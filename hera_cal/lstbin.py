@@ -469,6 +469,7 @@ def lst_bin_arg_parser():
     a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
     a.add_argument("--average_redundant_baselines", action="store_true", default=False, help="Redundantly average baselines within and between nights.")
     a.add_argument("--flag_thresh", default=0.7, type=float, help="fraction of flags over all nights in an LST bin on a baseline to flag that baseline.")
+    a.add_argument("--ex_ant_yaml_dir", default=None, type=str, help="directory containing flagging yamls with lists of antennas from each night to exclude lstbinned data files.")
     return a
 
 
@@ -578,7 +579,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None,
                   lst_stop=None, fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
                   output_file_select=None, Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
-                  bl_error_tol=1.0, include_autos=True,
+                  bl_error_tol=1.0, include_autos=True, ex_ant_yaml_files=None,
                   **kwargs):
     """
     LST bin a series of UVH5 files with identical frequency bins, but varying
@@ -629,6 +630,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     default is True.
     bl_error_tol : float, tolerance within which baselines are considered redundant
                    between nights for purposes of average_redundant_baselines.
+    ex_ant_yaml_files : list of strings, optional
+        list of paths of yaml files specifying antennas to flag and remove from data on each night.
     kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
 
     Result:
@@ -682,7 +685,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     # generate a list of dictionaries which contain the nights occupied by each unique baseline
     # (or unique baseline group if average_redundant_baselines is true)
     bldicts = gen_bldicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos,
-                          redundant=average_redundant_baselines)
+                          redundant=average_redundant_baselines, ex_ant_yaml_files=ex_ant_yaml_files)
     # store all baselines in this list. They need to be spoofed
     # if there are some times that dont overlap for nights with different baselines.
     # all_key_baselines = [list(bldict.values())[0] for bldict in blgroups]
@@ -743,6 +746,12 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                                 for bl in bldict[j]:
                                     bls_to_load.append(bl)
                         data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
+                        # if we want to throw away data associated with flagged antennas, throw it away.
+                        if ex_ant_yaml_files is not None:
+                            from hera_qm.utils import apply_yaml_flags
+                            hd = apply_yaml_flags(hd, a_priori_flag_yaml=ex_ant_yaml_files[i], ant_indices_only=True, flag_ants=True,
+                                                  flag_freqs=False, flag_times=False, throw_away_flagged_ants=True)
+                            data, flags, nsamps = hd.build_datacontainers()
                         data.phase_type = 'drift'
                     except ValueError:
                         # if no baselines in the file, skip this file
@@ -963,7 +972,7 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     return clip_flags
 
 
-def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
+def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False, ex_ant_yaml_files=None):
     """
     Helper function to generate baseline dicts to keep track of reds between nights.
 
@@ -978,6 +987,9 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
     redundant : optional, if True, each bldict stores redundant group. If False, each bldict will contain a length-1 group for each baseline
                 over all the nights.
                 default is False.
+    ex_ant_yaml_files : list of strings, optional
+                list of paths to yaml files with antennas to throw out on each night.
+                default is None (dont throw out any flagged antennas)
     Outputs:
     ---------
     If redundant:
@@ -999,6 +1011,12 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
         reds = redcal.get_reds(hd.antpos, bl_error_tol=bl_error_tol, pols=hd.pols[0], include_autos=include_autos)
         # read to get baselines in data
         d, _, _ = hd.read()
+        # if we are throwing away data with flagged ants, do it here.
+        if ex_ant_yaml_files is not None:
+            from hera_qm.utils import apply_yaml_flags
+            hd = apply_yaml_flags(hd, a_priori_flag_yaml=ex_ant_yaml_files[night], ant_indices_only=True, flag_ants=True,
+                                  flag_freqs=False, flag_times=False, throw_away_flagged_ants=True)
+            d, _, _ = hd.build_datacontainers()
         data_bls = d.antpairs()
         reds = [[bl for bl in grp if bl[:2] in data_bls or bl[:2][::-1] in data_bls] for grp in reds]
         reds = [grp for grp in reds if len(grp) > 0]
