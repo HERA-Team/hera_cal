@@ -386,10 +386,10 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 # antennas. This is to prevent flagging yamls from accidentally flagging data
                 # that should not be flagged down the road.
                 if dont_red_average_flagged_data:
-                    red_antpairs = [[bl for bl in grp if bl unflagged or bl[::-1] in unflagged] for grp in all_red_antpairs]
+                    red_antpairs = [[bl for bl in grp if bl in unflagged or bl[::-1] in unflagged] for grp in all_red_antpairs]
                     red_antpairs = [grp for grp in red_antpairs if len(grp) > 0]
                 else:
-
+                    red_antpairs = all_red_antpairs
                 # redundantly average
                 utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
                                   reds=red_antpairs, wgts=redundant_weights, inplace=True,
@@ -460,10 +460,10 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     # trim group to only include baselines with redundant weights not equal to zero.
                     if dont_red_average_flagged_data and redundant_groups > 1:
                         grp = [ap for ap in grp if ap in unflagged or ap[::-1] in unflagged]
-                    # use first unflagged baseline for group key.
-                    grp0 = grp[0]
                     # only include groups with more elements then redundant groups!
                     if len(grp) >= redundant_groups:
+                        # use first unflagged baseline for group key.
+                        grp0 = grp[0]
                         red_antpairs.append(grp[red_chunk:: redundant_groups])
                         reds_data_bls.append(grp0)
                 data_red, flags_red, nsamples_red = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
