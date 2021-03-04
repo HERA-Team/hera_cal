@@ -341,7 +341,7 @@ class Test_Update_Cal(object):
 
         hc = io.HERACal(calfile)
         hc.read()
-        hc = apply_yaml_flags(hc, flag_yaml,ant_indices_only=True)
+        hc = apply_yaml_flags(hc, flag_yaml, ant_indices_only=True)
         g, gf, _, _ = hc.build_calcontainers()
         ac.calibrate_in_place(data=d, new_gains=g, cal_flags=gf, data_flags=f)
         hd_calibrated.update(flags=f, data=d)
@@ -350,7 +350,6 @@ class Test_Update_Cal(object):
 
         d, f, n = hd_calibrated.build_datacontainers()
         wgts = deepcopy(n)
-
 
         hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False, wgts=wgts, propagate_flags=True)
         # compare to apply_cal throwing away flagged antennas.
@@ -363,8 +362,6 @@ class Test_Update_Cal(object):
         assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_with_apply_cal.nsample_array))
         assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
         assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
-
-
 
         # prepare calibrated file where all baselines have the same nsamples and the same flagging pattern if they are not all flagged.
         hdt = io.HERAData(uncalibrated_file)
