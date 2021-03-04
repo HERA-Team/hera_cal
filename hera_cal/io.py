@@ -320,7 +320,7 @@ class HERAData(UVData):
         Returns:
             metadata_dict: dictionary of all items in self.HERAData_metas
         '''
-        antpos, ants = self.get_ENU_antpos()
+        antpos, ants = self.get_ENU_antpos(pick_data_ants=False)
         antpos = odict(zip(ants, antpos))
         data_ants = np.unique(np.concatenate((self.ant_1_array, self.ant_2_array)))
 
