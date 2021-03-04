@@ -382,17 +382,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                             unflagged.append(bl[:-1])
                     else:
                         unflagged.append(bl[:-1])
-                # make sure that the redundantly averaged baselines get keyed to unflagged
-                # antennas. This is to prevent flagging yamls from accidentally flagging data
-                # that should not be flagged down the road.
-                if dont_red_average_flagged_data:
-                    red_antpairs = [[bl for bl in grp if bl in unflagged or bl[::-1] in unflagged] for grp in all_red_antpairs]
-                    red_antpairs = [grp for grp in red_antpairs if len(grp) > 0]
-                else:
-                    red_antpairs = all_red_antpairs
                 # redundantly average
                 utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
-                                  reds=red_antpairs, wgts=redundant_weights, inplace=True,
+                                  reds=all_red_antpairs, wgts=redundant_weights, inplace=True,
                                   propagate_flags=True)
                 # update redundant data. Don't partial write.
                 hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
@@ -453,12 +445,13 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                         unflagged.append(bl[:-1])
                 else:
                     unflagged.append(bl[:-1])
+
             for red_chunk in range(redundant_groups):
                 red_antpairs = []
                 reds_data_bls = []
                 for grp in reds_data:
                     # trim group to only include baselines with redundant weights not equal to zero.
-                    if dont_red_average_flagged_data and redundant_groups > 1:
+                    if dont_red_average_flagged_data:
                         grp = [ap for ap in grp if ap in unflagged or ap[::-1] in unflagged]
                     # only include groups with more elements then redundant groups!
                     if len(grp) >= redundant_groups:
