@@ -145,7 +145,7 @@ class Test_lstbin(object):
                       median=True, lst_low=0, lst_hi=np.pi, verbose=False)
 
         lst_output, data_output, flags_output, _, nsamples_output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
-                                                                          median=False, lst_low=0, lst_hi=np.pi, verbose=False)
+                                                                                   median=False, lst_low=0, lst_hi=np.pi, verbose=False)
         output = lstbin.lst_bin(self.data_list + [data_output], self.lst_list + [lst_output], flags_list=self.flgs_list + [flags_output], dlst=None,
                                 nsamples_list=self.nsmp_list + [nsamples_output], median=False, verbose=False)
         # test that nsamples_output are all 3.

@@ -95,7 +95,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     Ntimes, Nfreqs = data_list[0][list(data_list[0].keys())[0]].shape
     # check whether baselines are the same across all nights
     # by checking that every baseline occurs in data_list the same number times.
-    baselines_same_across_nights=False
+    baselines_same_across_nights = False
     baseline_counts = {}
     for dlist in data_list:
         for k in dlist:
@@ -682,8 +682,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                 antpos[a] = hd.antpos[a]
     # generate a list of dictionaries which contain the nights occupied by each unique baseline
     # (or unique baseline group if average_redundant_baselines is true)
-    bl_nightly_dicts = gen_bl_nightly_dicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos,
-                          redundant=average_redundant_baselines)
+    bl_nightly_dicts = gen_bl_nightly_dicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos, redundant=average_redundant_baselines)
     # iterate over output LST files
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = len(bl_nightly_dicts) + 1
