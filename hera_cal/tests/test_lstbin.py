@@ -113,7 +113,7 @@ class Test_lstbin(object):
                                 verbose=False)
         assert np.allclose(output[4][(24, 25, 'ee')], 3.0)
         # test including additional baselines in bl_list:
-        output = lstbin.lst_bin(self.data_list, self.lst_list, nsamp_list=self.nsmp_list,
+        output = lstbin.lst_bin(self.data_list, self.lst_list, nsamples_list=self.nsmp_list,
                                 flags_list=self.flgs_list, dlst=dlst, lst_low=0.25, lst_hi=0.3,
                                 verbose=False, bl_list=[(512, 512)])
         assert (512, 512, 'ee') in output[4]
@@ -129,7 +129,7 @@ class Test_lstbin(object):
         nsamp_list_conj[-1] = DataContainer({utils.reverse_bl(k): nsamp_list_conj[-1][k] for k in nsamp_list_conj[-1]})
         data_list_conj[-1] = DataContainer({utils.reverse_bl(k): np.conj(data_list_conj[-1][k]) for k in data_list_conj[-1]})
         output2 = lstbin.lst_bin(data_list=data_list_conj, lst_list=self.lst_list,
-                                 flags_list=flags_list_conj, nsamp_list=nsamp_list_conj,
+                                 flags_list=flags_list_conj, nsamples_list=nsamp_list_conj,
                                  dlst=dlst, lst_low=0.25, lst_hi=0.3,
                                  verbose=False, bl_list=[(512, 512)])
         # assert outputs are identical, even with conjugations present in the last night.
@@ -140,20 +140,14 @@ class Test_lstbin(object):
 
     def test_lstbin_vary_nsamps(self):
         # test execution
+        pytest.raises(NotImplementedError, lstbin.lst_bin, self.data_list, self.lst_list, flags_list=self.flgs_list,
+                      nsamples_list=self.nsmp_list, dlst=None,
+                      median=True, lst_low=0, lst_hi=np.pi, verbose=False)
+
         lst_output, data_output, flags_output, _, nsamples_output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
-                                                                                   median=True, lst_low=0, lst_hi=np.pi, verbose=False)
-        output = lstbin.lst_bin(self.data_list + [data_output], self.lst_list + [lst_output], flags_list=self.flgs_list + [flags_output], dlst=None,
-                                nsamp_list=self.nsmp_list + [nsamples_output], median=True, verbose=False)
-        # test that nsamples_output are all 3.
-        assert np.allclose(output[-1][(24, 25, 'ee')].real[0, 30], 2)
-        assert np.allclose(output[-1][(24, 25, 'ee')].real[30, 30], 4)
-        assert np.allclose(output[-1][(24, 25, 'ee')].real[100, 30], 6)
-        assert np.allclose(output[-1][(24, 25, 'ee')].real[190, 30], 4)
-        assert np.allclose(output[-1][(24, 25, 'ee')].real[220, 30], 2)
-        _, data_output, flags_output, _, nsamples_output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
                                                                           median=False, lst_low=0, lst_hi=np.pi, verbose=False)
         output = lstbin.lst_bin(self.data_list + [data_output], self.lst_list + [lst_output], flags_list=self.flgs_list + [flags_output], dlst=None,
-                                nsamp_list=self.nsmp_list + [nsamples_output], median=False, verbose=False)
+                                nsamples_list=self.nsmp_list + [nsamples_output], median=False, verbose=False)
         # test that nsamples_output are all 3.
         assert np.allclose(output[-1][(24, 25, 'ee')].real[0, 30], 2)
         assert np.allclose(output[-1][(24, 25, 'ee')].real[30, 30], 4)
@@ -482,6 +476,16 @@ class Test_lstbin(object):
         assert not np.any(out[0, 3])
         out = lstbin.sigma_clip(arr, flags=flg, min_N=1)
         assert np.all(out[0, 3])
+
+    def test_gen_nightly_bldicts(self):
+        # Test some basic behavior for bl_nightly_dicts.
+        hds = [io.HERAData(df[-1]) for df in self.data_files]
+        for redundant in [True, False]:
+            nightly_bldict_list = lstbin.gen_bl_nightly_dicts(hds, redundant=redundant)
+            # baselines all agree over all nights. Make sure their bldicts reflect this.
+            for bldict in nightly_bldict_list:
+                assert len(bldict) == len(self.data_files)
+                assert np.all([bldict[0] == bldict[i] for i in bldict])
 
     def tearDown(self):
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
