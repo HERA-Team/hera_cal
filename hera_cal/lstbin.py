@@ -21,10 +21,10 @@ from . import apply_cal
 from .datacontainer import DataContainer
 
 
-def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst_low=None,
+def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None, begin_lst=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
             sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, antpos=None, rephase=False,
-            freq_array=None, lat=-30.72152, verbose=True, nsamp_list=None, bl_list=None):
+            freq_array=None, lat=-30.72152, verbose=True, bl_list=None):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -38,6 +38,9 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
         These LST arrays must be monotonically increasing, except for a possible wrap at 2pi.
     flags_list : type=list, list of DataContainer dictionaries holding flags for each data dict
         in data_list. Flagged data do not contribute to the average of an LST bin.
+    nsamples_list : type=list. List of DataContainer dictionaries holding nsamples for each data dict
+        in data_list. Default is None
+        median=False not supported if nsamples_list is not None!
     dlst : type=float, delta-LST spacing for lst_grid. If None, will use the delta-LST of the first
         array in lst_list.
     begin_lst : type=float, beginning LST for making the lst_grid, extending from
@@ -48,6 +51,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
         flag the entire bin.
     atol : type=float, absolute tolerance for comparing LST bin center floats
     median : type=boolean, if True use median for LST binning. Warning: this is slower.
+             median=True is not supported when nsamples_list is not None.
     truncate_empty : type=boolean, if True, truncate output time bins that have
         no averaged data in them.
     sig_clip : type=boolean, if True, perform a sigma clipping algorithm of the LST bins on the
@@ -63,12 +67,12 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     freq_array : type=ndarray, 1D array of unique data frequencies channels in Hz. Needed for rephase.
     lat : type=float, latitude of array in degrees North. Needed for rephase.
     verbose : type=bool, if True report feedback to stdout
-    nsamp_list : list of nsamples arrays
     bl_list : optional list of antenna pairs that includes baselines that may not be in the data for the chunk of lsts
               being processed but may be present in other lst chunks.
               baselines not in data will be spoofed in the average to keep baselines in lst-averaged files.
-              flags set to True, nsamples set to zero, data set to one.
+              flags set to True, nsamples set to zero, data set to zero
               consistent across all lst bins.
+              DOES NOT ACCEPT ANTPAIRPOLS!
 
     Output: (lst_bins, data_avg, flags_min, data_std, data_count)
     -------
@@ -85,8 +89,23 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
             un-averaged complex visibilities in each LST bin as values.
         flags_min : dictionary with data flags
     """
+    if nsamples_list is not None and median:
+        raise NotImplementedError("LST binning with median not supported with nsamples_list is not None.")
     # get visibility shape
     Ntimes, Nfreqs = data_list[0][list(data_list[0].keys())[0]].shape
+    # check whether baselines are the same across all nights
+    # by checking that every baseline occurs in data_list the same number times.
+    baselines_same_across_nights=False
+    baseline_counts = {}
+    for dlist in data_list:
+        for k in dlist:
+            if k in baseline_counts:
+                baseline_counts[k] += 1
+            elif utils.reverse_bl(k) in baseline_counts:
+                baseline_counts[utils.reverse_bl(k)] += 1
+            else:
+                baseline_counts[k] = 1
+    baselines_same_across_nights = np.all([baseline_counts[k] == baseline_counts[l] for l in baseline_counts])
 
     # get dlst if not provided
     if dlst is None:
@@ -120,10 +139,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     flags = odict()
     nsamples = odict()
     all_lst_indices = set()
-    pols = []
-    for key in data_list[0].keys():
-        if key[-1] not in pols:
-            pols.append(key[-1])
+    pols = list(set([pol for dc in data_list for pol in dc.pols()]))
     # iterate over data_list
     for i, d in enumerate(data_list):
         # get lst array
@@ -171,8 +187,8 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                 d[key] = np.conj(d[utils.reverse_bl(key)])
                 if flags_list is not None:
                     flags_list[i][key] = flags_list[i][utils.reverse_bl(key)]
-                if nsamp_list is not None:
-                    nsamp_list[i][key] = nsamp_list[i][utils.reverse_bl(key)]
+                if nsamples_list is not None:
+                    nsamples_list[i][key] = nsamples_list[i][utils.reverse_bl(key)]
             else:
                 # if key or conj(key) not in data, insert key into data as an odict
                 data[key] = odict()
@@ -197,10 +213,10 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                         flags[key][ind].append(np.zeros_like(d[key][k], np.bool))
                     else:
                         flags[key][ind].append(flags_list[i][key][k])
-                    if nsamp_list is None:
+                    if nsamples_list is None:
                         nsamples[key][ind].append(np.ones_like(d[key][k], np.int))
                     else:
-                        nsamples[key][ind].append(nsamp_list[i][key][k])
+                        nsamples[key][ind].append(nsamples_list[i][key][k])
         # add in spoofed baselines to keep baselines in different LST files consistent.
         if bl_list is not None:
             for antpair in bl_list:
@@ -213,7 +229,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                         for k, ind in enumerate(grid_indices):
                             nsamples[key][ind].append(np.zeros(Nfreqs))
                             flags[key][ind].append(np.ones(Nfreqs, dtype=bool))
-                            data[key][ind].append(np.ones(Nfreqs, dtype=complex))
+                            data[key][ind].append(np.zeros(Nfreqs, dtype=complex))
 
     # get final lst_bin array
     if truncate_empty:
@@ -222,16 +238,16 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     else:
         # keep all lst_grid bins and fill empty ones with unity data and mark as flagged
         for index in range(len(lst_grid)):
-            # I got rid of this statement because it causes failures if a
-            # subset of baselines dont have data in every LST bin which can happen
-            # if a baseline is flagged on some days an not others.
-            for key in list(data.keys()):
-                # fill data with blank data
-                # if the index is not present.
-                if index not in data[key]:
-                    data[key][index] = [np.ones(Nfreqs, np.complex)]
-                    flags[key][index] = [np.ones(Nfreqs, np.bool)]
-                    nsamples[key][index] = [np.ones(Nfreqs, np.int)]
+            if index in all_lst_indices and baselines_same_across_nights:
+                continue
+            else:
+                for key in list(data.keys()):
+                    # fill data with blank data
+                    # if the index is not present.
+                    if index not in data[key]:
+                        data[key][index] = [np.zeros(Nfreqs, np.complex)]
+                        flags[key][index] = [np.ones(Nfreqs, np.bool)]
+                        nsamples[key][index] = [np.zeros(Nfreqs, np.int)]
 
         # use all LST bins
         lst_bins = lst_grid
@@ -303,23 +319,8 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
             # take bin average: real and imag separately
             if median:
                 # for median to account for varying nsamples, copy each day by nsamps
-                # this code is loopy landscapes. So avoid execution unless we have to.
-                if not np.all(np.isclose(n, np.median(n))):
-                    dnsamps = np.zeros(d.shape[1], dtype=complex)
-                    for chan in range(d.shape[1]):
-                        samples_r = []
-                        samples_i = []
-                        for dd, nn in zip(d[:, chan], n[:, chan]):
-                            for m in range(int(nn)):
-                                if np.isfinite(dd):
-                                    samples_r.append(dd.real)
-                                    samples_i.append(dd.imag)
-                        dnsamps[chan] = np.median(samples_r) + 1j * np.median(samples_i)
-                    real_avg.append(dnsamps.real)
-                    imag_avg.append(dnsamps.imag)
-                else:
-                    real_avg.append(np.nanmedian(d.real, axis=0))
-                    imag_avg.append(np.nanmedian(d.imag, axis=0))
+                real_avg.append(np.nanmedian(d.real, axis=0))
+                imag_avg.append(np.nanmedian(d.imag, axis=0))
             else:
                 # for mean ot account for varying nsamples, take nsamples weighted sum.
                 # (inverse variance weighted sum).
@@ -677,16 +678,13 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                 antpos[a] = hd.antpos[a]
     # generate a list of dictionaries which contain the nights occupied by each unique baseline
     # (or unique baseline group if average_redundant_baselines is true)
-    bldicts = gen_bldicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos,
+    bl_nightly_dicts = gen_bl_nightly_dicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos,
                           redundant=average_redundant_baselines)
-    # store all baselines in this list. They need to be spoofed
-    # if there are some times that dont overlap for nights with different baselines.
-    # all_key_baselines = [list(bldict.values())[0] for bldict in blgroups]
     # iterate over output LST files
     if Nbls_to_load in [None, 'None', 'none']:
-        Nbls_to_load = len(bldicts)
-    Nblgroups = len(bldicts) // Nbls_to_load + 1
-    blgroups = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
+        Nbls_to_load = len(bl_nightly_dicts) + 1
+    Nblgroups = len(bl_nightly_dicts) // Nbls_to_load + 1
+    blgroups = [bl_nightly_dicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
     blgroups = [blg for blg in blgroups if len(blg) > 0]
     for i, f_lst in enumerate(file_lsts):
         utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
@@ -701,13 +699,13 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             file_list = []
             flgs_list = []
             lst_list = []
-            nsamp_list = []
+            nsamples_list = []
             # iterate over individual nights to bin
             for j in range(len(data_files)):
                 nightly_data_list = []
                 nightly_flgs_list = []
                 nightly_lst_list = []
-                nightly_nsamp_list = []
+                nightly_nsamples_list = []
                 # iterate over files in each night, and open files that fall into this output file LST range
                 for k in range(len(data_files[j])):
                     # unwrap la relative to itself
@@ -735,14 +733,14 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                         key_baselines = []  # map first baseline in each group to
                         # first baseline in group on earliest night.
                         reds = []
-                        for bldict in blgroup:
+                        for bl_nightly_dict in blgroup:
                             # only load group if present in the current night.
-                            if j in bldict:
+                            if j in bl_nightly_dict:
                                 # key to earliest night with this redundant group.
-                                key_bl = bldict[np.min(list(bldict.keys()))][0]
+                                key_bl = bl_nightly_dict[np.min(list(bl_nightly_dict.keys()))][0]
                                 key_baselines.append(key_bl)
-                                reds.append(bldict[j])
-                                for bl in bldict[j]:
+                                reds.append(bl_nightly_dict[j])
+                                for bl in bl_nightly_dict[j]:
                                     bls_to_load.append(bl)
                         data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
                         data.phase_type = 'drift'
@@ -777,7 +775,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     nightly_data_list.append(data)  # this is data
                     nightly_flgs_list.append(flags)  # this is flgs
                     nightly_lst_list.append(larr[tinds])  # this is lsts
-                    nightly_nsamp_list.append(nsamps)
+                    nightly_nsamples_list.append(nsamps)
 
                 # skip if nothing accumulated in nightly files
                 if len(nightly_data_list) == 0:
@@ -787,10 +785,10 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                 data_list.extend(nightly_data_list)
                 flgs_list.extend(nightly_flgs_list)
                 lst_list.extend(nightly_lst_list)
-                nsamp_list.extend(nightly_nsamp_list)
-                del nightly_data_list, nightly_flgs_list, nightly_lst_list, nightly_nsamp_list
+                nsamples_list.extend(nightly_nsamples_list)
+                del nightly_data_list, nightly_flgs_list, nightly_lst_list, nightly_nsamples_list
 
-            all_blgroup_baselines = [list(bldict.values())[0][0] for bldict in blgroup]
+            all_blgroup_baselines = [list(bl_nightly_dict.values())[0][0] for bl_nightly_dict in blgroup]
             all_blgroup_antpairpols = []
             if len(data_list) == 0:
                 # spoof data  if data_list is empty.
@@ -802,13 +800,13 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                 data_list = [DataContainer({bl: np.ones((1, hd.Nfreqs), dtype=complex) for bl in all_blgroup_antpairpols})]
                 flgs_list = [DataContainer({bl: np.ones((1, hd.Nfreqs), dtype=bool) for bl in all_blgroup_antpairpols})]
                 lst_list = [make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)[:1]]
-                nsamp_list = [DataContainer({bl: np.zeros((1, hd.Nfreqs)) for bl in all_blgroup_antpairpols})]
+                nsamples_list = [DataContainer({bl: np.zeros((1, hd.Nfreqs)) for bl in all_blgroup_antpairpols})]
             # pass through lst-bin function
             if ignore_flags:
                 flgs_list = None
             (bin_lst, bin_data, flag_data, std_data,
              num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
-                                 lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamp_list=nsamp_list,
+                                 lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamples_list=nsamples_list,
                                  sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos, bl_list=all_blgroup_baselines)
             # append to lists
             data_conts.append(bin_data)
@@ -965,7 +963,7 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     return clip_flags
 
 
-def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
+def gen_bl_nightly_dicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
     """
     Helper function to generate baseline dicts to keep track of reds between nights.
 
@@ -975,9 +973,9 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
     hds : list of HERAData objects. Can have no data loaded (preferable) and should refer to single files.
     bl_error_tol : float (meters), optional. baselines whose vector difference are within this tolerance are considered
                    redundant. Default is 1.0 meter.
-    include_autos : bool, if True, include autos in bldicts.
+    include_autos : bool, if True, include autos in bl_nightly_dicts.
                     default is True.
-    redundant : optional, if True, each bldict stores redundant group. If False, each bldict will contain a length-1 group for each baseline
+    redundant : optional, if True, each bl_nightly_dict stores redundant group. If False, each bl_nightly_dict will contain a length-1 group for each baseline
                 over all the nights.
                 default is False.
     Outputs:
@@ -995,7 +993,7 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
     """
     # check that all hds are minimally redundant
     blvecs = {}
-    bldicts = []
+    bl_nightly_dicts = []
     for night, hd in enumerate(hds):
         assert len(hd.filepaths) == 1, 'HERAData objects must be for single data files.'
         reds = redcal.get_reds(hd.antpos, bl_error_tol=bl_error_tol, pols=hd.pols[0], include_autos=include_autos)
@@ -1009,44 +1007,48 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
             for bl in grp:
                 # store baseline vectors for all data.
                 blvecs[bl] = hd.antpos[bl[1]] - hd.antpos[bl[0]]
-        # otherwise, loop through baselines, for each bldict, see if the first
-        # entry matches (or conjugate matches). If yes, append to that bldict
+        # otherwise, loop through baselines, for each bl_nightly_dict, see if the first
+        # entry matches (or conjugate matches). If yes, append to that bl_nightly_dict
         for grp in reds:
             if redundant:
                 present = False
-                for bldict in bldicts:
+                for bl_nightly_dict in bl_nightly_dicts:
                     # check if baseline group occured in previous nights
-                    # if it did, add it to the appropriate bldict.
-                    for i in bldict:
-                        if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bl_error_tol or np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol:
+                    # if it did, add it to the appropriate bl_nightly_dict.
+                    for i in bl_nightly_dict:
+                        if np.linalg.norm(blvecs[grp[0]] - blvecs[bl_nightly_dict[i][0]]) <= bl_error_tol or np.linalg.norm(blvecs[grp[0]] + blvecs[bl_nightly_dict[i][0]]) <= bl_error_tol:
                             # I was having a lot of trouble getting a unittest for two separate cases here because
                             # I'm not sure how to conveniently create a UVData object with baselines conjugated.
                             # two cases is more readable then one so I'd prefer to have two.
-                            sign = int((-1) ** int(np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol))
-                            bldict[night] = [bl[::sign] for bl in grp]
+                            sign = -1
+                            if np.linalg.norm(blvecs[grp[0]] - blvecs[bl_nightly_dict[i][0]]) <= bl_error_tol:
+                                sign = 1
+                            bl_nightly_dict[night] = [bl[::sign] for bl in grp]
                             present = True
                             break
                 if not present:
                     # this baseline group has not occured in previous nights
                     # add it.
-                    bldicts.append({night: grp})
+                    bl_nightly_dicts.append({night: grp})
             else:
                 for bl in grp:
                     present = False
                     # check if baseline occured in previous nights
                     # if it did, add it to its corresponding baseline dictionary.
-                    for bldict in bldicts:
-                        for i in bldict:
-                            if bl in bldict[i] or bl[::-1] in bldict[i]:
+                    for bl_nightly_dict in bl_nightly_dicts:
+                        for i in bl_nightly_dict:
+                            if bl in bl_nightly_dict[i] or bl[::-1] in bl_nightly_dict[i]:
                                 # I was having a lot of trouble getting a unittest for two separate cases here because
                                 # I'm not sure how to conveniently create a UVData object with baselines conjugated.
                                 # two cases is more readable then one so I'd prefer to have two.
-                                sign = int((-1) ** int(bl[::-1] in bldict[i]))
-                                bldict[night] = [bl[::sign]]
+                                sign = -1
+                                if np.linalg.norm(blvecs[grp[0]] - blvecs[bl_nightly_dict[i][0]]) <= bl_error_tol:
+                                    sign = 1
+                                bl_nightly_dict[night] = [bl[::sign]]
                                 present = True
                                 break
                     if not present:
                         # if this baseline does not appear in previous nights
                         # add it with this night.
-                        bldicts.append({night: [bl]})
-    return bldicts
+                        bl_nightly_dicts.append({night: [bl]})
+    return bl_nightly_dicts
