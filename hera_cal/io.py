@@ -239,9 +239,10 @@ class HERAData(UVData):
     spaced in the underlying data_array.
     '''
     # static list of useful metadata to calculate and save
-    HERAData_metas = ['ants', 'antpos', 'freqs', 'times', 'lsts', 'pols',
-                      'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
-    # ants: list of antenna numbers in the data
+    HERAData_metas = ['ants', 'data_ants', 'antpos', 'freqs', 'times', 'lsts',
+                      'pols', 'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
+    # ants: list of antenna numbers in the array
+    # data_ants: list of antenna numbers in the data file
     # antpos: dictionary mapping all antenna numbers in the telescope to np.arrays of position in meters
     # freqs: np.arrray of frequencies (Hz)
     # times: np.array of unique times in the data file (JD)
@@ -319,9 +320,9 @@ class HERAData(UVData):
         Returns:
             metadata_dict: dictionary of all items in self.HERAData_metas
         '''
-        antpos, telescope_ants = self.get_ENU_antpos()
-        antpos = odict(zip(telescope_ants, antpos))
-        ants = np.unique(np.concatenate((self.ant_1_array, self.ant_2_array)))
+        antpos, ants = self.get_ENU_antpos()
+        antpos = odict(zip(ants, antpos))
+        data_ants = np.unique(np.concatenate((self.ant_1_array, self.ant_2_array)))
 
         freqs = np.unique(self.freq_array)
         times = np.unique(self.time_array)
