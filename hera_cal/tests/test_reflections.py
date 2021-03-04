@@ -233,7 +233,8 @@ class Test_ReflectionFitter_Cables(object):
         RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True, write_npz=True)
         assert uvc.Ntimes == 100
-        assert len(uvc.ant_array) == 5
+        assert len(uvc.ant_array) == 65
+        assert np.allclose(uvc.gain_array[0], 1.0)
         assert not np.allclose(uvc.gain_array[uvc.ant_array.tolist().index(23)], 1.0)
         # assert flag propagation
         assert np.all(uvc.get_flags(a_k)[:, 0])
@@ -251,7 +252,7 @@ class Test_ReflectionFitter_Cables(object):
         RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True)
         assert uvc.Ntimes == 100
-        assert len(uvc.ant_array) == 5
+        assert len(uvc.ant_array) == 65
         # assert flag propagation
         assert np.all(uvc.get_flags(a_k)[:, :2])
 
