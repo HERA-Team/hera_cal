@@ -61,7 +61,7 @@ if len(baseline_list) > 0:
                                                            skip_flagged_edges=a.skip_flagged_edges,
                                                            a_priori_flag_yaml=a.a_priori_flag_yaml,
                                                            external_flags=a.external_flags, inpaint=a.inpaint, frate_standoff=a.frate_standoff,
-                                                           skip_gaps_larger_then_filter_period=True,
+                                                           skip_contiguous_flags=skip_gaps_larger_then_filter_period,
                                                            overwrite_data_flags=a.overwrite_data_flags,
                                                            flag_model_rms_outliers=flag_model_rms_outliers,
                                                            clean_flags_in_resid_flags=True, **filter_kwargs)

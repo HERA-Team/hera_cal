@@ -53,7 +53,7 @@ xtalk_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile, avg_re
                                          max_contiguous_edge_flags=max_contiguous_edge_flags,
                                          add_to_history=' '.join(sys.argv), verbose=a.verbose,
                                          skip_flagged_edges=skip_flagged_edges,
-                                         skip_gaps_larger_then_filter_peri=skip_gaps_larger_then_filter_peri,
+                                         skip_contiguous_flags=skip_gaps_larger_then_filter_peri,
                                          a_priori_flag_yaml=a.a_priori_flag_yaml,
                                          external_flags=a.external_flags,
                                          overwrite_data_flags=a.overwrite_data_flags,

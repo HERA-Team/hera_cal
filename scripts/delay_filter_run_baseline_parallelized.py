@@ -59,7 +59,7 @@ if len(baseline_list) > 0:
                                                                  add_to_history=' '.join(sys.argv), polarizations=a.polarizations,
                                                                  verbose=a.verbose,
                                                                  a_priori_flag_yaml=a.a_priori_flag_yaml,
-                                                                 skip_gaps_larger_then_filter_period=skip_gaps_larger_then_filter_period,
+                                                                 skip_contiguous_flags=skip_gaps_larger_then_filter_period,
                                                                  skip_flagged_edges=skip_flagged_edges,
                                                                  filled_outfilename=a.filled_outfilename,
                                                                  CLEAN_outfilename=a.CLEAN_outfilename,
