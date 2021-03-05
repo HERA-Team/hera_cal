@@ -83,7 +83,7 @@ class XTalkFilter(VisClean):
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
                        ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
                        cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=max_frate,
-                       overwrite=True, skip_flagged_edge_times=skip_flagged_edges,
+                       overwrite=True, skip_flagged_edges=skip_flagged_edges,
                        keep_flags=keep_flags, **filter_kwargs)
         if not mode == 'clean':
             if write_cache:
