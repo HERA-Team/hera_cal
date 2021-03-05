@@ -405,10 +405,11 @@ class VisClean(object):
 
         Parameters
         ----------
-        external_flags: str, optional.
+        external_flags: str or UVFlag object, optional.
             Str or list of strings pointing to flag files to apply.
             flag files should be in a format readable by UVFlag and
             can have times and frequencies that are not in the data.
+            This arg is set to None by default to support applying a_priori_flag_yaml only.
         overwrite_data_flags: bool, optional
             If true, overwrite all data flags for bls that are not entirely flagged.
         flag_zero_times: bool, optional
@@ -418,12 +419,16 @@ class VisClean(object):
             An example of where we might want to do this is if we are doing a second round of RFI flagging
             starting with a more conservative set of flags but we want to keep fully flagged times.
         a_priori_flag_yaml: str, optional
-            path to a yaml file containing manual flags.
+            path to a yaml file containing manual flags. This is set to None by default
+            to support providing external_flags but no a_priori_flag_yaml.
         """
+        if external_flags is None and a_priori_flag_yaml is None:
+            raise ValueError("Must supply either external_flags or a_priori_flag_yaml!")
         # archive original flags.
         original_flags = UVFlag(self.hd, copy_flags=True)
         if external_flags is not None:
-            external_flags = UVFlag(external_flags)
+            if isinstance(external_flags, str):
+                external_flags = UVFlag(external_flags)
             # select frequencies and times that match data.
             flag_times = np.unique(external_flags.time_array)
             flag_freqs = np.unique(external_flags.freq_array)
