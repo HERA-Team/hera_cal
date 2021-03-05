@@ -193,6 +193,38 @@ def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_w
         return int(1. / (max_filter_freq * dx))
 
 
+def flag_model_rms(skipped, d, w, mdl, mdl_w=None, ax='freq'):
+    """
+    flag integrations or channels where the RMS of the model > RMS of the data
+
+    Parameters
+    ----------
+    skipped : array-like 2d, bool
+            existing clean_flags
+    d : array-like 2d, complex
+        the data waterfall.
+    w : array-like 2d, float
+        data weights waterfall. RMS of data will only be determined
+        over voxels where |w| > 0.
+    mdl : array-like 2d, complex
+        model waterfall.
+    mdl_w : array-like 2d, float, optional
+        model weights waterfall. RMS of model will be determined
+        over voxels where |mdl_w| > 0.
+        default is None. When None provided, mdl_w set to 1 everywhere.
+    """
+    if mdl_w is None:
+        mdl_w = np.ones_like(mdl)
+    if ax == 'freq' or ax == 'both':
+        for i in range(mdl.shape[0]):
+            if np.mean(np.abs(mdl[i,  ~np.isclose(np.abs(mdl_w[i]), 0.0)]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
+                skipped[i] = True
+    if ax == 'time' or ax == 'both':
+        for i in range(mdl.shape[1]):
+            if np.mean(np.abs(mdl[~np.isclose(np.abs(mdl_w[:, i]), 0.0), i]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
+                skipped[:, i] = True
+    return skipped
+
 class VisClean(object):
     """
     VisClean object for visibility CLEANing and filtering.
@@ -986,20 +1018,12 @@ class VisClean(object):
                                 skipped[:, i] = True
                             elif dim == 1:
                                 skipped[i] = True
-            # A redundant system (in the airline sense of the word).
-            # just in case any artifacts make it through after our best flagging
-            # efforts
-            # flag popups.
-            if ax == 'freq' or ax == 'both':
-                for i in range(mdl.shape[0]):
-                    if flag_model_rms_outliers:
-                        if np.mean(np.abs(mdl[i]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
-                            skipped[i] = True
-            if ax == 'time' or ax == 'both':
-                for i in range(mdl.shape[1]):
-                    if flag_model_rms_outliers:
-                        if np.mean(np.abs(mdl[:, i]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
-                            skipped[:, i] = True
+            # just in case any artifacts make it through after our other flagging rounds
+            # flag integrations or channels where the RMS of the model exceeds the RMS of the unflagged data
+            # by some threshold.
+            if flag_model_rms_outliers:
+                skipped = flag_model_rms(skipped, d, w, mdl, ax=ax)
+
             # also flag skipped edge channels and integrations.
             if skip_flagged_edges:
                 skipped[:, :edges[1][0]] = True
