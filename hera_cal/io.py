@@ -239,12 +239,11 @@ class HERAData(UVData):
     spaced in the underlying data_array.
     '''
     # static list of useful metadata to calculate and save
-    HERAData_metas = ['ants', 'data_ants', 'antpos', 'data_antpos', 'freqs', 'times', 'lsts',
+    HERAData_metas = ['ants', 'data_ants', 'antpos', 'freqs', 'times', 'lsts',
                       'pols', 'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
     # ants: list of antenna numbers in the array
     # data_ants: list of antenna numbers in the data file
     # antpos: dictionary mapping all antenna numbers in the telescope to np.arrays of position in meters
-    # data_antpos: dictionary mapping all antenna numbers in the data to np.arrays of position in meters
     # freqs: np.arrray of frequencies (Hz)
     # times: np.array of unique times in the data file (JD)
     # lsts: np.array of unique LSTs in the data file (radians)
@@ -322,9 +321,8 @@ class HERAData(UVData):
             metadata_dict: dictionary of all items in self.HERAData_metas
         '''
         antpos, ants = self.get_ENU_antpos(pick_data_ants=False)
-        antpos = dict(zip(ants, antpos))
+        antpos = odict(zip(ants, antpos))
         data_ants = np.unique(np.concatenate((self.ant_1_array, self.ant_2_array)))
-        data_antpos = {ant: antpos[ant] for ant in data_ants}
 
         freqs = np.unique(self.freq_array)
         times = np.unique(self.time_array)
@@ -433,7 +431,7 @@ class HERAData(UVData):
 
         # store useful metadata inside the DataContainers
         for dc in [data, flags, nsamples]:
-            for attr in ['ants', 'data_ants', 'antpos', 'data_antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
+            for attr in ['antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
                 setattr(dc, attr, copy.deepcopy(meta[attr]))
 
         return data, flags, nsamples
