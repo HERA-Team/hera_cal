@@ -146,7 +146,8 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         xf.read(frequencies=freqs)
         if avg_red_bllens:
             xf.avg_red_baseline_vectors()
-        xf.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, a_priori_flag_yaml=a_priori_flag_yaml, flag_zero_times=flag_zero_times)
+        if external_flags is not None or a_priori_flag_yaml is not None:
+            xf.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, a_priori_flag_yaml=a_priori_flag_yaml, flag_zero_times=flag_zero_times)
         if factorize_flags:
             xf.factorize_flags(time_thresh=time_thresh, inplace=True)
         xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
@@ -238,7 +239,8 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     xf.read(bls=baseline_list, frequencies=freqs, axis='blt')
     if avg_red_bllens:
         xf.avg_red_baseline_vectors()
-    xf.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, a_priori_flag_yaml=a_priori_flag_yaml, flag_zero_times=flag_zero_times)
+    if external_flags is not None or a_priori_flag_yaml is not None:
+        xf.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, a_priori_flag_yaml=a_priori_flag_yaml, flag_zero_times=flag_zero_times)
     if factorize_flags:
         xf.factorize_flags(time_thresh=time_thresh, inplace=True)
     xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
