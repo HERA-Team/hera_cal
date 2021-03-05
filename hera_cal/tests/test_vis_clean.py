@@ -56,6 +56,95 @@ def test_truncate_flagged_edges():
     assert np.all(np.isclose(wout, weights_in[:-2, :-1]))
     assert edges == [(0, 2), (0, 1)]
 
+def test_flag_rows_with_flags_within_edge_distance():
+    Nfreqs = 64
+    Ntimes = 60
+    weights_in = np.outer(np.arange(1, Ntimes+1), np.arange(1, Nfreqs+1))
+    weights_in[32, 2] = 0.
+    weights_in[33, 12] = 0.
+    weights_in[2, 30] = 0.
+    weights_in[-10, 20] = 0.
+    # under the above flagging pattern
+    # freq flagging with min_flag_edge_distance=2 yields 32nd integration flagged only.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=3, ax='freq')
+    for i in range(wout.shape[0]):
+        if i == 32:
+            assert np.all(np.isclose(wout[i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[i], weights_in[i]))
+    # extending edge_distance to 12 should yield 33rd integration being flagged as well.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=13, ax='freq')
+    for i in range(wout.shape[0]):
+        if i == 32 or i == 33:
+            assert np.all(np.isclose(wout[i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[i], weights_in[i]))
+    # now do time axis. 30th channel should be flagged for this case.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=3, ax='time')
+    for i in range(wout.shape[1]):
+        if i == 30:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
+    # 30th and 20th channels should end up flagged for this case.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=11, ax='time')
+    for i in range(wout.shape[1]):
+        if i == 30 or i == 20:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
+    # now do both
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=(3, 3), ax='both')
+    for i in range(wout.shape[1]):
+        if i == 30:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+    for i in range(wout.shape[0]):
+        if i == 32:
+            assert np.all(np.isclose(wout[i], 0.0))
+
+def test_flag_rows_with_contiguous_flags():
+    Nfreqs = 64
+    Ntimes = 60
+    weights_in = np.outer(np.arange(1, Ntimes+1), np.arange(1, Nfreqs+1))
+    weights_in[32, 2:12] = 0.
+    weights_in[35, 12:14] = 0.
+    weights_in[2:12, 30] = 0.
+    weights_in[-10:-8, 20] = 0.
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=8, ax='freq')
+    for i in range(wout.shape[0]):
+        if i == 32:
+            assert np.all(np.isclose(wout[i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[i], weights_in[i]))
+    # extending edge_distance to 12 should yield 33rd integration being flagged as well.
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=2, ax='freq')
+    for i in range(wout.shape[0]):
+        if i == 32 or i == 35:
+            assert np.all(np.isclose(wout[i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[i], weights_in[i]))
+    # now do time axis. 30th channel should be flagged for this case.
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=8, ax='time')
+    for i in range(wout.shape[1]):
+        if i == 30:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
+    # 30th and 20th channels should end up flagged for this case.
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=2, ax='time')
+    for i in range(wout.shape[1]):
+        if i == 30 or i == 20:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
+    # now do both
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=(3, 3), ax='both')
+    for i in range(wout.shape[1]):
+        if i == 30:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+    for i in range(wout.shape[0]):
+        if i == 32:
+            assert np.all(np.isclose(wout[i], 0.0))
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
