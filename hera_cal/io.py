@@ -239,11 +239,12 @@ class HERAData(UVData):
     spaced in the underlying data_array.
     '''
     # static list of useful metadata to calculate and save
-    HERAData_metas = ['ants', 'data_ants', 'antpos', 'freqs', 'times', 'lsts',
+    HERAData_metas = ['ants', 'data_ants', 'antpos', 'data_antpos', 'freqs', 'times', 'lsts',
                       'pols', 'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
     # ants: list of antenna numbers in the array
     # data_ants: list of antenna numbers in the data file
     # antpos: dictionary mapping all antenna numbers in the telescope to np.arrays of position in meters
+    # data_antpos: dictionary mapping all antenna numbers in the data to np.arrays of position in meters
     # freqs: np.arrray of frequencies (Hz)
     # times: np.array of unique times in the data file (JD)
     # lsts: np.array of unique LSTs in the data file (radians)
@@ -321,8 +322,9 @@ class HERAData(UVData):
             metadata_dict: dictionary of all items in self.HERAData_metas
         '''
         antpos, ants = self.get_ENU_antpos(pick_data_ants=False)
-        antpos = odict(zip(ants, antpos))
+        antpos = dict(zip(ants, antpos))
         data_ants = np.unique(np.concatenate((self.ant_1_array, self.ant_2_array)))
+        data_antpos = {ant: antpos[ant] for ant in data_ants}
 
         freqs = np.unique(self.freq_array)
         times = np.unique(self.time_array)
@@ -431,7 +433,7 @@ class HERAData(UVData):
 
         # store useful metadata inside the DataContainers
         for dc in [data, flags, nsamples]:
-            for attr in ['antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
+            for attr in ['ants', 'data_ants', 'antpos', 'data_antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
                 setattr(dc, attr, copy.deepcopy(meta[attr]))
 
         return data, flags, nsamples
@@ -695,23 +697,23 @@ class HERAData(UVData):
                     raise NotImplementedError('Redundant group iteration without explicitly setting antpos for filetype ' + self.filetype
                                               + ' without setting antpos has not been implemented.')
 
-                # generate antpos dict to feed into get_reds
+                # generate data_antpos dict to feed into get_reds
                 # that accounts for possibility that
                 # HERAData was initialized from multiple
-                # files in which case self.antpos is a dict of dicts.
+                # files in which case self.data_antpos is a dict of dicts.
                 if len(self.filepaths) > 1:
-                    antpos = {}
-                    for k in self.antpos:
-                        antpos.update(self.antpos[k])
+                    data_antpos = {}
+                    for k in self.data_antpos:
+                        data_antpos.update(self.data_antpos[k])
                     pols = set({})
                     for k in self.pols:
                         pols.union(set(self.pols[k]))
                     pols = list(pols)
                 else:
-                    antpos = self.antpos
+                    data_antpos = self.data_antpos
                     pols = self.pols
 
-                reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol,
+                reds = redcal.get_reds(data_antpos, pols=pols, bl_error_tol=bl_error_tol,
                                        include_autos=include_autos)
             # filter reds by baselines
             reds = redcal.filter_reds(reds, bls=bls)
