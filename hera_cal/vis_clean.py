@@ -19,6 +19,7 @@ from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
 
+
 def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
     """
     cut away edge channels and integrations that are completely flagged
@@ -78,6 +79,7 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
             edges = [(0, 0), edges]
     return xout, dout, wout, edges
 
+
 def flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance, ax='freq'):
     """
     flag integrations (and/or channels) with flags within min_flag_edge_distance of edge.
@@ -106,7 +108,7 @@ def flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance
     else:
         wout = copy.deepcopy(weights_in)
         for rownum, wrow in enumerate(wout):
-            if  ax == 'both':
+            if ax == 'both':
                 if np.any(np.isclose(wout[rownum, :min_flag_edge_distance[1]], 0.0)) | np.any(np.isclose(wout[rownum, -min_flag_edge_distance[1] - 1:], 0.0)):
                     wout[rownum, :] = 0.
             elif np.any(np.isclose(wout[rownum, :min_flag_edge_distance], 0.0)) | np.any(np.isclose(wout[rownum, -min_flag_edge_distance - 1:], 0.0)):
@@ -116,7 +118,7 @@ def flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance
     return wout
 
 
-def flag_rows_with_contiguous_flags(weights_in , max_contiguous_flag, ax='freq'):
+def flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag, ax='freq'):
     """
     flag any row or column with contiguous zero-weights over limit.
 
@@ -224,7 +226,7 @@ def flag_model_rms(skipped, d, w, mdl, mdl_w=None, model_rms_threshold=1.1, ax='
     if ax == 'freq' or ax == 'both':
         for i in range(mdl.shape[0]):
             if np.any(~skipped[i]):
-                if np.mean(np.abs(mdl[i,  ~np.isclose(np.abs(mdl_w[i]), 0.0)]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
+                if np.mean(np.abs(mdl[i, ~np.isclose(np.abs(mdl_w[i]), 0.0)]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
                     skipped[i] = True
     if ax == 'time' or ax == 'both':
         for i in range(mdl.shape[1]):
@@ -232,6 +234,7 @@ def flag_model_rms(skipped, d, w, mdl, mdl_w=None, model_rms_threshold=1.1, ax='
                 if np.mean(np.abs(mdl[~np.isclose(np.abs(mdl_w[:, i]), 0.0), i]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
                     skipped[:, i] = True
     return skipped
+
 
 class VisClean(object):
     """
@@ -981,7 +984,8 @@ class VisClean(object):
             if skip_flagged_edges:
                 xp, din, win, edges = truncate_flagged_edges(d, w, xp, ax=ax)
             else:
-                din = d; win = w
+                din = d
+                win = w
             # skip integrations with contiguous edge flags exceeding desired limit
             # (or precomputed limit) here.
             if skip_contiguous_flags:
@@ -1035,9 +1039,9 @@ class VisClean(object):
             # also flag skipped edge channels and integrations.
             if skip_flagged_edges:
                 skipped[:, :edges[1][0]] = True
-                skipped[:, -edges[1][1]-1:] = True
+                skipped[:, -edges[1][1] - 1:] = True
                 skipped[:edges[0][0], :] = True
-                skipped[-edges[0][1]-1:, :] = True
+                skipped[-edges[0][1] - 1:, :] = True
 
             filtered_model[k] = mdl
             filtered_model[k][skipped] = 0.

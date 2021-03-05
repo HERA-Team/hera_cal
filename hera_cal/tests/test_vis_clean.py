@@ -21,11 +21,12 @@ from hera_cal import xtalk_filter as xf
 import glob
 import copy
 
+
 # test flagging utility funtions
 def test_truncate_flagged_edges():
     Nfreqs = 64
     Ntimes = 60
-    data_in = np.outer(np.arange(1, Ntimes+1), np.arange(1, Nfreqs+1))
+    data_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
     weights_in = np.abs(data_in).astype(float)
     data_in = data_in + .3j * data_in
     # flag channel 30
@@ -56,10 +57,11 @@ def test_truncate_flagged_edges():
     assert np.all(np.isclose(wout, weights_in[:-2, :-1]))
     assert edges == [(0, 2), (0, 1)]
 
+
 def test_flag_rows_with_flags_within_edge_distance():
     Nfreqs = 64
     Ntimes = 60
-    weights_in = np.outer(np.arange(1, Ntimes+1), np.arange(1, Nfreqs+1))
+    weights_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
     weights_in[32, 2] = 0.
     weights_in[33, 12] = 0.
     weights_in[2, 30] = 0.
@@ -102,10 +104,11 @@ def test_flag_rows_with_flags_within_edge_distance():
         if i == 32:
             assert np.all(np.isclose(wout[i], 0.0))
 
+
 def test_flag_rows_with_contiguous_flags():
     Nfreqs = 64
     Ntimes = 60
-    weights_in = np.outer(np.arange(1, Ntimes+1), np.arange(1, Nfreqs+1))
+    weights_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
     weights_in[32, 2:12] = 0.
     weights_in[35, 12:14] = 0.
     weights_in[2:12, 30] = 0.
@@ -146,6 +149,7 @@ def test_flag_rows_with_contiguous_flags():
         if i == 32:
             assert np.all(np.isclose(wout[i], 0.0))
 
+
 def test_get_max_contiguous_flag_from_filter_periods():
     Nfreqs = 64
     Ntimes = 60
@@ -159,6 +163,7 @@ def test_get_max_contiguous_flag_from_filter_periods():
     assert mcf == 3
     mcf = vis_clean.get_max_contiguous_flag_from_filter_periods((times, freqs), filter_centers, filter_half_widths)
     assert tuple(mcf) == (3, 2)
+
 
 def test_flag_model_rms():
     Nfreqs = 64
