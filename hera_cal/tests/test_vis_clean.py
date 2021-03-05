@@ -307,41 +307,41 @@ class Test_VisClean(object):
         V = VisClean(fname_flagged, filetype='uvh5')
         V.read()
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
-                    skip_flagged_edge_times=True, skip_flagged_edge_freqs=True)
+                    skip_flagged_edges=True)
         # make sure if no unflagged channels exist, then the clean flags are all flagged.
         for k in V.clean_flags:
             assert np.all(V.clean_flags[k])
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
-                    skip_gaps_larger_then_filter_period=True)
+                    skip_contiguous_flags=True)
         for k in V.clean_flags:
             assert np.all(V.clean_flags[k])
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
-                    skip_gaps_larger_then_filter_period=True, max_frate=0.025)
+                    skip_contiguous_flags=True, max_frate=0.025)
         for k in V.clean_flags:
             assert np.all(V.clean_flags[k])
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
-                    skip_gaps_larger_then_filter_period=True, max_frate=0.025)
+                    skip_contiguous_flags=True, max_frate=0.025)
         for k in V.clean_flags:
             assert np.all(V.clean_flags[k])
         # now do file with some edge flags. Make sure the edge flags remain in clean_flags.
         V = VisClean(fname_edgeflags, filetype='uvh5')
         V.read()
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
-                    skip_flagged_edge_times=True, skip_flagged_edge_freqs=True)
+                    skip_flagged_edges=True)
         for k in V.clean_flags:
             if not np.all(V.flags[k]):
                 assert not np.all(V.clean_flags[k])
             assert np.all(V.clean_flags[k][0])
             assert np.all(V.clean_flags[k][:, 0])
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
-                    skip_flagged_edge_times=True, skip_flagged_edge_freqs=True, max_frate=0.025)
+                    skip_flagged_edges=True, max_frate=0.025)
         for k in V.clean_flags:
             if not np.all(V.flags[k]):
                 assert not np.all(V.clean_flags[k])
             assert np.all(V.clean_flags[k][0])
             assert np.all(V.clean_flags[k][:, 0])
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
-                    skip_flagged_edge_times=True, skip_flagged_edge_freqs=True, max_frate=0.025)
+                    skip_flagged_edges=True, max_frate=0.025)
         for k in V.clean_flags:
             if not np.all(V.flags[k]):
                 assert not np.all(V.clean_flags[k])
@@ -352,17 +352,17 @@ class Test_VisClean(object):
         max_frate = datacontainer.DataContainer({(24, 25, 'ee'): 2. / (np.mean(np.diff(V.times)) * 3.6 * 24.),
                                                  (24, 24, 'ee'): 1. / (2 * np.mean(np.diff(V.times)) * 3.6 * 24.)})
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
-                    skip_gaps_larger_then_filter_period=True, standoff=standoff)
+                    skip_contiguous_flags=True, standoff=standoff)
         # with this standoff, all data should be skipped.
         assert np.all(V.clean_flags[(24, 25, 'ee')])
         assert np.all(V.clean_flags[(24, 24, 'ee')])
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
-                    skip_gaps_larger_then_filter_period=True, max_frate=max_frate)
+                    skip_contiguous_flags=True, max_frate=max_frate)
         # this time, should only skip (24, 25, 'ee')
         assert np.all(V.clean_flags[(24, 25, 'ee')])
         assert not np.all(V.clean_flags[(24, 24, 'ee')])
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
-                    skip_gaps_larger_then_filter_period=True, max_frate=max_frate, standoff=standoff)
+                    skip_contiguous_flags=True, max_frate=max_frate, standoff=standoff)
 
         # now test flagging integrations within edge distance.
         # these flags should cause channel 12 to be

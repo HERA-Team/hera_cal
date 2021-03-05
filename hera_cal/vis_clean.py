@@ -58,15 +58,16 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
         edges = [edges[1], (0, 0)]
     else:
         ind_left = 0
-        ind_right = d.shape[1]
+        ind_right = data_in.shape[1]
         # Identify edge channels that are flagged.
         unflagged_chans = np.where(~np.all(np.isclose(weights_in, 0.0), axis=0))[0]
-        # truncate data to be filtered where appropriate.
-        ind_left = np.min(unflagged_chans)
-        ind_right = np.max(unflagged_chans) + 1
+        if np.count_nonzero(unflagged_chans) > 0:
+            # truncate data to be filtered where appropriate.
+            ind_left = np.min(unflagged_chans)
+            ind_right = np.max(unflagged_chans) + 1
         dout = data_in[:, ind_left: ind_right]
         wout = weights_in[:, ind_left: ind_right]
-        edges = (ind_left, d.shape[1] - ind_right)
+        edges = (ind_left, data_in.shape[1] - ind_right)
         if ax == 'both':
             x1 = x[1][ind_left: ind_right]
             x0, dout, wout, e0 = flag_edges(dout, wout, x[0], ax='time')
@@ -153,43 +154,44 @@ def flag_rows_with_contiguous_flags(weights_in , max_contiguous_flag, ax='freq')
                     if current_flag_length >= max_contiguous:
                         max_contiguous = current_flag_length
                     current_flag_length = 0
-            if ax == 'both' and max_contiguous >= max_contiguous_flag[1]:
-                wout[rownum][:] = 0.
+            if ax == 'both':
+                if max_contiguous >= max_contiguous_flag[1]:
+                    wout[rownum][:] = 0.
             elif max_contiguous >= max_contiguous_flag:
                 wout[rownum][:] = 0.
         if ax == 'both':
             wout = flag_rows_with_contiguous_flags(wout, max_contiguous_flag[0], ax='time')
     return wout
 
-    def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_widths):
-        """
-        determine maximum contiguous flags from filter periods
+def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_widths):
+    """
+    determine maximum contiguous flags from filter periods
 
-        Parameters
-        ----------
-        x : array-like, 1d or 2-tuple
-            x (and y) axes of data to determine maximum contiguous flags from.
-        filter_centers : list or 2-tuple/list of lists
-            centers of filtering-windows.
-        filter_widths : list or 2-tuple list of lists
-            half-widths of filtering windows.
+    Parameters
+    ----------
+    x : array-like, 1d or 2-tuple
+        x (and y) axes of data to determine maximum contiguous flags from.
+    filter_centers : list or 2-tuple/list of lists
+        centers of filtering-windows.
+    filter_half_widths : list or 2-tuple list of lists
+        half-widths of filtering windows.
 
-        Returns
-        -------
-        max_contiguous_flag: int or 2-list containing the width of a region corresponding
-                             to the largest delay in the filter centers and filter_widths
-        """
-        if len(x) == 2:
-            dx = [np.diff(x[0]), np.diff(x[1])]
-            nx = [len(x[0]), len(x[1])]
-            max_filter_freq = [np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers[0], filter_half_widths[0])]))),
-                               np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers[1], filter_half_widths[1])])))]
-            return [int(max_filter_freq[0] / (dx[0] * nx[0])) + 1, int(max_filter_freq[1] / (dx[1] * nx[1])) + 1 ]
-        else:
-            dx = np.diff(x)
-            nx = len(x)
-            max_filter_freq = np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers, filter_half_widths)])))
-            return int(max_filter_freq / (dx * nx)) + 1
+    Returns
+    -------
+    max_contiguous_flag: int or 2-list containing the width of a region corresponding
+                         to the largest delay in the filter centers and filter_widths
+    """
+    if len(x) == 2:
+        dx = [np.mean(np.diff(x[0])), np.mean(np.diff(x[1]))]
+        nx = [len(x[0]), len(x[1])]
+        max_filter_freq = [np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers[0], filter_half_widths[0])]))),
+                           np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers[1], filter_half_widths[1])])))]
+        return [int(max_filter_freq[0] * (dx[0] * nx[0])) + 1, int(max_filter_freq[1] * (dx[1] * nx[1])) + 1 ]
+    else:
+        dx = np.mean(np.diff(x))
+        nx = len(x)
+        max_filter_freq = np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers, filter_half_widths)])))
+        return int(max_filter_freq * (dx * nx)) + 1
 
 
 class VisClean(object):
@@ -639,7 +641,7 @@ class VisClean(object):
                        x=None, keys=None, data=None, flags=None, wgts=None,
                        output_prefix='clean', zeropad=None, cache=None,
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
-                       skip_flagged_edges,
+                       skip_flagged_edges=False,
                        skip_contiguous_flags=False, max_contiguous_flag=None,
                        keep_flags=False, clean_flags_in_resid_flags=False,
                        skip_if_flag_within_edge_distance=False,
@@ -931,14 +933,14 @@ class VisClean(object):
             mdl, res = np.zeros_like(d), np.zeros_like(d)
             # if we are not including flagged edges in filtering, skip them here.
             if skip_flagged_edges:
-                xp, din, win, edges = truncate_flagged_edges(d, w, ax=ax)
+                xp, din, win, edges = truncate_flagged_edges(d, w, xp, ax=ax)
             else:
-                xp = x; din = d; win = w
+                din = d; win = w
             # skip integrations with contiguous edge flags exceeding desired limit
             # (or precomputed limit) here.
             if skip_contiguous_flags:
                 if max_contiguous_flag is None:
-                    max_contiguous_flag = get_max_contiguous_flag_from_filter_period(x, filter_centers)
+                    max_contiguous_flag = get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_widths)
                 win = flag_rows_with_contiguous_flags(win, max_contiguous_flag, ax=ax)
             # skip integrations with flags within some minimum distance of the edges here.
             if skip_if_flag_within_edge_distance:
@@ -998,7 +1000,7 @@ class VisClean(object):
                 skipped[:, -edges[1][1]:] = True
                 skipped[:edges[0][0], :] = True
                 skipped[-edges[0][1]:, :] = True
-                
+
             filtered_model[k] = mdl
             filtered_model[k][skipped] = 0.
             filtered_resid[k] = res * fw
