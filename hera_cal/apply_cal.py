@@ -325,7 +325,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         for attribute, value in kwargs.items():
             hd.__setattr__(attribute, value)
         if redundant_average or redundant_solution:
-            all_reds = redcal.get_reds(hd.data_antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True)
+            all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True)
         else:
             all_reds = []
         if redundant_average:
@@ -391,10 +391,10 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     # full data loading and writing
     else:
         data, data_flags, data_nsamples = hd.read(frequencies=freqs_to_load)
-        data_antpos = hd.get_metadata_dict()['data_antpos']
+        antpos = hd.get_metadata_dict()['antpos']
         pols = hd.get_metadata_dict()['pols']
         if redundant_average or redundant_solution:
-            all_reds = redcal.get_reds(data_antpos, pols=pols, bl_error_tol=bl_error_tol, include_autos=True)
+            all_reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol, include_autos=True)
         else:
             all_reds = []
         if redundant_average:
