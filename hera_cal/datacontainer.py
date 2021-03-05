@@ -61,8 +61,7 @@ class DataContainer:
             self._pols = set([k[-1] for k in self._data.keys()])
 
             # placeholders for metadata (or get them from data, if possible)
-            for attr in ['ants', 'data_ants', 'antpos', 'data_antpos', 
-                         'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
+            for attr in ['antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
                 if hasattr(data, attr):
                     setattr(self, attr, getattr(data, attr))
                 else:
