@@ -193,7 +193,7 @@ def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_w
         return int(1. / (max_filter_freq * dx))
 
 
-def flag_model_rms(skipped, d, w, mdl, mdl_w=None, ax='freq'):
+def flag_model_rms(skipped, d, w, mdl, mdl_w=None, model_rms_threshold=1.1, ax='freq'):
     """
     flag integrations or channels where the RMS of the model > RMS of the data
 
@@ -212,9 +212,14 @@ def flag_model_rms(skipped, d, w, mdl, mdl_w=None, ax='freq'):
         model weights waterfall. RMS of model will be determined
         over voxels where |mdl_w| > 0.
         default is None. When None provided, mdl_w set to 1 everywhere.
+    model_rms_threshold : float, optional
+        flag integrations and/or channels if RMS of model > RMS of data x model_rms_threshold
+        default is 1.1
+    ax : str, optional
+        axis to flag over.
     """
     if mdl_w is None:
-        mdl_w = np.ones_like(mdl)
+        mdl_w = np.ones_like(w)
     if ax == 'freq' or ax == 'both':
         for i in range(mdl.shape[0]):
             if np.mean(np.abs(mdl[i,  ~np.isclose(np.abs(mdl_w[i]), 0.0)]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
@@ -1022,7 +1027,7 @@ class VisClean(object):
             # flag integrations or channels where the RMS of the model exceeds the RMS of the unflagged data
             # by some threshold.
             if flag_model_rms_outliers:
-                skipped = flag_model_rms(skipped, d, w, mdl, ax=ax)
+                skipped = flag_model_rms(skipped, d, w, mdl, model_rms_threshold=model_rms_threshold, ax=ax)
 
             # also flag skipped edge channels and integrations.
             if skip_flagged_edges:
