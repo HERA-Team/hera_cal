@@ -84,7 +84,7 @@ class DelayFilter(VisClean):
                        ax='freq', x=self.freqs, cache=filter_cache, mode=mode,
                        horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
                        skip_wgt=skip_wgt, overwrite=True,
-                       skip_flagged_edge_freqs=skip_flagged_edges, **filter_kwargs)
+                       skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
