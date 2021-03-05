@@ -46,14 +46,16 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
             data_in with completely flagged edges trimmed off.
     wout : array-like 2d.
             weights_in with completely flagged edges trimmed off.
-
+    edges : 2-list of 2-tuples
+            the width of the edges trimmed.
     """
     # if axis == 'time', just use freq mode
     # on transposed arrays.
     if ax == 'time':
-        xout, dout, wout = flag_edges(data_in.T, weights_in.T, x)
+        xout, dout, wout, edges = flag_edges(data_in.T, weights_in.T, x)
         dout = dout.T
         wout = wout.T
+        edges = [edges[1], (0, 0)]
     else:
         ind_left = 0
         ind_right = d.shape[1]
@@ -64,13 +66,16 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
         ind_right = np.max(unflagged_chans) + 1
         dout = data_in[:, ind_left: ind_right]
         wout = weights_in[:, ind_left: ind_right]
+        edges = (ind_left, d.shape[1] - ind_right)
         if ax == 'both':
             x1 = x[1][ind_left: ind_right]
-            x0, dout, wout = flag_edges(dout, wout, x[0], ax='time')
+            x0, dout, wout, e0 = flag_edges(dout, wout, x[0], ax='time')
             xout = [x0, x1]
+            edges = [e0[0], edges]
         else:
             xout = x[ind_left: ind_right]
-    return xout, dout, wout
+            edges = [(0, 0), edges]
+    return xout, dout, wout, edges
 
 def flag_rows_with_flags_within_edge_distance(weights_in, min_edge_distance, ax='freq'):
     """
@@ -165,9 +170,26 @@ def flag_rows_with_contiguous_flags(weights_in , max_contiguous_flag, ax='freq')
         x : array-like, 1d or 2-tuple
             x (and y) axes of data to determine maximum contiguous flags from.
         filter_centers : list or 2-tuple/list of lists
-            centers of delay-windows.
-        
+            centers of filtering-windows.
+        filter_widths : list or 2-tuple list of lists
+            half-widths of filtering windows.
+
+        Returns
+        -------
+        max_contiguous_flag: int or 2-list containing the width of a region corresponding
+                             to the largest delay in the filter centers and filter_widths
         """
+        if len(x) == 2:
+            dx = [np.diff(x[0]), np.diff(x[1])]
+            nx = [len(x[0]), len(x[1])]
+            max_filter_freq = [np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers[0], filter_half_widths[0])]))),
+                               np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers[1], filter_half_widths[1])])))]
+            return [int(max_filter_freq[0] / (dx[0] * nx[0])) + 1, int(max_filter_freq[1] / (dx[1] * nx[1])) + 1 ]
+        else:
+            dx = np.diff(x)
+            nx = len(x)
+            max_filter_freq = np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers, filter_half_widths)])))
+            return int(max_filter_freq / (dx * nx)) + 1
 
 
 class VisClean(object):
@@ -907,22 +929,29 @@ class VisClean(object):
                         xp[m] = np.hstack([x[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.mean(np.diff(x[m])),
                                            x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.mean(np.diff(x[m]))])
             mdl, res = np.zeros_like(d), np.zeros_like(d)
-            # perform the filtering on weights and data that have been truncated to exclude flaggged edges
-            # per users preference.
+            # if we are not including flagged edges in filtering, skip them here.
             if skip_flagged_edges:
-                din, win = truncate_flagged_edges(d, w, ax=ax)
+                xp, din, win, edges = truncate_flagged_edges(d, w, ax=ax)
+            else:
+                xp = x; din = d; win = w
+            # skip integrations with contiguous edge flags exceeding desired limit
+            # (or precomputed limit) here.
             if skip_contiguous_flags:
                 if max_contiguous_flag is None:
                     max_contiguous_flag = get_max_contiguous_flag_from_filter_period(x, filter_centers)
-                win = flag_rows_with_contiguous_flags0(win, max_contiguous_flag, ax=ax)
+                win = flag_rows_with_contiguous_flags(win, max_contiguous_flag, ax=ax)
+            # skip integrations with flags within some minimum distance of the edges here.
+            if skip_if_flag_within_edge_distance:
+                win = flag_rows_with_flags_within_edge_distance(win, min_edge_distance)
 
             mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                                   filter_half_widths=filter_half_widths,
                                                   mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
                                                   **filter_kwargs)
-            # insert filtered model etc... ba
-            mdl = np.pad(mdl, [(ind_lower, d.shape[0] - ind_upper), (ind_left, d.shape[1] - ind_right)])
-            res = np.pad(res, [(ind_lower, d.shape[0] - ind_upper), (ind_left, d.shape[1] - ind_right)])
+            # insert back the filtered model if we are skipping flagged edgs.
+            if skip_flagged_edges:
+                mdl = np.pad(mdl, edges)
+                res = np.pad(res, edges)
 
             # unzeropad array and put in skip flags.
             if ax == 'freq':
@@ -964,10 +993,12 @@ class VisClean(object):
                         if np.mean(np.abs(mdl[:, i]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
                             skipped[:, i] = True
             # also flag skipped edge channels and integrations.
-            skipped[:, :ind_left] = True
-            skipped[:, ind_right:] = True
-            skipped[:ind_lower, :] = True
-            skipped[ind_upper:, :] = True
+            if skip_flagged_edges:
+                skipped[:, :edges[1][0]] = True
+                skipped[:, -edges[1][1]:] = True
+                skipped[:edges[0][0], :] = True
+                skipped[-edges[0][1]:, :] = True
+                
             filtered_model[k] = mdl
             filtered_model[k][skipped] = 0.
             filtered_resid[k] = res * fw
