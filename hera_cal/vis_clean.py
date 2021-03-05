@@ -46,6 +46,7 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
             data_in with completely flagged edges trimmed off.
     wout : array-like 2d.
             weights_in with completely flagged edges trimmed off.
+
     """
     # if axis == 'time', just use freq mode
     # on transposed arrays.
@@ -85,10 +86,13 @@ def flag_rows_with_flags_within_edge_distance(weights_in, min_edge_distance, ax=
         of edge will be set to zero.
     ax : str, optional
         string specifying which axis to flag edges of.
+        valid options include 'freq', 'time', 'both'.
         default is 'freq'
     Returns
     -------
-
+    wout, array-like 2d
+        weights with rows or columns with zero weights
+        within min_edges_distance set entirely to zero.
 
     """
     if ax == 'time':
@@ -106,6 +110,24 @@ def flag_rows_with_flags_within_edge_distance(weights_in, min_edge_distance, ax=
 
 
 def flag_rows_with_contiguous_flags(weights_in , max_contiguous_flag, ax='freq'):
+    """
+    flag any row or column with contiguous zero-weights over limit.
+
+    Parameters
+    ----------
+    weights_in : array-like, 2d
+        weights to check. any row (ax='time') or col (ax='freq')
+        with contiguous regions of zero with length greater then max_contiguous_flag
+        will be set to zero.
+    max_contiguous_flag : integer (or 2-list/tuple)
+        any row or column with contiguous weights equal to zero greater or equal to this value
+        will be set entirely to zero.
+    ax : str, optional
+        axis to perform flagging over.
+        valid options include 'time' (zeroth axis), 'freq'(1 axis)
+        or 'both'.
+        default is 'freq'
+    """
     if ax == 'time':
         wout = flag_rows_with_contiguous_flags(weights_in.T, max_contiguous_flag).T
     else:
@@ -133,6 +155,19 @@ def flag_rows_with_contiguous_flags(weights_in , max_contiguous_flag, ax='freq')
         if ax == 'both':
             wout = flag_rows_with_contiguous_flags(wout, max_contiguous_flag[0], ax='time')
     return wout
+
+    def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_widths):
+        """
+        determine maximum contiguous flags from filter periods
+
+        Parameters
+        ----------
+        x : array-like, 1d or 2-tuple
+            x (and y) axes of data to determine maximum contiguous flags from.
+        filter_centers : list or 2-tuple/list of lists
+            centers of delay-windows.
+        
+        """
 
 
 class VisClean(object):
@@ -582,8 +617,8 @@ class VisClean(object):
                        x=None, keys=None, data=None, flags=None, wgts=None,
                        output_prefix='clean', zeropad=None, cache=None,
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
-                       skip_flagged_edge_freqs=False, skip_flagged_edge_times=False,
-                       skip_gaps_larger_then_filter_period=False,
+                       skip_flagged_edges,
+                       skip_contiguous_flags=False, max_contiguous_flag=None,
                        keep_flags=False, clean_flags_in_resid_flags=False,
                        skip_if_flag_within_edge_distance=False,
                        flag_within_edge_distance=None,
@@ -668,15 +703,16 @@ class VisClean(object):
         verbose : Lots of outputs.
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
-        skip_flagged_edge_freqs : bool, optional
-            if true, do not filter over flagged edge frequencies (filter over sub-region)
+        skip_flagged_edges : bool, optional
+            if true, do not filter over flagged edge times (if ax='time') (filter over sub-region)
+            or dont filter over flagged edge freqs (if ax='freq') or dont filter over both (if ax='both')
             defualt is False
-        skip_flagged_edge_times : bool, optional
-            if true, do not filter over flagged edge times (filter over sub-region)
-            defualt is False
-        skip_gaps_larger_then_filter_period : bool, optional
-            if true, skip integrations or channels with gaps that are larger then the period of
-            of the finest scale mode used for interpolation.
+        skip_contiguous_flags : bool, optional
+            if true, skip integrations or channels with gaps that are larger then integer
+            specified in max_contiguous_flag
+        max_contiguous_flag : int (or 2-tuple), optional
+            used if skip_contiguous_flags is True
+            gaps larger then this value will be skipped.
         keep_flags : bool, optional
             if true, set the post-filtered flags equal to the original flags plus any skipped integrations / channels.
         clean_flags_in_resid_flags : bool, optional
@@ -873,6 +909,13 @@ class VisClean(object):
             mdl, res = np.zeros_like(d), np.zeros_like(d)
             # perform the filtering on weights and data that have been truncated to exclude flaggged edges
             # per users preference.
+            if skip_flagged_edges:
+                din, win = truncate_flagged_edges(d, w, ax=ax)
+            if skip_contiguous_flags:
+                if max_contiguous_flag is None:
+                    max_contiguous_flag = get_max_contiguous_flag_from_filter_period(x, filter_centers)
+                win = flag_rows_with_contiguous_flags0(win, max_contiguous_flag, ax=ax)
+
             mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                                   filter_half_widths=filter_half_widths,
                                                   mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
