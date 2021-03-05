@@ -3301,7 +3301,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
     # if data_is_redsol, get reds, using data_flags.antpos if antpos is unspecified
     if data_is_redsol:
         if antpos is None:
-            antpos = data_flags.antpos
+            antpos = data_flags.data_antpos
         reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data_flags.pols())
         reds = redcal.filter_reds(reds, ants=[split_bl(bl)[0] for bl in autocorrs])
 
@@ -3517,10 +3517,10 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
         # get model bls and antpos to use later in baseline matching
         model_bls = hdm.bls
-        model_antpos = hdm.antpos
+        model_antpos = hdm.data_antpos
         if len(matched_model_files) > 1:  # in this case, it's a dictionary
             model_bls = list(set([bl for bls in list(hdm.bls.values()) for bl in bls]))
-            model_antpos = {ant: pos for antpos in hdm.antpos.values() for ant, pos in antpos.items()}
+            model_antpos = {ant: pos for antpos in hdm.data_antpos.values() for ant, pos in antpos.items()}
 
         # match integrations in model to integrations in data
         all_data_times, all_data_lsts = get_all_times_and_lsts(hd, solar_horizon=data_solar_horizon, unwrap=True)
@@ -3542,7 +3542,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                 # figure out which baselines to load from the data and the model and their correspondence (if one or both is redundantly averaged)
                 (data_bl_to_load,
                  model_bl_to_load,
-                 data_to_model_bl_map) = match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=[pol],
+                 data_to_model_bl_map) = match_baselines(hd.bls, model_bls, hd.data_antpos, model_antpos=model_antpos, pols=[pol],
                                                          data_is_redsol=data_is_redsol, model_is_redundant=model_is_redundant,
                                                          tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, verbose=verbose)
                 if (len(data_bl_to_load) == 0) or (len(model_bl_to_load) == 0):
@@ -3589,7 +3589,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                             # build data weights based on inverse noise variance and nsamples and flags
                             data_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, auto_flags,
                                                         times_by_bl=hd.times_by_bl, df=np.median(np.ediff1d(data.freqs)),
-                                                        data_is_redsol=data_is_redsol, gain_flags=rc_flags_subset, antpos=hd.antpos)
+                                                        data_is_redsol=data_is_redsol, gain_flags=rc_flags_subset, antpos=hd.data_antpos)
 
                             # run absolute calibration to get the gain updates
                             delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
@@ -3599,7 +3599,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                             calibrate_in_place(autocorrs, delta_gains)
                             chisq_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, auto_flags,
                                                          times_by_bl=hd.times_by_bl, df=np.median(np.ediff1d(data.freqs)),
-                                                         data_is_redsol=data_is_redsol, gain_flags=rc_flags_subset, antpos=hd.antpos)
+                                                         data_is_redsol=data_is_redsol, gain_flags=rc_flags_subset, antpos=hd.data_antpos)
                             total_qual, nObs, quals, nObs_per_ant = utils.chisq(data, model, chisq_wgts,
                                                                                 gain_flags=rc_flags_subset, split_by_antpol=True)
 
