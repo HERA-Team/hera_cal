@@ -164,6 +164,7 @@ def flag_rows_with_contiguous_flags(weights_in , max_contiguous_flag, ax='freq')
             wout = flag_rows_with_contiguous_flags(wout, max_contiguous_flag[0], ax='time')
     return wout
 
+
 def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_widths):
     """
     determine maximum contiguous flags from filter periods
@@ -222,12 +223,14 @@ def flag_model_rms(skipped, d, w, mdl, mdl_w=None, model_rms_threshold=1.1, ax='
         mdl_w = np.ones_like(w)
     if ax == 'freq' or ax == 'both':
         for i in range(mdl.shape[0]):
-            if np.mean(np.abs(mdl[i,  ~np.isclose(np.abs(mdl_w[i]), 0.0)]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
-                skipped[i] = True
+            if np.any(~skipped[i]):
+                if np.mean(np.abs(mdl[i,  ~np.isclose(np.abs(mdl_w[i]), 0.0)]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
+                    skipped[i] = True
     if ax == 'time' or ax == 'both':
         for i in range(mdl.shape[1]):
-            if np.mean(np.abs(mdl[~np.isclose(np.abs(mdl_w[:, i]), 0.0), i]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
-                skipped[:, i] = True
+            if np.any(~skipped[:, i]):
+                if np.mean(np.abs(mdl[~np.isclose(np.abs(mdl_w[:, i]), 0.0), i]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
+                    skipped[:, i] = True
     return skipped
 
 class VisClean(object):

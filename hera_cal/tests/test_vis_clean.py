@@ -146,6 +146,59 @@ def test_flag_rows_with_contiguous_flags():
         if i == 32:
             assert np.all(np.isclose(wout[i], 0.0))
 
+def test_get_max_contiguous_flag_from_filter_periods():
+    Nfreqs = 64
+    Ntimes = 60
+    times = np.arange(60) * 10.
+    freqs = np.arange(64) * 100e3
+    filter_centers = [[0.], [0.]]
+    filter_half_widths = [[1 / (3. * 10)], [1 / (100e3 * 2)]]
+    mcf = vis_clean.get_max_contiguous_flag_from_filter_periods(freqs, filter_centers[1], filter_half_widths[1])
+    assert mcf == 2
+    mcf = vis_clean.get_max_contiguous_flag_from_filter_periods(times, filter_centers[0], filter_half_widths[0])
+    assert mcf == 3
+    mcf = vis_clean.get_max_contiguous_flag_from_filter_periods((times, freqs), filter_centers, filter_half_widths)
+    assert tuple(mcf) == (3, 2)
+
+def test_flag_model_rms():
+    Nfreqs = 64
+    Ntimes = 60
+    times = np.arange(60) * 10.
+    freqs = np.arange(64) * 100e3
+    w = np.ones((Ntimes, Nfreqs), dtype=bool)
+    d = np.random.randn(Ntimes, Nfreqs) * 1e-3 + 1j * np.random.randn(Ntimes, Nfreqs) * 1e-3
+    d += np.ones_like(d) * 100
+    d[30, 12] = 3.12315132e6
+    w[30, 12] = 0.
+    mdl = np.ones_like(d) * 100
+    mdl[30, 24] = 1e6
+    skipped = np.zeros_like(mdl, dtype=bool)
+    skipped = vis_clean.flag_model_rms(skipped, d, w, mdl, ax='freq')
+    for i in range(Ntimes):
+        if i == 30:
+            assert np.all(skipped[i])
+        else:
+            assert np.all(~skipped[i])
+    skipped = np.zeros_like(mdl, dtype=bool)
+    skipped = vis_clean.flag_model_rms(skipped, d, w, mdl, ax='time')
+    for i in range(Ntimes):
+        if i == 24:
+            assert np.all(skipped[:, i])
+        else:
+            assert np.all(~skipped[:, i])
+    skipped = np.zeros_like(mdl, dtype=bool)
+    skipped = vis_clean.flag_model_rms(skipped, d, w, mdl, ax='both')
+    for i in range(Nfreqs):
+        if i == 24:
+            assert np.all(skipped[:, i])
+        else:
+            assert ~np.all(skipped[:, i])
+    for i in range(Ntimes):
+        if i == 30:
+            assert np.all(skipped[i])
+        else:
+            assert ~np.all(skipped[i])
+
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
