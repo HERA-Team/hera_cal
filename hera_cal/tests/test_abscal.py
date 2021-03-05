@@ -1084,6 +1084,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         data_flags.times_by_bl = {bl[:2]: np.arange(3) / 86400 for bl in bls}
         data_flags.freqs = np.arange(4)
         data_flags.antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0])}
+        data_flags.data_antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0])}
         data_nsamples = DataContainer({bl: np.ones((3, 4), dtype=float) for bl in bls})
         data_nsamples[(0, 1, 'ee')][1, 1] = 2
         model_flags = data_flags
@@ -1113,6 +1114,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         data_flags.times_by_bl = {bl[:2]: np.arange(3) / 86400 for bl in bls}
         data_flags.freqs = np.arange(4)
         data_flags.antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([30, 0, 0])}
+        data_flags.data_antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([30, 0, 0])}
         data_nsamples = DataContainer({bl: np.ones((3, 4), dtype=float) for bl in bls})
         data_nsamples[(0, 1, 'ee')] *= 3
         data_nsamples[(0, 2, 'ee')] *= 2
