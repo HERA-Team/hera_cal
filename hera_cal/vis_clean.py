@@ -19,6 +19,121 @@ from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
 
+def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
+    """
+    cut away edge channels and integrations that are completely flagged
+
+    Parameters
+    ----------
+    data_in : array-like, 2d
+        data from which to remove edge integrations and channels that are completely flagged.
+    weights_in : array-like, 2d
+        weights to determine which edge integrations and channels are completely flagged
+        (close to zero). Will also be truncated.
+    x : array-like, 1-d (or 2-tuple/list of arrays)
+        x-values for data axis that we are truncating.
+        if ax=='both', should be a 2-tuple or 2-list of 1-d arrays.
+    ax : string, optional
+        axis to truncate flagged edges from. Should be 'freq' to truncate
+        completely flagged edge channels, 'time' to truncate completely flagged
+        edge integrations, or 'both' to do both.
+
+    Returns
+    -------
+    xout : array-like 1d (or 2-list if ax=='both').
+            x with completely flagged edges trimmed off.
+    dout : array-like 2d.
+            data_in with completely flagged edges trimmed off.
+    wout : array-like 2d.
+            weights_in with completely flagged edges trimmed off.
+    """
+    # if axis == 'time', just use freq mode
+    # on transposed arrays.
+    if ax == 'time':
+        xout, dout, wout = flag_edges(data_in.T, weights_in.T, x)
+        dout = dout.T
+        wout = wout.T
+    else:
+        ind_left = 0
+        ind_right = d.shape[1]
+        # Identify edge channels that are flagged.
+        unflagged_chans = np.where(~np.all(np.isclose(weights_in, 0.0), axis=0))[0]
+        # truncate data to be filtered where appropriate.
+        ind_left = np.min(unflagged_chans)
+        ind_right = np.max(unflagged_chans) + 1
+        dout = data_in[:, ind_left: ind_right]
+        wout = weights_in[:, ind_left: ind_right]
+        if ax == 'both':
+            x1 = x[1][ind_left: ind_right]
+            x0, dout, wout = flag_edges(dout, wout, x[0], ax='time')
+            xout = [x0, x1]
+        else:
+            xout = x[ind_left: ind_right]
+    return xout, dout, wout
+
+def flag_rows_with_flags_within_edge_distance(weights_in, min_edge_distance, ax='freq'):
+    """
+    flag integrations (and/or channels) with flags within min_edge_distance of edge.
+
+    Parameters
+    -----------
+    weights_in : array-like, 2d
+        weights to check for flags within min_edge distance of edge along specified axis.
+        will set all weights in each row with flags within min_edge_distance to zero.
+    min_edge_distance : integer (or two-tuple / list)
+        any row of weights_in with zero weights within min_edge distance
+        of edge will be set to zero.
+    ax : str, optional
+        string specifying which axis to flag edges of.
+        default is 'freq'
+    Returns
+    -------
+
+
+    """
+    if ax == 'time':
+        wout = flag_rows_with_flags_within_edge_distance(weights_in.T, min_edge_distancee).T
+    else:
+        wout = copy.deepcopy(weights_in)
+        for rownum, wrow in enumerate(wout):
+            if  ax == 'both' and np.any(np.isclose(wout[:min_edge_distance[1], rownum], 0.0)) | np.any(np.isclose(wout[-min_edge_distance[1] - 1:, rownum], 0.0)):
+                wout[:, rownum] = 0.
+            elif np.any(np.isclose(wout[:min_edge_distance, rownum], 0.0)) | np.any(np.isclose(wout[-min_edge_distance - 1:, rownum], 0.0)):
+                wout[:, rownum] = 0.
+        if ax == 'both':
+            wout = flag_rows_with_flags_within_edge_distance(wout, min_edge_distance[0], ax='time')
+    return wout
+
+
+def flag_rows_with_contiguous_flags(weights_in , max_contiguous_flag, ax='freq'):
+    if ax == 'time':
+        wout = flag_rows_with_contiguous_flags(weights_in.T, max_contiguous_flag).T
+    else:
+        wout = copy.deepcopy(weights_in)
+        for rownum, wrow in enumerate(wout):
+            max_contiguous = 0  # keeps track of the largest contig flags in integration.
+            current_flag_length = 0  # keeps track of current contig flag size.
+            on_flag = False  # keep track if currently on a flag.
+            # iterate over each channel in integration.
+            for wr in wrow:
+                on_flag = (wr == 0)  # if weights are zero, on a flag.
+                # if on a flag, +1 current flag size.
+                if on_flag:
+                    current_flag_length += 1
+                else:
+                    # otherwise, check if the current flag len > max.
+                    # update max_contiguous if appropriate.
+                    if current_flag_length >= max_contiguous:
+                        max_contiguous = current_flag_length
+                    current_flag_length = 0
+            if ax == 'both' and max_contiguous >= max_contiguous_flag[1]:
+                wout[rownum][:] = 0.
+            elif max_contiguous >= max_contiguous_flag:
+                wout[rownum][:] = 0.
+        if ax == 'both':
+            wout = flag_rows_with_contiguous_flags(wout, max_contiguous_flag[0], ax='time')
+    return wout
+
 
 class VisClean(object):
     """
@@ -247,7 +362,8 @@ class VisClean(object):
         a_priori_flag_yaml: str, optional
             path to a yaml file containing manual flags.
         """
-        hd_flagged = copy.deepcopy(self.hd)
+        # archive original flags.
+        original_flags = UVFlag(self.hd, copy_flags=True)
         if external_flags is not None:
             external_flags = UVFlag(external_flags)
             # select frequencies and times that match data.
@@ -277,16 +393,18 @@ class VisClean(object):
                         self.flags[bl][:] = False
                     else:
                         self.flags[bl][~np.all(self.flags[bl], axis=1), :] = False
-            hd_flagged.update(flags=self.flags)
+            self.hd.update(flags=self.flags)
         # explicitly keep_existing since we already reset flags.
         if external_flags is not None:
-            flag_apply(external_flags, hd_flagged, force_pol=True, keep_existing=True)
+            flag_apply(external_flags, self.hd, force_pol=True, keep_existing=True)
         # apply apriori flag yaml too.
         if a_priori_flag_yaml is not None:
             import hera_qm.utils as qm_utils
-            hd_flagged = qm_utils.apply_yaml_flags(hd_flagged, a_priori_flag_yaml)
+            self.hd = qm_utils.apply_yaml_flags(self.hd, a_priori_flag_yaml)
 
-        _, self.flags, _ = hd_flagged.build_datacontainers()
+        _, self.flags, _ = self.hd.build_datacontainers()
+        # restore original flags on self.hd
+        flag_apply(original_flags, self.hd, keep_existing=False)
 
     def read(self, **read_kwargs):
         """
@@ -753,133 +871,6 @@ class VisClean(object):
                         xp[m] = np.hstack([x[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.mean(np.diff(x[m])),
                                            x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.mean(np.diff(x[m]))])
             mdl, res = np.zeros_like(d), np.zeros_like(d)
-            ind_left = 0
-            ind_right = d.shape[1]
-            # Identify edge channels that are flagged.
-            unflagged_chans = np.where(~np.all(np.isclose(w, 0.0), axis=0))[0]
-            # truncate data to be filtered where appropriate.
-            if skip_flagged_edge_freqs and len(unflagged_chans) > 0:
-                ind_left = np.min(unflagged_chans)
-                ind_right = np.max(unflagged_chans) + 1
-
-            ind_lower = 0
-            ind_upper = d.shape[0]
-            # Identify edge times that are flagged.
-            unflagged_times = np.where(~np.all(np.isclose(w, 0.0), axis=1))[0]
-            # truncate data to be filtered where appropriate.
-            if skip_flagged_edge_times and len(unflagged_times) > 0:
-                ind_lower = np.min(unflagged_times)
-                ind_upper = np.max(unflagged_times) + 1
-
-            # din and win are the arrays that will be passed into fourier filter
-            # If we specified skip_flagged_edge_freqs or
-            # skip_flagged_edge_times, they are
-            # truncated to remove these edge channels/integrations.
-            din = d[ind_lower: ind_upper][:, ind_left: ind_right]
-            win = w[ind_lower: ind_upper][:, ind_left: ind_right]
-            # also truncate the freqs and times.
-            if ax == 'both':
-                xp[0] = xp[0][ind_lower: ind_upper]
-                xp[1] = xp[1][ind_left: ind_right]
-            elif ax == 'time':
-                xp = xp[ind_lower: ind_upper]
-            elif ax == 'freq':
-                xp = xp[ind_left: ind_right]
-
-            # In the following code, we identify contiguous flag regions
-            # that are larger then a single period for the shortest wavelengths
-            # being used to interpolate the data. Linear filters have instability
-            # in regions where the shortest interpolation wavelength is smaller
-            # then the flagging gap.
-            if flag_within_edge_distance is None:
-                if ax == 'both':
-                    flag_within_edge_distance = (np.mean(np.diff(self.times) * 3600 * 24.), np.mean(np.diff(self.freqs)))
-                elif ax == 'freq':
-                    flag_within_edge_distance = np.mean(np.diff(self.freqs))
-                else:
-                    flag_within_edge_distance = np.mean(np.diff(self.times) * 3600 * 24.)
-            if ax == 'freq' or ax == 'both':
-                # iterate through each integration.
-                for rownum, wrow in enumerate(win):
-                    max_contiguous = 0  # keeps track of the largest contig flags in integration.
-                    current_flag_length = 0  # keeps track of current contig flag size.
-                    on_flag = False  # keep track if currently on a flag.
-                    # iterate over each channel in integration.
-                    for wr in wrow:
-                        on_flag = (wr == 0)  # if weights are zero, on a flag.
-                        # if on a flag, +1 current flag size.
-                        if on_flag:
-                            current_flag_length += 1
-                        else:
-                            # otherwise, check if the current flag len > max.
-                            # update max_contiguous if appropriate.
-                            if current_flag_length >= max_contiguous:
-                                max_contiguous = current_flag_length
-                            current_flag_length = 0
-                    # compute the maximum filter delay and the size of the frequency channel (voxel).
-                    # need different cases for ax=='both' or ax=='freq'.
-                    if ax == 'both':
-                        max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[1], filter_half_widths[1])])
-                        dvoxel = np.mean(np.diff(x[1]))
-                    else:
-                        max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
-                        dvoxel = np.mean(np.diff(x))
-                    # if width of largest contiguous flag region is greater
-                    # then the largest filtering delay, then flag the whole integration.
-                    if max_contiguous * dvoxel >= 1 / max_filter_delay:
-                        if skip_gaps_larger_then_filter_period:
-                            win[rownum, :] = 0.
-                    # check whether there are any flags within some distance of the edge
-                    # if user wants to flag these integrations, flag them as well.
-                    if ax == 'both':
-                        max_edge = int(flag_within_edge_distance[1] / dvoxel)
-                    else:
-                        max_edge = int(flag_within_edge_distance / dvoxel)
-                    if skip_if_flag_within_edge_distance:
-                        if np.any(np.isclose(win[rownum, :max_edge], 0.0)) | np.any(np.isclose(win[rownum, -max_edge - 1:], 0.0)):
-                            win[rownum, :] = 0.
-            # the following code identifies contiguous time-flags with chunks larger
-            # then the wavelength of the shortest filtering scale.
-            # channels with chuncks above this length can be flag, if user wishes.
-            if ax == 'time' or ax == 'both':
-                # visit each channel now.
-                for rownum, wrow in enumerate(win.T):
-                    max_contiguous = 0  # maximum contiguous time flag in channel.
-                    current_flag_length = 0  # length of current time flag.
-                    on_flag = False  # keep track if on a flagged region.
-                    for wr in wrow:  # iterate through times in channel.
-                        on_flag = (wr == 0)  # on a flag if weights are zero.
-                        if on_flag:
-                            current_flag_length += 1  # if on a flag, +1 flag len.
-                        else:
-                            # set max contig if we just got off of contig region
-                            # and cur len > max contig.
-                            if current_flag_length >= max_contiguous:
-                                max_contiguous = current_flag_length
-                            current_flag_length = 0
-                    # determine maximum contiguous length
-                    if ax == 'both':
-                        max_filter_fr = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[0], filter_half_widths[0])])
-                        dvoxel = np.mean(np.diff(x[0]))
-                    else:
-                        max_filter_fr = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
-                        dvoxel = np.mean(np.diff(x))
-                    # if largest contiguous flag region is larger then smallest period
-                    # flag the whole integration.
-                    if max_contiguous * dvoxel >= 1 / max_filter_fr:
-                        if skip_gaps_larger_then_filter_period:
-                            win[:, rownum] = 0.
-                    # check whether there are any flags within some distance of the edge
-                    # if user wants to flag these integrations, flag them as well.
-                    if ax == 'both':
-                        max_edge = int(flag_within_edge_distance[0] / dvoxel)
-                    else:
-                        max_edge = int(flag_within_edge_distance / dvoxel)
-                    # also have option to flag channel if there is a flag within
-                    # filter width of edge.
-                    if skip_if_flag_within_edge_distance:
-                        if np.any(np.isclose(win[:max_edge, rownum], 0.0)) | np.any(np.isclose(win[-max_edge - 1:, rownum], 0.0)):
-                            win[:, rownum] = 0.
             # perform the filtering on weights and data that have been truncated to exclude flaggged edges
             # per users preference.
             mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
