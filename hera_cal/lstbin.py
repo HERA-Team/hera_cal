@@ -105,7 +105,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 baseline_counts[utils.reverse_bl(k)] += 1
             else:
                 baseline_counts[k] = 1
-    baselines_same_across_nights = np.all([baseline_counts[k] == baseline_counts[l] for l in baseline_counts])
+    baselines_same_across_nights = np.all([baseline_counts[k] == baseline_counts[bl] for bl in baseline_counts])
 
     # get dlst if not provided
     if dlst is None:
