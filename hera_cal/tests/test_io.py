@@ -331,8 +331,12 @@ class Test_HERAData(object):
             assert isinstance(dc, DataContainer)
             for k in dc.antpos.keys():
                 assert np.all(dc.antpos[k] == hd.antpos[k])
+            assert len(dc.antpos) == 52
+            assert len(hd.antpos) == 52
             for k in dc.data_antpos.keys():
                 assert np.all(dc.data_antpos[k] == hd.data_antpos[k])
+            assert len(dc.data_antpos) == 2
+            assert len(hd.data_antpos) == 2
             assert np.all(dc.freqs == hd.freqs)
             assert np.all(dc.times == hd.times)
             assert np.all(dc.lsts == hd.lsts)
