@@ -695,23 +695,23 @@ class HERAData(UVData):
                     raise NotImplementedError('Redundant group iteration without explicitly setting antpos for filetype ' + self.filetype
                                               + ' without setting antpos has not been implemented.')
 
-                # generate antpos dict to feed into get_reds
+                # generate data_antpos dict to feed into get_reds
                 # that accounts for possibility that
                 # HERAData was initialized from multiple
-                # files in which case self.antpos is a dict of dicts.
+                # files in which case self.data_antpos is a dict of dicts.
                 if len(self.filepaths) > 1:
-                    antpos = {}
-                    for k in self.antpos:
-                        antpos.update(self.antpos[k])
+                    data_antpos = {}
+                    for k in self.data_antpos:
+                        data_antpos.update(self.data_antpos[k])
                     pols = set({})
                     for k in self.pols:
                         pols.union(set(self.pols[k]))
                     pols = list(pols)
                 else:
-                    antpos = self.antpos
+                    data_antpos = self.data_antpos
                     pols = self.pols
 
-                reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol,
+                reds = redcal.get_reds(data_antpos, pols=pols, bl_error_tol=bl_error_tol,
                                        include_autos=include_autos)
             # filter reds by baselines
             reds = redcal.filter_reds(reds, bls=bls)
