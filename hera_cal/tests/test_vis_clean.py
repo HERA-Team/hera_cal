@@ -21,6 +21,42 @@ from hera_cal import xtalk_filter as xf
 import glob
 import copy
 
+# test flagging utility funtions
+def test_truncate_flagged_edges():
+    Nfreqs = 64
+    Ntimes = 60
+    data_in = np.outer(np.arange(1, Ntimes+1), np.arange(1, Nfreqs+1))
+    weights_in = np.abs(data_in).astype(float)
+    data_in = data_in + .3j * data_in
+    # flag channel 30
+    weights_in[:, 30] = 0.
+    # flag last channel
+    weights_in[:, -1] = 0.
+    # flag last two integrations
+    weights_in[-2:, :] = 0.
+    times = np.arange(60) * 10.
+    freqs = np.arange(64) * 100e3
+    # test freq truncation
+    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
+    assert np.all(np.isclose(xout, freqs[:-1]))
+    assert np.all(np.isclose(dout, data_in[:, :-1]))
+    assert np.all(np.isclose(wout, weights_in[:, :-1]))
+    assert edges == [(0, 0), (0, 1)]
+    # test time truncation
+    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
+    assert np.all(np.isclose(xout, times[:-2]))
+    assert np.all(np.isclose(dout, data_in[:-2, :]))
+    assert np.all(np.isclose(wout, weights_in[:-2, :]))
+    assert edges == [(0, 2), (0, 0)]
+    # test truncating both.
+    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
+    assert np.all(np.isclose(xout[0], times[:-2]))
+    assert np.all(np.isclose(xout[1], freqs[:-1]))
+    assert np.all(np.isclose(dout, data_in[:-2, :-1]))
+    assert np.all(np.isclose(wout, weights_in[:-2, :-1]))
+    assert edges == [(0, 2), (0, 1)]
+
+
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
