@@ -52,7 +52,7 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
     # if axis == 'time', just use freq mode
     # on transposed arrays.
     if ax == 'time':
-        xout, dout, wout, edges = flag_edges(data_in.T, weights_in.T, x)
+        xout, dout, wout, edges = truncate_flagged_edges(data_in.T, weights_in.T, x)
         dout = dout.T
         wout = wout.T
         edges = [edges[1], (0, 0)]
@@ -70,7 +70,7 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
         edges = (ind_left, data_in.shape[1] - ind_right)
         if ax == 'both':
             x1 = x[1][ind_left: ind_right]
-            x0, dout, wout, e0 = flag_edges(dout, wout, x[0], ax='time')
+            x0, dout, wout, e0 = truncate_flagged_edges(dout, wout, x[0], ax='time')
             xout = [x0, x1]
             edges = [e0[0], edges]
         else:
@@ -78,16 +78,16 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
             edges = [(0, 0), edges]
     return xout, dout, wout, edges
 
-def flag_rows_with_flags_within_edge_distance(weights_in, min_edge_distance, ax='freq'):
+def flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance, ax='freq'):
     """
-    flag integrations (and/or channels) with flags within min_edge_distance of edge.
+    flag integrations (and/or channels) with flags within min_flag_edge_distance of edge.
 
     Parameters
     -----------
     weights_in : array-like, 2d
         weights to check for flags within min_edge distance of edge along specified axis.
-        will set all weights in each row with flags within min_edge_distance to zero.
-    min_edge_distance : integer (or two-tuple / list)
+        will set all weights in each row with flags within min_flag_edge_distance to zero.
+    min_flag_edge_distance : integer (or two-tuple / list)
         any row of weights_in with zero weights within min_edge distance
         of edge will be set to zero.
     ax : str, optional
@@ -98,20 +98,21 @@ def flag_rows_with_flags_within_edge_distance(weights_in, min_edge_distance, ax=
     -------
     wout, array-like 2d
         weights with rows or columns with zero weights
-        within min_edges_distance set entirely to zero.
+        within min_flag_edge_distance set entirely to zero.
 
     """
     if ax == 'time':
-        wout = flag_rows_with_flags_within_edge_distance(weights_in.T, min_edge_distancee).T
+        wout = flag_rows_with_flags_within_edge_distance(weights_in.T, min_flag_edge_distance).T
     else:
         wout = copy.deepcopy(weights_in)
         for rownum, wrow in enumerate(wout):
-            if  ax == 'both' and np.any(np.isclose(wout[:min_edge_distance[1], rownum], 0.0)) | np.any(np.isclose(wout[-min_edge_distance[1] - 1:, rownum], 0.0)):
-                wout[:, rownum] = 0.
-            elif np.any(np.isclose(wout[:min_edge_distance, rownum], 0.0)) | np.any(np.isclose(wout[-min_edge_distance - 1:, rownum], 0.0)):
-                wout[:, rownum] = 0.
+            if  ax == 'both':
+                if np.any(np.isclose(wout[rownum, :min_flag_edge_distance[1]], 0.0)) | np.any(np.isclose(wout[rownum, -min_flag_edge_distance[1] - 1:], 0.0)):
+                    wout[rownum, :] = 0.
+            elif np.any(np.isclose(wout[rownum, :min_flag_edge_distance], 0.0)) | np.any(np.isclose(wout[rownum, -min_flag_edge_distance - 1:], 0.0)):
+                wout[rownum, :] = 0.
         if ax == 'both':
-            wout = flag_rows_with_flags_within_edge_distance(wout, min_edge_distance[0], ax='time')
+            wout = flag_rows_with_flags_within_edge_distance(wout, min_flag_edge_distance[0], ax='time')
     return wout
 
 
@@ -183,15 +184,13 @@ def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_w
     """
     if len(x) == 2:
         dx = [np.mean(np.diff(x[0])), np.mean(np.diff(x[1]))]
-        nx = [len(x[0]), len(x[1])]
-        max_filter_freq = [np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers[0], filter_half_widths[0])]))),
-                           np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers[1], filter_half_widths[1])])))]
-        return [int(max_filter_freq[0] * (dx[0] * nx[0])) + 1, int(max_filter_freq[1] * (dx[1] * nx[1])) + 1 ]
+        max_filter_freq = [np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[0], filter_half_widths[0])]))),
+                           np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[1], filter_half_widths[1])])))]
+        return [int(1. / (max_filter_freq[0] * dx[0])), int(1. / (max_filter_freq[1] * dx[1]))]
     else:
         dx = np.mean(np.diff(x))
-        nx = len(x)
-        max_filter_freq = np.max(np.abs(np.hstack([[fc - fw / 2, fc + fw / 2. ] for fc, fw in zip(filter_centers, filter_half_widths)])))
-        return int(max_filter_freq * (dx * nx)) + 1
+        max_filter_freq = np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers, filter_half_widths)])))
+        return int(1. / (max_filter_freq * dx))
 
 
 class VisClean(object):
@@ -645,7 +644,7 @@ class VisClean(object):
                        skip_contiguous_flags=False, max_contiguous_flag=None,
                        keep_flags=False, clean_flags_in_resid_flags=False,
                        skip_if_flag_within_edge_distance=False,
-                       flag_within_edge_distance=None,
+                       min_flag_edge_distance=0,
                        flag_model_rms_outliers=False, model_rms_threshold=1.1,
                        **filter_kwargs):
         """
@@ -745,7 +744,7 @@ class VisClean(object):
         skip_if_flag_within_edge_distance : bool, optional
             if true, skip channel or integration if there is a flag within a skip_if_flag_within_edge_distance
             of the edge. Some instabilities seem to arise near edges, even if not contiguous with edge.
-        skip_if_flag_within_edge_distance : float (or 2-tuple/list), optional
+        min_flag_edge_distance : int (or 2-tuple/list), optional. Units of channels or integrations.
             if skip_if_flag_within_edge_distance is true and there is any flag within skip_if_flag_within_edge_distance
             of the edge of the band, then flag that integration (or channel).
             If performing 2dfilter, this arg should be a 2-tuple or list.
@@ -844,6 +843,8 @@ class VisClean(object):
             filter2d = True
             if x is None:
                 x = [(self.times - np.mean(self.times)) * 3600. * 24., self.freqs]
+            if min_flag_edge_distance == 0:
+                min_flag_edge_distance = (0, 0)
         elif ax == 'time':
             filterdim = 0
             filter2d = False
@@ -944,7 +945,7 @@ class VisClean(object):
                 win = flag_rows_with_contiguous_flags(win, max_contiguous_flag, ax=ax)
             # skip integrations with flags within some minimum distance of the edges here.
             if skip_if_flag_within_edge_distance:
-                win = flag_rows_with_flags_within_edge_distance(win, min_edge_distance)
+                win = flag_rows_with_flags_within_edge_distance(win, min_flag_edge_distance, ax=ax)
 
             mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                                   filter_half_widths=filter_half_widths,
@@ -997,9 +998,9 @@ class VisClean(object):
             # also flag skipped edge channels and integrations.
             if skip_flagged_edges:
                 skipped[:, :edges[1][0]] = True
-                skipped[:, -edges[1][1]:] = True
+                skipped[:, -edges[1][1]-1:] = True
                 skipped[:edges[0][0], :] = True
-                skipped[-edges[0][1]:, :] = True
+                skipped[-edges[0][1]-1:, :] = True
 
             filtered_model[k] = mdl
             filtered_model[k][skipped] = 0.
