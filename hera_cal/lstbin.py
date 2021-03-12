@@ -704,6 +704,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             lst_list = []
             nsamples_list = []
             # iterate over individual nights to bin
+            any_lst_overlap = False
             for j in range(len(data_files)):
                 nightly_data_list = []
                 nightly_flgs_list = []
@@ -719,6 +720,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     # check if this file has overlap with output file
                     if larr[-1] < fmin or larr[0] > fmax:
                         continue
+
+                    any_lst_overlap = True
 
                     # if overlap, get relevant time indicies
                     tinds = (larr > fmin) & (larr < fmax)
@@ -788,10 +791,10 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             all_blgroup_baselines = [list(bl_nightly_dict.values())[0][0] for bl_nightly_dict in blgroup]
             all_blgroup_antpairpols = []
             if len(data_list) == 0:
-                if len(blgroups) > 1:
-                    # spoof data  if data_list is empty.
+                if any_lst_overlap:
+                    # spoof data  if data_list is empty but there are some data files with overlap with this lst.
                     # this is to avoid creating lstbinned files with varying numbers of baselines
-                    # if we happen to be at an lst bin where one of the blgroups doesn't appear.
+                    # if we happen to be at an lst bin where one of the blgroups is empty.
                     for pol in hd.pols:
                         for bl in all_blgroup_baselines:
                             all_blgroup_antpairpols.append(bl + (pol,))
