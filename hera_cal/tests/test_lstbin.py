@@ -325,10 +325,11 @@ class Test_lstbin(object):
         # we want to test that each file that is written has identical ant_1_array
         # and ant_2_array and have baselines that include the union of all the nights.
         os.mkdir(tmp_path + '/lstbin_output/')
-        data_lists = [sorted(glob.glob(f'{DATA_PATH}{jd}/*.uvh5')) for jd in [2459118, 2459119, 2459122, 2459139]]
+        data_lists = [sorted(glob.glob(f'{DATA_PATH}/{jd}/*.uvh5')) for jd in [2459118, 2459119, 2459122, 2459139]]
         lstbin.lst_bin_files(data_lists, outdir=tmp_path + '/lstbin_output/', lst_start=5.178260914725223,
-                             dlst=0.0007046864745507975, ntimes_per_file=2)
-        bl_union = {}
+                             dlst=0.0007046864745507975, ntimes_per_file=6)
+
+        bl_union = set()
         for dlist in data_lists:
             hd = UVData()
             hd.read(dlist[-1])
@@ -337,30 +338,65 @@ class Test_lstbin(object):
         output_files = sorted(glob.glob(tmp_path + '/lstbin_output/*LST*.uvh5'))
         lstb = UVData()
         lstb.read(output_files[0])
-        a1arr = lstb.ant_1_array
-        a2arr = lstb.ant_2_array
+        a1arr = lstb.ant_1_array[::lstb.Ntimes]
+        a2arr = lstb.ant_2_array[::lstb.Ntimes]
         for of in output_files[1:]:
             lstb = UVData()
             lstb.read(of)
-            assert np.all(lstb.ant_1_array == a1arr)
-            assert np.all(lstb.ant_2_array == a2arr)
-            assert(len(set(lstb.get_antpairs()).difference(bl_union)) == 0)
-        # test with redundant averaging
+            assert np.all(lstb.ant_1_array[::lstb.Ntimes] == a1arr)
+            assert np.all(lstb.ant_2_array[::lstb.Ntimes] == a2arr)
+            aps = set(lstb.get_antpairs())
+            for ap in aps:
+                assert ap in bl_union or ap[::-1] in bl_union
+            for ap in bl_union:
+                assert ap in aps or ap[::-1] in aps
+
+        # Do the same test with partial bl loading.
         shutil.rmtree(tmp_path + '/lstbin_output/')
         os.mkdir(tmp_path + '/lstbin_output/')
-        data_lists = [sorted(glob.glob(f'{DATA_PATH}{jd}/*.uvh5')) for jd in [2459118, 2459119, 2459122, 2459139]]
+        data_lists = [sorted(glob.glob(f'{DATA_PATH}/{jd}/*.uvh5')) for jd in [2459118, 2459119, 2459122, 2459139]]
         lstbin.lst_bin_files(data_lists, outdir=tmp_path + '/lstbin_output/', lst_start=5.178260914725223,
-                             dlst=0.0007046864745507975, ntimes_per_file=2, average_redundant_baselines=True)
+                             dlst=0.0007046864745507975, ntimes_per_file=6, Nbls_to_load=1)
+        bl_union = set()
+        for dlist in data_lists:
+            hd = UVData()
+            hd.read(dlist[-1])
+            for bl in hd.get_antpairs():
+                bl_union.add(bl)
         output_files = sorted(glob.glob(tmp_path + '/lstbin_output/*LST*.uvh5'))
         lstb = UVData()
         lstb.read(output_files[0])
-        a1arr = lstb.ant_1_array
-        a2arr = lstb.ant_2_array
+        a1arr = lstb.ant_1_array[::lstb.Ntimes]
+        a2arr = lstb.ant_2_array[::lstb.Ntimes]
         for of in output_files[1:]:
             lstb = UVData()
             lstb.read(of)
-            assert np.all(lstb.ant_1_array == a1arr)
-            assert np.all(lstb.ant_2_array == a2arr)
+            # check that all outputs have same baselines
+            assert np.all(lstb.ant_1_array[::lstb.Ntimes] == a1arr)
+            assert np.all(lstb.ant_2_array[::lstb.Ntimes] == a2arr)
+            # check that all outputs have same baselines mod conjugation
+            # as the union of all baselines over all nights
+            aps = set(lstb.get_antpairs())
+            for ap in aps:
+                assert ap in bl_union or ap[::-1] in bl_union
+            for ap in bl_union:
+                assert ap in aps or ap[::-1] in aps
+        # test with redundant averaging
+        shutil.rmtree(tmp_path + '/lstbin_output/')
+        os.mkdir(tmp_path + '/lstbin_output/')
+        data_lists = [sorted(glob.glob(f'{DATA_PATH}/{jd}/*.uvh5')) for jd in [2459118, 2459119, 2459122, 2459139]]
+        lstbin.lst_bin_files(data_lists, outdir=tmp_path + '/lstbin_output/', lst_start=5.178260914725223,
+                             dlst=0.0007046864745507975, ntimes_per_file=6, average_redundant_baselines=True)
+        output_files = sorted(glob.glob(tmp_path + '/lstbin_output/*LST*.uvh5'))
+        lstb = UVData()
+        lstb.read(output_files[0])
+        a1arr = lstb.ant_1_array[::lstb.Ntimes]
+        a2arr = lstb.ant_2_array[::lstb.Ntimes]
+        for of in output_files[1:]:
+            lstb = UVData()
+            lstb.read(of)
+            assert np.all(lstb.ant_1_array[::lstb.Ntimes] == a1arr)
+            assert np.all(lstb.ant_2_array[::lstb.Ntimes] == a2arr)
 
     def test_lst_bin_files_redundant_average(self, tmpdir):
         # basic execution
