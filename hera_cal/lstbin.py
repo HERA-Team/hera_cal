@@ -788,16 +788,19 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             all_blgroup_baselines = [list(bl_nightly_dict.values())[0][0] for bl_nightly_dict in blgroup]
             all_blgroup_antpairpols = []
             if len(data_list) == 0:
-                # spoof data  if data_list is empty.
-                # this is to avoid creating lstbinned files with varying numbers of baselines
-                # if we happen to be at an lst bin where one of the blgroups doesn't appear.
-                for pol in hd.pols:
-                    for bl in all_blgroup_baselines:
-                        all_blgroup_antpairpols.append(bl + (pol,))
-                data_list = [DataContainer({bl: np.ones((1, hd.Nfreqs), dtype=complex) for bl in all_blgroup_antpairpols})]
-                flgs_list = [DataContainer({bl: np.ones((1, hd.Nfreqs), dtype=bool) for bl in all_blgroup_antpairpols})]
-                lst_list = [make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)[:1]]
-                nsamples_list = [DataContainer({bl: np.zeros((1, hd.Nfreqs)) for bl in all_blgroup_antpairpols})]
+                if len(blgroups) > 1:
+                    # spoof data  if data_list is empty.
+                    # this is to avoid creating lstbinned files with varying numbers of baselines
+                    # if we happen to be at an lst bin where one of the blgroups doesn't appear.
+                    for pol in hd.pols:
+                        for bl in all_blgroup_baselines:
+                            all_blgroup_antpairpols.append(bl + (pol,))
+                    data_list = [DataContainer({bl: np.ones((1, hd.Nfreqs), dtype=complex) for bl in all_blgroup_antpairpols})]
+                    flgs_list = [DataContainer({bl: np.ones((1, hd.Nfreqs), dtype=bool) for bl in all_blgroup_antpairpols})]
+                    lst_list = [make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)[:1]]
+                    nsamples_list = [DataContainer({bl: np.zeros((1, hd.Nfreqs)) for bl in all_blgroup_antpairpols})]
+                else:
+                    continue
             # pass through lst-bin function
             if ignore_flags:
                 flgs_list = None
