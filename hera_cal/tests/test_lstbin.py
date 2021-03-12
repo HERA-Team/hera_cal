@@ -13,6 +13,7 @@ from pyuvdata import UVCal, UVData
 from .. import io, lstbin, utils, redcal
 from ..datacontainer import DataContainer
 from ..data import DATA_PATH
+import shutil
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -316,6 +317,50 @@ class Test_lstbin(object):
 
         os.remove(output_lst_file)
         os.remove(output_std_file)
+
+    def test_lstbin_filess_inhomogenous_baselines(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        # now do a test with a more complicated set of files with inhomogenous baselines.
+        # between different nights.
+        # we want to test that each file that is written has identical ant_1_array
+        # and ant_2_array and have baselines that include the union of all the nights.
+        os.mkdir(tmp_path + '/lstbin_output/')
+        data_lists = [sorted(glob.glob(f'{DATA_PATH}{jd}/*.uvh5')) for jd in [2459118, 2459119, 2459122, 2459139]]
+        lstbin.lst_bin_files(data_lists, outdir=tmp_path + '/lstbin_output/', lst_start=5.178260914725223,
+                             dlst=0.0007046864745507975, ntimes_per_file=2)
+        bl_union = {}
+        for dlist in data_lists:
+            hd = UVData()
+            hd.read(dlist[-1])
+            for bl in hd.get_antpairs():
+                bl_union.add(bl)
+        output_files = sorted(glob.glob(tmp_path + '/lstbin_output/*LST*.uvh5'))
+        lstb = UVData()
+        lstb.read(output_files[0])
+        a1arr = lstb.ant_1_array
+        a2arr = lstb.ant_2_array
+        for of in output_files[1:]:
+            lstb = UVData()
+            lstb.read(of)
+            assert np.all(lstb.ant_1_array == a1arr)
+            assert np.all(lstb.ant_2_array == a2arr)
+            assert(len(set(lstb.get_antpairs()).difference(bl_union)) == 0)
+        # test with redundant averaging
+        shutil.rmtree(tmp_path + '/lstbin_output/')
+        os.mkdir(tmp_path + '/lstbin_output/')
+        data_lists = [sorted(glob.glob(f'{DATA_PATH}{jd}/*.uvh5')) for jd in [2459118, 2459119, 2459122, 2459139]]
+        lstbin.lst_bin_files(data_lists, outdir=tmp_path + '/lstbin_output/', lst_start=5.178260914725223,
+                             dlst=0.0007046864745507975, ntimes_per_file=2, average_redundant_baselines=True)
+        output_files = sorted(glob.glob(tmp_path + '/lstbin_output/*LST*.uvh5'))
+        lstb = UVData()
+        lstb.read(output_files[0])
+        a1arr = lstb.ant_1_array
+        a2arr = lstb.ant_2_array
+        for of in output_files[1:]:
+            lstb = UVData()
+            lstb.read(of)
+            assert np.all(lstb.ant_1_array == a1arr)
+            assert np.all(lstb.ant_2_array == a2arr)
 
     def test_lst_bin_files_redundant_average(self, tmpdir):
         # basic execution
