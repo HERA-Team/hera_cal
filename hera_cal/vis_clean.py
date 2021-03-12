@@ -887,8 +887,8 @@ class VisClean(object):
             filter2d = True
             if x is None:
                 x = [(self.times - np.mean(self.times)) * 3600. * 24., self.freqs]
-            if min_flag_edge_distance == 0:
-                min_flag_edge_distance = (0, 0)
+            if skip_if_flag_within_edge_distance == 0:
+                skip_if_flag_within_edge_distance = (0, 0)
         elif ax == 'time':
             filterdim = 0
             filter2d = False
