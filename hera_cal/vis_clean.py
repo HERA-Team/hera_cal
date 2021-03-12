@@ -13,6 +13,7 @@ import fnmatch
 from scipy import signal
 import warnings
 from pyuvdata import UVFlag
+from pyuvdata import utils as uvutils
 
 from . import io, apply_cal, version, redcal
 from .datacontainer import DataContainer
@@ -468,10 +469,10 @@ class VisClean(object):
                 external_flags = UVFlag(external_flags)
             uvutils.apply_uvflag(self.hd, external_flags, unflag_first=overwrite_flags, inplace=True)
         elif type == 'yaml':
-            if overwrite_flags:
-                self.hd.flag_array[:] = False
-            from hera_qm.utils import apply_flag_yaml
-                self.hd = apply_flag_yaml(self.hd, **yaml_kwargs)
+            from hera_qm.utils import apply_yaml_flags
+            self.hd = apply_yaml_flags(self.hd, external_flags, unflag_first=overwrite_flags)
+        else:
+            raise ValueError(f"{type} is an invalid type! Must be 'yaml' or 'uvflag'.")
         # re-flag fully flagged baselines if necessary
         if overwrite_flags:
             for bl in full_flags:

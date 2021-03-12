@@ -95,9 +95,9 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 factorize_flags=False, time_thresh=0.05, external_flags=None,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='',
-                                skip_flagged_edges=False, flag_zero_times=True,
-                                overwrite_data_flags=False, polarizations=None,
-                                a_priori_flag_yaml=None, **filter_kwargs):
+                                skip_flagged_edges=False,
+                                overwrite_flags=False, polarizations=None,
+                                flag_yaml=None, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
@@ -127,10 +127,9 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
         skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
-        flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
-        overwrite_data_flags : bool, if true reset data flags to False except for flagged antennas.
+        overwrite_flags : bool, if true reset data flags to False except for flagged antennas.
         polarizations: list, optional. List of polarizations to load, filter and write.
-        a_priori_flag_yaml: path to manual flagging text file.
+        flag_yaml: path to manual flagging text file.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
     hd = io.HERAData(infilename, filetype='uvh5')
@@ -143,37 +142,24 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
     if polarizations is None:
         polarizations = hd.pols
     if Nbls_per_load is None:
+        Nbls_per_load = len(hd.bls)
+    for i in range(0, len(hd.bls), Nbls_per_load):
         df = DelayFilter(hd, input_cal=calfile)
-        df.read(frequencies=freqs, polarizations=polarizations)
+        df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
         if avg_red_bllens:
             df.avg_red_baseline_vectors()
-        if external_flags is not None or a_priori_flag_yaml is not None:
-            df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
-                           flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
+        if external_flags is not None:
+            df.apply_flags(external_flags, overwrite_flags=overwrite_flags)
+        if flag_yaml is not None:
+            df.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, type='yaml')
         if factorize_flags:
             df.factorize_flags(time_thresh=time_thresh, inplace=True)
         df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                             skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                               filled_outfilename=filled_outfilename, partial_write=False,
-                               clobber=clobber, add_to_history=add_to_history)
-    else:
-        for i in range(0, len(hd.bls), Nbls_per_load):
-            df = DelayFilter(hd, input_cal=calfile)
-            df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
-            if avg_red_bllens:
-                df.avg_red_baseline_vectors()
-            if external_flags is not None or a_priori_flag_yaml is not None:
-                df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
-                               flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
-            if factorize_flags:
-                df.factorize_flags(time_thresh=time_thresh, inplace=True)
-            df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-            df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                   filled_outfilename=filled_outfilename, partial_write=True,
-                                   clobber=clobber, add_to_history=add_to_history, Nfreqs=df.Nfreqs, freq_array=np.asarray([df.freqs]))
-            df.hd.data_array = None  # this forces a reload in the next loop
+                               filled_outfilename=filled_outfilename, partial_write=True,
+                               clobber=clobber, add_to_history=add_to_history, Nfreqs=df.Nfreqs, freq_array=np.asarray([df.freqs]))
+        df.hd.data_array = None  # this forces a reload in the next loop
 
 
 def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
@@ -181,8 +167,8 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               factorize_flags=False, time_thresh=0.05, external_flags=None,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', polarizations=None,
-                                              skip_flagged_edges=False, overwrite_data_flags=False,
-                                              flag_zero_times=True, a_priori_flag_yaml=None, **filter_kwargs):
+                                              skip_flagged_edges=False, overwrite_flags=False,
+                                              flag_yaml=None, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
@@ -212,8 +198,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         add_to_history: string appended to the history of the output file
         polarizations: list of polarizations to include and write.
         skip_flagged_edges: if true, skip flagged edges in filtering.
-        flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
-        a_priori_flag_yaml: path to manual flagging text file.
+        flag_yaml: path to manual flagging text file.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
@@ -238,9 +223,10 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
     if avg_red_bllens:
         df.avg_red_baseline_vectors()
-    if external_flags is not None or a_priori_flag_yaml is not None:
-        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
-                       flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
+    if external_flags is not None:
+        df.apply_flags(external_flags, overwrite_flags=overwrite_flags)
+    if flag_yaml is not None:
+        df.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, type='yaml')
     if factorize_flags:
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
     df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,

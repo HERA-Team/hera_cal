@@ -57,9 +57,9 @@ delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, avg_re
                                          max_contiguous_edge_flags=max_contiguous_edge_flags,
                                          add_to_history=' '.join(sys.argv), verbose=a.verbose,
                                          skip_flagged_edges=skip_flagged_edges,
-                                         a_priori_flag_yaml=a.a_priori_flag_yaml,
+                                         flag_yaml=a.flag_yaml,
                                          external_flags=a.external_flags,
                                          skip_contiguous_flags=skip_gaps_larger_then_filter_period,
-                                         overwrite_data_flags=a.overwrite_data_flags,
+                                         overwrite_flags=a.overwrite_flags,
                                          flag_model_rms_outliers=flag_model_rms_outliers,
                                          clean_flags_in_resid_flags=True, **filter_kwargs)

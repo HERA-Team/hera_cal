@@ -251,7 +251,7 @@ class Test_DelayFilter(object):
             assert np.all(f[bl][:, -1])
             assert np.all(f[bl][0, :])
 
-        # test apriori flags and a_priori_flag_yaml
+        # test apriori flags and flag_yaml
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
         uvf = UVFlag(hd, mode='flag', copy_flags=True)
         uvf.to_waterfall(keep_pol=False, method='and')
@@ -261,7 +261,7 @@ class Test_DelayFilter(object):
         df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
                                                      tol=1e-4, baseline_list=[bl[:2]],
                                                      clobber=True, mode='dayenu',
-                                                     external_flags=flagfile, overwrite_data_flags=True)
+                                                     external_flags=flagfile, overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
@@ -271,8 +271,8 @@ class Test_DelayFilter(object):
         df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
                                                      tol=1e-4, baseline_list=[bl[:2]],
                                                      clobber=True, mode='dayenu',
-                                                     external_flags=flagfile, overwrite_data_flags=True,
-                                                     a_priori_flag_yaml=flag_yaml)
+                                                     external_flags=flagfile, overwrite_flags=True,
+                                                     flag_yaml=flag_yaml)
         # test that all flags are af yaml flags
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
@@ -337,7 +337,7 @@ class Test_DelayFilter(object):
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
 
-        # test apriori flags and a_priori_flag_yaml
+        # test apriori flags and flag_yaml
         hd = io.HERAData(uvh5)
         hd.read()
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
@@ -348,8 +348,8 @@ class Test_DelayFilter(object):
         uvf.write(flagfile, clobber=True)
         df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
                                        Nbls_per_load=1, clobber=True, mode='dayenu',
-                                       external_flags=flagfile, flag_zero_times=False,
-                                       overwrite_data_flags=True)
+                                       external_flags=flagfile,
+                                       overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -358,8 +358,8 @@ class Test_DelayFilter(object):
         # now without parital io.
         df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
                                        clobber=True, mode='dayenu',
-                                       external_flags=flagfile, flag_zero_times=False,
-                                       overwrite_data_flags=True)
+                                       external_flags=flagfile,
+                                       overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -370,7 +370,7 @@ class Test_DelayFilter(object):
         df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
                                        Nbls_per_load=1, clobber=True, mode='dayenu',
                                        external_flags=flagfile,
-                                       overwrite_data_flags=True, a_priori_flag_yaml=flag_yaml)
+                                       overwrite_flags=True, flag_yaml=flag_yaml)
         # test that all flags are af yaml flags
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])

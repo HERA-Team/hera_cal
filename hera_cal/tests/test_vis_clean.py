@@ -596,6 +596,14 @@ class Test_VisClean(object):
         for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
             assert np.all(V.clean_resid_flags[k][-1])
 
+    def test_apply_flags(self):
+        # cover edge cases of apply_flags not covered in test_delay_filter and
+        # test_xtalk_filter.
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        V = VisClean(fname, filetype='uvh5')
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
+        pytest.raises(ValueError, V.apply_flags, flag_yaml, type='invalid_type')
+
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
