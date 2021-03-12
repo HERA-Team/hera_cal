@@ -176,6 +176,13 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         # iterate over keys in d
         klist = list(d.keys())
         for j, key in enumerate(klist):
+            # if bl_list is not None, use it to determine conjugation:
+            # this is to prevent situations where conjugation of bl in
+            # data_list is different from bl in data which can cause
+            # inconsistent conjugation conventions in different LST chunks.
+            if bl_list is not None:
+                if utils.reverse_bl(key)[:2] in bl_list:
+                    key = utils.reverse_bl(key)
             # data[key] will be an odict. if data[key] doesn't exist
             # create data[key] as an empty odict. if data[key] already
             # exists, then pass
