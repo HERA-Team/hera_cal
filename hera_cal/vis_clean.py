@@ -441,76 +441,45 @@ class VisClean(object):
         apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags,
                                      gain_convention=gain_convention)
 
-    def apply_flags(self, external_flags=None, overwrite_data_flags=False,
-                    flag_zero_times=True, a_priori_flag_yaml=None):
+    def apply_flags(self, external_flags, overwrite_flags=False, type='uvflag'):
         """
-        apply external flags.
+        Apply external set of flags to self.hd.flag_array (inplace!), and re-attach the data and flags.
+        Default is to OR existing flags, unless overwrite_flags is True.
 
         Parameters
         ----------
-        external_flags: str or UVFlag object, optional.
+        external_flags: str or UVFlag object
             Str or list of strings pointing to flag files to apply.
-            flag files should be in a format readable by UVFlag and
-            can have times and frequencies that are not in the data.
-            This arg is set to None by default to support applying a_priori_flag_yaml only.
-        overwrite_data_flags: bool, optional
-            If true, overwrite all data flags for bls that are not entirely flagged.
-        flag_zero_times: bool, optional
-            if true, don't overwrite flags where the entire time is flagged.
-            this can be useful if we are applying external flags that do not have
-            thresholding.
-            An example of where we might want to do this is if we are doing a second round of RFI flagging
-            starting with a more conservative set of flags but we want to keep fully flagged times.
-        a_priori_flag_yaml: str, optional
-            path to a yaml file containing manual flags. This is set to None by default
-            to support providing external_flags but no a_priori_flag_yaml.
+            flag files should be in a format readable by UVFlag.
+        overwrite_flags: bool, optional
+            If True, overwrite flags (instead of OR) for baselines that are not entirely flagged.
+        type : str, optional
+            Use 'yaml' if the flags are a yaml file or 'uvflag' if the flags are a UVFlag
+            file or object. Default is 'uvflag'.
         """
-        if external_flags is None and a_priori_flag_yaml is None:
-            raise ValueError("Must supply either external_flags or a_priori_flag_yaml!")
-        # archive original flags.
-        original_flags = UVFlag(self.hd, copy_flags=True)
-        if external_flags is not None:
+
+        # get a census of fully flagged baselines to re-flag if overwrite_flags
+        if overwrite_flags:
+            full_flags = [bl for bl in self.flags if np.all(self.flags[bl])]
+
+        # apply flags
+        if type == 'uvflag':
             if isinstance(external_flags, str):
                 external_flags = UVFlag(external_flags)
-            # select frequencies and times that match data.
-            flag_times = np.unique(external_flags.time_array)
-            flag_freqs = np.unique(external_flags.freq_array)
-            times_overlapping = []
-            freqs_overlapping = []
-            for t in flag_times:
-                if np.any(np.isclose(self.times, t)):
-                    times_overlapping.append(t)
-            for f in flag_freqs:
-                if np.any(np.isclose(self.freqs, f)):
-                    freqs_overlapping.append(f)
-            # select frequencies and times that overlap with data.
-            external_flags.select(frequencies=freqs_overlapping, times=times_overlapping)
-            # make the times and frequencies in external_flags identical to data
-            # since to_baseline uses exact equality to broadcast flags to vis shape.
-            external_flags.time_array = np.unique(self.times)
-            external_flags.freq_array = np.unique(self.freqs)
-        from hera_qm.xrfi import flag_apply
-        # set all flags to False on waterfalls that are not fully flagged
-        # if overwrite_data_flags is True.
-        if overwrite_data_flags:
-            for bl in self.flags:
-                if not np.all(self.flags[bl]):
-                    if not flag_zero_times:
-                        self.flags[bl][:] = False
-                    else:
-                        self.flags[bl][~np.all(self.flags[bl], axis=1), :] = False
-            self.hd.update(flags=self.flags)
-        # explicitly keep_existing since we already reset flags.
-        if external_flags is not None:
-            flag_apply(external_flags, self.hd, force_pol=True, keep_existing=True)
-        # apply apriori flag yaml too.
-        if a_priori_flag_yaml is not None:
-            import hera_qm.utils as qm_utils
-            self.hd = qm_utils.apply_yaml_flags(self.hd, a_priori_flag_yaml)
+            uvutils.apply_uvflag(self.hd, external_flags, unflag_first=overwrite_flags, inplace=True)
+        elif type == 'yaml':
+            if overwrite_flags:
+                self.hd.flag_array[:] = False
+            from hera_qm.utils import apply_flag_yaml
+                self.hd = apply_flag_yaml(self.hd, **yaml_kwargs)
+        # re-flag fully flagged baselines if necessary
+        if overwrite_flags:
+            for bl in full_flags:
+                tinds = self.hd.antpair2ind(bl)
+                self.hd.flag_array[tinds] = True
 
-        _, self.flags, _ = self.hd.build_datacontainers()
-        # restore original flags on self.hd
-        flag_apply(original_flags, self.hd, keep_existing=False)
+        # attach data
+        self.attach_data()
 
     def read(self, **read_kwargs):
         """
