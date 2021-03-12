@@ -281,4 +281,5 @@ def xtalk_filter_argparser(mode='clean', multifile=False):
         a = vis_clean._dpss_argparser(multifile=multifile)
     filt_options = a.add_argument_group(title='Options for the cross-talk filter')
     a.add_argument("--max_frate_coeffs", type=float, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
+    a.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
     return a

@@ -556,8 +556,7 @@ class Test_VisClean(object):
             V.flags[k][-1, 32] = True
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
                     max_frate=0.025, standoff=0.0, min_dly=50.,
-                    skip_if_flag_within_edge_distance=True, mode='dpss_leastsq',
-                    min_flag_edge_distance=(2, 2))
+                    skip_if_flag_within_edge_distance=(2, 2), mode='dpss_leastsq')
         for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
             for i in range(V.Ntimes):
                 if i == 12:
@@ -568,8 +567,7 @@ class Test_VisClean(object):
         # if flagging mode is 'freq', then integration 12 should be flagged
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
                     max_frate=0.025, standoff=0.0, min_dly=50.,
-                    skip_if_flag_within_edge_distance=True, mode='dpss_leastsq',
-                    min_flag_edge_distance=2)
+                    skip_if_flag_within_edge_distance=2, mode='dpss_leastsq')
         for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
             for i in range(V.Ntimes):
                 if i == 12:
@@ -580,8 +578,7 @@ class Test_VisClean(object):
         # if flagging mode is 'time', then channel 32 should be flagged.
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
                     max_frate=0.025, standoff=0.0, min_dly=50.,
-                    skip_if_flag_within_edge_distance=True, mode='dpss_leastsq',
-                    min_flag_edge_distance=2)
+                    skip_if_flag_within_edge_distance=2, mode='dpss_leastsq')
         for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
             for i in range(V.Nfreqs):
                 if i == 32:

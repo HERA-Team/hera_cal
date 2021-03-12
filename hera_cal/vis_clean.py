@@ -691,8 +691,7 @@ class VisClean(object):
                        skip_flagged_edges=False,
                        skip_contiguous_flags=False, max_contiguous_flag=None,
                        keep_flags=False, clean_flags_in_resid_flags=False,
-                       skip_if_flag_within_edge_distance=False,
-                       min_flag_edge_distance=0,
+                       skip_if_flag_within_edge_distance=0,
                        flag_model_rms_outliers=False, model_rms_threshold=1.1,
                        **filter_kwargs):
         """
@@ -789,11 +788,8 @@ class VisClean(object):
         clean_flags_in_resid_flags : bool, optional
             if true, include clean flags in residual flags that will be written out in res_outfilename.
             default is False.
-        skip_if_flag_within_edge_distance : bool, optional
-            if true, skip channel or integration if there is a flag within a skip_if_flag_within_edge_distance
-            of the edge. Some instabilities seem to arise near edges, even if not contiguous with edge.
-        min_flag_edge_distance : int (or 2-tuple/list), optional. Units of channels or integrations.
-            if skip_if_flag_within_edge_distance is true and there is any flag within skip_if_flag_within_edge_distance
+        skip_if_flag_within_edge_distance : int (or 2-tuple/list), optional. Units of channels or integrations.
+            If there is any flag within skip_if_flag_within_edge_distance
             of the edge of the band, then flag that integration (or channel).
             If performing 2dfilter, this arg should be a 2-tuple or list.
         flag_model_rms_outliers : bool, optional
@@ -993,8 +989,8 @@ class VisClean(object):
                     max_contiguous_flag = get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_widths)
                 win = flag_rows_with_contiguous_flags(win, max_contiguous_flag, ax=ax)
             # skip integrations with flags within some minimum distance of the edges here.
-            if skip_if_flag_within_edge_distance:
-                win = flag_rows_with_flags_within_edge_distance(win, min_flag_edge_distance, ax=ax)
+            if np.any(np.asarray(skip_if_flag_within_edge_distance) > 0):
+                win = flag_rows_with_flags_within_edge_distance(win, skip_if_flag_within_edge_distance, ax=ax)
 
             mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                                   filter_half_widths=filter_half_widths,

@@ -52,7 +52,7 @@ delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, avg_re
                                          clobber=a.clobber, write_cache=a.write_cache,
                                          read_cache=a.read_cache, mode=mode,
                                          filled_outfilename=a.filled_outfilename,
-                                         CLEAN_outfilename=a.CLEAN_outfilename,
+                                         CLEAN_outfilename=a.CLEAN_outfilename, skip_if_flag_within_edge_distance=a.skip_if_flag_within_edge_distance,
                                          factorize_flags=a.factorize_flags, time_thresh=a.time_thresh,
                                          max_contiguous_edge_flags=max_contiguous_edge_flags,
                                          add_to_history=' '.join(sys.argv), verbose=a.verbose,

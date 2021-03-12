@@ -55,7 +55,7 @@ xtalk_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile, avg_re
                                          skip_flagged_edges=skip_flagged_edges,
                                          skip_contiguous_flags=skip_gaps_larger_then_filter_peri,
                                          a_priori_flag_yaml=a.a_priori_flag_yaml,
-                                         external_flags=a.external_flags,
+                                         external_flags=a.external_flags, skip_if_flag_within_edge_distance=a.skip_if_flag_within_edge_distance,
                                          overwrite_data_flags=a.overwrite_data_flags,
                                          flag_model_rms_outliers=flag_model_rms_outliers,
                                          clean_flags_in_resid_flags=True, **filter_kwargs)
