@@ -230,10 +230,17 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 for pol in pols:
                     key = antpair + (pol,)
                     if key not in data and utils.reverse_bl(key) not in data:
-                        nsamples[key] = odict({ind: [] for ind in grid_indices})
-                        data[key] = odict({ind: [] for ind in grid_indices})
-                        flags[key] = odict({ind: [] for ind in grid_indices})
-                        for k, ind in enumerate(grid_indices):
+                        # only spoofs data if it was never added! Does not catch
+                        # lsts with data.
+                        nsamples[key] = odict({ind: [] for ind in range(len(lst_grid))})
+                        data[key] = odict({ind: [] for ind in range(len(lst_grid))})
+                        flags[key] = odict({ind: [] for ind in range(len(lst_grid))})
+                    for ind in range(len(lst_grid)):
+                        if ind not in nsamples[key]:
+                            nsamples[key][ind] = []
+                            flags[key][ind] = []
+                            data[key][ind] = []
+                        if len(nsamples[key][ind]) == 0:
                             nsamples[key][ind].append(np.zeros(Nfreqs))
                             flags[key][ind].append(np.ones(Nfreqs, dtype=bool))
                             data[key][ind].append(np.zeros(Nfreqs, dtype=complex))
@@ -805,10 +812,10 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     for pol in hd.pols:
                         for bl in all_blgroup_baselines:
                             all_blgroup_antpairpols.append(bl + (pol,))
-                    data_list = [DataContainer({bl: np.ones((1, hd.Nfreqs), dtype=complex) for bl in all_blgroup_antpairpols})]
-                    flgs_list = [DataContainer({bl: np.ones((1, hd.Nfreqs), dtype=bool) for bl in all_blgroup_antpairpols})]
-                    lst_list = [make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)[:1]]
-                    nsamples_list = [DataContainer({bl: np.zeros((1, hd.Nfreqs)) for bl in all_blgroup_antpairpols})]
+                    data_list = [DataContainer({bl: np.ones((len(f_lst), hd.Nfreqs), dtype=complex) for bl in all_blgroup_antpairpols})]
+                    flgs_list = [DataContainer({bl: np.ones((len(f_lst), hd.Nfreqs), dtype=bool) for bl in all_blgroup_antpairpols})]
+                    lst_list = [f_lst]
+                    nsamples_list = [DataContainer({bl: np.zeros((len(f_lst), hd.Nfreqs)) for bl in all_blgroup_antpairpols})]
                 else:
                     continue
             # pass through lst-bin function
