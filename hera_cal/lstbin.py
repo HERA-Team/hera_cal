@@ -701,7 +701,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     # generate a list of dictionaries which contain the nights occupied by each unique baseline
     # (or unique baseline group if average_redundant_baselines is true)
     bl_nightly_dicts = gen_bl_nightly_dicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol,
-                                             include_autos=include_autos, redundant=average_redundant_baselines, ex_ant_yaml_files=ex_ant_yaml_files)
+                                            include_autos=include_autos, redundant=average_redundant_baselines, ex_ant_yaml_files=ex_ant_yaml_files)
     # iterate over output LST files
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = len(bl_nightly_dicts) + 1
