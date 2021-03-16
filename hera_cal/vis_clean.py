@@ -130,9 +130,11 @@ class VisClean(object):
             self.lat = self.hd.telescope_location_lat_lon_alt[0] * 180 / np.pi  # degrees
             self.lon = self.hd.telescope_location_lat_lon_alt[1] * 180 / np.pi  # degrees
             self.Nfreqs = len(self.freqs)
+            self.polarization_array = self.hd.polarization_array
+            self.Npols = len(self.polarization_array)
         # link the data if they exist
         if self.hd.data_array is not None and link_data:
-            self.hd.select(frequencies=self.freqs)
+            self.hd.select(frequencies=self.freqs, polarizations=self.pols)
             data, flags, nsamples = self.hd.build_datacontainers()
             self.data = data
             self.flags = flags

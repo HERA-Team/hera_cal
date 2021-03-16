@@ -178,24 +178,29 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                clobber=clobber, add_to_history=add_to_history,
                                extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': np.asarray([df.freqs])})
     else:
-        for i in range(0, len(hd.bls), Nbls_per_load):
+        bls = hd.get_antpairs()
+        Nbls = len(bls)
+        Nbls_per_load = Nbls_per_load // len(polarizations) # count polarizations
+        for i in range(0, Nbls, Nbls_per_load):
             echo(f"{str(datetime.now())}...initializing delay filter for baseline chunk.", verbose=verbose)
             df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
-            echo(f"{str(datetime.now())}...reading data for baseline chunk with {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
-            df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
-            if factorize_flags:
-                echo(f"{str(datetime.now())}...factorizing flags.", verbose=verbose)
-                df.factorize_flags(time_thresh=time_thresh, inplace=True)
-            if trim_edges:
-                raise NotImplementedError("trim_edges not implemented for partial baseline loading.")
-            echo(f"{str(datetime.now())}...running delay filter for baseline chunk with {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
-            df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
-            echo(f"{str(datetime.now())}...writing filtered data for {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
-            df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                   filled_outfilename=filled_outfilename, partial_write=True, verbose=verbose,
-                                   clobber=clobber, add_to_history=add_to_history, Nfreqs=df.Nfreqs, freq_array=np.asarray([df.freqs]))
-            df.hd.data_array = None  # this forces a reload in the next loop
+            if len(bls[i:i+Nbls_per_load]) > 0:
+                echo(f"{str(datetime.now())}...reading data for baseline chunk with {len(bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
+                df.read(bls=bls[i:i + Nbls_per_load], frequencies=freqs, polarizations=polarizations)
+                if factorize_flags:
+                    echo(f"{str(datetime.now())}...factorizing flags.", verbose=verbose)
+                    df.factorize_flags(time_thresh=time_thresh, inplace=True)
+                if trim_edges:
+                    raise NotImplementedError("trim_edges not implemented for partial baseline loading.")
+                echo(f"{str(datetime.now())}...running delay filter for baseline chunk with {len(bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
+                df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                                    skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
+                echo(f"{str(datetime.now())}...writing filtered data for {len(bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
+                df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                                       filled_outfilename=filled_outfilename, partial_write=True, verbose=verbose,
+                                       clobber=clobber, add_to_history=add_to_history, Nfreqs=df.Nfreqs, freq_array=np.asarray([df.freqs]),
+                                       polarization_array=df.polarization_array, Npols=df.Npols, pols=polarizations)
+                df.hd.data_array = None  # this forces a reload in the next loop
 
 
 def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,

@@ -12,7 +12,7 @@ import warnings
 
 def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh5',
                      polarizations=None, spw_range=None, throw_away_flagged_bls=False,
-                     clobber=False):
+                     clobber=False, ant_flag_yaml=None):
     """A data file chunker
 
     Parameters
@@ -35,6 +35,8 @@ def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh
     clobber: bool, optional
         if true, overwrite any preexisting output files.
         defualt is false.
+    flag_yaml : str, optional
+        yaml file with list of antennas to flag and throw away if throw_away_flagged_bls is True
     Returns
     -------
     Concatenated HERAData object.
@@ -52,16 +54,14 @@ def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh
     data, flags, nsamples = hd.read(axis='blt', **read_args)
     # throw away fully flagged baselines.
     if throw_away_flagged_bls:
-        bls2keep = []
-        for bl in data:
-            if not np.all(flags[bl]):
-                bls2keep.append(bl)
-        # Throw away unflagged antennas.
-        if len(bls2keep) > 0:
-            hd.select(bls=bls2keep)
-        else:
+        from hera_qm.utils import apply_yaml_flags
+        hd = apply_yaml_flags(hd, ant_flag_yaml, flag_freqs=False, flag_times=False,
+                              flag_ants=True, ant_indices_only=True, throw_away_flagged_ants=True)
+        data, flags, nsamples = hd.build_datacontainers()
+        if len(data) == 0:
             warnings.warn("No unflagged baselines present. Exiting.")
             sys.exit(0)
+
     if filetype == 'uvh5':
         hd.write_uvh5(outputfile, clobber=clobber)
     elif file_type == 'miriad':
@@ -147,6 +147,7 @@ def chunk_data_parser():
     a.add_argument("--filetype", type=str, help="Type of output file. Default is uvh5", default="uvh5")
     a.add_argument("--polarizations", type=str, nargs="+", default=None, help="optional list of polarizations to select.")
     a.add_argument("--spw_range", type=int, nargs=2, default=None, help="optional 2-tuple of frequency channels to select.")
-    a.add_argument("--throw_away_flagged_bls", default=False, action="store_true", help="Throw away baselines that are fully flagged.")
     a.add_argument("--clobber", default=False, action="store_true", help="overwrite output if it exists.")
+    a.add_argument("--throw_away_flagged_bls", default=False, action="store_true", help="throw away flagged baselines.")
+    a.add_argument("--ant_flag_yaml", default=None, help="path to yaml file with flagged data.")
     return a
