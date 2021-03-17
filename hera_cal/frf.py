@@ -13,6 +13,7 @@ from . import utils
 
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
+from pyuvdata import UVData, UVFlag
 
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, rephase=False,
@@ -482,7 +483,7 @@ class FRFilter(VisClean):
 
 
 def time_avg_data_and_write(input_data, output_data, t_avg,
-                            wgt_by_nsample=True, rephase=False,
+                            wgt_by_nsample=True, rephase=False, filetype='uvh5',
                             verbose=False, clobber=False, flag_output=None):
     """Driver method for averaging and writing out data.
 
@@ -497,6 +498,9 @@ def time_avg_data_and_write(input_data, output_data, t_avg,
     wgt_by_nsample: bool, optional
         weight by nsamples in time average
         default is True
+    filetype : str, optional
+        specify if uvh5, miriad, ect...
+        default is 'uvh5'.
     verbose: bool, optional
         if true, more outputs.
         default is False
@@ -511,19 +515,22 @@ def time_avg_data_and_write(input_data, output_data, t_avg,
     -------
     frf object with time averaged data attached.
     """
-    fr = FRFilter(input_data)
+    fr = FRFilter(input_data, filetype=filetype)
     fr.read()
     fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
                     wgt_by_nsample=wgt_by_nsample, rephase=rephase)
-    hdo = fr._write_time_averaged_data(output_data, clobber=clobber)
+    fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
+                  nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
     if flag_output is not None:
-        uvf = UVFlag(hdo, mode='flag', copy_flags=True)
+        uv_avg = UVData()
+        uv_avg.read(output_data)
+        uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.write(flag_output, clobber=clobber)
 
 
 def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output_data, t_avg,
-                                          wgt_by_nsample=True, rephase=False,
+                                          wgt_by_nsample=True, rephase=False, filetype='uvh5',
                                           verbose=False, clobber=False, flag_output=None):
     """Time-averaging with a baseline cornerturn
 
@@ -534,7 +541,6 @@ def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output
         list of names of input data file to read baselines across.
     baseline_list: list
         list of antpolpairs or antpairs
-
     output_data: str
         name of output data file.
     t_avg: float
@@ -542,6 +548,9 @@ def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output
     wgt_by_nsample: bool, optional
         weight by nsamples in time average
         default is True
+    filetype : str, optional
+        specify if uvh5, miriad, ect...
+            default is uvh5.
     verbose: bool, optional
         if true, more outputs.
         default is False
@@ -554,14 +563,17 @@ def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output
     -------
     frf object with time averaged data attached.
     """
-    fr = FRFilter(input_data_list)
+    fr = FRFilter(input_data_list, filetype=filetype)
     fr.read(bls=baseline_list, axis='blt')
 
     fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
                     wgt_by_nsample=wgt_by_nsample, rephase=rephase)
-    hdo = fr._write_time_averaged_data(output_data, clobber=clobber)
+    fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
+                  nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
     if flag_output is not None:
-        uvf = UVFlag(hdo, mode='flag', copy_flags=True)
+        uv_avg = UVData()
+        uv_avg.read(output_data)
+        uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.write(flag_output, clobber=clobber)
 
