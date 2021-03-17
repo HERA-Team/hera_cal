@@ -151,7 +151,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         if external_flags is not None:
             df.apply_flags(external_flags, overwrite_flags=overwrite_flags)
         if flag_yaml is not None:
-            df.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, type='yaml')
+            df.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
         if factorize_flags:
             df.factorize_flags(time_thresh=time_thresh, inplace=True)
         df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
@@ -226,7 +226,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     if external_flags is not None:
         df.apply_flags(external_flags, overwrite_flags=overwrite_flags)
     if flag_yaml is not None:
-        df.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, type='yaml')
+        df.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
     if factorize_flags:
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
     df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,

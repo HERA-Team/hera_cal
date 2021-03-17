@@ -442,7 +442,7 @@ class VisClean(object):
         apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags,
                                      gain_convention=gain_convention)
 
-    def apply_flags(self, external_flags, overwrite_flags=False, type='uvflag'):
+    def apply_flags(self, external_flags, overwrite_flags=False, filetype='uvflag'):
         """
         Apply external set of flags to self.hd.flag_array (inplace!), and re-attach the data and flags.
         Default is to OR existing flags, unless overwrite_flags is True.
@@ -454,7 +454,7 @@ class VisClean(object):
             flag files should be in a format readable by UVFlag.
         overwrite_flags: bool, optional
             If True, overwrite flags (instead of OR) for baselines that are not entirely flagged.
-        type : str, optional
+        filetype : str, optional
             Use 'yaml' if the flags are a yaml file or 'uvflag' if the flags are a UVFlag
             file or object. Default is 'uvflag'.
         """
@@ -464,11 +464,11 @@ class VisClean(object):
             full_flags = [bl for bl in self.flags if np.all(self.flags[bl])]
 
         # apply flags
-        if type == 'uvflag':
+        if filetype == 'uvflag':
             if isinstance(external_flags, str):
                 external_flags = UVFlag(external_flags)
             uvutils.apply_uvflag(self.hd, external_flags, unflag_first=overwrite_flags, inplace=True)
-        elif type == 'yaml':
+        elif filetype == 'yaml':
             from hera_qm.utils import apply_yaml_flags
             self.hd = apply_yaml_flags(self.hd, external_flags, unflag_first=overwrite_flags)
         else:
