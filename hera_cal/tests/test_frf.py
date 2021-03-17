@@ -238,7 +238,7 @@ class Test_FRFilter(object):
         assert not args.verbose
         assert args.flag_output is None
         assert args.filetype == "uvh5"
-        sys.argv = [sys.argv[0], "input.uvh5", "output.uvh5",  "first.uvh5", "second.uvh5", "--t_avg", "35.", "--rephase"]
+        sys.argv = [sys.argv[0], "input.uvh5", "output.uvh5", "first.uvh5", "second.uvh5", "--t_avg", "35.", "--rephase"]
         ap = frf.time_average_argparser(multifile=True)
         args = ap.parse_args()
         assert args.input_data == "input.uvh5"
