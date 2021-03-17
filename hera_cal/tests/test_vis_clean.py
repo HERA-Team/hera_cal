@@ -622,7 +622,6 @@ class Test_VisClean(object):
             else:
                 assert not np.any(V.flags[k])
 
-
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
