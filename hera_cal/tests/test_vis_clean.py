@@ -602,7 +602,26 @@ class Test_VisClean(object):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         V = VisClean(fname, filetype='uvh5')
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
-        pytest.raises(ValueError, V.apply_flags, flag_yaml, type='invalid_type')
+        pytest.raises(ValueError, V.apply_flags, flag_yaml, filetype='invalid_type')
+        # cover overwrite flags
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample_noflags.yaml')
+        V.read()
+        nk = 0
+        for k in V.flags.keys():
+            # flag every other baseline
+            if nk % 2 == 0:
+                V.flags[k][:] = False
+        original_flags = copy.deepcopy(V.flags)
+        # applying empty flag yaml should result in overwriting
+        # all flags with False except on baselines where all flags were True.
+        V.apply_flags(flag_yaml, filetype='yaml', overwrite_flags=True)
+        # check that this is the case.
+        for k in V.flags:
+            if np.all(original_flags[k]):
+                assert np.all(V.flags[k])
+            else:
+                assert not np.any(V.flags[k])
+
 
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean(self):
