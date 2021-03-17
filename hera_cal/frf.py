@@ -14,6 +14,7 @@ from . import utils
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
 from pyuvdata import UVData, UVFlag
+import argparse
 
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, rephase=False,
@@ -592,4 +593,5 @@ def time_average_argparser(multifile=False):
     a.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
     a.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
     a.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
+    a.add_argument("--filetype", default="uvh5", type=str, help="optional filetype specifier. Default is 'uvh5'. Set to 'miriad' if reading miriad files etc...")
     return a

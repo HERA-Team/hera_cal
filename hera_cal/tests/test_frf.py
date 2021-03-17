@@ -226,3 +226,26 @@ class Test_FRFilter(object):
             assert np.all(np.isclose(data_out.data[k], data_out_bls.data[k]))
             assert np.all(np.isclose(data_out.flags[k], data_out_bls.flags[k]))
             assert np.all(np.isclose(data_out.nsamples[k], data_out_bls.nsamples[k]))
+
+    def test_time_average_argparser(self):
+        sys.argv = [sys.argv[0], "input.uvh5", "output.uvh5", "--t_avg", "35.", "--rephase"]
+        ap = frf.time_average_argparser()
+        args = ap.parse_args()
+        assert args.input_data == "input.uvh5"
+        assert args.output_data == "output.uvh5"
+        assert args.t_avg == 35.
+        assert not args.clobber
+        assert not args.verbose
+        assert args.flag_output is None
+        assert args.filetype == "uvh5"
+        sys.argv = [sys.argv[0], "input.uvh5", "output.uvh5",  "first.uvh5", "second.uvh5", "--t_avg", "35.", "--rephase"]
+        ap = frf.time_average_argparser(multifile=True)
+        args = ap.parse_args()
+        assert args.input_data == "input.uvh5"
+        assert args.output_data == "output.uvh5"
+        assert args.input_data_list == ['first.uvh5', 'second.uvh5']
+        assert args.t_avg == 35.
+        assert not args.clobber
+        assert not args.verbose
+        assert args.flag_output is None
+        assert args.filetype == "uvh5"

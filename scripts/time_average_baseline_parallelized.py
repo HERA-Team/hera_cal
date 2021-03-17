@@ -19,6 +19,6 @@ if len(baseline_list) > 0:
                                 input_data_list=args.input_data_list,
                                 baseline_list=baseline_list,
                                 output_data=args.output_data,
-                                t_avg=args.t_avg, rephase=args.rephase,
+                                t_avg=args.t_avg, rephase=args.rephase, filetype=args.filetype,
                                 wgt_by_nsample=not(args.dont_wgt_by_nsample),
                                 clobber=args.clobber, verbose=args.verbose)
