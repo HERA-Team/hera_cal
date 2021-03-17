@@ -17,6 +17,7 @@ from ..data import DATA_PATH
 import glob
 from .. import vis_clean
 from .. import utils as utils
+from pyuvdata import UVFlag
 
 
 class Test_XTalkFilter(object):
@@ -125,6 +126,39 @@ class Test_XTalkFilter(object):
             assert np.all(f[bl][:, -1])
             assert np.all(f[bl][0, :])
 
+        # test apriori flags and flag_yaml
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
+        uvf = UVFlag(hd, mode='flag', copy_flags=True)
+        uvf.to_waterfall(keep_pol=False, method='and')
+        uvf.flag_array[:] = False
+        flagfile = os.path.join(tmp_path, 'test_flag.h5')
+        uvf.write(flagfile, clobber=True)
+        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
+                                                     tol=1e-4, baseline_list=[bl[:2]],
+                                                     clobber=True, mode='dayenu',
+                                                     external_flags=flagfile, overwrite_flags=True)
+        # test that all flags are False
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        for k in f:
+            assert np.all(~f[k])
+        # now do the external yaml
+        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
+                                                     tol=1e-4, baseline_list=[bl[:2]],
+                                                     clobber=True, mode='dayenu',
+                                                     external_flags=flagfile, overwrite_flags=True,
+                                                     flag_yaml=flag_yaml)
+        # test that all flags are af yaml flags
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        for k in f:
+            assert np.all(f[k][:, 0])
+            assert np.all(f[k][:, 1])
+            assert np.all(f[k][:, 10:20])
+            assert np.all(f[k][:, 60])
+        os.remove(outfilename)
+        shutil.rmtree(cdir)
+
     def test_load_xtalk_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
@@ -222,6 +256,35 @@ class Test_XTalkFilter(object):
             assert np.all(f[bl][:, -1])
             assert not np.all(np.isclose(d[bl], 0.))
 
+        # test apriori flags and flag_yaml
+        hd = io.HERAData(uvh5)
+        hd.read()
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
+        uvf = UVFlag(hd, mode='flag', copy_flags=True)
+        uvf.to_waterfall(keep_pol=False, method='and')
+        uvf.flag_array[:] = False
+        flagfile = os.path.join(tmp_path, 'test_flag.h5')
+        uvf.write(flagfile, clobber=True)
+        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename,
+                                       Nbls_per_load=1, clobber=True, mode='dayenu',
+                                       external_flags=flagfile,
+                                       overwrite_flags=True)
+        # test that all flags are False
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for k in f:
+            assert np.all(~f[k])
+        # now without parital io.
+        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename,
+                                       clobber=True, mode='dayenu',
+                                       external_flags=flagfile,
+                                       overwrite_flags=True)
+        # test that all flags are False
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for k in f:
+            assert np.all(~f[k])
+            
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
