@@ -360,7 +360,6 @@ class Test_Update_Cal(object):
         assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
         assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
 
-
         # now test entirely flagging yaml antennas
         # with nbl_per_load = 1
         hd_calibrated = io.HERAData(uncalibrated_file)
