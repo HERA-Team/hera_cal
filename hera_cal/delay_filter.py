@@ -57,12 +57,12 @@ class DelayFilter(VisClean):
                 Only works properly when all weights are all between 0 and 1.
             tol : float, optional. To what level are foregrounds subtracted.
             cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-                        see uvtools.dspec.dayenu_filter for key formats.
+                see uvtools.dspec.dayenu_filter for key formats.
             read_cache: bool, If true, read existing cache files in cache_dir before running.
             write_cache: bool. If true, create new cache file with precomputed matrices
-                               that were not in previously loaded cache files.
+                that were not in previously loaded cache files.
             skip_flagged_edges : bool, if true do not include frequencies at the edge of the band that are fully flagged. Instead
-                                 filter over frequencies bounded by the edge flags.
+                filter over frequencies bounded by the edge flags.
             filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Results are stored in:
@@ -105,13 +105,13 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         infilename: string path to data to uvh5 file to load
         cal: optional string path to calibration file to apply to data before delay filtering
         Nbls_per_load: int, the number of baselines to load at once.
-                       If None, load all baselines at once. default : None.
+            If None, load all baselines at once. default : None.
         spw_range: spw_range of data to delay-filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-                    see uvtools.dspec.dayenu_filter for key formats.
+            see uvtools.dspec.dayenu_filter for key formats.
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
-                           that were not in previously loaded cache files.
+            that were not in previously loaded cache files.
         avg_red_bllens: bool, if True, round baseline lengths to redundant average. Default is False.
         factorize_flags: bool, optional
             If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
@@ -178,10 +178,10 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         calfile_list: optional list of calibration files to apply to data before xtalk filtering
         spw_range: 2-tuple or 2-list, spw_range of data to filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-                    see uvtools.dspec.dayenu_filter for key formats.
+            see uvtools.dspec.dayenu_filter for key formats.
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
-                           that were not in previously loaded cache files.
+            that were not in previously loaded cache files.
         avg_red_bllens: bool, if True, round baseline lengths to redundant average. Default is False.
         factorize_flags: bool, optional
             If True, factorize flags before running delay filter. See vis_clean.factorize_flags.

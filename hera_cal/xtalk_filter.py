@@ -46,7 +46,7 @@ class XTalkFilter(VisClean):
                 Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
                 of self.flags. uvtools.dspec.xtalk_filter will renormalize to compensate.
             max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
-                              max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
+                max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
             mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.xtalk_filter for supported modes.
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
@@ -54,10 +54,10 @@ class XTalkFilter(VisClean):
                 Only works properly when all weights are all between 0 and 1.
             tol : float, optional. To what level are foregrounds subtracted.
             cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-                        see uvtools.dspec.dayenu_filter for key formats.
+                see uvtools.dspec.dayenu_filter for key formats.
             read_cache: bool, If true, read existing cache files in cache_dir before running.
             write_cache: bool. If true, create new cache file with precomputed matrices
-                               that were not in previously loaded cache files.
+                that were not in previously loaded cache files.
             cache: dictionary containing pre-computed filter products.
             skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
             keep_flags : bool, if true, retain data flags in filled data.
@@ -105,13 +105,13 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         infilename: string path to data to uvh5 file to load
         cal: optional string path to calibration file to apply to data before xtalk filtering
         Nbls_per_load: int, the number of baselines to load at once.
-                       If None, load all baselines at once. default : None.
+            If None, load all baselines at once. default : None.
         spw_range: spw_range of data to delay-filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-                    see uvtools.dspec.dayenu_filter for key formats.
+            see uvtools.dspec.dayenu_filter for key formats.
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
-                           that were not in previously loaded cache files.
+            that were not in previously loaded cache files.
         factorize_flags: bool, optional
             If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
         time_thresh : float
@@ -180,10 +180,10 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         calfile_list: optional list of calibration files to apply to data before xtalk filtering
         spw_range: 2-tuple or 2-list, spw_range of data to filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-                    see uvtools.dspec.dayenu_filter for key formats.
+            see uvtools.dspec.dayenu_filter for key formats.
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
-                           that were not in previously loaded cache files.
+            that were not in previously loaded cache files.
         factorize_flags: bool, optional
             If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
         time_thresh : float, optional

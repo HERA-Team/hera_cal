@@ -27,7 +27,7 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
 
     Parameters
     ----------
-    data_in : array-like, 2d
+    data_in : array-like, 2d (Ntimes, Nfreqs)
         data from which to remove edge integrations and channels that are completely flagged.
     weights_in : array-like, 2d
         weights to determine which edge integrations and channels are completely flagged
@@ -87,7 +87,7 @@ def flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance
 
     Parameters
     -----------
-    weights_in : array-like, 2d
+    weights_in : array-like, 2d (Ntimes, Nfreqs)
         weights to check for flags within min_edge distance of edge along specified axis.
         will set all weights in each row with flags within min_flag_edge_distance to zero.
     min_flag_edge_distance : integer (or two-tuple / list)
@@ -121,22 +121,19 @@ def flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance
 
 def flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag, ax='freq'):
     """
-    flag any row or column with contiguous zero-weights over limit.
+    flag any row or column with contiguous zero-weights over a specified limit.
 
     Parameters
     ----------
-    weights_in : array-like, 2d
+    weights_in : array-like, 2d (Ntimes, Nfreqs)
         weights to check. any row (ax='time') or col (ax='freq')
         with contiguous regions of zero with length greater then max_contiguous_flag
         will be set to zero.
-    max_contiguous_flag : integer (or 2-list/tuple)
-        any row or column with contiguous weights equal to zero greater or equal to this value
-        will be set entirely to zero.
+    max_contiguous_flag : integer (or 2-list/tuple if ax='both')
+        flag any row or column when any N series of contiguous bins in weights_in
+        along the axis are zero, where N = max_contiguous_flags
     ax : str, optional
-        axis to perform flagging over.
-        valid options include 'time' (zeroth axis), 'freq'(1 axis)
-        or 'both'.
-        default is 'freq'
+        axis to perform flagging over. options=['time', 'freq', 'both'], default='freq'
     """
     if ax == 'time':
         wout = flag_rows_with_contiguous_flags(weights_in.T, max_contiguous_flag).T
@@ -184,7 +181,7 @@ def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_w
     Returns
     -------
     max_contiguous_flag: int or 2-list containing the width of a region corresponding
-                         to the largest delay in the filter centers and filter_widths
+        to the largest delay in the filter centers and filter_widths
     """
     if len(x) == 2:
         dx = [np.mean(np.diff(x[0])), np.mean(np.diff(x[1]))]
@@ -204,7 +201,7 @@ def flag_model_rms(skipped, d, w, mdl, mdl_w=None, model_rms_threshold=1.1, ax='
     Parameters
     ----------
     skipped : array-like 2d, bool
-            existing clean_flags
+        existing clean_flags
     d : array-like 2d, complex
         the data waterfall.
     w : array-like 2d, float
