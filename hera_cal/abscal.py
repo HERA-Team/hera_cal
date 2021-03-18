@@ -3353,8 +3353,8 @@ def _get_idealized_antpos(cal_flags, antpos, pols, tol=1.0, keep_flagged_ants=Tr
             is False.
 
     Returns:
-        idealized_antpos: antenna positions on a perfect grid, but arbitarily skewed from the
-            input antpos. 
+        idealized_antpos: dictionary mapping antenna numbers to antenna positions on a perfect grid, 
+            but arbitarily skewed from the input antpos.
     '''
     # build list of reds without flagged untennas
     all_ants = list(cal_flags.keys())
