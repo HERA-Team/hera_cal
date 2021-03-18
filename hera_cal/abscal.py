@@ -3395,8 +3395,8 @@ def _get_idealized_antpos(cal_flags, antpos, pols, tol=1.0, keep_flagged_ants=Tr
         for ant in all_ants:
             if ant not in calibratable_ants:
                 if ant in ants_with_wgts:
-                     raise ValueError(f'Antenna {ant} appears in data with non-zero weight, but is not in the on-grid ants '
-                             f'which are {sorted(list(calibratable_ants))}.')
+                    raise ValueError(f'Antenna {ant} appears in data with non-zero weight, but is not in the on-grid ants '
+                                     f'which are {sorted(list(calibratable_ants))}.')
                 idealized_antpos[ant[0]] = np.zeros(unflagged_nDims)
 
     return idealized_antpos
