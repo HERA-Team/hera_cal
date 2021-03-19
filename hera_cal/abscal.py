@@ -3353,8 +3353,11 @@ def _get_idealized_antpos(cal_flags, antpos, pols, tol=1.0, keep_flagged_ants=Tr
             is False.
 
     Returns:
-        idealized_antpos: dictionary mapping antenna numbers to antenna positions on a perfect grid, 
-            but arbitarily skewed from the input antpos.
+        idealized_antpos: dictionary mapping antenna numbers to antenna positions on an N-dimensional
+            grid where redundant real-world baselines (up to the tol) are perfectly redundant (up to
+            numerical precision). These baselines will be arbitrarily linearly transformed (stretched,
+            skewed, etc.) and antennas that introduce extra degeneracies will introduce extra dimensions.
+            See redcal.reds_to_antpos() for more detail.
     '''
     # build list of reds without flagged untennas
     all_ants = list(cal_flags.keys())
@@ -3366,8 +3369,8 @@ def _get_idealized_antpos(cal_flags, antpos, pols, tol=1.0, keep_flagged_ants=Tr
     unflagged_idealized_antpos = redcal.reds_to_antpos(unflagged_reds, tol=redcal.IDEALIZED_BL_TOL)
     unflagged_nDims = _count_nDims(unflagged_idealized_antpos, assume_2D=False)
     
-    # get the potentially calibratable ants, reds, and idealized_antpos. These are antennas may be
-    # flagged, but they they are still on the grid of unflagged antennas and can thus be updated
+    # get the potentially calibratable ants, reds, and idealized_antpos. These are antennas that may
+    # be flagged, but they they are still on the grid of unflagged antennas and can thus be updated
     # without introducing additional degeneracies.
     if keep_flagged_ants:
         reds = redcal.filter_reds(all_reds, max_dims=unflagged_nDims)
