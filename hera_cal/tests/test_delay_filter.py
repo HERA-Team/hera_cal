@@ -9,7 +9,7 @@ import os
 import sys
 import shutil
 from scipy import constants
-from pyuvdata import UVCal, UVData
+from pyuvdata import UVCal, UVData, UVFlag
 
 from .. import io
 from .. import delay_filter as df
@@ -39,9 +39,11 @@ class Test_DelayFilter(object):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         # test that everything runs when baselines lengths are rounded.
-        for round_up_bllens in [True, False]:
+        for avg_red_bllens in [True, False]:
             dfil = df.DelayFilter(fname, filetype='miriad')
             dfil.read(bls=[k])
+            if avg_red_bllens:
+                dfil.avg_red_baseline_vectors()
             wgts = {k: np.ones_like(dfil.flags[k], dtype=np.float)}
             wgts[k][0, :] = 0.0
             dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
@@ -92,23 +94,26 @@ class Test_DelayFilter(object):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, 'temp.h5')
-        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1)
-        hd = io.HERAData(outfilename)
-        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for avg_bl in [True, False]:
+            df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1,
+                                           avg_red_bllens=avg_bl)
+            hd = io.HERAData(outfilename)
+            d, f, n = hd.read(bls=[(53, 54, 'ee')])
 
-        dfil = df.DelayFilter(uvh5, filetype='uvh5')
-        dfil.read(bls=[(53, 54, 'ee')])
-        dfil.run_delay_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
-        np.testing.assert_almost_equal(d[(53, 54, 'ee')], dfil.clean_resid[(53, 54, 'ee')], decimal=5)
-        np.testing.assert_array_equal(f[(53, 54, 'ee')], dfil.flags[(53, 54, 'ee')])
+            dfil = df.DelayFilter(uvh5, filetype='uvh5')
+            dfil.read(bls=[(53, 54, 'ee')])
+            dfil.run_delay_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+            np.testing.assert_almost_equal(d[(53, 54, 'ee')], dfil.clean_resid[(53, 54, 'ee')], decimal=5)
+            np.testing.assert_array_equal(f[(53, 54, 'ee')], dfil.flags[(53, 54, 'ee')])
 
-        # test loading and writing all baselines at once.
-        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-        outfilename = os.path.join(tmp_path, 'temp.h5')
-        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=None)
-        hd = io.HERAData(outfilename)
-        d, f, n = hd.read(bls=[(53, 54, 'ee')])
-
+            # test loading and writing all baselines at once.
+            uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+            outfilename = os.path.join(tmp_path, 'temp.h5')
+            df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True,
+                                           Nbls_per_load=None, avg_red_bllens=avg_bl)
+            hd = io.HERAData(outfilename)
+            d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        avg_bl = False
         dfil = df.DelayFilter(uvh5, filetype='uvh5')
         dfil.read(bls=[(53, 54, 'ee')])
         dfil.run_delay_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
@@ -117,7 +122,8 @@ class Test_DelayFilter(object):
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(tmp_path, 'temp.h5')
-        df.load_delay_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True)
+        df.load_delay_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
+                                       avg_red_bllens=avg_bl)
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -144,7 +150,7 @@ class Test_DelayFilter(object):
         # and entire final channel being flagged
         # when flags are broadcasted.
         time_thresh = 2. / hd.Ntimes
-        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
+        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, avg_red_bllens=avg_bl,
                                        factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -153,7 +159,7 @@ class Test_DelayFilter(object):
             assert np.all(f[bl][0, :])
 
         # test delay filtering and writing with factorized flags and partial i/o
-        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
+        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, avg_red_bllens=avg_bl,
                                        factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -162,7 +168,7 @@ class Test_DelayFilter(object):
             assert np.all(f[bl][0, :])
             assert np.all(f[bl][:, -1])
 
-        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, Nbls_per_load=1,
+        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, Nbls_per_load=1, avg_red_bllens=avg_bl,
                                        factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -180,21 +186,22 @@ class Test_DelayFilter(object):
         outfilename = os.path.join(tmp_path, 'temp.h5')
         cdir = os.path.join(tmp_path, 'cache_temp')
         # make a cache directory
-        if os.path.isdir(cdir):
-            shutil.rmtree(cdir)
-        os.mkdir(cdir)
-        df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
-                                                     calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
-                                                     read_cache=True, write_cache=True,
-                                                     res_outfilename=outfilename, clobber=True,
-                                                     mode='dayenu')
-        hd = io.HERAData(outfilename)
-        d, f, n = hd.read()
-        assert len(list(d.keys())) == 1
-        assert d[(53, 54, 'ee')].shape[1] == 100
-        assert d[(53, 54, 'ee')].shape[0] == 60
+        for avg_bl in [True, False]:
+            if os.path.isdir(cdir):
+                shutil.rmtree(cdir)
+            os.mkdir(cdir)
+            df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
+                                                         calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                                         read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                                                         res_outfilename=outfilename, clobber=True,
+                                                         mode='dayenu')
+            hd = io.HERAData(outfilename)
+            d, f, n = hd.read()
+            assert len(list(d.keys())) == 1
+            assert d[(53, 54, 'ee')].shape[1] == 100
+            assert d[(53, 54, 'ee')].shape[0] == 60
         # now do no spw range and no cal files just to cover those lines.
-        df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+        df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
                                                      cache_dir=cdir,
                                                      read_cache=True, write_cache=True,
                                                      res_outfilename=outfilename, clobber=True,
@@ -229,7 +236,7 @@ class Test_DelayFilter(object):
         for blnum, bl in enumerate(flags.keys()):
             outfilename = os.path.join(tmp_path, 'bl_chunk_%d.h5' % blnum)
             df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
-                                                         tol=1e-4, baseline_list=[bl],
+                                                         tol=1e-4, baseline_list=[bl[:2]],
                                                          cache_dir=cdir,
                                                          factorize_flags=True, time_thresh=time_thresh, clobber=True)
         # now load all of the outputs in
@@ -243,6 +250,39 @@ class Test_DelayFilter(object):
         for bl in f:
             assert np.all(f[bl][:, -1])
             assert np.all(f[bl][0, :])
+
+        # test apriori flags and flag_yaml
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
+        uvf = UVFlag(hd, mode='flag', copy_flags=True)
+        uvf.to_waterfall(keep_pol=False, method='and')
+        uvf.flag_array[:] = False
+        flagfile = os.path.join(tmp_path, 'test_flag.h5')
+        uvf.write(flagfile, clobber=True)
+        df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
+                                                     tol=1e-4, baseline_list=[bl[:2]],
+                                                     clobber=True, mode='dayenu',
+                                                     external_flags=flagfile, overwrite_flags=True)
+        # test that all flags are False
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        for k in f:
+            assert np.all(~f[k])
+        # now do the external yaml
+        df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
+                                                     tol=1e-4, baseline_list=[bl[:2]],
+                                                     clobber=True, mode='dayenu',
+                                                     external_flags=flagfile, overwrite_flags=True,
+                                                     flag_yaml=flag_yaml)
+        # test that all flags are af yaml flags
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        for k in f:
+            assert np.all(f[k][:, 0])
+            assert np.all(f[k][:, 1])
+            assert np.all(f[k][:, 10:20])
+            assert np.all(f[k][:, 60])
+        os.remove(outfilename)
+        shutil.rmtree(cdir)
 
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
@@ -296,6 +336,49 @@ class Test_DelayFilter(object):
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
+
+        # test apriori flags and flag_yaml
+        hd = io.HERAData(uvh5)
+        hd.read()
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
+        uvf = UVFlag(hd, mode='flag', copy_flags=True)
+        uvf.to_waterfall(keep_pol=False, method='and')
+        uvf.flag_array[:] = False
+        flagfile = os.path.join(tmp_path, 'test_flag.h5')
+        uvf.write(flagfile, clobber=True)
+        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
+                                       Nbls_per_load=1, clobber=True, mode='dayenu',
+                                       external_flags=flagfile,
+                                       overwrite_flags=True)
+        # test that all flags are False
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for k in f:
+            assert np.all(~f[k])
+        # now without parital io.
+        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
+                                       clobber=True, mode='dayenu',
+                                       external_flags=flagfile,
+                                       overwrite_flags=True)
+        # test that all flags are False
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for k in f:
+            assert np.all(~f[k])
+
+        # now do the external yaml
+        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
+                                       Nbls_per_load=1, clobber=True, mode='dayenu',
+                                       external_flags=flagfile,
+                                       overwrite_flags=True, flag_yaml=flag_yaml)
+        # test that all flags are af yaml flags
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for k in f:
+            assert np.all(f[k][:, 0])
+            assert np.all(f[k][:, 1])
+            assert np.all(f[k][:, 10:20])
+            assert np.all(f[k][:, 60])
         os.remove(outfilename)
         shutil.rmtree(cdir)
 
@@ -310,6 +393,13 @@ class Test_DelayFilter(object):
     def test_delay_linear_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
         parser = df.delay_filter_argparser(mode='dayenu')
+        a = parser.parse_args()
+        assert a.infilename == 'a'
+        assert a.clobber is True
+        assert a.write_cache is True
+        assert a.cache_dir == '/blah/'
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
+        parser = df.delay_filter_argparser(mode='dpss_leastsq')
         a = parser.parse_args()
         assert a.infilename == 'a'
         assert a.clobber is True

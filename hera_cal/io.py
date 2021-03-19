@@ -1696,7 +1696,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     uvc.cal_type = "gain"
 
     # optional calfits parameters to get overwritten via kwargs
-    telescope_location = None 
+    telescope_location = None
     antenna_positions = None
     lst_array = None
 
@@ -1801,11 +1801,11 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     cal.write_calfits(outfilename, clobber=clobber)
 
 
-def baselines_from_filelist_position(filename, filelist, polarizations=None):
+def baselines_from_filelist_position(filename, filelist):
     """Determine indices of baselines to process.
 
 
-    This function determines baselines to process given the position of a filename
+    This function determines antpairs to process given the position of a filename
     in a list of files.
 
 
@@ -1815,23 +1815,14 @@ def baselines_from_filelist_position(filename, filelist, polarizations=None):
         name of the file being processed.
     filelist : list of strings
         name of all files over which computations are being parallelized.
-    polarizations : list of strings
-        polarizations to include in baseline parallelization.
-
     Returns
     -------
     list
-        list of baselines to process based on the position of the filename in the list of files.
+        list of antpairs to process based on the position of the filename in the list of files.
     """
-    if polarizations is None:
-        polarizations = ['ee', 'nn', 'en', 'ne']
-    # sanitize polarizations
-    for pol in polarizations:
-        if pol.lower() not in POL_STR2NUM_DICT and pol.lower() not in ['ee', 'en', 'ne', 'nn']:
-            raise ValueError("invalid polarization %s provided!" % pol)
     # The reason this function is not in utils is that it needs to use HERAData
     hd = HERAData(filename)
-    bls = [bl for bl in hd.bls if bl[-1] in polarizations]
+    bls = list(set([bl[:2] for bl in hd.bls]))
     file_index = filelist.index(filename)
     nfiles = len(filelist)
     # Determine chunk size
@@ -1839,4 +1830,5 @@ def baselines_from_filelist_position(filename, filelist, polarizations=None):
     chunk_size = nbls // nfiles + 1
     lower_index = file_index * chunk_size
     upper_index = np.min([(file_index + 1) * chunk_size, nbls])
-    return bls[lower_index:upper_index]
+    output = bls[lower_index:upper_index]
+    return output
