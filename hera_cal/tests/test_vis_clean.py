@@ -22,6 +22,189 @@ import glob
 import copy
 
 
+# test flagging utility funtions
+def test_truncate_flagged_edges():
+    Nfreqs = 64
+    Ntimes = 60
+    data_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
+    weights_in = np.abs(data_in).astype(float)
+    data_in = data_in + .3j * data_in
+    # flag channel 30
+    weights_in[:, 30] = 0.
+    # flag last channel
+    weights_in[:, -1] = 0.
+    # flag last two integrations
+    weights_in[-2:, :] = 0.
+    times = np.arange(60) * 10.
+    freqs = np.arange(64) * 100e3
+    # test freq truncation
+    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
+    assert np.all(np.isclose(xout, freqs[:-1]))
+    assert np.all(np.isclose(dout, data_in[:, :-1]))
+    assert np.all(np.isclose(wout, weights_in[:, :-1]))
+    assert edges == [(0, 0), (0, 1)]
+    # test time truncation
+    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
+    assert np.all(np.isclose(xout, times[:-2]))
+    assert np.all(np.isclose(dout, data_in[:-2, :]))
+    assert np.all(np.isclose(wout, weights_in[:-2, :]))
+    assert edges == [(0, 2), (0, 0)]
+    # test truncating both.
+    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
+    assert np.all(np.isclose(xout[0], times[:-2]))
+    assert np.all(np.isclose(xout[1], freqs[:-1]))
+    assert np.all(np.isclose(dout, data_in[:-2, :-1]))
+    assert np.all(np.isclose(wout, weights_in[:-2, :-1]))
+    assert edges == [(0, 2), (0, 1)]
+
+
+def test_flag_rows_with_flags_within_edge_distance():
+    Nfreqs = 64
+    Ntimes = 60
+    weights_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
+    weights_in[32, 2] = 0.
+    weights_in[33, 12] = 0.
+    weights_in[2, 30] = 0.
+    weights_in[-10, 20] = 0.
+    # under the above flagging pattern
+    # freq flagging with min_flag_edge_distance=2 yields 32nd integration flagged only.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=3, ax='freq')
+    for i in range(wout.shape[0]):
+        if i == 32:
+            assert np.all(np.isclose(wout[i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[i], weights_in[i]))
+    # extending edge_distance to 12 should yield 33rd integration being flagged as well.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=13, ax='freq')
+    for i in range(wout.shape[0]):
+        if i == 32 or i == 33:
+            assert np.all(np.isclose(wout[i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[i], weights_in[i]))
+    # now do time axis. 30th channel should be flagged for this case.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=3, ax='time')
+    for i in range(wout.shape[1]):
+        if i == 30:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
+    # 30th and 20th channels should end up flagged for this case.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=11, ax='time')
+    for i in range(wout.shape[1]):
+        if i == 30 or i == 20:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
+    # now do both
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=(3, 3), ax='both')
+    for i in range(wout.shape[1]):
+        if i == 30:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+    for i in range(wout.shape[0]):
+        if i == 32:
+            assert np.all(np.isclose(wout[i], 0.0))
+
+
+def test_flag_rows_with_contiguous_flags():
+    Nfreqs = 64
+    Ntimes = 60
+    weights_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
+    weights_in[32, 2:12] = 0.
+    weights_in[35, 12:14] = 0.
+    weights_in[2:12, 30] = 0.
+    weights_in[-10:-8, 20] = 0.
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=8, ax='freq')
+    for i in range(wout.shape[0]):
+        if i == 32:
+            assert np.all(np.isclose(wout[i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[i], weights_in[i]))
+    # extending edge_distance to 12 should yield 33rd integration being flagged as well.
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=2, ax='freq')
+    for i in range(wout.shape[0]):
+        if i == 32 or i == 35:
+            assert np.all(np.isclose(wout[i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[i], weights_in[i]))
+    # now do time axis. 30th channel should be flagged for this case.
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=8, ax='time')
+    for i in range(wout.shape[1]):
+        if i == 30:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
+    # 30th and 20th channels should end up flagged for this case.
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=2, ax='time')
+    for i in range(wout.shape[1]):
+        if i == 30 or i == 20:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+        else:
+            assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
+    # now do both
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=(3, 3), ax='both')
+    for i in range(wout.shape[1]):
+        if i == 30:
+            assert np.all(np.isclose(wout[:, i], 0.0))
+    for i in range(wout.shape[0]):
+        if i == 32:
+            assert np.all(np.isclose(wout[i], 0.0))
+
+
+def test_get_max_contiguous_flag_from_filter_periods():
+    Nfreqs = 64
+    Ntimes = 60
+    times = np.arange(60) * 10.
+    freqs = np.arange(64) * 100e3
+    filter_centers = [[0.], [0.]]
+    filter_half_widths = [[1 / (3. * 10)], [1 / (100e3 * 2)]]
+    mcf = vis_clean.get_max_contiguous_flag_from_filter_periods(freqs, filter_centers[1], filter_half_widths[1])
+    assert mcf == 2
+    mcf = vis_clean.get_max_contiguous_flag_from_filter_periods(times, filter_centers[0], filter_half_widths[0])
+    assert mcf == 3
+    mcf = vis_clean.get_max_contiguous_flag_from_filter_periods((times, freqs), filter_centers, filter_half_widths)
+    assert tuple(mcf) == (3, 2)
+
+
+def test_flag_model_rms():
+    Nfreqs = 64
+    Ntimes = 60
+    times = np.arange(60) * 10.
+    freqs = np.arange(64) * 100e3
+    w = np.ones((Ntimes, Nfreqs), dtype=bool)
+    d = np.random.randn(Ntimes, Nfreqs) * 1e-3 + 1j * np.random.randn(Ntimes, Nfreqs) * 1e-3
+    d += np.ones_like(d) * 100
+    d[30, 12] = 3.12315132e6
+    w[30, 12] = 0.
+    mdl = np.ones_like(d) * 100
+    mdl[30, 24] = 1e6
+    skipped = np.zeros_like(mdl, dtype=bool)
+    skipped = vis_clean.flag_model_rms(skipped, d, w, mdl, ax='freq')
+    for i in range(Ntimes):
+        if i == 30:
+            assert np.all(skipped[i])
+        else:
+            assert np.all(~skipped[i])
+    skipped = np.zeros_like(mdl, dtype=bool)
+    skipped = vis_clean.flag_model_rms(skipped, d, w, mdl, ax='time')
+    for i in range(Ntimes):
+        if i == 24:
+            assert np.all(skipped[:, i])
+        else:
+            assert np.all(~skipped[:, i])
+    skipped = np.zeros_like(mdl, dtype=bool)
+    skipped = vis_clean.flag_model_rms(skipped, d, w, mdl, ax='both')
+    for i in range(Nfreqs):
+        if i == 24:
+            assert np.all(skipped[:, i])
+        else:
+            assert ~np.all(skipped[:, i])
+    for i in range(Ntimes):
+        if i == 30:
+            assert np.all(skipped[i])
+        else:
+            assert ~np.all(skipped[i])
+
+
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 class Test_VisClean(object):
@@ -184,7 +367,7 @@ class Test_VisClean(object):
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-15))
         assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
 
-        assert pytest.raises(ValueError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', mode='dayenu')
+        assert pytest.raises(AssertionError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', max_frate=None, mode='dayenu')
         assert pytest.raises(ValueError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', max_frate='arglebargle', mode='dayenu')
 
         # cover no overwrite = False skip lines.
@@ -242,7 +425,7 @@ class Test_VisClean(object):
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-6))
         assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
 
-        assert pytest.raises(ValueError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', mode='dpss_leastsq')
+        assert pytest.raises(AssertionError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', mode='dpss_leastsq')
         assert pytest.raises(ValueError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', max_frate='arglebargle', mode='dpss_leastsq')
 
         # cover no overwrite = False skip lines.
@@ -269,6 +452,175 @@ class Test_VisClean(object):
         # check that filtered_data is the same in channels that were not flagged
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-6))
+        # run with flag_model_rms_outliers
+        for ax in ['freq', 'time', 'both']:
+            for k in V.flags:
+                V.flags[k][:] = False
+                V.data[k][:] = np.random.randn(*V.data[k].shape) + 1j * np.random.randn(*V.data[k].shape)
+            # run with rms threshold < 1 which should lead to everything being flagged.
+            V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax=ax, overwrite=True,
+                        max_frate=1.0, mode='dpss_leastsq', flag_model_rms_outliers=True, model_rms_threshold=0.1)
+            for k in [(24, 25, 'ee'), (24, 25, 'ee')]:
+                assert np.all(V.clean_flags[k])
+            # now use a threshold which should not lead to any flags.
+            V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax=ax, overwrite=True,
+                        max_frate=1.0, mode='dpss_leastsq', flag_model_rms_outliers=True, model_rms_threshold=1e6)
+            for k in [(24, 25, 'ee'), (24, 25, 'ee')]:
+                assert not np.any(V.clean_flags[k])
+
+    def test_vis_clean_flag_options(self, tmpdir):
+        # tests for time and frequency partial flagging.
+        tmp_path = tmpdir.strpath
+        template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        # first run flagging channels and frequencies
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
+        hdt = io.HERAData(template)
+        d, f, n = hdt.read()
+        for k in d:
+            f[k][:] = False
+            f[k][:, 0] = True
+            f[k][0, :] = True
+        hdt.update(flags=f)
+        hdt.write_uvh5(fname_edgeflags)
+        for k in d:
+            f[k][:] = True
+        hdt.update(flags=f)
+        hdt.write_uvh5(fname_flagged)
+        V = VisClean(fname_flagged, filetype='uvh5')
+        V.read()
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_flagged_edges=True)
+        # make sure if no unflagged channels exist, then the clean flags are all flagged.
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_contiguous_flags=True)
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_contiguous_flags=True, max_frate=0.025)
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    skip_contiguous_flags=True, max_frate=0.025)
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k])
+        # now do file with some edge flags. Make sure the edge flags remain in clean_flags.
+        V = VisClean(fname_edgeflags, filetype='uvh5')
+        V.read()
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_flagged_edges=True)
+        for k in V.clean_flags:
+            if not np.all(V.flags[k]):
+                assert not np.all(V.clean_flags[k])
+            assert np.all(V.clean_flags[k][0])
+            assert np.all(V.clean_flags[k][:, 0])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_flagged_edges=True, max_frate=0.025)
+        for k in V.clean_flags:
+            if not np.all(V.flags[k]):
+                assert not np.all(V.clean_flags[k])
+            assert np.all(V.clean_flags[k][0])
+            assert np.all(V.clean_flags[k][:, 0])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    skip_flagged_edges=True, max_frate=0.025)
+        for k in V.clean_flags:
+            if not np.all(V.flags[k]):
+                assert not np.all(V.clean_flags[k])
+            assert np.all(V.clean_flags[k][0])
+            assert np.all(V.clean_flags[k][:, 0])
+        # now try using skip_contiguous flag gaps.
+        standoff = 1e9 / (np.mean(np.diff(V.freqs)))
+        max_frate = datacontainer.DataContainer({(24, 25, 'ee'): 2. / (np.mean(np.diff(V.times)) * 3.6 * 24.),
+                                                 (24, 24, 'ee'): 1. / (2 * np.mean(np.diff(V.times)) * 3.6 * 24.)})
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_contiguous_flags=True, standoff=standoff)
+        # with this standoff, all data should be skipped.
+        assert np.all(V.clean_flags[(24, 25, 'ee')])
+        assert np.all(V.clean_flags[(24, 24, 'ee')])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_contiguous_flags=True, max_frate=max_frate)
+        # this time, should only skip (24, 25, 'ee')
+        assert np.all(V.clean_flags[(24, 25, 'ee')])
+        assert not np.all(V.clean_flags[(24, 24, 'ee')])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    skip_contiguous_flags=True, max_frate=max_frate, standoff=standoff)
+
+        # now test flagging integrations within edge distance.
+        # these flags should cause channel 12 to be
+        # completely flagged if flagging mode is "both".
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            V.flags[k][:] = False
+            V.flags[k][12, 0] = True
+            V.flags[k][-1, 32] = True
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    max_frate=0.025, standoff=0.0, min_dly=50.,
+                    skip_if_flag_within_edge_distance=(2, 2), mode='dpss_leastsq')
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            for i in range(V.Ntimes):
+                if i == 12:
+                    assert np.all(V.clean_flags[k][i])
+                else:
+                    assert not np.any(V.clean_flags[k][i])
+
+        # if flagging mode is 'freq', then integration 12 should be flagged
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    max_frate=0.025, standoff=0.0, min_dly=50.,
+                    skip_if_flag_within_edge_distance=2, mode='dpss_leastsq')
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            for i in range(V.Ntimes):
+                if i == 12:
+                    assert np.all(V.clean_flags[k][i])
+                else:
+                    assert not np.any(V.clean_flags[k][i])
+
+        # if flagging mode is 'time', then channel 32 should be flagged.
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    max_frate=0.025, standoff=0.0, min_dly=50.,
+                    skip_if_flag_within_edge_distance=2, mode='dpss_leastsq')
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            for i in range(V.Nfreqs):
+                if i == 32:
+                    assert np.all(V.clean_flags[k][:, i])
+                else:
+                    assert not np.any(V.clean_flags[k][:, i])
+
+        # test clean_flags in resid_flags
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            V.flags[k][:] = False
+            V.flags[k][-1, :-2] = True
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    clean_flags_in_resid_flags=True, mode='dpss_leastsq',
+                    max_frate=max_frate, standoff=0.0, min_dly=50., skip_wgt=0.5)
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            assert np.all(V.clean_resid_flags[k][-1])
+
+    def test_apply_flags(self):
+        # cover edge cases of apply_flags not covered in test_delay_filter and
+        # test_xtalk_filter.
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        V = VisClean(fname, filetype='uvh5')
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
+        pytest.raises(ValueError, V.apply_flags, flag_yaml, filetype='invalid_type')
+        # cover overwrite flags
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample_noflags.yaml')
+        V.read()
+        nk = 0
+        for k in V.flags.keys():
+            # flag every other baseline
+            if nk % 2 == 0:
+                V.flags[k][:] = False
+        original_flags = copy.deepcopy(V.flags)
+        # applying empty flag yaml should result in overwriting
+        # all flags with False except on baselines where all flags were True.
+        V.apply_flags(flag_yaml, filetype='yaml', overwrite_flags=True)
+        # check that this is the case.
+        for k in V.flags:
+            if np.all(original_flags[k]):
+                assert np.all(V.flags[k])
+            else:
+                assert not np.any(V.flags[k])
 
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean(self):
@@ -532,7 +884,7 @@ class Test_VisClean(object):
         cdir.mkdir()
         # cross-talk filter chunked baselines
         for filenum, file in enumerate(datafiles):
-            baselines = io.baselines_from_filelist_position(file, datafiles, polarizations=['ee'])
+            baselines = io.baselines_from_filelist_position(file, datafiles)
             fname = 'temp.fragment.part.%d.h5' % filenum
             fragment_filename = tmp_path / fname
             xf.load_xtalk_filter_and_write_baseline_list(datafiles, baseline_list=baselines, calfile_list=cals,

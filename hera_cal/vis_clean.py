@@ -7,29 +7,238 @@ from collections import OrderedDict as odict
 import datetime
 from uvtools import dspec
 import argparse
-
-
 from astropy import constants
 import copy
 import fnmatch
 from scipy import signal
+import warnings
+from pyuvdata import UVFlag
+from pyuvdata import utils as uvutils
 
-from . import io
-from . import apply_cal
-from . import version
+from . import io, apply_cal, version, redcal
 from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
-import warnings
+
+
+def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
+    """
+    cut away edge channels and integrations that are completely flagged
+
+    Parameters
+    ----------
+    data_in : array-like, 2d (Ntimes, Nfreqs)
+        data from which to remove edge integrations and channels that are completely flagged.
+    weights_in : array-like, 2d
+        weights to determine which edge integrations and channels are completely flagged
+        (close to zero). Will also be truncated.
+    x : array-like, 1-d (or 2-tuple/list of arrays)
+        x-values for data axis that we are truncating.
+        if ax=='both', should be a 2-tuple or 2-list of 1-d arrays.
+    ax : string, optional
+        axis to truncate flagged edges from. Should be 'freq' to truncate
+        completely flagged edge channels, 'time' to truncate completely flagged
+        edge integrations, or 'both' to do both.
+
+    Returns
+    -------
+    xout : array-like 1d (or 2-list if ax=='both').
+            x with completely flagged edges trimmed off.
+    dout : array-like 2d.
+            data_in with completely flagged edges trimmed off.
+    wout : array-like 2d.
+            weights_in with completely flagged edges trimmed off.
+    edges : 2-list of 2-tuples
+            the width of the edges trimmed.
+    """
+    # if axis == 'time', just use freq mode
+    # on transposed arrays.
+    if ax == 'time':
+        xout, dout, wout, edges = truncate_flagged_edges(data_in.T, weights_in.T, x)
+        dout = dout.T
+        wout = wout.T
+        edges = [edges[1], (0, 0)]
+    else:
+        ind_left = 0
+        ind_right = data_in.shape[1]
+        # Identify edge channels that are flagged.
+        unflagged_chans = np.where(~np.all(np.isclose(weights_in, 0.0), axis=0))[0]
+        if np.count_nonzero(unflagged_chans) > 0:
+            # truncate data to be filtered where appropriate.
+            ind_left = np.min(unflagged_chans)
+            ind_right = np.max(unflagged_chans) + 1
+        dout = data_in[:, ind_left: ind_right]
+        wout = weights_in[:, ind_left: ind_right]
+        edges = (ind_left, data_in.shape[1] - ind_right)
+        if ax == 'both':
+            x1 = x[1][ind_left: ind_right]
+            x0, dout, wout, e0 = truncate_flagged_edges(dout, wout, x[0], ax='time')
+            xout = [x0, x1]
+            edges = [e0[0], edges]
+        else:
+            xout = x[ind_left: ind_right]
+            edges = [(0, 0), edges]
+    return xout, dout, wout, edges
+
+
+def flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance, ax='freq'):
+    """
+    flag integrations (and/or channels) with flags within min_flag_edge_distance of edge.
+
+    Parameters
+    -----------
+    weights_in : array-like, 2d (Ntimes, Nfreqs)
+        weights to check for flags within min_edge distance of edge along specified axis.
+        will set all weights in each row with flags within min_flag_edge_distance to zero.
+    min_flag_edge_distance : integer (or two-tuple / list)
+        any row of weights_in with zero weights within min_edge distance
+        of edge will be set to zero.
+    ax : str, optional
+        string specifying which axis to flag edges of.
+        valid options include 'freq', 'time', 'both'.
+        default is 'freq'
+    Returns
+    -------
+    wout, array-like 2d
+        weights with rows or columns with zero weights
+        within min_flag_edge_distance set entirely to zero.
+
+    """
+    if ax == 'time':
+        wout = flag_rows_with_flags_within_edge_distance(weights_in.T, min_flag_edge_distance).T
+    else:
+        wout = copy.deepcopy(weights_in)
+        for rownum, wrow in enumerate(wout):
+            if ax == 'both':
+                if np.any(np.isclose(wout[rownum, :min_flag_edge_distance[1]], 0.0)) | np.any(np.isclose(wout[rownum, -min_flag_edge_distance[1] - 1:], 0.0)):
+                    wout[rownum, :] = 0.
+            elif np.any(np.isclose(wout[rownum, :min_flag_edge_distance], 0.0)) | np.any(np.isclose(wout[rownum, -min_flag_edge_distance - 1:], 0.0)):
+                wout[rownum, :] = 0.
+        if ax == 'both':
+            wout = flag_rows_with_flags_within_edge_distance(wout, min_flag_edge_distance[0], ax='time')
+    return wout
+
+
+def flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag, ax='freq'):
+    """
+    flag any row or column with contiguous zero-weights over a specified limit.
+
+    Parameters
+    ----------
+    weights_in : array-like, 2d (Ntimes, Nfreqs)
+        weights to check. any row (ax='time') or col (ax='freq')
+        with contiguous regions of zero with length greater then max_contiguous_flag
+        will be set to zero.
+    max_contiguous_flag : integer (or 2-list/tuple if ax='both')
+        flag any row or column when any N series of contiguous bins in weights_in
+        along the axis are zero, where N = max_contiguous_flags
+    ax : str, optional
+        axis to perform flagging over. options=['time', 'freq', 'both'], default='freq'
+    """
+    if ax == 'time':
+        wout = flag_rows_with_contiguous_flags(weights_in.T, max_contiguous_flag).T
+    else:
+        wout = copy.deepcopy(weights_in)
+        for rownum, wrow in enumerate(wout):
+            max_contiguous = 0  # keeps track of the largest contig flags in integration.
+            current_flag_length = 0  # keeps track of current contig flag size.
+            on_flag = False  # keep track if currently on a flag.
+            # iterate over each channel in integration.
+            for wr in wrow:
+                on_flag = (wr == 0)  # if weights are zero, on a flag.
+                # if on a flag, +1 current flag size.
+                if on_flag:
+                    current_flag_length += 1
+                else:
+                    # otherwise, check if the current flag len > max.
+                    # update max_contiguous if appropriate.
+                    if current_flag_length >= max_contiguous:
+                        max_contiguous = current_flag_length
+                    current_flag_length = 0
+            if ax == 'both':
+                if max_contiguous >= max_contiguous_flag[1]:
+                    wout[rownum][:] = 0.
+            elif max_contiguous >= max_contiguous_flag:
+                wout[rownum][:] = 0.
+        if ax == 'both':
+            wout = flag_rows_with_contiguous_flags(wout, max_contiguous_flag[0], ax='time')
+    return wout
+
+
+def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_widths):
+    """
+    determine maximum contiguous flags from filter periods
+
+    Parameters
+    ----------
+    x : array-like, 1d or 2-tuple
+        x (and y) axes of data to determine maximum contiguous flags from.
+    filter_centers : list or 2-tuple/list of lists
+        centers of filtering-windows.
+    filter_half_widths : list or 2-tuple list of lists
+        half-widths of filtering windows.
+
+    Returns
+    -------
+    max_contiguous_flag: int or 2-list containing the width of a region corresponding
+        to the largest delay in the filter centers and filter_widths
+    """
+    if len(x) == 2:
+        dx = [np.mean(np.diff(x[0])), np.mean(np.diff(x[1]))]
+        max_filter_freq = [np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[0], filter_half_widths[0])]))),
+                           np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[1], filter_half_widths[1])])))]
+        return [int(1. / (max_filter_freq[0] * dx[0])), int(1. / (max_filter_freq[1] * dx[1]))]
+    else:
+        dx = np.mean(np.diff(x))
+        max_filter_freq = np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers, filter_half_widths)])))
+        return int(1. / (max_filter_freq * dx))
+
+
+def flag_model_rms(skipped, d, w, mdl, mdl_w=None, model_rms_threshold=1.1, ax='freq'):
+    """
+    flag integrations or channels where the RMS of the model > RMS of the data
+
+    Parameters
+    ----------
+    skipped : array-like 2d, bool
+        existing clean_flags
+    d : array-like 2d, complex
+        the data waterfall.
+    w : array-like 2d, float
+        data weights waterfall. RMS of data will only be determined
+        over voxels where |w| > 0.
+    mdl : array-like 2d, complex
+        model waterfall.
+    mdl_w : array-like 2d, float, optional
+        model weights waterfall. RMS of model will be determined
+        over voxels where |mdl_w| > 0.
+        default is None. When None provided, mdl_w set to 1 everywhere.
+    model_rms_threshold : float, optional
+        flag integrations and/or channels if RMS of model > RMS of data x model_rms_threshold
+        default is 1.1
+    ax : str, optional
+        axis to flag over.
+    """
+    if mdl_w is None:
+        mdl_w = np.ones_like(w)
+    if ax == 'freq' or ax == 'both':
+        for i in range(mdl.shape[0]):
+            if np.any(~skipped[i]):
+                if np.mean(np.abs(mdl[i, ~np.isclose(np.abs(mdl_w[i]), 0.0)]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
+                    skipped[i] = True
+    if ax == 'time' or ax == 'both':
+        for i in range(mdl.shape[1]):
+            if np.any(~skipped[:, i]):
+                if np.mean(np.abs(mdl[~np.isclose(np.abs(mdl_w[:, i]), 0.0), i]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
+                    skipped[:, i] = True
+    return skipped
 
 
 class VisClean(object):
     """
     VisClean object for visibility CLEANing and filtering.
     """
-
     def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True,
-                 round_up_bllens=False,
                  **read_kwargs):
         """
         Initialize the object.
@@ -44,11 +253,6 @@ class VisClean(object):
                 as they are built.
             link_data : bool, if True, attempt to link DataContainers
                 from HERAData object, otherwise only link metadata if possible.
-            round_up_bllens : bool, optional
-                If True, round up baseline lengths to nearest meter for delay-filtering.
-                this allows linear filters for baselines with slightly different lengths
-                to be hashed to the same matrix. Saves lots of time by only computing
-                one unique filtering matrix per flagging pattern and baseline length group.
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
         """
@@ -61,7 +265,29 @@ class VisClean(object):
 
         # attach data and/or metadata to object if exists
         self.attach_data(link_data=link_data)
-        self.round_up_bllens = round_up_bllens
+
+    def avg_red_baseline_vectors(self, bl_error_tol=1.0):
+        """
+        Round individual baseline vectors to the
+        average baseline vector of each redundant group
+
+        Args:
+            bl_error_tol : float, baseline error tolerance [meters]
+
+        Notes:
+            Affects self.blvecs and self.bllens in place
+        """
+        # get redundancies
+        antpos, ants = self.hd.get_ENU_antpos(pick_data_ants=True)
+        antpos_dict = dict(list(zip(ants, antpos)))
+        reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol)
+
+        # iterate over redundancies
+        for red in reds:
+            avg_vec = np.mean([self.blvecs[r] for r in red], axis=0)
+            for r in red:
+                self.blvecs[r] = avg_vec.copy()
+                self.bllens[r] = np.linalg.norm(avg_vec) / constants.c.value
 
     def soft_copy(self, references=[]):
         """
@@ -213,6 +439,46 @@ class VisClean(object):
         apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags,
                                      gain_convention=gain_convention)
 
+    def apply_flags(self, external_flags, overwrite_flags=False, filetype='uvflag'):
+        """
+        Apply external set of flags to self.hd.flag_array (inplace!), and re-attach the data and flags.
+        Default is to OR existing flags, unless overwrite_flags is True.
+
+        Parameters
+        ----------
+        external_flags: str or UVFlag object
+            Str or list of strings pointing to flag files to apply.
+            flag files should be in a format readable by UVFlag.
+        overwrite_flags: bool, optional
+            If True, overwrite flags (instead of OR) for baselines that are not entirely flagged.
+        filetype : str, optional
+            Use 'yaml' if the flags are a yaml file or 'uvflag' if the flags are a UVFlag
+            file or object. Default is 'uvflag'.
+        """
+
+        # get a census of fully flagged baselines to re-flag if overwrite_flags
+        if overwrite_flags:
+            full_flags = [bl for bl in self.flags if np.all(self.flags[bl])]
+
+        # apply flags
+        if filetype == 'uvflag':
+            if isinstance(external_flags, str):
+                external_flags = UVFlag(external_flags)
+            uvutils.apply_uvflag(self.hd, external_flags, unflag_first=overwrite_flags, inplace=True)
+        elif filetype == 'yaml':
+            from hera_qm.utils import apply_yaml_flags
+            self.hd = apply_yaml_flags(self.hd, external_flags, unflag_first=overwrite_flags)
+        else:
+            raise ValueError(f"{type} is an invalid type! Must be 'yaml' or 'uvflag'.")
+        # re-flag fully flagged baselines if necessary
+        if overwrite_flags:
+            for bl in full_flags:
+                tinds = self.hd.antpair2ind(bl)
+                self.hd.flag_array[tinds] = True
+
+        # attach data
+        self.attach_data()
+
     def read(self, **read_kwargs):
         """
         Read from self.hd and attach data and/or metadata to self.
@@ -309,22 +575,25 @@ class VisClean(object):
                   skip_wgt=0.1, verbose=False, tol=1e-9,
                   overwrite=False, **filter_kwargs):
         """
-        Filter the data
+        Perform visibility cleaning and filtering given flags.
 
         Parameters
         -----------
-        keys : list of bl-pol keys in data to filter
-        x : array-like, x-values of axes to be filtered. Numpy array if 1d filter.
+        keys : list of antpair-pol tuples
+            keys in data to filter, default is all keys
+        x : array-like
+            x-values of the axes to be filtered. Numpy array if 1d filter.
             2-list/tuple of numpy arrays if 2d filter.
         data : DataContainer, data to clean. Default is self.data
         flags : Datacontainer, flags to use. Default is self.flags
         wgts : DataContainer, weights to use. Default is None.
-        ax: str, axis to filter, options=['freq', 'time', 'both']
+            Inverse of flags are multiplied into this dictionary
+        ax : str, axis to filter, options=['freq', 'time', 'both']
             Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
         horizon: coefficient to bl_len where 1 is the horizon [freq filtering]
         standoff: fixed additional delay beyond the horizon (in nanosec) to filter [freq filtering]
         cache: dictionary containing pre-computed filter products.
-        mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
+        mode: string specifying filtering mode. See fourier_filter for supported modes.
         min_dly: max delay (in nanosec) used for freq filter is never below this.
         max_frate : max fringe rate (in milli-Hz) used for time filtering. See uvtools.dspec.fourier_filter for options.
         output_prefix : str, attach output model, resid, etc, to self as output_prefix + '_model' etc.
@@ -335,9 +604,9 @@ class VisClean(object):
             time. Skipped channels are then flagged in self.flags.
             Only works properly when all weights are all between 0 and 1.
         verbose : Lots of outputs
+        tol : float, optional. To what level are foregrounds subtracted.
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
-        tol : float, optional. To what level are foregrounds subtracted.
         filter_kwargs : optional dictionary, see fourier_filter **filter_kwargs.
                         Do not pass suppression_factors (non-clean)!
                         instead, use tol to set suppression levels in linear filtering.
@@ -354,7 +623,7 @@ class VisClean(object):
             wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
         # make sure flagged channels have zero weight, regardless of what user supplied.
         wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
-        suppression_factors = [tol]
+        # convert max_frate to DataContainer
         if max_frate is not None:
             if isinstance(max_frate, (int, np.integer, float, np.float)):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
@@ -364,52 +633,36 @@ class VisClean(object):
             max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
 
         for k in keys:
-            if ax == 'freq' or ax == 'both':
-                filter_centers_freq = [0.]
-                if self.round_up_bllens:
-                    bl_dly = np.ceil(self.bllens[k[:2]] * constants.c.value) / constants.c.value * horizon + standoff / 1e9
-                else:
-                    bl_dly = self.bllens[k[:2]] * horizon + standoff / 1e9
-                filter_half_widths_freq = [np.max([bl_dly, min_dly / 1e9])]
-            if ax == 'time' or ax == 'both':
-                filter_centers_time = [0.]
-                if max_frate is not None:
-                    max_fr = max_frate[k] * 1e-3
-                    filter_centers_time = [0.]
-                    filter_half_widths_time = [max_fr]
-                else:
-                    raise ValueError("Must provide a maximum ringe-rate (or max frate dict) for time filtering.")
-            if ax == 'both':
-                filter_centers = [filter_centers_time, filter_centers_freq]
-                filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
-                filter_centers = [filter_centers_time, filter_centers_freq]
-                if not mode == 'clean':
-                    suppression_factors = [[tol], [tol]]
-            else:
-                if not mode == 'clean':
-                    suppression_factors = [tol]
-                if ax == 'freq':
-                    filter_centers = filter_centers_freq
-                    filter_half_widths = filter_half_widths_freq
-                elif ax == 'time':
-                    filter_centers = filter_centers_time
-                    filter_half_widths = filter_half_widths_time
+            # get filter properties
+            mfrate = max_frate[k] if max_frate is not None else None
+            filter_centers, filter_half_widths = gen_filter_properties(ax=ax, horizon=horizon,
+                                                                       standoff=standoff, min_dly=min_dly,
+                                                                       bl_len=self.bllens[k[:2]], max_frate=mfrate)
             if mode != 'clean':
-                self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                                    mode=mode, suppression_factors=suppression_factors,
+                suppression_factors = [[tol], [tol]] if ax == 'both' else [tol]
+                self.fourier_filter(filter_centers=filter_centers, filter_half_widths=filter_half_widths,
+                                    keys=[k], mode=mode, suppression_factors=suppression_factors,
                                     x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    ax=ax, cache=cache, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite, **filter_kwargs)
+                                    ax=ax, cache=cache, skip_wgt=skip_wgt, verbose=verbose,
+                                    overwrite=overwrite, **filter_kwargs)
             else:
-                self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                                    mode=mode, tol=tol, x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    ax=ax, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite, **filter_kwargs)
+                self.fourier_filter(filter_centers=filter_centers, filter_half_widths=filter_half_widths,
+                                    keys=[k], mode=mode, tol=tol, x=x, data=data, flags=flags, wgts=wgts,
+                                    output_prefix=output_prefix, ax=ax, skip_wgt=skip_wgt, verbose=verbose,
+                                    overwrite=overwrite, **filter_kwargs)
 
-    def fourier_filter(self, filter_centers, filter_half_widths, mode,
+    def fourier_filter(self, filter_centers, filter_half_widths, mode='clean',
                        x=None, keys=None, data=None, flags=None, wgts=None,
                        output_prefix='clean', zeropad=None, cache=None,
-                       ax='freq', skip_wgt=0.1, verbose=False, overwrite=False, **filter_kwargs):
+                       ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
+                       skip_flagged_edges=False,
+                       skip_contiguous_flags=False, max_contiguous_flag=None,
+                       keep_flags=False, clean_flags_in_resid_flags=False,
+                       skip_if_flag_within_edge_distance=0,
+                       flag_model_rms_outliers=False, model_rms_threshold=1.1,
+                       **filter_kwargs):
         """
-        Generalized fourier filtering of attached data.
+        Generalized fourier filtering wrapper for uvtools.dspec.fourier_filter.
         It can filter 1d or 2d data with x-axis(es) x and wgts in fourier domain
         rectangular windows centered at filter_centers or filter_half_widths
         perform filtering along any of 2 dimensions in 2d or 1d!
@@ -429,7 +682,7 @@ class VisClean(object):
             if 2dfilter: should be a 2-list or 2-tuple. Each element should
             be a list or tuple or np.ndarray of floats that include centers
             of rectangular bins.
-        mode: string
+        mode: string, optional
             specify filtering mode. Currently supported are
             'clean', iterative clean
             'dpss_lsq', dpss fitting using scipy.optimize.lsq_linear
@@ -467,7 +720,8 @@ class VisClean(object):
                      'dpss_matrix' method (see above)
             'dayenu_clean', apply dayenu filter to data. Deconvolve
                      subtracted foregrounds with 'clean'.
-        x : array-like, optional, numpy ndarray
+        x : array-like, x-values of axes to be filtered. Numpy array if 1d filter.
+            2-list/tuple of numpy arrays if 2d filter. Default is freqs [Hz] and/or time [sec].
         keys : list, optional, list of tuple ant-pol pair keys of visibilities to filter.
         data : DataContainer, data to clean. Default is self.data
         flags : Datacontainer, flags to use. Default is self.flags
@@ -486,11 +740,38 @@ class VisClean(object):
         verbose : Lots of outputs.
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
-        filter_kwargs: dict. NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
+        skip_flagged_edges : bool, optional
+            if true, do not filter over flagged edge times (if ax='time') (filter over sub-region)
+            or dont filter over flagged edge freqs (if ax='freq') or dont filter over both (if ax='both')
+            defualt is False
+        skip_contiguous_flags : bool, optional
+            if true, skip integrations or channels with gaps that are larger then integer
+            specified in max_contiguous_flag
+        max_contiguous_flag : int (or 2-tuple), optional
+            used if skip_contiguous_flags is True
+            gaps larger then this value will be skipped.
+        keep_flags : bool, optional
+            if true, set the post-filtered flags equal to the original flags plus any skipped integrations / channels.
+        clean_flags_in_resid_flags : bool, optional
+            if true, include clean flags in residual flags that will be written out in res_outfilename.
+            default is False.
+        skip_if_flag_within_edge_distance : int (or 2-tuple/list), optional. Units of channels or integrations.
+            If there is any flag within skip_if_flag_within_edge_distance
+            of the edge of the band, then flag that integration (or channel).
+            If performing 2dfilter, this arg should be a 2-tuple or list.
+        flag_model_rms_outliers : bool, optional
+            if true, flag integrations or channels where the rms of the filter model exceeds the rms of the
+            unflagged data by model_rms_threshold.
+        model_rms_threshold : float, optional
+            factor that rms of model in a channel or integration needs to exceed the rms of unflagged data
+            to be flagged. only used if flag_model_rms_outliers is true.
+        filter_kwargs: dict. Filtering arguments depending on type of filtering.
+            NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
             dictionary with options for fitting techniques.
             if filter2d is true, this should be a 2-tuple or 2-list
             of dictionaries. The dictionary for each dimension must
             specify the following for each fitting method.
+            Also see uvtools.dspec.fourier_filter where these kwargs are listed.
                 * 'dft':
                     'fundamental_period': float or 2-tuple
                         the fundamental_period of dft modes to fit. The number of
@@ -564,11 +845,8 @@ class VisClean(object):
                     'gain': The fraction of a residual used in each iteration. If this is too low, clean takes
                         unnecessarily long. If it is too high, clean does a poor job of deconvolving.
                     'alpha': float, if window is 'tukey', this is its alpha parameter.
-        x : array-like, x-values of axes to be filtered. Numpy array if 1d filter.
-            2-list/tuple of numpy arrays if 2d filter.
-     """
+        """
         # type checks
-
         if ax == 'both':
             if zeropad is None:
                 zeropad = [0, 0]
@@ -576,6 +854,8 @@ class VisClean(object):
             filter2d = True
             if x is None:
                 x = [(self.times - np.mean(self.times)) * 3600. * 24., self.freqs]
+            if skip_if_flag_within_edge_distance == 0:
+                skip_if_flag_within_edge_distance = (0, 0)
         elif ax == 'time':
             filterdim = 0
             filter2d = False
@@ -594,12 +874,12 @@ class VisClean(object):
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
 
         # initialize containers
-        containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data']]
+        containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
         for i, dc in enumerate(containers):
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
             containers[i] = getattr(self, dc)
-        filtered_model, filtered_resid, filtered_flags, filtered_data = containers
+        filtered_model, filtered_resid, filtered_flags, filtered_data, resid_flags = containers
         filtered_info = "{}_{}".format(output_prefix, 'info')
         if not hasattr(self, filtered_info):
             setattr(self, filtered_info, {})
@@ -662,10 +942,31 @@ class VisClean(object):
                         w, _ = zeropad_array(w, zeropad=zeropad[m], axis=m)
                         xp[m] = np.hstack([x[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.mean(np.diff(x[m])),
                                            x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.mean(np.diff(x[m]))])
-            mdl, res, info = dspec.fourier_filter(x=xp, data=d, wgts=w, filter_centers=filter_centers,
+            mdl, res = np.zeros_like(d), np.zeros_like(d)
+            # if we are not including flagged edges in filtering, skip them here.
+            if skip_flagged_edges:
+                xp, din, win, edges = truncate_flagged_edges(d, w, xp, ax=ax)
+            else:
+                din = d
+                win = w
+            # skip integrations with contiguous edge flags exceeding desired limit
+            # (or precomputed limit) here.
+            if skip_contiguous_flags:
+                if max_contiguous_flag is None:
+                    max_contiguous_flag = get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_widths)
+                win = flag_rows_with_contiguous_flags(win, max_contiguous_flag, ax=ax)
+            # skip integrations with flags within some minimum distance of the edges here.
+            if np.any(np.asarray(skip_if_flag_within_edge_distance) > 0):
+                win = flag_rows_with_flags_within_edge_distance(win, skip_if_flag_within_edge_distance, ax=ax)
+
+            mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                                   filter_half_widths=filter_half_widths,
                                                   mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
                                                   **filter_kwargs)
+            # insert back the filtered model if we are skipping flagged edgs.
+            if skip_flagged_edges:
+                mdl = np.pad(mdl, edges)
+                res = np.pad(res, edges)
 
             # unzeropad array and put in skip flags.
             if ax == 'freq':
@@ -682,7 +983,7 @@ class VisClean(object):
                         mdl, _ = zeropad_array(mdl, zeropad=zeropad[i], axis=i, undo=True)
                         res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
                     _trim_status(info, i, zeropad[i - 1])
-
+            # flag integrations and channels that were skipped.
             skipped = np.zeros_like(mdl, dtype=np.bool)
             for dim in range(2):
                 if len(info['status']['axis_%d' % dim]) > 0:
@@ -692,14 +993,33 @@ class VisClean(object):
                                 skipped[:, i] = True
                             elif dim == 1:
                                 skipped[i] = True
+            # just in case any artifacts make it through after our other flagging rounds
+            # flag integrations or channels where the RMS of the model exceeds the RMS of the unflagged data
+            # by some threshold.
+            if flag_model_rms_outliers:
+                skipped = flag_model_rms(skipped, d, w, mdl, model_rms_threshold=model_rms_threshold, ax=ax)
+
+            # also flag skipped edge channels and integrations.
+            if skip_flagged_edges:
+                skipped[:, :edges[1][0]] = True
+                skipped[:, -edges[1][1] - 1:] = True
+                skipped[:edges[0][0], :] = True
+                skipped[-edges[0][1] - 1:, :] = True
 
             filtered_model[k] = mdl
             filtered_model[k][skipped] = 0.
             filtered_resid[k] = res * fw
             filtered_resid[k][skipped] = 0.
             filtered_data[k] = filtered_model[k] + filtered_resid[k]
-            filtered_flags[k] = skipped
+            if not keep_flags:
+                filtered_flags[k] = skipped
+            else:
+                filtered_flags[k] = copy.deepcopy(flags[k]) | skipped
             filtered_info[k] = info
+            if clean_flags_in_resid_flags:
+                resid_flags[k] = copy.deepcopy(flags[k]) | skipped
+            else:
+                resid_flags[k] = copy.deepcopy(flags[k])
 
         if hasattr(data, 'times'):
             filtered_data.times = data.times
@@ -892,7 +1212,7 @@ class VisClean(object):
                                          [res_outfilename, CLEAN_outfilename, filled_outfilename]):
                 if outfilename is not None:
                     if mode == 'residual':
-                        data_out, flags_out = getattr(self, prefix + '_resid'), self.flags
+                        data_out, flags_out = getattr(self, prefix + '_resid'), getattr(self, prefix + '_resid_flags')
                     elif mode == 'CLEAN':
                         data_out, flags_out = getattr(self, prefix + '_model'), getattr(self, prefix + '_flags')
                     elif mode == 'filled':
@@ -1171,34 +1491,6 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
     return model, noise
 
 
-def _trim_status(info_dict, axis, zeropad):
-    '''
-    Trims the info status dictionary for a zero-padded
-    filter so that the status of integrations that were
-    in the zero-pad region are deleted
-
-    Parameters
-    ----------
-    info : dict, info dictionary
-    axis : integer, index of axis to trim
-    zeropad : integer
-
-    Returns
-    -------
-    Nothing, modifies the provided dictionary in place.
-    '''
-    # delete statuses in zero-pad region
-    statuses = info_dict['status']['axis_%d' % axis]
-    nints = len(statuses)
-    for i in range(zeropad):
-        del statuses[i]
-        del statuses[nints - i - 1]
-    # now update keys of the dict elements we wish to keep
-    nints = len(statuses)
-    for i in range(nints):
-        statuses[i] = statuses.pop(i + zeropad)
-
-
 def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
     """
     Zeropad data ndarray along axis.
@@ -1283,6 +1575,82 @@ def noise_eq_bandwidth(window, axis=-1):
             Noise equivalent bandwidth of the window
     """
     return np.sqrt(window.shape[axis] * np.max(window, axis=axis)**2 / np.sum(window**2, dtype=np.float, axis=axis))
+
+
+def gen_filter_properties(ax='freq', horizon=1, standoff=0, min_dly=0, bl_len=None,
+                          max_frate=0):
+    """
+    Convert standard delay and fringe-rate filtering parameters
+    into uvtools.dspec.fourier_filter parameters.
+    If ax == 'both', filter properties are returned as (time, freq)
+
+    Args:
+        ax : str, options = ['freq', 'time', 'both']
+        horizon : float, foreground wedge horizon coefficient
+        standoff : float, wedge buffer [nanosec]
+        min_dly: float, the CLEAN delay window
+            is never below this minimum value (in nanosec)
+        bl_len : float, baseline length in seconds (i.e. meters / c)
+        max_frate : float, maximum |fringe-rate| to filter [mHz]
+
+    Returns:
+        filter_centers
+            list of filter centers in units of Hz or sec
+        filter_half_widths
+            list of filter half widths in units Hz or sec
+    """
+    if ax == 'freq' or ax == 'both':
+        filter_centers_freq = [0.]
+        assert bl_len is not None
+        # bl_dly in nanosec
+        bl_dly = dspec._get_bl_dly(bl_len * 1e9, horizon=horizon, standoff=standoff, min_dly=min_dly)
+        filter_half_widths_freq = [bl_dly * 1e-9]
+    if ax == 'time' or ax == 'both':
+        if max_frate is not None:
+            filter_centers_time = [0.]
+            filter_half_widths_time = [max_frate * 1e-3]
+        else:
+            raise AssertionError("must supply max_frate if ax=='time' or ax=='both'!")
+    if ax == 'both':
+        filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
+        filter_centers = [filter_centers_time, filter_centers_freq]
+    elif ax == 'freq':
+        filter_centers = filter_centers_freq
+        filter_half_widths = filter_half_widths_freq
+    elif ax == 'time':
+        filter_centers = filter_centers_time
+        filter_half_widths = filter_half_widths_time
+
+    return filter_centers, filter_half_widths
+
+
+def _trim_status(info_dict, axis, zeropad):
+    '''
+    Trims the info status dictionary for a zero-padded
+    filter so that the status of integrations that were
+    in the zero-pad region are deleted
+
+    Parameters
+    ----------
+    info : dict, info dictionary
+    axis : integer, index of axis to trim
+    zeropad : integer
+
+    Returns
+    -------
+    Nothing, modifies the provided dictionary in place.
+    '''
+    # delete statuses in zero-pad region
+    statuses = info_dict['status']['axis_%d' % axis]
+    nints = len(statuses)
+    for i in range(zeropad):
+        del statuses[i]
+        del statuses[nints - i - 1]
+    # now update keys of the dict elements we wish to keep
+    nints = len(statuses)
+    for i in range(nints):
+        statuses[i] = statuses.pop(i + zeropad)
+
 
 # ------------------------------------------
 # Here is an argparser with core arguments
@@ -1374,6 +1742,23 @@ def _linear_argparser(multifile=False):
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
     a.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
     a.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
+    return a
+
+
+def _dpss_argparser(multifile=False):
+    '''
+    Arg parser for commandline operation of hera_cal.delay_filter in dpss mode.
+    Arguments
+    ---------
+        multifile, bool: optional. If True, add calfilelist and filelist
+                         arguments.
+    Returns
+    -------
+        Arg-parser for dpss filtering.
+    '''
+    a = _linear_argparser(multifile=multifile)
+    a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
+    a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
     return a
 
 
