@@ -1144,6 +1144,68 @@ class Test_Post_Redcal_Abscal_Run(object):
                         else:
                             assert wgts[bl][t, f] == 2
 
+    def test_get_idealized_antpos(self):
+
+        # build 7 element hex with 1 outrigger
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        antpos[7] = np.array([100, 0, 0])
+        reds = redcal.get_reds(antpos, pols=['ee'])
+
+        # test with no flagged antennas
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos}
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'])
+        assert len(iap) == 8
+        assert len(iap[0]) == 3
+        r2a = redcal.reds_to_antpos(reds)
+        for ant in r2a:
+            np.testing.assert_array_equal(iap[ant], r2a[ant])
+
+        # test with flagged outrigger
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos}
+        cal_flags[(7, 'Jee')] = True
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'])
+        assert len(iap) == 8
+        assert len(iap[0]) == 2
+        r2a = redcal.reds_to_antpos(redcal.filter_reds(reds, ex_ants=[7]))
+        for ant in r2a:
+            np.testing.assert_array_equal(iap[ant], r2a[ant])
+        assert np.all(iap[7] == 0)
+
+        # test with flagged grid ant
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos}
+        cal_flags[(1, 'Jee')] = True
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'])
+        assert len(iap) == 8
+        assert len(iap[0]) == 3
+        r2a = redcal.reds_to_antpos(reds)
+        for ant in r2a:
+            np.testing.assert_array_equal(iap[ant], r2a[ant])
+            
+        # test keep_flagged_ants=False
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos}
+        cal_flags[(1, 'Jee')] = True
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'], keep_flagged_ants=False)
+        assert 1 not in iap
+        assert len(iap) == 7
+
+        # test errors
+        antpos2 = hex_array(2, split_core=False, outriggers=0)
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos2}
+        del antpos2[0]
+        with pytest.raises(ValueError):
+            iap = abscal._get_idealized_antpos(cal_flags, antpos2, ['ee'])
+            
+        data_wgts = {bl: np.array([1]) for red in reds for bl in red}
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos}
+        cal_flags[(7, 'Jee')] = True
+        with pytest.raises(ValueError):
+            iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'], data_wgts=data_wgts)
+
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos2}
+        cal_flags[7, 'Jee'] = True
+        with pytest.raises(ValueError):
+            iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'], data_wgts=data_wgts)
+
     def test_post_redcal_abscal(self):
         # setup
         hd = io.HERAData(self.data_file)
