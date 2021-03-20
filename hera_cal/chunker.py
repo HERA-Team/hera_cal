@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Copyright 2019 the HERA Project
+# Copyright 2021 the HERA Project
 # Licensed under the MIT License
 
 
@@ -9,6 +9,7 @@ import argparse
 import numpy as np
 import sys
 import warnings
+
 
 def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh5',
                      polarizations=None, spw_range=None, throw_away_flagged_bls=False,
@@ -71,6 +72,7 @@ def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh
 
     return hd
 
+
 def chunk_cal_files(filenames, inputfile, outputfile, chunk_size, spw_range=None, clobber=False):
     """A calibration file chunker
 
@@ -104,6 +106,7 @@ def chunk_cal_files(filenames, inputfile, outputfile, chunk_size, spw_range=None
         hc.select(freq_chans=np.arange(spw_range[0], spw_range[1]).astype(int))
     hc.write_calfits(outputfile, clobber=clobber)
     return hc
+
 
 def chunk_cal_parser():
     """
