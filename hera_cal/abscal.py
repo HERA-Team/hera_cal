@@ -3336,6 +3336,75 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
     return DataContainer(wgts)
 
 
+def _get_idealized_antpos(cal_flags, antpos, pols, tol=1.0, keep_flagged_ants=True, data_wgts={}):
+    '''Figure out a set of idealized antenna positions that doesn't introduce additional 
+    redcal degeneracies.
+    
+    Arguments:
+        cal_flags: dictionary mapping keys like (1, 'Jnn') to flag waterfalls
+        antpos: dictionary mapping antenna numbers to numpy array positions
+        pols: list of polarizations like ['ee', 'nn']
+        tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters)
+        keep_flagged_ants: If True, flagged antennas that are off-grid (i.e. would introduce an 
+            additional degeneracy) are placed at the origin. Otherwise, flagged antennas in cal_flags
+            are excluded from idealized_antpos.
+        data_wgts: DataContainer mapping baselines like (0, 1, 'ee') to weights. Used to check if 
+            flagged antennas off the calibratable grid have no weight. Ignored if keep_flagged_ants
+            is False.
+
+    Returns:
+        idealized_antpos: dictionary mapping antenna numbers to antenna positions on an N-dimensional
+            grid where redundant real-world baselines (up to the tol) are perfectly redundant (up to
+            numerical precision). These baselines will be arbitrarily linearly transformed (stretched,
+            skewed, etc.) and antennas that introduce extra degeneracies will introduce extra dimensions.
+            See redcal.reds_to_antpos() for more detail.
+    '''
+    # build list of reds without flagged untennas
+    all_ants = list(cal_flags.keys())
+    unflagged_ants = [ant for ant in cal_flags if not np.all(cal_flags[ant])]
+    all_reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=pols)
+    unflagged_reds = redcal.filter_reds(all_reds, ants=unflagged_ants)
+    
+    # count the number of dimensions describing the redundancies of unflagged antennas
+    unflagged_idealized_antpos = redcal.reds_to_antpos(unflagged_reds, tol=redcal.IDEALIZED_BL_TOL)
+    unflagged_nDims = _count_nDims(unflagged_idealized_antpos, assume_2D=False)
+    
+    # get the potentially calibratable ants, reds, and idealized_antpos. These are antennas that may
+    # be flagged, but they they are still on the grid of unflagged antennas and can thus be updated
+    # without introducing additional degeneracies.
+    if keep_flagged_ants:
+        reds = redcal.filter_reds(all_reds, max_dims=unflagged_nDims)
+    else:
+        reds = unflagged_reds
+    calibratable_ants = set([ant for red in reds for bl in red for ant in split_bl(bl)])
+    idealized_antpos = redcal.reds_to_antpos(reds, tol=redcal.IDEALIZED_BL_TOL)
+    for ant in unflagged_ants:
+        if ant not in calibratable_ants:
+            raise ValueError(f'{ant}, which is not flagged in cal_flags, but is not in the on-grid ants '
+                             f'which are {sorted(list(calibratable_ants))}.')
+    
+    if keep_flagged_ants:
+        # figure out which atennas have non-zero weight
+        ants_with_wgts = set([])
+        for bl in data_wgts:
+            if not np.all(data_wgts[bl] == 0.0):
+                for ant in split_bl(bl):
+                    if ant not in all_ants:
+                        raise ValueError(f'Antenna {ant} has non-zero weight in data_wgts but is not in cal_flags, '
+                                         f'which has keys {sorted(list(cal_flags.keys()))}.')
+                    ants_with_wgts.add(ant)
+
+        # add off-grid antennas that have no weight at idealized position = 0
+        for ant in all_ants:
+            if ant not in calibratable_ants:
+                if ant in ants_with_wgts:
+                    raise ValueError(f'Antenna {ant} appears in data with non-zero weight, but is not in the on-grid ants '
+                                     f'which are {sorted(list(calibratable_ants))}.')
+                idealized_antpos[ant[0]] = np.zeros(unflagged_nDims)
+
+    return idealized_antpos
+
+
 def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, kernel=(1, 15),
                        phs_max_iter=100, phs_conv_crit=1e-6, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
@@ -3357,28 +3426,15 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
 
     Returns:
         abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing
-            the updates to the gains between redcal and abscal. Uses keys from rc_flags
+            the updates to the gains between redcal and abscal. Uses keys from rc_flags. Will try to 
+            update flagged antennas if they fall on the grid and don't introduce additional degeneracies.
     '''
-
-    # setup: initialize ants and figure out which ones are not completely flagged (no weight)
-    ants = list(rc_flags.keys())
-    ants_with_wgts = set([])
-    for bl in data_wgts:
-        if not np.all(data_wgts[bl] == 0.0):
-            for ant in split_bl(bl):
-                assert ant in ants, f'Antenna {ant} appears in the data but not in the redcal flags.'
-                ants_with_wgts.add(ant)
-
-    # Get idealized antenna poistions, not letting flagged antennas affect the number of dimensions
-    reds = redcal.get_reds(data.antpos, bl_error_tol=tol, pols=data.pols())
-    reds = redcal.filter_reds(reds, ants=ants_with_wgts)
-    idealized_antpos = redcal.reds_to_antpos(reds, tol=redcal.IDEALIZED_BL_TOL)
     
-    # set flagged antennas to have position 0.0
-    nDims = _count_nDims(idealized_antpos, assume_2D=False)
-    for ant in ants:
-        if ant not in ants_with_wgts:
-            idealized_antpos[ant[0]] = np.zeros(nDims)
+    # get ants, idealized_antpos, and reds
+    ants = sorted(list(rc_flags.keys()))
+    idealized_antpos = _get_idealized_antpos(rc_flags, data.antpos, data.pols(), 
+                                             data_wgts=data_wgts, tol=tol, keep_flagged_ants=True)
+    reds = redcal.get_reds(idealized_antpos, pols=data.pols(), bl_error_tol=redcal.IDEALIZED_BL_TOL)
 
     # Abscal Step 1: Per-Channel Logarithmic Absolute Amplitude Calibration
     gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)

@@ -1144,6 +1144,79 @@ class Test_Post_Redcal_Abscal_Run(object):
                         else:
                             assert wgts[bl][t, f] == 2
 
+    def test_get_idealized_antpos(self):
+        # build 7 element hex with 1 outrigger. If all antennas are unflagged, the outrigger
+        # is not redundant with the hex, so it introduces an extra degeneracy. That corresponds
+        # to an extra dimension in an idealized antenna position. 
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        antpos[7] = np.array([100, 0, 0])
+        reds = redcal.get_reds(antpos, pols=['ee'])
+
+        # test with no flagged antennas
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos}
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'], keep_flagged_ants=True)
+        assert len(iap) == 8  # all antennas are included
+        assert len(iap[0]) == 3  # 3 degeneracies ==> 3 dimensions
+        # check that the results are the same as in redcal.reds_to_antpos
+        r2a = redcal.reds_to_antpos(reds)
+        for ant in r2a:
+            np.testing.assert_array_equal(iap[ant], r2a[ant])
+
+        # test with flagged outrigger, which lowers the number of degeneracies
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos}
+        cal_flags[(7, 'Jee')] = True
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'], keep_flagged_ants=True)
+        # because keep_flagged_ants is True, the flagged antenna is still in the antpos dict
+        assert len(iap) == 8
+        # because the only antenna necessitating a 3rd tip-tilt degeneracy is flagged, 
+        # get_idealized_antpos enforces that all remaining antenna positions are expressed in 2D
+        assert len(iap[0]) == 2
+        r2a = redcal.reds_to_antpos(redcal.filter_reds(reds, ex_ants=[7]))
+        for ant in r2a:
+            np.testing.assert_array_equal(iap[ant], r2a[ant])
+        # because there's no sensible way to describe the antenna's position in this basis, set it to 0
+        assert np.all(iap[7] == 0)
+
+        # test with flagged grid ant, which does not affect the number of degeneracies
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos}
+        cal_flags[(1, 'Jee')] = True
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'], keep_flagged_ants=True)
+        assert len(iap) == 8  # all antennas included
+        # removing an on-grid antenna but keeping the outrigger doesn't change the number of degeneracies
+        assert len(iap[0]) == 3 
+        # test that the flagged antenna has the position it would have had it if weren't flagged
+        r2a = redcal.reds_to_antpos(reds)
+        for ant in r2a:
+            np.testing.assert_array_equal(iap[ant], r2a[ant])
+            
+        # test keep_flagged_ants=False
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos}
+        cal_flags[(1, 'Jee')] = True
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'], keep_flagged_ants=False)
+        assert 1 not in iap
+        assert len(iap) == 7
+
+        # test error when an antenna is somehow in the cal_flags (unflagged) but not antpos or the derived reds
+        antpos2 = hex_array(2, split_core=False, outriggers=0)
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos2}
+        # remove antenna 0
+        del antpos2[0]
+        with pytest.raises(ValueError):
+            iap = abscal._get_idealized_antpos(cal_flags, antpos2, ['ee'])
+
+        # test error where an antenna has non-zero weight, but doesn't appear in cal_flags
+        data_wgts = {bl: np.array([1]) for red in reds for bl in red}
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos}
+        cal_flags[(7, 'Jee')] = True
+        with pytest.raises(ValueError):
+            iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'], data_wgts=data_wgts)
+
+        # test error where antenna with non-zero weight is getting placed at position 0
+        cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos2}
+        cal_flags[7, 'Jee'] = True
+        with pytest.raises(ValueError):
+            iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'], data_wgts=data_wgts)
+
     def test_post_redcal_abscal(self):
         # setup
         hd = io.HERAData(self.data_file)
