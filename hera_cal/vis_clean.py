@@ -1828,11 +1828,13 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         hd_time_chunk.write_uvh5(outfilename, clobber=clobber)
     else:
         dt_time_chunk = np.mean(np.diff(hd_time_chunk.times)) / 2.
-        dt_baseline_chunk = np.mean(np.diff(hd_baseline_chunk.times)) / 2.
         tmax = hd_time_chunk.times.max() + dt_time_chunk
         tmin = hd_time_chunk.times.min() - dt_time_chunk
         hd_combined = io.HERAData(baseline_chunk_files)
-        t_select = (hd_baseline_chunk.times - dt_baseline_chunk / 2. >= tmin) & (hd_baseline_chunk.times + dt_baseline_chunk / 2. <= tmax)
+        # we only compare centers of baseline files to time limits of time-file.
+        # this is to prevent integrations that straddle file boundaries from being dropped.
+        # when we perform reconstitution.
+        t_select = (hd_baseline_chunk.times >= tmin) & (hd_baseline_chunk.times < tmax)
         hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
         hd_combined.write_uvh5(outfilename, clobber=clobber)
 
