@@ -490,9 +490,8 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
     # get stopping LST for output binning
     if lst_stop is None:
         lst_stop = lmax
-    else:
-        if lst_stop < begin_lst:
-            lst_stop += 2 * np.pi
+    if lst_stop < begin_lst:
+        lst_stop += 2 * np.pi
 
     # make LST grid
     lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
