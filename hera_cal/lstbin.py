@@ -468,9 +468,6 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
         lst_arrays.append(larrs)
         time_arrays.append(tarrs)
 
-    lst_arrays = np.asarray(lst_arrays)
-    time_arrays = np.asarray(time_arrays)
-
     # get starting LST for output binning
     if lst_start is None:
         lst_start = lmin
