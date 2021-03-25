@@ -637,6 +637,12 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     tarr = time_arrs[j][k]
                     larr[larr < larr[0]] += 2 * np.pi
 
+                    # phase wrap larr to get it to fall within 2pi of file_lists
+                    while larr[-1] < fmin - 2 * np.pi:
+                        larr += 2 * np.pi
+                    while larr[0] > fmax + 2 * np.pi:
+                        larr -= 2 * np.pi
+
                     # check if this file has overlap with output file
                     if larr[-1] < fmin or larr[0] > fmax:
                         continue
@@ -671,7 +677,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     file_list.append(data_files[j][k])
                     nightly_data_list.append(data)  # this is data
                     nightly_flgs_list.append(flags)  # this is flgs
-                    nightly_lst_list.append(larr[tinds])  # this is lsts
+                    nightly_lst_list.append(data.lsts)  # this is lsts
 
                 # skip if nothing accumulated in nightly files
                 if len(nightly_data_list) == 0:
