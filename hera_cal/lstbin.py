@@ -638,9 +638,9 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     larr[larr < larr[0]] += 2 * np.pi
 
                     # phase wrap larr to get it to fall within 2pi of file_lists
-                    while larr[-1] < fmin - 2 * np.pi:
+                    while larr[0] + 2 * np.pi < fmax:
                         larr += 2 * np.pi
-                    while larr[0] > fmax + 2 * np.pi:
+                    while larr[-1] - 2 * np.pi > fmin:
                         larr -= 2 * np.pi
 
                     # check if this file has overlap with output file
