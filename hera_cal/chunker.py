@@ -11,7 +11,7 @@ import sys
 import warnings
 
 
-def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh5',
+def chunk_data_files(filenames, inputfile, outputfile, chunk_size,
                      polarizations=None, spw_range=None, throw_away_flagged_bls=False,
                      clobber=False, ant_flag_yaml=None):
     """A data file chunker
@@ -22,9 +22,6 @@ def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh
         list of filenames to chunk. Should be homogenous in blt.
     outpufile: str
         name of outputfile to write time-concatenated data too.
-    filetype: str, optional
-        file type to write out.
-        Default is uvh5.
     polarizations: list of strs, optional
         Limit output to polarizations listed.
         Default None selects all polarizations.
@@ -58,17 +55,8 @@ def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh
         from hera_qm.utils import apply_yaml_flags
         hd = apply_yaml_flags(hd, ant_flag_yaml, flag_freqs=False, flag_times=False,
                               flag_ants=True, ant_indices_only=True, throw_away_flagged_ants=True)
-        data, flags, nsamples = hd.build_datacontainers()
-        if len(data) == 0:
-            warnings.warn("No unflagged baselines present. Exiting.")
-            sys.exit(0)
 
-    if filetype == 'uvh5':
-        hd.write_uvh5(outputfile, clobber=clobber)
-    elif file_type == 'miriad':
-        hd.write_miriad(outputfile, clobber=clobber)
-    elif file_type == 'uvfits':
-        hd.write_uvfit(outputfile, clobber=clobber)
+    hd.write_uvh5(outputfile, clobber=clobber)
 
     return hd
 

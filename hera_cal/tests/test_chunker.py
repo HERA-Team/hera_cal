@@ -49,7 +49,7 @@ def test_chunk_cal_files(tmpdir):
     # form chunks with three samples.
     for chunk in range(0, nfiles, 2):
         output = tmp_path + f'/chunk.{chunk}.calfits'
-        chunker.chunk_cal_files(cal_files, cal_files[chunk], output, 2)
+        chunker.chunk_cal_files(cal_files, cal_files[chunk], output, 2, spw_range=[0, 32])
 
     # test that chunked files contain identical data (when combined)
     # to original combined list of files.
@@ -60,6 +60,7 @@ def test_chunk_cal_files(tmpdir):
     # load in original file
     uvco = UVCal()
     uvco.read_calfits(cal_files)
+    uvco.select(freq_chans=range(32))
 
     assert np.all(np.isclose(uvco.gain_array, uvc.gain_array))
     assert np.all(np.isclose(uvco.flag_array, uvc.flag_array))
