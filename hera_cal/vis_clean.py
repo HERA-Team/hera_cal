@@ -1732,7 +1732,8 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         path to file to use as a template for the time-chunk. Function selects times from time-chunk
         that exist in baseline_chunks for all baseline chunks and combines them into a single file.
         If the frequenies of the baseline_chunk files are a subset of the frequencies in the time_chunk, then
-        output will trim the extra frequencies in the time_chunk and write out trimmed freqs.
+        output will trim the extra frequencies in the time_chunk and write out trimmed freqs. The same is true
+        for polarizations.
     baseline_chunk_files : list of strings
         list of paths to baseline-chunk files to select time-chunk file from.
     outfilename : string
@@ -1760,6 +1761,10 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
     # from the baseline_chunk_file files.
     if not time_bounds:
         hd_time_chunk.read(times=times, frequencies=freqs, polarizations=polarizations)
+        # set the all data to zero, flags to True, and nsamples to zero.
+        hd_time_chunk.nsample_array[:] = 0.0
+        hd_time_chunk.data_array[:] = 0.0 + 0j
+        hd_time_chunk.flag_array[:] = True
         # for each baseline_chunk_file, read in only the times relevant to the templatefile.
         # and update the data, flags, nsamples array of the template file
         # with the baseline_chunk_file data.
@@ -1778,12 +1783,19 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         # now that we've updated everything, we write the output file.
         hd_time_chunk.write_uvh5(outfilename, clobber=clobber)
     else:
-        tmax = hd_time_chunk.times.max()
-        tmin = hd_time_chunk.times.min()
+        dt_time_chunk = np.mean(np.diff(hd_time_chunk.times)) / 2.
+        tmax = hd_time_chunk.times.max() + dt_time_chunk
+        tmin = hd_time_chunk.times.min() - dt_time_chunk
         hd_combined = io.HERAData(baseline_chunk_files)
-        t_select = (hd_baseline_chunk.times >= tmin) & (hd_baseline_chunk.times <= tmax)
-        hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
-        hd_combined.write_uvh5(outfilename, clobber=clobber)
+        # we only compare centers of baseline files to time limits of time-file.
+        # this is to prevent integrations that straddle file boundaries from being dropped.
+        # when we perform reconstitution.
+        t_select = (hd_baseline_chunk.times >= tmin) & (hd_baseline_chunk.times < tmax)
+        if np.count_nonzero(t_select) > 0:
+            hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
+            hd_combined.write_uvh5(outfilename, clobber=clobber)
+        else:
+            warning.warn("No times overlap. No time-chunk file created.")
 
 
 def time_chunk_from_baseline_chunks_argparser():
