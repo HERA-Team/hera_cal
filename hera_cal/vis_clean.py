@@ -1835,8 +1835,12 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         # this is to prevent integrations that straddle file boundaries from being dropped.
         # when we perform reconstitution.
         t_select = (hd_baseline_chunk.times >= tmin) & (hd_baseline_chunk.times < tmax)
-        hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
-        hd_combined.write_uvh5(outfilename, clobber=clobber)
+        if np.count_nonzero(t_select) > 0:
+            hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
+            hd_combined.write_uvh5(outfilename, clobber=clobber)
+        else:
+            warnings.warn("no times selected. No outputfile produced.", RuntimeWarning)
+
 
 
 def time_chunk_from_baseline_chunks_argparser():
