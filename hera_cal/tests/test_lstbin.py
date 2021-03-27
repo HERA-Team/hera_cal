@@ -307,3 +307,14 @@ class Test_lstbin(object):
         for of in output_files:
             if os.path.exists(of):
                 os.remove(of)
+
+    def test_test_config_lst_bin_files(self, tmpdir):
+         # test time grid is equally spaced.
+         data_lists = [sorted(glob.glob(f'{DATA_PATH}/{jd}/*.uvh5')) for jd in [2459118, 2459119, 2459122, 2459139]]
+         (lst_grid, dlst, file_lsts, begin_lst, lst_arrs, time_arrs) = config_lst_bin_files(lists, dlst=0.0007046864745507975, atol=1e-10, lst_start=5.178260914725223, lst_stop=None, fixed_lst_start=False, verbose=True,
+                                                                                            ntimes_per_file=2)
+         file_order = np.argsort([time_arr[0] for time_arr in time_arrs])
+         all_times = np.hstack([time_arrs[i] for i in file_order])
+         assert np.all(np.isclose(np.diff(all_times), np.diff(all_times)[0]))
+         # test LST grid is equally spaced
+         assert np.all(np.isclose(np.diff(np.unwrap(lst_grid)), np.diff(np.unwrap(lst_grid))[0]))
