@@ -1795,7 +1795,7 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
             hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
             hd_combined.write_uvh5(outfilename, clobber=clobber)
         else:
-            warning.warn("No times overlap. No time-chunk file created.")
+            warnings.warn("No times overlap. No time-chunk file created.")
 
 
 def time_chunk_from_baseline_chunks_argparser():
