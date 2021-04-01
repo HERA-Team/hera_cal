@@ -12,7 +12,7 @@ from . import utils
 from . import version
 from .noise import predict_noise_variance_from_autos
 from .datacontainer import DataContainer
-from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol
+from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores
 from .io import HERAData, HERACal, write_cal, save_redcal_meta
 from .apply_cal import calibrate_in_place
 
@@ -846,6 +846,10 @@ class RedundantCalibrator:
         sol = ls.solve(mode=mode)
         dly_sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
         off_sol = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
+        # add back in antennas in reds but not in the system of equations
+        ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
+        dly_sol = {ant: dly_sol.get(ant, (np.zeros_like(list(dly_sol.values())[0]))) for ant in ants}
+        off_sol = {ant: off_sol.get(ant, (np.zeros_like(list(off_sol.values())[0]))) for ant in ants}
         return dly_sol, off_sol
 
     def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-6,
@@ -1441,11 +1445,11 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
         # solve for new gains and update cal
         new_gains = {}
-        new_gain_ants = set([ant for bl in bls_to_use for ant in split_bl(bl) 
+        new_gain_ants = set([ant for bl in bls_to_use for ant in split_bl(bl)
                              if ant not in cal['g_omnical']])
         for ant in new_gain_ants:
-            new_gains.update(linear_cal_update([bl for bl in bls_to_use if ant in split_bl(bl)], 
-                                               cal, data, all_reds, 
+            new_gains.update(linear_cal_update([bl for bl in bls_to_use if ant in split_bl(bl)],
+                                               cal, data, all_reds,
                                                weight_by_nsamples=True, weight_by_flags=(i == 0)))
         make_sol_finite(new_gains)
         for ant, g in new_gains.items():
@@ -1737,19 +1741,26 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
     # get antnums2antnames dictionary
     antnums2antnames = dict(zip(hd.antenna_numbers, hd.antenna_names))
 
+    # Build UVCal metadata that might be different from UVData metadata
+    cal_antnums = sorted(set([ant[0] for ant in cal['g_omnical']]))
+    antenna_positions = np.array([hd.antenna_positions[hd.antenna_numbers == antnum].flatten() for antnum in cal_antnums])
+    lst_array = np.unique(hd.lsts)
+
     if verbose:
         print('\nNow saving firstcal gains to', os.path.join(outdir, fistcal_filename))
     write_cal(fistcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
               flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber,
-              x_orientation=hd.x_orientation, history=version.history_string(add_to_history),
-              antnums2antnames=antnums2antnames)
+              x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
+              antenna_positions=antenna_positions, lst_array=lst_array,
+              history=version.history_string(add_to_history), antnums2antnames=antnums2antnames)
 
     if verbose:
         print('Now saving omnical gains to', os.path.join(outdir, omnical_filename))
     write_cal(omnical_filename, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
               quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
-              x_orientation=hd.x_orientation, history=version.history_string(add_to_history),
-              antnums2antnames=antnums2antnames)
+              x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
+              antenna_positions=antenna_positions, lst_array=lst_array,
+              history=version.history_string(add_to_history), antnums2antnames=antnums2antnames)
 
     if verbose:
         print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
@@ -1767,7 +1778,7 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
                omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None,
-               ant_metrics_file=None, a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None, pol_mode='2pol',
+               metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None, pol_mode='2pol',
                bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0,
                flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50,
                oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, add_to_history='',
@@ -1786,8 +1797,9 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         iter0_prefix: if not '', save the omnical results with this prefix appended to each file after the 0th
             iteration, but only if redcal has found any antennas to exclude and re-run without
         outdir: folder to save data products. If None, will be the same as the folder containing input_data
-        ant_metrics_file: path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file.
-            Used for finding ex_ants and is combined with antennas excluded via ex_ants.
+        metrics_files: path or list of paths to file(s) containing ant_metrics or auto_metrics readable by
+            hera_qm.metrics_io.load_metric_file. Used for finding ex_ants and is combined with antennas
+            excluded via ex_ants.
         a_priori_ex_ants_yaml : path to YAML with antenna flagging information parsable by
             hera_qm.metrics_io.read_a_priori_ant_flags(). Frequency and time flags in the YAML
             are ignored. Flags are combined with ant_metrics's xants and ex_ants. If any
@@ -1840,11 +1852,23 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     else:
         raise TypeError('input_data must be a single string path to a visibility data file or a HERAData object')
 
+    # parse ex_ants from function, metrics_files, and apriori yamls
     ex_ants = set(ex_ants)
-    from hera_qm.metrics_io import load_metric_file
-    if ant_metrics_file is not None:
-        for ant in load_metric_file(ant_metrics_file)['xants']:
-            ex_ants.add(ant[0])  # Just take the antenna number, flagging both polarizations
+    if metrics_files is not None:
+        if isinstance(metrics_files, str):
+            metrics_files = [metrics_files]
+        if len(metrics_files) > 0:
+            from hera_qm.metrics_io import load_metric_file
+            for mf in metrics_files:
+                metrics = load_metric_file(mf)
+                # load from an ant_metrics file
+                if 'xants' in metrics:
+                    for ant in metrics['xants']:
+                        ex_ants.add(ant[0])  # Just take the antenna number, flagging both polarizations
+                # load from an auto_metrics file
+                elif 'ex_ants' in metrics and 'r2_ex_ants' in metrics['ex_ants']:
+                    for ant in metrics['ex_ants']['r2_ex_ants']:
+                        ex_ants.add(ant)  # Auto metrics reports just antenna numbers
     if a_priori_ex_ants_yaml is not None:
         from hera_qm.metrics_io import read_a_priori_ant_flags
         ex_ants = ex_ants.union(set(read_a_priori_ant_flags(a_priori_ex_ants_yaml, ant_indices_only=True)))
@@ -1856,7 +1880,6 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         outdir = os.path.dirname(input_data)
 
     # loop over calibration, removing bad antennas and re-running if necessary
-    from hera_qm.ant_metrics import per_antenna_modified_z_scores
     run_number = 0
     while True:
         # Run redundant calibration
@@ -1912,7 +1935,7 @@ def redcal_argparser():
     a.add_argument("--verbose", default=False, action="store_true", help="print calibration progress updates")
 
     redcal_opts = a.add_argument_group(title='Runtime Options for Redcal')
-    redcal_opts.add_argument("--ant_metrics_file", type=str, default=None, help="path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file. \
+    redcal_opts.add_argument("--metrics_files", type=str, nargs='*', default=[], help="path to file containing ant_metrics or auto_metrics readable by hera_qm.metrics_io.load_metric_file. \
                              Used for finding ex_ants and is combined with antennas excluded via ex_ants.")
     redcal_opts.add_argument("--ex_ants", type=int, nargs='*', default=[], help='space-delimited list of antennas to exclude from calibration and flag. All pols for an antenna will be excluded.')
     redcal_opts.add_argument("--a_priori_ex_ants_yaml", type=str, default=None, help='path to YAML file containing a priori ex_ants parsable by hera_qm.metrics_io.read_a_priori_ant_flags()')
