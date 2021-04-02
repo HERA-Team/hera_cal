@@ -856,5 +856,5 @@ def frate_filter_argparser(mode='clean', multifile=False):
     a.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
     a.add_argument("--frac_frate_sky_max", type=float, default=1.0, help="Fraction of maximum sky-fringe-rate to interpolate / filter.")
     a.add_argument("--frate_standoff", type=float, default=0.0, help="Standoff in fringe-rate to filter [mHz].")
-    a.add_argument("--")
+    a.add_argument("--min_frate", type=float, default=0.0, help="Minimum fringe-rate to filter [mHz].")
     return a
