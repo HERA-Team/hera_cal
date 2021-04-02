@@ -407,6 +407,108 @@ class FRFilter(VisClean):
         self.t_avg = t_avg
         self.Navg = Navg
 
+    def run_fr_filter(self, to_filter=None, weight_dict=None, mode='clean',
+                        frate_standoff=0.0, frate_horizon=1.0,
+                        skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
+                        write_cache=False, skip_flagged_edges=False, flag_filled=False,
+                        data=None, flags=None, **filter_kwargs):
+                        '''
+                        Interpolate / filter data in time using the physical fringe-rates of the sky.
+                        Arguments:
+                          to_filter: list of visibilities to filter in the (i,j,pol) format.
+                              If None (the default), all visibilities are filtered.
+                          weight_dict: dictionary or DataContainer with all the same keys as self.data.
+                              Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
+                              of self.flags. uvtools.dspec.xtalk_filter will renormalize to compensate.
+                          mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.xtalk_filter for supported modes.
+                          frate_standoff: float, optional
+                              Additional fringe-rate standoff in mHz to add to \Omega_E b_{EW} \nu/c for fringe-rate inpainting.
+                              default = None. If None, will use max_frate_coeffs instead to compute max_frate.
+                          frate_horizon: float, optional
+                             fraction of horizon to fringe-rate filter.
+                          skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+                              Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+                              time. Skipped channels are then flagged in self.flags.
+                              Only works properly when all weights are all between 0 and 1.
+                          tol : float, optional. To what level are foregrounds subtracted.
+                          verbose: If True print feedback to stdout
+                          cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
+                                      see uvtools.dspec.dayenu_filter for key formats.
+                          read_cache: bool, If true, read existing cache files in cache_dir before running.
+                          write_cache: bool. If true, create new cache file with precomputed matrices
+                                             that were not in previously loaded cache files.
+                          cache: dictionary containing pre-computed filter products.
+                          skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
+                          verbose: bool, optional, lots of outputs!
+                          filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
+
+                        Results are stored in:
+                          self.clean_resid: DataContainer formatted like self.data with only high-fringe-rate components
+                          self.clean_model: DataContainer formatted like self.data with only low-fringe-rate components
+                          self.clean_info: Dictionary of info from uvtools.dspec.xtalk_filter with the same keys as self.data
+                        '''
+                    if to_filter is None:
+                        to_filter = list(self.data.keys())
+                    # read in cache
+                    if not mode == 'clean':
+                       if read_cache:
+                           filter_cache = io.read_filter_cache_scratch(cache_dir)
+                       else:
+                           filter_cache = {}
+                       keys_before = list(filter_cache.keys())
+                    else:
+                       filter_cache = None
+                    # compute maximum fringe rate dict based on baseline lengths.
+                    blcosines = {k: self.blvecs[k[:2]][0] / np.linalg.norm(self.blvecs[k[:2]]) for k in to_filter}
+                    frateamps = {k: 1./(24. * 3.6) * self.freqs.max() / 3e8 * 2 * np.pi * np.linalg.norm(self.blvecs[k[:2]]) for k in to_filter}
+                    # set autocorrs to have blcose of 0.0
+                    for k in blcosines:
+                        if np.isnan(blcosines[k]):
+                            blcosines[k] = 0.0
+                    sinlat = np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))
+                    max_frate = io.DataContainer({})
+                    min_frate = io.DataContainer({})
+                    center_frate = io.DataContainer({})
+                    width_frate = io.DataContainer({})
+                    # calculate min/max center fringerates.
+                    for k in to_filter:
+                       if blcosines[k] >= 0:
+                           max_frate[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                           min_frate[k] = -frateamps[k] * sinlat
+                       else:
+                           min_frate[k] = -frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                           max_frate[k] = frateamps[k] * sinlat
+                       center_frate[k] = (max_frate[k] + min_frate[k]) / 2.
+                       width_frate[k] = np.abs(max_frate[k] - min_frate[k]) / 2. * frate_horizon + frate_standoff
+                    # divide by center fringe rate
+                    for k in self.data:
+                       self.data[k] /= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
+
+                    # loop over all baselines in increments of Nbls
+                    self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
+                                  ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
+                                  cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=width_frate,
+                                  overwrite=True, verbose=verbose, skip_flagged_edge_times=skip_flagged_edges,
+                                  flag_filled=flag_filled, **filter_kwargs)
+                    if 'output_prefix' in filter_kwargs:
+                        filtered_data = getattr(self, filter_kwargs['output_prefix'] + '_data')
+                        filtered_model = getattr(self, filter_kwargs['output_prefix'] + '_model')
+                        filtered_resid = getattr(self, filter_kwargs['output_prefix'] + '_resid')
+                    else:
+                        filtered_data = self.clean_data
+                        filtered_model = self.clean_model
+                        filtered_resid = self.clean_resid
+                    for k in self.data:
+                       filtered_data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
+                       filtered_model[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
+                       filtered_resid[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
+                       self.data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
+                    if not mode == 'clean':
+                       if write_cache:
+                           filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
+
+
+
     def filter_data(self, data, frps, flags=None, nsamples=None,
                     output_prefix='filt', keys=None, overwrite=False,
                     edgecut_low=0, edgecut_hi=0, axis=0, verbose=True):
