@@ -14,6 +14,8 @@ from pyuvdata import UVData
 from pyuvdata import utils as uvutils
 import unittest
 from scipy import stats
+from scipy import constants
+
 
 from .. import datacontainer, io, frf
 from ..data import DATA_PATH
@@ -511,7 +513,7 @@ class Test_FRFilter(object):
 
     def test_frf_clean_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris']
-        parser = frf.fr_filter_argparser()
+        parser = frf.frate_filter_argparser()
         a = parser.parse_args()
         assert a.infilename == 'a'
         assert a.clobber is True
@@ -524,7 +526,7 @@ class Test_FRFilter(object):
 
     def test_frf_linear_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--min_frate', '0.1', '--frate_standoff', '3.2', '--frac_frate_sky_max', '.99']
-        parser = frf.fr_filter_argparser(mode='dayenu')
+        parser = frf.frate_filter_argparser(mode='dayenu')
         a = parser.parse_args()
         assert a.infilename == 'a'
         assert a.clobber is True
