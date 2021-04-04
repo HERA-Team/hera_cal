@@ -15,6 +15,7 @@ from pyuvdata import utils as uvutils
 import unittest
 from scipy import stats
 from scipy import constants
+from pyuvdata import UVFlag
 
 
 from .. import datacontainer, io, frf
@@ -265,7 +266,7 @@ class Test_FRFilter(object):
         k = (24, 25, 'ee')
         # check successful run when avg_red_bllens is True and when False.
         for avg_red_bllens in [True, False]:
-            frfil = frf.XTalkFilter(fname, filetype='miriad')
+            frfil = frf.FRFilter(fname, filetype='miriad')
             frfil.read(bls=[k])
             if avg_red_bllens:
                 frfil.avg_red_baseline_vectors()
@@ -394,11 +395,11 @@ class Test_FRFilter(object):
         for bl in d:
             assert not np.all(np.isclose(d[bl], 0.))
 
-        xfil = xf.XTalkFilter(uvh5, filetype='uvh5')
-        xfil.read(bls=[(53, 54, 'ee')])
-        xfil.run_fr_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
-        np.testing.assert_almost_equal(d[(53, 54, 'ee')], xfil.clean_resid[(53, 54, 'ee')], decimal=5)
-        np.testing.assert_array_equal(f[(53, 54, 'ee')], xfil.flags[(53, 54, 'ee')])
+        frfil = frf.FRFilter(uvh5, filetype='uvh5')
+        frfil.read(bls=[(53, 54, 'ee')])
+        frfil.run_fr_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        np.testing.assert_almost_equal(d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5)
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
 
         # test loading and writing all baselines at once.
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
@@ -414,8 +415,8 @@ class Test_FRFilter(object):
         frfil = frf.FRFilter(uvh5, filetype='uvh5')
         frfil.read(bls=[(53, 54, 'ee')])
         frfil.run_fr_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
-        np.testing.assert_almost_equal(d[(53, 54, 'ee')], xfil.clean_resid[(53, 54, 'ee')], decimal=5)
-        np.testing.assert_array_equal(f[(53, 54, 'ee')], xfil.flags[(53, 54, 'ee')])
+        np.testing.assert_almost_equal(d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5)
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(tmp_path, 'temp.h5')
@@ -522,7 +523,7 @@ class Test_FRFilter(object):
         assert not a.factorize_flags
         assert a.frate_standoff == 0.0
         assert a.frac_frate_sky_max == 1.0
-        assert a.min_frate == 0.0
+        assert a.min_frate == 0.025
 
     def test_frf_linear_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--min_frate', '0.1', '--frate_standoff', '3.2', '--frac_frate_sky_max', '.99']
@@ -537,7 +538,7 @@ class Test_FRFilter(object):
         assert a.frac_frate_sky_max == .99
         assert a.min_frate == 0.1
         assert not a.factorize_flags
-        parser = frf.fr_filter_argparser(mode='dpss_leastsq')
+        parser = frf.frate_filter_argparser(mode='dpss_leastsq')
         a = parser.parse_args()
         assert a.infilename == 'a'
         assert a.clobber is True
