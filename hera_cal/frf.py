@@ -407,7 +407,7 @@ class FRFilter(VisClean):
         self.Navg = Navg
 
     def run_fr_filter(self, to_filter=None, weight_dict=None, mode='clean',
-                      frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.0,
+                      frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.025,
                       skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
                       write_cache=False,
                       data=None, flags=None, **filter_kwargs):
@@ -467,30 +467,30 @@ class FRFilter(VisClean):
                         if np.isnan(blcosines[k]):
                             blcosines[k] = 0.0
                     sinlat = np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))
-                    max_frate = io.DataContainer({})
-                    min_frate = io.DataContainer({})
-                    center_frate = io.DataContainer({})
-                    width_frate = io.DataContainer({})
+                    max_frates = io.DataContainer({})
+                    min_frates = io.DataContainer({})
+                    center_frates = io.DataContainer({})
+                    width_frates = io.DataContainer({})
                     # calculate min/max center fringerates.
                     # these depend on the sign of the blcosine.
                     for k in to_filter:
                        if blcosines[k] >= 0:
-                           max_frate[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
-                           min_frate[k] = -frateamps[k] * sinlat
+                           max_frates[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                           min_frates[k] = -frateamps[k] * sinlat
                        else:
-                           min_frate[k] = -frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
-                           max_frate[k] = frateamps[k] * sinlat
-                       center_frate[k] = (max_frate[k] + min_frate[k]) / 2.
-                       width_frate[k] = np.abs(max_frate[k] - min_frate[k]) / 2. * frac_frate_sky_max + frate_standoff
+                           min_frates[k] = -frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                           max_frates[k] = frateamps[k] * sinlat
+                       center_frates[k] = (max_frates[k] + min_frates[k]) / 2.
+                       width_frates[k] = np.abs(max_frates[k] - min_frates[k]) / 2. * frac_frate_sky_max + frate_standoff
                     # divide by center fringe rate to take advantage of Fourier shift theorem and use a
                     # zero centered filter even if the center fringe rate is not at zero.
                     for k in to_filter:
-                       self.data[k] /= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
-                       width_frate[k] = np.max([width_frate[k], min_frate])
+                       self.data[k] /= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
+                       width_frates[k] = np.max([width_frates[k], min_frate])
                     # perform vis_clean.
                     self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
                                   ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
-                                  cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=width_frate,
+                                  cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=width_frates,
                                   overwrite=True, verbose=verbose, **filter_kwargs)
                     if 'output_prefix' in filter_kwargs:
                         filtered_data = getattr(self, filter_kwargs['output_prefix'] + '_data')
@@ -501,10 +501,10 @@ class FRFilter(VisClean):
                         filtered_model = self.clean_model
                         filtered_resid = self.clean_resid
                     for k in to_filter:
-                       filtered_data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
-                       filtered_model[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
-                       filtered_resid[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
-                       self.data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
+                       filtered_data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
+                       filtered_model[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
+                       filtered_resid[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
+                       self.data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
                     if not mode == 'clean':
                        if write_cache:
                            filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
@@ -855,5 +855,5 @@ def frate_filter_argparser(mode='clean', multifile=False):
     a.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
     a.add_argument("--frac_frate_sky_max", type=float, default=1.0, help="Fraction of maximum sky-fringe-rate to interpolate / filter.")
     a.add_argument("--frate_standoff", type=float, default=0.0, help="Standoff in fringe-rate to filter [mHz].")
-    a.add_argument("--min_frate", type=float, default=0.0, help="Minimum fringe-rate to filter [mHz].")
+    a.add_argument("--min_frate", type=float, default=0.025, help="Minimum fringe-rate to filter [mHz].")
     return a
