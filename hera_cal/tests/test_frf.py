@@ -303,10 +303,10 @@ class Test_FRFilter(object):
             assert d[(53, 54, 'ee')].shape[0] == 60
             # now do no spw range and no cal files just to cover those lines.
             frf.load_fr_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
-                                                         cache_dir=cdir,
-                                                         read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
-                                                         res_outfilename=outfilename, clobber=True,
-                                                         mode='dpss_leastsq')
+                                                       cache_dir=cdir,
+                                                       read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                                                       res_outfilename=outfilename, clobber=True,
+                                                       mode='dpss_leastsq')
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
@@ -337,9 +337,9 @@ class Test_FRFilter(object):
         for blnum, bl in enumerate(flags.keys()):
             outfilename = os.path.join(tmp_path, 'bl_chunk_%d.h5' % blnum)
             frf.load_fr_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
-                                                          tol=1e-4, baseline_list=[bl],
-                                                          cache_dir=cdir,
-                                                          factorize_flags=True, time_thresh=time_thresh, clobber=True)
+                                                       tol=1e-4, baseline_list=[bl],
+                                                       cache_dir=cdir,
+                                                       factorize_flags=True, time_thresh=time_thresh, clobber=True)
         # now load all of the outputs in
         output_files = glob.glob(tmp_path + '/bl_chunk_*.h5')
         hd = io.HERAData(output_files)
@@ -360,9 +360,9 @@ class Test_FRFilter(object):
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
         uvf.write(flagfile, clobber=True)
         frf.load_fr_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
-                                                  tol=1e-4, baseline_list=[bl[:2]],
-                                                  clobber=True, mode='dpss_leastsq',
-                                                  external_flags=flagfile, overwrite_flags=True)
+                                                   tol=1e-4, baseline_list=[bl[:2]],
+                                                   clobber=True, mode='dpss_leastsq',
+                                                   external_flags=flagfile, overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
@@ -370,10 +370,10 @@ class Test_FRFilter(object):
             assert np.all(~f[k])
         # now do the external yaml
         frf.load_fr_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
-                                                     tol=1e-4, baseline_list=[bl[:2]],
-                                                     clobber=True, mode='dayenu',
-                                                     external_flags=flagfile, overwrite_flags=True,
-                                                     flag_yaml=flag_yaml)
+                                                   tol=1e-4, baseline_list=[bl[:2]],
+                                                   clobber=True, mode='dayenu',
+                                                   external_flags=flagfile, overwrite_flags=True,
+                                                   flag_yaml=flag_yaml)
         # test that all flags are af yaml flags
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
@@ -406,7 +406,7 @@ class Test_FRFilter(object):
         outfilename = os.path.join(tmp_path, 'temp.h5')
         for avg_bl in [True, False]:
             frf.load_fr_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True,
-                                           Nbls_per_load=None, avg_red_bllens=avg_bl)
+                                         Nbls_per_load=None, avg_red_bllens=avg_bl)
             hd = io.HERAData(outfilename)
             d, f, n = hd.read(bls=[(53, 54, 'ee')])
             for bl in d:
@@ -423,7 +423,7 @@ class Test_FRFilter(object):
         os.remove(outfilename)
         for avg_bl in [True, False]:
             frf.load_fr_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename,
-                                           Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl)
+                                         Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl)
             hd = io.HERAData(outfilename)
             assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
             d, f, n = hd.read()
@@ -454,7 +454,7 @@ class Test_FRFilter(object):
         # when flags are broadcasted.
         time_thresh = 2. / hd.Ntimes
         frf.load_fr_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
-                                       factorize_flags=True, time_thresh=time_thresh, clobber=True)
+                                     factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in f:
@@ -463,7 +463,7 @@ class Test_FRFilter(object):
 
         # test delay filtering and writing with factorized flags and partial i/o
         frf.load_fr_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
-                                       factorize_flags=True, time_thresh=time_thresh, clobber=True)
+                                     factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in f:
@@ -473,7 +473,7 @@ class Test_FRFilter(object):
             assert not np.all(np.isclose(d[bl], 0.))
 
         frf.load_fr_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, Nbls_per_load=1,
-                                       factorize_flags=True, time_thresh=time_thresh, clobber=True)
+                                     factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in f:
@@ -492,9 +492,9 @@ class Test_FRFilter(object):
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
         uvf.write(flagfile, clobber=True)
         frf.load_fr_filter_and_write(uvh5, res_outfilename=outfilename,
-                                       Nbls_per_load=1, clobber=True, mode='dpss_leastsq',
-                                       external_flags=flagfile,
-                                       overwrite_flags=True)
+                                     Nbls_per_load=1, clobber=True, mode='dpss_leastsq',
+                                     external_flags=flagfile,
+                                     overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -502,15 +502,14 @@ class Test_FRFilter(object):
             assert np.all(~f[k])
         # now without parital io.
         frf.load_fr_filter_and_write(uvh5, res_outfilename=outfilename,
-                                       clobber=True, mode='dpss_leastsq',
-                                       external_flags=flagfile,
-                                       overwrite_flags=True)
+                                     clobber=True, mode='dpss_leastsq',
+                                     external_flags=flagfile,
+                                     overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for k in f:
             assert np.all(~f[k])
-
 
     def test_frf_clean_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris']
