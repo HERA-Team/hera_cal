@@ -483,7 +483,7 @@ class FRFilter(VisClean):
             filt_nsamples[k] = eff_nsamples
 
 
-def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None, 
+def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
                             wgt_by_nsample=True, rephase=False, filetype='uvh5',
                             verbose=False, clobber=False, flag_output=None):
     """Time-averaging with a baseline cornerturn
@@ -551,7 +551,7 @@ def time_average_argparser():
     ap = argparse.ArgumentParser(description="Time-average data.")
     ap.add_argument("input_data", type=str, help="name of data file to determine baselines based on posotion in input_data_list.")
     ap.add_argument("output_data", type=str, help="name of data file to write out time-average.")
-    ap.add_argument("input_data_list", type=str, nargs="+", help="list of data files to read across. Provide a single data-file")
+    ap.add_argument("--input_data_list", type=str, nargs="+", help="list of data files to use for determining baseline chunk if performing cornerturn.")
     ap.add_argument("--cornerturn", default=False, help="If True, convert from time parallelization to baseline parallelization.")
     ap.add_argument("--t_avg", type=float, help="number of seconds to average over.", default=None)
     ap.add_argument("--rephase", default=False, action="store_true", help="rephase to averaging window center.")
