@@ -1218,6 +1218,9 @@ class VisClean(object):
                     elif mode == 'filled':
                         data_out, flags_out = self.get_filled_data()
                     if partial_write:
+                        # add extra_attrs to kwargs
+                        for k in extra_attrs:
+                            kwargs[k] = extra_attrs[k]
                         if not ((filetype == 'uvh5') and (getattr(self.hd, 'filetype', None) == 'uvh5')):
                             raise NotImplementedError('Partial writing requires input and output types to be "uvh5".')
                         self.hd.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber,

@@ -177,7 +177,7 @@ class Test_XTalkFilter(object):
         np.testing.assert_array_equal(f[(53, 54, 'ee')], xfil.flags[(53, 54, 'ee')])
         # test NotImplementedError
         pytest.raises(NotImplementedError, xf.load_xtalk_filter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
-                      clobber=True, Nbls_per_load=1, avg_red_bllens=avg_bl, baseline_list=[(54, 54, 'ee')])
+                      clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54, 'ee')])
 
         # test loading and writing all baselines at once.
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
@@ -353,7 +353,7 @@ class Test_XTalkFilter(object):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris', '--max_frate_coeffs', '0.024', '-0.229']
         parser = xf.xtalk_filter_argparser()
         a = parser.parse_args()
-        assert a.infilename == 'a'
+        assert a.datafilelist == ['a']
         assert a.clobber is True
         assert a.window == 'blackmanharris'
         assert a.max_frate_coeffs[0] == 0.024
@@ -365,7 +365,7 @@ class Test_XTalkFilter(object):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs', '0.024', '-0.229']
         parser = xf.xtalk_filter_argparser(mode='dayenu')
         a = parser.parse_args()
-        assert a.infilename == 'a'
+        assert a.datafilelist == ['a']
         assert a.clobber is True
         assert a.write_cache is True
         assert a.cache_dir == '/blah/'
@@ -375,7 +375,7 @@ class Test_XTalkFilter(object):
         assert not a.factorize_flags
         parser = xf.xtalk_filter_argparser(mode='dpss_leastsq')
         a = parser.parse_args()
-        assert a.infilename == 'a'
+        assert a.datafilelist == ['a']
         assert a.clobber is True
         assert a.write_cache is True
         assert a.cache_dir == '/blah/'

@@ -95,8 +95,8 @@ class Test_DelayFilter(object):
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, 'temp.h5')
         # test NotImplementedError
-        pytest.raises(NotImplementedError, xf.load_xtalk_filter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
-                      clobber=True, Nbls_per_load=1, avg_red_bllens=avg_bl, baseline_list=[(54, 54, 'ee')])
+        pytest.raises(NotImplementedError, df.load_delay_filter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
+                      clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54, 'ee')])
         for avg_bl in [True, False]:
             df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1,
                                            avg_red_bllens=avg_bl)
@@ -389,7 +389,7 @@ class Test_DelayFilter(object):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris']
         parser = df.delay_filter_argparser()
         a = parser.parse_args()
-        assert a.infilename == 'a'
+        assert a.datafilelist == ['a']
         assert a.clobber is True
         assert a.window == 'blackmanharris'
 
@@ -397,14 +397,14 @@ class Test_DelayFilter(object):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
         parser = df.delay_filter_argparser(mode='dayenu')
         a = parser.parse_args()
-        assert a.infilename == 'a'
+        assert a.datafilelist == ['a']
         assert a.clobber is True
         assert a.write_cache is True
         assert a.cache_dir == '/blah/'
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
+        sys.argv = [sys.argv[0], 'a', 'b', '--clobber', '--write_cache', '--cache_dir', '/blah/']
         parser = df.delay_filter_argparser(mode='dpss_leastsq')
         a = parser.parse_args()
-        assert a.infilename == 'a'
+        assert a.datafilelist == ['a', 'b']
         assert a.clobber is True
         assert a.write_cache is True
         assert a.cache_dir == '/blah/'

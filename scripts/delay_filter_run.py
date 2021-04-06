@@ -64,7 +64,7 @@ if len(baseline_list) > 0:
                                              max_contiguous_edge_flags=max_contiguous_edge_flags,
                                              add_to_history=' '.join(sys.argv), polarizations=a.polarizations,
                                              verbose=a.verbose, skip_if_flag_within_edge_distance=a.skip_if_flag_within_edge_distance,
-                                             flag_yaml=a.flag_yaml,
+                                             flag_yaml=a.flag_yaml, Nbls_per_load=a.Nbls_per_load,
                                              skip_contiguous_flags=skip_gaps_larger_then_filter_period,
                                              skip_flagged_edges=skip_flagged_edges,
                                              filled_outfilename=a.filled_outfilename,

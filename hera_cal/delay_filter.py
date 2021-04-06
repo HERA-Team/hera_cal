@@ -138,8 +138,6 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
     if baseline_list is None:
         baseline_list = hd.bls
-    if Nbls_per_load is None:
-        Nbls_per_load = len(baseline_list)
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
@@ -153,13 +151,15 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
     else:
         cals = None
     if polarizations is None:
-        if len(datafile_list) > 1:
+        if len(hd.filepaths) > 1:
             polarizations = list(hd.pols.values())[0]
         else:
             polarizations = hd.pols
-    baseline_list = [bl for bl in baseline_list if bl[-1] in polarizations]
-    df = DelayFilter(hd, input_cal=cals)
-    for i in range(0, len(hd.bls), Nbls_per_load):
+    baseline_list = [bl for bl in baseline_list if bl[-1] in polarizations or len(bl) == 2]
+    if Nbls_per_load is None:
+        Nbls_per_load = len(baseline_list)
+    for i in range(0, len(baseline_list), Nbls_per_load):
+        df = DelayFilter(hd, input_cal=cals)
         df.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
         if avg_red_bllens:
             df.avg_red_baseline_vectors()
@@ -173,7 +173,8 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
                             skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
-                               clobber=clobber, add_to_history=add_to_history, Nfreqs=df.Nfreqs, freq_array=np.asarray([df.freqs]))
+                               clobber=clobber, add_to_history=add_to_history,
+                               extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': df.hd.freq_array})
         df.hd.data_array = None  # this forces a reload in the next loop
 
 
