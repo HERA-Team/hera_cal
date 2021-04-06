@@ -229,6 +229,7 @@ class Test_FRFilter(object):
 
     def test_time_average_argparser_multifile(self):
         sys.argv = [sys.argv[0], "input.uvh5", "output.uvh5", "first.uvh5", "second.uvh5", "--t_avg", "35.", "--rephase"]
+        ap = frf.time_average_argparser()
         args = ap.parse_args()
         assert args.input_data == "input.uvh5"
         assert args.output_data == "output.uvh5"
