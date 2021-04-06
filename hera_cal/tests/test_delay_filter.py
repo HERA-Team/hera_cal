@@ -94,6 +94,9 @@ class Test_DelayFilter(object):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, 'temp.h5')
+        # test NotImplementedError
+        pytest.raises(NotImplementedError, xf.load_xtalk_filter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
+                      clobber=True, Nbls_per_load=1, avg_red_bllens=avg_bl, baseline_list=[(54, 54, 'ee')])
         for avg_bl in [True, False]:
             df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1,
                                            avg_red_bllens=avg_bl)
@@ -122,7 +125,7 @@ class Test_DelayFilter(object):
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(tmp_path, 'temp.h5')
-        df.load_delay_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
+        df.load_delay_filter_and_write(uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
                                        avg_red_bllens=avg_bl)
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
@@ -327,7 +330,7 @@ class Test_DelayFilter(object):
         # run again using computed cache.
         calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
-                                       cache_dir=cdir, calfile=calfile, read_cache=True,
+                                       cache_dir=cdir, calfile_list=calfile, read_cache=True,
                                        Nbls_per_load=1, clobber=True, mode='dayenu',
                                        spw_range=(0, 32), write_cache=True)
         # now new cache files should be generated.

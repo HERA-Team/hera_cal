@@ -161,10 +161,11 @@ def load_xtalk_filter_and_write(datafile_list, baseline_list=None, calfile_list=
             polarizations = list(hd.pols.values())[0]
         else:
             polarizations = hd.pols
+    baseline_list = [bl for bl in baseline_list if bl[-1] in polarizations]
     xf = XTalkFilter(hd, input_cal=cals, axis='blt')
     for i in range(0, hd.Nbls, Nbls_per_load):
-        xf = XTalkFilter(hd, input_cal=calfile)
-        xf.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs, polarizations=polarizations)
+        xf = XTalkFilter(hd, input_cal=cals)
+        xf.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
         if avg_red_bllens:
             xf.avg_red_baseline_vectors()
         if external_flags is not None:
@@ -176,7 +177,7 @@ def load_xtalk_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                             skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
         xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                               filled_outfilename=filled_outfilename, partial_write=True,
+                               filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
                                clobber=clobber, add_to_history=add_to_history,
                                freq_array=xf.hd.freq_array, Nfreqs=xf.Nfreqs)
         xf.hd.data_array = None  # this forces a reload in the next loop

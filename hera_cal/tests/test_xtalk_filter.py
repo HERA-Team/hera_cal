@@ -175,6 +175,9 @@ class Test_XTalkFilter(object):
         xfil.run_xtalk_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], xfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], xfil.flags[(53, 54, 'ee')])
+        # test NotImplementedError
+        pytest.raises(NotImplementedError, xf.load_xtalk_filter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
+                      clobber=True, Nbls_per_load=1, avg_red_bllens=avg_bl, baseline_list=[(54, 54, 'ee')])
 
         # test loading and writing all baselines at once.
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
@@ -197,7 +200,7 @@ class Test_XTalkFilter(object):
         outfilename = os.path.join(tmp_path, 'temp.h5')
         os.remove(outfilename)
         for avg_bl in [True, False]:
-            xf.load_xtalk_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename,
+            xf.load_xtalk_filter_and_write(uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename,
                                            Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl)
             hd = io.HERAData(outfilename)
             assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
@@ -334,7 +337,7 @@ class Test_XTalkFilter(object):
         # run again using computed cache.
         calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename,
-                                       cache_dir=cdir, calfile=calfile, read_cache=True,
+                                       cache_dir=cdir, calfile_list=calfile, read_cache=True,
                                        Nbls_per_load=1, clobber=True, mode='dayenu',
                                        spw_range=(0, 32), write_cache=True)
         # now new cache files should be generated.

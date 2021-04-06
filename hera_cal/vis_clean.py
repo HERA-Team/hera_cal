@@ -1664,7 +1664,7 @@ def _filter_argparser():
     Core Arg parser for commandline operation of hera_cal.delay_filter and hera_cal.xtalk_filter
     Parameters:
         None
-        
+
     Returns:
         Argparser with core (but not complete) functionality that is called by _linear_argparser and
         _clean_argparser.
@@ -1685,7 +1685,6 @@ def _filter_argparser():
     a.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
     a.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
     a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
-    a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
     return a
 
 
@@ -1695,18 +1694,18 @@ def _filter_argparser():
 # ------------------------------------------
 
 
-def _clean_argparser(multifile=False):
+def _clean_argparser():
     '''
     Arg parser for commandline operation of hera_cal.delay_filter in various clean modes.
     Arguments
     ---------
-        multifile, bool: optional. If True, add calfilelist and filelist
-                         arguments.
+        None
+
     Returns
     -------
         Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk).
     '''
-    a = _filter_argparser(multifile=multifile)
+    a = _filter_argparser()
     a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
     clean_options = a.add_argument_group(title='Options for CLEAN')
@@ -1725,18 +1724,17 @@ def _clean_argparser(multifile=False):
 # ------------------------------------------
 
 
-def _linear_argparser(multifile=False):
+def _linear_argparser():
     '''
     Arg parser for commandline operation of hera_cal.delay_filter in various linear modes.
     Arguments
     ---------
-        multifile, bool: optional. If True, add calfilelist and filelist
-                         arguments.
+        None
     Returns
     -------
         Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk)
     '''
-    a = _filter_argparser(multifile=multifile)
+    a = _filter_argparser()
     cache_options = a.add_argument_group(title='Options for caching')
     a.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
@@ -1745,18 +1743,17 @@ def _linear_argparser(multifile=False):
     return a
 
 
-def _dpss_argparser(multifile=False):
+def _dpss_argparser():
     '''
     Arg parser for commandline operation of hera_cal.delay_filter in dpss mode.
     Arguments
     ---------
-        multifile, bool: optional. If True, add calfilelist and filelist
-                         arguments.
+        None
     Returns
     -------
         Arg-parser for dpss filtering.
     '''
-    a = _linear_argparser(multifile=multifile)
+    a = _linear_argparser()
     a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
     return a
