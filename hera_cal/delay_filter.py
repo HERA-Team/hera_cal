@@ -90,7 +90,8 @@ class DelayFilter(VisClean):
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
 
 
-def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=None, spw_range=None, cache_dir=None,
+def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=None,
+                                Nbls_per_load=None, spw_range=None, cache_dir=None,
                                 read_cache=False, write_cache=False, avg_red_bllens=False,
                                 factorize_flags=False, time_thresh=0.05, external_flags=None,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
@@ -104,6 +105,8 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         datafile_list: list of data files to perform cross-talk filtering on
         baseline_list: list of antenna-pair-pol triplets to filter and write out from the datafile_list.
                        If None, load all baselines in files. Default is None.
+        Nbls_per_load: int, the number of baselines to load at once.
+            If None, load all baselines at once. default : None.
         calfile_list: optional list of calibration files to apply to data before xtalk filtering
         spw_range: 2-tuple or 2-list, spw_range of data to filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
