@@ -654,7 +654,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     hd = io.HERAData(data_files[j][k], filetype='uvh5')
                     antpairs = set(hd.antpairs)
                     bls_in_data = [bl for bl in blgroup if bl in antpairs or bl[::-1] in antpairs]
-                    if len(to_load) == 0:
+                    if len(bls_in_data) == 0:
                         utils.echo(f"No baselines from blgroup {bi + 1} found in {data_files[j][k]}, skipping file for these bls", verbose=verbose)
                     data, flags, nsamps = hd.read(bls=bls_in_data, times=tarr[tinds])
                     data.phase_type = 'drift'
