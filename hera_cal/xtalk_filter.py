@@ -89,87 +89,14 @@ class XTalkFilter(VisClean):
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
 
-
-def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
-                                read_cache=False, write_cache=False,
-                                factorize_flags=False, time_thresh=0.05, external_flags=None,
+def load_xtalk_filter_and_write(datafile_list, baseline_list=None, calfile_list=None, spw_range=None, cache_dir=None,
+                                read_cache=False, write_cache=False, external_flags=None,
+                                factorize_flags=False, time_thresh=0.05,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                clobber=False, add_to_history='', avg_red_bllens=False,
+                                clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
                                 skip_flagged_edges=False, overwrite_flags=False,
                                 flag_yaml=None,
                                 clean_flags_in_resid_flags=True, **filter_kwargs):
-    '''
-    Uses partial data loading and writing to perform xtalk filtering.
-
-    Arguments:
-        infilename: string path to data to uvh5 file to load
-        cal: optional string path to calibration file to apply to data before xtalk filtering
-        Nbls_per_load: int, the number of baselines to load at once.
-            If None, load all baselines at once. default : None.
-        spw_range: spw_range of data to delay-filter.
-        cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-            see uvtools.dspec.dayenu_filter for key formats.
-        read_cache: bool, If true, read existing cache files in cache_dir before running.
-        write_cache: bool. If true, create new cache file with precomputed matrices
-            that were not in previously loaded cache files.
-        factorize_flags: bool, optional
-            If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
-        time_thresh : float
-            Fractional threshold of flagged pixels across time needed to flag all times
-            per freq channel. It is not recommend to set this greater than 0.5.
-            Fully flagged integrations do not count towards triggering time_thresh.
-        external_flags : str, optional, path to external flag files to apply
-        res_outfilename: path for writing the filtered visibilities with flags
-        CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
-        filled_outfilename: path for writing the original data but with flags unflagged and replaced
-            with CLEAN models wherever possible
-        clobber: if True, overwrites existing file at the outfilename
-        add_to_history: string appended to the history of the output file
-        avg_red_bllens: bool, if True, round baseline lengths to redundant average. Default is False.
-        skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
-        overwrite_flags : bool, if true reset data flags to False except for flagged antennas.
-        flag_yaml: path to manual flagging text file.
-        clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
-                                    default is True.
-        filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
-    '''
-    hd = io.HERAData(infilename, filetype='uvh5')
-    if calfile is not None:
-        calfile = io.HERACal(calfile)
-        calfile.read()
-    if spw_range is None:
-        spw_range = [0, hd.Nfreqs]
-    freqs = hd.freqs[spw_range[0]:spw_range[1]]
-    if Nbls_per_load is None:
-        Nbls_per_load = len(hd.bls)
-    for i in range(0, hd.Nbls, Nbls_per_load):
-        xf = XTalkFilter(hd, input_cal=calfile)
-        xf.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
-        if avg_red_bllens:
-            xf.avg_red_baseline_vectors()
-        if external_flags is not None:
-            xf.apply_flags(external_flags, overwrite_flags=overwrite_flags)
-        if flag_yaml is not None:
-            xf.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
-        if factorize_flags:
-            xf.factorize_flags(time_thresh=time_thresh, inplace=True)
-        xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                            skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-        xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                               filled_outfilename=filled_outfilename, partial_write=True,
-                               clobber=clobber, add_to_history=add_to_history,
-                               freq_array=xf.hd.freq_array, Nfreqs=xf.Nfreqs)
-        xf.hd.data_array = None  # this forces a reload in the next loop
-
-
-def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
-                                              read_cache=False, write_cache=False, external_flags=None,
-                                              factorize_flags=False, time_thresh=0.05,
-                                              res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                              clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
-                                              skip_flagged_edges=False, overwrite_flags=False,
-                                              flag_yaml=None,
-                                              clean_flags_in_resid_flags=True, **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
@@ -177,6 +104,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     Arguments:
         datafile_list: list of data files to perform cross-talk filtering on
         baseline_list: list of antenna-pair-pol triplets to filter and write out from the datafile_list.
+                       If None, load all baselines in files. Default is None.
         calfile_list: optional list of calibration files to apply to data before xtalk filtering
         spw_range: 2-tuple or 2-list, spw_range of data to filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.

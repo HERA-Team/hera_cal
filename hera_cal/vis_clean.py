@@ -1681,11 +1681,10 @@ def _filter_argparser(multifile=False):
     a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     a.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
     a.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
-    if multifile:
-        a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
-        a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
-    else:
-        a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
+    a.add_argument("--cornerturn", default=False, action="store_true", help="perform cornerturn from time parallelization to baseline parallelization.")
+    a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
+    a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk if performing cornerturn.")
+    a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
     return a
 
 
