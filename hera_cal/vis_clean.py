@@ -1681,8 +1681,8 @@ def _filter_argparser():
     a.add_argument("--spw_range", type=int, default=None, nargs=2, help="spectral window of data to foreground filter.")
     a.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground and xtalk subtraction (default 1e-9)')
     a.add_argument("--cornerturnfile", type=str, default=None, help="path to visibility data file to use as an index for baseline chunk in cornerturn."
-                                                      "Warning: Providing this file will result in outputs with significantly different structure "
-                                                      "then inputs. Only use it if you know what you are doing. Default is None.")
+                                                                    "Warning: Providing this file will result in outputs with significantly different structure "
+                                                                    "then inputs. Only use it if you know what you are doing. Default is None.")
     a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
     a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     a.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
