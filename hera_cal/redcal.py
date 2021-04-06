@@ -1492,6 +1492,8 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             cal['vf_omnical'][bl] = np.ones_like(vis, dtype=bool)
             cal['vns_omnical'][bl] = np.zeros_like(vis, dtype=np.float32)
 
+    cal["omni_meta"]["data_wgts"] = data_wgts
+
 
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6,
                           fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
@@ -1731,7 +1733,9 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 rv['omni_meta']['chisq'][str(pols)][tinds, fSlice] = cal['omni_meta']['chisq']
                 rv['omni_meta']['iter'][str(pols)][tinds, fSlice] = cal['omni_meta']['iter']
                 rv['omni_meta']['conv_crit'][str(pols)][tinds, fSlice] = cal['omni_meta']['conv_crit']
+                rv['omni_meta']["data_wgts"] = cal["omni_meta"]["data_wgts"]
 
+    rv["all_reds"] = all_reds
     return rv
 
 
@@ -1881,6 +1885,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
 
     # loop over calibration, removing bad antennas and re-running if necessary
     run_number = 0
+    data_wgts = []
     while True:
         # Run redundant calibration
         if verbose:
@@ -1890,6 +1895,9 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                                fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
                                check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain,
                                verbose=verbose, **filter_reds_kwargs)
+        
+        if len(cal["omni_meta"]["data_wgts"]) > len(data_wgts):
+            data_wgts = cal["omni_meta"]["data_wgts"]
 
         # Determine whether to add additional antennas to exclude
         z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items()
@@ -1915,7 +1923,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     _redcal_run_write_results(cal, hd, filename_no_ext + firstcal_ext, filename_no_ext + omnical_ext,
                               filename_no_ext + omnivis_ext, filename_no_ext + meta_ext, outdir, clobber=clobber,
                               verbose=verbose, add_to_history=add_to_history + '\n' + high_z_ant_hist)
-
+    cal["omni_meta"]["data_wgts"] = data_wgts
     return cal
 
 
