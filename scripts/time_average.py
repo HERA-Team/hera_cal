@@ -9,12 +9,9 @@ from hera_cal import io
 a = frf.time_average_argparser()
 args = a.parse_args()
 
-# if no input_data_list provided, use input_data
-if args.input_data_list is None:
-    args.input_data_list = [args.input_data]
 # only use baseline_list if cornerturn requested.
-if args.cornerturn:
-    baseline_list = io.baselines_from_filelist_position(filename=args.input_data,
+if args.cornerturnfile is not None:
+    baseline_list = io.baselines_from_filelist_position(filename=args.cornerturnfile,
                                                         filelist=args.input_data_list)
 else:
     baseline_list = None

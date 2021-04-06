@@ -228,7 +228,7 @@ class Test_FRFilter(object):
             assert np.all(np.isclose(data_out.nsamples[k], data_out_bls.nsamples[k]))
 
     def test_time_average_argparser_multifile(self):
-        sys.argv = [sys.argv[0], "input.uvh5", "output.uvh5", "--input_data_list", "first.uvh5", "second.uvh5", "--t_avg", "35.", "--rephase"]
+        sys.argv = [sys.argv[0], "first.uvh5", "second.uvh5", "output.uvh5", "--cornerturnfile", "input.uvh5", "--t_avg", "35.", "--rephase"]
         ap = frf.time_average_argparser()
         args = ap.parse_args()
         assert args.input_data == "input.uvh5"
