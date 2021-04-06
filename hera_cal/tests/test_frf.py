@@ -196,9 +196,9 @@ class Test_FRFilter(object):
         data_out = frf.FRFilter(output, filetype='miriad')
         data_out.read()
         for k in data_out.data:
-            assert np.all(np.isclose(data_out.data[k], self.F.avg_data[k]))
-            assert np.all(np.isclose(data_out.flags[k], self.F.avg_flags[k]))
-            assert np.all(np.isclose(data_out.nsamples[k], self.F.avg_nsamples[k]))
+            assert np.allclose(data_out.data[k], self.F.avg_data[k])
+            assert np.allclose(data_out.flags[k], self.F.avg_flags[k])
+            assert np.allclose(data_out.nsamples[k], self.F.avg_nsamples[k])
 
     def test_time_avg_data_and_write_baseline_list(self, tmpdir):
         # compare time averaging over baseline list versus time averaging
@@ -211,9 +211,9 @@ class Test_FRFilter(object):
             output = tmp_path + '/' + file.split('/')[-1]
             output_files.append(output)
             output_flags = tmp_path + '/' + file.split('/')[-1].replace('.uvh5', '.flags.h5')
-            frf.time_avg_data_and_write_baseline_list(baseline_list=baseline_list, flag_output=output_flags,
-                                                      input_data_list=uvh5s, rephase=True,
-                                                      output_data=output, t_avg=35., wgt_by_nsample=True)
+            frf.time_avg_data_and_write(baseline_list=baseline_list, flag_output=output_flags,
+                                        input_data_list=uvh5s, rephase=True,
+                                        output_data=output, t_avg=35., wgt_by_nsample=True)
         # now do everything at once:
         output = tmp_path + '/combined.uvh5'
         frf.time_avg_data_and_write(uvh5s, output, t_avg=35., rephase=True, wgt_by_nsample=True)
@@ -227,19 +227,8 @@ class Test_FRFilter(object):
             assert np.all(np.isclose(data_out.flags[k], data_out_bls.flags[k]))
             assert np.all(np.isclose(data_out.nsamples[k], data_out_bls.nsamples[k]))
 
-    def test_time_average_argparser(self):
-        sys.argv = [sys.argv[0], "input.uvh5", "output.uvh5", "--t_avg", "35.", "--rephase"]
-        ap = frf.time_average_argparser()
-        args = ap.parse_args()
-        assert args.input_data == "input.uvh5"
-        assert args.output_data == "output.uvh5"
-        assert args.t_avg == 35.
-        assert not args.clobber
-        assert not args.verbose
-        assert args.flag_output is None
-        assert args.filetype == "uvh5"
+    def test_time_average_argparser_multifile(self):
         sys.argv = [sys.argv[0], "input.uvh5", "output.uvh5", "first.uvh5", "second.uvh5", "--t_avg", "35.", "--rephase"]
-        ap = frf.time_average_argparser(multifile=True)
         args = ap.parse_args()
         assert args.input_data == "input.uvh5"
         assert args.output_data == "output.uvh5"
