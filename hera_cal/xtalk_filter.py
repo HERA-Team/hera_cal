@@ -173,7 +173,7 @@ def load_xtalk_filter_and_write(datafile_list, baseline_list=None, calfile_list=
 # ------------------------------------------
 
 
-def xtalk_filter_argparser(mode='clean', multifile=False):
+def xtalk_filter_argparser(mode='clean'):
     '''Arg parser for commandline operation of xtalk filters.
 
     Parameters
@@ -181,10 +181,7 @@ def xtalk_filter_argparser(mode='clean', multifile=False):
     mode : string, optional.
         Determines sets of arguments to load.
         Can be 'clean', 'dayenu', or 'dpss_leastsq'.
-    multifile: bool, optional.
-        If True, add calfilelist and filelist
-        arguments.
-
+        
     Returns
     -------
     argparser
@@ -192,11 +189,11 @@ def xtalk_filter_argparser(mode='clean', multifile=False):
 
     '''
     if mode == 'clean':
-        a = vis_clean._clean_argparser(multifile=multifile)
+        a = vis_clean._clean_argparser()
     elif mode == 'dayenu':
-        a = vis_clean._linear_argparser(multifile=multifile)
+        a = vis_clean._linear_argparser()
     elif mode == 'dpss_leastsq':
-        a = vis_clean._dpss_argparser(multifile=multifile)
+        a = vis_clean._dpss_argparser()
     filt_options = a.add_argument_group(title='Options for the cross-talk filter')
     a.add_argument("--max_frate_coeffs", type=float, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
     a.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")

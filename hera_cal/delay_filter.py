@@ -171,7 +171,7 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
 # ---------------------------------------
 
 
-def delay_filter_argparser(mode='clean', multifile=False):
+def delay_filter_argparser(mode='clean'):
     '''
     Arg parser for commandline operation of delay filters.
 
@@ -185,11 +185,11 @@ def delay_filter_argparser(mode='clean', multifile=False):
         argparser for delay-domain filtering for specified filtering mode
     '''
     if mode == 'clean':
-        a = vis_clean._clean_argparser(multifile=multifile)
+        a = vis_clean._clean_argparser()
     elif mode == 'dayenu':
-        a = vis_clean._linear_argparser(multifile=multifile)
+        a = vis_clean._linear_argparser()
     elif mode == 'dpss_leastsq':
-        a = vis_clean._dpss_argparser(multifile=multifile)
+        a = vis_clean._dpss_argparser()
     filt_options = a.add_argument_group(title='Options for the delay filter')
     filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (default 15 ns)')
     filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1.0 (default) is the horizon\

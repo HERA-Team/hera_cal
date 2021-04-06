@@ -1659,12 +1659,12 @@ def _trim_status(info_dict, axis, zeropad):
 # ------------------------------------------
 
 
-def _filter_argparser(multifile=False):
+def _filter_argparser():
     """
     Core Arg parser for commandline operation of hera_cal.delay_filter and hera_cal.xtalk_filter
     Parameters:
-        multifile, bool: optional. If True, add calfilelist and filelist
-                         arguments.
+        None
+        
     Returns:
         Argparser with core (but not complete) functionality that is called by _linear_argparser and
         _clean_argparser.
