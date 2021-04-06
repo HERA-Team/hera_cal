@@ -552,7 +552,7 @@ def time_average_argparser():
     ap.add_argument("input_data_list", type=str, nargs="+", help="list of data files to use for determining baseline chunk if performing cornerturn.")
     ap.add_argument("output_data", type=str, help="name of data file to write out time-average.")
     ap.add_argument("--cornerturnfile", type=str, help="name of data file to determine baselines based on posotion in input_data_list."
-                                                         "If provided, will perform cornerturn from time to baselines.")
+                                                       "If provided, will perform cornerturn from time to baselines.")
     ap.add_argument("--t_avg", type=float, help="number of seconds to average over.", default=None)
     ap.add_argument("--rephase", default=False, action="store_true", help="rephase to averaging window center.")
     ap.add_argument("--dont_wgt_by_nsample", default=False, action="store_true", help="don't weight averages by nsample. Default is to wgt by nsamples.")
