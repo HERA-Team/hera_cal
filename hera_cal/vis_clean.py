@@ -1670,20 +1670,21 @@ def _filter_argparser(multifile=False):
         _clean_argparser.
     """
     a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
+    a.add_argument("datafilelist", default=None, type=str, nargs="+", help="list of data files to read in and perform filtering on.")
     a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files (default "uvh5")')
     a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype for output data files (default "uvh5")')
     a.add_argument("--res_outfilename", default=None, type=str, help="path for writing the filtered visibilities with flags")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     a.add_argument("--spw_range", type=int, default=None, nargs=2, help="spectral window of data to foreground filter.")
     a.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground and xtalk subtraction (default 1e-9)')
-    a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
+    a.add_argument("--cornerturnfile", type=str, default=None, help="path to visibility data file to use as an index for baseline chunk in cornerturn."
+                                                      "Warning: Providing this file will result in outputs with significantly different structure "
+                                                      "then inputs. Only use it if you know what you are doing. Default is None.")
     a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
     a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     a.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
     a.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
-    a.add_argument("--cornerturn", default=False, action="store_true", help="perform cornerturn from time parallelization to baseline parallelization.")
     a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
-    a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk if performing cornerturn.")
     a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
     return a
 

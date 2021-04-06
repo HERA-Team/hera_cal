@@ -41,12 +41,9 @@ elif a.mode == 'dpss_leastsq':
 else:
     raise ValueError(f"mode {mode} not supported.")
 
-# if no datafilelist provided, use infilename.
-if a.datafilelist is None:
-    a.datafilelist = [a.infilename]
 
-if args.cornerturn:
-    baseline_list = io.baselines_from_filelist_position(filename=a.infilename, filelist=a.datafilelist)
+if args.cornerturnfile is not None:
+    baseline_list = io.baselines_from_filelist_position(filename=a.cornerturnfile, filelist=a.datafilelist)
 else:
     baseline_list = None
 

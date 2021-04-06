@@ -65,22 +65,22 @@ class Test_XTalkFilter(object):
             shutil.rmtree(cdir)
         os.mkdir(cdir)
         for avg_bl in [True, False]:
-            xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
-                                                         calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
-                                                         read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
-                                                         res_outfilename=outfilename, clobber=True,
-                                                         mode='dayenu')
+            xf.load_xtalk_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+                                           calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                           read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                                           res_outfilename=outfilename, clobber=True,
+                                           mode='dayenu')
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
             assert d[(53, 54, 'ee')].shape[1] == 100
             assert d[(53, 54, 'ee')].shape[0] == 60
             # now do no spw range and no cal files just to cover those lines.
-            xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
-                                                         cache_dir=cdir,
-                                                         read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
-                                                         res_outfilename=outfilename, clobber=True,
-                                                         mode='dayenu')
+            xf.load_xtalk_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+                                           cache_dir=cdir,
+                                           read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                                           res_outfilename=outfilename, clobber=True,
+                                           mode='dayenu')
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
@@ -110,10 +110,11 @@ class Test_XTalkFilter(object):
         time_thresh = 2. / hd.Ntimes
         for blnum, bl in enumerate(flags.keys()):
             outfilename = os.path.join(tmp_path, 'bl_chunk_%d.h5' % blnum)
-            xf.load_xtalk_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
-                                                         tol=1e-4, baseline_list=[bl],
-                                                         cache_dir=cdir,
-                                                         factorize_flags=True, time_thresh=time_thresh, clobber=True)
+            xf.load_xtalk_filter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
+                                           tol=1e-4, baseline_list=[bl],
+                                           cache_dir=cdir,
+                                           factorize_flags=True,
+                                           time_thresh=time_thresh, clobber=True)
         # now load all of the outputs in
         output_files = glob.glob(tmp_path + '/bl_chunk_*.h5')
         hd = io.HERAData(output_files)
@@ -133,21 +134,21 @@ class Test_XTalkFilter(object):
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
         uvf.write(flagfile, clobber=True)
-        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
-                                                     tol=1e-4, baseline_list=[bl[:2]],
-                                                     clobber=True, mode='dayenu',
-                                                     external_flags=flagfile, overwrite_flags=True)
+        xf.load_xtalk_filter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
+                                       tol=1e-4, baseline_list=[bl[:2]],
+                                       clobber=True, mode='dayenu',
+                                       external_flags=flagfile, overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
         for k in f:
             assert np.all(~f[k])
         # now do the external yaml
-        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
-                                                     tol=1e-4, baseline_list=[bl[:2]],
-                                                     clobber=True, mode='dayenu',
-                                                     external_flags=flagfile, overwrite_flags=True,
-                                                     flag_yaml=flag_yaml)
+        xf.load_xtalk_filter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
+                                       tol=1e-4, baseline_list=[bl[:2]],
+                                       clobber=True, mode='dayenu',
+                                       external_flags=flagfile, overwrite_flags=True,
+                                       flag_yaml=flag_yaml)
         # test that all flags are af yaml flags
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
@@ -284,7 +285,7 @@ class Test_XTalkFilter(object):
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for k in f:
             assert np.all(~f[k])
-            
+
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
