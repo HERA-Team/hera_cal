@@ -828,7 +828,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
         flag_yaml: path to manual flagging text file.
         clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
                                     default is True.
-        filter_kwargs: additional keyword arguments to be passed to TophatFRFilter.run_tophat_frfilter()
+        filter_kwargs: additional keyword arguments to be passed to FRFilter.run_tophat_frfilter()
     '''
     if baseline_list is not None and Nbls_per_load is not None:
         raise NotImplementedError("baseline loading and partial i/o not yet implemented.")
@@ -856,20 +856,20 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
     if Nbls_per_load is None:
         Nbls_per_load = len(baseline_list)
     for i in range(0, len(baseline_list), Nbls_per_load):
-        tfrfil = TophatFRFilter(hd, input_cal=cals, axis='blt')
-        tfrfil.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
+        frfil = FRFilter(hd, input_cal=cals, axis='blt')
+        frfil.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
         if avg_red_bllens:
-            tfrfil.avg_red_baseline_vectors()
+            frfil.avg_red_baseline_vectors()
         if external_flags is not None:
-            tfrfil.apply_flags(external_flags, overwrite_flags=overwrite_flags)
+            frfil.apply_flags(external_flags, overwrite_flags=overwrite_flags)
         if flag_yaml is not None:
-            tfrfil.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
+            frfil.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
         if factorize_flags:
-            tfrfil.factorize_flags(time_thresh=time_thresh, inplace=True)
-        tfrfil.run_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+            frfil.factorize_flags(time_thresh=time_thresh, inplace=True)
+        frfil.run_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                                    skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-        tfrfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+        frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
                                    clobber=clobber, add_to_history=add_to_history,
-                                   extra_attrs={'Nfreqs': tfrfil.hd.Nfreqs, 'freq_array': tfrfil.hd.freq_array})
-        tfrfil.hd.data_array = None  # this forces a reload in the next loop
+                                   extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array})
+        frfil.hd.data_array = None  # this forces a reload in the next loop

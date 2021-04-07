@@ -250,7 +250,7 @@ class Test_FRFilter(object):
     def test_run_tophat_frfilter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
-        tfrfil = tfrf.FRFilter(fname, filetype='miriad')
+        frfil = frf.FRFilter(fname, filetype='miriad')
         frfil.read(bls=[k])
         bl = np.linalg.norm(frfil.antpos[24] - frfil.antpos[25]) / constants.c * 1e9
         sdf = (frfil.freqs[1] - frfil.freqs[0]) / 1e9
