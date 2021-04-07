@@ -406,7 +406,6 @@ class FRFilter(VisClean):
         self.t_avg = t_avg
         self.Navg = Navg
 
-
     def filter_data(self, data, frps, flags=None, nsamples=None,
                     output_prefix='filt', keys=None, overwrite=False,
                     edgecut_low=0, edgecut_hi=0, axis=0, verbose=True):
