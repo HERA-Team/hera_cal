@@ -8,8 +8,8 @@ import numpy as np
 
 from . import io
 from . import version
-from .vis_clean import VisClean
 from .frf import FRFilter
+from . import vis_clean
 
 import pickle
 import random
@@ -25,8 +25,8 @@ class TophatFRFilter(FRFilter):
     """
     FRFilter object with methods for applying tophat filters in fringe-rate space.
 
-    Used for fringe-rate Xtalk CLEANing and filtering.
-    See vis_clean.VisClean for CLEAN functions.
+    Used for Tophat fringe-rate CLEANing and filtering.
+    See vis_clean.VisClean for details on time-domain filtering.
     """
 
     def run_tophat_frfilter(self, to_filter=None, weight_dict=None, mode='clean',
@@ -42,8 +42,8 @@ class TophatFRFilter(FRFilter):
               If None (the default), all visibilities are filtered.
           weight_dict: dictionary or DataContainer with all the same keys as self.data.
               Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
-              of self.flags. uvtools.dspec.xtalk_filter will renormalize to compensate.
-          mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.xtalk_filter for supported modes.
+              of self.flags. uvtools.dspec.fourier_filter will renormalize to compensate.
+          mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
           frate_standoff: float, optional
               Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
               default = 0.0.
@@ -74,7 +74,7 @@ class TophatFRFilter(FRFilter):
         Results are stored in:
           self.clean_resid: DataContainer formatted like self.data with only high-fringe-rate components
           self.clean_model: DataContainer formatted like self.data with only low-fringe-rate components
-          self.clean_info: Dictionary of info from uvtools.dspec.xtalk_filter with the same keys as self.data
+          self.clean_info: Dictionary of info from uvtools.dspec.fourier_filter with the same keys as self.data
         '''
         if to_filter is None:
             to_filter = list(self.data.keys())
@@ -117,16 +117,12 @@ class TophatFRFilter(FRFilter):
                 self.data[k] /= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
                 width_frates[k] = np.max([width_frates[k], min_frate])
             # perform vis_clean.
-
-            self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
-                           ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
-                           cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=width_frates,
-                           overwrite=True, verbose=verbose, **filter_kwargs)
         else:
-            self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
-                           ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
-                           cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate_coeffs=max_frate_coeffs,
-                           overwrite=True, verbose=verbose, **filter_kwargs)
+            width_frates = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in self.data})
+        self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
+                       ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
+                       cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=width_frates,
+                       overwrite=True, verbose=verbose, **filter_kwargs)
         if 'output_prefix' in filter_kwargs:
             filtered_data = getattr(self, filter_kwargs['output_prefix'] + '_data')
             filtered_model = getattr(self, filter_kwargs['output_prefix'] + '_model')
@@ -146,31 +142,28 @@ class TophatFRFilter(FRFilter):
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
 
 
-def frate_filter_argparser(mode='clean', multifile=False):
-    '''Arg parser for commandline operation of xtalk filters.
+def tophat_frfilter_argparser(mode='clean'):
+    '''Arg parser for commandline operation of tophat fr-filters.
 
     Parameters
     ----------
     mode : string, optional.
         Determines sets of arguments to load.
         Can be 'clean', 'dayenu', or 'dpss_leastsq'.
-    multifile: bool, optional.
-        If True, add calfilelist and filelist
-        arguments.
 
     Returns
     -------
     argparser
-        argparser for xtalk (time-domain) filtering for specified filtering mode
+        argparser for tophat fringe-rate (time-domain) filtering for specified filtering mode
 
     '''
     if mode == 'clean':
-        ap = vis_clean._clean_argparser(multifile=multifile)
+        ap = vis_clean._clean_argparser()
     elif mode == 'dayenu':
-        ap = vis_clean._linear_argparser(multifile=multifile)
+        ap = vis_clean._linear_argparser()
     elif mode == 'dpss_leastsq':
-        ap = vis_clean._dpss_argparser(multifile=multifile)
-    filt_options = a.add_argument_group(title='Options for the fr-filter')
+        ap = vis_clean._dpss_argparser()
+    filt_options = ap.add_argument_group(title='Options for the fr-filter')
     ap.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
     ap.add_argument("--frac_frate_sky_max", type=float, default=1.0, help="Fraction of maximum sky-fringe-rate to interpolate / filter.")
     ap.add_argument("--frate_standoff", type=float, default=0.0, help="Standoff in fringe-rate to filter [mHz].")
@@ -197,7 +190,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
         datafile_list: list of data files to perform cross-talk filtering on
         baseline_list: list of antenna-pair-pol triplets to filter and write out from the datafile_list.
                        If None, load all baselines in files. Default is None.
-        calfile_list: optional list of calibration files to apply to data before xtalk filtering
+        calfile_list: optional list of calibration files to apply to data before fr filtering
         Nbls_per_load: int, the number of baselines to load at once.
             If None, load all baselines at once. default : None.
         spw_range: 2-tuple or 2-list, spw_range of data to filter.
@@ -253,20 +246,20 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
     if Nbls_per_load is None:
         Nbls_per_load = len(baseline_list)
     for i in range(0, len(baseline_list), Nbls_per_load):
-        xf = XTalkFilter(hd, input_cal=cals, axis='blt')
-        xf.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
+        tfrfil = TophatFRFilter(hd, input_cal=cals, axis='blt')
+        tfrfil.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
         if avg_red_bllens:
-            xf.avg_red_baseline_vectors()
+            tfrfil.avg_red_baseline_vectors()
         if external_flags is not None:
-            xf.apply_flags(external_flags, overwrite_flags=overwrite_flags)
+            tfrfil.apply_flags(external_flags, overwrite_flags=overwrite_flags)
         if flag_yaml is not None:
-            xf.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
+            tfrfil.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
         if factorize_flags:
-            xf.factorize_flags(time_thresh=time_thresh, inplace=True)
-        xf.run_tophat_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                             skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-        xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+            tfrfil.factorize_flags(time_thresh=time_thresh, inplace=True)
+        tfrfil.run_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                                   skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+        tfrfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
                                clobber=clobber, add_to_history=add_to_history,
-                               extra_attrs={'Nfreqs': xf.hd.Nfreqs, 'freq_array': xf.hd.freq_array})
-        xf.hd.data_array = None  # this forces a reload in the next loop
+                               extra_attrs={'Nfreqs': tfrfil.hd.Nfreqs, 'freq_array': tfrfil.hd.freq_array})
+        tfrfil.hd.data_array = None  # this forces a reload in the next loop
