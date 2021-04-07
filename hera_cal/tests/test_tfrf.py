@@ -29,11 +29,11 @@ class Test_TophatFRFilter(object):
         bl = np.linalg.norm(tfrfil.antpos[24] - tfrfil.antpos[25]) / constants.c * 1e9
         sdf = (tfrfil.freqs[1] - tfrfil.freqs[0]) / 1e9
 
-        tfrfil.run_tophat_frfilter(to_filter=tfrfil.data.keys(), tol=1e-2)
+        tfrfil.run_tophat_frfilter(to_filter=tfrfil.data.keys(), tol=1e-2, output_prefix='frfiltered')
         for k in tfrfil.data.keys():
-            assert tfrfil.clean_resid[k].shape == (60, 64)
-            assert tfrfil.clean_model[k].shape == (60, 64)
-            assert k in tfrfil.clean_info
+            assert tfrfil.frfiltered_resid[k].shape == (60, 64)
+            assert tfrfil.frfiltered_model[k].shape == (60, 64)
+            assert k in tfrfil.frfiltered_info
 
         # test skip_wgt imposition of flags
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
