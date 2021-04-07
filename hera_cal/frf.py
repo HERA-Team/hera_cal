@@ -13,6 +13,8 @@ from . import utils
 
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
+from pyuvdata import UVData, UVFlag
+import argparse
 
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, rephase=False,
@@ -479,3 +481,83 @@ class FRFilter(VisClean):
             filt_data[k] = dfilt
             filt_flags[k] = f
             filt_nsamples[k] = eff_nsamples
+
+
+def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
+                            wgt_by_nsample=True, rephase=False, filetype='uvh5',
+                            verbose=False, clobber=False, flag_output=None):
+    """Time-averaging with a baseline cornerturn
+
+
+    Parameters
+    ----------
+    intput_data_list: list of strings.
+        list of names of input data file to read baselines across.
+    baseline_list: list
+        list of antpolpairs or antpairs
+    output_data: str
+        name of output data file.
+    t_avg: float
+        width of time-averaging interval in seconds.
+    wgt_by_nsample: bool, optional
+        weight by nsamples in time average
+        default is True
+    rephase: bool, optional
+        rephase each time bin to central lst.
+    filetype : str, optional
+        specify if uvh5, miriad, ect...
+            default is uvh5.
+    verbose: bool, optional
+        if true, more outputs.
+        default is False
+    clobber: bool, optional
+        if true, overwrite output ata if it already exists.
+        default is False
+    flag_output: str, optional
+        string to write flag output. Optional.
+
+    Returns
+    -------
+    None
+    """
+    fr = FRFilter(input_data_list, filetype=filetype)
+    fr.read(bls=baseline_list, axis='blt')
+
+    fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
+                    wgt_by_nsample=wgt_by_nsample, rephase=rephase)
+    fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
+                  nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
+    if flag_output is not None:
+        uv_avg = UVData()
+        uv_avg.read(output_data)
+        uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
+        uvf.to_waterfall(keep_pol=False, method='and')
+        uvf.write(flag_output, clobber=clobber)
+
+
+def time_average_argparser():
+    """
+    Define an argument parser for time averaging data.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    ap : ArgumentParser object
+        An instance of an `ArgumentParser` that has the relevant options defined.
+    """
+    ap = argparse.ArgumentParser(description="Time-average data.")
+    ap.add_argument("input_data_list", type=str, nargs="+", help="list of data files to use for determining baseline chunk if performing cornerturn.")
+    ap.add_argument("output_data", type=str, help="name of data file to write out time-average.")
+    ap.add_argument("--cornerturnfile", type=str, help="name of data file to determine baselines based on posotion in input_data_list."
+                                                       "If provided, will perform cornerturn from time to baselines.")
+    ap.add_argument("--t_avg", type=float, help="number of seconds to average over.", default=None)
+    ap.add_argument("--rephase", default=False, action="store_true", help="rephase to averaging window center.")
+    ap.add_argument("--dont_wgt_by_nsample", default=False, action="store_true", help="don't weight averages by nsample. Default is to wgt by nsamples.")
+    ap.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
+    ap.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
+    ap.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
+    ap.add_argument("--filetype", default="uvh5", type=str, help="optional filetype specifier. Default is 'uvh5'. Set to 'miriad' if reading miriad files etc...")
+    return ap
