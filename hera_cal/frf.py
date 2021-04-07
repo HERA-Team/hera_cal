@@ -483,160 +483,6 @@ class FRFilter(VisClean):
             filt_flags[k] = f
             filt_nsamples[k] = eff_nsamples
 
-def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
-                            wgt_by_nsample=True, rephase=False, filetype='uvh5',
-                            verbose=False, clobber=False, flag_output=None):
-    """Time-averaging with a baseline cornerturn
-
-
-    Parameters
-    ----------
-    intput_data_list: list of strings.
-        list of names of input data file to read baselines across.
-    baseline_list: list
-        list of antpolpairs or antpairs
-    output_data: str
-        name of output data file.
-    t_avg: float
-        width of time-averaging interval in seconds.
-    wgt_by_nsample: bool, optional
-        weight by nsamples in time average
-        default is True
-    rephase: bool, optional
-        rephase each time bin to central lst.
-    filetype : str, optional
-        specify if uvh5, miriad, ect...
-            default is uvh5.
-    verbose: bool, optional
-        if true, more outputs.
-        default is False
-    clobber: bool, optional
-        if true, overwrite output ata if it already exists.
-        default is False
-    flag_output: str, optional
-        string to write flag output. Optional.
-
-    Returns
-    -------
-    None
-    """
-    if baseline_list is not None and len(baseline_list) == 0:
-        warnings.warn("Length of baseline list is zero."
-                      "This can happen under normal circumstances when there are more files in datafile_list then baselines."
-                      "in your dataset. Exiting without writing any output.", RuntimeWarning)
-    else:
-        fr = FRFilter(input_data_list, filetype=filetype)
-        fr.read(bls=baseline_list, axis='blt')
-
-        fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
-                        wgt_by_nsample=wgt_by_nsample, rephase=rephase)
-        fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
-                      nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
-        if flag_output is not None:
-            uv_avg = UVData()
-            uv_avg.read(output_data)
-            uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
-            uvf.to_waterfall(keep_pol=False, method='and')
-            uvf.write(flag_output, clobber=clobber)
-
-
-def time_average_argparser():
-    """
-    Define an argument parser for time averaging data.
-
-    Parameters
-    ----------
-    None
-
-    Returns
-    -------
-    ap : ArgumentParser object
-        An instance of an `ArgumentParser` that has the relevant options defined.
-    """
-    ap = argparse.ArgumentParser(description="Time-average data.")
-    ap.add_argument("input_data_list", type=str, nargs="+", help="list of data files to use for determining baseline chunk if performing cornerturn.")
-    ap.add_argument("output_data", type=str, help="name of data file to write out time-average.")
-    ap.add_argument("--cornerturnfile", type=str, help="name of data file to determine baselines based on posotion in input_data_list."
-                                                       "If provided, will perform cornerturn from time to baselines.")
-    ap.add_argument("--t_avg", type=float, help="number of seconds to average over.", default=None)
-    ap.add_argument("--rephase", default=False, action="store_true", help="rephase to averaging window center.")
-    ap.add_argument("--dont_wgt_by_nsample", default=False, action="store_true", help="don't weight averages by nsample. Default is to wgt by nsamples.")
-    ap.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
-    ap.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
-    ap.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
-    ap.add_argument("--filetype", default="uvh5", type=str, help="optional filetype specifier. Default is 'uvh5'. Set to 'miriad' if reading miriad files etc...")
-
-def load_fr_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
-                             read_cache=False, write_cache=False,
-                             factorize_flags=False, time_thresh=0.05, external_flags=None,
-                             res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                             clobber=False, add_to_history='', avg_red_bllens=False,
-                             skip_flagged_edges=False, overwrite_flags=False,
-                             flag_yaml=None,
-                             clean_flags_in_resid_flags=True, **filter_kwargs):
-    '''
-    Uses partial data loading and writing to perform xtalk filtering.
-
-    Arguments:
-        infilename: string path to data to uvh5 file to load
-        cal: optional string path to calibration file to apply to data before xtalk filtering
-        Nbls_per_load: int, the number of baselines to load at once.
-            If None, load all baselines at once. default : None.
-        spw_range: spw_range of data to delay-filter.
-        cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-            see uvtools.dspec.dayenu_filter for key formats.
-        read_cache: bool, If true, read existing cache files in cache_dir before running.
-        write_cache: bool. If true, create new cache file with precomputed matrices
-            that were not in previously loaded cache files.
-        factorize_flags: bool, optional
-            If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
-        time_thresh : float
-            Fractional threshold of flagged pixels across time needed to flag all times
-            per freq channel. It is not recommend to set this greater than 0.5.
-            Fully flagged integrations do not count towards triggering time_thresh.
-        external_flags : str, optional, path to external flag files to apply
-        res_outfilename: path for writing the filtered visibilities with flags
-        CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
-        filled_outfilename: path for writing the original data but with flags unflagged and replaced
-            with CLEAN models wherever possible
-        clobber: if True, overwrites existing file at the outfilename
-        add_to_history: string appended to the history of the output file
-        avg_red_bllens: bool, if True, round baseline lengths to redundant average. Default is False.
-        skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
-        overwrite_flags : bool, if true reset data flags to False except for flagged antennas.
-        flag_yaml: path to manual flagging text file.
-        clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
-                                    default is True.
-        filter_kwargs: additional keyword arguments to be passed to FRFilter.run_xtalk_filter()
-    '''
-    hd = io.HERAData(infilename, filetype='uvh5')
-    if calfile is not None:
-        calfile = io.HERACal(calfile)
-        calfile.read()
-    if spw_range is None:
-        spw_range = [0, hd.Nfreqs]
-    freqs = hd.freqs[spw_range[0]:spw_range[1]]
-    if Nbls_per_load is None:
-        Nbls_per_load = len(hd.bls)
-    for i in range(0, hd.Nbls, Nbls_per_load):
-        frf = FRFilter(hd, input_cal=calfile)
-        frf.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
-        if avg_red_bllens:
-            frf.avg_red_baseline_vectors()
-        if external_flags is not None:
-            frf.apply_flags(external_flags, overwrite_flags=overwrite_flags)
-        if flag_yaml is not None:
-            frf.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
-        if factorize_flags:
-            frf.factorize_flags(time_thresh=time_thresh, inplace=True)
-        frf.run_fr_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                          skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-        frf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                filled_outfilename=filled_outfilename, partial_write=True,
-                                clobber=clobber, add_to_history=add_to_history,
-                                freq_array=frf.hd.freq_array, Nfreqs=frf.Nfreqs)
-        frf.hd.data_array = None  # this forces a reload in the next loop
-
     def run_tophat_frfilter(self, to_filter=None, weight_dict=None, mode='clean',
                             frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.025,
                             max_frate_coeffs=None,
@@ -748,6 +594,63 @@ def load_fr_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_r
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
+
+
+def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
+                            wgt_by_nsample=True, rephase=False, filetype='uvh5',
+                            verbose=False, clobber=False, flag_output=None):
+    """Time-averaging with a baseline cornerturn
+
+
+    Parameters
+    ----------
+    intput_data_list: list of strings.
+        list of names of input data file to read baselines across.
+    baseline_list: list
+        list of antpolpairs or antpairs
+    output_data: str
+        name of output data file.
+    t_avg: float
+        width of time-averaging interval in seconds.
+    wgt_by_nsample: bool, optional
+        weight by nsamples in time average
+        default is True
+    rephase: bool, optional
+        rephase each time bin to central lst.
+    filetype : str, optional
+        specify if uvh5, miriad, ect...
+            default is uvh5.
+    verbose: bool, optional
+        if true, more outputs.
+        default is False
+    clobber: bool, optional
+        if true, overwrite output ata if it already exists.
+        default is False
+    flag_output: str, optional
+        string to write flag output. Optional.
+
+    Returns
+    -------
+    None
+    """
+    if baseline_list is not None and len(baseline_list) == 0:
+        warnings.warn("Length of baseline list is zero."
+                      "This can happen under normal circumstances when there are more files in datafile_list then baselines."
+                      "in your dataset. Exiting without writing any output.", RuntimeWarning)
+    else:
+        fr = FRFilter(input_data_list, filetype=filetype)
+        fr.read(bls=baseline_list, axis='blt')
+
+        fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
+                        wgt_by_nsample=wgt_by_nsample, rephase=rephase)
+        fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
+                      nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
+        if flag_output is not None:
+            uv_avg = UVData()
+            uv_avg.read(output_data)
+            uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
+            uvf.to_waterfall(keep_pol=False, method='and')
+            uvf.write(flag_output, clobber=clobber)
 
 
 def tophat_frfilter_argparser(mode='clean'):
@@ -871,3 +774,31 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
                                   clobber=clobber, add_to_history=add_to_history,
                                   extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array})
         frfil.hd.data_array = None  # this forces a reload in the next loop
+
+
+def time_average_argparser():
+    """
+    Define an argument parser for time averaging data.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    ap : ArgumentParser object
+        An instance of an `ArgumentParser` that has the relevant options defined.
+    """
+    ap = argparse.ArgumentParser(description="Time-average data.")
+    ap.add_argument("input_data_list", type=str, nargs="+", help="list of data files to use for determining baseline chunk if performing cornerturn.")
+    ap.add_argument("output_data", type=str, help="name of data file to write out time-average.")
+    ap.add_argument("--cornerturnfile", type=str, help="name of data file to determine baselines based on posotion in input_data_list."
+                                                       "If provided, will perform cornerturn from time to baselines.")
+    ap.add_argument("--t_avg", type=float, help="number of seconds to average over.", default=None)
+    ap.add_argument("--rephase", default=False, action="store_true", help="rephase to averaging window center.")
+    ap.add_argument("--dont_wgt_by_nsample", default=False, action="store_true", help="don't weight averages by nsample. Default is to wgt by nsamples.")
+    ap.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
+    ap.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
+    ap.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
+    ap.add_argument("--filetype", default="uvh5", type=str, help="optional filetype specifier. Default is 'uvh5'. Set to 'miriad' if reading miriad files etc...")
+    return ap
