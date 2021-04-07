@@ -468,9 +468,6 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
         lst_arrays.append(larrs)
         time_arrays.append(tarrs)
 
-    lst_arrays = np.asarray(lst_arrays)
-    time_arrays = np.asarray(time_arrays)
-
     # get starting LST for output binning
     if lst_start is None:
         lst_start = lmin
@@ -490,9 +487,8 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
     # get stopping LST for output binning
     if lst_stop is None:
         lst_stop = lmax
-    else:
-        if lst_stop < begin_lst:
-            lst_stop += 2 * np.pi
+    if lst_stop < begin_lst:
+        lst_stop += 2 * np.pi
 
     # make LST grid
     lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
@@ -641,6 +637,12 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     tarr = time_arrs[j][k]
                     larr[larr < larr[0]] += 2 * np.pi
 
+                    # phase wrap larr to get it to fall within 2pi of file_lists
+                    while larr[0] + 2 * np.pi < fmax:
+                        larr += 2 * np.pi
+                    while larr[-1] - 2 * np.pi > fmin:
+                        larr -= 2 * np.pi
+
                     # check if this file has overlap with output file
                     if larr[-1] < fmin or larr[0] > fmax:
                         continue
@@ -650,13 +652,12 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
 
                     # load data: only times needed for this output LST-bin file
                     hd = io.HERAData(data_files[j][k], filetype='uvh5')
-                    try:
-                        data, flags, nsamps = hd.read(bls=blgroup, times=tarr[tinds])
-                        data.phase_type = 'drift'
-                    except ValueError:
-                        # if no baselines in the file, skip this file
-                        utils.echo("No baselines from blgroup {} found in {}, skipping file for these bls".format(bi + 1, data_files[j][k]), verbose=verbose)
-                        continue
+                    antpairs = set(hd.antpairs)
+                    bls_in_data = [bl for bl in blgroup if bl in antpairs or bl[::-1] in antpairs]
+                    if len(bls_in_data) == 0:
+                        utils.echo(f"No baselines from blgroup {bi + 1} found in {data_files[j][k]}, skipping file for these bls", verbose=verbose)
+                    data, flags, nsamps = hd.read(bls=bls_in_data, times=tarr[tinds])
+                    data.phase_type = 'drift'
 
                     # load calibration
                     if input_cals is not None:
@@ -675,7 +676,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     file_list.append(data_files[j][k])
                     nightly_data_list.append(data)  # this is data
                     nightly_flgs_list.append(flags)  # this is flgs
-                    nightly_lst_list.append(larr[tinds])  # this is lsts
+                    nightly_lst_list.append(data.lsts)  # this is lsts
 
                 # skip if nothing accumulated in nightly files
                 if len(nightly_data_list) == 0:
