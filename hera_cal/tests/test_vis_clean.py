@@ -935,3 +935,6 @@ class Test_VisClean(object):
         assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))
         assert np.all(np.isclose(hd.flag_array, hd_reconstituted.flag_array))
         assert np.all(np.isclose(hd.nsample_array, hd_reconstituted.nsample_array))
+        # check warning.
+        with pytest.warns(RuntimeWarning):
+            vis_clean.time_chunk_from_baseline_chunks(datafiles[0], baseline_chunk_files=datafiles[1:], clobber=True, outfilename=str(tmp_path / fname), time_bounds=True)
