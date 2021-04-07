@@ -12,7 +12,7 @@ from scipy import constants
 from pyuvdata import UVCal, UVData
 
 from .. import io
-from .. import tophat_frfilter as tfrf
+from .. import tfrf
 from ..data import DATA_PATH
 import glob
 from .. import vis_clean
@@ -73,10 +73,10 @@ class Test_TophatFRFilter(object):
                                            mode='dayenu')
         for avg_bl in [True, False]:
             tfrf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
-                                           calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
-                                           read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
-                                           res_outfilename=outfilename, clobber=True,
-                                           mode='dayenu')
+                                                calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                                read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                                                res_outfilename=outfilename, clobber=True,
+                                                mode='dayenu')
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
@@ -84,10 +84,10 @@ class Test_TophatFRFilter(object):
             assert d[(53, 54, 'ee')].shape[0] == 60
             # now do no spw range and no cal files just to cover those lines.
             tfrf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
-                                           cache_dir=cdir,
-                                           read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
-                                           res_outfilename=outfilename, clobber=True,
-                                           mode='dayenu')
+                                                cache_dir=cdir,
+                                                read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                                                res_outfilename=outfilename, clobber=True,
+                                                mode='dayenu')
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
@@ -133,10 +133,10 @@ class Test_TophatFRFilter(object):
         for blnum, bl in enumerate(flags.keys()):
             outfilename = os.path.join(tmp_path, 'bl_chunk_%d.h5' % blnum)
             tfrf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
-                                           tol=1e-4, baseline_list=[bl],
-                                           cache_dir=cdir,
-                                           factorize_flags=True,
-                                           time_thresh=time_thresh, clobber=True)
+                                                tol=1e-4, baseline_list=[bl],
+                                                cache_dir=cdir,
+                                                factorize_flags=True,
+                                                time_thresh=time_thresh, clobber=True)
         # now load all of the outputs in
         output_files = glob.glob(tmp_path + '/bl_chunk_*.h5')
         hd = io.HERAData(output_files)
@@ -157,9 +157,9 @@ class Test_TophatFRFilter(object):
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
         uvf.write(flagfile, clobber=True)
         tfrf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
-                                       tol=1e-4, baseline_list=[bl[:2]],
-                                       clobber=True, mode='dayenu',
-                                       external_flags=flagfile, overwrite_flags=True)
+                                            tol=1e-4, baseline_list=[bl[:2]],
+                                            clobber=True, mode='dayenu',
+                                            external_flags=flagfile, overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
@@ -167,10 +167,10 @@ class Test_TophatFRFilter(object):
             assert np.all(~f[k])
         # now do the external yaml
         tfrf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
-                                       tol=1e-4, baseline_list=[bl[:2]],
-                                       clobber=True, mode='dayenu',
-                                       external_flags=flagfile, overwrite_flags=True,
-                                       flag_yaml=flag_yaml)
+                                            tol=1e-4, baseline_list=[bl[:2]],
+                                            clobber=True, mode='dayenu',
+                                            external_flags=flagfile, overwrite_flags=True,
+                                            flag_yaml=flag_yaml)
         # test that all flags are af yaml flags
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
@@ -314,8 +314,7 @@ class Test_TophatFRFilter(object):
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-        cdir = os.getcwd()
-        cdir = os.path.join(cdir, 'cache_temp')
+        cdir = os.path.join(tmp_path, 'cache_temp')
         # make a cache directory
         if os.path.isdir(cdir):
             shutil.rmtree(cdir)
@@ -358,11 +357,11 @@ class Test_TophatFRFilter(object):
         os.mkdir(cdir)
         # run again using computed cache.
         calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-        tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
-                                       cache_dir=cdir, calfile_list=calfile, read_cache=True,
-                                       Nbls_per_load=1, clobber=True, mode='dayenu',
-                                       spw_range=(0, 32), write_cache=True)
-        # now new cache files should be generated.
+        tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, max_frate_coeffs=[0.0, 0.025],
+                                            cache_dir=cdir, calfile_list=calfile, read_cache=True,
+                                            Nbls_per_load=1, clobber=True, mode='dayenu',
+                                            spw_range=(0, 32), write_cache=True)
+        # no new cache files should be generated.
         assert len(glob.glob(cdir + '/*')) == 1
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
