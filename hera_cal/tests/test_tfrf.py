@@ -206,7 +206,7 @@ class Test_TophatFRFilter(object):
         outfilename = os.path.join(tmp_path, 'temp.h5')
         for avg_bl in [True, False]:
             tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True,
-                                           Nbls_per_load=None, avg_red_bllens=avg_bl)
+                                                Nbls_per_load=None, avg_red_bllens=avg_bl)
             hd = io.HERAData(outfilename)
             d, f, n = hd.read(bls=[(53, 54, 'ee')])
             for bl in d:
@@ -223,7 +223,7 @@ class Test_TophatFRFilter(object):
         os.remove(outfilename)
         for avg_bl in [True, False]:
             tfrf.load_tophat_frfilter_and_write(uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename,
-                                           Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl)
+                                                Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl)
             hd = io.HERAData(outfilename)
             assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
             d, f, n = hd.read()
@@ -254,7 +254,7 @@ class Test_TophatFRFilter(object):
         # when flags are broadcasted.
         time_thresh = 2. / hd.Ntimes
         tfrf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
-                                       factorize_flags=True, time_thresh=time_thresh, clobber=True)
+                                            factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in f:
@@ -263,7 +263,7 @@ class Test_TophatFRFilter(object):
 
         # test delay filtering and writing with factorized flags and partial i/o
         tfrf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
-                                       factorize_flags=True, time_thresh=time_thresh, clobber=True)
+                                            factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in f:
@@ -273,7 +273,7 @@ class Test_TophatFRFilter(object):
             assert not np.all(np.isclose(d[bl], 0.))
 
         tfrf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, Nbls_per_load=1,
-                                       factorize_flags=True, time_thresh=time_thresh, clobber=True)
+                                            factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in f:
@@ -292,9 +292,9 @@ class Test_TophatFRFilter(object):
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
         uvf.write(flagfile, clobber=True)
         tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
-                                       Nbls_per_load=1, clobber=True, mode='dayenu',
-                                       external_flags=flagfile,
-                                       overwrite_flags=True)
+                                            Nbls_per_load=1, clobber=True, mode='dayenu',
+                                            external_flags=flagfile,
+                                            overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -302,9 +302,9 @@ class Test_TophatFRFilter(object):
             assert np.all(~f[k])
         # now without parital io.
         tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
-                                       clobber=True, mode='dayenu',
-                                       external_flags=flagfile,
-                                       overwrite_flags=True)
+                                            clobber=True, mode='dayenu',
+                                            external_flags=flagfile,
+                                            overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -323,14 +323,14 @@ class Test_TophatFRFilter(object):
         # run dayenu filter
         avg_bl = True
         tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
-                                       cache_dir=cdir, mode='dayenu',
-                                       Nbls_per_load=1, clobber=True, avg_red_bllens=avg_bl,
-                                       spw_range=(0, 32), write_cache=True)
+                                            cache_dir=cdir, mode='dayenu',
+                                            Nbls_per_load=1, clobber=True, avg_red_bllens=avg_bl,
+                                            spw_range=(0, 32), write_cache=True)
         # generate duplicate cache files to test duplicate key handle for cache load.
         tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, cache_dir=cdir,
-                                       mode='dayenu', avg_red_bllens=avg_bl,
-                                       Nbls_per_load=1, clobber=True, read_cache=False,
-                                       spw_range=(0, 32), write_cache=True)
+                                            mode='dayenu', avg_red_bllens=avg_bl,
+                                            Nbls_per_load=1, clobber=True, read_cache=False,
+                                            spw_range=(0, 32), write_cache=True)
         # there should now be six cache files (one per i/o/filter). There are three baselines.
         assert len(glob.glob(cdir + '/*')) == 6
         hd = io.HERAData(outfilename)
@@ -343,9 +343,9 @@ class Test_TophatFRFilter(object):
         # now do all the baselines at once.
         for avg_bl in [True, False]:
             tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
-                                           cache_dir=cdir, mode='dayenu', avg_red_bllens=avg_bl,
-                                           Nbls_per_load=None, clobber=True,
-                                           spw_range=(0, 32), write_cache=True)
+                                                cache_dir=cdir, mode='dayenu', avg_red_bllens=avg_bl,
+                                                Nbls_per_load=None, clobber=True,
+                                                spw_range=(0, 32), write_cache=True)
             if avg_bl:
                 assert len(glob.glob(cdir + '/*')) == 1
             hd = io.HERAData(outfilename)
