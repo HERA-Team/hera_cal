@@ -750,8 +750,6 @@ def load_fr_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_r
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
 
 
-
-
 def tophat_frfilter_argparser(mode='clean'):
     '''Arg parser for commandline operation of tophat fr-filters.
 
@@ -867,9 +865,9 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
         if factorize_flags:
             frfil.factorize_flags(time_thresh=time_thresh, inplace=True)
         frfil.run_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                   skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+                                  skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
         frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                   filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
-                                   clobber=clobber, add_to_history=add_to_history,
-                                   extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array})
+                                  filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
+                                  clobber=clobber, add_to_history=add_to_history,
+                                  extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array})
         frfil.hd.data_array = None  # this forces a reload in the next loop
