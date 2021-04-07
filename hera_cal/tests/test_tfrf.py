@@ -12,7 +12,7 @@ from scipy import constants
 from pyuvdata import UVCal, UVData
 
 from .. import io
-from .. import xtalk_filter as xf
+from .. import tophat_frfilter as tfrf
 from ..data import DATA_PATH
 import glob
 from .. import vis_clean
@@ -20,39 +20,39 @@ from .. import utils as utils
 from pyuvdata import UVFlag
 
 
-class Test_XTalkFilter(object):
-    def test_run_xtalk_filter(self):
+class Test_TophatFRFilter(object):
+    def test_run_tophat_frfilter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
-        xfil = xf.XTalkFilter(fname, filetype='miriad')
-        xfil.read(bls=[k])
-        bl = np.linalg.norm(xfil.antpos[24] - xfil.antpos[25]) / constants.c * 1e9
-        sdf = (xfil.freqs[1] - xfil.freqs[0]) / 1e9
+        tfrfil = tfrf.TophatFRFilter(fname, filetype='miriad')
+        tfrfil.read(bls=[k])
+        bl = np.linalg.norm(tfrfil.antpos[24] - tfrfil.antpos[25]) / constants.c * 1e9
+        sdf = (tfrfil.freqs[1] - tfrfil.freqs[0]) / 1e9
 
-        xfil.run_xtalk_filter(to_filter=xfil.data.keys(), tol=1e-2)
-        for k in xfil.data.keys():
-            assert xfil.clean_resid[k].shape == (60, 64)
-            assert xfil.clean_model[k].shape == (60, 64)
-            assert k in xfil.clean_info
+        tfrfil.run_tophat_frfilter(to_filter=tfrfil.data.keys(), tol=1e-2)
+        for k in tfrfil.data.keys():
+            assert tfrfil.clean_resid[k].shape == (60, 64)
+            assert tfrfil.clean_model[k].shape == (60, 64)
+            assert k in tfrfil.clean_info
 
         # test skip_wgt imposition of flags
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         # check successful run when avg_red_bllens is True and when False.
         for avg_red_bllens in [True, False]:
-            xfil = xf.XTalkFilter(fname, filetype='miriad')
-            xfil.read(bls=[k])
+            tfrfil = tfrf.TophatFRFilter(fname, filetype='miriad')
+            tfrfil.read(bls=[k])
             if avg_red_bllens:
-                xfil.avg_red_baseline_vectors()
-            wgts = {k: np.ones_like(xfil.flags[k], dtype=np.float)}
+                tfrfil.avg_red_baseline_vectors()
+            wgts = {k: np.ones_like(tfrfil.flags[k], dtype=np.float)}
             wgts[k][:, 0] = 0.0
-            xfil.run_xtalk_filter(to_filter=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
-            assert xfil.clean_info[k]['status']['axis_0'][0] == 'skipped'
-            np.testing.assert_array_equal(xfil.clean_flags[k][:, 0], np.ones_like(xfil.flags[k][:, 0]))
-            np.testing.assert_array_equal(xfil.clean_model[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
-            np.testing.assert_array_equal(xfil.clean_resid[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
+            tfrfil.run_tophat_frfilter(to_filter=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+            assert tfrfil.clean_info[k]['status']['axis_0'][0] == 'skipped'
+            np.testing.assert_array_equal(tfrfil.clean_flags[k][:, 0], np.ones_like(tfrfil.flags[k][:, 0]))
+            np.testing.assert_array_equal(tfrfil.clean_model[k][:, 0], np.zeros_like(tfrfil.clean_resid[k][:, 0]))
+            np.testing.assert_array_equal(tfrfil.clean_resid[k][:, 0], np.zeros_like(tfrfil.clean_resid[k][:, 0]))
 
-    def test_load_xtalk_filter_and_write_baseline_list(self, tmpdir):
+    def test_load_tophat_frfilter_and_write_baseline_list(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
                 os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
@@ -72,7 +72,7 @@ class Test_XTalkFilter(object):
                                            res_outfilename=outfilename, clobber=True,
                                            mode='dayenu')
         for avg_bl in [True, False]:
-            xf.load_xtalk_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)], polarizations=['ee'],
+            tfrf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
                                            calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
                                            read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
                                            res_outfilename=outfilename, clobber=True,
@@ -83,7 +83,7 @@ class Test_XTalkFilter(object):
             assert d[(53, 54, 'ee')].shape[1] == 100
             assert d[(53, 54, 'ee')].shape[0] == 60
             # now do no spw range and no cal files just to cover those lines.
-            xf.load_xtalk_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)], polarizations=['ee'],
+            tfrf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
                                            cache_dir=cdir,
                                            read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
                                            res_outfilename=outfilename, clobber=True,
@@ -132,8 +132,8 @@ class Test_XTalkFilter(object):
         time_thresh = 2. / hd.Ntimes
         for blnum, bl in enumerate(flags.keys()):
             outfilename = os.path.join(tmp_path, 'bl_chunk_%d.h5' % blnum)
-            xf.load_xtalk_filter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
-                                           tol=1e-4, baseline_list=[bl[:2]], polarizations=[bl[-1]],
+            tfrf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
+                                           tol=1e-4, baseline_list=[bl],
                                            cache_dir=cdir,
                                            factorize_flags=True,
                                            time_thresh=time_thresh, clobber=True)
@@ -156,7 +156,7 @@ class Test_XTalkFilter(object):
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
         uvf.write(flagfile, clobber=True)
-        xf.load_xtalk_filter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
+        tfrf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
                                        tol=1e-4, baseline_list=[bl[:2]],
                                        clobber=True, mode='dayenu',
                                        external_flags=flagfile, overwrite_flags=True)
@@ -166,7 +166,7 @@ class Test_XTalkFilter(object):
         for k in f:
             assert np.all(~f[k])
         # now do the external yaml
-        xf.load_xtalk_filter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
+        tfrf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
                                        tol=1e-4, baseline_list=[bl[:2]],
                                        clobber=True, mode='dayenu',
                                        external_flags=flagfile, overwrite_flags=True,
@@ -182,47 +182,47 @@ class Test_XTalkFilter(object):
         os.remove(outfilename)
         shutil.rmtree(cdir)
 
-    def test_load_xtalk_filter_and_write(self, tmpdir):
+    def test_load_tophat_frfilter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, 'temp.h5')
-        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1)
+        tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in d:
             assert not np.all(np.isclose(d[bl], 0.))
 
-        xfil = xf.XTalkFilter(uvh5, filetype='uvh5')
-        xfil.read(bls=[(53, 54, 'ee')])
-        xfil.run_xtalk_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
-        np.testing.assert_almost_equal(d[(53, 54, 'ee')], xfil.clean_resid[(53, 54, 'ee')], decimal=5)
-        np.testing.assert_array_equal(f[(53, 54, 'ee')], xfil.flags[(53, 54, 'ee')])
+        tfrfil = tfrf.TophatFRFilter(uvh5, filetype='uvh5')
+        tfrfil.read(bls=[(53, 54, 'ee')])
+        tfrfil.run_tophat_frfilter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        np.testing.assert_almost_equal(d[(53, 54, 'ee')], tfrfil.clean_resid[(53, 54, 'ee')], decimal=5)
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], tfrfil.flags[(53, 54, 'ee')])
         # test NotImplementedError
-        pytest.raises(NotImplementedError, xf.load_xtalk_filter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
-                      clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54)], polarizations=['ee'])
+        pytest.raises(NotImplementedError, tfrf.load_tophat_frfilter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
+                      clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54, 'ee')])
 
         # test loading and writing all baselines at once.
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, 'temp.h5')
         for avg_bl in [True, False]:
-            xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True,
+            tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True,
                                            Nbls_per_load=None, avg_red_bllens=avg_bl)
             hd = io.HERAData(outfilename)
             d, f, n = hd.read(bls=[(53, 54, 'ee')])
             for bl in d:
                 assert not np.all(np.isclose(d[bl], 0.))
 
-        xfil = xf.XTalkFilter(uvh5, filetype='uvh5')
-        xfil.read(bls=[(53, 54, 'ee')])
-        xfil.run_xtalk_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
-        np.testing.assert_almost_equal(d[(53, 54, 'ee')], xfil.clean_resid[(53, 54, 'ee')], decimal=5)
-        np.testing.assert_array_equal(f[(53, 54, 'ee')], xfil.flags[(53, 54, 'ee')])
+        tfrfil = tfrf.TophatFRFilter(uvh5, filetype='uvh5')
+        tfrfil.read(bls=[(53, 54, 'ee')])
+        tfrfil.run_tophat_frfilter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        np.testing.assert_almost_equal(d[(53, 54, 'ee')], tfrfil.clean_resid[(53, 54, 'ee')], decimal=5)
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], tfrfil.flags[(53, 54, 'ee')])
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(tmp_path, 'temp.h5')
         os.remove(outfilename)
         for avg_bl in [True, False]:
-            xf.load_xtalk_filter_and_write(uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename,
+            tfrf.load_tophat_frfilter_and_write(uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename,
                                            Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl)
             hd = io.HERAData(outfilename)
             assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
@@ -253,7 +253,7 @@ class Test_XTalkFilter(object):
         # and entire final channel being flagged
         # when flags are broadcasted.
         time_thresh = 2. / hd.Ntimes
-        xf.load_xtalk_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
+        tfrf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
                                        factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -262,7 +262,7 @@ class Test_XTalkFilter(object):
             assert np.all(f[bl][0, :])
 
         # test delay filtering and writing with factorized flags and partial i/o
-        xf.load_xtalk_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
+        tfrf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
                                        factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -272,7 +272,7 @@ class Test_XTalkFilter(object):
             assert np.all(f[bl][:, -1])
             assert not np.all(np.isclose(d[bl], 0.))
 
-        xf.load_xtalk_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, Nbls_per_load=1,
+        tfrf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, Nbls_per_load=1,
                                        factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -291,7 +291,7 @@ class Test_XTalkFilter(object):
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
         uvf.write(flagfile, clobber=True)
-        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename,
+        tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
                                        Nbls_per_load=1, clobber=True, mode='dayenu',
                                        external_flags=flagfile,
                                        overwrite_flags=True)
@@ -301,7 +301,7 @@ class Test_XTalkFilter(object):
         for k in f:
             assert np.all(~f[k])
         # now without parital io.
-        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename,
+        tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
                                        clobber=True, mode='dayenu',
                                        external_flags=flagfile,
                                        overwrite_flags=True)
@@ -323,12 +323,12 @@ class Test_XTalkFilter(object):
         outfilename = os.path.join(tmp_path, 'temp.h5')
         # run dayenu filter
         avg_bl = True
-        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename,
+        tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
                                        cache_dir=cdir, mode='dayenu',
                                        Nbls_per_load=1, clobber=True, avg_red_bllens=avg_bl,
                                        spw_range=(0, 32), write_cache=True)
         # generate duplicate cache files to test duplicate key handle for cache load.
-        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename, cache_dir=cdir,
+        tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, cache_dir=cdir,
                                        mode='dayenu', avg_red_bllens=avg_bl,
                                        Nbls_per_load=1, clobber=True, read_cache=False,
                                        spw_range=(0, 32), write_cache=True)
@@ -343,7 +343,7 @@ class Test_XTalkFilter(object):
         os.mkdir(cdir)
         # now do all the baselines at once.
         for avg_bl in [True, False]:
-            xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename,
+            tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
                                            cache_dir=cdir, mode='dayenu', avg_red_bllens=avg_bl,
                                            Nbls_per_load=None, clobber=True,
                                            spw_range=(0, 32), write_cache=True)
@@ -358,7 +358,7 @@ class Test_XTalkFilter(object):
         os.mkdir(cdir)
         # run again using computed cache.
         calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename,
+        tfrf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
                                        cache_dir=cdir, calfile_list=calfile, read_cache=True,
                                        Nbls_per_load=1, clobber=True, mode='dayenu',
                                        spw_range=(0, 32), write_cache=True)
@@ -371,9 +371,9 @@ class Test_XTalkFilter(object):
         os.remove(outfilename)
         shutil.rmtree(cdir)
 
-    def test_xtalk_clean_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris', '--max_frate_coeffs', '0.024', '-0.229', '--mode', 'clean']
-        parser = xf.xtalk_filter_argparser()
+    def test_tophat_clean_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris', '--max_frate_coeffs', '0.024', '-0.229']
+        parser = tfrf.tophat_frfilter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a']
         assert a.clobber is True
@@ -383,9 +383,9 @@ class Test_XTalkFilter(object):
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
 
-    def test_xtalk_linear_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs', '0.024', '-0.229', '--mode', 'dayenu']
-        parser = xf.xtalk_filter_argparser()
+    def test_tophat_linear_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs', '0.024', '-0.229']
+        parser = tfrf.tophat_frfilter_argparser(mode='dayenu')
         a = parser.parse_args()
         assert a.datafilelist == ['a']
         assert a.clobber is True
@@ -395,7 +395,7 @@ class Test_XTalkFilter(object):
         assert a.max_frate_coeffs[1] == -0.229
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
-        parser = xf.xtalk_filter_argparser()
+        parser = tfrf.tophat_frfilter_argparser(mode='dpss_leastsq')
         a = parser.parse_args()
         assert a.datafilelist == ['a']
         assert a.clobber is True
