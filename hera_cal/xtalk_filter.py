@@ -431,6 +431,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         xf.flags = xf.inpainted_flags
     echo(f"{str(datetime.now())}...running xtalk filter", verbose=verbose)
     if skip_autos:
+        echo(f"skip autos is True. Excluding autos from filter.")
         keys_to_filter = [bl for bl in xf.data if bl[0] != bl[1]]
     else:
         keys_to_filter = xf.data.keys()
@@ -440,6 +441,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     echo(f"{str(datetime.now())}...writing output", verbose=verbose)
     # now add autos back in to res and filled data.
     if skip_autos:
+        echo(f"skip autos is True. Filling in autos with unfiltered autos.")
         auto_bls = [bl for bl in xf.data if bl[0] == bl[1]]
         for bl in auto_bls:
             xf.clean_data[bl] = xf.data[bl]
