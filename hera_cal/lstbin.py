@@ -765,6 +765,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                         # if no baselines in the file, skip this file
                         utils.echo("No baselines from blgroup {} found in {}, skipping file for these bls".format(bi + 1, data_files[j][k]), verbose=verbose)
                         continue
+                    data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
+                    data.phase_type = 'drift'
 
                     # load calibration
                     if input_cals is not None:
