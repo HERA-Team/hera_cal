@@ -765,7 +765,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                         # if we want to throw away data associated with flagged antennas, throw it away.
                         if ex_ant_yaml_files is not None:
                             from hera_qm.utils import apply_yaml_flags
-                            hd = apply_yaml_flags(hd, a_priori_flag_yaml=ex_ant_yaml_files[i], ant_indices_only=True, flag_ants=True,
+                            hd = apply_yaml_flags(hd, a_priori_flag_yaml=ex_ant_yaml_files[j], ant_indices_only=True, flag_ants=True,
                                                   flag_freqs=False, flag_times=False, throw_away_flagged_ants=True)
                             data, flags, nsamps = hd.build_datacontainers()
                         data.phase_type = 'drift'
