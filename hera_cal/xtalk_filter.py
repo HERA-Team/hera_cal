@@ -333,7 +333,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
                                               skip_flagged_edges=False,flag_zero_times=True, overwrite_data_flags=False,
                                               a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0,
-                                              frate_horizon=1.0,
+                                              frate_horizon=1.0, skip_autos=False,
                                               max_frate_coeffs=[0.024, -0.229],
                                               **filter_kwargs):
     '''
@@ -430,10 +430,22 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         xf.data = xf.inpainted_data
         xf.flags = xf.inpainted_flags
     echo(f"{str(datetime.now())}...running xtalk filter", verbose=verbose)
+    if skip_autos:
+        keys_to_filter = [bl for bl in xf.data if bl[0] != bl[1]]
+    else:
+        keys_to_filter = xf.data.keys()
     xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                        skip_flagged_edges=skip_flagged_edges,
+                        skip_flagged_edges=skip_flagged_edges, keys=keys_to_filter,
                         max_frate_coeffs=max_frate_coeffs, **filter_kwargs)
     echo(f"{str(datetime.now())}...writing output", verbose=verbose)
+    # now add autos back in to res and filled data.
+    if skip_autos:
+        auto_bls = [bl for bl in xf.data if bl[0] == bl[1]]
+        for bl in auto_bls:
+            xf.clean_data[bl] = xf.data[bl]
+            xf.clean_flags[bl] = xf.flags[bl]
+            xf.clean_resid[bl] = np.zeros_like(xf.data[bl])
+
     xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
                            clobber=clobber, add_to_history=add_to_history,
@@ -469,6 +481,7 @@ def xtalk_filter_argparser(mode='clean', multifile=False):
     elif mode == 'dpss_leastsq':
         a = vis_clean._dpss_argparser(multifile=multifile)
     filt_options = a.add_argument_group(title='Options for the cross-talk filter')
+    a.add_argument("--skip_autos", default=False, action="store_true")
     a.add_argument("--max_frate_coeffs", type=float, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
     if 'dayenu' not in mode:
         a.add_argument("--frate_standoff", type=float, default=0.0, help="Additional fringe-rate standoff in mHz to add to \Omega_E b_{EW} \nu/c for fringe-rate inpainting.")

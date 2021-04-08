@@ -33,7 +33,7 @@ if len(baseline_list) > 0:
                                                            trim_edges=a.trim_edges, max_contiguous_edge_flags=a.max_contiguous_edge_flags,
                                                            add_to_history=' '.join(sys.argv), verbose=a.verbose,
                                                            skip_flagged_edges=a.skip_flagged_edges,
-                                                           a_priori_flag_yaml=a.a_priori_flag_yaml,
+                                                           a_priori_flag_yaml=a.a_priori_flag_yaml, skip_autos=a.skip_autos,
                                                            external_flags=a.external_flags, inpaint=a.inpaint, frate_standoff=a.frate_standoff,
                                                            skip_gaps_larger_then_filter_period=True, rms_threshold=a.rms_threshold, flag_rms_outliers=a.flag_rms_outliers,
                                                            overwrite_data_flags=a.overwrite_data_flags, **filter_kwargs)
