@@ -50,33 +50,40 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
     start = filenames.index(inputfile)
     end = start + chunk_size
     if type == 'data':
-        hd = io.HERAData(filenames[start:end])
+        chunked_files = io.HERAData(filenames[start:end])
     elif type == 'gains':
-        hc = io.HERACal(filenames[start:end])
+        chunked_files = io.HERACal(filenames[start:end])
     else:
         raise ValueError("Invalid type provided. Must be in ['data', 'gains']")
     read_args = {}
     if type == 'data':
-        if polarizations is not None:
-            read_args['polarizations'] = polarizations
-        if spw_range is not None:
-            read_args['freq_chans'] = np.arange(spw_range[0], spw_range[1]).astype(int)
-            data, flags, nsamples = hd.read(axis='blt', **read_args)
+        if polarizations is None:
+            if len(chunked_files.filepaths) > 1:
+                polarizations = list(chunked_files.pols.values())[0]
+            else:
+                polarizations = chunked_files.pols
+        if spw_range is None:
+            spw_range = (0, chunked_files.Nfreqs)
+        data, flags, nsamples = chunked_files.read(axis='blt', polarizations=polarizations,
+                                                   freq_chans=range(spw_range[0], spw_range[1]))
     elif type == 'gains':
-        hc.read()
+        chunked_files.read()
+        if polarizations is None:
+            polarizations = [pol[1:] for pol in chunked_files.pols]
+        if spw_range is None:
+            spw_range = (0, chunked_files.Nfreqs)
         # convert polarizations to jones integers.
-        jones = [uvutils.polstr2num(pol, x_orientation=hc.x_orientation) for pol in polarizations]
-        if spw_range is not None:
-            hc.select(freq_chans=np.arange(spw_range[0], spw_range[1]).astype(int), jones=jones)
+        jones = [uvutils.polstr2num(pol, x_orientation=chunked_files.x_orientation) for pol in polarizations]
+        chunked_files.select(freq_chans=np.arange(spw_range[0], spw_range[1]).astype(int), jones=jones)
     # throw away fully flagged baselines.
     if throw_away_flagged_ants:
         from hera_qm.utils import apply_yaml_flags
-        hd = apply_yaml_flags(hd, ant_flag_yaml, flag_freqs=False, flag_times=False,
-                              flag_ants=True, ant_indices_only=True, throw_away_flagged_ants=True)
+        chunked_files = apply_yaml_flags(chunked_files, ant_flag_yaml, flag_freqs=False, flag_times=False,
+                                         flag_ants=True, ant_indices_only=True, throw_away_flagged_ants=True)
     if type == 'data':
-        hd.write_uvh5(outputfile, clobber=clobber)
+        chunked_files.write_uvh5(outputfile, clobber=clobber)
     elif type == 'gains':
-        hc.write_calfits(outputfile, clobber=clobber)
+        chunked_files.write_calfits(outputfile, clobber=clobber)
 
 
 def chunk_parser():

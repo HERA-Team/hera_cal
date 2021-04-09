@@ -8,8 +8,8 @@
 
 from hera_cal import chunker
 
-a = chunker.chunk_data_parser()
-args = a.parse_args()
+ap = chunker.chunk_parser()
+args = ap.parse_args()
 
 chunker.chunk_data_files(filenames=args.filenames, outputfile=args.outputfile,
                          chunk_size=args.chunk_size, clobber=args.clobber, ant_flag_yaml=args.ant_flag_yaml,

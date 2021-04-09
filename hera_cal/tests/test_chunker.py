@@ -67,8 +67,8 @@ def test_chunk_cal_files(tmpdir):
 
 
 def test_chunk_parser():
-    sys.argv = [sys.argv[0], 'a', 'b', 'c', 'input', 'output', '3', '--type' , 'gains']
-    ap = chunker.chunk_data_parser()
+    sys.argv = [sys.argv[0], 'a', 'b', 'c', 'input', 'output', '3', '--type', 'gains']
+    ap = chunker.chunk_parser()
     args = ap.parse_args()
     assert args.filenames == ['a', 'b', 'c']
     assert args.inputfile == 'input'
