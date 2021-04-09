@@ -765,7 +765,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                         # if no baselines in the file, skip this file
                         utils.echo("No baselines from blgroup {} found in {}, skipping file for these bls".format(bi + 1, data_files[j][k]), verbose=verbose)
                         # check that the current night is not present in any of the baselines in the current blgroup.
-                        if np.all([j not in list(bl_nightly_dict.keys()) for bl_nightly_dict in glbroup]):
+                        if np.all([j not in list(bl_nightly_dict.keys()) for bl_nightly_dict in blgroup]):
                             utils.echo(f"The current night {j} is not present in any of the baseline dicts in the current blgroup.", verbose=verbose)
                         continue
                     data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
