@@ -23,7 +23,7 @@ def test_chunk_data_files(tmpdir):
         output = tmp_path + f'/chunk.{chunk}.uvh5'
         chunker.chunk_files(data_files, data_files[chunk], output, 2,
                             polarizations=['ee'], spw_range=[0, 32],
-                            throw_away_flagged_bls=True, ant_flag_yaml=DATA_PATH + '/test_input/a_priori_flags_sample_noflags.yaml')
+                            throw_away_flagged_ants=True, ant_flag_yaml=DATA_PATH + '/test_input/a_priori_flags_sample_noflags.yaml')
 
     # test that chunked files contain identical data (when combined)
     # to original combined list of files.

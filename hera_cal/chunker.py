@@ -39,7 +39,7 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
         if true, overwrite any preexisting output files.
         defualt is false.
     flag_yaml : str, optional
-        yaml file with list of antennas to flag and throw away if throw_away_flagged_bls is True
+        yaml file with list of antennas to flag and throw away if throw_away_flagged_ants is True
 
     Returns
     -------
@@ -92,7 +92,7 @@ def chunk_parser():
     ap: argparse.ArgumentParser object.
         An argument parser.
     """
-    a = argparse.ArgumentParser(description="Chunk visibility files.")
+    ap = argparse.ArgumentParser(description="Chunk visibility files.")
     ap.add_argument("filenames", type=str, nargs="+", help="list of filenames to chunk together.")
     ap.add_argument("inputfile", type=str, help="name of input file to start chunk at.")
     ap.add_argument("outputfile", type=str, help="Name of output file.")
@@ -101,6 +101,6 @@ def chunk_parser():
     ap.add_argument("--polarizations", type=str, nargs="+", default=None, help="optional list of polarizations to select.")
     ap.add_argument("--spw_range", type=int, nargs=2, default=None, help="optional 2-tuple of frequency channels to select.")
     ap.add_argument("--clobber", default=False, action="store_true", help="overwrite output if it exists.")
-    ap.add_argument("--throw_away_flagged_bls", default=False, action="store_true", help="throw away flagged baselines.")
+    ap.add_argument("--throw_away_flagged_ants", default=False, action="store_true", help="throw away flagged baselines.")
     ap.add_argument("--ant_flag_yaml", default=None, help="path to yaml file with flagged data.")
     return ap

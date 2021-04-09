@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Copyright 2019 the HERA Project
+# Copyright 2021 the HERA Project
 # Licensed under the MIT License
 
 
@@ -14,4 +14,4 @@ args = a.parse_args()
 chunker.chunk_data_files(filenames=args.filenames, outputfile=args.outputfile,
                          chunk_size=args.chunk_size, clobber=args.clobber, ant_flag_yaml=args.ant_flag_yaml,
                          inputfile=args.inputfile, type=args.type, polarizations=args.polarizations,
-                         spw_range=args.spw_range, throw_away_flagged_bls=args.throw_away_flagged_bls)
+                         spw_range=args.spw_range, throw_away_flagged_ants=args.throw_away_flagged_ants)
