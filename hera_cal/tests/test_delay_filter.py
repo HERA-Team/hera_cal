@@ -210,6 +210,21 @@ class Test_DelayFilter(object):
             assert len(list(d.keys())) == 1
             assert d[(53, 54, 'ee')].shape[1] == 100
             assert d[(53, 54, 'ee')].shape[0] == 60
+
+        # Test baseline_list = None.
+        df.load_delay_filter_and_write(datafile_list=uvh5, baseline_list=None,
+                                       calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                       read_cache=True, write_cache=True, avg_red_bllens=True,
+                                       res_outfilename=outfilename, clobber=True,
+                                       mode='dayenu')
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        assert d[(53, 54, 'ee')].shape[1] == 100
+        assert d[(53, 54, 'ee')].shape[0] == 60
+        hdall = io.HERAData(uvh5)
+        hdall.read()
+        assert np.allclose(hd.baseline_array, hdall.baseline_array)
+        assert np.allclose(hd.time_array, hdall.time_array)
         # now do no spw range and no cal files just to cover those lines.
         df.load_delay_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)],
                                        cache_dir=cdir,

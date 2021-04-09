@@ -93,6 +93,21 @@ class Test_XTalkFilter(object):
             assert len(list(d.keys())) == 1
             assert d[(53, 54, 'ee')].shape[1] == 1024
             assert d[(53, 54, 'ee')].shape[0] == 60
+
+        # test baseline_list = None
+        xf.load_xtalk_filter_and_write(datafile_list=uvh5, baseline_list=None,
+                                       calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                       read_cache=True, write_cache=True, avg_red_bllens=True,
+                                       res_outfilename=outfilename, clobber=True,
+                                       mode='dayenu')
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        assert d[(53, 54, 'ee')].shape[1] == 100
+        assert d[(53, 54, 'ee')].shape[0] == 60
+        hdall = io.HERAData(uvh5)
+        hdall.read()
+        assert np.allclose(hd.baseline_array, hdall.baseline_array)
+        assert np.allclose(hd.time_array, hdall.time_array)
         # now test flag factorization and time thresholding.
         # prepare an input files for broadcasting flags
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
