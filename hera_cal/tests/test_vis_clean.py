@@ -840,7 +840,7 @@ class Test_VisClean(object):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20']
         parser = vis_clean._filter_argparser()
         a = parser.parse_args()
-        assert a.infilename == 'a'
+        assert a.datafilelist == ['a']
         assert a.clobber is True
         assert a.spw_range[0] == 0
         assert a.spw_range[1] == 20
@@ -849,13 +849,13 @@ class Test_VisClean(object):
 
     def test_filter_argparser_multifile(self):
         # test multifile functionality of _filter_argparser
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20', '--calfilelist', 'cal1', 'cal2', 'cal3',
-                    '--datafilelist', 'a', 'b', 'c']
-        parser = vis_clean._filter_argparser(multifile=True)
+        sys.argv = [sys.argv[0], 'a', 'b', 'c', '--clobber', '--spw_range', '0', '20', '--calfilelist', 'cal1', 'cal2', 'cal3',
+                    '--cornerturnfile', 'a']
+        parser = vis_clean._filter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a', 'b', 'c']
+        assert a.cornerturnfile == 'a'
         assert a.calfilelist == ['cal1', 'cal2', 'cal3']
-        assert a.infilename == 'a'
         assert a.clobber is True
         assert a.spw_range[0] == 0
         assert a.spw_range[1] == 20
@@ -887,9 +887,9 @@ class Test_VisClean(object):
             baselines = io.baselines_from_filelist_position(file, datafiles)
             fname = 'temp.fragment.part.%d.h5' % filenum
             fragment_filename = tmp_path / fname
-            xf.load_xtalk_filter_and_write_baseline_list(datafiles, baseline_list=baselines, calfile_list=cals,
-                                                         spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
-                                                         res_outfilename=fragment_filename, clobber=True)
+            xf.load_xtalk_filter_and_write(datafiles, baseline_list=baselines, calfile_list=cals,
+                                           spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
+                                           res_outfilename=fragment_filename, clobber=True)
             # load in fragment and make sure the number of baselines is equal to the length of the baseline list
             hd_fragment = io.HERAData(str(fragment_filename))
             assert len(hd_fragment.bls) == len(baselines)
@@ -908,8 +908,8 @@ class Test_VisClean(object):
         hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
         hd_reconstituted.read()
         # compare to xtalk filtering the whole file.
-        xf.load_xtalk_filter_and_write(infilename=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
-                                       calfile=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
+        xf.load_xtalk_filter_and_write(datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
+                                       calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
                                        res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20])
         hd = io.HERAData(str(tmp_path / 'temp.h5'))
         hd.read()
@@ -927,8 +927,8 @@ class Test_VisClean(object):
         hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
         hd_reconstituted.read()
         # compare to xtalk filtering the whole file.
-        xf.load_xtalk_filter_and_write(infilename=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
-                                       calfile=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
+        xf.load_xtalk_filter_and_write(datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
+                                       calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
                                        res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20])
         hd = io.HERAData(str(tmp_path / 'temp.h5'))
         hd.read()
