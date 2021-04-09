@@ -64,8 +64,15 @@ class Test_XTalkFilter(object):
         if os.path.isdir(cdir):
             shutil.rmtree(cdir)
         os.mkdir(cdir)
+        # check graceful exist with length zero baseline list.
+        with pytest.warns(RuntimeWarning):
+            xf.load_xtalk_filter_and_write(datafile_list=uvh5, baseline_list=[], polarizations=['ee'],
+                                           calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                           read_cache=True, write_cache=True, avg_red_bllens=True,
+                                           res_outfilename=outfilename, clobber=True,
+                                           mode='dayenu')
         for avg_bl in [True, False]:
-            xf.load_xtalk_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+            xf.load_xtalk_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)], polarizations=['ee'],
                                            calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
                                            read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
                                            res_outfilename=outfilename, clobber=True,
@@ -76,7 +83,7 @@ class Test_XTalkFilter(object):
             assert d[(53, 54, 'ee')].shape[1] == 100
             assert d[(53, 54, 'ee')].shape[0] == 60
             # now do no spw range and no cal files just to cover those lines.
-            xf.load_xtalk_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+            xf.load_xtalk_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)], polarizations=['ee'],
                                            cache_dir=cdir,
                                            read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
                                            res_outfilename=outfilename, clobber=True,
@@ -111,7 +118,7 @@ class Test_XTalkFilter(object):
         for blnum, bl in enumerate(flags.keys()):
             outfilename = os.path.join(tmp_path, 'bl_chunk_%d.h5' % blnum)
             xf.load_xtalk_filter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
-                                           tol=1e-4, baseline_list=[bl],
+                                           tol=1e-4, baseline_list=[bl[:2]], polarizations=[bl[-1]],
                                            cache_dir=cdir,
                                            factorize_flags=True,
                                            time_thresh=time_thresh, clobber=True)
@@ -177,7 +184,7 @@ class Test_XTalkFilter(object):
         np.testing.assert_array_equal(f[(53, 54, 'ee')], xfil.flags[(53, 54, 'ee')])
         # test NotImplementedError
         pytest.raises(NotImplementedError, xf.load_xtalk_filter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
-                      clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54, 'ee')])
+                      clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54)], polarizations=['ee'])
 
         # test loading and writing all baselines at once.
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")

@@ -96,7 +96,7 @@ class Test_DelayFilter(object):
         outfilename = os.path.join(tmp_path, 'temp.h5')
         # test NotImplementedError
         pytest.raises(NotImplementedError, df.load_delay_filter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
-                      clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54, 'ee')])
+                      clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54)], polarizations=['ee'])
         for avg_bl in [True, False]:
             df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1,
                                            avg_red_bllens=avg_bl)
@@ -188,6 +188,13 @@ class Test_DelayFilter(object):
                 os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part2")]
         outfilename = os.path.join(tmp_path, 'temp.h5')
         cdir = os.path.join(tmp_path, 'cache_temp')
+        # test graceful exit with baseline list length of zero.
+        with pytest.warns(RuntimeWarning):
+            df.load_delay_filter_and_write(datafile_list=uvh5, baseline_list=[],
+                                           calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                           read_cache=True, write_cache=True, avg_red_bllens=True,
+                                           res_outfilename=outfilename, clobber=True,
+                                           mode='dayenu')
         # make a cache directory
         for avg_bl in [True, False]:
             if os.path.isdir(cdir):

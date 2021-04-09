@@ -102,11 +102,14 @@ def load_xtalk_filter_and_write(datafile_list, baseline_list=None, calfile_list=
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
+    While this function reads from multiple files (in datafile_list)
+    it always writes to a single file for the resid, filled, and model files.
 
     Arguments:
         datafile_list: list of data files to perform cross-talk filtering on
-        baseline_list: list of antenna-pair-pol triplets to filter and write out from the datafile_list.
-                       If None, load all baselines in files. Default is None.
+        baseline_list: list of antenna-pair 2-tuples.
+                       to filter and write out from the datafile_list.
+                       If None, load all baselines in files in datafile_list. Default is None.
         calfile_list: optional list of calibration files to apply to data before xtalk filtering
         Nbls_per_load: int, the number of baselines to load at once.
             If None, load all baselines at once. default : None.
@@ -141,45 +144,52 @@ def load_xtalk_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         raise NotImplementedError("baseline loading and partial i/o not yet implemented.")
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
     if baseline_list is None:
-        baseline_list = hd.bls
-    if spw_range is None:
-        spw_range = [0, hd.Nfreqs]
-    freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
-    baseline_antennas = []
-    for blpolpair in baseline_list:
-        baseline_antennas += list(blpolpair[:2])
-    baseline_antennas = np.unique(baseline_antennas).astype(int)
-    if calfile_list is not None:
-        cals = io.HERACal(calfile_list)
-        cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
-    else:
-        cals = None
-    if polarizations is None:
         if len(hd.filepaths) > 1:
-            polarizations = list(hd.pols.values())[0]
+            baseline_list = list(hd.bls.values())[0]
         else:
-            polarizations = hd.pols
-    baseline_list = [bl for bl in baseline_list if bl[-1] in polarizations or len(bl) == 2]
-    if Nbls_per_load is None:
-        Nbls_per_load = len(baseline_list)
-    for i in range(0, len(baseline_list), Nbls_per_load):
-        xf = XTalkFilter(hd, input_cal=cals, axis='blt')
-        xf.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
-        if avg_red_bllens:
-            xf.avg_red_baseline_vectors()
-        if external_flags is not None:
-            xf.apply_flags(external_flags, overwrite_flags=overwrite_flags)
-        if flag_yaml is not None:
-            xf.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
-        if factorize_flags:
-            xf.factorize_flags(time_thresh=time_thresh, inplace=True)
-        xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                            skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-        xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                               filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
-                               clobber=clobber, add_to_history=add_to_history,
-                               extra_attrs={'Nfreqs': xf.hd.Nfreqs, 'freq_array': xf.hd.freq_array})
-        xf.hd.data_array = None  # this forces a reload in the next loop
+            baseline_list = hd.bls
+    if len(baseline_list) == 0:
+        warnings.warn("Length of baseline list is zero."
+                      "This can happen under normal circumstances when there are more files in datafile_list then baselines."
+                      "in your dataset. Exiting without writing any output.", RuntimeWarning)
+    else:
+        if spw_range is None:
+            spw_range = [0, hd.Nfreqs]
+        freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
+        baseline_antennas = []
+        for blpolpair in baseline_list:
+            baseline_antennas += list(blpolpair[:2])
+        baseline_antennas = np.unique(baseline_antennas).astype(int)
+        if calfile_list is not None:
+            cals = io.HERACal(calfile_list)
+            cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
+        else:
+            cals = None
+        if polarizations is None:
+            if len(hd.filepaths) > 1:
+                polarizations = list(hd.pols.values())[0]
+            else:
+                polarizations = hd.pols
+        if Nbls_per_load is None:
+            Nbls_per_load = len(baseline_list)
+        for i in range(0, len(baseline_list), Nbls_per_load):
+            xf = XTalkFilter(hd, input_cal=cals, axis='blt')
+            xf.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
+            if avg_red_bllens:
+                xf.avg_red_baseline_vectors()
+            if external_flags is not None:
+                xf.apply_flags(external_flags, overwrite_flags=overwrite_flags)
+            if flag_yaml is not None:
+                xf.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
+            if factorize_flags:
+                xf.factorize_flags(time_thresh=time_thresh, inplace=True)
+            xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                                skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+            xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                                   filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
+                                   clobber=clobber, add_to_history=add_to_history,
+                                   extra_attrs={'Nfreqs': xf.hd.Nfreqs, 'freq_array': xf.hd.freq_array})
+            xf.hd.data_array = None  # this forces a reload in the next loop
 
 # ------------------------------------------
 # Here are arg-parsers for xtalk-filtering.
