@@ -85,21 +85,22 @@ def chunk_parser():
 
     Parameters
     ----------
-    N/A
+    None
 
     Returns
     -------
-    Argument parser.
+    ap: argparse.ArgumentParser object.
+        An argument parser.
     """
     a = argparse.ArgumentParser(description="Chunk visibility files.")
-    a.add_argument("filenames", type=str, nargs="+", help="list of filenames to chunk together.")
-    a.add_argument("inputfile", type=str, help="name of input file to start chunk at.")
-    a.add_argument("outputfile", type=str, help="Name of output file.")
-    a.add_argument("chunk_size", type=int, help="Number of files after filenames to chunk.")
-    a.add_argument("--type", type=str, help="Specify whether you are chunking 'gains' or 'data'", default="data")
-    a.add_argument("--polarizations", type=str, nargs="+", default=None, help="optional list of polarizations to select.")
-    a.add_argument("--spw_range", type=int, nargs=2, default=None, help="optional 2-tuple of frequency channels to select.")
-    a.add_argument("--clobber", default=False, action="store_true", help="overwrite output if it exists.")
-    a.add_argument("--throw_away_flagged_bls", default=False, action="store_true", help="throw away flagged baselines.")
-    a.add_argument("--ant_flag_yaml", default=None, help="path to yaml file with flagged data.")
-    return a
+    ap.add_argument("filenames", type=str, nargs="+", help="list of filenames to chunk together.")
+    ap.add_argument("inputfile", type=str, help="name of input file to start chunk at.")
+    ap.add_argument("outputfile", type=str, help="Name of output file.")
+    ap.add_argument("chunk_size", type=int, help="Number of files after filenames to chunk.")
+    ap.add_argument("--type", type=str, help="Specify whether you are chunking 'gains' or 'data'", default="data")
+    ap.add_argument("--polarizations", type=str, nargs="+", default=None, help="optional list of polarizations to select.")
+    ap.add_argument("--spw_range", type=int, nargs=2, default=None, help="optional 2-tuple of frequency channels to select.")
+    ap.add_argument("--clobber", default=False, action="store_true", help="overwrite output if it exists.")
+    ap.add_argument("--throw_away_flagged_bls", default=False, action="store_true", help="throw away flagged baselines.")
+    ap.add_argument("--ant_flag_yaml", default=None, help="path to yaml file with flagged data.")
+    return ap
