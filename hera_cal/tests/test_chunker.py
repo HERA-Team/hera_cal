@@ -21,9 +21,9 @@ def test_chunk_data_files(tmpdir):
     # form chunks with three samples.
     for chunk in range(0, nfiles, 2):
         output = tmp_path + f'/chunk.{chunk}.uvh5'
-        chunker.chunk_data_files(data_files, data_files[chunk], output, 2,
-                                 polarizations=['ee'], spw_range=[0, 32],
-                                 throw_away_flagged_bls=True, ant_flag_yaml=DATA_PATH + '/test_input/a_priori_flags_sample_noflags.yaml')
+        chunker.chunk_files(data_files, data_files[chunk], output, 2,
+                            polarizations=['ee'], spw_range=[0, 32],
+                            throw_away_flagged_bls=True, ant_flag_yaml=DATA_PATH + '/test_input/a_priori_flags_sample_noflags.yaml')
 
     # test that chunked files contain identical data (when combined)
     # to original combined list of files.
@@ -49,7 +49,7 @@ def test_chunk_cal_files(tmpdir):
     # form chunks with three samples.
     for chunk in range(0, nfiles, 2):
         output = tmp_path + f'/chunk.{chunk}.calfits'
-        chunker.chunk_cal_files(cal_files, cal_files[chunk], output, 2, spw_range=[0, 32])
+        chunker.chunk_files(cal_files, cal_files[chunk], output, 2, spw_range=[0, 32], type='gains')
 
     # test that chunked files contain identical data (when combined)
     # to original combined list of files.
@@ -66,21 +66,12 @@ def test_chunk_cal_files(tmpdir):
     assert np.all(np.isclose(uvco.flag_array, uvc.flag_array))
 
 
-def test_chunk_data_parser():
-    sys.argv = [sys.argv[0], 'a', 'b', 'c', 'input', 'output', '3']
+def test_chunk_parser():
+    sys.argv = [sys.argv[0], 'a', 'b', 'c', 'input', 'output', '3', '--type' , 'gains']
     ap = chunker.chunk_data_parser()
     args = ap.parse_args()
     assert args.filenames == ['a', 'b', 'c']
     assert args.inputfile == 'input'
     assert args.outputfile == 'output'
     assert args.chunk_size == 3
-
-
-def test_chunk_cal_parser():
-    sys.argv = [sys.argv[0], 'a', 'b', 'c', 'input', 'output', '3']
-    ap = chunker.chunk_cal_parser()
-    args = ap.parse_args()
-    assert args.filenames == ['a', 'b', 'c']
-    assert args.inputfile == 'input'
-    assert args.outputfile == 'output'
-    assert args.chunk_size == 3
+    assert args.type == 'gains'

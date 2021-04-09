@@ -13,5 +13,5 @@ args = a.parse_args()
 
 chunker.chunk_data_files(filenames=args.filenames, outputfile=args.outputfile,
                          chunk_size=args.chunk_size, clobber=args.clobber, ant_flag_yaml=args.ant_flag_yaml,
-                         inputfile=args.inputfile, filetype=args.filetype, polarizations=args.polarizations,
+                         inputfile=args.inputfile, type=args.type, polarizations=args.polarizations,
                          spw_range=args.spw_range, throw_away_flagged_bls=args.throw_away_flagged_bls)
