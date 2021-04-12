@@ -436,7 +436,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     else:
         keys_to_filter = xf.data.keys()
     xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                        skip_flagged_edges=skip_flagged_edges, keys=keys_to_filter,
+                        skip_flagged_edges=skip_flagged_edges, to_filter=keys_to_filter,
                         max_frate_coeffs=max_frate_coeffs, **filter_kwargs)
     echo(f"{str(datetime.now())}...writing output", verbose=verbose)
     # now add autos back in to res and filled data.
