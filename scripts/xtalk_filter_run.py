@@ -14,25 +14,25 @@ parser = xtalk_filter.xtalk_filter_argparser()
 a = parser.parse_args()
 
 # set kwargs
-if a.mode == 'clean':
-    filter_kwargs = {'window': a.window,
-                    'skip_wgt': a.skip_wgt, 'maxiter': a.maxiter, 'edgecut_hi': a.edgecut_hi,
-                    'edgecut_low': a.edgecut_low, 'gain': a.gain}
-    if a.window == 'tukey':
-        filter_kwargs['alpha'] = a.alpha
+if ap.mode == 'clean':
+    filter_kwargs = {'window': ap.window,
+                    'skip_wgt': ap.skip_wgt, 'maxiter': ap.maxiter, 'edgecut_hi': ap.edgecut_hi,
+                    'edgecut_low': ap.edgecut_low, 'gain': ap.gain}
+    if ap.window == 'tukey':
+        filter_kwargs['alpha'] = ap.alpha
     avg_red_bllens = False
     skip_gaps_larger_then_filter_period = False
     skip_flagged_edges = False
     max_contiguous_edge_flags = 10000
     flag_model_rms_outliers = False
-elif a.mode == 'dayenu':
+elif ap.mode == 'dayenu':
     filter_kwargs = {}
     avg_red_bllens = True
     max_contiguous_edge_flags = 10000
     skip_gaps_larger_then_filter_period = False
     skip_flagged_edges = False
     flag_model_rms_outliers = False
-elif a.mode == 'dpss_leastsq':
+elif ap.mode == 'dpss_leastsq':
     filter_kwargs = {}
     avg_red_bllens = True
     skip_gaps_larger_then_filter_period = True
@@ -42,29 +42,29 @@ elif a.mode == 'dpss_leastsq':
 filter_kwargs['zeropad'] = a.zeropad
 
 if args.cornerturnfile is not None:
-    baseline_list = io.baselines_from_filelist_position(filename=a.cornerturnfile, filelist=a.datafilelist)
+    baseline_list = io.baselines_from_filelist_position(filename=ap.cornerturnfile, filelist=ap.datafilelist)
 else:
     baseline_list = None
 
 # modify output file name to include index.
-spw_range = a.spw_range
-# allow none string to be passed through to a.calfile
-if isinstance(a.calfile_list, str) and a.calfile_list.lower() == 'none':
-    a.calfile_list = None
+spw_range = ap.spw_range
+# allow none string to be passed through to ap.calfile
+if isinstance(ap.calfilelist, str) and ap.calfilelist.lower() == 'none':
+    ap.calfilelist = None
 # Run Xtalk Filter
-xtalk_filter.load_xtalk_filter_and_write(a.datafilelist, calfile_list=a.calfilelist, avg_red_bllens=True,
-                                         baseline_list=baseline_list, spw_range=a.spw_range,
-                                         cache_dir=a.cache_dir, filled_outfilename=a.filled_outfilename,
-                                         clobber=a.clobber, write_cache=a.write_cache, CLEAN_outfilename=a.CLEAN_outfilename,
-                                         read_cache=a.read_cache, mode=a.mode, res_outfilename=a.res_outfilename,
-                                         factorize_flags=a.factorize_flags, time_thresh=a.time_thresh,
-                                         max_contiguous_edge_flags=a.max_contiguous_edge_flags,
-                                         add_to_history=' '.join(sys.argv), verbose=a.verbose,
-                                         skip_flagged_edges=a.skip_flagged_edges,
-                                         tol=a.tol, max_frate_coeffs=a.max_frate_coeffs,
-                                         flag_yaml=a.flag_yaml, Nbls_per_load=a.Nbls_per_load,
-                                         external_flags=a.external_flags, inpaint=a.inpaint, frate_standoff=a.frate_standoff,
+xtalk_filter.load_xtalk_filter_and_write(ap.datafilelist, calfile_list=ap.calfilelist, avg_red_bllens=True,
+                                         baseline_list=baseline_list, spw_range=ap.spw_range,
+                                         cache_dir=ap.cache_dir, filled_outfilename=ap.filled_outfilename,
+                                         clobber=ap.clobber, write_cache=ap.write_cache, CLEAN_outfilename=ap.CLEAN_outfilename,
+                                         read_cache=ap.read_cache, mode=ap.mode, res_outfilename=ap.res_outfilename,
+                                         factorize_flags=ap.factorize_flags, time_thresh=ap.time_thresh,
+                                         max_contiguous_edge_flags=ap.max_contiguous_edge_flags,
+                                         add_to_history=' '.join(sys.argv), verbose=ap.verbose,
+                                         skip_flagged_edges=ap.skip_flagged_edges,
+                                         tol=ap.tol, max_frate_coeffs=ap.max_frate_coeffs,
+                                         flag_yaml=ap.flag_yaml, Nbls_per_load=ap.Nbls_per_load,
+                                         external_flags=ap.external_flags, inpaint=ap.inpaint, frate_standoff=ap.frate_standoff,
                                          skip_contiguous_flags=skip_gaps_larger_then_filter_period,
-                                         overwrite_flags=a.overwrite_flags, skip_if_flag_within_edge_distance=a.skip_if_flag_within_edge_distance,
+                                         overwrite_flags=ap.overwrite_flags, skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
                                          flag_model_rms_outliers=flag_model_rms_outliers,
                                          clean_flags_in_resid_flags=True, **filter_kwargs)
