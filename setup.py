@@ -42,7 +42,6 @@ setup_args = {
                 'scripts/auto_reflection_run.py', 'scripts/noise_from_autos.py',
                 'scripts/query_ex_ants.py',
                 'scripts/xtalk_filter_run.py',
-                'scripts/delay_filter_run_baseline_parallelized.py',
                 'scripts/time_chunk_from_baseline_chunks_run.py', 'scripts/chunk_files.py'],
     'version': version.version,
     'package_data': {'hera_cal': data_files},
