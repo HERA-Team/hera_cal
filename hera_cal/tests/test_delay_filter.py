@@ -408,7 +408,7 @@ class Test_DelayFilter(object):
         shutil.rmtree(cdir)
 
     def test_delay_clean_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris']
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris', '--mode', 'clean']
         parser = df.delay_filter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a']
@@ -416,15 +416,15 @@ class Test_DelayFilter(object):
         assert a.window == 'blackmanharris'
 
     def test_delay_linear_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
-        parser = df.delay_filter_argparser(mode='dayenu')
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--mode', 'dayenu']
+        parser = df.delay_filter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a']
         assert a.clobber is True
         assert a.write_cache is True
         assert a.cache_dir == '/blah/'
-        sys.argv = [sys.argv[0], 'a', 'b', '--clobber', '--write_cache', '--cache_dir', '/blah/']
-        parser = df.delay_filter_argparser(mode='dpss_leastsq')
+        sys.argv = [sys.argv[0], 'a', 'b', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--mode', 'dpss_leastsq']
+        parser = df.delay_filter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a', 'b']
         assert a.clobber is True

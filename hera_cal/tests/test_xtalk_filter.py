@@ -372,7 +372,7 @@ class Test_XTalkFilter(object):
         shutil.rmtree(cdir)
 
     def test_xtalk_clean_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris', '--max_frate_coeffs', '0.024', '-0.229']
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris', '--max_frate_coeffs', '0.024', '-0.229', '--mode', 'clean']
         parser = xf.xtalk_filter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a']
@@ -384,8 +384,8 @@ class Test_XTalkFilter(object):
         assert not a.factorize_flags
 
     def test_xtalk_linear_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs', '0.024', '-0.229']
-        parser = xf.xtalk_filter_argparser(mode='dayenu')
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs', '0.024', '-0.229', '--mode', 'dayenu']
+        parser = xf.xtalk_filter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a']
         assert a.clobber is True
@@ -395,7 +395,7 @@ class Test_XTalkFilter(object):
         assert a.max_frate_coeffs[1] == -0.229
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
-        parser = xf.xtalk_filter_argparser(mode='dpss_leastsq')
+        parser = xf.xtalk_filter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a']
         assert a.clobber is True
