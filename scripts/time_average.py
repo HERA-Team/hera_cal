@@ -16,8 +16,6 @@ if args.cornerturnfile is not None:
 else:
     baseline_list = None
 
-for f in args.input_data_list:
-    hd = io.HERAData(f)
 if len(baseline_list) > 0:
     frf.time_avg_data_and_write(
                                 flag_output=args.flag_output,
