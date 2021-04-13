@@ -587,8 +587,8 @@ class Test_FRFilter(object):
         assert not a.factorize_flags
 
     def test_tophat_linear_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs', '0.024', '-0.229']
-        parser = frf.tophat_frfilter_argparser(mode='dayenu')
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs', '0.024', '-0.229', '--mode', 'dayenu']
+        parser = frf.tophat_frfilter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a']
         assert a.clobber is True
@@ -598,7 +598,7 @@ class Test_FRFilter(object):
         assert a.max_frate_coeffs[1] == -0.229
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
-        parser = frf.tophat_frfilter_argparser(mode='dpss_leastsq')
+        parser = frf.tophat_frfilter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a']
         assert a.clobber is True
