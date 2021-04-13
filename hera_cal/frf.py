@@ -520,19 +520,24 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
     -------
     None
     """
-    fr = FRFilter(input_data_list, filetype=filetype)
-    fr.read(bls=baseline_list, axis='blt')
+    if len(baseline_list) == 0:
+        warnings.warn("Length of baseline list is zero."
+                      "This can happen under normal circumstances when there are more files in datafile_list then baselines."
+                      "in your dataset. Exiting without writing any output.", RuntimeWarning)
+    else:
+        fr = FRFilter(input_data_list, filetype=filetype)
+        fr.read(bls=baseline_list, axis='blt')
 
-    fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
-                    wgt_by_nsample=wgt_by_nsample, rephase=rephase)
-    fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
-                  nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
-    if flag_output is not None:
-        uv_avg = UVData()
-        uv_avg.read(output_data)
-        uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
-        uvf.to_waterfall(keep_pol=False, method='and')
-        uvf.write(flag_output, clobber=clobber)
+        fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
+                        wgt_by_nsample=wgt_by_nsample, rephase=rephase)
+        fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
+                      nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
+        if flag_output is not None:
+            uv_avg = UVData()
+            uv_avg.read(output_data)
+            uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
+            uvf.to_waterfall(keep_pol=False, method='and')
+            uvf.write(flag_output, clobber=clobber)
 
 
 def time_average_argparser():
