@@ -53,7 +53,7 @@ delay_filter.load_delay_filter_and_write(a.datafilelist, calfile_list=a.calfilel
                                          baseline_list=baseline_list, spw_range=a.spw_range,
                                          cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
                                          clobber=a.clobber, write_cache=a.write_cache, external_flags=a.external_flags,
-                                         read_cache=a.read_cache, mode=mode, overwrite_flags=a.overwrite_flags,
+                                         read_cache=a.read_cache, mode=a.mode, overwrite_flags=a.overwrite_flags,
                                          factorize_flags=a.factorize_flags, time_thresh=a.time_thresh,
                                          max_contiguous_edge_flags=max_contiguous_edge_flags,
                                          add_to_history=' '.join(sys.argv), polarizations=a.polarizations,
