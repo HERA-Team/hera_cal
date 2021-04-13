@@ -17,6 +17,7 @@ from pyuvdata import UVData, UVFlag
 import argparse
 from . import io
 from . import vis_clean
+import warnings
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, rephase=False,
                       lsts=None, freqs=None, bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
@@ -668,12 +669,7 @@ def tophat_frfilter_argparser(mode='clean'):
         argparser for tophat fringe-rate (time-domain) filtering for specified filtering mode
 
     '''
-    if mode == 'clean':
-        ap = vis_clean._clean_argparser()
-    elif mode == 'dayenu':
-        ap = vis_clean._linear_argparser()
-    elif mode == 'dpss_leastsq':
-        ap = vis_clean._dpss_argparser()
+    ap = vis_clean._filter_argparser()
     filt_options = ap.add_argument_group(title='Options for the fr-filter')
     ap.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
     ap.add_argument("--frac_frate_sky_max", type=float, default=1.0, help="Fraction of maximum sky-fringe-rate to interpolate / filter.")
@@ -735,49 +731,54 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
         raise NotImplementedError("baseline loading and partial i/o not yet implemented.")
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
     if baseline_list is None:
-        baseline_list = hd.bls
+        if len(hd.filepaths) > 1:
+            baseline_list = list(hd.bls.values())[0]
+            baseline_list = list(set([bl[:2] for bl in baseline_list]))
+        else:
+            baseline_list = hd.bls
+            baseline_list = list(set([bl[:2] for bl in baseline_list]))
     if len(baseline_list) == 0:
         warnings.warn("Length of baseline list is zero."
                       "This can happen under normal circumstances when there are more files in datafile_list then baselines."
                       "in your dataset. Exiting without writing any output.", RuntimeWarning)
-    if spw_range is None:
-        spw_range = [0, hd.Nfreqs]
-    freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
-    baseline_antennas = []
-    for blpolpair in baseline_list:
-        baseline_antennas += list(blpolpair[:2])
-    baseline_antennas = np.unique(baseline_antennas).astype(int)
-    if calfile_list is not None:
-        cals = io.HERACal(calfile_list)
-        cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
     else:
-        cals = None
-    if polarizations is None:
-        if len(hd.filepaths) > 1:
-            polarizations = list(hd.pols.values())[0]
+        if spw_range is None:
+            spw_range = [0, hd.Nfreqs]
+        freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
+        baseline_antennas = []
+        for blpolpair in baseline_list:
+            baseline_antennas += list(blpolpair[:2])
+        baseline_antennas = np.unique(baseline_antennas).astype(int)
+        if calfile_list is not None:
+            cals = io.HERACal(calfile_list)
+            cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
         else:
-            polarizations = hd.pols
-    baseline_list = [bl for bl in baseline_list if bl[-1] in polarizations or len(bl) == 2]
-    if Nbls_per_load is None:
-        Nbls_per_load = len(baseline_list)
-    for i in range(0, len(baseline_list), Nbls_per_load):
-        frfil = FRFilter(hd, input_cal=cals, axis='blt')
-        frfil.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
-        if avg_red_bllens:
-            frfil.avg_red_baseline_vectors()
-        if external_flags is not None:
-            frfil.apply_flags(external_flags, overwrite_flags=overwrite_flags)
-        if flag_yaml is not None:
-            frfil.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
-        if factorize_flags:
-            frfil.factorize_flags(time_thresh=time_thresh, inplace=True)
-        frfil.run_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                  skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-        frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                  filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
-                                  clobber=clobber, add_to_history=add_to_history,
-                                  extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array})
-        frfil.hd.data_array = None  # this forces a reload in the next loop
+            cals = None
+        if polarizations is None:
+            if len(hd.filepaths) > 1:
+                polarizations = list(hd.pols.values())[0]
+            else:
+                polarizations = hd.pols
+        if Nbls_per_load is None:
+            Nbls_per_load = len(baseline_list)
+        for i in range(0, len(baseline_list), Nbls_per_load):
+            frfil = FRFilter(hd, input_cal=cals, axis='blt')
+            frfil.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
+            if avg_red_bllens:
+                frfil.avg_red_baseline_vectors()
+            if external_flags is not None:
+                frfil.apply_flags(external_flags, overwrite_flags=overwrite_flags)
+            if flag_yaml is not None:
+                frfil.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
+            if factorize_flags:
+                frfil.factorize_flags(time_thresh=time_thresh, inplace=True)
+            frfil.run_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                                      skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+            frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                                      filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
+                                      clobber=clobber, add_to_history=add_to_history,
+                                      extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array})
+            frfil.hd.data_array = None  # this forces a reload in the next loop
 
 
 def time_average_argparser():

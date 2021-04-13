@@ -290,8 +290,15 @@ class Test_FRFilter(object):
         if os.path.isdir(cdir):
             shutil.rmtree(cdir)
         os.mkdir(cdir)
+        # test graceful exit with baseline list length of zero.
+        with pytest.warns(RuntimeWarning):
+            frf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[],
+                                               calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                               read_cache=True, write_cache=True, avg_red_bllens=True,
+                                               res_outfilename=outfilename, clobber=True,
+                                               mode='dayenu')
         for avg_bl in [True, False]:
-            frf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+            frf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)], polarizations=['ee'],
                                                calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
                                                read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
                                                res_outfilename=outfilename, clobber=True,
@@ -302,7 +309,7 @@ class Test_FRFilter(object):
             assert d[(53, 54, 'ee')].shape[1] == 100
             assert d[(53, 54, 'ee')].shape[0] == 60
             # now do no spw range and no cal files just to cover those lines.
-            frf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+            frf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)], polarizations=['ee'],
                                                cache_dir=cdir,
                                                read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
                                                res_outfilename=outfilename, clobber=True,
@@ -337,7 +344,7 @@ class Test_FRFilter(object):
         for blnum, bl in enumerate(flags.keys()):
             outfilename = os.path.join(tmp_path, 'bl_chunk_%d.h5' % blnum)
             frf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
-                                               tol=1e-4, baseline_list=[bl],
+                                               tol=1e-4, baseline_list=[bl[:2]], polarizations=[bl[-1]],
                                                cache_dir=cdir,
                                                factorize_flags=True,
                                                time_thresh=time_thresh, clobber=True)
@@ -361,7 +368,7 @@ class Test_FRFilter(object):
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
         uvf.write(flagfile, clobber=True)
         frf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
-                                           tol=1e-4, baseline_list=[bl[:2]],
+                                           tol=1e-4, baseline_list=[bl[:2]], polarizations=[bl[-1]],
                                            clobber=True, mode='dayenu',
                                            external_flags=flagfile, overwrite_flags=True)
         # test that all flags are False
@@ -371,7 +378,7 @@ class Test_FRFilter(object):
             assert np.all(~f[k])
         # now do the external yaml
         frf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
-                                           tol=1e-4, baseline_list=[bl[:2]],
+                                           tol=1e-4, baseline_list=[bl[:2]], polarizations=[bl[-1]],
                                            clobber=True, mode='dayenu',
                                            external_flags=flagfile, overwrite_flags=True,
                                            flag_yaml=flag_yaml)
@@ -403,7 +410,7 @@ class Test_FRFilter(object):
         np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
         # test NotImplementedError
         pytest.raises(NotImplementedError, frf.load_tophat_frfilter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
-                      clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54, 'ee')])
+                      clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54)], polarizations=['ee'])
 
         # test loading and writing all baselines at once.
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
