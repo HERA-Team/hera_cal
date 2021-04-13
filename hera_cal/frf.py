@@ -736,6 +736,10 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
     if baseline_list is None:
         baseline_list = hd.bls
+    if len(baseline_list) == 0:
+        warnings.warn("Length of baseline list is zero."
+                      "This can happen under normal circumstances when there are more files in datafile_list then baselines."
+                      "in your dataset. Exiting without writing any output.", RuntimeWarning)
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
