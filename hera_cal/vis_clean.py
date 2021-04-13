@@ -284,7 +284,7 @@ class VisClean(object):
 
         # iterate over redundancies
         for red in reds:
-            avg_vec = np.mean([self.blvecs[r] for r in red if r in self.blvecs], axis=0)
+            avg_vec = np.mean([self.blvecs[r] for r in red], axis=0)
             for r in red:
                 self.blvecs[r] = avg_vec.copy()
                 self.bllens[r] = np.linalg.norm(avg_vec) / constants.c.value
@@ -1682,8 +1682,8 @@ def _filter_argparser():
     ap.add_argument("--spw_range", type=int, default=None, nargs=2, help="spectral window of data to foreground filter.")
     ap.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground and xtalk subtraction (default 1e-9)')
     ap.add_argument("--cornerturnfile", type=str, default=None, help="path to visibility data file to use as an index for baseline chunk in cornerturn."
-                                                                    "Warning: Providing this file will result in outputs with significantly different structure "
-                                                                    "then inputs. Only use it if you know what you are doing. Default is None.")
+                                                                     "Warning: Providing this file will result in outputs with significantly different structure "
+                                                                     "then inputs. Only use it if you know what you are doing. Default is None.")
     ap.add_argument("--zeropad", default=None, type=int, help="number of bins to zeropad on both sides of FFT axis")
     ap.add_argument("--Nbls_per_load", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
     ap.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
