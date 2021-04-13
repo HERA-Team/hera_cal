@@ -447,6 +447,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             xf.clean_data[bl] = xf.data[bl]
             xf.clean_flags[bl] = xf.flags[bl]
             xf.clean_resid[bl] = np.zeros_like(xf.data[bl])
+            xf.clean_resid_flags[bl] = xf.flags[bl]
 
     xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
