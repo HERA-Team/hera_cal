@@ -730,14 +730,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
     if baseline_list is not None and Nbls_per_load is not None:
         raise NotImplementedError("baseline loading and partial i/o not yet implemented.")
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
-    if baseline_list is None:
-        if len(hd.filepaths) > 1:
-            baseline_list = list(hd.bls.values())[0]
-            baseline_list = list(set([bl[:2] for bl in baseline_list]))
-        else:
-            baseline_list = hd.bls
-            baseline_list = list(set([bl[:2] for bl in baseline_list]))
-    if len(baseline_list) == 0:
+    if baseline_list is not None and len(baseline_list) == 0:
         warnings.warn("Length of baseline list is zero."
                       "This can happen under normal circumstances when there are more files in datafile_list then baselines."
                       "in your dataset. Exiting without writing any output.", RuntimeWarning)
