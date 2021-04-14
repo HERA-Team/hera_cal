@@ -7,7 +7,7 @@
 
 from hera_cal import vis_clean
 
-parser = vis_clean.time_chunk_from_baseline_chunks()
+parser = vis_clean.time_chunk_from_baseline_chunks_argparser()
 
 a = parser.parse_args()
 
