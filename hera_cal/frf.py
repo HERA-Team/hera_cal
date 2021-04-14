@@ -19,7 +19,6 @@ from . import io
 import warnings
 
 
-
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, rephase=False,
                       lsts=None, freqs=None, bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
     """
