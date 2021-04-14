@@ -16,6 +16,7 @@ from .vis_clean import VisClean
 from pyuvdata import UVData, UVFlag
 import argparse
 from . import io
+import warnings
 
 
 
@@ -522,13 +523,7 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
     -------
     None
     """
-    if baseline_list is None:
-        hd = io.HERAData(input_data_list, filetype=filetype, axis='blt')
-        if len(hd.filepaths) > 1:
-            baseline_list = list(hd.bls.values())[0]
-        else:
-            baseline_list = hd.bls
-    if len(baseline_list) == 0:
+    if baseline_list is not None and len(baseline_list) == 0:
         warnings.warn("Length of baseline list is zero."
                       "This can happen under normal circumstances when there are more files in datafile_list then baselines."
                       "in your dataset. Exiting without writing any output.", RuntimeWarning)

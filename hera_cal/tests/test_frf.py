@@ -206,15 +206,15 @@ class Test_FRFilter(object):
         tmp_path = tmpdir.strpath
         uvh5s = sorted(glob.glob(DATA_PATH + '/zen.2458045.*.uvh5'))
         output_files = []
-        with pytest.warns(RuntimeWarning):
-            frf.time_avg_data_and_write(baseline_list=[], flag_output=output_flags,
-                                        input_data_list=uvh5s, rephase=True,
-                                        output_data=output, t_avg=35., wgt_by_nsample=True)
         for file in uvh5s:
             baseline_list = io.baselines_from_filelist_position(file, uvh5s)
             output = tmp_path + '/' + file.split('/')[-1]
             output_files.append(output)
             output_flags = tmp_path + '/' + file.split('/')[-1].replace('.uvh5', '.flags.h5')
+            with pytest.warns(RuntimeWarning):
+                frf.time_avg_data_and_write(baseline_list=[], flag_output=output_flags,
+                                            input_data_list=uvh5s, rephase=True,
+                                            output_data=output, t_avg=35., wgt_by_nsample=True)
             frf.time_avg_data_and_write(baseline_list=baseline_list, flag_output=output_flags,
                                         input_data_list=uvh5s, rephase=True,
                                         output_data=output, t_avg=35., wgt_by_nsample=True)
