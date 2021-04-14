@@ -15,6 +15,8 @@ from .datacontainer import DataContainer
 from .vis_clean import VisClean
 from pyuvdata import UVData, UVFlag
 import argparse
+from . import io
+
 
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, rephase=False,
