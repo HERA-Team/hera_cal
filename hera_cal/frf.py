@@ -735,6 +735,11 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
                       "This can happen under normal circumstances when there are more files in datafile_list then baselines."
                       "in your dataset. Exiting without writing any output.", RuntimeWarning)
     else:
+        if baseline_list is None:
+            if len(hd.filepaths) > 1:
+                baseline_list = list(hd.bls.values())[0]
+            else:
+                baseline_list = hd.bls
         if spw_range is None:
             spw_range = [0, hd.Nfreqs]
         freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
