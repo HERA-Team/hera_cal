@@ -21,6 +21,10 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
     ----------
     filenames: list of strings
         list of filenames to chunk. Should be homogenous in blt.
+    inputfile: string,
+        name of the file within filenames to use for the start of the chunk.
+        data between the index of input file and the index of inputfile + chunk_size
+        will be chunked together.
     outpufile: str
         name of outputfile to write time-concatenated data too.
     chunk_size: int
