@@ -11,7 +11,7 @@ import hera_cal.io as io
 
 parser = xtalk_filter.xtalk_filter_argparser()
 
-a = parser.parse_args()
+ap = parser.parse_args()
 
 # set kwargs
 if ap.mode == 'clean':
