@@ -40,7 +40,7 @@ setup_args = {
                 'scripts/lstbin_run.py', 'scripts/extract_autos.py',
                 'scripts/smooth_cal_run.py', 'scripts/redcal_run.py',
                 'scripts/auto_reflection_run.py', 'scripts/noise_from_autos.py',
-                'scripts/query_ex_ants.py',
+                'scripts/query_ex_ants.py', 'scripts/red_average.py',
                 'scripts/xtalk_filter_run.py',
                 'scripts/time_chunk_from_baseline_chunks_run.py', 'scripts/chunk_files.py'],
     'version': version.version,
