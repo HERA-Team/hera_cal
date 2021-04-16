@@ -22,7 +22,7 @@ hd = io.HERAData(args.infilename)
 hd.read()
 
 # Redundantly average
-reds = redcal.get_reds(hd.data_antpos, pols=[hd.pols[0]], bl_error_tol=args.bl_error_tol, include_autos=True)
+reds = redcal.get_pos_reds(hd.data_antpos, bl_error_tol=args.bl_error_tol, include_autos=True)
 utils.red_average(hd, reds=reds, inplace=True)
 
 # Write data
