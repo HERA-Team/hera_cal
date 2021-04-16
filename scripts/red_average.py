@@ -7,7 +7,7 @@
 
 import sys
 import argparse
-from hera_cal import io, utils
+from hera_cal import io, utils, redcal
 
 # Parse arguments
 a = argparse.ArgumentParser(description="Apply (and optionally, also unapply) a calfits file to visibility file.")
