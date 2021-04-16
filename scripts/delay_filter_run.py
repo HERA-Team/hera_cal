@@ -13,7 +13,7 @@ a = parser.parse_args()
 
 # set kwargs
 if a.mode == 'clean':
-    filter_kwargs = {'window': a.window,
+    filter_kwargs = {'window': a.window, 
                      'maxiter': a.maxiter, 'edgecut_hi': a.edgecut_hi,
                      'edgecut_low': a.edgecut_low, 'min_dly': a.min_dly, 'gain': a.gain}
     if a.window == 'tukey':
@@ -38,7 +38,7 @@ elif a.mode == 'dpss_leastsq':
     flag_model_rms_outliers = True
 else:
     raise ValueError(f"mode {mode} not supported.")
-
+filter_kwargs['zeropad'] = a.zeropad
 
 if args.cornerturnfile is not None:
     baseline_list = io.baselines_from_filelist_position(filename=a.cornerturnfile, filelist=a.datafilelist)

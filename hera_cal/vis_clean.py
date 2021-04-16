@@ -1684,6 +1684,7 @@ def _filter_argparser():
                                                                     "Warning: Providing this file will result in outputs with significantly different structure "
                                                                     "then inputs. Only use it if you know what you are doing. Default is None.")
     a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
+    a.add_argument("--zeropad", default=None, type=int, help="number of bins to zeropad on both sides of FFT axis")
     a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     a.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
     a.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")

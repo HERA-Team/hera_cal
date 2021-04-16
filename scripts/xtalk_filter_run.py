@@ -39,7 +39,7 @@ elif a.mode == 'dpss_leastsq':
     skip_flagged_edges = True
     max_contiguous_edge_flags = 1
     flag_model_rms_outliers = True
-
+filter_kwargs['zeropad'] = a.zeropad
 
 if args.cornerturnfile is not None:
     baseline_list = io.baselines_from_filelist_position(filename=a.cornerturnfile, filelist=a.datafilelist)
