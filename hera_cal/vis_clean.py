@@ -1714,6 +1714,7 @@ def _filter_argparser():
     linear_options.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
     return ap
 
+
 def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, outfilename, clobber=False, time_bounds=False):
     """Combine multiple waterfall files (with disjoint baseline sets) into time-limited file with all baselines.
 
