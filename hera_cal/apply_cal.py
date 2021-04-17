@@ -192,7 +192,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         data_infilename: filename of the data to be calibrated.
         data_outfilename: filename of the resultant data file with the new calibration and flags.
         new_calibration: filename of the calfits file (or a list of filenames) for the calibration
-        old_calibration: filename of the calfits file (or a list of filenames) for the calibration	        old_calibration: filename of the calfits file for the calibration
+            to be applied, along with its new flags (if any).
+        old_calibration: filename of the calfits file (or a list of filenames) for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
         flag_file: optional path to file containing flags to be ORed with flags in input data. Must have
             the same shape as the data.
@@ -218,8 +219,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
             of flag_file (if applicable), new_calibration and, old_calibration (if applicable).
         clobber: if True, overwrites existing file at outfilename
-        overwrite_data_flags bool, optional
-            If True, overwrite data flags with calibration flags.
         redundant_average : bool, optional
             If True, redundantly average calibrated data and save to <data_outfilename>.red_avg.<filetype_out>
         redundant_weights : datacontainer, optional.
@@ -466,6 +465,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                         raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
                 else:
                     warnings.warn("No unflagged data so no calibration or outputs produced.")
+
 
 def apply_cal_argparser():
     '''Arg parser for commandline operation of apply_cal.'''
