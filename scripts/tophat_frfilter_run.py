@@ -45,7 +45,7 @@ else:
 # modify output file name to include index.
 spw_range = ap.spw_range
 # allow none string to be passed through to ap.calfile
-if isinstance(ap.calfile_list, str) and ap.calfile_list.lower() == 'none':
+if isinstance(ap.calfilelist, str) and ap.calfile_list.lower() == 'none':
     ap.calfile_list = None
 # Run Xtalk Filter
 frf.load_tophat_frfilter_and_write(ap.datafilelist, calfile_list=ap.calfilelist, avg_red_bllens=True,
