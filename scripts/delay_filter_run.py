@@ -39,7 +39,7 @@ elif ap.mode == 'dpss_leastsq':
 else:
     raise ValueError(f"mode {mode} not supported.")
 
-if args.cornerturnfile is not None:
+if ap.cornerturnfile is not None:
     baseline_list = io.baselines_from_filelist_position(filename=ap.cornerturnfile, filelist=ap.datafilelist)
 else:
     baseline_list = None
