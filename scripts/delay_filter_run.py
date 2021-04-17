@@ -9,7 +9,7 @@ from hera_cal import delay_filter
 import sys
 
 parser = delay_filter.delay_filter_argparser()
-a = parser.parse_args()
+ap = parser.parse_args()
 
 # set kwargs
 if ap.mode == 'clean':
