@@ -24,13 +24,13 @@ if ap.mode == 'clean':
 elif ap.mode == 'dayenu':
     filter_kwargs = {}
     avg_red_bllens = True
-    filter_kwargs['skip_gaps_larger_then_filter_period'] = False
+    filter_kwargs['skip_contiguous_flags'] = False
     filter_kwargs['max_contiguous_edge_flags'] = 10000
     filter_kwargs['flag_model_rms_outliers'] = False
 elif ap.mode == 'dpss_leastsq':
     filter_kwargs = {}
     avg_red_bllens = True
-    filter_kwargs['skip_gaps_larger_then_filter_period'] = True
+    filter_kwargs['skip_contiguous_flags'] = True
     skip_flagged_edges = True
     filter_kwargs['max_contiguous_edge_flags'] = 1
     filter_kwargs['flag_model_rms_outliers'] = True
