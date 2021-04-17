@@ -1,61 +1,70 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Copyright 2019 the HERA Project
+# Copyright 2020 the HERA Project
 # Licensed under the MIT License
 
-"Command-line drive script for hera_cal.xtalk_filter. Only performs CLEAN Filtering"
+"""Command-line drive script for hera_cal.xtalk_filter with baseline parallelization. Only performs DAYENU Filtering"""
 
 from hera_cal import xtalk_filter
 import sys
+import hera_cal.io as io
 
 parser = xtalk_filter.xtalk_filter_argparser()
 
 a = parser.parse_args()
-# allow none string to be passed through to a.calfile
-if a.calfile is not None:
-    if a.calfile.lower() == 'none':
-        a.calfile = None
+
 # set kwargs
-if a.mode == 'clean':
-    filter_kwargs = {'tol': a.tol, 'window': a.window, 'max_frate_coeffs': a.max_frate_coeffs,
-                    'skip_wgt': a.skip_wgt, 'maxiter': a.maxiter, 'edgecut_hi': a.edgecut_hi,
-                    'edgecut_low': a.edgecut_low, 'gain': a.gain}
-    if a.window == 'tukey':
-        filter_kwargs['alpha'] = a.alpha
-    avg_red_bllens=False
-    skip_gaps_larger_then_filter_peri=False
-    skip_flagged_edges=False
-    max_contiguous_edge_flags=10000
-    flag_model_rms_outliers=False
-elif a.mode == 'dayenu':
-    filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
-    avg_red_bllens=True
-    max_contiguous_edge_flags=10000
-    skip_gaps_larger_then_filter_peri=False
-    skip_flagged_edges=False
-    flag_model_rms_outliers=False
-elif a.mode == 'dpss_leastsq':
-    filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
-    avg_red_bllens=True
-    skip_gaps_larger_then_filter_peri=True
-    skip_flagged_edges=True
-    max_contiguous_edge_flags=1
-    flag_model_rms_outliers=True
+if ap.mode == 'clean':
+    filter_kwargs = {'window': ap.window,
+                    'skip_wgt': ap.skip_wgt, 'maxiter': ap.maxiter, 'edgecut_hi': ap.edgecut_hi,
+                    'edgecut_low': ap.edgecut_low, 'gain': ap.gain}
+    if ap.window == 'tukey':
+        filter_kwargs['alpha'] = ap.alpha
+    avg_red_bllens = False
+    skip_gaps_larger_then_filter_period = False
+    skip_flagged_edges = False
+    max_contiguous_edge_flags = 10000
+    flag_model_rms_outliers = False
+elif ap.mode == 'dayenu':
+    filter_kwargs = {}
+    avg_red_bllens = True
+    max_contiguous_edge_flags = 10000
+    skip_gaps_larger_then_filter_period = False
+    skip_flagged_edges = False
+    flag_model_rms_outliers = False
+elif ap.mode == 'dpss_leastsq':
+    filter_kwargs = {}
+    avg_red_bllens = True
+    skip_gaps_larger_then_filter_period = True
+    skip_flagged_edges = True
+    max_contiguous_edge_flags = 1
+    flag_model_rms_outliers = True
+filter_kwargs['zeropad'] = a.zeropad
 
+if args.cornerturnfile is not None:
+    baseline_list = io.baselines_from_filelist_position(filename=ap.cornerturnfile, filelist=ap.datafilelist)
+else:
+    baseline_list = None
 
-# Run XTalk Filter
-xtalk_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile, avg_red_bllens=avg_red_bllens,
-                                         Nbls_per_load=a.partial_load_Nbls, spw_range=a.spw_range,
-                                         cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
-                                         clobber=a.clobber, write_cache=a.write_cache,
-                                         read_cache=a.read_cache, mode=a.mode,
-                                         factorize_flags=a.factorize_flags, time_thresh=a.time_thresh,
-                                         max_contiguous_edge_flags=max_contiguous_edge_flags,
-                                         add_to_history=' '.join(sys.argv), verbose=a.verbose,
-                                         skip_flagged_edges=skip_flagged_edges,
-                                         skip_contiguous_flags=skip_gaps_larger_then_filter_peri,
-                                         flag_yaml=a.flag_yaml,
-                                         external_flags=a.external_flags, skip_if_flag_within_edge_distance=a.skip_if_flag_within_edge_distance,
-                                         overwrite_flags=a.overwrite_flags,
+# modify output file name to include index.
+spw_range = ap.spw_range
+# allow none string to be passed through to ap.calfile
+if isinstance(ap.calfilelist, str) and ap.calfilelist.lower() == 'none':
+    ap.calfilelist = None
+# Run Xtalk Filter
+xtalk_filter.load_xtalk_filter_and_write(ap.datafilelist, calfile_list=ap.calfilelist, avg_red_bllens=True,
+                                         baseline_list=baseline_list, spw_range=ap.spw_range,
+                                         cache_dir=ap.cache_dir, filled_outfilename=ap.filled_outfilename,
+                                         clobber=ap.clobber, write_cache=ap.write_cache, CLEAN_outfilename=ap.CLEAN_outfilename,
+                                         read_cache=ap.read_cache, mode=ap.mode, res_outfilename=ap.res_outfilename,
+                                         factorize_flags=ap.factorize_flags, time_thresh=ap.time_thresh,
+                                         max_contiguous_edge_flags=ap.max_contiguous_edge_flags,
+                                         add_to_history=' '.join(sys.argv), verbose=ap.verbose,
+                                         skip_flagged_edges=ap.skip_flagged_edges,
+                                         tol=ap.tol, max_frate_coeffs=ap.max_frate_coeffs,
+                                         flag_yaml=ap.flag_yaml, Nbls_per_load=ap.Nbls_per_load,
+                                         external_flags=ap.external_flags, inpaint=ap.inpaint, frate_standoff=ap.frate_standoff,
+                                         skip_contiguous_flags=skip_gaps_larger_then_filter_period,
+                                         overwrite_flags=ap.overwrite_flags, skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
                                          flag_model_rms_outliers=flag_model_rms_outliers,
                                          clean_flags_in_resid_flags=True, **filter_kwargs)

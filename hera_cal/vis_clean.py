@@ -1218,6 +1218,9 @@ class VisClean(object):
                     elif mode == 'filled':
                         data_out, flags_out = self.get_filled_data()
                     if partial_write:
+                        # add extra_attrs to kwargs
+                        for k in extra_attrs:
+                            kwargs[k] = extra_attrs[k]
                         if not ((filetype == 'uvh5') and (getattr(self.hd, 'filetype', None) == 'uvh5')):
                             raise NotImplementedError('Partial writing requires input and output types to be "uvh5".')
                         self.hd.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber,
@@ -1659,57 +1662,43 @@ def _trim_status(info_dict, axis, zeropad):
 # ------------------------------------------
 
 
-def _filter_argparser(multifile=False):
+def _filter_argparser():
     """
     Core Arg parser for commandline operation of hera_cal.delay_filter and hera_cal.xtalk_filter
     Parameters:
-        multifile, bool: optional. If True, add calfilelist and filelist
-                         arguments.
+        None
+
     Returns:
         Argparser with core (but not complete) functionality that is called by _linear_argparser and
         _clean_argparser.
     """
-    a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
-    a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files (default "uvh5")')
-    a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype for output data files (default "uvh5")')
-    a.add_argument("--res_outfilename", default=None, type=str, help="path for writing the filtered visibilities with flags")
-    a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
-    a.add_argument("--spw_range", type=int, default=None, nargs=2, help="spectral window of data to foreground filter.")
-    a.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground and xtalk subtraction (default 1e-9)')
-    a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
-    a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
-    a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
-    a.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
-    a.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
-    if multifile:
-        a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
-        a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
-    else:
-        a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
-    return a
-
-
-# ------------------------------------------
-# Here are arg-parsers clean filtering
-# for both xtalk and foregrounds.
-# ------------------------------------------
-
-
-def _clean_argparser(multifile=False):
-    '''
-    Arg parser for commandline operation of hera_cal.delay_filter in various clean modes.
-    Arguments
-    ---------
-        multifile, bool: optional. If True, add calfilelist and filelist
-                         arguments.
-    Returns
-    -------
-        Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk).
-    '''
-    a = _filter_argparser(multifile=multifile)
-    a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
-    a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
-    clean_options = a.add_argument_group(title='Options for CLEAN')
+    ap = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
+    ap.add_argument("datafilelist", default=None, type=str, nargs="+", help="list of data files to read in and perform filtering on.")
+    ap.add_argument("--mode", type=str, default="clean", help="filtering mode to use. Can be dpss_leastsq, clean, dayenu.")
+    ap.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files (default "uvh5")')
+    ap.add_argument("--filetype_out", type=str, default='uvh5', help='filetype for output data files (default "uvh5")')
+    ap.add_argument("--res_outfilename", default=None, type=str, help="path for writing the filtered visibilities with flags")
+    ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
+    ap.add_argument("--spw_range", type=int, default=None, nargs=2, help="spectral window of data to foreground filter.")
+    ap.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground and xtalk subtraction (default 1e-9)')
+    ap.add_argument("--cornerturnfile", type=str, default=None, help="path to visibility data file to use as an index for baseline chunk in cornerturn."
+                                                                     "Warning: Providing this file will result in outputs with significantly different structure "
+                                                                     "then inputs. Only use it if you know what you are doing. Default is None.")
+    ap.add_argument("--zeropad", default=None, type=int, help="number of bins to zeropad on both sides of FFT axis")
+    ap.add_argument("--Nbls_per_load", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
+    ap.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
+    ap.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
+    ap.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
+    ap.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
+    ap.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
+    ap.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
+    ap.add_argument("--external_flags", default=None, type=str, nargs="+", help="path(s) to external flag files that you wish to apply.")
+    ap.add_argument("--overwrite_flags", default=False, action="store_true", help="overwrite existing flags.")
+    ap.add_argument("--flag_yaml", default=None, type=str, help="path to a flagging yaml containing apriori antenna, freq, and time flags.")
+    ap.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter.")
+    ap.add_argument("--verbose", default=False, action="store_true", help="Lots of text.")
+    # clean arguments.
+    clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
                               see uvtools.dspec.gen_window for options')
     clean_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
@@ -1717,49 +1706,13 @@ def _clean_argparser(multifile=False):
     clean_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
     clean_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     clean_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
-    return a
-
-# ------------------------------------------
-# Here are are parsers for linear filters.
-# for xtalk and foregrounds.
-# ------------------------------------------
-
-
-def _linear_argparser(multifile=False):
-    '''
-    Arg parser for commandline operation of hera_cal.delay_filter in various linear modes.
-    Arguments
-    ---------
-        multifile, bool: optional. If True, add calfilelist and filelist
-                         arguments.
-    Returns
-    -------
-        Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk)
-    '''
-    a = _filter_argparser(multifile=multifile)
-    cache_options = a.add_argument_group(title='Options for caching')
-    a.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
-    a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
-    a.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
-    a.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
-    return a
-
-
-def _dpss_argparser(multifile=False):
-    '''
-    Arg parser for commandline operation of hera_cal.delay_filter in dpss mode.
-    Arguments
-    ---------
-        multifile, bool: optional. If True, add calfilelist and filelist
-                         arguments.
-    Returns
-    -------
-        Arg-parser for dpss filtering.
-    '''
-    a = _linear_argparser(multifile=multifile)
-    a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
-    a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
-    return a
+    cache_options = ap.add_argument_group(title='Options for caching (arguments only used if mode!="clean")')
+    cache_options.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
+    cache_options.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
+    cache_options.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
+    linear_options = ap.add_argument_group(title="Options for linear filtering (dayenu and dpss_leastsq)")
+    linear_options.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
+    return ap
 
 
 def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, outfilename, clobber=False, time_bounds=False):

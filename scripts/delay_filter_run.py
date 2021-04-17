@@ -3,63 +3,66 @@
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
-"Command-line drive script for hera_cal.delay_filter. Only performs CLEAN Filtering"
+"Command-line drive script for hera_cal.delay_filter with baseline parallelization. Only performs filtering for DAYENU"
 
 from hera_cal import delay_filter
 import sys
 
 parser = delay_filter.delay_filter_argparser()
+ap = parser.parse_args()
 
-a = parser.parse_args()
 # set kwargs
-if a.mode == 'clean':
-    filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol, 'window': a.window,
-                     'skip_wgt': a.skip_wgt, 'maxiter': a.maxiter, 'edgecut_hi': a.edgecut_hi,
-                     'edgecut_low': a.edgecut_low, 'min_dly': a.min_dly, 'gain': a.gain}
-    if a.window == 'tukey':
-        filter_kwargs['alpha'] = a.alpha
-    avg_red_bllens=False
-    skip_gaps_larger_then_filter_period=False
-    skip_flagged_edges=False
-    max_contiguous_edge_flags=10000
-    flag_model_rms_outliers=False
-elif a.mode == 'dayenu':
-    filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol,
-                     'skip_wgt': a.skip_wgt, 'min_dly': a.min_dly}
-    avg_red_bllens=True
-    max_contiguous_edge_flags=10000
-    skip_gaps_larger_then_filter_period=False
-    skip_flagged_edges=False
-    flag_model_rms_outliers=False
-elif a.mode == 'dpss_leastsq':
-    filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol,
-                     'skip_wgt': a.skip_wgt, 'min_dly': a.min_dly}
-    avg_red_bllens=True
-    skip_gaps_larger_then_filter_period=True
-    skip_flagged_edges=True
-    max_contiguous_edge_flags=1
-    flag_model_rms_outliers=True
+if ap.mode == 'clean':
+    filter_kwargs = {'window': ap.window,
+                     'maxiter': ap.maxiter, 'edgecut_hi': ap.edgecut_hi,
+                     'edgecut_low': ap.edgecut_low, 'gain': ap.gain}
+    if ap.window == 'tukey':
+        filter_kwargs['alpha'] = ap.alpha
+    avg_red_bllens = False
+    skip_gaps_larger_then_filter_period = False
+    skip_flagged_edges = False
+    max_contiguous_edge_flags = 10000
+    flag_model_rms_outliers = False
+elif ap.mode == 'dayenu':
+    filter_kwargs = {}
+    avg_red_bllens = True
+    skip_gaps_larger_then_filter_period = False
+    max_contiguous_edge_flags = 10000
+    flag_model_rms_outliers = False
+elif ap.mode == 'dpss_leastsq':
+    filter_kwargs = {}
+    avg_red_bllens = True
+    skip_gaps_larger_then_filter_period = True
+    skip_flagged_edges = True
+    max_contiguous_edge_flags = 1
+    flag_model_rms_outliers = True
 else:
     raise ValueError(f"mode {mode} not supported.")
-if a.calfile is not None:
-    if a.calfile.lower() == 'none':
-        a.calfile = None
 
+if ap.cornerturnfile is not None:
+    baseline_list = io.baselines_from_filelist_position(filename=ap.cornerturnfile, filelist=ap.datafilelist)
+else:
+    baseline_list = None
+
+# allow none string to be passed through to ap.calfile
+if isinstance(ap.calfilelist, str) and ap.calfilelist.lower() == 'none':
+    ap.calfilelist = None
 # Run Delay Filter
-delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, avg_red_bllens=avg_red_bllens,
-                                         Nbls_per_load=a.partial_load_Nbls, spw_range=a.spw_range,
-                                         cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
-                                         clobber=a.clobber, write_cache=a.write_cache,
-                                         read_cache=a.read_cache, mode=mode,
-                                         filled_outfilename=a.filled_outfilename,
-                                         CLEAN_outfilename=a.CLEAN_outfilename, skip_if_flag_within_edge_distance=a.skip_if_flag_within_edge_distance,
-                                         factorize_flags=a.factorize_flags, time_thresh=a.time_thresh,
+delay_filter.load_delay_filter_and_write(ap.datafilelist, calfile_list=ap.calfilelist, avg_red_bllens=avg_red_bllens,
+                                         baseline_list=baseline_list, spw_range=ap.spw_range,
+                                         cache_dir=ap.cache_dir, res_outfilename=ap.res_outfilename,
+                                         clobber=ap.clobber, write_cache=ap.write_cache, external_flags=ap.external_flags,
+                                         read_cache=ap.read_cache, mode=ap.mode, overwrite_flags=ap.overwrite_flags,
+                                         factorize_flags=ap.factorize_flags, time_thresh=ap.time_thresh,
                                          max_contiguous_edge_flags=max_contiguous_edge_flags,
-                                         add_to_history=' '.join(sys.argv), verbose=a.verbose,
-                                         skip_flagged_edges=skip_flagged_edges,
-                                         flag_yaml=a.flag_yaml,
-                                         external_flags=a.external_flags,
+                                         add_to_history=' '.join(sys.argv), polarizations=ap.polarizations,
+                                         verbose=ap.verbose, skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
+                                         flag_yaml=ap.flag_yaml, Nbls_per_load=ap.Nbls_per_load,
                                          skip_contiguous_flags=skip_gaps_larger_then_filter_period,
-                                         overwrite_flags=a.overwrite_flags,
+                                         skip_flagged_edges=skip_flagged_edges,
+                                         filled_outfilename=ap.filled_outfilename,
+                                         CLEAN_outfilename=ap.CLEAN_outfilename,
+                                         standoff=ap.standoff, horizon=ap.horizon, tol=ap.tol,
+                                         skip_wgt=ap.skip_wgt, min_dly=ap.min_dly, zeropad=ap.zeropad,
                                          flag_model_rms_outliers=flag_model_rms_outliers,
                                          clean_flags_in_resid_flags=True, **filter_kwargs)

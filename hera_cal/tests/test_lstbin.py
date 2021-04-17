@@ -44,6 +44,18 @@ class Test_lstbin(object):
         ap, a = hd3.get_ENU_antpos(center=True, pick_data_ants=True)
         t = np.hstack(list(hd3.times.values()))
 
+        hd1 = io.HERAData(self.data_files[0])
+        hd2 = io.HERAData(self.data_files[1])
+        hd3 = io.HERAData(self.data_files[2])
+        self.data1, self.flgs1, self.nsmps1 = hd1.read()
+        self.ap1, self.freqs1, self.lsts1 = list(hd1.pols.values())[0], list(hd1.freqs.values())[0], np.hstack(list(hd1.lsts.values()))
+        self.data2, self.flgs2, self.nsmps2 = hd2.read()
+        self.ap2, self.freqs2, self.lsts2 = list(hd2.pols.values())[0], list(hd2.freqs.values())[0], np.hstack(list(hd2.lsts.values()))
+        self.data3, self.flgs3, self.nsmps3 = hd3.read()
+        self.ap3, self.freqs3, self.lsts3 = list(hd3.pols.values())[0], list(hd3.freqs.values())[0], np.hstack(list(hd3.lsts.values()))
+        ap, a = hd3.get_ENU_antpos(center=True, pick_data_ants=True)
+        t = np.hstack(list(hd3.times.values()))
+
         self.data_list = [self.data1, self.data2, self.data3]
         self.flgs_list = [self.flgs1, self.flgs2, self.flgs3]
         self.lst_list = [self.lsts1, self.lsts2, self.lsts3]

@@ -184,3 +184,62 @@ class Test_FRFilter(object):
 
         pytest.raises(AssertionError, self.F.write_data, self.F.avg_data, "./out.uv", times=self.F.avg_times)
         pytest.raises(ValueError, self.F.write_data, self.F.data, "hi", filetype='foo')
+
+    def test_time_avg_data_and_write(self, tmpdir):
+        # time-averaged data written too file will be compared to this.
+        tmp_path = tmpdir.strpath
+        output = tmp_path + '/test_output.miriad'
+        flag_output = tmp_path + '/test_output.flags.h5'
+        self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 35., rephase=True, overwrite=True,
+                            wgt_by_nsample=True, flags=self.F.flags, nsamples=self.F.nsamples)
+        frf.time_avg_data_and_write(self.fname, output, t_avg=35., rephase=True, wgt_by_nsample=True, flag_output=flag_output, filetype='miriad')
+        data_out = frf.FRFilter(output, filetype='miriad')
+        data_out.read()
+        for k in data_out.data:
+            assert np.allclose(data_out.data[k], self.F.avg_data[k])
+            assert np.allclose(data_out.flags[k], self.F.avg_flags[k])
+            assert np.allclose(data_out.nsamples[k], self.F.avg_nsamples[k])
+
+    def test_time_avg_data_and_write_baseline_list(self, tmpdir):
+        # compare time averaging over baseline list versus time averaging
+        # without baseline list.
+        tmp_path = tmpdir.strpath
+        uvh5s = sorted(glob.glob(DATA_PATH + '/zen.2458045.*.uvh5'))
+        output_files = []
+        for file in uvh5s:
+            baseline_list = io.baselines_from_filelist_position(file, uvh5s)
+            output = tmp_path + '/' + file.split('/')[-1]
+            output_files.append(output)
+            output_flags = tmp_path + '/' + file.split('/')[-1].replace('.uvh5', '.flags.h5')
+            with pytest.warns(RuntimeWarning):
+                frf.time_avg_data_and_write(baseline_list=[], flag_output=output_flags,
+                                            input_data_list=uvh5s, rephase=True,
+                                            output_data=output, t_avg=35., wgt_by_nsample=True)
+            frf.time_avg_data_and_write(baseline_list=baseline_list, flag_output=output_flags,
+                                        input_data_list=uvh5s, rephase=True,
+                                        output_data=output, t_avg=35., wgt_by_nsample=True)
+        # now do everything at once:
+        output = tmp_path + '/combined.uvh5'
+        frf.time_avg_data_and_write(uvh5s, output, t_avg=35., rephase=True, wgt_by_nsample=True)
+        data_out = frf.FRFilter(output)
+        data_out_bls = frf.FRFilter(output_files)
+        data_out.read()
+        data_out_bls.read()
+        # check that data, flags, nsamples are all close.
+        for k in data_out.data:
+            assert np.all(np.isclose(data_out.data[k], data_out_bls.data[k]))
+            assert np.all(np.isclose(data_out.flags[k], data_out_bls.flags[k]))
+            assert np.all(np.isclose(data_out.nsamples[k], data_out_bls.nsamples[k]))
+
+    def test_time_average_argparser_multifile(self):
+        sys.argv = [sys.argv[0], "first.uvh5", "second.uvh5", "output.uvh5", "--cornerturnfile", "input.uvh5", "--t_avg", "35.", "--rephase"]
+        ap = frf.time_average_argparser()
+        args = ap.parse_args()
+        assert args.cornerturnfile == "input.uvh5"
+        assert args.output_data == "output.uvh5"
+        assert args.input_data_list == ['first.uvh5', 'second.uvh5']
+        assert args.t_avg == 35.
+        assert not args.clobber
+        assert not args.verbose
+        assert args.flag_output is None
+        assert args.filetype == "uvh5"

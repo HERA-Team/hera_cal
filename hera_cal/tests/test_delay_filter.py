@@ -94,6 +94,9 @@ class Test_DelayFilter(object):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, 'temp.h5')
+        # test NotImplementedError
+        pytest.raises(NotImplementedError, df.load_delay_filter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
+                      clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54)], polarizations=['ee'])
         for avg_bl in [True, False]:
             df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1,
                                            avg_red_bllens=avg_bl)
@@ -122,7 +125,7 @@ class Test_DelayFilter(object):
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(tmp_path, 'temp.h5')
-        df.load_delay_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
+        df.load_delay_filter_and_write(uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
                                        avg_red_bllens=avg_bl)
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
@@ -185,27 +188,49 @@ class Test_DelayFilter(object):
                 os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part2")]
         outfilename = os.path.join(tmp_path, 'temp.h5')
         cdir = os.path.join(tmp_path, 'cache_temp')
+        # test graceful exit with baseline list length of zero.
+        with pytest.warns(RuntimeWarning):
+            df.load_delay_filter_and_write(datafile_list=uvh5, baseline_list=[],
+                                           calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                           read_cache=True, write_cache=True, avg_red_bllens=True,
+                                           res_outfilename=outfilename, clobber=True,
+                                           mode='dayenu')
         # make a cache directory
         for avg_bl in [True, False]:
             if os.path.isdir(cdir):
                 shutil.rmtree(cdir)
             os.mkdir(cdir)
-            df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
-                                                         calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
-                                                         read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
-                                                         res_outfilename=outfilename, clobber=True,
-                                                         mode='dayenu')
+            df.load_delay_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)],
+                                           calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                           read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                                           res_outfilename=outfilename, clobber=True,
+                                           mode='dayenu')
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
             assert d[(53, 54, 'ee')].shape[1] == 100
             assert d[(53, 54, 'ee')].shape[0] == 60
+
+        # Test baseline_list = None.
+        df.load_delay_filter_and_write(datafile_list=uvh5, baseline_list=None,
+                                       calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                       read_cache=True, write_cache=True, avg_red_bllens=True,
+                                       res_outfilename=outfilename, clobber=True,
+                                       mode='dayenu')
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        assert d[(53, 54, 'ee')].shape[1] == 100
+        assert d[(53, 54, 'ee')].shape[0] == 60
+        hdall = io.HERAData(uvh5)
+        hdall.read()
+        assert np.allclose(hd.baseline_array, hdall.baseline_array)
+        assert np.allclose(hd.time_array, hdall.time_array)
         # now do no spw range and no cal files just to cover those lines.
-        df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
-                                                     cache_dir=cdir,
-                                                     read_cache=True, write_cache=True,
-                                                     res_outfilename=outfilename, clobber=True,
-                                                     mode='dayenu')
+        df.load_delay_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)],
+                                       cache_dir=cdir,
+                                       read_cache=True, write_cache=True,
+                                       res_outfilename=outfilename, clobber=True,
+                                       mode='dayenu')
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
         assert len(list(d.keys())) == 1
@@ -235,10 +260,10 @@ class Test_DelayFilter(object):
         time_thresh = 2. / hd.Ntimes
         for blnum, bl in enumerate(flags.keys()):
             outfilename = os.path.join(tmp_path, 'bl_chunk_%d.h5' % blnum)
-            df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
-                                                         tol=1e-4, baseline_list=[bl[:2]],
-                                                         cache_dir=cdir,
-                                                         factorize_flags=True, time_thresh=time_thresh, clobber=True)
+            df.load_delay_filter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
+                                           tol=1e-4, baseline_list=[bl[:2]],
+                                           cache_dir=cdir,
+                                           factorize_flags=True, time_thresh=time_thresh, clobber=True)
         # now load all of the outputs in
         output_files = glob.glob(tmp_path + '/bl_chunk_*.h5')
         hd = io.HERAData(output_files)
@@ -258,21 +283,21 @@ class Test_DelayFilter(object):
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
         uvf.write(flagfile, clobber=True)
-        df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
-                                                     tol=1e-4, baseline_list=[bl[:2]],
-                                                     clobber=True, mode='dayenu',
-                                                     external_flags=flagfile, overwrite_flags=True)
+        df.load_delay_filter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
+                                       tol=1e-4, baseline_list=[bl[:2]],
+                                       clobber=True, mode='dayenu',
+                                       external_flags=flagfile, overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
         for k in f:
             assert np.all(~f[k])
         # now do the external yaml
-        df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
-                                                     tol=1e-4, baseline_list=[bl[:2]],
-                                                     clobber=True, mode='dayenu',
-                                                     external_flags=flagfile, overwrite_flags=True,
-                                                     flag_yaml=flag_yaml)
+        df.load_delay_filter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
+                                       tol=1e-4, baseline_list=[bl[:2]],
+                                       clobber=True, mode='dayenu',
+                                       external_flags=flagfile, overwrite_flags=True,
+                                       flag_yaml=flag_yaml)
         # test that all flags are af yaml flags
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
@@ -327,7 +352,7 @@ class Test_DelayFilter(object):
         # run again using computed cache.
         calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
-                                       cache_dir=cdir, calfile=calfile, read_cache=True,
+                                       cache_dir=cdir, calfile_list=calfile, read_cache=True,
                                        Nbls_per_load=1, clobber=True, mode='dayenu',
                                        spw_range=(0, 32), write_cache=True)
         # now new cache files should be generated.
@@ -383,25 +408,25 @@ class Test_DelayFilter(object):
         shutil.rmtree(cdir)
 
     def test_delay_clean_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris']
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris', '--mode', 'clean']
         parser = df.delay_filter_argparser()
         a = parser.parse_args()
-        assert a.infilename == 'a'
+        assert a.datafilelist == ['a']
         assert a.clobber is True
         assert a.window == 'blackmanharris'
 
     def test_delay_linear_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
-        parser = df.delay_filter_argparser(mode='dayenu')
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--mode', 'dayenu']
+        parser = df.delay_filter_argparser()
         a = parser.parse_args()
-        assert a.infilename == 'a'
+        assert a.datafilelist == ['a']
         assert a.clobber is True
         assert a.write_cache is True
         assert a.cache_dir == '/blah/'
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
-        parser = df.delay_filter_argparser(mode='dpss_leastsq')
+        sys.argv = [sys.argv[0], 'a', 'b', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--mode', 'dpss_leastsq']
+        parser = df.delay_filter_argparser()
         a = parser.parse_args()
-        assert a.infilename == 'a'
+        assert a.datafilelist == ['a', 'b']
         assert a.clobber is True
         assert a.write_cache is True
         assert a.cache_dir == '/blah/'

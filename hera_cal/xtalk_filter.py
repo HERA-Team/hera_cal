@@ -90,94 +90,29 @@ class XTalkFilter(VisClean):
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
 
 
-def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
-                                read_cache=False, write_cache=False,
-                                factorize_flags=False, time_thresh=0.05, external_flags=None,
+def load_xtalk_filter_and_write(datafile_list, baseline_list=None, calfile_list=None,
+                                Nbls_per_load=None, spw_range=None, cache_dir=None,
+                                read_cache=False, write_cache=False, external_flags=None,
+                                factorize_flags=False, time_thresh=0.05,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                clobber=False, add_to_history='', avg_red_bllens=False,
+                                clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
                                 skip_flagged_edges=False, overwrite_flags=False,
                                 flag_yaml=None,
                                 clean_flags_in_resid_flags=True, **filter_kwargs):
     '''
-    Uses partial data loading and writing to perform xtalk filtering.
-
-    Arguments:
-        infilename: string path to data to uvh5 file to load
-        cal: optional string path to calibration file to apply to data before xtalk filtering
-        Nbls_per_load: int, the number of baselines to load at once.
-            If None, load all baselines at once. default : None.
-        spw_range: spw_range of data to delay-filter.
-        cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-            see uvtools.dspec.dayenu_filter for key formats.
-        read_cache: bool, If true, read existing cache files in cache_dir before running.
-        write_cache: bool. If true, create new cache file with precomputed matrices
-            that were not in previously loaded cache files.
-        factorize_flags: bool, optional
-            If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
-        time_thresh : float
-            Fractional threshold of flagged pixels across time needed to flag all times
-            per freq channel. It is not recommend to set this greater than 0.5.
-            Fully flagged integrations do not count towards triggering time_thresh.
-        external_flags : str, optional, path to external flag files to apply
-        res_outfilename: path for writing the filtered visibilities with flags
-        CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
-        filled_outfilename: path for writing the original data but with flags unflagged and replaced
-            with CLEAN models wherever possible
-        clobber: if True, overwrites existing file at the outfilename
-        add_to_history: string appended to the history of the output file
-        avg_red_bllens: bool, if True, round baseline lengths to redundant average. Default is False.
-        skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
-        overwrite_flags : bool, if true reset data flags to False except for flagged antennas.
-        flag_yaml: path to manual flagging text file.
-        clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
-                                    default is True.
-        filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
-    '''
-    hd = io.HERAData(infilename, filetype='uvh5')
-    if calfile is not None:
-        calfile = io.HERACal(calfile)
-        calfile.read()
-    if spw_range is None:
-        spw_range = [0, hd.Nfreqs]
-    freqs = hd.freqs[spw_range[0]:spw_range[1]]
-    if Nbls_per_load is None:
-        Nbls_per_load = len(hd.bls)
-    for i in range(0, hd.Nbls, Nbls_per_load):
-        xf = XTalkFilter(hd, input_cal=calfile)
-        xf.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
-        if avg_red_bllens:
-            xf.avg_red_baseline_vectors()
-        if external_flags is not None:
-            xf.apply_flags(external_flags, overwrite_flags=overwrite_flags)
-        if flag_yaml is not None:
-            xf.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
-        if factorize_flags:
-            xf.factorize_flags(time_thresh=time_thresh, inplace=True)
-        xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                            skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-        xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                               filled_outfilename=filled_outfilename, partial_write=True,
-                               clobber=clobber, add_to_history=add_to_history,
-                               freq_array=xf.hd.freq_array, Nfreqs=xf.Nfreqs)
-        xf.hd.data_array = None  # this forces a reload in the next loop
-
-
-def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
-                                              read_cache=False, write_cache=False, external_flags=None,
-                                              factorize_flags=False, time_thresh=0.05,
-                                              res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                              clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
-                                              skip_flagged_edges=False, overwrite_flags=False,
-                                              flag_yaml=None,
-                                              clean_flags_in_resid_flags=True, **filter_kwargs):
-    '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
+    While this function reads from multiple files (in datafile_list)
+    it always writes to a single file for the resid, filled, and model files.
 
     Arguments:
         datafile_list: list of data files to perform cross-talk filtering on
-        baseline_list: list of antenna-pair-pol triplets to filter and write out from the datafile_list.
+        baseline_list: list of antenna-pair 2-tuples.
+                       to filter and write out from the datafile_list.
+                       If None, load all baselines in files in datafile_list. Default is None.
         calfile_list: optional list of calibration files to apply to data before xtalk filtering
+        Nbls_per_load: int, the number of baselines to load at once.
+            If None, load all baselines at once. default : None.
         spw_range: 2-tuple or 2-list, spw_range of data to filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
             see uvtools.dspec.dayenu_filter for key formats.
@@ -205,47 +140,63 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                     default is True.
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
+    if baseline_list is not None and Nbls_per_load is not None:
+        raise NotImplementedError("baseline loading and partial i/o not yet implemented.")
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
-    if spw_range is None:
-        spw_range = [0, hd.Nfreqs]
-    freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
-    baseline_antennas = []
-    for blpolpair in baseline_list:
-        baseline_antennas += list(blpolpair[:2])
-    baseline_antennas = np.unique(baseline_antennas).astype(int)
-    if calfile_list is not None:
-        cals = io.HERACal(calfile_list)
-        cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
-    else:
-        cals = None
-    if polarizations is None:
-        if len(datafile_list) > 1:
-            polarizations = list(hd.pols.values())[0]
+    if baseline_list is None:
+        if len(hd.filepaths) > 1:
+            baseline_list = list(hd.bls.values())[0]
         else:
-            polarizations = hd.pols
-    xf = XTalkFilter(hd, input_cal=cals, axis='blt')
-    xf.read(bls=baseline_list, frequencies=freqs, axis='blt')
-    if avg_red_bllens:
-        xf.avg_red_baseline_vectors()
-    if external_flags is not None:
-        xf.apply_flags(external_flags, overwrite_flags=overwrite_flags)
-    if flag_yaml is not None:
-        xf.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
-    if factorize_flags:
-        xf.factorize_flags(time_thresh=time_thresh, inplace=True)
-    xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                        skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-    xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                           filled_outfilename=filled_outfilename, partial_write=False,
-                           clobber=clobber, add_to_history=add_to_history,
-                           extra_attrs={'Nfreqs': xf.Nfreqs, 'freq_array': np.asarray([xf.freqs])})
+            baseline_list = hd.bls
+    if len(baseline_list) == 0:
+        warnings.warn("Length of baseline list is zero."
+                      "This can happen under normal circumstances when there are more files in datafile_list then baselines."
+                      "in your dataset. Exiting without writing any output.", RuntimeWarning)
+    else:
+        if spw_range is None:
+            spw_range = [0, hd.Nfreqs]
+        freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
+        baseline_antennas = []
+        for blpolpair in baseline_list:
+            baseline_antennas += list(blpolpair[:2])
+        baseline_antennas = np.unique(baseline_antennas).astype(int)
+        if calfile_list is not None:
+            cals = io.HERACal(calfile_list)
+            cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
+        else:
+            cals = None
+        if polarizations is None:
+            if len(hd.filepaths) > 1:
+                polarizations = list(hd.pols.values())[0]
+            else:
+                polarizations = hd.pols
+        if Nbls_per_load is None:
+            Nbls_per_load = len(baseline_list)
+        for i in range(0, len(baseline_list), Nbls_per_load):
+            xf = XTalkFilter(hd, input_cal=cals, axis='blt')
+            xf.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
+            if avg_red_bllens:
+                xf.avg_red_baseline_vectors()
+            if external_flags is not None:
+                xf.apply_flags(external_flags, overwrite_flags=overwrite_flags)
+            if flag_yaml is not None:
+                xf.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
+            if factorize_flags:
+                xf.factorize_flags(time_thresh=time_thresh, inplace=True)
+            xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                                skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+            xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                                   filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
+                                   clobber=clobber, add_to_history=add_to_history,
+                                   extra_attrs={'Nfreqs': xf.hd.Nfreqs, 'freq_array': xf.hd.freq_array})
+            xf.hd.data_array = None  # this forces a reload in the next loop
 
 # ------------------------------------------
 # Here are arg-parsers for xtalk-filtering.
 # ------------------------------------------
 
 
-def xtalk_filter_argparser(mode='clean', multifile=False):
+def xtalk_filter_argparser():
     '''Arg parser for commandline operation of xtalk filters.
 
     Parameters
@@ -253,9 +204,6 @@ def xtalk_filter_argparser(mode='clean', multifile=False):
     mode : string, optional.
         Determines sets of arguments to load.
         Can be 'clean', 'dayenu', or 'dpss_leastsq'.
-    multifile: bool, optional.
-        If True, add calfilelist and filelist
-        arguments.
 
     Returns
     -------
@@ -263,13 +211,8 @@ def xtalk_filter_argparser(mode='clean', multifile=False):
         argparser for xtalk (time-domain) filtering for specified filtering mode
 
     '''
-    if mode == 'clean':
-        a = vis_clean._clean_argparser(multifile=multifile)
-    elif mode == 'dayenu':
-        a = vis_clean._linear_argparser(multifile=multifile)
-    elif mode == 'dpss_leastsq':
-        a = vis_clean._dpss_argparser(multifile=multifile)
+    a = vis_clean._filter_argparser()
     filt_options = a.add_argument_group(title='Options for the cross-talk filter')
-    a.add_argument("--max_frate_coeffs", type=float, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
-    a.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
+    filt_options.add_argument("--max_frate_coeffs", type=float, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
+    filt_options.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
     return a

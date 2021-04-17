@@ -548,9 +548,6 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
         lst_arrays.append(larrs)
         time_arrays.append(tarrs)
 
-    lst_arrays = np.asarray(lst_arrays)
-    time_arrays = np.asarray(time_arrays)
-
     # get starting LST for output binning
     if lst_start is None:
         lst_start = lmin
@@ -570,9 +567,8 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
     # get stopping LST for output binning
     if lst_stop is None:
         lst_stop = lmax
-    else:
-        if lst_stop < begin_lst:
-            lst_stop += 2 * np.pi
+    if lst_stop < begin_lst:
+        lst_stop += 2 * np.pi
 
     # make LST grid
     lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
@@ -736,6 +732,12 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     tarr = time_arrs[j][k]
                     larr[larr < larr[0]] += 2 * np.pi
 
+                    # phase wrap larr to get it to fall within 2pi of file_lists
+                    while larr[0] + 2 * np.pi < fmax:
+                        larr += 2 * np.pi
+                    while larr[-1] - 2 * np.pi > fmin:
+                        larr -= 2 * np.pi
+
                     # check if this file has overlap with output file
                     if larr[-1] < fmin or larr[0] > fmax:
                         continue
@@ -772,7 +774,12 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     except ValueError:
                         # if no baselines in the file, skip this file
                         utils.echo("No baselines from blgroup {} found in {}, skipping file for these bls".format(bi + 1, data_files[j][k]), verbose=verbose)
+                        # check that the current night is not present in any of the baselines in the current blgroup.
+                        if np.all([j not in list(bl_nightly_dict.keys()) for bl_nightly_dict in blgroup]):
+                            utils.echo(f"The current night {j} is not present in any of the baseline dicts in the current blgroup.", verbose=verbose)
                         continue
+                    data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
+                    data.phase_type = 'drift'
 
                     # load calibration
                     if input_cals is not None:
