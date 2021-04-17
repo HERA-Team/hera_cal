@@ -15,7 +15,7 @@ ap = parser.parse_args()
 if ap.mode == 'clean':
     filter_kwargs = {'window': ap.window,
                      'maxiter': ap.maxiter, 'edgecut_hi': ap.edgecut_hi,
-                     'edgecut_low': ap.edgecut_low, 'min_dly': ap.min_dly, 'gain': ap.gain}
+                     'edgecut_low': ap.edgecut_low, 'gain': ap.gain}
     if ap.window == 'tukey':
         filter_kwargs['alpha'] = ap.alpha
     avg_red_bllens = False
