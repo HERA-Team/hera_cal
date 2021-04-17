@@ -192,7 +192,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         data_infilename: filename of the data to be calibrated.
         data_outfilename: filename of the resultant data file with the new calibration and flags.
         new_calibration: filename of the calfits file (or a list of filenames) for the calibration
-        old_calibration: filename of the calfits file (or a list of filenames) for the calibration	        old_calibration: filename of the calfits file for the calibration
+            to be applied, along with its new flags (if any).
+        old_calibration: filename of the calfits file (or a list of filenames) for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
         flag_file: optional path to file containing flags to be ORed with flags in input data. Must have
             the same shape as the data.
@@ -368,20 +369,13 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 # and also allows us to compute redundant averaged vis in flagged channels (in case flags are spurious).
                 if no_red_weights:
                     redundant_weights = copy.deepcopy(data_nsamples)
-                unflagged = []
-                for bl in data_flags:
-                    if exclude_from_redundant_mode == 'data':
-                        if np.all(data_flags[bl]):
-                            redundant_weights[bl][:] = 0.
-                        else:
-                            unflagged.append(bl[:-1])
-                    elif exclude_from_redundant_mode == 'yaml' and ex_ants is not None:
-                        if bl[0] in ex_ants or bl[1] in ex_ants:
-                            redundant_weights[bl][:] = 0.
-                        else:
-                            unflagged.append(bl[:-1])
-                    else:
-                        unflagged.append(bl[:-1])
+                    for bl in data_flags:
+                        if exclude_from_redundant_mode == 'data':
+                            if np.all(data_flags[bl]):
+                                redundant_weights[bl][:] = 0.
+                        elif exclude_from_redundant_mode == 'yaml' and ex_ants is not None:
+                            if bl[0] in ex_ants or bl[1] in ex_ants:
+                                redundant_weights[bl][:] = 0.
                 # redundantly average
                 utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
                                   reds=all_red_antpairs, wgts=redundant_weights, inplace=True,
@@ -431,32 +425,24 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             # and also allows us to compute redundant averaged vis in flagged channels (in case flags are spurious).
             if no_red_weights:
                 redundant_weights = copy.deepcopy(data_nsamples)
-            unflagged = []
-            for bl in data_flags:
-                if exclude_from_redundant_mode == 'data':
+                for bl in data_flags:
                     if np.all(data_flags[bl]):
-                        redundant_weights[bl][:] = 0.
-                    else:
-                        unflagged.append(bl[:-1])
-                elif exclude_from_redundant_mode == 'yaml' and ex_ants is not None:
-                    if bl[0] in ex_ants or bl[1] in ex_ants:
-                        redundant_weights[bl][:] = 0.
-                    else:
-                        unflagged.append(bl[:-1])
-                else:
-                    unflagged.append(bl[:-1])
-
+                        if exclude_from_redundant_mode == 'data':
+                            if np.all(data_flags[bl]):
+                                redundant_weights[bl][:] = 0.
+                        elif exclude_from_redundant_mode == 'yaml' and ex_ants is not None:
+                            if bl[0] in ex_ants or bl[1] in ex_ants:
+                                redundant_weights[bl][:] = 0.
             for red_chunk in range(redundant_groups):
                 red_antpairs = []
                 reds_data_bls = []
                 for grp in reds_data:
                     # trim group to only include baselines with redundant weights not equal to zero.
-                    if dont_red_average_flagged_data:
-                        grp = [ap for ap in grp if ap in unflagged or ap[::-1] in unflagged]
+                    grp0 = grp[0]
+                    if dont_red_average_flagged_data and redundant_groups > 1:
+                        grp = [ap for ap in grp if np.any(np.asarray([~np.isclose(redundant_weights[ap + (pol,)], 0.0) for pol in data_flags.pols()]))]
                     # only include groups with more elements then redundant groups!
                     if len(grp) >= redundant_groups:
-                        # use first unflagged baseline for group key.
-                        grp0 = grp[0]
                         red_antpairs.append(grp[red_chunk:: redundant_groups])
                         reds_data_bls.append(grp0)
                 data_red, flags_red, nsamples_red = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
