@@ -19,23 +19,21 @@ if ap.mode == 'clean':
     if ap.window == 'tukey':
         filter_kwargs['alpha'] = ap.alpha
     avg_red_bllens = False
-    skip_gaps_larger_then_filter_period = False
     skip_flagged_edges = False
-    max_contiguous_edge_flags = 10000
     flag_model_rms_outliers = False
 elif ap.mode == 'dayenu':
     filter_kwargs = {}
     avg_red_bllens = True
-    skip_gaps_larger_then_filter_period = False
-    max_contiguous_edge_flags = 10000
-    flag_model_rms_outliers = False
+    filter_kwargs['skip_gaps_larger_then_filter_period'] = False
+    filter_kwargs['max_contiguous_edge_flags'] = 10000
+    filter_kwargs['flag_model_rms_outliers'] = False
 elif ap.mode == 'dpss_leastsq':
     filter_kwargs = {}
     avg_red_bllens = True
-    skip_gaps_larger_then_filter_period = True
+    filter_kwargs['skip_gaps_larger_then_filter_period'] = True
     skip_flagged_edges = True
-    max_contiguous_edge_flags = 1
-    flag_model_rms_outliers = True
+    filter_kwargs['max_contiguous_edge_flags'] = 1
+    filter_kwargs['flag_model_rms_outliers'] = True
 else:
     raise ValueError(f"mode {mode} not supported.")
 
@@ -54,15 +52,12 @@ delay_filter.load_delay_filter_and_write(ap.datafilelist, calfile_list=ap.calfil
                                          clobber=ap.clobber, write_cache=ap.write_cache, external_flags=ap.external_flags,
                                          read_cache=ap.read_cache, mode=ap.mode, overwrite_flags=ap.overwrite_flags,
                                          factorize_flags=ap.factorize_flags, time_thresh=ap.time_thresh,
-                                         max_contiguous_edge_flags=max_contiguous_edge_flags,
                                          add_to_history=' '.join(sys.argv), polarizations=ap.polarizations,
                                          verbose=ap.verbose, skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
                                          flag_yaml=ap.flag_yaml, Nbls_per_load=ap.Nbls_per_load,
-                                         skip_contiguous_flags=skip_gaps_larger_then_filter_period,
                                          skip_flagged_edges=skip_flagged_edges,
                                          filled_outfilename=ap.filled_outfilename,
                                          CLEAN_outfilename=ap.CLEAN_outfilename,
                                          standoff=ap.standoff, horizon=ap.horizon, tol=ap.tol,
                                          skip_wgt=ap.skip_wgt, min_dly=ap.min_dly, zeropad=ap.zeropad,
-                                         flag_model_rms_outliers=flag_model_rms_outliers,
                                          clean_flags_in_resid_flags=True, **filter_kwargs)
