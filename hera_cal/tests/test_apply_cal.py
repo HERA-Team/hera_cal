@@ -345,21 +345,6 @@ class Test_Update_Cal(object):
         uncalibrated_file_homogenous_nsamples_flags = os.path.join(tmp_path, 'homogenous_nsamples_flags.uvh5')
         hdt.write_uvh5(uncalibrated_file_homogenous_nsamples_flags)
 
-        # prepare calibrated file where all baselines have the same nsamples and the same flagging pattern if they are not all flagged.
-        hdt = io.HERAData(uncalibrated_file)
-        d, f, n = hdt.read()
-        for bl in f:
-            if not np.all(f[bl]):
-                bl_not_flagged = bl
-                break
-        for bl in f:
-            if not np.all(f[bl]):
-                f[bl] = f[bl_not_flagged]
-                n[bl] = n[bl_not_flagged]
-        hdt.update(data=d, flags=f, nsamples=n)
-        uncalibrated_file_homogenous_nsamples_flags = os.path.join(tmp_path, 'homogenous_nsamples_flags.uvh5')
-        hdt.write_uvh5(uncalibrated_file_homogenous_nsamples_flags)
-
         # check not implemented error for partial i/o with redundant_groups > 1
         with pytest.raises(NotImplementedError):
             ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
