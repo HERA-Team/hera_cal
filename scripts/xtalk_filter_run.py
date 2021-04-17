@@ -21,24 +21,20 @@ if ap.mode == 'clean':
     if ap.window == 'tukey':
         filter_kwargs['alpha'] = ap.alpha
     avg_red_bllens = False
-    skip_gaps_larger_then_filter_period = False
-    skip_flagged_edges = False
-    max_contiguous_edge_flags = 10000
-    flag_model_rms_outliers = False
 elif ap.mode == 'dayenu':
     filter_kwargs = {}
     avg_red_bllens = True
-    max_contiguous_edge_flags = 10000
-    skip_gaps_larger_then_filter_period = False
-    skip_flagged_edges = False
-    flag_model_rms_outliers = False
+    filter_kwargs['max_contiguous_edge_flags'] = 10000
+    filter_kwargs['skip_contiguous_flags'] = False
+    filter_kwargs['skip_flagged_edges'] = False
+    filter_kwargs['flag_model_rms_outliers'] = False
 elif ap.mode == 'dpss_leastsq':
     filter_kwargs = {}
     avg_red_bllens = True
-    skip_gaps_larger_then_filter_period = True
-    skip_flagged_edges = True
-    max_contiguous_edge_flags = 1
-    flag_model_rms_outliers = True
+    filter_kwargs['skip_contiguous_flags'] = True
+    filter_kwargs['skip_flagged_edges'] = True
+    filter_kwargs['max_contiguous_edge_flags'] = 1
+    filter_kwargs['flag_model_rms_outliers'] = True
 filter_kwargs['zeropad'] = a.zeropad
 
 if args.cornerturnfile is not None:
@@ -58,13 +54,10 @@ xtalk_filter.load_xtalk_filter_and_write(ap.datafilelist, calfile_list=ap.calfil
                                          clobber=ap.clobber, write_cache=ap.write_cache, CLEAN_outfilename=ap.CLEAN_outfilename,
                                          read_cache=ap.read_cache, mode=ap.mode, res_outfilename=ap.res_outfilename,
                                          factorize_flags=ap.factorize_flags, time_thresh=ap.time_thresh,
-                                         max_contiguous_edge_flags=ap.max_contiguous_edge_flags,
                                          add_to_history=' '.join(sys.argv), verbose=ap.verbose,
-                                         skip_flagged_edges=ap.skip_flagged_edges,
                                          tol=ap.tol, max_frate_coeffs=ap.max_frate_coeffs,
                                          flag_yaml=ap.flag_yaml, Nbls_per_load=ap.Nbls_per_load,
                                          external_flags=ap.external_flags, inpaint=ap.inpaint, frate_standoff=ap.frate_standoff,
-                                         skip_contiguous_flags=skip_gaps_larger_then_filter_period,
                                          overwrite_flags=ap.overwrite_flags, skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
                                          flag_model_rms_outliers=flag_model_rms_outliers,
                                          clean_flags_in_resid_flags=True, **filter_kwargs)
