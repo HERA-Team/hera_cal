@@ -25,7 +25,7 @@ elif ap.mode == 'dayenu':
     filter_kwargs = {}
     avg_red_bllens = True
     filter_kwargs['max_contiguous_edge_flags'] = 10000
-    filter_kwargs['skip_gaps_larger_then_filter_period'] = False
+    filter_kwargs['skip_contiguous_flags'] = False
     filter_kwargs['skip_flagged_edges'] = False
     filter_kwargs['flag_model_rms_outliers'] = False
 elif ap.mode == 'dpss_leastsq':
@@ -37,7 +37,7 @@ elif ap.mode == 'dpss_leastsq':
     filter_kwargs['flag_model_rms_outliers'] = True
 
 
-if args.cornerturnfile is not None:
+if ap.cornerturnfile is not None:
     baseline_list = io.baselines_from_filelist_position(filename=ap.cornerturnfile, filelist=ap.datafilelist)
 else:
     baseline_list = None
