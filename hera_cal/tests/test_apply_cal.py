@@ -330,64 +330,6 @@ class Test_Update_Cal(object):
             ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
                          gain_convention='divide', redundant_average=True, nbl_per_load=2, clobber=True)
 
-        # now test throwing away yaml flags.
-        from hera_qm.utils import apply_yaml_flags
-        from hera_qm.metrics_io import read_a_priori_ant_flags
-        flag_yaml = os.path.join(DATA_PATH, '2458043.yaml')
-
-        hd_calibrated = io.HERAData(uncalibrated_file)
-        d, f, n = hd_calibrated.read()
-        reds = redcal.get_reds(hd_calibrated.antpos, bl_error_tol=1.0, include_autos=True)
-        reds = [[bl[:2] for bl in redgrp] for redgrp in reds]
-
-        hc = io.HERACal(calfile)
-        hc.read()
-        hc = apply_yaml_flags(hc, flag_yaml, ant_indices_only=True)
-        g, gf, _, _ = hc.build_calcontainers()
-        ac.calibrate_in_place(data=d, new_gains=g, cal_flags=gf, data_flags=f)
-        hd_calibrated.update(flags=f, data=d)
-        hd_calibrated = apply_yaml_flags(hd_calibrated, flag_yaml, throw_away_flagged_ants=True, ant_indices_only=True)
-        d, f, n = hd_calibrated.build_datacontainers()
-        wgts = deepcopy(n)
-        hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False, wgts=wgts, propagate_flags=True)
-        # compare to apply_cal throwing away flagged antennas.
-        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, nbl_per_load=None, a_priori_flags_yaml=flag_yaml, clobber=True,
-                     gain_convention='divide', redundant_average=True, dont_red_average_flagged_data=True, exclude_from_redundant_mode='yaml')
-        # now load in the calibrated redundant data.
-        hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
-        hda_calibrated_with_apply_cal.read()
-        assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_with_apply_cal.nsample_array))
-        assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
-        assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
-
-        # now test entirely flagging yaml antennas
-        # with nbl_per_load = 1
-        hd_calibrated = io.HERAData(uncalibrated_file)
-        d, f, n = hd_calibrated.read()
-        reds = redcal.get_reds(hd_calibrated.antpos, bl_error_tol=1.0, include_autos=True)
-        reds = [[bl[:2] for bl in redgrp] for redgrp in reds]
-        wgts = deepcopy(n)
-        ex_ants = read_a_priori_ant_flags(flag_yaml, ant_indices_only=True)
-        for bl in wgts:
-            if bl[0] in ex_ants or bl[1] in ex_ants:
-                wgts[bl][:] = 0.
-        hc = io.HERACal(calfile)
-        hc.read()
-        hc = apply_yaml_flags(hc, flag_yaml, ant_indices_only=True)
-        g, gf, _, _ = hc.build_calcontainers()
-        ac.calibrate_in_place(data=d, new_gains=g, cal_flags=gf, data_flags=f)
-        hd_calibrated.update(flags=f, data=d)
-        hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False, wgts=wgts, propagate_flags=True)
-        # compare to apply_cal throwing away flagged antennas.
-        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, nbl_per_load=3, a_priori_flags_yaml=flag_yaml, clobber=True,
-                     gain_convention='divide', redundant_average=True, dont_red_average_flagged_data=False, exclude_from_redundant_mode='yaml')
-        # now load in the calibrated redundant data.
-        hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
-        hda_calibrated_with_apply_cal.read()
-        assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_with_apply_cal.nsample_array))
-        assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
-        assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
-
         # prepare calibrated file where all baselines have the same nsamples and the same flagging pattern if they are not all flagged.
         hdt = io.HERAData(uncalibrated_file)
         d, f, n = hdt.read()
