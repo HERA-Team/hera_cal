@@ -1182,7 +1182,8 @@ class VisClean(object):
             return flags
 
     def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
-                            partial_write=False, clobber=False, add_to_history='', extra_attrs={}, prefix='clean', **kwargs):
+                            partial_write=False, clobber=False, add_to_history='',
+                            include_flags_in_model=False, extra_attrs={}, prefix='clean', **kwargs):
         '''
         Method for writing data products.
 
@@ -1199,6 +1200,10 @@ class VisClean(object):
             clobber: if True, overwrites existing file at the outfilename
             add_to_history: string appended to the history of the output file
             extra_attrs : additional UVData/HERAData attributes to update before writing
+            include_flags_in_model : If True, include the clean_resid_flags in the model.
+                                     this is useful if we want to produce a model dataset
+                                     that is lstbinned in the same way as the data without filtering
+                                     so that we can validate our lstbin and filter strategy.
             prefix : string, the prefix for the datacontainers to write.
             kwargs : extra kwargs to pass to UVData.write_*() call
         '''
@@ -1214,7 +1219,11 @@ class VisClean(object):
                     if mode == 'residual':
                         data_out, flags_out = getattr(self, prefix + '_resid'), getattr(self, prefix + '_resid_flags')
                     elif mode == 'CLEAN':
-                        data_out, flags_out = getattr(self, prefix + '_model'), getattr(self, prefix + '_flags')
+                        if include_flags_in_model:
+                            flag_prefix = prefix + '_resid_flags'
+                        else:
+                            flag_prefix = prefix + '_flags'
+                        data_out, flags_out = getattr(self, prefix + '_model'), getattr(self, flag_prefix)
                     elif mode == 'filled':
                         data_out, flags_out = self.get_filled_data()
                     if partial_write:
@@ -1743,6 +1752,10 @@ def _filter_argparser():
     ap.add_argument("--Nbls_per_load", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
     ap.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     ap.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
+    ap.add_argument("--clean_flags_in_resid_flags", default=False, action="store_true", help="include fully flagged integrations / channels that appear in clean_flags"
+                                                                                             "in the written resid_flags.")
+    ap.add_argument("--include_flags_in_model", default=False, action="store_true", help="include original flags in model files output to CLEAN_outfilename."
+                                                                                         "Used for simulating effects of LSTbinning non-uniform flags on smooth components.")
     ap.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
     ap.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
     ap.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")

@@ -95,6 +95,7 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
                                 read_cache=False, write_cache=False, avg_red_bllens=False,
                                 factorize_flags=False, time_thresh=0.05, external_flags=None,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
+                                include_flags_in_model=False, clean_flags_in_resid_flags=False,
                                 clobber=False, add_to_history='', polarizations=None,
                                 skip_flagged_edges=False, overwrite_flags=False,
                                 flag_yaml=None, **filter_kwargs):
@@ -128,6 +129,9 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
             with CLEAN models wherever possible
+        include_flags_in_model: if True, include resid_flags in the model output written to CLEAN_outfilename.
+        clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
+                                    default is False.
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
         polarizations: list of polarizations to include and write.
@@ -179,10 +183,11 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
             if factorize_flags:
                 df.factorize_flags(time_thresh=time_thresh, inplace=True)
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+                                skip_flagged_edges=skip_flagged_edges, clean_flags_in_resid_flags=clean_flags_in_resid_flags,
+                                **filter_kwargs)
             df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
-                                   clobber=clobber, add_to_history=add_to_history,
+                                   clobber=clobber, add_to_history=add_to_history, include_flags_in_model=include_flags_in_model,
                                    extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': df.hd.freq_array})
             df.hd.data_array = None  # this forces a reload in the next loop
 
