@@ -21,6 +21,37 @@ from . import apply_cal
 from .datacontainer import DataContainer
 
 
+def baselines_same_across_nights(data_list):
+    """
+    Check whether the sets of baselines in the datacontainers are consistent.
+
+    Parameters
+    ----------
+    data_list: list of data-container dictionaries
+               list of data-containers holding data for different nights.
+
+    Returns
+    -------
+    same_across_nights: bool
+        True, if all datacontainers in data_list have the same baselines.
+        False if they do not.
+    """
+    # check whether baselines are the same across all nights
+    # by checking that every baseline occurs in data_list the same number times.
+    same_across_nights = False
+    baseline_counts = {}
+    for dlist in data_list:
+        for k in dlist:
+            if k in baseline_counts:
+                baseline_counts[k] += 1
+            elif utils.reverse_bl(k) in baseline_counts:
+                baseline_counts[utils.reverse_bl(k)] += 1
+            else:
+                baseline_counts[k] = 1
+    same_across_nights = np.all([baseline_counts[k] == baseline_counts[bl] for bl in baseline_counts])
+    return same_across_nights
+
+
 def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None, begin_lst=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
             sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, antpos=None, rephase=False,
@@ -39,7 +70,8 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     flags_list : type=list, list of DataContainer dictionaries holding flags for each data dict
         in data_list. Flagged data do not contribute to the average of an LST bin.
     nsamples_list : type=list. List of DataContainer dictionaries holding nsamples for each data dict
-        in data_list. Default is None
+        in data_list. nsamples_list values are used to weight the data being averaged
+        when median=False. Default is None -> all non-flagged nsamples are set to unity.
         median=False not supported if nsamples_list is not None!
     dlst : type=float, delta-LST spacing for lst_grid. If None, will use the delta-LST of the first
         array in lst_list.
@@ -69,7 +101,9 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     verbose : type=bool, if True report feedback to stdout
     bl_list : optional list of antenna pairs that includes baselines that may not be in the data for the chunk of lsts
               being processed but may be present in other lst chunks.
-              baselines not in data will be spoofed in the average to keep baselines in lst-averaged files.
+              baselines not in data will be replaced with completely flagged
+              placeholder data in the average to keep the sets of baselines the same across
+              different LST-chunks. Placeholder data has
               flags set to True, nsamples set to zero, data set to zero
               consistent across all lst bins.
               DOES NOT ACCEPT ANTPAIRPOLS!
@@ -95,17 +129,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     Ntimes, Nfreqs = data_list[0][list(data_list[0].keys())[0]].shape
     # check whether baselines are the same across all nights
     # by checking that every baseline occurs in data_list the same number times.
-    baselines_same_across_nights = False
-    baseline_counts = {}
-    for dlist in data_list:
-        for k in dlist:
-            if k in baseline_counts:
-                baseline_counts[k] += 1
-            elif utils.reverse_bl(k) in baseline_counts:
-                baseline_counts[utils.reverse_bl(k)] += 1
-            else:
-                baseline_counts[k] = 1
-    baselines_same_across_nights = np.all([baseline_counts[k] == baseline_counts[bl] for bl in baseline_counts])
+    bls_same_across_nights = baselines_same_across_nights(data_list)
 
     # get dlst if not provided
     if dlst is None:
@@ -221,28 +245,33 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     else:
                         flags[key][ind].append(flags_list[i][key][k])
                     if nsamples_list is None:
-                        nsamples[key][ind].append(np.ones_like(d[key][k], np.int))
+                        nsamples[key][ind].append(np.ones_like(d[key][k], np.int8))
                     else:
                         nsamples[key][ind].append(nsamples_list[i][key][k])
+
         # add in spoofed baselines to keep baselines in different LST files consistent.
         if bl_list is not None:
             for antpair in bl_list:
                 for pol in pols:
                     key = antpair + (pol,)
-                    if key not in data:
-                        if (key[0] != key[1] and utils.reverse_bl(key) not in data) or key[0] == key[1]:
-                            # last part lets us spoof ne and en for autocorrs.
+                    if key not in data and ((key[0] != key[1] and utils.reverse_bl(key) not in data) or key[0] == key[1]):
+                            # last part lets us spoof ne and en for autocorrs. If we dont include it, only en xor ne will be spoofed.
                             nsamples[key] = odict({ind: [] for ind in range(len(lst_grid))})
                             data[key] = odict({ind: [] for ind in range(len(lst_grid))})
                             flags[key] = odict({ind: [] for ind in range(len(lst_grid))})
 
+                    # Since different nights have different sets of baselines and different LST bins have different sets of nights,
+                    # it is possible to get a baseline that appears in a subset of the LSTs within an LST chunk
+                    # (for example, a baseline that exists in one of the nights that only contained a subset of
+                    # the LSTs in the LST chunk being processed).
+                    # The following lines address this case.
                     for ind in range(len(lst_grid)):
                         if ind not in nsamples[key]:
                             nsamples[key][ind] = []
                             flags[key][ind] = []
                             data[key][ind] = []
                         if len(nsamples[key][ind]) == 0:
-                            nsamples[key][ind].append(np.zeros(Nfreqs))
+                            nsamples[key][ind].append(np.zeros(Nfreqs, np.int8))
                             flags[key][ind].append(np.ones(Nfreqs, dtype=bool))
                             data[key][ind].append(np.zeros(Nfreqs, dtype=complex))
 
@@ -251,9 +280,9 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         # use only lst_grid bins that have data in them
         lst_bins = lst_grid[sorted(all_lst_indices)]
     else:
-        # keep all lst_grid bins and fill empty ones with unity data and mark as flagged
+        # keep all lst_grid bins and fill empty ones with zero data and mark as flagged
         for index in range(len(lst_grid)):
-            if index in all_lst_indices and baselines_same_across_nights:
+            if index in all_lst_indices and bls_same_across_nights:
                 continue
             else:
                 for key in list(data.keys()):
@@ -262,7 +291,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     if index not in data[key]:
                         data[key][index] = [np.zeros(Nfreqs, np.complex)]
                         flags[key][index] = [np.ones(Nfreqs, np.bool)]
-                        nsamples[key][index] = [np.zeros(Nfreqs, np.int)]
+                        nsamples[key][index] = [np.zeros(Nfreqs, np.int8)]
 
         # use all LST bins
         lst_bins = lst_grid
@@ -333,12 +362,15 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
 
             # take bin average: real and imag separately
             if median:
-                # for median to account for varying nsamples, copy each day by nsamps
                 real_avg.append(np.nanmedian(d.real, axis=0))
                 imag_avg.append(np.nanmedian(d.imag, axis=0))
             else:
-                # for mean ot account for varying nsamples, take nsamples weighted sum.
+                # for mean to account for varying nsamples, take nsamples weighted sum.
                 # (inverse variance weighted sum).
+                isfinite = np.isfinite(d)
+                d[~isfinite] = 0.0
+                n[~isfinite] = 0.0
+
                 resum = np.asarray([np.sum((d.real[:, chan] * n[:, chan])[np.isfinite(d.real[:, chan])]) for chan in range(d.shape[1])])
                 re_nsum = np.asarray([np.sum((n[np.isfinite(d.real[:, chan]), chan])) for chan in range(d.shape[1])])
                 imsum = np.asarray([np.sum((d.imag[:, chan] * n[:, chan])[np.isfinite(d.imag[:, chan])]) for chan in range(d.shape[1])])
