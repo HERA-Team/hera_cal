@@ -16,15 +16,14 @@ if args.cornerturnfile is not None:
 else:
     baseline_list = None
 
-if len(baseline_list) > 0:
-    frf.time_avg_data_and_write(
-                                flag_output=args.flag_output,
-                                input_data_list=args.input_data_list,
-                                baseline_list=baseline_list,
-                                output_data=args.output_data,
-                                t_avg=args.t_avg, rephase=args.rephase,
-                                # wgt_by_nsample is default True in frf.time_avg_data_and_write
-                                # for this reason, the argparser requests the negation.
-                                filetype=args.filetype,
-                                wgt_by_nsample=not(args.dont_wgt_by_nsample),
-                                clobber=args.clobber, verbose=args.verbose)
+frf.time_avg_data_and_write(
+                            flag_output=args.flag_output,
+                            input_data_list=args.input_data_list,
+                            baseline_list=baseline_list,
+                            output_data=args.output_data,
+                            t_avg=args.t_avg, rephase=args.rephase,
+                            # wgt_by_nsample is default True in frf.time_avg_data_and_write
+                            # for this reason, the argparser requests the negation.
+                            filetype=args.filetype,
+                            wgt_by_nsample=not(args.dont_wgt_by_nsample),
+                            clobber=args.clobber, verbose=args.verbose)
