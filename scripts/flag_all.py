@@ -27,11 +27,11 @@ hd.read()
 hd.flag_array[:] = True
 
 # fill data with zeros.
-if ap.fill_data_with_zeros:
+if args.fill_data_with_zeros:
     hd.data_array[:] = 0.0 + 0.0j
 
 # fill nsamples with zeros.
-if ap.fill_nsamples_with_zeros:
+if args.fill_nsamples_with_zeros:
     hd.nsample_array[:] = 0
 
 # Write data
