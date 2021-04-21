@@ -672,12 +672,12 @@ def tophat_frfilter_argparser(mode='clean'):
     '''
     ap = vis_clean._filter_argparser()
     filt_options = ap.add_argument_group(title='Options for the fr-filter')
-    ap.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
     ap.add_argument("--frac_frate_sky_max", type=float, default=1.0, help="Fraction of maximum sky-fringe-rate to interpolate / filter.")
     ap.add_argument("--frate_standoff", type=float, default=0.0, help="Standoff in fringe-rate to filter [mHz].")
     ap.add_argument("--min_frate", type=float, default=0.025, help="Minimum fringe-rate to filter [mHz].")
     ap.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
                                                                                   "Providing these overrides the sky-based fringe-rate determination! Default is None.")
+    ap.add_argument("--skip_autos", default=False, action="store_true", help="Exclude autos from filtering.")
     return ap
 
 
@@ -688,7 +688,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
                                    res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                    clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
                                    skip_flagged_edges=False, overwrite_flags=False,
-                                   flag_yaml=None,
+                                   flag_yaml=None, skip_autos=False,
                                    clean_flags_in_resid_flags=True, **filter_kwargs):
     '''
     A tophat fr-filtering method that only simultaneously loads and writes user-provided
@@ -724,6 +724,8 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
         skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
         overwrite_flags : bool, if true reset data flags to False except for flagged antennas.
         flag_yaml: path to manual flagging text file.
+        skip_autos: bool, if true, exclude autocorrelations from filtering. Default is False.
+                 autos will still be saved in the resides as zeros, as the models as the data (with original flags).
         clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
                                     default is True.
         filter_kwargs: additional keyword arguments to be passed to FRFilter.run_tophat_frfilter()
@@ -771,8 +773,29 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
                 frfil.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
             if factorize_flags:
                 frfil.factorize_flags(time_thresh=time_thresh, inplace=True)
-            frfil.run_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                      skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+            to_filter = frfil.data.keys()
+            if skip_autos:
+                to_filter = [bl for bl in to_filter if bl[0] != bl[1]]
+            if len(to_filter) > 0:
+                frfil.run_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                                          skip_flagged_edges=skip_flagged_edges, to_filter=to_filter, **filter_kwargs)
+            else:
+                frfil.clean_data = DataContainer({})
+                frfil.clean_flags = DataContainer({})
+                frfil.clean_resid = DataContainer({})
+                frfil.clean_resid_flags = DataContainer({})
+                frfil.clean_model = DataContainer({})
+            # put autocorr data into filtered data containers if skip_autos = True.
+            # so that it can be written out into the filtered files.
+            if skip_autos:
+                for bl in frfil.data.keys():
+                    if bl[0] == bl[1]:
+                        frfil.clean_data[bl] = frfil.data[bl]
+                        frfil.clean_flags[bl] = frfil.flags[bl]
+                        frfil.clean_resid[bl] = frfil.data[bl]
+                        frfil.clean_model[bl] = np.zeros_like(frfil.data[bl])
+                        frfil.clean_resid_flags[bl] = frfil.flags[bl]
+
             frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                       filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
                                       clobber=clobber, add_to_history=add_to_history,

@@ -1697,6 +1697,7 @@ def _filter_argparser():
     ap.add_argument("--flag_yaml", default=None, type=str, help="path to a flagging yaml containing apriori antenna, freq, and time flags.")
     ap.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter.")
     ap.add_argument("--verbose", default=False, action="store_true", help="Lots of text.")
+    ap.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
     # Arguments for CLEAN. Not used in linear filtering methods.
     clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\

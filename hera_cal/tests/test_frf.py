@@ -397,6 +397,8 @@ class Test_FRFilter(object):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, 'temp.h5')
+        CLEAN_outfilename = os.path.join(tmp_path, 'temp_clean.h5')
+        filled_outfilename = os.path.join(tmp_path, 'temp_filled.h5')
         frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -443,6 +445,29 @@ class Test_FRFilter(object):
                     assert not np.all(np.isclose(d[bl], 0.))
             np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
             os.remove(outfilename)
+        # test skip_autos
+        frf.load_tophat_frfilter_and_write(uvh5, calfile_list=None, tol=1e-4, res_outfilename=outfilename,
+                                           filled_outfilename=filled_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                                           Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl, skip_autos=True)
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        hd_original = io.HERAData(uvh5)
+        do, fo, no = hd_original.read()
+        chd = io.HERAData(CLEAN_outfilename)
+        cd, cf, cn = chd.read()
+        fhd = io.HERAData(filled_outfilename)
+        fd, ff, fn = fhd.read()
+        # test that the resids are are equal to original data.
+        for bl in do:
+            if bl[0] == bl[1]:
+                assert np.allclose(do[bl], d[bl]) # check that resid equals original data.
+                assert np.allclose(fo[bl], f[bl])
+                assert np.allclose(no[bl], n[bl])
+                assert np.allclose(cd[bl], np.zeros_like(cd[bl])) # check that all model values are zero.
+                assert np.allclose(fd[bl][~f[bl]], d[bl][~f[bl]]) # check that filled data equals original data.
+            else:
+                assert not np.allclose(do[bl], d[bl])
+                assert np.allclose(no[bl], n[bl])
 
         # prepare an input file for broadcasting flags
         input_file = os.path.join(tmp_path, 'temp_special_flags.h5')

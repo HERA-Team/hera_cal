@@ -212,5 +212,4 @@ def delay_filter_argparser():
     filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1.0 (default) is the horizon\
                               (full light travel time)')
     filt_options.add_argument("--min_dly", type=float, default=0.0, help="A minimum delay threshold [ns] used for filtering.")
-    filt_options.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations if there is a flag within this integer distance of edge.")
     return a
