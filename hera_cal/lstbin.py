@@ -255,10 +255,10 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 for pol in pols:
                     key = antpair + (pol,)
                     if key not in data and ((key[0] != key[1] and utils.reverse_bl(key) not in data) or key[0] == key[1]):
-                            # last part lets us spoof ne and en for autocorrs. If we dont include it, only en xor ne will be spoofed.
-                            nsamples[key] = odict({ind: [] for ind in range(len(lst_grid))})
-                            data[key] = odict({ind: [] for ind in range(len(lst_grid))})
-                            flags[key] = odict({ind: [] for ind in range(len(lst_grid))})
+                        # last part lets us spoof ne and en for autocorrs. If we dont include it, only en xor ne will be spoofed.
+                        nsamples[key] = odict({ind: [] for ind in range(len(lst_grid))})
+                        data[key] = odict({ind: [] for ind in range(len(lst_grid))})
+                        flags[key] = odict({ind: [] for ind in range(len(lst_grid))})
 
                     # Since different nights have different sets of baselines and different LST bins have different sets of nights,
                     # it is possible to get a baseline that appears in a subset of the LSTs within an LST chunk
