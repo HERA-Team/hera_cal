@@ -284,7 +284,7 @@ class VisClean(object):
 
         # iterate over redundancies
         for red in reds:
-            avg_vec = np.mean([self.blvecs[r] for r in red], axis=0)
+            avg_vec = np.mean([self.blvecs[r] for r in red if r in self.blvecs], axis=0)
             for r in red:
                 self.blvecs[r] = avg_vec.copy()
                 self.bllens[r] = np.linalg.norm(avg_vec) / constants.c.value
