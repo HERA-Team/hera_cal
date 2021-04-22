@@ -371,16 +371,9 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 d[~isfinite] = 0.0
                 n[~isfinite] = 0.0
 
-                resum = np.asarray([np.sum((d.real[:, chan] * n[:, chan])[np.isfinite(d.real[:, chan])]) for chan in range(d.shape[1])])
-                re_nsum = np.asarray([np.sum((n[np.isfinite(d.real[:, chan]), chan])) for chan in range(d.shape[1])])
-                imsum = np.asarray([np.sum((d.imag[:, chan] * n[:, chan])[np.isfinite(d.imag[:, chan])]) for chan in range(d.shape[1])])
-                im_nsum = np.asarray([np.sum((n[np.isfinite(d.imag[:, chan]), chan])) for chan in range(d.shape[1])])
-
-                resum[re_nsum > 0.] /= re_nsum[re_nsum > 0.]
-                imsum[im_nsum > 0.] /= im_nsum[im_nsum > 0.]
-
-                real_avg.append(resum)
-                imag_avg.append(imsum)
+                norm = np.sum(n, axis=0).clip(1e-99, np.inf)
+                real_avg.append(np.sum(d.real * n, axis=0) / norm)
+                imag_avg.append(np.sum(d.imag * n, axis=0) / norm)
 
             # get minimum bin flag
             f_min.append(np.nanmin(f, axis=0))
@@ -666,14 +659,14 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     Nbls_to_load : int, default=None, Number of baselines to load and bin simultaneously. If Nbls exceeds this
         than iterate over an outer loop until all baselines are binned. Default is to load all baselines at once.
     ignore_flags : bool, if True, ignore the flags in the input files, such that all input data in included in binning.
-    average_redundant_baselines : bool, if True, baselines that are redundant between nights will be averaged together.
-                                  When this is set to true, Nbls_to_load is interpreted as the number of redundant groups
-                                  to load simultaneously. The number of data waterfalls can be substantially larger in some
-                                  cases.
+    average_redundant_baselines : bool, if True, baselines that are redundant between and within nights will be averaged together.
+        When this is set to true, Nbls_to_load is interpreted as the number of redundant groups
+        to load simultaneously. The number of data waterfalls that are loaded can be substantially larger in some
+        cases.
     include_autos : bool, if True, include autocorrelations in redundant baseline averages.
                     default is True.
     bl_error_tol : float, tolerance within which baselines are considered redundant
-                   between nights for purposes of average_redundant_baselines.
+                   between and within nights for purposes of average_redundant_baselines.
     ex_ant_yaml_files : list of strings, optional
         list of paths of yaml files specifying antennas to flag and remove from data on each night.
     kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
@@ -730,12 +723,13 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     # (or unique baseline group if average_redundant_baselines is true)
     bl_nightly_dicts = gen_bl_nightly_dicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol,
                                             include_autos=include_autos, redundant=average_redundant_baselines, ex_ant_yaml_files=ex_ant_yaml_files)
-    # iterate over output LST files
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = len(bl_nightly_dicts) + 1
     Nblgroups = len(bl_nightly_dicts) // Nbls_to_load + 1
     blgroups = [bl_nightly_dicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
     blgroups = [blg for blg in blgroups if len(blg) > 0]
+
+    # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
         fmin = f_lst[0] - (dlst / 2 + atol)
@@ -784,7 +778,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     try:
                         bls_to_load = []
                         key_baselines = []  # map first baseline in each group to
-                        # first baseline in group on earliest night.
+                        # first baseline in group on earliest night that has the baseline.
                         reds = []
                         for bl_nightly_dict in blgroup:
                             # only load group if present in the current night.
@@ -793,8 +787,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                                 key_bl = bl_nightly_dict[np.min(list(bl_nightly_dict.keys()))][0]
                                 key_baselines.append(key_bl)
                                 reds.append(bl_nightly_dict[j])
-                                for bl in bl_nightly_dict[j]:
-                                    bls_to_load.append(bl)
+                                bls_to_load.extend(bl_nightly_dict[j])
+                                
                         data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
                         # if we want to throw away data associated with flagged antennas, throw it away.
                         if ex_ant_yaml_files is not None:
@@ -1036,7 +1030,6 @@ def gen_bl_nightly_dicts(hds, bl_error_tol=1.0, include_autos=True, redundant=Fa
 
     Parameters:
     -----------
-
     hds : list of HERAData objects. Can have no data loaded (preferable) and should refer to single files.
     bl_error_tol : float (meters), optional. baselines whose vector difference are within this tolerance are considered
                    redundant. Default is 1.0 meter.
