@@ -460,11 +460,11 @@ class Test_FRFilter(object):
         # test that the resids are are equal to original data.
         for bl in do:
             if bl[0] == bl[1]:
-                assert np.allclose(do[bl], d[bl]) # check that resid equals original data.
+                assert np.allclose(do[bl], d[bl])  # check that resid equals original data.
                 assert np.allclose(fo[bl], f[bl])
                 assert np.allclose(no[bl], n[bl])
-                assert np.allclose(cd[bl], np.zeros_like(cd[bl])) # check that all model values are zero.
-                assert np.allclose(fd[bl][~f[bl]], d[bl][~f[bl]]) # check that filled data equals original data.
+                assert np.allclose(cd[bl], np.zeros_like(cd[bl]))  # check that all model values are zero.
+                assert np.allclose(fd[bl][~f[bl]], d[bl][~f[bl]])  # check that filled data equals original data.
             else:
                 assert not np.allclose(do[bl], d[bl])
                 assert np.allclose(no[bl], n[bl])
