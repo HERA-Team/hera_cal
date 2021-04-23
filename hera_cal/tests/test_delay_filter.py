@@ -187,13 +187,15 @@ class Test_DelayFilter(object):
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         resid_outfilename = os.path.join(tmp_path, 'temp_res.h5') # file to write to resid outfile.
         CLEAN_outfilename = os.path.join(tmp_path, 'temp_model.h5') # file to write smooth model components.
-        df.load_delay_filter_and_write(uvh5, res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+        df.load_delay_filter_and_write(uvh5, res_outfilename=resid_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                        tol=1e-4, clobber=True, Nbls_per_load=1, mode='clean',
                                        avg_red_bllens=True, include_flags_in_model=True)
 
         hdr = io.HERAData(resid_outfilename)
         hdc = io.HERAData(CLEAN_outfilename)
 
+        dc, fc, nc = hdc.read()
+        dr, fr, nr = hdr.read()
         # check that flags in resid are same as flags in model components.
         for bl in fr:
             assert np.allclose(fr[bl], fc[bl])
