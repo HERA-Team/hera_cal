@@ -185,8 +185,8 @@ class Test_DelayFilter(object):
         # flags are the same.
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-        resid_outfilename = os.path.join(tmp_path, 'temp_res.h5') #  file to write to resid outfile.
-        CLEAN_outfilename = os.path.join(tmp_path, 'temp_model.h5') #  file to write smooth model components.
+        resid_outfilename = os.path.join(tmp_path, 'temp_res.h5')  # file to write to resid outfile.
+        CLEAN_outfilename = os.path.join(tmp_path, 'temp_model.h5')  # file to write smooth model components.
         df.load_delay_filter_and_write(uvh5, res_outfilename=resid_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                        tol=1e-4, clobber=True, Nbls_per_load=1, mode='clean',
                                        avg_red_bllens=True, include_flags_in_model=True)
