@@ -7,8 +7,7 @@
 
 import sys
 import argparse
-from hera_cal import io, utils, redcal
-
+from hera_cal import io
 # Parse arguments
 ap = argparse.ArgumentParser(description="Completely Flag a data file.")
 ap.add_argument("infilename", type=str, help="path to visibility data to completely flag.")
