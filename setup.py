@@ -43,7 +43,7 @@ setup_args = {
                 'scripts/query_ex_ants.py', 'scripts/red_average.py',
                 'scripts/xtalk_filter_run.py', 'scripts/time_average.py',
                 'scripts/time_chunk_from_baseline_chunks_run.py', 'scripts/chunk_files.py',
-                'scripts/flag_all.py', 'scripts/throw_away_flagged_ants.py'],
+                'scripts/flag_all.py', 'scripts/throw_away_flagged_antennas.py'],
     'version': version.version,
     'package_data': {'hera_cal': data_files},
     'install_requires': [
