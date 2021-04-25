@@ -961,7 +961,7 @@ def per_antenna_modified_z_scores(metric):
     dictionary for each antenna.
     The modified Z-score is defined as:
         0.6745 * (metric - median(all_metrics))/ median_absoulte_deviation
-    
+
     Parameters:
         metric : dict
             Dictionary of metric data to compute z-score. Keys are expected to

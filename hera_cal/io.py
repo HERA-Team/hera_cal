@@ -1178,7 +1178,6 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
     '''Load miriad or uvfits files or UVData/HERAData objects into DataContainers, optionally returning
     the most useful metadata. More than one spectral window is not supported. Assumes every baseline
     has the same times present and that the times are in order.
-
     Arguments:
         input_data: data file path, or UVData/HERAData instance, or list of either strings of data
             file paths or list of UVData/HERAData instances to concatenate into a single dictionary
@@ -1189,13 +1188,11 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary filetype
             where visibilities and flags are accessed as data[(0,1)]['nn']
         read_kwargs : keyword arguments to pass to HERAData.read()
-
     Returns:
         if return_meta is True:
             (data, flags, antpos, ants, freqs, times, lsts, pols)
         else:
             (data, flags)
-
         data: DataContainer containing baseline-pol complex visibility data with keys
             like (0,1,'nn') and with shape=(Ntimes,Nfreqs)
         flags: DataContainer containing data flags
