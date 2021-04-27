@@ -7,7 +7,7 @@
 
 import sys
 import argparse
-from hera_cal import io
+from pyuvdata import UVData
 # Parse arguments
 ap = argparse.ArgumentParser(description="Completely Flag a data file.")
 ap.add_argument("infilename", type=str, help="path to visibility data to completely flag.")
@@ -19,19 +19,19 @@ ap.add_argument("--fill_nsamples_with_zeros", default=False, action="store_true"
 args = ap.parse_args()
 
 # Load data
-hd = io.HERAData(args.infilename)
-hd.read()
+uv = UVData()
+uv.read_uvh5(args.infilename)
 
 # completely flag.
-hd.flag_array[:] = True
+uv.flag_array[:] = True
 
 # fill data with zeros.
 if args.fill_data_with_zeros:
-    hd.data_array[:] = 0.0 + 0.0j
+    uv.data_array[:] = 0.0 + 0.0j
 
 # fill nsamples with zeros.
 if args.fill_nsamples_with_zeros:
-    hd.nsample_array[:] = 0
+    uv.nsample_array[:] = 0
 
 # Write data
-hd.write_uvh5(args.outfilename, clobber=args.clobber)
+uv.write_uvh5(args.outfilename, clobber=args.clobber)
