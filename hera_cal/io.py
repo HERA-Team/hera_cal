@@ -1855,7 +1855,8 @@ def throw_away_flagged_ants(infilename, outfilename, yaml_file=None, throw_away_
             Default is False.
     Returns
     -------
-        N/A
+        hd: HERAData object
+            HERAData object containing data from infilename with baselines thrown out. 
 
     """
     hd = HERAData(infilename)
@@ -1888,6 +1889,7 @@ def throw_away_flagged_ants(infilename, outfilename, yaml_file=None, throw_away_
     history_string += f"Also threw out {antpairs_not_to_keep} because data was fully flagged.\n"
     hd.history += version.history_string(notes=history_string)
     hd.write_uvh5(outfilename, clobber=clobber)
+    return hd
 
 
 def throw_away_flagged_ants_parser():
