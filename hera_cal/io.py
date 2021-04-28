@@ -20,6 +20,7 @@ import glob
 from pyuvdata.utils import POL_STR2NUM_DICT
 from . import redcal
 import argparse
+import version
 
 try:
     import aipy
@@ -1870,13 +1871,22 @@ def throw_away_flagged_ants(infilename, outfilename, yaml_file=None, throw_away_
     # Write data
     if throw_away_fully_flagged_data_baselines:
         antpairs_to_keep = []
+        antpairs_not_to_keep = []
         for antpair in hd.get_antpairs():
             fully_flagged = True
             for pol in hd.pols:
                 fully_flagged = fully_flagged & np.all(hd.get_flags(antpair + (pol, )))
             if not fully_flagged:
                 antpairs_to_keep.append(antpair)
+            else:
+                antpairs_not_to_keep.append(antpair)
         hd.select(bls=antpairs_to_keep)
+    else:
+        antpairs_not_to_keep = None
+    # wite to history.
+    history_string = f"Threw away flagged antennas from yaml_file={a_priori_flag_yaml} using throw_away_flagged_ants.\n"
+    history_string += f"Also threw out {antpairs_not_to_keep} because data was fully flagged.\n"
+    hd.history += version.history_string(notes=history_string)
     hd.write_uvh5(outfilename, clobber=clobber)
 
 
