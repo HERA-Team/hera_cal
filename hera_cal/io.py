@@ -20,7 +20,7 @@ import glob
 from pyuvdata.utils import POL_STR2NUM_DICT
 from . import redcal
 import argparse
-import version
+from . import version
 
 try:
     import aipy
@@ -1856,7 +1856,7 @@ def throw_away_flagged_ants(infilename, outfilename, yaml_file=None, throw_away_
     Returns
     -------
         hd: HERAData object
-            HERAData object containing data from infilename with baselines thrown out. 
+            HERAData object containing data from infilename with baselines thrown out.
 
     """
     hd = HERAData(infilename)
