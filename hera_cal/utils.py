@@ -1264,7 +1264,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
         antpairs = sorted(data.antpairs())
     else:
         antpairs = data.get_antpairs()
-    reds = [[bl for bl in blg if bl in antpairs] for blg in reds]
+    reds = [[bl for bl in blg if bl in antpairs or bl[::-1] in antpairs] for blg in reds]
     reds = [blg for blg in reds if len(blg) > 0]
 
     # iterate over redundant groups and polarizations
@@ -1309,6 +1309,9 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             else:
                 blinds = data.antpair2ind(blk)
                 polind = pols.index(pol)
+                if len(blinds) == 0:
+                    blinds = data.antpair2ind(reverse_bl(blk))
+                    davg = np.conj(davg)
                 data.data_array[blinds, 0, :, polind] = davg
                 data.flag_array[blinds, 0, :, polind] = favg
                 data.nsample_array[blinds, 0, :, polind] = navg
