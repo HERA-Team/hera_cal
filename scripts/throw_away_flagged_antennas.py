@@ -12,4 +12,4 @@ from hera_cal import io
 
 ap = io.throw_away_flagged_ants_parser()
 args = ap.parse_args()
-ap = io.throw_away_flagged_ants(**vars(args))
+io.throw_away_flagged_ants(**vars(args))
