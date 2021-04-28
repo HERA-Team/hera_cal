@@ -1885,7 +1885,7 @@ def throw_away_flagged_ants(infilename, outfilename, yaml_file=None, throw_away_
     else:
         antpairs_not_to_keep = None
     # wite to history.
-    history_string = f"Threw away flagged antennas from yaml_file={a_priori_flag_yaml} using throw_away_flagged_ants.\n"
+    history_string = f"Threw away flagged antennas from yaml_file={yaml_file} using throw_away_flagged_ants.\n"
     history_string += f"Also threw out {antpairs_not_to_keep} because data was fully flagged.\n"
     hd.history += version.history_string(notes=history_string)
     hd.write_uvh5(outfilename, clobber=clobber)
