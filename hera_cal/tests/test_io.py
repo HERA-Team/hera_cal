@@ -1106,3 +1106,52 @@ def test_baselines_from_filelist_position(tmpdir):
     assert baseline_chunk == [(53, 54)]
     baseline_chunk = io.baselines_from_filelist_position(filelist_1bl[1], filelist_1bl)
     assert baseline_chunk == []
+
+
+def test_throw_away_flagged_ants_parser():
+    sys.argv = [sys.argv[0], 'input', 'output', '--yaml_file', 'test']
+    ap = io.throw_away_flagged_ants_parser()
+    args = ap.parse_args()
+    assert args.infilename == 'input'
+    assert args.outfilename == 'output'
+    assert not args.clobber
+    assert not args.throw_away_fully_flagged_data_baselines
+    assert args.yaml_file == 'test'
+
+
+def test_throw_away_flagged_ants(tmpdir):
+    strpath = tmpdir.strpath
+    inputfile = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+    outputfile = os.path.join(strpath, 'trimmed_output.uvh5')
+    yaml_file = os.path.join(DATA_PATH, '2458043.yaml')
+    hd = io.HERAData(inputfile)
+    hd.read()
+    for ant in [24, 25, 37, 38, 52]:
+        assert ant in set(hd.ant_1_array).union(set(hd.ant_2_array))
+    io.throw_away_flagged_ants(inputfile, outputfile, yaml_file)
+    hdo = io.HERAData(outputfile)
+    for ant in set(hd.ant_1_array).union(set(hd.ant_2_array)):
+        if ant in [24, 25, 37, 38]:
+            assert ant not in set(hdo.ant_1_array).union(set(hdo.ant_2_array))
+        else:
+            assert ant in set(hdo.ant_1_array).union(set(hdo.ant_2_array))
+
+    # now fully flag antenna 11 by setting flags to True.
+    hdt = copy.deepcopy(hd)
+    dt, ft, nt = hdt.build_datacontainers()
+    for k in ft:
+        ft[k] = np.zeros_like(ft[k], dtype=bool)
+        if k[0] in [52] or k[1] in [52]:
+            ft[k] = np.ones_like(ft[k], dtype=bool)
+    hdt.update(flags=ft)
+    manual_file = os.path.join(strpath, 'manually_flagged.uvh5')
+    manual_file_trimmed = os.path.join(strpath, 'manually_flagged_trimmed.uvh5')
+    hdt.write_uvh5(manual_file)
+    io.throw_away_flagged_ants(manual_file, manual_file_trimmed, yaml_file=yaml_file,
+                               throw_away_fully_flagged_data_baselines=True)
+    hdo = io.HERAData(manual_file_trimmed)
+    for ant in set(hd.ant_1_array).union(set(hd.ant_2_array)):
+        if ant in [52, 37, 38, 24, 25]:
+            assert ant not in set(hdo.ant_1_array).union(set(hdo.ant_2_array))
+        else:
+            assert ant in set(hdo.ant_1_array).union(set(hdo.ant_2_array))

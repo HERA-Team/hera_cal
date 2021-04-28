@@ -19,6 +19,7 @@ import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT
 from . import redcal
+import argparse
 
 try:
     import aipy
@@ -1829,3 +1830,63 @@ def baselines_from_filelist_position(filename, filelist):
     upper_index = np.min([(file_index + 1) * chunk_size, nbls])
     output = bls[lower_index:upper_index]
     return output
+
+
+def throw_away_flagged_ants(infilename, outfilename, yaml_file=None, throw_away_fully_flagged_data_baselines=False, clobber=False):
+    """Throw away completely flagged data.
+
+    Parameters
+    ----------
+        infilename: str
+            path to a UVData file in uvh5 format.
+        outfilename: str
+            path to file to output trimmed data file.
+        yaml_file: str
+            path to a yaml flagging file with a list of antennas to flag.
+            Default is None.
+        throw_away_flagged_ants: bool, optional
+            if True, also throw away baselines where all data is flagged.
+            Warning: Don't use this for files with a small number of time integrations.
+                     since this can easily happen by chance in files like this.
+            Default is False
+        clobber: bool, optional
+            overwrite output file if it already exists.
+            Default is False.
+    Returns
+    -------
+        N/A
+
+    """
+    hd = HERAData(infilename)
+    hd.read()
+
+    # throw away flagged antennas in yaml file.
+    if yaml_file is not None:
+        from hera_qm import utils as qm_utils
+        qm_utils.apply_yaml_flags(uv=hd, a_priori_flag_yaml=yaml_file,
+                                  ant_indices_only=True, flag_ants=True, flag_freqs=False,
+                                  flag_times=False, throw_away_flagged_ants=True)
+
+    # Write data
+    if throw_away_fully_flagged_data_baselines:
+        antpairs_to_keep = []
+        for antpair in hd.get_antpairs():
+            fully_flagged = True
+            for pol in hd.pols:
+                fully_flagged = fully_flagged & np.all(hd.get_flags(antpair + (pol, )))
+            if not fully_flagged:
+                antpairs_to_keep.append(antpair)
+        hd.select(bls=antpairs_to_keep)
+    hd.write_uvh5(outfilename, clobber=clobber)
+
+
+def throw_away_flagged_ants_parser():
+    # Parse arguments
+    ap = argparse.ArgumentParser(description="Throw away baselines whose antennas are flagged in a yaml file or whose.")
+    ap.add_argument("infilename", type=str, help="path to visibility data to completely flag.")
+    ap.add_argument("outfilename", type=str, help="path to new visibility file to write out completely flagged data.")
+    ap.add_argument("--yaml_file", default=None, type=str, help='yaml file with list of antennas to throw away.')
+    ap.add_argument("--throw_away_fully_flagged_data_baselines", default=False, action="store_true",
+                    help="Also throw away baselines that have all channels and integrations flagged.")
+    ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
+    return ap
