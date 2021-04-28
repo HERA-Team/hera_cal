@@ -1883,8 +1883,8 @@ def throw_away_flagged_ants(infilename, outfilename, yaml_file=None, throw_away_
 def throw_away_flagged_ants_parser():
     # Parse arguments
     ap = argparse.ArgumentParser(description="Throw away baselines whose antennas are flagged in a yaml file or which have all integrations/chans flagged.")
-    ap.add_argument("infilename", type=str, help="path to visibility data to completely flag.")
-    ap.add_argument("outfilename", type=str, help="path to new visibility file to write out completely flagged data.")
+    ap.add_argument("infilename", type=str, help="path to visibility data throw out flagged baselines..")
+    ap.add_argument("outfilename", type=str, help="path to new visibility file to write data with thrown out baselines..")
     ap.add_argument("--yaml_file", default=None, type=str, help='yaml file with list of antennas to throw away.')
     ap.add_argument("--throw_away_fully_flagged_data_baselines", default=False, action="store_true",
                     help="Also throw away baselines that have all channels and integrations flagged.")
