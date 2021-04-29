@@ -1285,7 +1285,13 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 d = np.asarray([data.get_data(bl + (pol,)) for bl in blg])
                 f = np.asarray([(~data.get_flags(bl + (pol,))).astype(np.float) for bl in blg])
                 n = np.asarray([data.get_nsamples(bl + (pol,)) for bl in blg])
-                tint = np.asarray([data.integration_time[data.antpair2ind(bl + (pol,))] for bl in blg])[:, :, None]
+                tint = []
+                for bl in blg:
+                    blinds = data.antpair2ind(bl + (pol,))
+                    if len(blinds) == 0:
+                        blinds = data.antpair2ind(reverse_bl(bl + (pol,)))
+                    tint.extend(data.integration_time[blinds])
+                tint = np.asarray(tint)[:, :, None]
                 w = np.asarray([wgts[bl + (pol,)] for bl in blg]) * tint
             # take the weighted average
             wsum = np.sum(w, axis=0).clip(1e-10, np.inf)  # this is the normalization
