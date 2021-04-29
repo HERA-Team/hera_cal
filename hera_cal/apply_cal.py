@@ -383,11 +383,15 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 # update redundant data. Don't partial write.
                 hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
             else:
+                if hasattr(hc, 'gain_scale'):
+                    hd.vis_units = hc.gain_scale
                 # partial write works for no redundant averaging.
                 hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
         if redundant_average:
             # if we did redundant averaging, just write the redundant dataset out in the end at once.
-            hd_red.write_uvh5(data_outfilename, clobber=clobber)
+            if hasattr(hc, 'gain_scale'):
+                hd_red.vis_units = hc.gain_scale
+            hd_red.write_uvh5(data_outfilename, clobber=clobber, **kwargs)
     # full data loading and writing
     else:
         data, data_flags, data_nsamples = hd.read(frequencies=freqs_to_load)
@@ -460,7 +464,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     else:
                         outfile = data_outfilename
                     if filetype_out == 'uvh5':
-                        hd_red.write_uvh5(outfile, clobber=clobber)
+                        if hasattr(hc, 'gain_scale'):
+                            hd_red.vis_units = hc.gain_scale
+                        hd_red.write_uvh5(outfile, clobber=clobber, **kwargs)
                     else:
                         raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
                 else:
