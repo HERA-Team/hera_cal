@@ -6,7 +6,7 @@ dependencies:
   - pip
   - aipy>=3.0.0rc2
   - astropy>=3.2.3
-  - h5py
+  - h5py<=3.2
   - numpy>=1.10
   - pytest
   - scipy
@@ -23,7 +23,7 @@ dependencies:
   - pip:
     - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
     - git+https://github.com/HERA-Team/uvtools
-    - git+https://github.com/HERA-Team/linsolve    
+    - git+https://github.com/HERA-Team/linsolve
     - git+https://github.com/HERA-Team/hera_qm
     - git+https://github.com/RadioAstronomySoftwareGroup/pyuvsim
     - git+https://github.com/HERA-Team/hera_sim
