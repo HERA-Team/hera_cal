@@ -270,7 +270,7 @@ class Test_Abscal_Solvers(object):
         ants = list(set([ant for bl in data for ant in utils.split_bl(bl)]))
         gains = abscal.abs_amp_lincal(model, data, return_gains=True, gain_ants=ants)
         for ant in ants:
-            np.testing.assert_array_equal(gains[ant], 2.0) 
+            np.testing.assert_array_equal(gains[ant], 2.0)
 
     def test_abs_amp_lincal_4pol(self):
         antpos = hex_array(2, split_core=False, outriggers=0)
@@ -542,10 +542,10 @@ class Test_Abscal_Solvers(object):
             data = copy.deepcopy(uncal_data)
             for i in range(8):
                 if i == 0:
-                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver=solver, assume_2D=True, 
+                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver=solver, assume_2D=True,
                                                              time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
                 else:
-                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False, 
+                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False,
                                                              time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
                 calibrate_in_place(data, gains)
             np.testing.assert_array_almost_equal(np.linalg.norm([data[bl] - model[bl] for bl in data]), 0)
@@ -567,10 +567,10 @@ class Test_Abscal_Solvers(object):
         ants = sorted(list(set([ant for bl in data for ant in utils.split_bl(bl)])))
         for i in range(10):
             if i == 0:
-                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='ndim_fft', assume_2D=False, 
+                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='ndim_fft', assume_2D=False,
                                                          time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
             else:
-                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False, 
+                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False,
                                                          time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
             calibrate_in_place(data, gains)
         np.testing.assert_array_almost_equal(np.linalg.norm([data[bl] - model[bl] for bl in data]), 0, 5)
@@ -1068,7 +1068,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         model_antpos = {100: np.array([0, 0, 0]), 101: np.array([10, 0, 0]), 102: np.array([20, 0, 0]), 103: np.array([100, 100, 0])}
         data_bls = [(0, 2, 'ee'), (1, 2, 'ee'), (0, 3, 'ee')]
         model_bls = [(100, 101, 'ee'), (100, 102, 'ee'), (101, 103, 'ee')]
-        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_antpos=model_antpos, 
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_antpos=model_antpos,
                                                                                          data_is_redsol=True, model_is_redundant=True)
         assert len(data_bl_to_load) == 2
         assert len(model_bl_to_load) == 2
@@ -1147,7 +1147,7 @@ class Test_Post_Redcal_Abscal_Run(object):
     def test_get_idealized_antpos(self):
         # build 7 element hex with 1 outrigger. If all antennas are unflagged, the outrigger
         # is not redundant with the hex, so it introduces an extra degeneracy. That corresponds
-        # to an extra dimension in an idealized antenna position. 
+        # to an extra dimension in an idealized antenna position.
         antpos = hex_array(2, split_core=False, outriggers=0)
         antpos[7] = np.array([100, 0, 0])
         reds = redcal.get_reds(antpos, pols=['ee'])
@@ -1168,7 +1168,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'], keep_flagged_ants=True)
         # because keep_flagged_ants is True, the flagged antenna is still in the antpos dict
         assert len(iap) == 8
-        # because the only antenna necessitating a 3rd tip-tilt degeneracy is flagged, 
+        # because the only antenna necessitating a 3rd tip-tilt degeneracy is flagged,
         # get_idealized_antpos enforces that all remaining antenna positions are expressed in 2D
         assert len(iap[0]) == 2
         r2a = redcal.reds_to_antpos(redcal.filter_reds(reds, ex_ants=[7]))
@@ -1183,12 +1183,12 @@ class Test_Post_Redcal_Abscal_Run(object):
         iap = abscal._get_idealized_antpos(cal_flags, antpos, ['ee'], keep_flagged_ants=True)
         assert len(iap) == 8  # all antennas included
         # removing an on-grid antenna but keeping the outrigger doesn't change the number of degeneracies
-        assert len(iap[0]) == 3 
+        assert len(iap[0]) == 3
         # test that the flagged antenna has the position it would have had it if weren't flagged
         r2a = redcal.reds_to_antpos(reds)
         for ant in r2a:
             np.testing.assert_array_equal(iap[ant], r2a[ant])
-            
+
         # test keep_flagged_ants=False
         cal_flags = {(ant, 'Jee'): np.array([False]) for ant in antpos}
         cal_flags[(1, 'Jee')] = True
@@ -1246,7 +1246,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         data_ants = set([ant for bl in data.keys() for ant in utils.split_bl(bl)])
         rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
         rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
-        calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
+        calibrate_in_place(data, rc_gains_subset, data_flags=flags,
                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
         wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
 
@@ -1256,7 +1256,7 @@ class Test_Post_Redcal_Abscal_Run(object):
             delta_gains = abscal.post_redcal_abscal(model, copy.deepcopy(data), wgts, rc_flags_subset, verbose=False)
 
         # use returned gains to calibrate data
-        calibrate_in_place(data, delta_gains, data_flags=flags, 
+        calibrate_in_place(data, delta_gains, data_flags=flags,
                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
 
         # basic shape & type checks
@@ -1277,7 +1277,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         hd.write_uvh5(temp_outfile, clobber=True)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, [temp_outfile], phs_conv_crit=1e-4, 
+            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, [temp_outfile], phs_conv_crit=1e-4,
                                                 nInt_to_load=30, verbose=False, add_to_history='testing')
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
         np.testing.assert_array_equal(hca.total_quality_array, 0.0)
@@ -1290,14 +1290,15 @@ class Test_Post_Redcal_Abscal_Run(object):
         # test normal operation of abscal (with one missing integration, to test assinging multiple data times to one model time and then rephasing)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.model_files_missing_one_int, extrap_limit=1.0, 
+            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.model_files_missing_one_int, extrap_limit=1.0,
                                                 phs_conv_crit=1e-4, nInt_to_load=30, verbose=False, add_to_history='testing')
         pytest.raises(IOError, abscal.post_redcal_abscal_run, self.data_file, self.redcal_file, self.model_files, clobber=False)
 
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
         ac_gains, ac_flags, ac_quals, ac_total_qual = hca.build_calcontainers()
-
+        hdm = io.HERAData(self.model_files_missing_one_int)
+        assert hca.gain_scale == hdm.vis_units
         assert hcr.history.replace('\n', '').replace(' ', '') in hca.history.replace('\n', '').replace(' ', '')
         assert 'testing' in hca.history.replace('\n', '').replace(' ', '')
         for k in rc_gains:
@@ -1327,7 +1328,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         # test redundant model and full data
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            hca_red = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4, 
+            hca_red = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4,
                                                     nInt_to_load=10, verbose=False, add_to_history='testing2', model_is_redundant=True)
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
@@ -1364,9 +1365,11 @@ class Test_Post_Redcal_Abscal_Run(object):
         # test redundant model and redundant data
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            hca_red_red = abscal.post_redcal_abscal_run(self.red_data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4, 
-                                                        nInt_to_load=10, verbose=False, add_to_history='testing3', model_is_redundant=True, 
+            hca_red_red = abscal.post_redcal_abscal_run(self.red_data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4,
+                                                        nInt_to_load=10, verbose=False, add_to_history='testing3', model_is_redundant=True,
                                                         data_is_redsol=True, raw_auto_file=self.data_file)
+        hdm = io.HERAData(self.red_model_files)
+        assert hca_red_red.gain_scale == hdm.vis_units
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
         ac_gains, ac_flags, ac_quals, ac_total_qual = hca_red_red.build_calcontainers()

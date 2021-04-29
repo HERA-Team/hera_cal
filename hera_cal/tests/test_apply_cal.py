@@ -256,6 +256,34 @@ class Test_Update_Cal(object):
             assert np.all(new_flags[bl][flagged_ints])
             assert np.all(new_flags[bl][:, flagged_chans])
 
+    def test_apply_cal_units(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        # test that units are propagated from calibration gains to calibrated data.
+        new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+        hc = io.HERACal(new_cal)
+        # manually set gain-scale.
+        hc.gain_scale = 'Jy'
+        calfile = os.path.join(tmp_path, 'test_cal.calfits')
+        output = os.path.join(tmp_path, '')
+        hc.write_calfits(calfile)
+        ac.apply_cal(uvh5, output, calfile)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'Jy'
+        # test red_average mode.
+        ac.apply_cal(uvh5, output, calfile, clobber=True, red_average=True)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'Jy'
+        # test red_average mode with partial i/o.
+        ac.apply_cal(uvh5, output, calfile, clobber=True, red_average=True, nbl_per_load=4)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'Jy'
+        # test red_average mode with baseline groups.
+        ac.apply_cal(uvh5, output, calfile, clobber=True, red_average=True, redundant_groups=2)
+        for grpnum in range(2):
+            hdc = io.HERAData(output.replace('.uvh5', f'.{grpnum}.uvh5'))
+            assert hdc.vis_units == 'Jy'
+
     def test_apply_cal_redundant_averaging(self, tmpdir):
         tmp_path = tmpdir.strpath
         # test redundant averaging functionality in apply_cal
