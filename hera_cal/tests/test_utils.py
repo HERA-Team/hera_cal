@@ -653,6 +653,9 @@ def test_red_average_conjugate_baseline_case():
     # sans conjugation.
     to_test = []
     for filenum in range(2):
+        # zeroth file is a raw correlator '.sum.uvh5' file.
+        # first file is a file with flagged antennas removed and chunked.
+        # second file is after foreground / xtalk filtering / time averaging.
         input_file = os.path.join(DATA_PATH, f'red_averaging_conjugate_tester_{filenum}.uvh5')
         hd = io.HERAData(input_file)
         d, f, n = hd.read()
