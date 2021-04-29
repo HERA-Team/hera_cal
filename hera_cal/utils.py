@@ -1290,7 +1290,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                     blinds = data.antpair2ind(bl + (pol,))
                     if len(blinds) == 0:
                         blinds = data.antpair2ind(reverse_bl(bl + (pol,)))
-                    tint.extend(data.integration_time[blinds])
+                    tint.append(data.integration_time[blinds])
                 tint = np.asarray(tint)[:, :, None]
                 w = np.asarray([wgts[bl + (pol,)] for bl in blg]) * tint
             # take the weighted average
