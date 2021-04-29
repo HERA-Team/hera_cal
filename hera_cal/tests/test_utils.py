@@ -651,30 +651,32 @@ def test_red_average():
 def test_red_average_conjugate_baseline_case():
     # this test covers the case where there baselines that are redundant
     # sans conjugation.
-    input_file = os.path.join(DATA_PATH, 'red_averaging_conjugate_tester.uvh5')
-    hd = io.HERAData(input_file)
-    d, f, n = hd.read()
-    reds = get_pos_reds(hd.antpos)
-    reds = [[bl[:2] for bl in grp if bl in hd.get_antpairs() or bl[::-1] in hd.get_antpairs()] for grp in reds]
-    reds = [grp for grp in reds if len(grp) > 0]
-    red_grp_keys = [grp[0] for grp in reds]
-    # test conjugate sets with fed_datacontainers = False
-    hd_red_average = utils.red_average(hd, reds=reds, inplace=False,
-                                       red_bl_keys=red_grp_keys)
-    # check without specifying reds or red_bl_keys.
-    hd_red_average_1 = utils.red_average(hd, inplace=False)
-    # test with fed_datacontainers = True
-    dr, fr, nr = utils.red_average(data=d, flags=f, nsamples=n, inplace=False)
-    d0, f0, n0 = hd_red_average.build_datacontainers()
-    d1, f1, n1 = hd_red_average_1.build_datacontainers()
-    # make sure all three cases give same nsamples, flags, and data.
-    for k in d0:
-        assert np.allclose(d0[k], d1[k])
-        assert np.allclose(f0[k], f1[k])
-        assert np.allclose(n0[k], n1[k])
-        assert np.allclose(n0[k], nr[k])
-        assert np.allclose(f0[k], fr[k])
-        assert np.allclose(d0[k], dr[k])
+    to_test = []
+    for filenum in range(2):
+        input_file = os.path.join(DATA_PATH, f'red_averaging_conjugate_tester_{filenum}.uvh5')
+        hd = io.HERAData(input_file)
+        d, f, n = hd.read()
+        reds = get_pos_reds(hd.antpos)
+        reds = [[bl[:2] for bl in grp if bl in hd.get_antpairs() or bl[::-1] in hd.get_antpairs()] for grp in reds]
+        reds = [grp for grp in reds if len(grp) > 0]
+        red_grp_keys = [grp[0] for grp in reds]
+        # test conjugate sets with fed_datacontainers = False
+        hd_red_average = utils.red_average(hd, reds=reds, inplace=False,
+                                           red_bl_keys=red_grp_keys)
+        # check without specifying reds or red_bl_keys.
+        hd_red_average_1 = utils.red_average(hd, inplace=False)
+        # test with fed_datacontainers = True
+        dr, fr, nr = utils.red_average(data=d, flags=f, nsamples=n, inplace=False)
+        d0, f0, n0 = hd_red_average.build_datacontainers()
+        d1, f1, n1 = hd_red_average_1.build_datacontainers()
+        # make sure all three cases give same nsamples, flags, and data.
+        for k in d0:
+            assert np.allclose(d0[k], d1[k])
+            assert np.allclose(f0[k], f1[k])
+            assert np.allclose(n0[k], n1[k])
+            assert np.allclose(n0[k], nr[k])
+            assert np.allclose(f0[k], fr[k])
+            assert np.allclose(d0[k], dr[k])
 
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 def test_gain_relative_difference():
