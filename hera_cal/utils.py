@@ -1297,7 +1297,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             wsum = np.sum(w, axis=0).clip(1e-10, np.inf)  # this is the normalization
             davg = np.sum(d * w, axis=0) / wsum  # weighted average
             fmax = np.max(f, axis=2)             # collapse along freq: marks any fully flagged integrations
-            if tint.squeeze().ndim == 1: # tint.squeeze() can be one-dimensional if we have one time sample in our data.
+            if tint.squeeze().ndim == 1:  # tint.squeeze() can be one-dimensional if we have one time sample in our data.
                 iavg = np.sum(tint.squeeze()[:, None] * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
             else:
                 iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)

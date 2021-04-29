@@ -648,6 +648,7 @@ def test_red_average():
     pytest.raises(ValueError, utils.red_average, _data)
     pytest.raises(ValueError, utils.red_average, 'foo')
 
+
 def test_red_average_conjugate_baseline_case():
     # this test covers the case where there baselines that are redundant
     # sans conjugation.
@@ -680,6 +681,7 @@ def test_red_average_conjugate_baseline_case():
             assert np.allclose(n0[k], nr[k])
             assert np.allclose(f0[k], fr[k])
             assert np.allclose(d0[k], dr[k])
+
 
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 def test_gain_relative_difference():
