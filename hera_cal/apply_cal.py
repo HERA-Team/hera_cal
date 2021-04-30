@@ -430,8 +430,12 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             if vis_units is None:
                 if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
                     vis_units = hc.gain_scale
-            io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
-                          data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs, vis_units=vis_units)
+            if vis_units is not None:
+                io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
+                              data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs, vis_units=vis_units)
+            else:
+                io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
+                              data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
         else:
             all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
             hd.update(data=data, flags=data_flags, nsamples=data_nsamples, **kwargs)
