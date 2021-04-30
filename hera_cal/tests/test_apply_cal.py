@@ -271,10 +271,16 @@ class Test_Update_Cal(object):
         ac.apply_cal(uvh5, output, calfile)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'Jy'
+        ac.apply_cal(uvh5, output, calfile, vis_units='k str', clobber=True)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'k str'
         # test red_average mode.
         ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'Jy'
+        ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, vis_units='k str')
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'k str'
         # test red_average mode with partial i/o.
         ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, nbl_per_load=4)
         hdc = io.HERAData(output)
@@ -299,6 +305,11 @@ class Test_Update_Cal(object):
         for grpnum in range(3):
             hdc = io.HERAData(output.replace('.uvh5', f'.{grpnum}.uvh5'))
             assert hdc.vis_units == 'Jy'
+        ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags,
+                     output, calfile, clobber=True, redundant_average=True, redundant_groups=3, vis_units='k str')
+        for grpnum in range(3):
+            hdc = io.HERAData(output.replace('.uvh5', f'.{grpnum}.uvh5'))
+            assert hdc.vis_units == 'k str'
 
     def test_apply_cal_redundant_averaging(self, tmpdir):
         tmp_path = tmpdir.strpath

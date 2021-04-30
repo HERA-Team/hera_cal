@@ -184,7 +184,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
               freq_atol=1., redundant_groups=1, dont_red_average_flagged_data=False, spw_range=None,
-              exclude_from_redundant_mode="data", **kwargs):
+              exclude_from_redundant_mode="data", vis_units=None, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
@@ -241,6 +241,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         exclude_from_redundant_mode: str, optional
             specify whether to use entirely flagged data, 'data', or ex_ants from an external yaml file 'yaml' to determine
             baselines to exclude from redundant average.
+        vis_units : str, optional
+            string specifying units of calibrated visibility. Overrides gain_scale in calibration file.
+            Default is None -> calibration gain_scale is used to set vis_units in calibrated file.
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
@@ -385,14 +388,16 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             else:
                 if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
                     hd.vis_units = hc.gain_scale
+                if vis_units is not None:
+                    hd.vis_units = vis_units
                 # partial write works for no redundant averaging.
                 hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
         if redundant_average:
             # if we did redundant averaging, just write the redundant dataset out in the end at once.
             if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
                 hd_red.vis_units = hc.gain_scale
-            if 'vis_units' in kwargs and kwargs['vis_units'] is not None:
-                hd_red.vis_units = kwargs['vis_units']
+            if vis_units is not None:
+                hd_red.vis_units = vis_units
             hd_red.write_uvh5(data_outfilename, clobber=clobber)
     # full data loading and writing
     else:
@@ -422,8 +427,11 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
                                old_gains=old_gains, gain_convention=gain_convention)
         if not redundant_average:
+            if vis_units is None:
+                if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
+                    vis_units = hc.gain_scale
             io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
-                          data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
+                          data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs, vis_units=vis_units)
         else:
             all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
             hd.update(data=data, flags=data_flags, nsamples=data_nsamples, **kwargs)
@@ -468,8 +476,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     if filetype_out == 'uvh5':
                         if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
                             hd_red.vis_units = hc.gain_scale
-                        if 'vis_units' in kwargs and kwargs['vis_units'] is not None:
-                            hd_red.vis_units = kwargs['vis_units']
+                        if vis_units is not None:
+                            hd_red.vis_units = vis_units
                         hd_red.write_uvh5(outfile, clobber=clobber)
                     else:
                         raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
