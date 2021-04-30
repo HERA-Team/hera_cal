@@ -282,7 +282,7 @@ class Test_Update_Cal(object):
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'k str'
         # do this with nbl_per_load set.
-        ac.apply_cal(uvh5, output, calfile, nbl_per_load=4)
+        ac.apply_cal(uvh5, output, calfile, nbl_per_load=4, clobber=True)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'Jy'
         ac.apply_cal(uvh5, output, calfile, vis_units='k str', clobber=True, nbl_per_load=4)

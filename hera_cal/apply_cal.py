@@ -386,12 +386,14 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 # update redundant data. Don't partial write.
                 hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
             else:
-                if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
-                    hd.vis_units = hc.gain_scale
-                if vis_units is not None:
-                    hd.vis_units = vis_units
-                # partial write works for no redundant averaging.
-                hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
+                if vis_units is None:
+                    if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
+                        vis_units = hc.gain_scale
+                    else:
+                        vis_units = hd.vis_units
+                    # partial write works for no redundant averaging.
+                hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, vis_units=vis_units, **kwargs)
+
         if redundant_average:
             # if we did redundant averaging, just write the redundant dataset out in the end at once.
             if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
