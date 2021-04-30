@@ -281,6 +281,20 @@ class Test_Update_Cal(object):
         ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, vis_units='k str')
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'k str'
+        # do this with nbl_per_load set.
+        ac.apply_cal(uvh5, output, calfile, nbl_per_load=4)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'Jy'
+        ac.apply_cal(uvh5, output, calfile, vis_units='k str', clobber=True, nbl_per_load=4)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'k str'
+        # test red_average mode.
+        ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, nbl_per_load=4)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'Jy'
+        ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, vis_units='k str', nbl_per_load=4)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'k str'
         # test red_average mode with partial i/o.
         ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, nbl_per_load=4)
         hdc = io.HERAData(output)
