@@ -653,7 +653,7 @@ def test_red_average_conjugate_baseline_case():
     # this test covers the case where there baselines that are redundant
     # sans conjugation.
     to_test = []
-    for filenum in range(2):
+    for filenum in range(3):
         # zeroth file is a raw correlator '.sum.uvh5' file.
         # first file is a file with flagged antennas removed and chunked.
         # second file is after foreground / xtalk filtering / time averaging.
