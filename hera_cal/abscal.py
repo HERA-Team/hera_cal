@@ -3566,7 +3566,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         echo("The following model files overlap with data files in LST:\n" + "\n".join(matched_model_files), verbose=verbose)
         hd = io.HERAData(data_file)
         hdm = io.HERAData(matched_model_files)
-        hc.gain_scale = hdm.vis_units # set vis_units of hera_cal based on model files.
+        hc.gain_scale = hdm.vis_units  # set vis_units of hera_cal based on model files.
         hd_autos = io.HERAData(raw_auto_file)
         assert hdm.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation, hdm.x_orientation)
         assert hc.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation, hc.x_orientation)

@@ -262,25 +262,41 @@ class Test_Update_Cal(object):
         new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         hc = io.HERACal(new_cal)
+        hc.read()
         # manually set gain-scale.
         hc.gain_scale = 'Jy'
         calfile = os.path.join(tmp_path, 'test_cal.calfits')
-        output = os.path.join(tmp_path, '')
+        output = os.path.join(tmp_path, 'test_calibrated_output.uvh5')
         hc.write_calfits(calfile)
         ac.apply_cal(uvh5, output, calfile)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'Jy'
         # test red_average mode.
-        ac.apply_cal(uvh5, output, calfile, clobber=True, red_average=True)
+        ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'Jy'
         # test red_average mode with partial i/o.
-        ac.apply_cal(uvh5, output, calfile, clobber=True, red_average=True, nbl_per_load=4)
+        ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, nbl_per_load=4)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'Jy'
         # test red_average mode with baseline groups.
-        ac.apply_cal(uvh5, output, calfile, clobber=True, red_average=True, redundant_groups=2)
-        for grpnum in range(2):
+        uncalibrated_file = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uncalibrated.uvh5")
+        hdt = io.HERAData(uncalibrated_file)
+        d, f, n = hdt.read()
+        for bl in f:
+            if not np.all(f[bl]):
+                bl_not_flagged = bl
+                break
+        for bl in f:
+            if not np.all(f[bl]):
+                f[bl] = f[bl_not_flagged]
+                n[bl] = n[bl_not_flagged]
+        hdt.update(data=d, flags=f, nsamples=n)
+        uncalibrated_file_homogenous_nsamples_flags = os.path.join(tmp_path, 'homogenous_nsamples_flags.uvh5')
+        hdt.write_uvh5(uncalibrated_file_homogenous_nsamples_flags)
+        ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags,
+                     output, calfile, clobber=True, redundant_average=True, redundant_groups=3)
+        for grpnum in range(3):
             hdc = io.HERAData(output.replace('.uvh5', f'.{grpnum}.uvh5'))
             assert hdc.vis_units == 'Jy'
 
