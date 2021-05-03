@@ -388,6 +388,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             else:
                 if vis_units is None:
                     if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
+                        if hd.vis_units is not None and hc.vis_units.lower() != "uncalib":
+                            warnings.warn(f"Replacing original data vis_units of {hd.vis_units}"
+                                           " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
                         vis_units = hc.gain_scale
                     else:
                         vis_units = hd.vis_units
@@ -397,6 +400,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         if redundant_average:
             # if we did redundant averaging, just write the redundant dataset out in the end at once.
             if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
+                if hd.vis_units is not None and hc.vis_units.lower() != "uncalib":
+                    warnings.warn(f"Replacing original data vis_units of {hd.vis_units}"
+                                   " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
                 hd_red.vis_units = hc.gain_scale
             if vis_units is not None:
                 hd_red.vis_units = vis_units
@@ -431,13 +437,14 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         if not redundant_average:
             if vis_units is None:
                 if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
+                    if hd.vis_units is not None and hd.vis_units.lower() != "uncalib":
+                        warnings.warn(f"Replacing original data vis_units of {hd.vis_units}"
+                                       " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
                     vis_units = hc.gain_scale
             if vis_units is not None:
-                io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
-                              data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs, vis_units=vis_units)
-            else:
-                io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
-                              data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
+                kwargs['vis_units'] = vis_units
+            io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
+                          data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
         else:
             all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
             hd.update(data=data, flags=data_flags, nsamples=data_nsamples, **kwargs)
