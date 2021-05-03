@@ -261,6 +261,13 @@ class Test_Update_Cal(object):
         # test that units are propagated from calibration gains to calibrated data.
         new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+
+        uvd_with_units = UVData()
+        uvd_with_units.read_uvh5(uvh5)
+        uvd_with_units.vis_units = 'k str'
+        uvh5_units = os.path.join(tmp_path, 'test_input_kstr.uvh5')
+        uvd_with_units.write_uvh5(uvh5_units)
+
         hc = io.HERACal(new_cal)
         hc.read()
         # manually set gain-scale.
@@ -268,35 +275,41 @@ class Test_Update_Cal(object):
         calfile = os.path.join(tmp_path, 'test_cal.calfits')
         output = os.path.join(tmp_path, 'test_calibrated_output.uvh5')
         hc.write_calfits(calfile)
-        ac.apply_cal(uvh5, output, calfile)
+
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uvh5_units, output, calfile)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'Jy'
         ac.apply_cal(uvh5, output, calfile, vis_units='k str', clobber=True)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'k str'
         # test red_average mode.
-        ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True)
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uvh5_units, output, calfile, clobber=True, redundant_average=True)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'Jy'
         ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, vis_units='k str')
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'k str'
         # do this with nbl_per_load set.
-        ac.apply_cal(uvh5, output, calfile, nbl_per_load=4, clobber=True)
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uvh5_units, output, calfile, nbl_per_load=4, clobber=True)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'Jy'
         ac.apply_cal(uvh5, output, calfile, vis_units='k str', clobber=True, nbl_per_load=4)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'k str'
         # test red_average mode.
-        ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, nbl_per_load=4)
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uvh5_units, output, calfile, clobber=True, redundant_average=True, nbl_per_load=4)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'Jy'
         ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, vis_units='k str', nbl_per_load=4)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'k str'
         # test red_average mode with partial i/o.
-        ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, nbl_per_load=4)
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uvh5_units, output, calfile, clobber=True, redundant_average=True, nbl_per_load=4)
         hdc = io.HERAData(output)
         assert hdc.vis_units == 'Jy'
         # test red_average mode with baseline groups.
@@ -312,10 +325,12 @@ class Test_Update_Cal(object):
                 f[bl] = f[bl_not_flagged]
                 n[bl] = n[bl_not_flagged]
         hdt.update(data=d, flags=f, nsamples=n)
+        hdt.vis_units = 'k str'
         uncalibrated_file_homogenous_nsamples_flags = os.path.join(tmp_path, 'homogenous_nsamples_flags.uvh5')
         hdt.write_uvh5(uncalibrated_file_homogenous_nsamples_flags)
-        ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags,
-                     output, calfile, clobber=True, redundant_average=True, redundant_groups=3)
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags,
+                         output, calfile, clobber=True, redundant_average=True, redundant_groups=3)
         for grpnum in range(3):
             hdc = io.HERAData(output.replace('.uvh5', f'.{grpnum}.uvh5'))
             assert hdc.vis_units == 'Jy'

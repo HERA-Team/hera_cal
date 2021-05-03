@@ -7,7 +7,7 @@
 import numpy as np
 import argparse
 import copy
-
+import warnings
 from . import io
 from . import version
 from . import utils
@@ -390,7 +390,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
                         if hd.vis_units is not None and hc.gain_scale.lower() != "uncalib" and hd.vis_units.lower() != hc.gain_scale.lower():
                             warnings.warn(f"Replacing original data vis_units of {hd.vis_units}"
-                                           " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
+                                          " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
                         vis_units = hc.gain_scale
                     else:
                         vis_units = hd.vis_units
@@ -402,7 +402,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
                 if hd.vis_units is not None and hc.gain_scale.lower() != "uncalib" and hd.vis_units.lower() != hc.gain_scale.lower():
                     warnings.warn(f"Replacing original data vis_units of {hd.vis_units}"
-                                   " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
+                                  " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
                 hd_red.vis_units = hc.gain_scale
             if vis_units is not None:
                 hd_red.vis_units = vis_units
@@ -439,7 +439,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
                     if hd.vis_units is not None and hd.vis_units.lower() != "uncalib" and hd.vis_units.lower() != hc.gain_scale.lower():
                         warnings.warn(f"Replacing original data vis_units of {hd.vis_units}"
-                                       " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
+                                      " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
                     vis_units = hc.gain_scale
             if vis_units is not None:
                 kwargs['vis_units'] = vis_units
@@ -490,7 +490,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                         if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
                             if hd_red.vis_units is not None and hd_red.vis_units.lower() != "uncalib" and hd_red.vis_units.lower() != hc.gain_scale.lower():
                                 warnings.warn(f"Replacing original data vis_units of {hd.vis_units}"
-                                               " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
+                                              " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
                             hd_red.vis_units = hc.gain_scale
                         if vis_units is not None:
                             hd_red.vis_units = vis_units
