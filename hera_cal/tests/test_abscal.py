@@ -1265,6 +1265,23 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert delta_gains[k].shape == (3, rc_gains[k].shape[1])
             assert delta_gains[k].dtype == np.complex
 
+    def test_post_redcal_abscal_run_units_warning(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        calfile_units = os.path.join(tmp_path, 'redcal_units.calfits')
+        model_units = os.path.join(tmp_path, 'model_file_units.uvh5')
+        hd = io.HERAData(self.model_files[0])
+        hd.read()
+        hd.vis_units = 'Jy'
+        hd.write_uvh5(model_units)
+        hcr = io.HERACal(self.redcal_file)
+        hcr.read()
+        hcr.gain_scale = 'k str'
+        hcr.write_calfits(calfile_units)
+        with pytest.warns(RuntimeWarning):
+            hca = abscal.post_redcal_abscal_run(self.data_file, calfile_units, [model_units], phs_conv_crit=1e-4,
+                                                nInt_to_load=30, verbose=False, add_to_history='testing')
+        assert hca.gain_scale == 'Jy'
+
     def test_post_redcal_abscal_run(self):
         # test no model overlap
         hcr = io.HERACal(self.redcal_file)
