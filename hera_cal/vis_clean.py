@@ -1229,6 +1229,62 @@ class VisClean(object):
                         self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
                                         add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
 
+
+    def sky_frates(self, to_filter = None, frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.025):
+        """Automatically compute sky fringe-rate ranges based on baselines and telescope location.
+
+        Parameters
+        ----------
+        to_filter: list of antpairpol tuples, optional
+            list of antpairpols to generate sky fringe-rate centers and widths for.
+            Default is None -> use all keys in self.data.
+        frate_standoff: float, optional
+            Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
+            default = 0.0.
+        frac_frate_sky_max: float, optional
+            fraction of horizon to fringe-rate filter.
+            default is 1.0
+        min_frate: float, optional
+            minimum fringe-rate to filter, regardless of baseline length in mHz.
+            Default is 0.025
+        TODO: Look into per-frequency fringe-rate centers and widths (currently uses max freq for broadest frate range).
+
+        Returns
+        -------
+        center_frates: DataContainer object,
+            DataContainer with the center fringe-rate of each baseline in to_filter in units of mHz.
+        width_frates: DataContainer object
+            DataContainer with the half widths of each fringe-rate window around the center_frates in units of mHz.
+
+        """
+        if to_filter is None:
+            to_filter = self.data.keys()
+        # compute maximum fringe rate dict based on baseline lengths.
+        blcosines = {k: self.blvecs[k[:2]][0] / np.linalg.norm(self.blvecs[k[:2]]) for k in to_filter}
+        frateamps = {k: 1. / (24. * 3.6) * self.freqs.max() / 3e8 * 2 * np.pi * np.linalg.norm(self.blvecs[k[:2]]) for k in to_filter}
+        # set autocorrs to have blcose of 0.0
+        for k in blcosines:
+            if np.isnan(blcosines[k]):
+                blcosines[k] = 0.0
+        sinlat = np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))
+        max_frates = io.DataContainer({})
+        min_frates = io.DataContainer({})
+        center_frates = io.DataContainer({})
+        width_frates = io.DataContainer({})
+        # calculate min/max center fringerates.
+        # these depend on the sign of the blcosine.
+        for k in to_filter:
+            if blcosines[k] >= 0:
+                max_frates[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                min_frates[k] = -frateamps[k] * sinlat
+            else:
+                min_frates[k] = -frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                max_frates[k] = frateamps[k] * sinlat
+            center_frates[k] = (max_frates[k] + min_frates[k]) / 2.
+            width_frates[k] = np.abs(max_frates[k] - min_frates[k]) / 2. * frac_frate_sky_max + frate_standoff
+        return center_frates, width_frates
+
+
     def zeropad_data(self, data, binvals=None, zeropad=0, axis=-1, undo=False):
         """
         Iterate through DataContainer "data" and zeropad it inplace.

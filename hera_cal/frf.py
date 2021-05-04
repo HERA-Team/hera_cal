@@ -505,6 +505,7 @@ class FRFilter(VisClean):
               default = 0.0.
           frac_frate_sky_max: float, optional
              fraction of horizon to fringe-rate filter.
+             default is 1.0
           min_frate: float, optional
              minimum fringe-rate to filter, regardless of baseline length in mHz.
              Default is 0.025
@@ -544,35 +545,13 @@ class FRFilter(VisClean):
         else:
             filter_cache = None
         if max_frate_coeffs is None:
-            # compute maximum fringe rate dict based on baseline lengths.
-            blcosines = {k: self.blvecs[k[:2]][0] / np.linalg.norm(self.blvecs[k[:2]]) for k in to_filter}
-            frateamps = {k: 1. / (24. * 3.6) * self.freqs.max() / 3e8 * 2 * np.pi * np.linalg.norm(self.blvecs[k[:2]]) for k in to_filter}
-            # set autocorrs to have blcose of 0.0
-            for k in blcosines:
-                if np.isnan(blcosines[k]):
-                    blcosines[k] = 0.0
-            sinlat = np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))
-            max_frates = io.DataContainer({})
-            min_frates = io.DataContainer({})
-            center_frates = io.DataContainer({})
-            width_frates = io.DataContainer({})
-            # calculate min/max center fringerates.
-            # these depend on the sign of the blcosine.
-            for k in to_filter:
-                if blcosines[k] >= 0:
-                    max_frates[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
-                    min_frates[k] = -frateamps[k] * sinlat
-                else:
-                    min_frates[k] = -frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
-                    max_frates[k] = frateamps[k] * sinlat
-                center_frates[k] = (max_frates[k] + min_frates[k]) / 2.
-                width_frates[k] = np.abs(max_frates[k] - min_frates[k]) / 2. * frac_frate_sky_max + frate_standoff
+            center_frates, width_frates = self.sky_frates(to_filter=to_filter, frate_standoff=frate_standoff,
+                                                          frac_frate_sky_max=frac_frate_sky_max, min_frate=min_frate)
             # divide by center fringe rate to take advantage of Fourier shift theorem and use a
             # zero centered filter even if the center fringe rate is not at zero.
             for k in to_filter:
                 self.data[k] /= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
                 width_frates[k] = np.max([width_frates[k], min_frate])
-            # perform vis_clean.
         else:
             width_frates = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in self.data})
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
