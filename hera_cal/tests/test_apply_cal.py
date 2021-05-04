@@ -256,6 +256,90 @@ class Test_Update_Cal(object):
             assert np.all(new_flags[bl][flagged_ints])
             assert np.all(new_flags[bl][:, flagged_chans])
 
+    def test_apply_cal_units(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        # test that units are propagated from calibration gains to calibrated data.
+        new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+
+        uvd_with_units = UVData()
+        uvd_with_units.read_uvh5(uvh5)
+        uvd_with_units.vis_units = 'k str'
+        uvh5_units = os.path.join(tmp_path, 'test_input_kstr.uvh5')
+        uvd_with_units.write_uvh5(uvh5_units)
+
+        hc = io.HERACal(new_cal)
+        hc.read()
+        # manually set gain-scale.
+        hc.gain_scale = 'Jy'
+        calfile = os.path.join(tmp_path, 'test_cal.calfits')
+        output = os.path.join(tmp_path, 'test_calibrated_output.uvh5')
+        hc.write_calfits(calfile)
+
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uvh5_units, output, calfile)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'Jy'
+        ac.apply_cal(uvh5, output, calfile, vis_units='k str', clobber=True)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'k str'
+        # test red_average mode.
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uvh5_units, output, calfile, clobber=True, redundant_average=True)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'Jy'
+        ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, vis_units='k str')
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'k str'
+        # do this with nbl_per_load set.
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uvh5_units, output, calfile, nbl_per_load=4, clobber=True)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'Jy'
+        ac.apply_cal(uvh5, output, calfile, vis_units='k str', clobber=True, nbl_per_load=4)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'k str'
+        # test red_average mode.
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uvh5_units, output, calfile, clobber=True, redundant_average=True, nbl_per_load=4)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'Jy'
+        ac.apply_cal(uvh5, output, calfile, clobber=True, redundant_average=True, vis_units='k str', nbl_per_load=4)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'k str'
+        # test red_average mode with partial i/o.
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uvh5_units, output, calfile, clobber=True, redundant_average=True, nbl_per_load=4)
+        hdc = io.HERAData(output)
+        assert hdc.vis_units == 'Jy'
+        # test red_average mode with baseline groups.
+        uncalibrated_file = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uncalibrated.uvh5")
+        hdt = io.HERAData(uncalibrated_file)
+        d, f, n = hdt.read()
+        for bl in f:
+            if not np.all(f[bl]):
+                bl_not_flagged = bl
+                break
+        for bl in f:
+            if not np.all(f[bl]):
+                f[bl] = f[bl_not_flagged]
+                n[bl] = n[bl_not_flagged]
+        hdt.update(data=d, flags=f, nsamples=n)
+        hdt.vis_units = 'k str'
+        uncalibrated_file_homogenous_nsamples_flags = os.path.join(tmp_path, 'homogenous_nsamples_flags.uvh5')
+        hdt.write_uvh5(uncalibrated_file_homogenous_nsamples_flags)
+        with pytest.warns(RuntimeWarning):
+            ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags,
+                         output, calfile, clobber=True, redundant_average=True, redundant_groups=3)
+        for grpnum in range(3):
+            hdc = io.HERAData(output.replace('.uvh5', f'.{grpnum}.uvh5'))
+            assert hdc.vis_units == 'Jy'
+        ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags,
+                     output, calfile, clobber=True, redundant_average=True, redundant_groups=3, vis_units='k str')
+        for grpnum in range(3):
+            hdc = io.HERAData(output.replace('.uvh5', f'.{grpnum}.uvh5'))
+            assert hdc.vis_units == 'k str'
+
     def test_apply_cal_redundant_averaging(self, tmpdir):
         tmp_path = tmpdir.strpath
         # test redundant averaging functionality in apply_cal
