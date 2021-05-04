@@ -550,7 +550,7 @@ class FRFilter(VisClean):
         else:
             width_frates = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in to_filter})
             center_frates = io.DataContainer({k: 0.0 for k in to_filter})
-        wgts=io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
+        wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         for k in to_filter:
             if mode != 'clean':
                 filter_kwargs['suppression_factors'] = tol

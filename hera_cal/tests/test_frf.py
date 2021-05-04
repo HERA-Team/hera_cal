@@ -255,7 +255,7 @@ class Test_FRFilter(object):
         bl = np.linalg.norm(frfil.antpos[24] - frfil.antpos[25]) / constants.c * 1e9
         sdf = (frfil.freqs[1] - frfil.freqs[0]) / 1e9
 
-        frfil.run_tophat_frfilter(to_filter=frfil.data.keys(), tol=1e-2, output_prefix='frfiltered')
+        frfil.run_tophat_frfilter(tol=1e-2, output_prefix='frfiltered')
         for k in frfil.data.keys():
             assert frfil.frfiltered_resid[k].shape == (60, 64)
             assert frfil.frfiltered_model[k].shape == (60, 64)

@@ -1229,8 +1229,7 @@ class VisClean(object):
                         self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
                                         add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
 
-
-    def sky_frates(self, to_filter = None, frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.025):
+    def sky_frates(self, to_filter=None, frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.025):
         """Automatically compute sky fringe-rate ranges based on baselines and telescope location.
 
         Parameters
@@ -1283,7 +1282,6 @@ class VisClean(object):
             center_frates[k] = (max_frates[k] + min_frates[k]) / 2.
             width_frates[k] = np.abs(max_frates[k] - min_frates[k]) / 2. * frac_frate_sky_max + frate_standoff
         return center_frates, width_frates
-
 
     def zeropad_data(self, data, binvals=None, zeropad=0, axis=-1, undo=False):
         """
