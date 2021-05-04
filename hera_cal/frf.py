@@ -547,31 +547,19 @@ class FRFilter(VisClean):
         if max_frate_coeffs is None:
             center_frates, width_frates = self.sky_frates(to_filter=to_filter, frate_standoff=frate_standoff,
                                                           frac_frate_sky_max=frac_frate_sky_max, min_frate=min_frate)
-            # divide by center fringe rate to take advantage of Fourier shift theorem and use a
-            # zero centered filter even if the center fringe rate is not at zero.
-            for k in to_filter:
-                self.data[k] /= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
-                width_frates[k] = np.max([width_frates[k], min_frate])
         else:
-            width_frates = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in self.data})
-        self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
-                       ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
-                       cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=width_frates,
-                       overwrite=True, verbose=verbose, **filter_kwargs)
-        if 'output_prefix' in filter_kwargs:
-            filtered_data = getattr(self, filter_kwargs['output_prefix'] + '_data')
-            filtered_model = getattr(self, filter_kwargs['output_prefix'] + '_model')
-            filtered_resid = getattr(self, filter_kwargs['output_prefix'] + '_resid')
-        else:
-            filtered_data = self.clean_data
-            filtered_model = self.clean_model
-            filtered_resid = self.clean_resid
-        if max_frate_coeffs is None:
-            for k in to_filter:
-                filtered_data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
-                filtered_model[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
-                filtered_resid[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
-                self.data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
+            width_frates = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in to_filter})
+            center_frates = io.DataContainer({k: 0.0 for k in to_filter})
+        wgts=io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
+        for k in to_filter:
+            if mode != 'clean':
+                filter_kwargs['suppression_factors'] = tol
+            else:
+                filter_kwargs['tol'] = tol
+            self.fourier_filter(keys=[k], filter_centers=[center_frates[k]], filter_half_widths=[width_frates[k]],
+                                mode=mode, x=self.times * 3.6 * 24.,
+                                data=self.data, flags=self.flags, wgts=wgts,
+                                ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
