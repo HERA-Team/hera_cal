@@ -541,7 +541,7 @@ def LST2JD(LST, start_jd, longitude=21.42830):
 
     # iterate over LST
     jd_array = []
-    for lst in LST:
+    for lst in np.unwrap(LST):
         while True:
             # calculate fit
             jd1 = start_jd
