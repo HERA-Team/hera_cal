@@ -512,7 +512,7 @@ def JD2LST(JD, longitude=21.42830):
         return LST[0]
 
 
-def LST2JD(LST, start_jd, longitude=21.42830):
+def LST2JD(LST, start_jd, allow_other_jd=False, longitude=21.42830):
     """
     Convert Local Apparent Sidereal Time -> Julian Date via a linear fit
     at the 'start_JD' anchor point.
@@ -522,6 +522,9 @@ def LST2JD(LST, start_jd, longitude=21.42830):
     LST : type=float or array-like, local apparent sidereal time [radians]
 
     start_jd : type=int, integer julian day to use as starting point for LST2JD conversion
+    
+    allow_other_jd : treat start_jd as the JD for 0 radians LST but allow
+        subsequent or following days if appropriate
 
     longitude : type=float, degrees East of observer, default=HERA longitude
 
@@ -554,6 +557,8 @@ def LST2JD(LST, start_jd, longitude=21.42830):
             JD = (lst - offset) / slope
 
             # redo if JD isn't on starting JD
+            if allow_other_jd: 
+                break
             if JD - base_jd < 0:
                 start_jd += 1
             elif JD - base_jd > 1:
