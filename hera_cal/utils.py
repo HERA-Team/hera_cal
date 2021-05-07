@@ -519,7 +519,7 @@ def LST2JD(LST, start_jd, longitude=21.42830):
 
     Input:
     ------
-    LST : type=float, local apparent sidereal time [radians]
+    LST : type=float or array-like, local apparent sidereal time [radians]
 
     start_jd : type=int, integer julian day to use as starting point for LST2JD conversion
 
@@ -527,7 +527,7 @@ def LST2JD(LST, start_jd, longitude=21.42830):
 
     Output:
     -------
-    JD : type=float, Julian Date(s). accurate to ~1 milliseconds
+    JD : type=type(LST), Julian Date(s). accurate to ~1 milliseconds
     """
     # get LST type
     if isinstance(LST, list) or isinstance(LST, np.ndarray):
