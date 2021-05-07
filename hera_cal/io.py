@@ -1321,7 +1321,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     if time_array is None:
         if start_jd is None:
             raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = LST2JD(lst_array, start_jd, longitude=(tel_lat_lon_alt[1] *180 / np.pi))
+        time_array = LST2JD(lst_array, start_jd, allow_other_jd=True, longitude=(tel_lat_lon_alt[1] *180 / np.pi))
     Ntimes = len(time_array)
 
     # get freqs
