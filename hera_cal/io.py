@@ -1312,6 +1312,11 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     Npols = len(pols)
     polarization_array = np.array(list(map(lambda p: polstr2num(p, x_orientation=x_orientation), pols)))
 
+    # get telescope ants
+    antenna_numbers = np.unique(list(antpos.keys()))
+    Nants_telescope = len(antenna_numbers)
+    antenna_names = list(map(lambda a: "HH{}".format(a), antenna_numbers))
+
     # get antenna positions in ITRF frame
     tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
     antenna_positions = np.array(list(map(lambda k: antpos[k], antenna_numbers)))
@@ -1376,11 +1381,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # get antennas in data
     data_ants = np.unique(np.concatenate([ant_1_array, ant_2_array]))
     Nants_data = len(data_ants)
-
-    # get telescope ants
-    antenna_numbers = np.unique(list(antpos.keys()))
-    Nants_telescope = len(antenna_numbers)
-    antenna_names = list(map(lambda a: "HH{}".format(a), antenna_numbers))
 
     # set uvw assuming drift phase i.e. phase center is zenith
     uvw_array = np.array([antpos[k[1]] - antpos[k[0]] for k in zip(ant_1_array, ant_2_array)])
