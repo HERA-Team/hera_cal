@@ -1238,7 +1238,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
 
 def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None, nsamples=None,
               filetype='miriad', write_file=True, outdir="./", overwrite=False, verbose=True, history=" ",
-              return_uvd=False, longitude=21.42830, start_jd=None, x_orientation="north", instrument="HERA",
+              return_uvd=False, start_jd=None, x_orientation="north", instrument="HERA",
               telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
               telescope_location=HERA_TELESCOPE_LOCATION, integration_time=None, **kwargs):
     """
@@ -1278,8 +1278,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     return_uvd : type=boolean, if True return UVData instance.
 
-    longitude : type=float, longitude of observer in degrees East
-
     start_jd : type=float, starting integer Julian Date of time_array if time_array is None.
 
     x_orientation : type=str, orientation of X dipole, options=['east', 'north']
@@ -1314,11 +1312,16 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     Npols = len(pols)
     polarization_array = np.array(list(map(lambda p: polstr2num(p, x_orientation=x_orientation), pols)))
 
+    # get antenna positions in ITRF frame
+    tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
+    antenna_positions = np.array(list(map(lambda k: antpos[k], antenna_numbers)))
+    antenna_positions = uvutils.ECEF_from_ENU(antenna_positions, *tel_lat_lon_alt) - telescope_location
+
     # get times
     if time_array is None:
         if start_jd is None:
             raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = LST2JD(lst_array, start_jd, longitude=longitude)
+        time_array = LST2JD(lst_array, start_jd, longitude=(tel_lat_lon_alt[1] *180 / np.pi))
     Ntimes = len(time_array)
 
     # get freqs
@@ -1381,11 +1384,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     # set uvw assuming drift phase i.e. phase center is zenith
     uvw_array = np.array([antpos[k[1]] - antpos[k[0]] for k in zip(ant_1_array, ant_2_array)])
-
-    # get antenna positions in ITRF frame
-    tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
-    antenna_positions = np.array(list(map(lambda k: antpos[k], antenna_numbers)))
-    antenna_positions = uvutils.ECEF_from_ENU(antenna_positions, *tel_lat_lon_alt) - telescope_location
 
     # get zenith location: can only write drift phase
     phase_type = 'drift'
