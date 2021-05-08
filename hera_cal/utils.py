@@ -474,13 +474,17 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     return aa
 
 
-def JD2LST(JD, longitude=21.42830):
+def JD2LST(JD, latitude=-30.721526120689507, longitude=21.428303826863015, altitude=1051.690000018105):
     """
     Input:
     ------
     JD : type=float or list of floats containing Julian Date(s) of an observation
 
-    longitude : type=float, longitude of observer in degrees East, default=HERA longitude
+    latitude : type=float, degrees North of observer, default=HERA latitude
+
+    longitude : type=float, degrees East of observer, default=HERA longitude
+
+    altitude : type=float, altitude in meters, default=HERA altitude
 
     Output:
     -------
@@ -512,7 +516,8 @@ def JD2LST(JD, longitude=21.42830):
         return LST[0]
 
 
-def LST2JD(LST, start_jd, allow_other_jd=False, longitude=21.42830):
+def LST2JD(LST, start_jd, allow_other_jd=False, latitude=-30.721526120689507,
+           longitude=21.428303826863015, altitude=1051.690000018105):
     """
     Convert Local Apparent Sidereal Time -> Julian Date via a linear fit
     at the 'start_JD' anchor point.
@@ -526,7 +531,11 @@ def LST2JD(LST, start_jd, allow_other_jd=False, longitude=21.42830):
     allow_other_jd : treat the LST at the very beginning of the start_jd as the phase wrap 
         reference and allow LSTs to map to subsequent or previous days as appropraite.
 
+    latitude : type=float, degrees North of observer, default=HERA latitude
+
     longitude : type=float, degrees East of observer, default=HERA longitude
+
+    altitude : type=float, altitude in meters, default=HERA altitude
 
     Output:
     -------
@@ -547,7 +556,8 @@ def LST2JD(LST, start_jd, allow_other_jd=False, longitude=21.42830):
         if sjd not in slopes:
             jd1 = sjd
             jd2 = sjd + 0.01
-            lst1, lst2 = JD2LST(jd1, longitude=longitude), JD2LST(jd2, longitude=longitude)
+            lst1 = JD2LST(jd1, latitude=latitude, longitude=longitude, altitude=altitude)
+            lst2 = JD2LST(jd2, latitude=latitude, longitude=longitude, altitude=altitude)
             slopes[sjd] = (lst2 - lst1) / 0.01
             offsets[sjd] = lst1 - slopes[sjd] * jd1
 
@@ -579,7 +589,7 @@ def LST2JD(LST, start_jd, allow_other_jd=False, longitude=21.42830):
         return jd_array[0]
 
 
-def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
+def JD2RA(JD, latitude=-30.721526120689507, longitude=21.428303826863015, epoch='current'):
     """
     Convert from Julian date to Equatorial Right Ascension at zenith
     during a specified epoch.
@@ -639,7 +649,7 @@ def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
         return RA[0]
 
 
-def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
+def get_sun_alt(jds, latitude=-30.721526120689507, longitude=21.428303826863015):
     """
     Given longitude and latitude, get the Solar alittude at a given time.
 
@@ -737,7 +747,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
     uvc.write_calfits(output_fname, clobber=True)
 
 
-def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False):
+def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, array=False):
     """
     Shift phase center of each integration in data by amount dlst [radians] along right ascension axis.
     If inplace == True, this function directly edits the arrays in 'data' in memory, so as not to
