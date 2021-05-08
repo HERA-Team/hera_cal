@@ -493,6 +493,7 @@ def JD2LST(JD, latitude=-30.721526120689507, longitude=21.428303826863015, altit
     Notes:
     ------
     The Local Apparent Sidereal Time is *defined* as the right ascension in the current epoch.
+    Wrapper around pyuvdata's get_lst_for_time().
     """
     # get JD type
     if isinstance(JD, list) or isinstance(JD, np.ndarray):
@@ -501,14 +502,8 @@ def JD2LST(JD, latitude=-30.721526120689507, longitude=21.428303826863015, altit
         _array = False
         JD = [JD]
 
-    # iterate over JD
-    LST = []
-    for jd in JD:
-        # construct astropy Time object
-        t = Time(jd, format='jd', scale='utc')
-        # get LST in radians at epoch of jd
-        LST.append(t.sidereal_time('apparent', longitude=longitude * unt.deg).radian)
-    LST = np.array(LST)
+    # use pyuvdata
+    LST = uvutils.get_lst_for_time(np.array(JD), latitude, longitude, altitude)
 
     if _array:
         return LST
