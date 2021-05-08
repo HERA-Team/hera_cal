@@ -523,8 +523,8 @@ def LST2JD(LST, start_jd, allow_other_jd=False, longitude=21.42830):
 
     start_jd : type=int, integer julian day to use as starting point for LST2JD conversion
     
-    allow_other_jd : treat start_jd as the JD for 0 radians LST but allow
-        subsequent or following days if appropriate
+    allow_other_jd : treat the LST at the very beginning of the start_jd as the phase wrap 
+        reference and allow LSTs to map to subsequent or previous days as appropraite.
 
     longitude : type=float, degrees East of observer, default=HERA longitude
 
