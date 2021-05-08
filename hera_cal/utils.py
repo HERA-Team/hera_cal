@@ -542,29 +542,32 @@ def LST2JD(LST, start_jd, allow_other_jd=False, longitude=21.42830):
     # get start_JD
     base_jd = float(start_jd)
 
+    # calculate fit and cache it by start_jd
+    slopes, offsets = {}, {}
+    def fit_slope_offset(sjd):
+        if sjd not in slopes:
+            jd1 = sjd
+            jd2 = sjd + 0.01
+            lst1, lst2 = JD2LST(jd1, longitude=longitude), JD2LST(jd2, longitude=longitude)
+            slopes[sjd] = (lst2 - lst1) / 0.01
+            offsets[sjd] = lst1 - slopes[sjd] * jd1
+    fit_slope_offset(start_jd)
+
     # iterate over LST
     jd_array = []
-    for lst in np.unwrap(LST):
-        while True:
-            # calculate fit
-            jd1 = start_jd
-            jd2 = start_jd + 0.01
-            lst1, lst2 = JD2LST(jd1, longitude=longitude), JD2LST(jd2, longitude=longitude)
-            slope = (lst2 - lst1) / 0.01
-            offset = lst1 - slope * jd1
-
-            # solve y = mx + b for x
-            JD = (lst - offset) / slope
-
-            # redo if JD isn't on starting JD
-            if allow_other_jd: 
-                break
-            if JD - base_jd < 0:
-                start_jd += 1
-            elif JD - base_jd > 1:
-                start_jd -= 1
-            else:
-                break
+    for lst in np.unwrap(LST): # TODO: this isn't going to work for lst_array if we're bouncing back and forth
+        JD = (lst - offsets[start_jd]) / slopes[start_jd]
+        if not allow_other_jd:
+            start_jd_here = copy.copy(start_jd)
+            while True:
+                fit_slope_offset(start_jd_here)
+                JD = (lst - offsets[start_jd_here]) / slopes[start_jd_here]
+                if (JD - base_jd < 0):
+                    start_jd_here += 1
+                elif JD - base_jd > 1:
+                    start_jd_here -= 1
+                else:
+                    break
         jd_array.append(JD)
 
     jd_array = np.array(jd_array)
