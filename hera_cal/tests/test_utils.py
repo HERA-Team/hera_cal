@@ -310,6 +310,17 @@ def test_LST2JD():
     jd = utils.LST2JD(lst, start_jd=2458042)
     assert len(jd) == 6
     assert np.allclose(jd[3], 2458042.9660755517)
+    # test allow_other_jd = True
+    lsts = np.arange(-np.pi, 5 * np.pi / 2, .1)
+    jds = utils.LST2JD(lsts, start_jd=2458042, allow_other_jd=True)
+    for jd in jds:
+        assert int(np.floor(jd)) in [2458041, 2458042, 2458043]
+    assert not np.all([np.floor(jd) == 2458042 for jd in jds])
+    # test allow_other_jd = False
+    lsts = np.arange(-np.pi, 5 * np.pi / 2, .1)
+    jds = utils.LST2JD(lsts, start_jd=2458042, allow_other_jd=False)
+    for jd in jds:
+        assert int(np.floor(jd)) == 2458042
 
 
 def test_JD2RA():
