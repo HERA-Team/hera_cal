@@ -553,7 +553,7 @@ class FRFilter(VisClean):
         wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         for k in to_filter:
             if mode != 'clean':
-                filter_kwargs['suppression_factors'] = tol
+                filter_kwargs['suppression_factors'] = [tol]
             else:
                 filter_kwargs['tol'] = tol
             self.fourier_filter(keys=[k], filter_centers=[center_frates[k]], filter_half_widths=[width_frates[k]],
