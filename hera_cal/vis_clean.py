@@ -1281,6 +1281,7 @@ class VisClean(object):
                 max_frates[k] = frateamps[k] * sinlat
             center_frates[k] = (max_frates[k] + min_frates[k]) / 2.
             width_frates[k] = np.abs(max_frates[k] - min_frates[k]) / 2. * frac_frate_sky_max + frate_standoff
+            width_frates[k] = np.max([width_frates[k], min_frate]) # Don't allow frates smaller then min_frate
         return center_frates, width_frates
 
     def zeropad_data(self, data, binvals=None, zeropad=0, axis=-1, undo=False):
