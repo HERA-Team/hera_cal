@@ -57,7 +57,7 @@ delay_filter.load_delay_filter_and_write(ap.datafilelist, calfile_list=ap.calfil
                                          flag_yaml=ap.flag_yaml, Nbls_per_load=ap.Nbls_per_load,
                                          skip_flagged_edges=skip_flagged_edges,
                                          filled_outfilename=ap.filled_outfilename,
-                                         CLEAN_outfilename=ap.CLEAN_outfilename, include_flags_in_model=ap.include_flags_in_model,
+                                         CLEAN_outfilename=ap.CLEAN_outfilename,
                                          include_flags_in_model=ap.include_flags_in_model,
                                          standoff=ap.standoff, horizon=ap.horizon, tol=ap.tol,
                                          skip_wgt=ap.skip_wgt, min_dly=ap.min_dly, zeropad=ap.zeropad,
