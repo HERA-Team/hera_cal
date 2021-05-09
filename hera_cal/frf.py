@@ -656,7 +656,8 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
                                    clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
                                    skip_flagged_edges=False, overwrite_flags=False,
                                    flag_yaml=None, skip_autos=False,
-                                   clean_flags_in_resid_flags=True, **filter_kwargs):
+                                   clean_flags_in_resid_flags=True, include_flags_in_model=False,
+                                   **filter_kwargs):
     '''
     A tophat fr-filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time) if baseline_list is specified.
@@ -695,6 +696,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
                  autos will still be saved in the resides as zeros, as the models as the data (with original flags).
         clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
                                     default is True.
+        include_flags_in_model: if True, include resid_flags in the model output written to CLEAN_outfilename.
         filter_kwargs: additional keyword arguments to be passed to FRFilter.run_tophat_frfilter()
     '''
     if baseline_list is not None and Nbls_per_load is not None:
