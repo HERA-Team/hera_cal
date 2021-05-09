@@ -62,4 +62,4 @@ frf.load_tophat_frfilter_and_write(ap.datafilelist, calfile_list=ap.calfilelist,
                                    skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
                                    zeropad=ap.zeropad, tol=ap.tol, skip_wgt=ap.skip_wgt, max_frate_coeffs=ap.max_frate_coeffs,
                                    frac_frate_sky_max=ap.frac_frate_sky_max, frate_standoff=ap.frate_standoff, min_frate=ap.min_frate,
-                                   clean_flags_in_resid_flags=apr.clean_flags_in_resid_flags, **filter_kwargs)
+                                   clean_flags_in_resid_flags=ap.clean_flags_in_resid_flags, **filter_kwargs)
