@@ -579,7 +579,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
 
     # if lst_start is sufficiently below lmin, shift everything down an octave
     if lst_start < (lmin - np.pi):
-        lst_arrays -= 2 * np.pi
+        lst_arrays = [[la - 2 * np.pi for la in day] for day in lst_arrays]
         lmin -= 2 * np.pi
         lmax -= 2 * np.pi
 
