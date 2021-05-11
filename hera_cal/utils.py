@@ -16,6 +16,7 @@ from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT, _x_orientation_rep_dict
 import sklearn.gaussian_process as gp
 import warnings
+import argparse
 
 try:
     AIPY = True
@@ -1423,9 +1424,9 @@ def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=Fa
 
     Parameters
     ----------
-    inputfile: str
+    inputfilename: str
         name if inputfile to read in
-    outputfile: str
+    outputfilename: str
         name of outputfile to write spw selected data too.
     spw_ranges: list, optional
         list of 2-tuples specifying spw-ranges to select.
@@ -1437,7 +1438,7 @@ def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=Fa
     if spw_ranges is None:
         spw_ranges = [(0, hd.Nfreqs)]
     # read in selected spw_ranges
-    hd.read(freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]))
+    hd.read(inputfilename, freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]))
     hd.write_uvh5(outputfilename, clobber=clobber)
 
 
@@ -1450,8 +1451,8 @@ def select_spw_ranges_argparser():
             v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         return v
     ap = argparse.ArgumentParser(description="Select spw-ranges from a file.")
-    ap.add_argument("infilename", type=str, help="path to visibility data to select spw_ranges from.")
-    ap.add_argument("outfilename", type=str, help="path to spw selected visibility file to write out.")
+    ap.add_argument("inputfilename", type=str, help="path to visibility data to select spw_ranges from.")
+    ap.add_argument("outputfilename", type=str, help="path to spw selected visibility file to write out.")
     ap.add_argument("--spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections. Two acceptable formats are "
                                                                                 "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
                                                                                 "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
