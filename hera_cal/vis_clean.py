@@ -184,12 +184,12 @@ def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_w
         to the largest delay in the filter centers and filter_widths
     """
     if len(x) == 2:
-        dx = [np.mean(np.diff(x[0])), np.mean(np.diff(x[1]))]
+        dx = [np.median(np.diff(x[0])), np.median(np.diff(x[1]))]
         max_filter_freq = [np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[0], filter_half_widths[0])]))),
                            np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[1], filter_half_widths[1])])))]
         return [int(1. / (max_filter_freq[0] * dx[0])), int(1. / (max_filter_freq[1] * dx[1]))]
     else:
-        dx = np.mean(np.diff(x))
+        dx = np.median(np.diff(x))
         max_filter_freq = np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers, filter_half_widths)])))
         return int(1. / (max_filter_freq * dx))
 
@@ -655,7 +655,7 @@ class VisClean(object):
                        x=None, keys=None, data=None, flags=None, wgts=None,
                        output_prefix='clean', zeropad=None, cache=None,
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
-                       skip_flagged_edges=False,
+                       skip_flagged_edges=False, spw_ranges=None,
                        skip_contiguous_flags=False, max_contiguous_flag=None,
                        keep_flags=False, clean_flags_in_resid_flags=False,
                        skip_if_flag_within_edge_distance=0,
@@ -744,6 +744,8 @@ class VisClean(object):
             if true, do not filter over flagged edge times (if ax='time') (filter over sub-region)
             or dont filter over flagged edge freqs (if ax='freq') or dont filter over both (if ax='both')
             defualt is False
+        spw_ranges : list of 2-tuples, optional
+            list of 2-tuples specifying spw-ranges to filter simultaneously
         skip_contiguous_flags : bool, optional
             if true, skip integrations or channels with gaps that are larger then integer
             specified in max_contiguous_flag
@@ -856,11 +858,14 @@ class VisClean(object):
                 x = [(self.times - np.mean(self.times)) * 3600. * 24., self.freqs]
             if skip_if_flag_within_edge_distance == 0:
                 skip_if_flag_within_edge_distance = (0, 0)
+            if spw_ranges is None:
+                spw_ranges = [(0, self.Nfreqs)]
         elif ax == 'time':
             filterdim = 0
             filter2d = False
             if x is None:
                 x = (self.times - np.mean(self.times)) * 3600. * 24.
+            spw_ranges = [(0, self.Nfreqs)]
             if zeropad is None:
                 zeropad = 0
         elif ax == 'freq':
@@ -870,9 +875,12 @@ class VisClean(object):
                 zeropad = 0
             if x is None:
                 x = self.freqs
+            if spw_ranges is None:
+                spw_ranges = [(0, self.Nfreqs)]
         else:
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
-
+        if not np.allclose(self.freqs, self.freqs[np.hstack([np.arange(spw_range[0], spw_range[1]).astype(int) for spw_range in spw_ranges])]):
+            raise NotImplementedError("No support for spw-ranges that do not disjointly cover the entire frequency band.")
         # initialize containers
         containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
         for i, dc in enumerate(containers):
@@ -911,115 +919,124 @@ class VisClean(object):
                 echo("{} exists in clean_model and overwrite is False, skipping...".format(k), verbose=verbose)
                 continue
             echo("Starting fourier filter of {} at {}".format(k, str(datetime.datetime.now())), verbose=verbose)
-            d = data[k]
-            f = flags[k]
-            fw = (~f).astype(np.float)
-            w = fw * wgts[k]
-            # avoid modifying x in-place with zero-padding.
-            xp = copy.deepcopy(x)
-            if ax == 'freq':
-                # zeropad the data
-                if zeropad > 0:
-                    d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
-                    w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
-                    xp = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
-                                    x.max() + (1 + np.arange(zeropad)) * np.mean(np.diff(x))])
-            elif ax == 'time':
-                # zeropad the data
-                if zeropad > 0:
-                    d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
-                    w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
-                    xp = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
-                                   x.max() + (1 + np.arange(zeropad)) * np.mean(np.diff(x))])
-            elif ax == 'both':
-                if not isinstance(zeropad, (list, tuple)) or not len(zeropad) == 2:
-                    raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
-                if not (isinstance(zeropad[0], (int, np.int)) and isinstance(zeropad[0], (int, np.int))):
-                    raise ValueError("zeropad values must all be integers. You provided %s" % (zeropad))
-                for m in range(2):
-                    if zeropad[m] > 0:
-                        d, _ = zeropad_array(d, zeropad=zeropad[m], axis=m)
-                        w, _ = zeropad_array(w, zeropad=zeropad[m], axis=m)
-                        xp[m] = np.hstack([x[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.mean(np.diff(x[m])),
-                                           x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.mean(np.diff(x[m]))])
-            mdl, res = np.zeros_like(d), np.zeros_like(d)
-            # if we are not including flagged edges in filtering, skip them here.
-            if skip_flagged_edges:
-                xp, din, win, edges = truncate_flagged_edges(d, w, xp, ax=ax)
-            else:
-                din = d
-                win = w
-            # skip integrations with contiguous edge flags exceeding desired limit
-            # (or precomputed limit) here.
-            if skip_contiguous_flags:
-                if max_contiguous_flag is None:
-                    max_contiguous_flag = get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_widths)
-                win = flag_rows_with_contiguous_flags(win, max_contiguous_flag, ax=ax)
-            # skip integrations with flags within some minimum distance of the edges here.
-            if np.any(np.asarray(skip_if_flag_within_edge_distance) > 0):
-                win = flag_rows_with_flags_within_edge_distance(win, skip_if_flag_within_edge_distance, ax=ax)
+            for spw_range in spw_ranges:
+                spw_slice = slice(spw_range[0], spw_range[1])
+                d = data[k][:, spw_slice]
+                f = flags[k][:, spw_slice]
+                fw = (~f).astype(np.float)
+                w = fw * wgts[k]
+                # avoid modifying x in-place with zero-padding.
+                xp = copy.deepcopy(x)
+                if ax == 'freq':
+                    xp = xp[spw_slice]
+                    # zeropad the data
+                    if zeropad > 0:
+                        d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
+                        w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
+                        xp = np.hstack([xp.min() - (1 + np.arange(zeropad)[::-1]) * np.median(np.diff(xp)), xp,
+                                        xp.max() + (1 + np.arange(zeropad)) * np.median(np.diff(xp))])
+                elif ax == 'time':
+                    # zeropad the data
+                    if zeropad > 0:
+                        d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
+                        w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
+                        xp = np.hstack([xp.min() - (1 + np.arange(zeropad)[::-1]) * np.median(np.diff(xp)), xp,
+                                        xp.max() + (1 + np.arange(zeropad)) * np.median(np.diff(xp))])
+                elif ax == 'both':
+                    xp[1] = xp[1][spw_slice]
+                    if not isinstance(zeropad, (list, tuple)) or not len(zeropad) == 2:
+                        raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
+                    if not (isinstance(zeropad[0], (int, np.int)) and isinstance(zeropad[0], (int, np.int))):
+                        raise ValueError("zeropad values must all be integers. You provided %s" % (zeropad))
+                    for m in range(2):
+                        if zeropad[m] > 0:
+                            d, _ = zeropad_array(d, zeropad=zeropad[m], axis=m)
+                            w, _ = zeropad_array(w, zeropad=zeropad[m], axis=m)
+                            xp[m] = np.hstack([xp[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.median(np.diff(xp[m])),
+                                               xp[m], xp[m].max() + (1 + np.arange(zeropad[m])) * np.median(np.diff(xp[m]))])
+                mdl, res = np.zeros_like(d), np.zeros_like(d)
+                # if we are not including flagged edges in filtering, skip them here.
+                if skip_flagged_edges:
+                    xp, din, win, edges = truncate_flagged_edges(d, w, xp, ax=ax)
+                else:
+                    din = d
+                    win = w
+                # skip integrations with contiguous edge flags exceeding desired limit
+                # (or precomputed limit) here.
+                if skip_contiguous_flags:
+                    if max_contiguous_flag is None:
+                        max_contiguous_flag = get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_widths)
+                    win = flag_rows_with_contiguous_flags(win, max_contiguous_flag, ax=ax)
+                # skip integrations with flags within some minimum distance of the edges here.
+                if np.any(np.asarray(skip_if_flag_within_edge_distance) > 0):
+                    win = flag_rows_with_flags_within_edge_distance(win, skip_if_flag_within_edge_distance, ax=ax)
 
-            mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
-                                                  filter_half_widths=filter_half_widths,
-                                                  mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
-                                                  **filter_kwargs)
-            # insert back the filtered model if we are skipping flagged edgs.
-            if skip_flagged_edges:
-                mdl = np.pad(mdl, edges)
-                res = np.pad(res, edges)
+                mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                                      filter_half_widths=filter_half_widths,
+                                                      mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                                      **filter_kwargs)
+                # insert back the filtered model if we are skipping flagged edgs.
+                if skip_flagged_edges:
+                    mdl = np.pad(mdl, edges)
+                    res = np.pad(res, edges)
 
-            # unzeropad array and put in skip flags.
-            if ax == 'freq':
-                if zeropad > 0:
-                    mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
-                    res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
-            elif ax == 'time':
-                if zeropad > 0:
-                    mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
-                    res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
-            elif ax == 'both':
-                for i in range(2):
-                    if zeropad[i] > 0:
-                        mdl, _ = zeropad_array(mdl, zeropad=zeropad[i], axis=i, undo=True)
-                        res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
-                    _trim_status(info, i, zeropad[i - 1])
-            # flag integrations and channels that were skipped.
-            skipped = np.zeros_like(mdl, dtype=np.bool)
-            for dim in range(2):
-                if len(info['status']['axis_%d' % dim]) > 0:
-                    for i in range(len(info['status']['axis_%d' % dim])):
-                        if info['status']['axis_%d' % dim][i] == 'skipped':
-                            if dim == 0:
-                                skipped[:, i] = True
-                            elif dim == 1:
-                                skipped[i] = True
-            # just in case any artifacts make it through after our other flagging rounds
-            # flag integrations or channels where the RMS of the model exceeds the RMS of the unflagged data
-            # by some threshold.
-            if flag_model_rms_outliers:
-                skipped = flag_model_rms(skipped, d, w, mdl, model_rms_threshold=model_rms_threshold, ax=ax)
+                # unzeropad array and put in skip flags.
+                if ax == 'freq':
+                    if zeropad > 0:
+                        mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
+                        res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
+                elif ax == 'time':
+                    if zeropad > 0:
+                        mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
+                        res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
+                elif ax == 'both':
+                    for i in range(2):
+                        if zeropad[i] > 0:
+                            mdl, _ = zeropad_array(mdl, zeropad=zeropad[i], axis=i, undo=True)
+                            res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
+                        _trim_status(info, i, zeropad[i - 1])
+                # flag integrations and channels that were skipped.
+                skipped = np.zeros_like(mdl, dtype=np.bool)
+                for dim in range(2):
+                    if len(info['status']['axis_%d' % dim]) > 0:
+                        for i in range(len(info['status']['axis_%d' % dim])):
+                            if info['status']['axis_%d' % dim][i] == 'skipped':
+                                if dim == 0:
+                                    skipped[:, i] = True
+                                elif dim == 1:
+                                    skipped[i] = True
+                # just in case any artifacts make it through after our other flagging rounds
+                # flag integrations or channels where the RMS of the model exceeds the RMS of the unflagged data
+                # by some threshold.
+                if flag_model_rms_outliers:
+                    skipped = flag_model_rms(skipped, d, w, mdl, model_rms_threshold=model_rms_threshold, ax=ax)
 
-            # also flag skipped edge channels and integrations.
-            if skip_flagged_edges:
-                skipped[:, :edges[1][0]] = True
-                skipped[:, -edges[1][1] - 1:] = True
-                skipped[:edges[0][0], :] = True
-                skipped[-edges[0][1] - 1:, :] = True
-
-            filtered_model[k] = mdl
-            filtered_model[k][skipped] = 0.
-            filtered_resid[k] = res * fw
-            filtered_resid[k][skipped] = 0.
-            filtered_data[k] = filtered_model[k] + filtered_resid[k]
-            if not keep_flags:
-                filtered_flags[k] = skipped
-            else:
-                filtered_flags[k] = copy.deepcopy(flags[k]) | skipped
-            filtered_info[k] = info
-            if clean_flags_in_resid_flags:
-                resid_flags[k] = copy.deepcopy(flags[k]) | skipped
-            else:
-                resid_flags[k] = copy.deepcopy(flags[k])
+                # also flag skipped edge channels and integrations.
+                if skip_flagged_edges:
+                    skipped[:, :edges[1][0]] = True
+                    skipped[:, -edges[1][1] - 1:] = True
+                    skipped[:edges[0][0], :] = True
+                    skipped[-edges[0][1] - 1:, :] = True
+                if k not in filtered_model:
+                    filtered_model[k] = np.zeros_like(data[k])
+                    filtered_resid[k] = np.zeros_like(data[k])
+                    filtered_data[k] = np.zeros_like(data[k])
+                    filtered_flags[k] = np.zeros_like(flags[k])
+                    resid_flags[k] = np.zeros_like(flags[k])
+                filtered_model[k][:, spw_slice] = mdl
+                filtered_model[k][skipped, spw_slice] = 0.
+                filtered_resid[k][:, spw_slice] = res * fw
+                filtered_resid[k][skipped, spw_slice]] = 0.
+                filtered_data[k][:, spw_slice] = filtered_model[k] + filtered_resid[k]
+                if not keep_flags:
+                    filtered_flags[k][:, spw_slice] = skipped
+                else:
+                    filtered_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice]) | skipped
+                filtered_info[k] = info
+                if clean_flags_in_resid_flags:
+                    resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice]) | skipped
+                else:
+                    resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice])
 
         if hasattr(data, 'times'):
             filtered_data.times = data.times
@@ -1770,7 +1787,7 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
             # find times that are close.
             tload = []
             # use tolerance in times that is set by the time resolution of the dataset.
-            atol = np.mean(np.diff(hd_baseline_chunk.times)) / 10.
+            atol = np.median(np.diff(hd_baseline_chunk.times)) / 10.
             all_times = np.unique(hd_baseline_chunk.times)
             for t in all_times:
                 if np.any(np.isclose(t, hd_time_chunk.times, atol=atol, rtol=0)):
@@ -1780,7 +1797,7 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         # now that we've updated everything, we write the output file.
         hd_time_chunk.write_uvh5(outfilename, clobber=clobber)
     else:
-        dt_time_chunk = np.mean(np.diff(hd_time_chunk.times)) / 2.
+        dt_time_chunk = np.median(np.diff(hd_time_chunk.times)) / 2.
         tmax = hd_time_chunk.times.max() + dt_time_chunk
         tmin = hd_time_chunk.times.min() - dt_time_chunk
         hd_combined = io.HERAData(baseline_chunk_files)
