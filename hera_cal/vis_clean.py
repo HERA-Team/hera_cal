@@ -54,8 +54,6 @@ def find_discontinuity_edges(x, xtol=1e-3):
         edges.append((discontinuities[-1] + 1, len(x)))
     return edges
 
-
-
 def truncate_flagged_edges(data_in, weights_in, x, ax='freq', treat_spectral_breaks_as_edges=True, xtol=1e-3):
     """
     cut away edge channels and integrations that are completely flagged
@@ -91,19 +89,14 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq', treat_spectral_bre
             the width of the edges trimmed.
             first list is time dim, second list is freq dim.
             these lists can be greater then length 1 if treat_spectral_breaks_as_edges = True
-    chunks : 2-list of lists of 2-tuples
-            indices indicating the chunk edges that edge widths are reference too.
-            first list is time dim, second list is freq dim.
-            these lists can be greater then length 1 if treat_spectral_breaks_as_edges = True
     """
     # if axis == 'time', just use freq mode
     # on transposed arrays.
     if ax == 'time':
-        xout, dout, wout, edges, chunks = truncate_flagged_edges(data_in.T, weights_in.T, x)
+        xout, dout, wout, edges, breaks = truncate_flagged_edges(data_in.T, weights_in.T, x)
         dout = dout.T
         wout = wout.T
         edges = [edges[1], [(0, 0)]]
-        chunks = [chunks[1], [(0, data_in.shape[1])]]
     else:
         # Identify all contiguous chunks.
         if treat_spectral_breaks_as_edges:
@@ -123,22 +116,71 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq', treat_spectral_bre
         if len(inds_left) > 1:
             dout = np.hstack([data_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
             wout = np.hstack([weights_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
+
         else:
             dout = data_in[:, ind_left: ind_right]
             wout = weights_in[:, ind_left: ind_right]
+            breaks = []
         edges = [(ind_left, chunk[1] - ind_right) for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)]
         if ax == 'both':
             x1 = np.hstack([x[1][chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
-            x0, dout, wout, e0, c0 = truncate_flagged_edges(dout, wout, x[0], ax='time')
+            x0, dout, wout, e0, b0 = truncate_flagged_edges(dout, wout, x[0], ax='time')
             xout = [x0, x1]
             edges = [e0[0], edges]
-            chunks = [c0[0], chunks]
         else:
             xout = np.hstack(x[chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
             edges = [[(0, 0)], edges]
-            chunks = [[(0, data_in.shape[0])], chunks]
-    return xout, dout, wout, edges, chunks
+    return xout, dout, wout, edges, breaks
 
+
+def restore_flagged_edges(x, data, edges, ax='freq'):
+    """fill in flagged regions of data array produced
+       by truncate_flagged_edges with zeros.
+
+     Parameters
+     ----------
+     x: 2-list of arrays
+       1d array of x-values of data with removed edges.
+     data: array-like
+       2d array containing data that has been trimmed with
+       trunate_flagged_edges (dout or wout)
+       dimensions (nf_trimmed, nt_trimmed)
+     edges : 2-list of lists of 2-tuples
+        the width of the edges trimmed.
+        first list is time dim, second list is freq dim.
+        these lists can be greater then length 1 if treat_spectral_breaks_as_edges = True
+     chunks : 2-list of lists of 2-tuples
+        indices indicating the chunk edges that edge widths are reference too.
+        first list is time dim, second list is freq dim.
+        these lists can be greater then length 1 if treat_spectral_breaks_as_edges = True
+    ax : axis to restore gaps on.
+    Returns
+    -------
+    data_restored: array-like
+        2d array with truncated edges restored.
+    """
+    if ax == 'time':
+        # if axis is time, process everything like its the time axis with 0 <-> 1 reversed.
+        # switch everything back later.
+        data = data.T
+        x = [x[1], x[0]]
+        edges = [edges[1], edges[0]]
+    else:
+    chunks = find_discontinuity_edges(x[1])
+    data_restored = [np.pad(data[:, chunk[0]: chunk[1]], [(0, 0), edge]) for chunk, edge in zip(chunks[1], edges[1])]
+    if len(data_restored) > 1:
+        data_restored = np.hstack(data_restored)
+    else:
+        data_restored = data_restored[0]
+    if ax == 'both':
+        # if axis is both, then process time-axis after freq axis.
+        data_restored = restore_flagged_edges(x, data_restored, edges, ax='time')
+    elif ax == 'time':
+        # restore everything if axis was time.
+        data_restored = data_restored.T
+        x = [x[1], x[0]]
+        edges = [edges[1], edges[0]]
+    return data_restored
 
 def flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance, ax='freq'):
     """
@@ -979,6 +1021,8 @@ class VisClean(object):
                 continue
             echo("Starting fourier filter of {} at {}".format(k, str(datetime.datetime.now())), verbose=verbose)
             for spw_range in spw_ranges:
+                if spw_range not in filtered_info[k]:
+                    filtered_info[k][spw_range] = {}
                 spw_slice = slice(spw_range[0], spw_range[1])
                 d = data[k][:, spw_slice]
                 f = flags[k][:, spw_slice]
@@ -1016,7 +1060,7 @@ class VisClean(object):
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
                 # if we are not including flagged edges in filtering, skip them here.
                 if skip_flagged_edges:
-                    xp, din, win, edges, chunks = truncate_flagged_edges(d, w, xp, ax=ax)
+                    xp, din, win, edges = truncate_flagged_edges(d, w, xp, ax=ax)
                 else:
                     din = d
                     win = w
@@ -1036,8 +1080,8 @@ class VisClean(object):
                                                       **filter_kwargs)
                 # insert back the filtered model if we are skipping flagged edgs.
                 if skip_flagged_edges:
-                    mdl = fill_back_flagged_edges(mdl, edges, chunks)
-                    res = fill_back_flagged_edges(res, edges, chunks)
+                    mdl = restore_flagged_edges(xp, mdl, edges)
+                    res = restore_flagged_edges(xp, res, edges)
 
                 # unzeropad array and put in skip flags.
                 if ax == 'freq':
@@ -1091,7 +1135,7 @@ class VisClean(object):
                     filtered_flags[k][:, spw_slice] = skipped
                 else:
                     filtered_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice]) | skipped
-                filtered_info[k] = info
+                filtered_info[k][spw_range] = info
                 if clean_flags_in_resid_flags:
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice]) | skipped
                 else:
