@@ -321,6 +321,25 @@ def test_LST2JD():
     jds = utils.LST2JD(lsts, start_jd=2458042, allow_other_jd=False)
     for jd in jds:
         assert int(np.floor(jd)) == 2458042
+    # test branch cut
+    lsts = np.arange(0, 2 * np.pi, .1)
+    jds = utils.LST2JD(lsts, start_jd=2458042, allow_other_jd=True, lst_branch_cut=0.0)
+    assert jds[0] < jds[-1]
+    jds = utils.LST2JD(lsts, start_jd=2458042, allow_other_jd=True, lst_branch_cut=1)
+    assert np.min(jds[lsts < 1]) > np.max(jds[lsts > 1])
+    # test that lst 0 falls on correct day
+    for jd in range(2458042, 2458042 + 365):
+        assert np.floor(utils.LST2JD(0, start_jd=jd, allow_other_jd=True)) == jd
+    # test that lst of branch cut falls on correct day
+    for jd in range(2458042, 2458042 + 365):
+        assert np.floor(utils.LST2JD(1, start_jd=jd, allow_other_jd=True, lst_branch_cut=1)) == jd
+    # test convert back and forth for a range of days to 1e-8 radians precision
+    for start_jd in range(2458042, 2458042 + 365):
+        lsts = np.arange(0, 2*np.pi, .1)
+        lsts2 = utils.JD2LST(utils.LST2JD(lsts, start_jd=jd, allow_other_jd=True, lst_branch_cut=1))
+        is_close = (np.abs(lsts - lsts2) < 1e-8) | (np.abs(lsts - lsts2 + 2 * np.pi) < 1e-8) | (np.abs(lsts - lsts2 - 2 * np.pi) < 1e-8)
+        assert np.all(is_close)
+
 
 
 def test_JD2RA():
