@@ -9,7 +9,7 @@ import astropy.constants as const
 from astropy.time import Time
 from astropy import coordinates as crd
 from astropy import units as unt
-from scipy import signal
+from scipy import signal, interpolate
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
@@ -540,43 +540,32 @@ def LST2JD(LST, start_jd, allow_other_jd=False, latitude=-30.721526120689507,
     if isinstance(LST, list) or isinstance(LST, np.ndarray):
         _array = True
     else:
-        LST = [LST]
+        LST = np.array([LST])
         _array = False
 
-    # get start_JD
-    base_jd = float(start_jd)
+    # create interpolator for a given start that completely spans that date and the previous one
+    jd_grid = start_jd + np.linspace(-1, 1, 21)
+    lst_grid = (JD2LST(jd_grid, latitude=latitude, longitude=longitude, altitude=altitude))
+    interpolator = interpolate.interp1d(np.unwrap(lst_grid - 2 * np.pi), jd_grid,
+                                        kind='linear', fill_value='extrapolate')
 
-    # calculate fit and cache it by start_jd
-    def fit_slope_offset(sjd):
-        if sjd not in slopes:
-            jd1 = sjd
-            jd2 = sjd + 0.01
-            lst1 = JD2LST(jd1, latitude=latitude, longitude=longitude, altitude=altitude)
-            lst2 = JD2LST(jd2, latitude=latitude, longitude=longitude, altitude=altitude)
-            slopes[sjd] = (lst2 - lst1) / 0.01
-            offsets[sjd] = lst1 - slopes[sjd] * jd1
-
-    slopes, offsets = {}, {}
-    fit_slope_offset(start_jd)
-
-    # iterate over LST
-    jd_array = []
-    for lst in np.unwrap(LST):
-        JD = (lst - offsets[start_jd]) / slopes[start_jd]
-        if not allow_other_jd:
-            start_jd_here = copy.copy(start_jd)
-            while True:
-                fit_slope_offset(start_jd_here)
-                JD = (lst - offsets[start_jd_here]) / slopes[start_jd_here]
-                if (JD - base_jd < 0):
-                    start_jd_here += 1
-                elif JD - base_jd > 1:
-                    start_jd_here -= 1
-                else:
-                    break
-        jd_array.append(JD)
-
-    jd_array = np.array(jd_array)
+    # interpolate
+    jd_array = interpolator(LST)
+    
+    # Enforce single JD if desired
+    if not allow_other_jd:
+        lst_temp = copy.copy(LST)
+        while True:
+            lt_indices = np.floor(jd_array) < np.floor(start_jd)
+            gt_indices = np.floor(jd_array) > np.floor(start_jd)
+            if np.any(lt_indices):
+                lst_temp[lt_indices] += 2 * np.pi
+                jd_array[lt_indices] = interpolator(lst_temp[lt_indices])
+            elif np.any(gt_indices):
+                lst_temp[gt_indices] -= 2 * np.pi
+                jd_array[gt_indices] = interpolator(lst_temp[gt_indices])
+            else:
+                break
 
     if _array:
         return jd_array
