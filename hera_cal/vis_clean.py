@@ -54,6 +54,7 @@ def find_discontinuity_edges(x, xtol=1e-3):
         edges.append((discontinuities[-1] + 1, len(x)))
     return edges
 
+
 def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
     """
     cut away edge channels and integrations that are completely flagged
@@ -182,6 +183,7 @@ def restore_flagged_edges(x, data, edges, ax='freq'):
             # if axis is both, then process time-axis after freq axis.
             data_restored = restore_flagged_edges(x[0], data_restored, edges[0], ax='time')
     return data_restored
+
 
 def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_distance, ax='freq'):
     """
@@ -1851,8 +1853,8 @@ def _filter_argparser():
     ap.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter.")
     ap.add_argument("--verbose", default=False, action="store_true", help="Lots of text.")
     ap.add_argument("--filter_spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections to filter independently. Two acceptable formats are "
-                                                                                "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
-                                                                                "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
+                                                                                       "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
+                                                                                       "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     # clean arguments.
     clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\

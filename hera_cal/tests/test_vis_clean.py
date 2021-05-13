@@ -387,7 +387,7 @@ class Test_VisClean(object):
         assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
         # check that filtered_data is the same in channels that were not flagged
-        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) **.5
+        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) ** .5
         assert np.allclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
                            V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], rtol=0., atol=atol)
 
@@ -659,10 +659,10 @@ class Test_VisClean(object):
         for k in d:
             f[k][:] = False
             f[k][:, 0] = True
-            f[k][:, 28, 29, 30, 31, 32, 33] = True # flags around first discont
-            f[k][:, 12] = True # should be inpainted
-            f[k][:, 47] = True # flag near second break
-            f[k][:, 49] = True # should be inpainted
+            f[k][:, 28, 29, 30, 31, 32, 33] = True  # flags around first discont
+            f[k][:, 12] = True  # should be inpainted
+            f[k][:, 47] = True  # flag near second break
+            f[k][:, 49] = True  # should be inpainted
 
         hdt.update(flags=f)
         hdt.write_uvh5(fname_edgeflags)
@@ -682,13 +682,16 @@ class Test_VisClean(object):
 
         # test spw_range functionality.
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
-                    skip_flagged_edges=True, spw_range=[(0, 30), (30, V.Nfreqs)])
+                    skip_flagged_edges=True, filter_spw_ranges=[(0, 30), (30, V.Nfreqs)])
         for k in V.clean_flags:
             assert np.all(V.clean_flags[k][:, 0, 28, 29, 30, 31, 32, 33, 47])
             assert not np.any(V.clean_flags[k][:, range(1, 28)])
             assert not np.any(V.clean_flags[k][:, range(34, 47)])
             assert not np.any(V.clean_flags[k][:, range(48, V.Nfreqs)])
-
+        # test NotImplementedError
+        pytest.raises(NotImplementedError, V.vis_clean, keys=[(24, 25, 'ee')], ax='freq', overwrite=True,
+                      filter_spw_ranges=[(0, 30), (31, V.Nfreqs)])
+        # test time filtering and filtering both axes.
 
     def test_apply_flags(self):
         # cover edge cases of apply_flags not covered in test_delay_filter and
@@ -935,13 +938,25 @@ class Test_VisClean(object):
         pytest.raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'ee')], axis=(0, 1), zeropad=(0,))
 
     def test_filter_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20']
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20', '--filter_spw_ranges', '0~10,12~20']
         parser = vis_clean._filter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a']
         assert a.clobber is True
         assert a.spw_range[0] == 0
         assert a.spw_range[1] == 20
+        assert a.filter_spw_ranges == [(0, 10), (12, 20)]
+        assert a.time_thresh == 0.05
+        assert not a.factorize_flags
+        # test alternative.filter_spw_ranges format.
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20', '--filter_spw_ranges', '0 10,12 20']
+        parser = vis_clean._filter_argparser()
+        a = parser.parse_args()
+        assert a.datafilelist == ['a']
+        assert a.clobber is True
+        assert a.spw_range[0] == 0
+        assert a.spw_range[1] == 20
+        assert a.filter_spw_ranges == [(0, 10), (12, 20)]
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
 
