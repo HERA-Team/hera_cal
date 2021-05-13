@@ -553,7 +553,7 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
         LST[LST < lst_branch_cut] += 2 * np.pi  
 
     # create interpolator for a given start date that puts the lst_branch_cut on start_jd
-    jd_grid = start_jd + np.linspace(-1, 2, 31) # include previous and next days
+    jd_grid = start_jd + np.linspace(-1, 2, 31)  # include previous and next days
     while True:
         lst_grid = (JD2LST(jd_grid, latitude=latitude, longitude=longitude, altitude=altitude))
         interpolator = interpolate.interp1d(np.unwrap(lst_grid - 2 * np.pi), jd_grid,
