@@ -1238,7 +1238,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
 
 def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None, nsamples=None,
               filetype='miriad', write_file=True, outdir="./", overwrite=False, verbose=True, history=" ",
-              return_uvd=False, start_jd=None, x_orientation="north", instrument="HERA",
+              return_uvd=False, start_jd=None, lst_branch_cut=0.0, x_orientation="north", instrument="HERA",
               telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
               telescope_location=HERA_TELESCOPE_LOCATION, integration_time=None, **kwargs):
     """
@@ -1279,6 +1279,9 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     return_uvd : type=boolean, if True return UVData instance.
 
     start_jd : type=float, starting integer Julian Date of time_array if time_array is None.
+
+    lst_branch_cut : type=float, LST of data start, ensures that LSTs lower than this are wrapped around
+                     and correspond to higher JDs in time_array, but only if time_array is None [radians]
 
     x_orientation : type=str, orientation of X dipole, options=['east', 'north']
 
@@ -1326,7 +1329,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     if time_array is None:
         if start_jd is None:
             raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = LST2JD(lst_array, start_jd, allow_other_jd=True, 
+        time_array = LST2JD(lst_array, start_jd, allow_other_jd=True, lst_branch_cut=lst_branch_cut,
                             latitude=(tel_lat_lon_alt[0] * 180 / np.pi),
                             longitude=(tel_lat_lon_alt[1] * 180 / np.pi),
                             altitude=tel_lat_lon_alt[2])
