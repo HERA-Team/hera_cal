@@ -647,6 +647,49 @@ class Test_VisClean(object):
         for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
             assert np.all(V.clean_resid_flags[k][-1])
 
+    def rest_vis_clean_spws(self):
+        # test selecting partial frequency chunks.
+        tmp_path = tmpdir.strpath
+        template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        # first run flagging channels and frequencies
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
+        hdt = io.HERAData(template)
+        d, f, n = hdt.read(frequencies=np.hstack([hdt.freqs[:30], hdt.freqs[32:48], hdt.freqs[49:]]))
+        for k in d:
+            f[k][:] = False
+            f[k][:, 0] = True
+            f[k][:, 28, 29, 30, 31, 32, 33] = True # flags around first discont
+            f[k][:, 12] = True # should be inpainted
+            f[k][:, 47] = True # flag near second break
+            f[k][:, 49] = True # should be inpainted
+
+        hdt.update(flags=f)
+        hdt.write_uvh5(fname_edgeflags)
+        for k in d:
+            f[k][:] = True
+        hdt.update(flags=f)
+        hdt.write_uvh5(fname_flagged)
+        V = VisClean(fname_flagged, filetype='uvh5')
+        V.read()
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_flagged_edges=True)
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k][:, 0, 28, 29, 30, 31, 32, 33, 47])
+            assert not np.any(V.clean_flags[k][:, range(1, 28)])
+            assert not np.any(V.clean_flags[k][:, range(34, 47)])
+            assert not np.any(V.clean_flags[k][:, range(48, V.Nfreqs)])
+
+        # test spw_range functionality.
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_flagged_edges=True, spw_range=[(0, 30), (30, V.Nfreqs)])
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k][:, 0, 28, 29, 30, 31, 32, 33, 47])
+            assert not np.any(V.clean_flags[k][:, range(1, 28)])
+            assert not np.any(V.clean_flags[k][:, range(34, 47)])
+            assert not np.any(V.clean_flags[k][:, range(48, V.Nfreqs)])
+
+
     def test_apply_flags(self):
         # cover edge cases of apply_flags not covered in test_delay_filter and
         # test_xtalk_filter.
