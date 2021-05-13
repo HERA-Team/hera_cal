@@ -314,7 +314,7 @@ def test_LST2JD():
     lsts = np.arange(-np.pi / 4, 7 * np.pi / 2, .1)
     jds = utils.LST2JD(lsts, start_jd=2458042, allow_other_jd=True)
     for jd in jds:
-        assert int(np.floor(jd)) in [2458041, 2458042, 2458043]
+        assert int(np.floor(jd)) in [2458041, 2458042, 2458043, 2458044]
     assert not np.all([np.floor(jd) == 2458042 for jd in jds])
     # test allow_other_jd = False
     lsts = np.arange(-np.pi / 4, 7 * np.pi / 2, .1)
