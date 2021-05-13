@@ -60,4 +60,5 @@ delay_filter.load_delay_filter_and_write(ap.datafilelist, calfile_list=ap.calfil
                                          CLEAN_outfilename=ap.CLEAN_outfilename,
                                          standoff=ap.standoff, horizon=ap.horizon, tol=ap.tol,
                                          skip_wgt=ap.skip_wgt, min_dly=ap.min_dly, zeropad=ap.zeropad,
+                                         filter_spw_ranges=ap.filter_spw_ranges,
                                          clean_flags_in_resid_flags=True, **filter_kwargs)
