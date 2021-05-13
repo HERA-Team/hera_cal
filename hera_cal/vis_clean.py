@@ -126,9 +126,10 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
         edges = [(ind_left, chunk[1] - ind_right) for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)]
         if ax == 'both':
             x1 = np.hstack([x[1][chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
-            x0, dout, wout, e0, b0 = truncate_flagged_edges(dout, wout, x[0], ax='time')
+            x0, dout, wout, e0, c0 = truncate_flagged_edges(dout, wout, x[0], ax='time')
             xout = [x0, x1]
             edges = [e0, edges]
+            chunks = [c0, chunks]
         else:
             xout = np.hstack([x[chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
     return xout, dout, wout, edges, chunks
@@ -168,11 +169,11 @@ def restore_flagged_edges(x, data, edges, ax='freq'):
     else:
         if ax == 'both':
             chunks = find_discontinuity_edges(x[1])
-            data_restored = [np.pad(data[:, chunk[0]: chunk[1]], [(0, 0), edge]) for chunk, edge in zip(chunks[1], edges[1])]
+            zgen = zip(chunks, edges[1])
         else:
             chunks = find_discontinuity_edges(x)
-            data_restored = [np.pad(data[:, chunk[0]: chunk[1]], [(0, 0), edge]) for chunk, edge in zip(chunks, edges)]
-
+            zgen = zip(chunks, edges)
+        data_restored = [np.pad(data[:, chunk[0]: chunk[1]], [(0, 0), edge]) for chunk, edge in zgen]
         if len(data_restored) > 1:
             data_restored = np.hstack(data_restored)
         else:
@@ -1070,7 +1071,6 @@ class VisClean(object):
                             w, _ = zeropad_array(w, zeropad=zeropad[m], axis=m)
                             xp[m] = np.hstack([xp[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.median(np.diff(xp[m])),
                                                xp[m], xp[m].max() + (1 + np.arange(zeropad[m])) * np.median(np.diff(xp[m]))])
-                mdl, res = np.zeros_like(d), np.zeros_like(d)
                 # if we are not including flagged edges in filtering, skip them here.
                 if skip_flagged_edges:
                     xp, din, win, edges, chunks = truncate_flagged_edges(d, w, xp, ax=ax)
@@ -1087,14 +1087,15 @@ class VisClean(object):
                 if np.any(np.asarray(skip_if_flag_within_edge_distance) > 0):
                     win = flag_rows_with_flags_within_edge_distance(xp, win, skip_if_flag_within_edge_distance, ax=ax)
 
+                mdl, res = np.zeros_like(d), np.zeros_like(d)
                 mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                                       filter_half_widths=filter_half_widths,
                                                       mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
                                                       **filter_kwargs)
                 # insert back the filtered model if we are skipping flagged edgs.
                 if skip_flagged_edges:
-                    mdl = restore_flagged_edges(xp, mdl, edges)
-                    res = restore_flagged_edges(xp, res, edges)
+                    mdl = restore_flagged_edges(xp, mdl, edges, ax=ax)
+                    res = restore_flagged_edges(xp, res, edges, ax=ax)
 
                 # unzeropad array and put in skip flags.
                 if ax == 'freq':
@@ -1133,7 +1134,7 @@ class VisClean(object):
                         for chunk, edge in zip(chunks[1], edges[1]):
                             cslice = slice(chunk[0], chunk[1])
                             skipped[:, cslice][:, :edge[0]] = True
-                            skipped[:, cslice][:, -edges[1] - 1:] = True
+                            skipped[:, cslice][:, -edge[1] - 1:] = True
                         for chunk, edge in zip(chunks[0], edges[0]):
                             skipped[cslice, :][:edge[0]] = True
                             skipped[cslice, :][-edge[1] - 1:] = True
