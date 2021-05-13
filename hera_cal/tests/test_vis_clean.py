@@ -40,24 +40,28 @@ def test_truncate_flagged_edges():
     times = np.arange(60) * 10.
     freqs = np.arange(64) * 100e3
     # test freq truncation
-    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
+    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
     assert np.all(np.isclose(xout, freqs[:-1]))
     assert np.all(np.isclose(dout, data_in[:, :-1]))
     assert np.all(np.isclose(wout, weights_in[:, :-1]))
     assert edges == [(0, 0), (0, 1)]
     # test time truncation
-    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
+    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
     assert np.all(np.isclose(xout, times[:-2]))
     assert np.all(np.isclose(dout, data_in[:-2, :]))
     assert np.all(np.isclose(wout, weights_in[:-2, :]))
     assert edges == [(0, 2), (0, 0)]
     # test truncating both.
-    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
+    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
     assert np.all(np.isclose(xout[0], times[:-2]))
     assert np.all(np.isclose(xout[1], freqs[:-1]))
     assert np.all(np.isclose(dout, data_in[:-2, :-1]))
     assert np.all(np.isclose(wout, weights_in[:-2, :-1]))
     assert edges == [(0, 2), (0, 1)]
+
+def find_discontinuity_edges():
+    assert find_discontinuity_edges([0, 1, 4, 9]) == [(0, 2), (2, 3), (3, 4)]
+    assert find_discontinuity_edges([0, 1, 2, 4, 5, 6, 7, 11, 12]) == [(0, 3), (3, 7), (7, 8), (8, 9)]
 
 
 def test_flag_rows_with_flags_within_edge_distance():
