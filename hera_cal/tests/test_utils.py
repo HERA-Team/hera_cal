@@ -335,11 +335,10 @@ def test_LST2JD():
         assert np.floor(utils.LST2JD(1, start_jd=jd, allow_other_jd=True, lst_branch_cut=1)) == jd
     # test convert back and forth for a range of days to 1e-8 radians precision
     for start_jd in range(2458042, 2458042 + 365):
-        lsts = np.arange(0, 2*np.pi, .1)
+        lsts = np.arange(0, 2 * np.pi, .1)
         lsts2 = utils.JD2LST(utils.LST2JD(lsts, start_jd=jd, allow_other_jd=True, lst_branch_cut=1))
         is_close = (np.abs(lsts - lsts2) < 1e-8) | (np.abs(lsts - lsts2 + 2 * np.pi) < 1e-8) | (np.abs(lsts - lsts2 - 2 * np.pi) < 1e-8)
         assert np.all(is_close)
-
 
 
 def test_JD2RA():
