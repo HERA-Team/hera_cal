@@ -511,7 +511,7 @@ def JD2LST(JD, latitude=-30.721526120689507, longitude=21.428303826863015, altit
         return LST[0]
 
 
-def LST2JD(LST, start_jd, allow_other_jd=False, latitude=-30.721526120689507,
+def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30.721526120689507,
            longitude=21.428303826863015, altitude=1051.690000018105):
     """
     Convert Local Apparent Sidereal Time -> Julian Date via a linear fit
@@ -523,9 +523,13 @@ def LST2JD(LST, start_jd, allow_other_jd=False, latitude=-30.721526120689507,
 
     start_jd : type=int, integer julian day to use as starting point for LST2JD conversion
     
-    allow_other_jd : treat the LST at the very beginning of the start_jd as the phase wrap 
-        reference and allow LSTs to map to subsequent or previous days as appropraite.
-
+    allow_other_jd : type=bool, ensure that the lst_branch_cut falls on start_jd but allow 
+                     LSTs to correspond to previous or subsequent days if necessary
+        
+    lst_branch_cut : type=float, LST that must fall during start_jd even when allow_other_jd 
+                     is True. Used as the starting point starting point where LSTs below this
+                     value map to later JDs than this LST [radians]
+    
     latitude : type=float, degrees North of observer, default=HERA latitude
 
     longitude : type=float, degrees East of observer, default=HERA longitude
@@ -538,32 +542,44 @@ def LST2JD(LST, start_jd, allow_other_jd=False, latitude=-30.721526120689507,
     """
     # get LST type
     if isinstance(LST, list) or isinstance(LST, np.ndarray):
+        LST = np.array(LST)
         _array = True
     else:
         LST = np.array([LST])
         _array = False
 
-    # create interpolator for a given start that completely spans that date and the previous one
-    jd_grid = start_jd + np.linspace(-1, 1, 21)
-    lst_grid = (JD2LST(jd_grid, latitude=latitude, longitude=longitude, altitude=altitude))
-    interpolator = interpolate.interp1d(np.unwrap(lst_grid - 2 * np.pi), jd_grid,
-                                        kind='linear', fill_value='extrapolate')
+    # increase LSTs so no values fall below the branch cut (avoiding wraps in interpolation)
+    while np.any(LST < lst_branch_cut):
+        LST[LST < lst_branch_cut] += 2 * np.pi  
 
+    # create interpolator for a given start date that puts the lst_branch_cut on start_jd
+    jd_grid = start_jd + np.linspace(-1, 2, 31) # include previous and next days
+    while True:
+        lst_grid = (JD2LST(jd_grid, latitude=latitude, longitude=longitude, altitude=altitude))
+        interpolator = interpolate.interp1d(np.unwrap(lst_grid - 2 * np.pi), jd_grid,
+                                            kind='linear', fill_value='extrapolate')
+        if np.floor(interpolator(lst_branch_cut)) > np.floor(start_jd):
+            jd_grid -= 1.0
+
+        elif np.floor(interpolator(lst_branch_cut)) < np.floor(start_jd):
+            jd_grid += 1.0     
+        else:
+            break
+        
     # interpolate
     jd_array = interpolator(LST)
     
     # Enforce single JD if desired
     if not allow_other_jd:
-        lst_temp = copy.copy(LST)
         while True:
             lt_indices = np.floor(jd_array) < np.floor(start_jd)
             gt_indices = np.floor(jd_array) > np.floor(start_jd)
             if np.any(lt_indices):
-                lst_temp[lt_indices] += 2 * np.pi
-                jd_array[lt_indices] = interpolator(lst_temp[lt_indices])
+                LST[lt_indices] += 2 * np.pi
+                jd_array[lt_indices] = interpolator(LST[lt_indices])
             elif np.any(gt_indices):
-                lst_temp[gt_indices] -= 2 * np.pi
-                jd_array[gt_indices] = interpolator(lst_temp[gt_indices])
+                LST[gt_indices] -= 2 * np.pi
+                jd_array[gt_indices] = interpolator(LST[gt_indices])
             else:
                 break
 
