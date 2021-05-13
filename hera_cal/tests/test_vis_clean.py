@@ -42,20 +42,46 @@ def test_truncate_flagged_edges():
     assert np.all(np.isclose(xout, freqs[:-1]))
     assert np.all(np.isclose(dout, data_in[:, :-1]))
     assert np.all(np.isclose(wout, weights_in[:, :-1]))
-    assert edges == [(0, 0), (0, 1)]
+    assert edges == [(0, 1)]
     # test time truncation
     xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
     assert np.all(np.isclose(xout, times[:-2]))
     assert np.all(np.isclose(dout, data_in[:-2, :]))
     assert np.all(np.isclose(wout, weights_in[:-2, :]))
-    assert edges == [(0, 2), (0, 0)]
+    assert edges == [(0, 2)]
     # test truncating both.
     xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
     assert np.all(np.isclose(xout[0], times[:-2]))
     assert np.all(np.isclose(xout[1], freqs[:-1]))
     assert np.all(np.isclose(dout, data_in[:-2, :-1]))
     assert np.all(np.isclose(wout, weights_in[:-2, :-1]))
-    assert edges == [(0, 2), (0, 1)]
+    assert edges == [[(0, 2)], [(0, 1)]]
+
+
+def test_restore_flagged_edges():
+    Nfreqs = 64
+    Ntimes = 60
+    data_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
+    weights_in = np.abs(data_in).astype(float)
+    data_in = data_in + .3j * data_in
+    # flag channel 30
+    weights_in[:, 30] = 0.
+    # flag last channel
+    weights_in[:, -1] = 0.
+    # flag last two integrations
+    weights_in[-2:, :] = 0.
+    times = np.arange(60) * 10.
+    freqs = np.arange(64) * 100e3
+    # test freq truncation
+    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
+    wrest = vis_clean.restore_flagged_edges(xout, wout, edges)
+    assert np.allclose(weights_in, wrest[:, :-1])
+    assert np.allclose(wrest[:, -1], 0.0)
+    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
+    wrest = vis_clean.restore_flagged_edges(xout, wout, edges, ax='time')
+    assert np.allclose(wout, wrest[:-2, :])
+    assert np.allclose(wrest[:-2, :], 0.0)
+
 
 def find_discontinuity_edges():
     assert find_discontinuity_edges([0, 1, 4, 9]) == [(0, 2), (2, 3), (3, 4)]
@@ -70,37 +96,39 @@ def test_flag_rows_with_flags_within_edge_distance():
     weights_in[33, 12] = 0.
     weights_in[2, 30] = 0.
     weights_in[-10, 20] = 0.
+    freqs = np.arange(Nfreqs) * 100e3
     # under the above flagging pattern
     # freq flagging with min_flag_edge_distance=2 yields 32nd integration flagged only.
-    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=3, ax='freq')
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(freqs, weights_in, min_flag_edge_distance=3, ax='freq')
     for i in range(wout.shape[0]):
         if i == 32:
             assert np.all(np.isclose(wout[i], 0.0))
         else:
             assert np.all(np.isclose(wout[i], weights_in[i]))
     # extending edge_distance to 12 should yield 33rd integration being flagged as well.
-    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=13, ax='freq')
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(freqs, weights_in, min_flag_edge_distance=13, ax='freq')
     for i in range(wout.shape[0]):
         if i == 32 or i == 33:
             assert np.all(np.isclose(wout[i], 0.0))
         else:
             assert np.all(np.isclose(wout[i], weights_in[i]))
     # now do time axis. 30th channel should be flagged for this case.
-    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=3, ax='time')
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(freqs, weights_in, min_flag_edge_distance=3, ax='time')
     for i in range(wout.shape[1]):
         if i == 30:
             assert np.all(np.isclose(wout[:, i], 0.0))
         else:
             assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
     # 30th and 20th channels should end up flagged for this case.
-    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=11, ax='time')
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(freqs, weights_in, min_flag_edge_distance=11, ax='time')
     for i in range(wout.shape[1]):
         if i == 30 or i == 20:
             assert np.all(np.isclose(wout[:, i], 0.0))
         else:
             assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
     # now do both
-    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=(3, 3), ax='both')
+    times = np.arange(Ntimes) * 10.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance([times, freqs], weights_in, min_flag_edge_distance=(3, 3), ax='both')
     for i in range(wout.shape[1]):
         if i == 30:
             assert np.all(np.isclose(wout[:, i], 0.0))
@@ -311,12 +339,12 @@ class Test_VisClean(object):
         # this line is repeated to cover the overwrite skip
         V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fw, suppression_factors=ff, max_contiguous_edge_flags=20,
                          ax='freq', mode='dayenu', zeropad=10, output_prefix='clean', overwrite=False)
-        assert np.all([V.clean_info[k]['status']['axis_1'][i] == 'success' for i in V.clean_info[k]['status']['axis_1']])
+        assert np.all([V.clean_info[k][(0, V.Nfreqs)]['status']['axis_1'][i] == 'success' for i in V.clean_info[k][(0, V.Nfreqs)]['status']['axis_1']])
         # now do a time filter
         V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fwt, suppression_factors=ff, overwrite=True,
                          ax='time', mode='dayenu', zeropad=10, max_contiguous_edge_flags=20)
-        assert V.clean_info[k]['status']['axis_0'][0] == 'skipped'
-        assert V.clean_info[k]['status']['axis_0'][3] == 'success'
+        assert V.clean_info[k][(0, V.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[k][(0, V.Nfreqs)]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
@@ -339,8 +367,8 @@ class Test_VisClean(object):
                          suppression_factors=[ff, ff],
                          mode='dayenu', overwrite=True,
                          zeropad=[20, 10], ax='both', max_contiguous_edge_flags=100)
-        assert V.clean_info[k]['status']['axis_0'][0] == 'skipped'
-        assert V.clean_info[k]['status']['axis_0'][3] == 'success'
+        assert V.clean_info[k][(0, V.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[k][(0, V.Nfreqs)]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
@@ -369,7 +397,7 @@ class Test_VisClean(object):
         # numpy issues.
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-15))
-        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert np.all([V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
 
         assert pytest.raises(AssertionError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', max_frate=None, mode='dayenu')
         assert pytest.raises(ValueError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', max_frate='arglebargle', mode='dayenu')
@@ -378,8 +406,8 @@ class Test_VisClean(object):
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='freq', overwrite=False, mode='dayenu')
 
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='time', overwrite=True, max_frate=1.0, mode='dayenu')
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0] == 'skipped'
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
@@ -389,9 +417,9 @@ class Test_VisClean(object):
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-15))
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='both', overwrite=True, max_frate=1.0, mode='dayenu')
-        assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0] == 'skipped'
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
+        assert np.all(['success' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
@@ -427,7 +455,7 @@ class Test_VisClean(object):
         # check that filtered_data is the same in channels that were not flagged
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-6))
-        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert np.all([V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
 
         assert pytest.raises(AssertionError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', mode='dpss_leastsq')
         assert pytest.raises(ValueError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', max_frate='arglebargle', mode='dpss_leastsq')
@@ -436,8 +464,8 @@ class Test_VisClean(object):
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='freq', overwrite=False, mode='dpss_leastsq')
 
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='time', overwrite=True, max_frate=1.0, mode='dpss_leastsq')
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0] == 'skipped'
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
@@ -447,7 +475,7 @@ class Test_VisClean(object):
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-6))
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='both', overwrite=True, max_frate=1.0, mode='dpss_leastsq')
-        assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert np.all(['success' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
@@ -637,7 +665,7 @@ class Test_VisClean(object):
 
         # basic freq clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True)
-        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert np.all([V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
@@ -648,8 +676,8 @@ class Test_VisClean(object):
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-16))
         # basic time clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', max_frate=10., overwrite=True)
-        assert 'skipped' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0]
-        assert 'success' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3]
+        assert 'skipped' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][0]
+        assert 'success' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][3]
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
@@ -661,8 +689,8 @@ class Test_VisClean(object):
         # basic 2d clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
                     filt2d_mode='plus')
-        assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_0']])
-        assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert np.all(['success' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][i] for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0']])
+        assert np.all(['success' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
@@ -674,8 +702,8 @@ class Test_VisClean(object):
 
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', flags=V.flags + True, max_frate=10.,
                     overwrite=True, filt2d_mode='plus')
-        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'skipped' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
-        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_0'][i] == 'skipped' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_0']])
+        assert np.all([V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] == 'skipped' for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
+        assert np.all([V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][i] == 'skipped' for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0']])
 
         # test fft data
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,

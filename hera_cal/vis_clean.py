@@ -72,62 +72,66 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
         axis to truncate flagged edges from. Should be 'freq' to truncate
         completely flagged edge channels, 'time' to truncate completely flagged
         edge integrations, or 'both' to do both.
-    treat_spectral_breaks_as_edges : bool, optional
-        If true, also flag the edges of spectral breaks
-        (where the x axis has a discontinuity, e.g. if we have multiple spectral windows that are not contiguous.)
-        default is True
 
     Returns
     -------
     xout : array-like 1d (or 2-list if ax=='both').
-            x with completely flagged edges trimmed off.
+        x with completely flagged edges trimmed off.
     dout : array-like 2d.
-            data_in with completely flagged edges trimmed off.
+        data_in with completely flagged edges trimmed off.
     wout : array-like 2d.
-            weights_in with completely flagged edges trimmed off.
-    edges : 2-list of lists of 2-tuples
-            the width of the edges trimmed.
-            first list is time dim, second list is freq dim.
-            these lists can be greater then length 1 if treat_spectral_breaks_as_edges = True
+        weights_in with completely flagged edges trimmed off.
+    edges : list of 2-tuples or 2-list of lists of 2-tuples
+        the width of the edges trimmed.
+        If ax == 'both' then a 2-list of lists of tuples
+        first list is time dim, second list is freq dim.
+        these lists can be greater then length 1 if treat_spectral_breaks_as_edges = True
+    chunks : list of 2-tuples or 2-list of lists of 2-tuples
+        List of start / end indices of each chunk that edges are applied to.
+        If ax=='both' should be a 2-tuple or 2-list.
     """
     # if axis == 'time', just use freq mode
     # on transposed arrays.
     if ax == 'time':
-        xout, dout, wout, edges, breaks = truncate_flagged_edges(data_in.T, weights_in.T, x)
+        xout, dout, wout, edges, chunks = truncate_flagged_edges(data_in.T, weights_in.T, x)
         dout = dout.T
         wout = wout.T
-        edges = [edges[1], [(0, 0)]]
     else:
         # Identify all contiguous chunks.
-        chunks = find_discontinuity_edges(x)
+        if ax == 'both':
+            chunks = find_discontinuity_edges(x[1])
+        else:
+            chunks = find_discontinuity_edges(x)
         inds_left = []
         inds_right = []
         # Identify edge channels that are flagged.
         for chunk in chunks:
+            ind_left = 0
+            ind_right = chunk[1] - chunk[0]
             chunkslice = slice(chunk[0], chunk[1])
             unflagged_chans = np.where(~np.all(np.isclose(weights_in[:, chunkslice], 0.0), axis=0))[0]
             if np.count_nonzero(unflagged_chans) > 0:
                 # truncate data to be filtered where appropriate.
-                inds_left.append(np.min(unflagged_chans))
-                inds_right.append(np.max(unflagged_chans) + 1)
+                ind_left = np.min(unflagged_chans)
+                ind_right = np.max(unflagged_chans) + 1
+            inds_left.append(ind_left)
+            inds_right.append(ind_right)
         if len(inds_left) > 1:
             dout = np.hstack([data_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
             wout = np.hstack([weights_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
 
         else:
-            dout = data_in[:, ind_left: ind_right]
-            wout = weights_in[:, ind_left: ind_right]
-            breaks = []
+            dout = data_in[:, inds_left[0]: inds_right[0]]
+            wout = weights_in[:, inds_left[0]: inds_right[0]]
         edges = [(ind_left, chunk[1] - ind_right) for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)]
         if ax == 'both':
             x1 = np.hstack([x[1][chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
             x0, dout, wout, e0, b0 = truncate_flagged_edges(dout, wout, x[0], ax='time')
             xout = [x0, x1]
-            edges = [e0[0], edges]
+            edges = [e0, edges]
         else:
-            xout = np.hstack(x[chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
-            edges = [[(0, 0)], edges]
-    return xout, dout, wout, edges, breaks
+            xout = np.hstack([x[chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
+    return xout, dout, wout, edges, chunks
 
 
 def restore_flagged_edges(x, data, edges, ax='freq'):
@@ -136,17 +140,18 @@ def restore_flagged_edges(x, data, edges, ax='freq'):
 
      Parameters
      ----------
-     x: 2-list of arrays
+     x: array-like or 2-list/tuple of arrays
        1d array of x-values of data with removed edges.
+       if ax=='both', must be 2-list of arrays.
      data: array-like
        2d array containing data that has been trimmed with
        trunate_flagged_edges (dout or wout)
        dimensions (nf_trimmed, nt_trimmed)
-     edges : 2-list of lists of 2-tuples
+     edges : list of 2-tuples or 2-list of lists of 2-tuples.
         the width of the edges trimmed.
-        first list is time dim, second list is freq dim.
         these lists can be greater then length 1 if treat_spectral_breaks_as_edges = True
-     chunks : 2-list of lists of 2-tuples
+        must be 2-list of lists if ax=='both'
+     chunks : list of 2-tuples or 2-list of lists of 2-tuples.
         indices indicating the chunk edges that edge widths are reference too.
         first list is time dim, second list is freq dim.
         these lists can be greater then length 1 if treat_spectral_breaks_as_edges = True
@@ -159,24 +164,22 @@ def restore_flagged_edges(x, data, edges, ax='freq'):
     if ax == 'time':
         # if axis is time, process everything like its the time axis with 0 <-> 1 reversed.
         # switch everything back later.
-        data = data.T
-        x = [x[1], x[0]]
-        edges = [edges[1], edges[0]]
+        data_restored = restore_flagged_edges(x, data.T, edges).T
     else:
-    chunks = find_discontinuity_edges(x[1])
-    data_restored = [np.pad(data[:, chunk[0]: chunk[1]], [(0, 0), edge]) for chunk, edge in zip(chunks[1], edges[1])]
-    if len(data_restored) > 1:
-        data_restored = np.hstack(data_restored)
-    else:
-        data_restored = data_restored[0]
-    if ax == 'both':
-        # if axis is both, then process time-axis after freq axis.
-        data_restored = restore_flagged_edges(x, data_restored, edges, ax='time')
-    elif ax == 'time':
-        # restore everything if axis was time.
-        data_restored = data_restored.T
-        x = [x[1], x[0]]
-        edges = [edges[1], edges[0]]
+        if ax == 'both':
+            chunks = find_discontinuity_edges(x[1])
+            data_restored = [np.pad(data[:, chunk[0]: chunk[1]], [(0, 0), edge]) for chunk, edge in zip(chunks[1], edges[1])]
+        else:
+            chunks = find_discontinuity_edges(x)
+            data_restored = [np.pad(data[:, chunk[0]: chunk[1]], [(0, 0), edge]) for chunk, edge in zip(chunks, edges)]
+
+        if len(data_restored) > 1:
+            data_restored = np.hstack(data_restored)
+        else:
+            data_restored = data_restored[0]
+        if ax == 'both':
+            # if axis is both, then process time-axis after freq axis.
+            data_restored = restore_flagged_edges(x[0], data_restored, edges[0], ax='time')
     return data_restored
 
 def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_distance, ax='freq'):
@@ -185,6 +188,7 @@ def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_dista
 
     Parameters
     -----------
+    x: array-like or 2-list / 2-tuple
     weights_in : array-like, 2d (Ntimes, Nfreqs)
         weights to check for flags within min_edge distance of edge along specified axis.
         will set all weights in each row with flags within min_flag_edge_distance to zero.
@@ -203,17 +207,28 @@ def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_dista
 
     """
     if ax == 'time':
-        wout = flag_rows_with_flags_within_edge_distance(weights_in.T, min_flag_edge_distance).T
+        if isinstance(x, (tuple, list)) and len(x) == 2:
+            x = x[0]
+        wout = flag_rows_with_flags_within_edge_distance(x, weights_in.T, min_flag_edge_distance).T
     else:
+        if isinstance(x, (tuple, list)) and len(x) == 2:
+            chunks = find_discontinuity_edges(x[1])
+        else:
+            chunks = find_discontinuity_edges(x)
         wout = copy.deepcopy(weights_in)
         for rownum, wrow in enumerate(wout):
-            if ax == 'both':
-                if np.any(np.isclose(wout[rownum, :min_flag_edge_distance[1]], 0.0)) | np.any(np.isclose(wout[rownum, -min_flag_edge_distance[1] - 1:], 0.0)):
-                    wout[rownum, :] = 0.
-            elif np.any(np.isclose(wout[rownum, :min_flag_edge_distance], 0.0)) | np.any(np.isclose(wout[rownum, -min_flag_edge_distance - 1:], 0.0)):
+            flagrow = False
+            for chunk in chunks:
+                cslice = slice(chunk[0], chunk[1])
+                if ax == 'both':
+                    if np.any(np.isclose(wout[rownum][cslice][:min_flag_edge_distance[1]], 0.0)) | np.any(np.isclose(wout[rownum][cslice][-min_flag_edge_distance[1] - 1:], 0.0)):
+                        flagrow = True
+                elif np.any(np.isclose(wout[rownum][cslice][:min_flag_edge_distance], 0.0)) | np.any(np.isclose(wout[rownum][cslice][-min_flag_edge_distance - 1:], 0.0)):
+                    flagrow = True
+            if flagrow:
                 wout[rownum, :] = 0.
         if ax == 'both':
-            wout = flag_rows_with_flags_within_edge_distance(wout, min_flag_edge_distance[0], ax='time')
+            wout = flag_rows_with_flags_within_edge_distance(x[0], wout, min_flag_edge_distance[0], ax='time')
     return wout
 
 
@@ -753,7 +768,7 @@ class VisClean(object):
                        x=None, keys=None, data=None, flags=None, wgts=None,
                        output_prefix='clean', zeropad=None, cache=None,
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
-                       skip_flagged_edges=False, spw_ranges=None,
+                       skip_flagged_edges=False, filter_spw_ranges=None,
                        skip_contiguous_flags=False, max_contiguous_flag=None,
                        keep_flags=False, clean_flags_in_resid_flags=False,
                        skip_if_flag_within_edge_distance=0,
@@ -842,7 +857,7 @@ class VisClean(object):
             if true, do not filter over flagged edge times (if ax='time') (filter over sub-region)
             or dont filter over flagged edge freqs (if ax='freq') or dont filter over both (if ax='both')
             defualt is False
-        spw_ranges : list of 2-tuples, optional
+        filter_spw_ranges : list of 2-tuples, optional
             list of 2-tuples specifying spw-ranges to filter simultaneously
         skip_contiguous_flags : bool, optional
             if true, skip integrations or channels with gaps that are larger then integer
@@ -956,14 +971,14 @@ class VisClean(object):
                 x = [(self.times - np.mean(self.times)) * 3600. * 24., self.freqs]
             if skip_if_flag_within_edge_distance == 0:
                 skip_if_flag_within_edge_distance = (0, 0)
-            if spw_ranges is None:
-                spw_ranges = [(0, self.Nfreqs)]
+            if filter_spw_ranges is None:
+                filter_spw_ranges = [(0, self.Nfreqs)]
         elif ax == 'time':
             filterdim = 0
             filter2d = False
             if x is None:
                 x = (self.times - np.mean(self.times)) * 3600. * 24.
-            spw_ranges = [(0, self.Nfreqs)]
+            filter_spw_ranges = [(0, self.Nfreqs)]
             if zeropad is None:
                 zeropad = 0
         elif ax == 'freq':
@@ -973,11 +988,11 @@ class VisClean(object):
                 zeropad = 0
             if x is None:
                 x = self.freqs
-            if spw_ranges is None:
-                spw_ranges = [(0, self.Nfreqs)]
+            if filter_spw_ranges is None:
+                filter_spw_ranges = [(0, self.Nfreqs)]
         else:
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
-        if not np.allclose(self.freqs, self.freqs[np.hstack([np.arange(spw_range[0], spw_range[1]).astype(int) for spw_range in spw_ranges])]):
+        if not np.allclose(self.freqs, self.freqs[np.hstack([np.arange(spw_range[0], spw_range[1]).astype(int) for spw_range in filter_spw_ranges])]):
             raise NotImplementedError("No support for spw-ranges that do not disjointly cover the entire frequency band.")
         # initialize containers
         containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
@@ -1017,7 +1032,8 @@ class VisClean(object):
                 echo("{} exists in clean_model and overwrite is False, skipping...".format(k), verbose=verbose)
                 continue
             echo("Starting fourier filter of {} at {}".format(k, str(datetime.datetime.now())), verbose=verbose)
-            for spw_range in spw_ranges:
+            for spw_range in filter_spw_ranges:
+                filtered_info[k] = {}
                 if spw_range not in filtered_info[k]:
                     filtered_info[k][spw_range] = {}
                 spw_slice = slice(spw_range[0], spw_range[1])
@@ -1057,7 +1073,7 @@ class VisClean(object):
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
                 # if we are not including flagged edges in filtering, skip them here.
                 if skip_flagged_edges:
-                    xp, din, win, edges = truncate_flagged_edges(d, w, xp, ax=ax)
+                    xp, din, win, edges, chunks = truncate_flagged_edges(d, w, xp, ax=ax)
                 else:
                     din = d
                     win = w
@@ -1069,7 +1085,7 @@ class VisClean(object):
                     win = flag_rows_with_contiguous_flags(win, max_contiguous_flag, ax=ax)
                 # skip integrations with flags within some minimum distance of the edges here.
                 if np.any(np.asarray(skip_if_flag_within_edge_distance) > 0):
-                    win = flag_rows_with_flags_within_edge_distance(win, skip_if_flag_within_edge_distance, ax=ax)
+                    win = flag_rows_with_flags_within_edge_distance(xp, win, skip_if_flag_within_edge_distance, ax=ax)
 
                 mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                                       filter_half_widths=filter_half_widths,
@@ -1113,10 +1129,23 @@ class VisClean(object):
 
                 # also flag skipped edge channels and integrations.
                 if skip_flagged_edges:
-                    skipped[:, :edges[1][0]] = True
-                    skipped[:, -edges[1][1] - 1:] = True
-                    skipped[:edges[0][0], :] = True
-                    skipped[-edges[0][1] - 1:, :] = True
+                    if ax == 'both':
+                        for chunk, edge in zip(chunks[1], edges[1]):
+                            cslice = slice(chunk[0], chunk[1])
+                            skipped[:, cslice][:, :edge[0]] = True
+                            skipped[:, cslice][:, -edges[1] - 1:] = True
+                        for chunk, edge in zip(chunks[0], edges[0]):
+                            skipped[cslice, :][:edge[0]] = True
+                            skipped[cslice, :][-edge[1] - 1:] = True
+                    else:
+                        for chunk, edge in zip(chunks, edges):
+                            cslice = slice(chunk[0], chunk[1])
+                            if ax == 'freq':
+                                skipped[:, cslice][:, :edge[0]] = True
+                                skipped[:, cslice][:, -edge[1] - 1:] = True
+                            elif ax == 'time':
+                                skipped[cslice, :][:edge[0]] = True
+                                skipped[cslice, :][-edge[1] - 1:] = True
                 if k not in filtered_model:
                     filtered_model[k] = np.zeros_like(data[k])
                     filtered_resid[k] = np.zeros_like(data[k])
@@ -1124,9 +1153,9 @@ class VisClean(object):
                     filtered_flags[k] = np.zeros_like(flags[k])
                     resid_flags[k] = np.zeros_like(flags[k])
                 filtered_model[k][:, spw_slice] = mdl
-                filtered_model[k][skipped, spw_slice] = 0.
+                filtered_model[k][:, spw_slice][skipped] = 0.
                 filtered_resid[k][:, spw_slice] = res * fw
-                filtered_resid[k][skipped, spw_slice]] = 0.
+                filtered_resid[k][:, spw_slice][skipped] = 0.
                 filtered_data[k][:, spw_slice] = filtered_model[k] + filtered_resid[k]
                 if not keep_flags:
                     filtered_flags[k][:, spw_slice] = skipped
@@ -1820,6 +1849,9 @@ def _filter_argparser():
     ap.add_argument("--flag_yaml", default=None, type=str, help="path to a flagging yaml containing apriori antenna, freq, and time flags.")
     ap.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter.")
     ap.add_argument("--verbose", default=False, action="store_true", help="Lots of text.")
+    ap.add_argument("--filter_spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections to filter independently. Two acceptable formats are "
+                                                                                "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
+                                                                                "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     # clean arguments.
     clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
