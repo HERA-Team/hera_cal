@@ -1789,6 +1789,12 @@ def _filter_argparser():
         Argparser with core (but not complete) functionality that is called by _linear_argparser and
         _clean_argparser.
     """
+    def list_of_int_tuples(v):
+        if '~' in v:
+            v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        else:
+            v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
+        return v
     ap = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
     ap.add_argument("datafilelist", default=None, type=str, nargs="+", help="list of data files to read in and perform filtering on.")
     ap.add_argument("--mode", type=str, default="clean", help="filtering mode to use. Can be dpss_leastsq, clean, dayenu.")
