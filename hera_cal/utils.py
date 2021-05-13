@@ -559,10 +559,10 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
         interpolator = interpolate.interp1d(np.unwrap(lst_grid - 2 * np.pi), jd_grid,
                                             kind='linear', fill_value='extrapolate')
         if np.floor(interpolator(lst_branch_cut)) > np.floor(start_jd):
-            jd_grid -= 1.0
+            jd_grid -= unt.sday.to(unt.day)
 
         elif np.floor(interpolator(lst_branch_cut)) < np.floor(start_jd):
-            jd_grid += 1.0     
+            jd_grid += unt.sday.to(unt.day)
         else:
             break
         
