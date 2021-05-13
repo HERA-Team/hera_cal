@@ -54,7 +54,7 @@ def find_discontinuity_edges(x, xtol=1e-3):
         edges.append((discontinuities[-1] + 1, len(x)))
     return edges
 
-def truncate_flagged_edges(data_in, weights_in, x, ax='freq', treat_spectral_breaks_as_edges=True, xtol=1e-3):
+def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
     """
     cut away edge channels and integrations that are completely flagged
 
@@ -99,10 +99,7 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq', treat_spectral_bre
         edges = [edges[1], [(0, 0)]]
     else:
         # Identify all contiguous chunks.
-        if treat_spectral_breaks_as_edges:
-            chunks = find_discontinuity_edges(x)
-        else:
-            chunks = [(0, data_in.shape[1])]
+        chunks = find_discontinuity_edges(x)
         inds_left = []
         inds_right = []
         # Identify edge channels that are flagged.
@@ -182,7 +179,7 @@ def restore_flagged_edges(x, data, edges, ax='freq'):
         edges = [edges[1], edges[0]]
     return data_restored
 
-def flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance, ax='freq'):
+def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_distance, ax='freq'):
     """
     flag integrations (and/or channels) with flags within min_flag_edge_distance of edge.
 
