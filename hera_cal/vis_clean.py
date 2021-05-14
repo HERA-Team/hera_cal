@@ -38,7 +38,7 @@ def find_discontinuity_edges(x, xtol=1e-3):
         of contiguous x-indices.
     Examples:
             x = [0, 1, 4, 9] -> [(0, 2) (2, 3), (3, 4)]
-            x = [0, 1, 2, 4, 5, 6, 7, 11, 12] -> [(0, 3), (3, 7), (7, 8), (8, 9)]
+            x = [0, 1, 2, 4, 5, 6, 7, 11, 12] -> [(0, 3), (3, 7), (7, 9)]
     """
     xdiff = np.diff(x)
     discontinuities = np.where(~np.isclose(xdiff, np.min(np.abs(xdiff)) * np.sign(xdiff[0]),
@@ -124,7 +124,7 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
         else:
             dout = data_in[:, inds_left[0]: inds_right[0]]
             wout = weights_in[:, inds_left[0]: inds_right[0]]
-        edges = [(ind_left, chunk[1] - ind_right) for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)]
+        edges = [(ind_left, chunk[1] - chunk[0] - ind_right) for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)]
         if ax == 'both':
             x1 = np.hstack([x[1][chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
             x0, dout, wout, e0, c0 = truncate_flagged_edges(dout, wout, x[0], ax='time')
@@ -995,7 +995,7 @@ class VisClean(object):
                 filter_spw_ranges = [(0, self.Nfreqs)]
         else:
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
-        if not np.allclose(self.freqs, self.freqs[np.hstack([np.arange(spw_range[0], spw_range[1]).astype(int) for spw_range in filter_spw_ranges])]):
+        if len(self.freqs) != np.sum([spw_range[1] - spw_range[0] for spw_range in filter_spw_ranges]) or not np.allclose(self.freqs, self.freqs[np.hstack([np.arange(spw_range[0], spw_range[1]).astype(int) for spw_range in filter_spw_ranges])]):
             raise NotImplementedError("No support for spw-ranges that do not disjointly cover the entire frequency band.")
         # initialize containers
         containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
@@ -1043,7 +1043,7 @@ class VisClean(object):
                 d = data[k][:, spw_slice]
                 f = flags[k][:, spw_slice]
                 fw = (~f).astype(np.float)
-                w = fw * wgts[k]
+                w = fw * wgts[k][:, spw_slice]
                 # avoid modifying x in-place with zero-padding.
                 xp = copy.deepcopy(x)
                 if ax == 'freq':
@@ -1115,7 +1115,7 @@ class VisClean(object):
                             res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
                         _trim_status(info, i, zeropad[i - 1])
                 # flag integrations and channels that were skipped.
-                skipped = np.zeros_like(mdl, dtype=np.bool)
+                skipped = np.zeros_like(d, dtype=np.bool)
                 for dim in range(2):
                     if len(info['status']['axis_%d' % dim]) > 0:
                         for i in range(len(info['status']['axis_%d' % dim])):
@@ -1134,21 +1134,25 @@ class VisClean(object):
                 if skip_flagged_edges:
                     if ax == 'both':
                         for chunk, edge in zip(chunks[1], edges[1]):
-                            cslice = slice(chunk[0], chunk[1])
-                            skipped[:, cslice][:, :edge[0]] = True
-                            skipped[:, cslice][:, -edge[1] - 1:] = True
+                            cslice0 = slice(chunk[0], chunk[0] + edge[0])
+                            cslice1 = slice(chunk[1] - edge[1], chunk[1])
+                            skipped[:, cslice0] = True
+                            skipped[:, cslice1] = True
                         for chunk, edge in zip(chunks[0], edges[0]):
-                            skipped[cslice, :][:edge[0]] = True
-                            skipped[cslice, :][-edge[1] - 1:] = True
+                            cslice0 = slice(chunk[0], chunk[0] + edge[0])
+                            cslice1 = slice(chunk[1] - edge[1], chunk[1])
+                            skipped[cslice0, :] = True
+                            skipped[cslice1, :] = True
                     else:
                         for chunk, edge in zip(chunks, edges):
-                            cslice = slice(chunk[0], chunk[1])
+                            cslice0 = slice(chunk[0], chunk[0] + edge[0])
+                            cslice1 = slice(chunk[1] - edge[1], chunk[1])
                             if ax == 'freq':
-                                skipped[:, cslice][:, :edge[0]] = True
-                                skipped[:, cslice][:, -edge[1] - 1:] = True
+                                skipped[:, cslice0] = True
+                                skipped[:, cslice1] = True
                             elif ax == 'time':
-                                skipped[cslice, :][:edge[0]] = True
-                                skipped[cslice, :][-edge[1] - 1:] = True
+                                skipped[cslice0, :] = True
+                                skipped[cslice1, :] = True
                 if k not in filtered_model:
                     filtered_model[k] = np.zeros_like(data[k])
                     filtered_resid[k] = np.zeros_like(data[k])
@@ -1159,7 +1163,7 @@ class VisClean(object):
                 filtered_model[k][:, spw_slice][skipped] = 0.
                 filtered_resid[k][:, spw_slice] = res * fw
                 filtered_resid[k][:, spw_slice][skipped] = 0.
-                filtered_data[k][:, spw_slice] = filtered_model[k] + filtered_resid[k]
+                filtered_data[k][:, spw_slice] = filtered_model[k][:, spw_slice] + filtered_resid[k][:, spw_slice]
                 if not keep_flags:
                     filtered_flags[k][:, spw_slice] = skipped
                 else:
