@@ -90,9 +90,9 @@ def test_restore_flagged_edges():
     assert np.allclose(wout, wrest[:-2, :-1])
 
 
-def find_discontinuity_edges():
-    assert find_discontinuity_edges([0, 1, 4, 9]) == [(0, 2), (2, 3), (3, 4)]
-    assert find_discontinuity_edges([0, 1, 2, 4, 5, 6, 7, 11, 12]) == [(0, 3), (3, 7), (7, 8), (8, 9)]
+def test_find_discontinuity_edges():
+    assert vis_clean.find_discontinuity_edges([0, 1, 4, 9]) == [(0, 2), (2, 3), (3, 4)]
+    assert vis_clean.find_discontinuity_edges([0, 1, 2, 4, 5, 6, 7, 9, 11, 12]) == [(0, 3), (3, 7), (7, 8), (8, 10)]
 
 
 def test_flag_rows_with_flags_within_edge_distance():
@@ -647,7 +647,7 @@ class Test_VisClean(object):
         for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
             assert np.all(V.clean_resid_flags[k][-1])
 
-    def rest_vis_clean_spws(self):
+    def test_vis_clean_spws(self, tmpdir):
         # test selecting partial frequency chunks.
         tmp_path = tmpdir.strpath
         template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
@@ -659,35 +659,42 @@ class Test_VisClean(object):
         for k in d:
             f[k][:] = False
             f[k][:, 0] = True
-            f[k][:, 28, 29, 30, 31, 32, 33] = True  # flags around first discont
+            for i in (28, 29, 30, 31, 32, 33):
+                f[k][:, i] = True  # flags around first discont
             f[k][:, 12] = True  # should be inpainted
+            f[k][:, 46] = True  # flag near second break
             f[k][:, 47] = True  # flag near second break
             f[k][:, 49] = True  # should be inpainted
-
-        hdt.update(flags=f)
+            d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
+            n[k] = np.ones(d[k].shape)
+        hdt.update(flags=f, data=d)
         hdt.write_uvh5(fname_edgeflags)
-        for k in d:
-            f[k][:] = True
-        hdt.update(flags=f)
-        hdt.write_uvh5(fname_flagged)
-        V = VisClean(fname_flagged, filetype='uvh5')
+        V = VisClean(fname_edgeflags, filetype='uvh5')
         V.read()
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
-                    skip_flagged_edges=True)
+                    skip_flagged_edges=True, mode='dpss_leastsq')
         for k in V.clean_flags:
-            assert np.all(V.clean_flags[k][:, 0, 28, 29, 30, 31, 32, 33, 47])
-            assert not np.any(V.clean_flags[k][:, range(1, 28)])
-            assert not np.any(V.clean_flags[k][:, range(34, 47)])
-            assert not np.any(V.clean_flags[k][:, range(48, V.Nfreqs)])
+            for i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
+                assert np.all(V.clean_flags[k][:, i])
+            for i in range(1, 28):
+                assert not np.any(V.clean_flags[k][:, i])
+            for i in range(34, 46):
+                assert not np.any(V.clean_flags[k][:, i])
+            for i in range(48, V.Nfreqs):
+                assert not np.any(V.clean_flags[k][:, i])
 
         # test spw_range functionality.
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
-                    skip_flagged_edges=True, filter_spw_ranges=[(0, 30), (30, V.Nfreqs)])
+                    skip_flagged_edges=True, filter_spw_ranges=[(0, 30), (30, 46), (46, V.Nfreqs)])
         for k in V.clean_flags:
-            assert np.all(V.clean_flags[k][:, 0, 28, 29, 30, 31, 32, 33, 47])
-            assert not np.any(V.clean_flags[k][:, range(1, 28)])
-            assert not np.any(V.clean_flags[k][:, range(34, 47)])
-            assert not np.any(V.clean_flags[k][:, range(48, V.Nfreqs)])
+            for i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
+                assert np.all(V.clean_flags[k][:, i])
+            for i in range(1, 28):
+                assert not np.any(V.clean_flags[k][:, i])
+            for i in range(34, 46):
+                assert not np.any(V.clean_flags[k][:, i])
+            for i in range(48, V.Nfreqs):
+                assert not np.any(V.clean_flags[k][:, i])
         # test NotImplementedError
         pytest.raises(NotImplementedError, V.vis_clean, keys=[(24, 25, 'ee')], ax='freq', overwrite=True,
                       filter_spw_ranges=[(0, 30), (31, V.Nfreqs)])
