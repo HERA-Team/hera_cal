@@ -47,7 +47,7 @@ class Test_XTalkFilter(object):
             wgts = {k: np.ones_like(xfil.flags[k], dtype=np.float)}
             wgts[k][:, 0] = 0.0
             xfil.run_xtalk_filter(to_filter=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
-            assert xfil.clean_info[k]['status']['axis_0'][0] == 'skipped'
+            assert xfil.clean_info[k][(0, xfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
             np.testing.assert_array_equal(xfil.clean_flags[k][:, 0], np.ones_like(xfil.flags[k][:, 0]))
             np.testing.assert_array_equal(xfil.clean_model[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
             np.testing.assert_array_equal(xfil.clean_resid[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
