@@ -86,7 +86,6 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
         the width of the edges trimmed.
         If ax == 'both' then a 2-list of lists of tuples
         first list is time dim, second list is freq dim.
-        these lists can be greater then length 1 if treat_spectral_breaks_as_edges = True
     chunks : list of 2-tuples or 2-list of lists of 2-tuples
         List of start / end indices of each chunk that edges are applied to.
         If ax=='both' should be a 2-tuple or 2-list.
@@ -151,12 +150,10 @@ def restore_flagged_edges(x, data, edges, ax='freq'):
        dimensions (nf_trimmed, nt_trimmed)
      edges : list of 2-tuples or 2-list of lists of 2-tuples.
         the width of the edges trimmed.
-        these lists can be greater then length 1 if treat_spectral_breaks_as_edges = True
         must be 2-list of lists if ax=='both'
      chunks : list of 2-tuples or 2-list of lists of 2-tuples.
         indices indicating the chunk edges that edge widths are reference too.
         first list is time dim, second list is freq dim.
-        these lists can be greater then length 1 if treat_spectral_breaks_as_edges = True
     ax : axis to restore gaps on.
     Returns
     -------
@@ -1133,6 +1130,8 @@ class VisClean(object):
                 # also flag skipped edge channels and integrations.
                 if skip_flagged_edges:
                     if ax == 'both':
+                        print(chunks[0], edges[0])
+                        print(chunks[1], edges[1])
                         for chunk, edge in zip(chunks[1], edges[1]):
                             cslice0 = slice(chunk[0], chunk[0] + edge[0])
                             cslice1 = slice(chunk[1] - edge[1], chunk[1])
