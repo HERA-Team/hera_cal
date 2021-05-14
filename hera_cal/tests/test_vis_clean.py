@@ -667,31 +667,118 @@ class Test_VisClean(object):
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
                     skip_flagged_edges=True, mode='dpss_leastsq')
         for k in V.clean_flags:
-            for i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
-                assert np.all(V.clean_flags[k][:, i])
-            for i in range(1, 28):
-                assert not np.any(V.clean_flags[k][:, i])
-            for i in range(34, 46):
-                assert not np.any(V.clean_flags[k][:, i])
-            for i in range(48, V.Nfreqs):
-                assert not np.any(V.clean_flags[k][:, i])
-
+            for i in range(V.Nfreqs):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
+                    assert np.all(V.clean_flags[k][:, i])
+                else:
+                    assert not np.any(V.clean_flags[k][:, i])
         # test spw_range functionality.
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
                     skip_flagged_edges=True, filter_spw_ranges=[(0, 30), (30, 46), (46, V.Nfreqs)])
         for k in V.clean_flags:
-            for i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
-                assert np.all(V.clean_flags[k][:, i])
-            for i in range(1, 28):
-                assert not np.any(V.clean_flags[k][:, i])
-            for i in range(34, 46):
-                assert not np.any(V.clean_flags[k][:, i])
-            for i in range(48, V.Nfreqs):
-                assert not np.any(V.clean_flags[k][:, i])
+            for i in range(V.Nfreqs):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
+                    assert np.all(V.clean_flags[k][:, i])
+                else:
+                    assert not np.any(V.clean_flags[k][:, i])
         # test NotImplementedError
         pytest.raises(NotImplementedError, V.vis_clean, keys=[(24, 25, 'ee')], ax='freq', overwrite=True,
                       filter_spw_ranges=[(0, 30), (31, V.Nfreqs)])
-        # test time filtering and filtering both axes.
+
+    def test_vis_clean_spws_time(self, tmpdir):
+        # test spw-ranges with time filtering.
+        tmp_path = tmpdir.strpath
+        template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        # first run flagging channels and frequencies
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
+        hdt = io.HERAData(template)
+        d, f, n = hdt.read(times=np.hstack([hdt.times[:30], hdt.times[32:48], hdt.times[49:]]))
+        for k in d:
+            f[k][:] = False
+            f[k][0, :] = True
+            for i in (28, 29, 30, 31, 32, 33):
+                f[k][i, :] = True  # flags around first discont
+            f[k][12, :] = True  # should be inpainted
+            f[k][46, :] = True  # flag near second break
+            f[k][47, :] = True  # flag near second break
+            f[k][49, :] = True  # should be inpainted
+            d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
+            n[k] = np.ones(d[k].shape)
+        hdt.update(flags=f, data=d)
+        hdt.write_uvh5(fname_edgeflags)
+        V = VisClean(fname_edgeflags, filetype='uvh5')
+        V.read()
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_flagged_edges=True, mode='dpss_leastsq', max_frate=0.025)
+        for k in V.clean_flags:
+            for i in range(V.Ntimes):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
+                    assert np.all(V.clean_flags[k][i])
+                else:
+                    assert not np.any(V.clean_flags[k][i])
+        # test spw_range functionality in time axis clean.
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_flagged_edges=True, filter_spw_ranges=[(0, 30), (30, 46), (46, V.Nfreqs)], max_frate=0.025, mode='dpss_leastsq')
+        for k in V.clean_flags:
+            for i in range(V.Ntimes):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
+                    assert np.all(V.clean_flags[k][i])
+                else:
+                    assert not np.any(V.clean_flags[k][i])
+
+    def test_vis_clean_spws_both(self, tmpdir):
+        # test spw-ranges with time filtering.
+        tmp_path = tmpdir.strpath
+        template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        # first run flagging channels and frequencies
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
+        hdt = io.HERAData(template)
+        d, f, n = hdt.read(times=np.hstack([hdt.times[:30], hdt.times[32:48], hdt.times[49:]]),
+                           frequencies=np.hstack([hdt.freqs[:21], hdt.freqs[23:45], hdt.freqs[52:]]))
+        for k in d:
+            f[k][:] = False
+            f[k][0, :] = True
+            for i in (12, 28, 29, 30, 31, 32, 33, 46, 49):
+                f[k][i, :] = True  # flags around first discont
+            for j in (4, 18, 21, 22, 23, 42, 43, 52):
+                f[k][:, j] = True
+
+            d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
+            n[k] = np.ones(d[k].shape)
+        hdt.update(flags=f, data=d)
+        hdt.write_uvh5(fname_edgeflags)
+        V = VisClean(fname_edgeflags, filetype='uvh5')
+        V.read()
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    skip_flagged_edges=True, mode='dpss_leastsq', max_frate=0.025)
+        for k in V.clean_flags:
+            for i in (range(V.Ntimes)):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46):
+                    assert np.all(V.clean_flags[k][i])
+                else:
+                    assert np.count_nonzero(~V.clean_flags[k][i]) == V.Nfreqs - 5
+            for j in range(V.Nfreqs):
+                if j in (21, 22, 23, 42, 43):
+                    assert np.all(V.clean_flags[k][:, j])
+                else:
+                    assert np.count_nonzero(~V.clean_flags[k][:, j]) == V.Ntimes - 8
+
+        # test spw_range functionality in time axis clean.
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    skip_flagged_edges=True, filter_spw_ranges=[(0, 30), (30, 46), (46, V.Nfreqs)], max_frate=0.025, mode='dpss_leastsq')
+        for k in V.clean_flags:
+            for i in (range(V.Ntimes)):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46):
+                    assert np.all(V.clean_flags[k][i])
+                else:
+                    assert np.count_nonzero(~V.clean_flags[k][i]) == V.Nfreqs - 5
+            for j in range(V.Nfreqs):
+                if j in (21, 22, 23, 42, 43):
+                    assert np.all(V.clean_flags[k][:, j])
+                else:
+                    assert np.count_nonzero(~V.clean_flags[k][:, j]) == V.Ntimes - 8
 
     def test_apply_flags(self):
         # cover edge cases of apply_flags not covered in test_delay_filter and
