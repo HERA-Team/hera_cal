@@ -1115,7 +1115,7 @@ class VisClean(object):
                             res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
                         _trim_status(info, i, zeropad[i - 1])
                 # flag integrations and channels that were skipped.
-                skipped = np.zeros_like(d, dtype=np.bool)
+                skipped = np.zeros_like(mdl, dtype=np.bool)
                 for dim in range(2):
                     if len(info['status']['axis_%d' % dim]) > 0:
                         for i in range(len(info['status']['axis_%d' % dim])):
