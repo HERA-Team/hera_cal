@@ -141,6 +141,32 @@ def test_flag_rows_with_flags_within_edge_distance():
         if i == 32:
             assert np.all(np.isclose(wout[i], 0.0))
 
+def test_flag_rows_with_flags_within_edge_distance_with_breaks():
+    Nfreqs = 64
+    Ntimes = 60
+    freqs = np.hstack([np.arange(23), 30 + np.arange(24), 58 + np.arange(17)]) * 100e3 + 150e6 #  freq axis with discontinuities at 23 and 47 integrations.
+    times = np.hstack([np.arange(20) * 11., 41 * 11. + np.arange(27) * 11., 200 * 11. + np.arange(13) * 11.]) # time axis with discontinuities at 29 abd 47 integrations
+    weights_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
+    # frequency direction and time direction separately.
+    weights_in[2, 30] = 0. # time 2 should not get flagged
+    weights_in[21, 48] = 0. # time 21 should get flagged
+    weights_in[55, 46] = 0. # time 55 should get flagged
+    weights_in[25, -2] = 0. # time 25 should get flagged
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(freqs, weights_in, min_flag_edge_distance=3, ax='freq')
+    assert list(np.where(np.all(np.isclose(wout, 0.), axis=1))[0]) == [21, 25, 55]
+    weights_in[22, 30] = 0. # channel 30 should be flagged
+    # channel 48 will also be flagged.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(times, weights_in, min_flag_edge_distance=3, ax='time')
+    assert list(np.where(np.all(np.isclose(wout, 0.), axis=0))[0]) == [30, 48]
+    weights_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
+    # both directions
+    weights_in[22, 30] = 0. # time 2 should not get flagged
+    weights_in[55, 46] = 0. # time 55 should get flagged
+    weights_in[25, -2] = 0. # time 25 should get flagged
+    weights_in[22, 30] = 0. # channel 30 should be flagged
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance([times, freqs], weights_in, min_flag_edge_distance=[2, 3], ax='both')
+    assert list(np.where(np.all(np.isclose(wout, 0.), axis=0))[0]) == [30]
+    assert list(np.where(np.all(np.isclose(wout, 0.), axis=1))[0]) == [25, 55]
 
 def test_flag_rows_with_contiguous_flags():
     Nfreqs = 64

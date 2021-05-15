@@ -207,8 +207,6 @@ def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_dista
 
     """
     if ax == 'time':
-        if isinstance(x, (tuple, list)) and len(x) == 2:
-            x = x[0]
         wout = flag_rows_with_flags_within_edge_distance(x, weights_in.T, min_flag_edge_distance).T
     else:
         if isinstance(x, (tuple, list)) and len(x) == 2:
@@ -219,12 +217,16 @@ def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_dista
         for rownum, wrow in enumerate(wout):
             flagrow = False
             for chunk in chunks:
-                cslice = slice(chunk[0], chunk[1])
                 if ax == 'both':
-                    if np.any(np.isclose(wout[rownum][cslice][:min_flag_edge_distance[1]], 0.0)) | np.any(np.isclose(wout[rownum][cslice][-min_flag_edge_distance[1] - 1:], 0.0)):
+                    cslice0 = slice(chunk[0], chunk[0] + min_flag_edge_distance[1] + 1)
+                    cslice1 = slice(chunk[1] - min_flag_edge_distance[1] - 1, chunk[1])
+                    if np.any(np.isclose(wout[rownum, cslice0], 0.0)) | np.any(np.isclose(wout[rownum, cslice1], 0.0)):
                         flagrow = True
-                elif np.any(np.isclose(wout[rownum][cslice][:min_flag_edge_distance], 0.0)) | np.any(np.isclose(wout[rownum][cslice][-min_flag_edge_distance - 1:], 0.0)):
-                    flagrow = True
+                else:
+                    cslice0 = slice(chunk[0], chunk[0] + min_flag_edge_distance + 1)
+                    cslice1 = slice(chunk[1] - min_flag_edge_distance - 1, chunk[1])
+                    if np.any(np.isclose(wout[rownum, cslice0], 0.0)) | np.any(np.isclose(wout[rownum, cslice1], 0.0)):
+                        flagrow = True
             if flagrow:
                 wout[rownum, :] = 0.
         if ax == 'both':
