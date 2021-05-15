@@ -1028,12 +1028,13 @@ class VisClean(object):
             filter_kwargs['cache'] = cache
         # iterate over keys
         for k in keys:
+            if k not in filtered_info:
+                filtered_info[k] = {}
             if k in filtered_model and overwrite is False:
                 echo("{} exists in clean_model and overwrite is False, skipping...".format(k), verbose=verbose)
                 continue
             echo("Starting fourier filter of {} at {}".format(k, str(datetime.datetime.now())), verbose=verbose)
             for spw_range in filter_spw_ranges:
-                filtered_info[k] = {}
                 if spw_range not in filtered_info[k]:
                     filtered_info[k][spw_range] = {}
                 spw_slice = slice(spw_range[0], spw_range[1])
@@ -1095,7 +1096,6 @@ class VisClean(object):
                 if skip_flagged_edges:
                     mdl = restore_flagged_edges(xp, mdl, edges, ax=ax)
                     res = restore_flagged_edges(xp, res, edges, ax=ax)
-
                 # unzeropad array and put in skip flags.
                 if ax == 'freq':
                     if zeropad > 0:
@@ -1111,11 +1111,19 @@ class VisClean(object):
                             mdl, _ = zeropad_array(mdl, zeropad=zeropad[i], axis=i, undo=True)
                             res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
                         _trim_status(info, i, zeropad[i - 1])
+                    # need to adjust info based on edges and chunks!
+                    # restore indices in info necessary if ax=='both'.
+                    if skip_flagged_edges:
+                        _adjust_info_indices(xp, info, edges, spw_range[0])
                 # flag integrations and channels that were skipped.
                 skipped = np.zeros_like(mdl, dtype=np.bool)
-                for dim in range(2):
+                # this is not the correct thing to do for 2d filtering.
+                # For 2d filter, only look at time-axis skips.
+                # for 1d filter look at both time and freq axes.
+                for dim in range(int(ax.lower() == 'both'), 2):
+                    dim = 1 - dim
                     if len(info['status']['axis_%d' % dim]) > 0:
-                        for i in range(len(info['status']['axis_%d' % dim])):
+                        for i in info['status']['axis_%d' % dim]:
                             if info['status']['axis_%d' % dim][i] == 'skipped':
                                 if dim == 0:
                                     skipped[:, i] = True
@@ -1805,6 +1813,40 @@ def _trim_status(info_dict, axis, zeropad):
     nints = len(statuses)
     for i in range(nints):
         statuses[i] = statuses.pop(i + zeropad)
+
+
+def _adjust_info_indices(x, info_dict, edges, freq_baseind):
+    """Adjust indices in info dict to reflect rows inserted by restore_flagged_edges
+
+    Parameters
+    ----------
+    x: 2-tuple/list
+        x-axis of data that has had rows/columns adjoining discontinuities removed.
+    info_dict: dictionary
+        info dict output by dspec.fourier_filter.
+    edges: 2-list of lists of 2-tuples.
+        list of 2-tuples indicating how many channels need to be inserted back
+        within each discontinuous chunk.
+    freq_baseind: int.
+        index base for freq dimension
+        (needed if processing spw_range that is not at lowest index of data).
+    Returns
+    -------
+    N/A:
+        modifies info-dict in place.
+    """
+    chunks = [find_discontinuity_edges(x[m]) for m in [1, 0]]
+    axinds = [0, 1]
+    edges = [edges[1], edges[0]]
+    baseinds = [freq_baseind, 0]
+    for axind, axchunks, axedges in zip(axinds, chunks, edges):
+        statuses = info_dict['status']['axis_%d' % axind]
+        offset = np.sum(np.hstack(axedges))
+        for chunk, edge in zip(chunks[axind][::-1], edges[axind][::-1]):
+            offset -= edge[1]
+            for ind in range(chunk[1] - 1, chunk[0] - 1, -1):
+                statuses[ind + offset + baseinds[axind]] = statuses.pop(ind)
+            offset -= edge[0]
 
 
 # ------------------------------------------
