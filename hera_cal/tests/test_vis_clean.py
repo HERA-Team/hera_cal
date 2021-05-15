@@ -127,14 +127,14 @@ def test_flag_rows_with_flags_within_edge_distance():
         else:
             assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
     # 30th and 20th channels should end up flagged for this case.
-    wout = vis_clean.flag_rows_with_flags_within_edge_distance(freqs, weights_in, min_flag_edge_distance=11, ax='time')
+    times = np.arange(Ntimes) * 10.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(times, weights_in, min_flag_edge_distance=11, ax='time')
     for i in range(wout.shape[1]):
         if i == 30 or i == 20:
             assert np.all(np.isclose(wout[:, i], 0.0))
         else:
             assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
     # now do both
-    times = np.arange(Ntimes) * 10.
     wout = vis_clean.flag_rows_with_flags_within_edge_distance([times, freqs], weights_in, min_flag_edge_distance=(3, 3), ax='both')
     for i in range(wout.shape[1]):
         if i == 30:
