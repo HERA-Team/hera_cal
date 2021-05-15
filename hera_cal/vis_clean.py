@@ -136,25 +136,29 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
 
 
 def restore_flagged_edges(x, data, edges, ax='freq'):
-    """fill in flagged regions of data array produced
-       by truncate_flagged_edges with zeros.
+    """
+    fill in flagged regions of data array produced
+    by truncate_flagged_edges with zeros.
 
-     Parameters
-     ----------
-     x: array-like or 2-list/tuple of arrays
-       1d array of x-values of data with removed edges.
-       if ax=='both', must be 2-list of arrays.
-     data: array-like
-       2d array containing data that has been trimmed with
-       trunate_flagged_edges (dout or wout)
-       dimensions (nf_trimmed, nt_trimmed)
-     edges : list of 2-tuples or 2-list of lists of 2-tuples.
+    Parameters
+    ----------
+    x: array-like or 2-list/tuple of arrays
+        1d array of x-values of data with removed edges.
+        if ax=='both', must be 2-list of arrays.
+    data: array-like
+        2d array containing data that has been trimmed with
+        trunate_flagged_edges (dout or wout)
+        dimensions (nf_trimmed, nt_trimmed)
+    edges : list of 2-tuples or 2-list of lists of 2-tuples.
         the width of the edges trimmed.
         must be 2-list of lists if ax=='both'
-     chunks : list of 2-tuples or 2-list of lists of 2-tuples.
+    chunks : list of 2-tuples or 2-list of lists of 2-tuples.
         indices indicating the chunk edges that edge widths are reference too.
         first list is time dim, second list is freq dim.
-    ax : axis to restore gaps on.
+    ax : str, optional
+        axis to restore gaps on.
+        default is 'freq'
+
     Returns
     -------
     data_restored: array-like
