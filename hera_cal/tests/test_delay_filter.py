@@ -47,7 +47,7 @@ class Test_DelayFilter(object):
             wgts = {k: np.ones_like(dfil.flags[k], dtype=np.float)}
             wgts[k][0, :] = 0.0
             dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
-            assert dfil.clean_info[k]['status']['axis_1'][0] == 'skipped'
+            assert dfil.clean_info[k][(0, dfil.Nfreqs)]['status']['axis_1'][0] == 'skipped'
             np.testing.assert_array_equal(dfil.clean_flags[k][0, :], np.ones_like(dfil.flags[k][0, :]))
             np.testing.assert_array_equal(dfil.clean_model[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
             np.testing.assert_array_equal(dfil.clean_resid[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
