@@ -604,7 +604,7 @@ class Test_VisClean(object):
         for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
             for i in range(V.Ntimes):
                 if i == 12:
-                    assert np.all(V.clean_flags[k][i])
+                    assert V.clean_info[k][(0, V.Nfreqs)]['status']['axis_1'][i] == 'skipped'
                 else:
                     assert not np.any(V.clean_flags[k][i])
 
@@ -757,6 +757,8 @@ class Test_VisClean(object):
             for i in (range(V.Ntimes)):
                 if i in (0, 28, 29, 30, 31, 32, 33, 46):
                     assert np.all(V.clean_flags[k][i])
+                    for spw_range in V.clean_info[k]:
+                        assert i not in V.clean_info[k][spw_range]['status']['axis_1']
                 else:
                     assert np.count_nonzero(~V.clean_flags[k][i]) == V.Nfreqs - 5
             for j in range(V.Nfreqs):
@@ -772,13 +774,20 @@ class Test_VisClean(object):
             for i in (range(V.Ntimes)):
                 if i in (0, 28, 29, 30, 31, 32, 33, 46):
                     assert np.all(V.clean_flags[k][i])
+                    for spw_range in V.clean_info[k]:
+                        assert i not in V.clean_info[k][spw_range]['status']['axis_1']
                 else:
                     assert np.count_nonzero(~V.clean_flags[k][i]) == V.Nfreqs - 5
-            for j in range(V.Nfreqs):
-                if j in (21, 22, 23, 42, 43):
-                    assert np.all(V.clean_flags[k][:, j])
-                else:
-                    assert np.count_nonzero(~V.clean_flags[k][:, j]) == V.Ntimes - 8
+                    for spw_range in V.clean_info[k]:
+                        assert i in V.clean_info[k][spw_range]['status']['axis_1']
+            for spw_range in V.clean_info[k]:
+                for j in range(spw_range[0], spw_range[1]):
+                    if j in (21, 22, 23, 42, 43):
+                        assert np.all(V.clean_flags[k][:, j])
+                        assert j not in V.clean_info[k][spw_range]['status']['axis_0']
+                    else:
+                        assert np.count_nonzero(~V.clean_flags[k][:, j]) == V.Ntimes - 8
+                        assert j in V.clean_info[k][spw_range]['status']['axis_0']
 
     def test_apply_flags(self):
         # cover edge cases of apply_flags not covered in test_delay_filter and
