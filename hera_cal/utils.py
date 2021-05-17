@@ -574,13 +574,15 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
         while True:
             lt_indices = np.floor(jd_array) < np.floor(start_jd)
             gt_indices = np.floor(jd_array) > np.floor(start_jd)
+            # if any of the resultant days fall on a JD less than start_jd, recalculate them 2pi higher
             if np.any(lt_indices):
                 LST[lt_indices] += 2 * np.pi
                 jd_array[lt_indices] = interpolator(LST[lt_indices])
+            # if any of the resultant days fall on a JD greater than start_jd, recalculate them 2pi lower
             elif np.any(gt_indices):
                 LST[gt_indices] -= 2 * np.pi
                 jd_array[gt_indices] = interpolator(LST[gt_indices])
-            else:
+            else:  # all resultant JDs fall on start_jd
                 break
 
     if _array:
