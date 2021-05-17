@@ -393,6 +393,19 @@ class Test_FRFilter(object):
         os.remove(outfilename)
         shutil.rmtree(cdir)
 
+    def test_load_tophat_frfilter_and_write_multifile(self, tmpdir):
+        # cover line where baseline-list is None and multiple files are provided.
+        uvh5s = sorted(glob.glob(DATA_PATH + '/zen.2458045.*.uvh5'))
+        tmp_path = tmpdir.strpath
+        outfilename = os.path.join(tmp_path, 'temp_output.uvh5')
+        frf.load_tophat_frfilter_and_write(uvh5s, filled_outfilename=outfilename, tol=1e-4, clobber=True)
+        hd = io.HERAData(uvh5s)
+        d, f, n = hd.read()
+        hdoutput = io.HERAData(outfilename)
+        doutput, foutput, nouput = hdoutput.read()
+        for k in doutput:
+            assert doutput[k].shape == d[k].shape
+
     def test_load_tophat_frfilter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
