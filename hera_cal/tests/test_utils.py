@@ -785,7 +785,6 @@ def test_select_spw_ranges(tmpdir):
     assert np.allclose(hdo.freq_array[0], hd.freq_array[0])
 
 
-
 def test_select_spw_ranges_argparser():
     sys.argv = [sys.argv[0], 'a', 'b', '--clobber', '--spw_ranges', '0 20,30 100,120 150']
     ap = utils.select_spw_ranges_argparser()
