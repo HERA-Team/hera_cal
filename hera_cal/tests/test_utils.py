@@ -779,6 +779,11 @@ def test_select_spw_ranges(tmpdir):
     utils.select_spw_ranges(inputfilename=uvh5, outputfilename=output, spw_ranges=[(0, 256), (332, 364), (792, 1000)])
     hdo = io.HERAData(output)
     assert np.allclose(hdo.freq_array[0], np.hstack([hd.freq_array[0, :256], hd.freq_array[0, 332:364], hd.freq_array[0, 792:1000]]))
+    # test case where no spw-ranges supplied
+    utils.select_spw_ranges(inputfilename=uvh5, outputfilename=output, clobber=True)
+    hdo = io.HERAData(output)
+    assert np.allclose(hdo.freq_array[0], hd.freq_array[0])
+
 
 
 def test_select_spw_ranges_argparser():
