@@ -184,12 +184,12 @@ def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_w
         to the largest delay in the filter centers and filter_widths
     """
     if len(x) == 2:
-        dx = [np.mean(np.diff(x[0])), np.mean(np.diff(x[1]))]
+        dx = [np.median(np.diff(x[0])), np.median(np.diff(x[1]))]
         max_filter_freq = [np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[0], filter_half_widths[0])]))),
                            np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[1], filter_half_widths[1])])))]
         return [int(1. / (max_filter_freq[0] * dx[0])), int(1. / (max_filter_freq[1] * dx[1]))]
     else:
-        dx = np.mean(np.diff(x))
+        dx = np.median(np.diff(x))
         max_filter_freq = np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers, filter_half_widths)])))
         return int(1. / (max_filter_freq * dx))
 
@@ -922,15 +922,15 @@ class VisClean(object):
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
-                    xp = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
-                                    x.max() + (1 + np.arange(zeropad)) * np.mean(np.diff(x))])
+                    xp = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.median(np.diff(x)), x,
+                                    x.max() + (1 + np.arange(zeropad)) * np.median(np.diff(x))])
             elif ax == 'time':
                 # zeropad the data
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
-                    xp = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
-                                   x.max() + (1 + np.arange(zeropad)) * np.mean(np.diff(x))])
+                    xp = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.median(np.diff(x)), x,
+                                   x.max() + (1 + np.arange(zeropad)) * np.median(np.diff(x))])
             elif ax == 'both':
                 if not isinstance(zeropad, (list, tuple)) or not len(zeropad) == 2:
                     raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
@@ -940,8 +940,8 @@ class VisClean(object):
                     if zeropad[m] > 0:
                         d, _ = zeropad_array(d, zeropad=zeropad[m], axis=m)
                         w, _ = zeropad_array(w, zeropad=zeropad[m], axis=m)
-                        xp[m] = np.hstack([x[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.mean(np.diff(x[m])),
-                                           x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.mean(np.diff(x[m]))])
+                        xp[m] = np.hstack([x[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.median(np.diff(x[m])),
+                                           x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.median(np.diff(x[m]))])
             mdl, res = np.zeros_like(d), np.zeros_like(d)
             # if we are not including flagged edges in filtering, skip them here.
             if skip_flagged_edges:
@@ -1770,7 +1770,7 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
             # find times that are close.
             tload = []
             # use tolerance in times that is set by the time resolution of the dataset.
-            atol = np.mean(np.diff(hd_baseline_chunk.times)) / 10.
+            atol = np.median(np.diff(hd_baseline_chunk.times)) / 10.
             all_times = np.unique(hd_baseline_chunk.times)
             for t in all_times:
                 if np.any(np.isclose(t, hd_time_chunk.times, atol=atol, rtol=0)):
@@ -1780,7 +1780,7 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         # now that we've updated everything, we write the output file.
         hd_time_chunk.write_uvh5(outfilename, clobber=clobber)
     else:
-        dt_time_chunk = np.mean(np.diff(hd_time_chunk.times)) / 2.
+        dt_time_chunk = np.median(np.diff(hd_time_chunk.times)) / 2.
         tmax = hd_time_chunk.times.max() + dt_time_chunk
         tmin = hd_time_chunk.times.min() - dt_time_chunk
         hd_combined = io.HERAData(baseline_chunk_files)

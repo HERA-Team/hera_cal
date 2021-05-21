@@ -794,3 +794,57 @@ def test_chunck_baselines_by_redundant_group():
     chunked_by_four_output = utils.chunk_baselines_by_redundant_groups(reds=filter_reds(reds_extended, bls=bls), max_chunk_size=4)
     for chunk1, chunk2 in zip(chunked_by_four_output, chunked_by_four_expected):
         assert chunk1 == chunk2
+
+
+def test_select_spw_ranges(tmpdir):
+    # validate spw_ranges.
+    tmp_path = tmpdir.strpath
+    # test that units are propagated from calibration gains to calibrated data.
+    new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+    uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+    hd = io.HERAData(uvh5)
+    nf = hd.Nfreqs
+    output = os.path.join(tmp_path, 'test_calibrated_output.uvh5')
+    utils.select_spw_ranges(inputfilename=uvh5, outputfilename=output, spw_ranges=[(0, 256), (332, 364), (792, 1000)])
+    hdo = io.HERAData(output)
+    assert np.allclose(hdo.freq_array[0], np.hstack([hd.freq_array[0, :256], hd.freq_array[0, 332:364], hd.freq_array[0, 792:1000]]))
+    # test case where no spw-ranges supplied
+    utils.select_spw_ranges(inputfilename=uvh5, outputfilename=output, clobber=True)
+    hdo = io.HERAData(output)
+    assert np.allclose(hdo.freq_array[0], hd.freq_array[0])
+
+
+def test_select_spw_ranges_argparser():
+    sys.argv = [sys.argv[0], 'a', 'b', '--clobber', '--spw_ranges', '0 20,30 100,120 150']
+    ap = utils.select_spw_ranges_argparser()
+    args = ap.parse_args()
+    assert args.spw_ranges == [(0, 20), (30, 100), (120, 150)]
+    # test tilde formatting.
+    sys.argv = [sys.argv[0], 'a', 'b', '--clobber', '--spw_ranges', '0~20,30~100,120~150']
+    ap = utils.select_spw_ranges_argparser()
+    args = ap.parse_args()
+    assert args.spw_ranges == [(0, 20), (30, 100), (120, 150)]
+
+
+def test_select_spw_ranges_run_script_code(tmpdir):
+    # test script code from scripts/test_select_spw_ranges.py
+    tmp_path = tmpdir.strpath
+    new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+    uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+    hd = io.HERAData(uvh5)
+    hd.read()
+    nf = hd.Nfreqs
+    output = os.path.join(tmp_path, 'test_calibrated_output.uvh5')
+    # construct bash script command
+    select_cmd = f'python ./scripts/select_spw_ranges.py {uvh5} {output} --clobber --spw_ranges 0~256,332~364,792~1000'
+    # and excecute inside of python
+    os.system(select_cmd)
+    # test that output has correct frequencies.
+    hdo = io.HERAData(output)
+    hdo.read()
+    assert np.allclose(hdo.freq_array[0], np.hstack([hd.freq_array[0, :256], hd.freq_array[0, 332:364], hd.freq_array[0, 792:1000]]))
+    freq_inds = np.hstack([np.arange(0, 256).astype(int), np.arange(332, 364).astype(int), np.arange(792, 1000).astype(int)])
+    # and check that data, flags, nsamples make sense.
+    assert np.allclose(hdo.data_array, hd.data_array[:, :, freq_inds, :])
+    assert np.allclose(hdo.flag_array, hd.flag_array[:, :, freq_inds, :])
+    assert np.allclose(hdo.nsample_array, hd.nsample_array[:, :, freq_inds, :])
