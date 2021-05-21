@@ -903,6 +903,10 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         fkwargs['type'] = 'STD'
         std_file = "zen." + file_ext.format(**fkwargs)
 
+        # make sure the JD corresponding to file_lsts[0][0] is the lowest JD in the LST-binned data set
+        if lst_start is not None:
+            kwargs['lst_branch_cut'] = file_lsts[0][0]
+
         # check for overwrite
         if os.path.exists(bin_file) and overwrite is False:
             utils.echo("{} exists, not overwriting".format(bin_file), verbose=verbose)

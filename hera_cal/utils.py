@@ -9,7 +9,7 @@ import astropy.constants as const
 from astropy.time import Time
 from astropy import coordinates as crd
 from astropy import units as unt
-from scipy import signal
+from scipy import signal, interpolate
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
@@ -475,13 +475,17 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     return aa
 
 
-def JD2LST(JD, longitude=21.42830):
+def JD2LST(JD, latitude=-30.721526120689507, longitude=21.428303826863015, altitude=1051.690000018105):
     """
     Input:
     ------
     JD : type=float or list of floats containing Julian Date(s) of an observation
 
-    longitude : type=float, longitude of observer in degrees East, default=HERA longitude
+    latitude : type=float, degrees North of observer, default=HERA latitude
+
+    longitude : type=float, degrees East of observer, default=HERA longitude
+
+    altitude : type=float, altitude in meters, default=HERA altitude
 
     Output:
     -------
@@ -490,6 +494,7 @@ def JD2LST(JD, longitude=21.42830):
     Notes:
     ------
     The Local Apparent Sidereal Time is *defined* as the right ascension in the current epoch.
+    Wrapper around pyuvdata's get_lst_for_time().
     """
     # get JD type
     if isinstance(JD, list) or isinstance(JD, np.ndarray):
@@ -498,14 +503,8 @@ def JD2LST(JD, longitude=21.42830):
         _array = False
         JD = [JD]
 
-    # iterate over JD
-    LST = []
-    for jd in JD:
-        # construct astropy Time object
-        t = Time(jd, format='jd', scale='utc')
-        # get LST in radians at epoch of jd
-        LST.append(t.sidereal_time('apparent', longitude=longitude * unt.deg).radian)
-    LST = np.array(LST)
+    # use pyuvdata
+    LST = uvutils.get_lst_for_time(np.array(JD), latitude, longitude, altitude)
 
     if _array:
         return LST
@@ -513,57 +512,79 @@ def JD2LST(JD, longitude=21.42830):
         return LST[0]
 
 
-def LST2JD(LST, start_jd, longitude=21.42830):
+def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30.721526120689507,
+           longitude=21.428303826863015, altitude=1051.690000018105):
     """
     Convert Local Apparent Sidereal Time -> Julian Date via a linear fit
     at the 'start_JD' anchor point.
 
     Input:
     ------
-    LST : type=float, local apparent sidereal time [radians]
+    LST : type=float or array-like, local apparent sidereal time [radians]
 
     start_jd : type=int, integer julian day to use as starting point for LST2JD conversion
+    
+    allow_other_jd : type=bool, ensure that the lst_branch_cut falls on start_jd but allow 
+                     LSTs to correspond to previous or subsequent days if necessary
+        
+    lst_branch_cut : type=float, LST that must fall during start_jd even when allow_other_jd 
+                     is True. Used as the starting point starting point where LSTs below this
+                     value map to later JDs than this LST [radians]
+    
+    latitude : type=float, degrees North of observer, default=HERA latitude
 
     longitude : type=float, degrees East of observer, default=HERA longitude
 
+    altitude : type=float, altitude in meters, default=HERA altitude
+
     Output:
     -------
-    JD : type=float, Julian Date(s). accurate to ~1 milliseconds
+    JD : type=type(LST), Julian Date(s). accurate to ~1 milliseconds
     """
     # get LST type
     if isinstance(LST, list) or isinstance(LST, np.ndarray):
+        LST = np.array(LST)
         _array = True
     else:
-        LST = [LST]
+        LST = np.array([LST])
         _array = False
 
-    # get start_JD
-    base_jd = float(start_jd)
+    # increase LSTs so no values fall below the branch cut (avoiding wraps in interpolation)
+    while np.any(LST < lst_branch_cut):
+        LST[LST < lst_branch_cut] += 2 * np.pi  
 
-    # iterate over LST
-    jd_array = []
-    for lst in LST:
+    # create interpolator for a given start date that puts the lst_branch_cut on start_jd
+    jd_grid = start_jd + np.linspace(-1, 2, 31)  # include previous and next days
+    while True:
+        lst_grid = (JD2LST(jd_grid, latitude=latitude, longitude=longitude, altitude=altitude))
+        interpolator = interpolate.interp1d(np.unwrap(lst_grid - 2 * np.pi), jd_grid,
+                                            kind='linear', fill_value='extrapolate')
+        if np.floor(interpolator(lst_branch_cut)) > np.floor(start_jd):
+            jd_grid -= unt.sday.to(unt.day)
+
+        elif np.floor(interpolator(lst_branch_cut)) < np.floor(start_jd):
+            jd_grid += unt.sday.to(unt.day)
+        else:
+            break
+        
+    # interpolate
+    jd_array = interpolator(LST)
+    
+    # Enforce single JD if desired
+    if not allow_other_jd:
         while True:
-            # calculate fit
-            jd1 = start_jd
-            jd2 = start_jd + 0.01
-            lst1, lst2 = JD2LST(jd1, longitude=longitude), JD2LST(jd2, longitude=longitude)
-            slope = (lst2 - lst1) / 0.01
-            offset = lst1 - slope * jd1
-
-            # solve y = mx + b for x
-            JD = (lst - offset) / slope
-
-            # redo if JD isn't on starting JD
-            if JD - base_jd < 0:
-                start_jd += 1
-            elif JD - base_jd > 1:
-                start_jd -= 1
-            else:
+            lt_indices = np.floor(jd_array) < np.floor(start_jd)
+            gt_indices = np.floor(jd_array) > np.floor(start_jd)
+            # if any of the resultant days fall on a JD less than start_jd, recalculate them 2pi higher
+            if np.any(lt_indices):
+                LST[lt_indices] += 2 * np.pi
+                jd_array[lt_indices] = interpolator(LST[lt_indices])
+            # if any of the resultant days fall on a JD greater than start_jd, recalculate them 2pi lower
+            elif np.any(gt_indices):
+                LST[gt_indices] -= 2 * np.pi
+                jd_array[gt_indices] = interpolator(LST[gt_indices])
+            else:  # all resultant JDs fall on start_jd
                 break
-        jd_array.append(JD)
-
-    jd_array = np.array(jd_array)
 
     if _array:
         return jd_array
@@ -571,7 +592,7 @@ def LST2JD(LST, start_jd, longitude=21.42830):
         return jd_array[0]
 
 
-def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
+def JD2RA(JD, latitude=-30.721526120689507, longitude=21.428303826863015, epoch='current'):
     """
     Convert from Julian date to Equatorial Right Ascension at zenith
     during a specified epoch.
@@ -631,7 +652,7 @@ def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
         return RA[0]
 
 
-def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
+def get_sun_alt(jds, latitude=-30.721526120689507, longitude=21.428303826863015):
     """
     Given longitude and latitude, get the Solar alittude at a given time.
 
@@ -729,7 +750,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
     uvc.write_calfits(output_fname, clobber=True)
 
 
-def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False):
+def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, array=False):
     """
     Shift phase center of each integration in data by amount dlst [radians] along right ascension axis.
     If inplace == True, this function directly edits the arrays in 'data' in memory, so as not to
