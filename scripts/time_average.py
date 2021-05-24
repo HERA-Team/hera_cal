@@ -26,4 +26,5 @@ frf.time_avg_data_and_write(
                             # for this reason, the argparser requests the negation.
                             filetype=args.filetype,
                             wgt_by_nsample=not(args.dont_wgt_by_nsample),
+                            wgt_by_favg_nsample=args.wgt_by_favg_nsample,
                             clobber=args.clobber, verbose=args.verbose)
