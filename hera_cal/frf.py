@@ -499,8 +499,8 @@ class FRFilter(VisClean):
 
 
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
-                            wgt_by_nsample=True, rephase=False, filetype='uvh5',
-                            verbose=False, clobber=False, flag_output=None):
+                            wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
+                            filetype='uvh5', verbose=False, clobber=False, flag_output=None):
     """Time-averaging with a baseline cornerturn
 
 
@@ -517,6 +517,9 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
     wgt_by_nsample: bool, optional
         weight by nsamples in time average
         default is True
+    wgt_by_favg_nsample : bool
+        If True, perform time average weighting by averaging the number of samples across
+        frequency for each integration. Mutually exclusive with wgt_by_nsample. Default False.
     rephase: bool, optional
         rephase each time bin to central lst.
     filetype : str, optional
@@ -544,7 +547,7 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         fr.read(bls=baseline_list, axis='blt')
 
         fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
-                        wgt_by_nsample=wgt_by_nsample, rephase=rephase)
+                        wgt_by_nsample=wgt_by_nsample, wgt_by_favg_nsample=wgt_by_favg_nsample, rephase=rephase)
         fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
                       nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
         if flag_output is not None:
