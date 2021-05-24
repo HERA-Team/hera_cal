@@ -19,8 +19,9 @@ from . import io
 import warnings
 
 
-def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, rephase=False,
-                      lsts=None, freqs=None, bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
+def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, 
+                      wgt_by_favg_nsample=False, rephase=False, lsts=None, freqs=None, 
+                      bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
     """
     Calculate the time average of a visibility waterfall. The average is optionally
     weighted by a boolean flag array (flags) and also optionally by an Nsample array (nsample),
@@ -58,6 +59,10 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
     wgt_by_nsample : bool, optional
         If True, perform time average weighted by nsample, otherwise perform uniform
         average. Default is True.
+
+    wgt_by_favg_nsample : bool, optional
+        If True, perform time average weighting by averaging the number of samples across
+        frequency for each integration. Mutually exclusive with wgt_by_nsample. Default False.
 
     rephase : boolean, optional
         If True, phase each integration to the LST of the averaging window-center
@@ -111,6 +116,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
     if rephase:
         assert lsts is not None and freqs is not None and bl_vec is not None, "" \
             "If rephase is True, must feed lsts, freqs and bl_vec."
+    if (wgt_by_nsample and wgt_by_favg_nsample):
+        raise ValueError('wgt_by_nsample and wgt_by_favg_nsample cannot both be True.')
 
     # unwrap lsts if fed
     if lsts is not None:
@@ -174,6 +181,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
         # form data weights
         if wgt_by_nsample:
             w = fw * n
+        elif wgt_by_favg_nsample:
+            w = fw * np.mean(n, axis=1, keepdims=True)
         else:
             w = fw
         w_sum = np.sum(w, axis=0, keepdims=False).clip(1e-10, np.inf)
