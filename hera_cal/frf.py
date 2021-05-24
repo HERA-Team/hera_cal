@@ -319,8 +319,9 @@ class FRFilter(VisClean):
     """
     FRFilter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
     """
-    def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None, wgt_by_nsample=True,
-                     rephase=False, verbose=True, output_prefix='avg', keys=None, overwrite=False):
+    def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None,
+                     wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
+                     verbose=True, output_prefix='avg', keys=None, overwrite=False):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
         The resultant averaged data, flags, time arrays, etc. are attached to self
@@ -352,6 +353,9 @@ class FRFilter(VisClean):
             wgt_by_nsample : bool
                 If True, perform time average weighted by nsample, otherwise perform
                 uniform average. Default is True.
+            wgt_by_favg_nsample : bool
+                If True, perform time average weighting by averaging the number of samples across
+                frequency for each integration. Mutually exclusive with wgt_by_nsample. Default False.
             rephase : bool
                 If True, rephase data in averaging window to the window-center.
             keys : list of len-3 antpair-pol tuples
@@ -405,7 +409,7 @@ class FRFilter(VisClean):
              ea) = timeavg_waterfall(data[k], Navg, flags=flags[k], nsamples=nsamples[k],
                                      rephase=rephase, lsts=lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
                                      lat=self.lat, extra_arrays=dict(times=times), wgt_by_nsample=wgt_by_nsample,
-                                     verbose=verbose)
+                                     wgt_by_favg_nsample=wgt_by_favg_nsample, verbose=verbose)
             avg_data[k] = ad
             avg_flags[k] = af
             avg_nsamples[k] = an
