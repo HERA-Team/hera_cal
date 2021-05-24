@@ -579,6 +579,7 @@ def time_average_argparser():
     ap.add_argument("--t_avg", type=float, help="number of seconds to average over.", default=None)
     ap.add_argument("--rephase", default=False, action="store_true", help="rephase to averaging window center.")
     ap.add_argument("--dont_wgt_by_nsample", default=False, action="store_true", help="don't weight averages by nsample. Default is to wgt by nsamples.")
+    ap.add_argument("--wgt_by_favg_nsample", default=False, action="store_true", help="weight each integration by frequency-averaged nsamples.")
     ap.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
     ap.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
     ap.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
