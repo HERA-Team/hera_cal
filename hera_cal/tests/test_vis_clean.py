@@ -532,8 +532,8 @@ class Test_VisClean(object):
             assert np.all(V.clean_flags[k][:, 0])
         # now try using skip_contiguous flag gaps.
         standoff = 1e9 / (np.mean(np.diff(V.freqs)))
-        max_frate = datacontainer.DataContainer({(24, 25, 'ee'): 2. / (np.mean(np.diff(V.times)) * 3.6 * 24.),
-                                                 (24, 24, 'ee'): 1. / (2 * np.mean(np.diff(V.times)) * 3.6 * 24.)})
+        max_frate = datacontainer.DataContainer({(24, 25, 'ee'): 2. / np.abs(np.median(np.diff(V.times)) * 3.6 * 24.),
+                                                 (24, 24, 'ee'): 1. / np.abs(2 * np.median(np.diff(V.times)) * 3.6 * 24.)})
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
                     skip_contiguous_flags=True, standoff=standoff)
         # with this standoff, all data should be skipped.
