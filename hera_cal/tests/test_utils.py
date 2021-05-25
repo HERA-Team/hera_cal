@@ -7,6 +7,7 @@ import numpy as np
 import sys
 import os
 import warnings
+from pathlib import Path
 import shutil
 import glob
 from collections import OrderedDict as odict
@@ -836,7 +837,8 @@ def test_select_spw_ranges_run_script_code(tmpdir):
     nf = hd.Nfreqs
     output = os.path.join(tmp_path, 'test_calibrated_output.uvh5')
     # construct bash script command
-    select_cmd = f'python ./scripts/select_spw_ranges.py {uvh5} {output} --clobber --spw_ranges 0~256,332~364,792~1000'
+    script_dir = str(Path(__file__).resolve().parent.parent.parent / "scripts")
+    select_cmd = f'python {script_dir}/select_spw_ranges.py {uvh5} {output} --clobber --spw_ranges 0~256,332~364,792~1000'
     # and excecute inside of python
     os.system(select_cmd)
     # test that output has correct frequencies.
