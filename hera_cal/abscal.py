@@ -3288,7 +3288,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
         tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters).
             Ignored if data_is_redsol is False.
         antpos: dictionary mapping antenna number to ENU position in meters for antennas in the data.
-            Ignored if data_is_redsol is False. If left as None, can be inferred from data_flags.antpos.
+            Ignored if data_is_redsol is False. If left as None, can be inferred from data_flags.data_antpos.
     Returns:
         wgts: Datacontainer mapping data_flags baseline to weights
     '''
