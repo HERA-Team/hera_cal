@@ -3288,7 +3288,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
         tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters).
             Ignored if data_is_redsol is False.
         antpos: dictionary mapping antenna number to ENU position in meters for antennas in the data.
-            Ignored if data_is_redsol is False. If left as None, can be inferred from data_flags.antpos.
+            Ignored if data_is_redsol is False. If left as None, can be inferred from data_flags.data_antpos.
     Returns:
         wgts: Datacontainer mapping data_flags baseline to weights
     '''
@@ -3406,7 +3406,7 @@ def _get_idealized_antpos(cal_flags, antpos, pols, tol=1.0, keep_flagged_ants=Tr
 
 
 def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, kernel=(1, 15),
-                       phs_max_iter=100, phs_conv_crit=1e-6, verbose=True):
+                       phs_max_iter=100, phs_conv_crit=1e-6, verbose=True, use_abs_amp_lincal=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
@@ -3423,6 +3423,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
         phs_max_iter: maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
             the updates to all 1.0s.
+        use_abs_amp_lincal: finish calibration with an unbiased amplitude lincal step. Default True.
 
     Returns:
         abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing
@@ -3481,8 +3482,9 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
             break
 
     # Abscal Step 5: Per-Channel Linear Absolute Amplitude Calibration
-    gains_here = abs_amp_lincal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
-    abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
+    if use_abs_amp_lincal:
+        gains_here = abs_amp_lincal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+        abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
 
     return abscal_delta_gains
 

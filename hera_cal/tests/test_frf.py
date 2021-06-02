@@ -80,6 +80,23 @@ def test_timeavg_waterfall():
     assert np.allclose(ad, ad2)
     assert np.allclose(al, al2 - 1.52917804)
 
+    # Test Error
+    with pytest.raises(ValueError):
+        frf.timeavg_waterfall(d, 25, verbose=False, wgt_by_nsample=True, wgt_by_favg_nsample=True)
+
+    # test weightings
+    d = np.ones((4, 10))
+    d[0, :] *= 2
+    n = np.ones((4, 10))
+    n[0, 0:5] *= 2
+    ad, _, _, _, _ = frf.timeavg_waterfall(d, 2, rephase=False, nsamples=n, wgt_by_nsample=True)
+    np.testing.assert_array_equal(ad[1, :], 1.0) 
+    np.testing.assert_array_equal(ad[0, 0:5], 5. / 3) 
+    np.testing.assert_array_equal(ad[0, 5:10], 1.5)
+    ad, _, _, _, _ = frf.timeavg_waterfall(d, 2, rephase=False, nsamples=n, wgt_by_nsample=False, wgt_by_favg_nsample=True)
+    np.testing.assert_array_equal(ad[1, :], 1.0) 
+    np.testing.assert_array_equal(ad[0, :], 1.6)
+
 
 def test_fir_filtering():
     # convert a high-pass frprofile to an FIR filter
