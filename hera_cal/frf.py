@@ -20,8 +20,9 @@ from . import vis_clean
 import warnings
 
 
-def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, rephase=False,
-                      lsts=None, freqs=None, bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
+def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, 
+                      wgt_by_favg_nsample=False, rephase=False, lsts=None, freqs=None, 
+                      bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
     """
     Calculate the time average of a visibility waterfall. The average is optionally
     weighted by a boolean flag array (flags) and also optionally by an Nsample array (nsample),
@@ -59,6 +60,10 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
     wgt_by_nsample : bool, optional
         If True, perform time average weighted by nsample, otherwise perform uniform
         average. Default is True.
+
+    wgt_by_favg_nsample : bool, optional
+        If True, perform time average weighting by averaging the number of samples across
+        frequency for each integration. Mutually exclusive with wgt_by_nsample. Default False.
 
     rephase : boolean, optional
         If True, phase each integration to the LST of the averaging window-center
@@ -112,6 +117,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
     if rephase:
         assert lsts is not None and freqs is not None and bl_vec is not None, "" \
             "If rephase is True, must feed lsts, freqs and bl_vec."
+    if (wgt_by_nsample and wgt_by_favg_nsample):
+        raise ValueError('wgt_by_nsample and wgt_by_favg_nsample cannot both be True.')
 
     # unwrap lsts if fed
     if lsts is not None:
@@ -175,6 +182,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
         # form data weights
         if wgt_by_nsample:
             w = fw * n
+        elif wgt_by_favg_nsample:
+            w = fw * np.mean(n, axis=1, keepdims=True)
         else:
             w = fw
         w_sum = np.sum(w, axis=0, keepdims=False).clip(1e-10, np.inf)
@@ -311,8 +320,9 @@ class FRFilter(VisClean):
     """
     FRFilter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
     """
-    def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None, wgt_by_nsample=True,
-                     rephase=False, verbose=True, output_prefix='avg', keys=None, overwrite=False):
+    def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None,
+                     wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
+                     verbose=True, output_prefix='avg', keys=None, overwrite=False):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
         The resultant averaged data, flags, time arrays, etc. are attached to self
@@ -344,6 +354,9 @@ class FRFilter(VisClean):
             wgt_by_nsample : bool
                 If True, perform time average weighted by nsample, otherwise perform
                 uniform average. Default is True.
+            wgt_by_favg_nsample : bool
+                If True, perform time average weighting by averaging the number of samples across
+                frequency for each integration. Mutually exclusive with wgt_by_nsample. Default False.
             rephase : bool
                 If True, rephase data in averaging window to the window-center.
             keys : list of len-3 antpair-pol tuples
@@ -397,7 +410,7 @@ class FRFilter(VisClean):
              ea) = timeavg_waterfall(data[k], Navg, flags=flags[k], nsamples=nsamples[k],
                                      rephase=rephase, lsts=lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
                                      lat=self.lat, extra_arrays=dict(times=times), wgt_by_nsample=wgt_by_nsample,
-                                     verbose=verbose)
+                                     wgt_by_favg_nsample=wgt_by_favg_nsample, verbose=verbose)
             avg_data[k] = ad
             avg_flags[k] = af
             avg_nsamples[k] = an
@@ -566,8 +579,8 @@ class FRFilter(VisClean):
 
 
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
-                            wgt_by_nsample=True, rephase=False, filetype='uvh5',
-                            verbose=False, clobber=False, flag_output=None):
+                            wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
+                            filetype='uvh5', verbose=False, clobber=False, flag_output=None):
     """Time-averaging with a baseline cornerturn
 
 
@@ -584,6 +597,9 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
     wgt_by_nsample: bool, optional
         weight by nsamples in time average
         default is True
+    wgt_by_favg_nsample : bool
+        If True, perform time average weighting by averaging the number of samples across
+        frequency for each integration. Mutually exclusive with wgt_by_nsample. Default False.
     rephase: bool, optional
         rephase each time bin to central lst.
     filetype : str, optional
@@ -611,7 +627,7 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         fr.read(bls=baseline_list, axis='blt')
 
         fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
-                        wgt_by_nsample=wgt_by_nsample, rephase=rephase)
+                        wgt_by_nsample=wgt_by_nsample, wgt_by_favg_nsample=wgt_by_favg_nsample, rephase=rephase)
         fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
                       nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
         if flag_output is not None:
@@ -791,6 +807,7 @@ def time_average_argparser():
     ap.add_argument("--t_avg", type=float, help="number of seconds to average over.", default=None)
     ap.add_argument("--rephase", default=False, action="store_true", help="rephase to averaging window center.")
     ap.add_argument("--dont_wgt_by_nsample", default=False, action="store_true", help="don't weight averages by nsample. Default is to wgt by nsamples.")
+    ap.add_argument("--wgt_by_favg_nsample", default=False, action="store_true", help="weight each integration by frequency-averaged nsamples.")
     ap.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
     ap.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
     ap.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
