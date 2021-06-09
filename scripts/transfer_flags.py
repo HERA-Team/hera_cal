@@ -24,7 +24,7 @@ uvo.read_uvh5(args.flag_origin)
 uvd = UVData()
 uvd.read_uvh5(args.flag_destination)
 
-uvo.flag_array = uvd.flag_array
+uvd.flag_array = uvo.flag_array
 
 # Write data
 uvd.write_uvh5(args.output, clobber=args.clobber)
