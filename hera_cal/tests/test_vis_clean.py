@@ -276,6 +276,11 @@ class Test_VisClean(object):
         assert V2.hd.vis_units == 'Jy'
         assert 'Thisfilewasproducedbythefunction' in V2.hd.history.replace('\n', '').replace(' ', '')
         V.hd.history, V2.hd.history, V2.hd.vis_units = '', '', V.hd.vis_units
+        if hasattr(V.hd, "filename"):
+            # make sure filename attributes are what we're expecting
+            assert V.hd.filename == ["zen.2458098.43124.subband.uvh5"]
+            assert V2.hd.filename == ["ex.uvh5"]
+            V.hd.filename = V2.hd.filename
         assert V.hd == V2.hd
         os.remove("./ex.uvh5")
 
