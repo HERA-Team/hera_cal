@@ -10,6 +10,8 @@ import sys
 import shutil
 from scipy import constants, interpolate
 from pyuvdata import UVCal, UVData
+from hera_sim.interpolators import Beam
+from hera_sim import DATA_PATH as HS_DATA_PATH
 from hera_sim import noise
 from uvtools import dspec
 
@@ -742,8 +744,10 @@ class Test_VisClean(object):
         # delay width = intended delay width x (manually set dnu / original dnu of the attached data)
         np.random.seed(0)
         k = (23, 24, 'ee')
-        Op = noise.bm_poly_to_omega_p(V.freqs / 1e9)
-        V.data[k] += noise.sky_noise_jy(V.data[(23, 23, 'ee')], V.freqs / 1e9, V.lsts, Op, inttime=50)
+        beam_interp = Beam(HS_DATA_PATH / 'HERA_H1C_BEAM_POLY.npy')
+        Op = beam_interp(V.freqs / 1e9)
+        # V.data[k] += noise.sky_noise_jy(autovis=V.data[(23, 23, 'ee')], freqs=V.freqs / 1e9, lsts=V.lsts, omega_p=Op)
+        V.data[k] += noise.sky_noise_jy(V.lsts, V.freqs / 1e9, omega_p=Op, integration_time=50, autovis=V.data[(23, 23, 'ee')])
 
         # add lots of random flags
         f = np.zeros(V.Nfreqs, dtype=np.bool)[None, :]
@@ -777,8 +781,8 @@ class Test_VisClean(object):
 
         # confirm that dfft3 and dfft1 match while dfft2 and dfft1 do not near CLEAN boundary
         select = (np.abs(V.delays) < 300) & (np.abs(V.delays) > 100)
-        assert np.isclose(np.mean(np.abs(d1)[select]), np.mean(np.abs(d3)[select]), atol=10)
-        assert not np.isclose(np.mean(np.abs(d1)[select]), np.mean(np.abs(d2)[select]), atol=10)
+        assert np.isclose(np.mean(np.abs(d1)[select]), np.mean(np.abs(d3)[select]), atol=.1)
+        assert not np.isclose(np.mean(np.abs(d1)[select]), np.mean(np.abs(d2)[select]), atol=.1)
 
         # test that polynomial fitting is a good fit
         _, n1 = vis_clean.trim_model(V.clean_model, V.clean_resid, V.dnu, noise_thresh=3.0, delay_cut=500,
