@@ -14,7 +14,7 @@ from pyuvdata import utils as uvutils
 
 def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
                 polarizations=None, spw_range=None, throw_away_flagged_ants=False,
-                clobber=False, ant_flag_yaml=None):
+                clobber=False, ant_flag_yaml=None, apply_yaml_flags=False):
     """Chunk a list of data or cal files together into a single file.
 
     Parameters
@@ -44,7 +44,11 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
         defualt is false.
     flag_yaml : str, optional
         yaml file with list of antennas to flag and throw away if throw_away_flagged_ants is True
-
+    apply_yaml_flags: bool, optional
+        if True, apply flags (freq, time, ants) from flag_yaml file. Distinct from throw_away_flagged_ants
+        in that throw_away_flagged_ants will delete flagged antennas but not apply time/freq flags
+        while apply_yaml_flags will but not throw away antennas.
+        default is False.
     Returns
     -------
     None
@@ -84,6 +88,8 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
         from hera_qm.utils import apply_yaml_flags
         chunked_files = apply_yaml_flags(chunked_files, ant_flag_yaml, flag_freqs=False, flag_times=False,
                                          flag_ants=True, ant_indices_only=True, throw_away_flagged_ants=True)
+    if apply_yaml_flags:
+        chunked_files = apply_yaml_flags(chunked_files, ant_flag_yaml, flag_freqs=True, flag_times=True, flag_ants=True)
     if type == 'data':
         chunked_files.write_uvh5(outputfile, clobber=clobber)
     elif type == 'gains':
@@ -114,4 +120,5 @@ def chunk_parser():
     ap.add_argument("--clobber", default=False, action="store_true", help="overwrite output if it exists.")
     ap.add_argument("--throw_away_flagged_ants", default=False, action="store_true", help="throw away flagged baselines.")
     ap.add_argument("--ant_flag_yaml", default=None, help="path to yaml file with flagged data.")
+    ap.add_argument("--apply_yaml_flags", default=False, action="store_true", help="apply flags in yaml file.")
     return ap
