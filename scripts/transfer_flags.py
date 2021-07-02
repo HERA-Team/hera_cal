@@ -14,7 +14,7 @@ ap.add_argument("flag_origin", type=str, help="path fot visibility data to trans
 ap.add_argument("flag_destination", type=str, help="path fot visibility data to transfer flags to.")
 ap.add_argument("output", type=str, help="path to write outputs to.")
 ap.add_argument("--clobber", default=False, action="store_true", help="overwrite existing outputs.")
-
+ap.add_argument("--keep_old_flags", default=False, action="store_true", help="OR new flags with original flags.")
 args = ap.parse_args()
 
 # Load data
@@ -24,7 +24,10 @@ uvo.read_uvh5(args.flag_origin)
 uvd = UVData()
 uvd.read_uvh5(args.flag_destination)
 
-uvd.flag_array = uvo.flag_array
+if args.keep_old_flags:
+    uvd.flag_array = uvd.flag_array | uvo.flag_array
+else:
+    uvd.flag_array = uvo.flag_array
 
 # Write data
 uvd.write_uvh5(args.output, clobber=args.clobber)
