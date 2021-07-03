@@ -42,7 +42,7 @@ setup_args = {
                 'scripts/auto_reflection_run.py', 'scripts/noise_from_autos.py',
                 'scripts/query_ex_ants.py', 'scripts/red_average.py',
                 'scripts/xtalk_filter_run.py', 'scripts/time_average.py',
-                'scripts/time_chunk_from_baseline_chunks_run.py', 'scripts/chunk_files.py',
+                'scripts/time_chunk_from_baseline_chunks_run.py', 'scripts/chunk_files.py', 'scripts/transfer_flags.py',
                 'scripts/flag_all.py', 'scripts/throw_away_flagged_antennas.py', 'scripts/select_spw_ranges.py'],
     'version': version.version,
     'package_data': {'hera_cal': data_files},
