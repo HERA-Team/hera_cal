@@ -985,7 +985,6 @@ class VisClean(object):
             filter2d = False
             if x is None:
                 x = (self.times - np.mean(self.times)) * 3600. * 24.
-            filter_spw_ranges = [(0, self.Nfreqs)]
             if zeropad is None:
                 zeropad = 0
         elif ax == 'freq':
@@ -995,8 +994,8 @@ class VisClean(object):
                 zeropad = 0
             if x is None:
                 x = self.freqs
-            if filter_spw_ranges is None:
-                filter_spw_ranges = [(0, self.Nfreqs)]
+        if filter_spw_ranges is None:
+            filter_spw_ranges = [(0, self.Nfreqs)]
         else:
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
         if len(self.freqs) != np.sum([spw_range[1] - spw_range[0] for spw_range in filter_spw_ranges]) or not np.allclose(self.freqs, self.freqs[np.hstack([np.arange(spw_range[0], spw_range[1]).astype(int) for spw_range in filter_spw_ranges])]):
