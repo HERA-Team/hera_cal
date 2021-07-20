@@ -978,8 +978,6 @@ class VisClean(object):
                 x = [(self.times - np.mean(self.times)) * 3600. * 24., self.freqs]
             if skip_if_flag_within_edge_distance == 0:
                 skip_if_flag_within_edge_distance = (0, 0)
-            if filter_spw_ranges is None:
-                filter_spw_ranges = [(0, self.Nfreqs)]
         elif ax == 'time':
             filterdim = 0
             filter2d = False
@@ -994,10 +992,10 @@ class VisClean(object):
                 zeropad = 0
             if x is None:
                 x = self.freqs
-        if filter_spw_ranges is None:
-            filter_spw_ranges = [(0, self.Nfreqs)]
         else:
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
+        if filter_spw_ranges is None:
+            filter_spw_ranges = [(0, self.Nfreqs)]
         if len(self.freqs) != np.sum([spw_range[1] - spw_range[0] for spw_range in filter_spw_ranges]) or not np.allclose(self.freqs, self.freqs[np.hstack([np.arange(spw_range[0], spw_range[1]).astype(int) for spw_range in filter_spw_ranges])]):
             raise NotImplementedError("No support for spw-ranges that do not disjointly cover the entire frequency band.")
         # initialize containers
