@@ -973,8 +973,6 @@ class VisClean(object):
                 x = [(self.times - np.mean(self.times)) * 3600. * 24., self.freqs]
             if skip_if_flag_within_edge_distance == 0:
                 skip_if_flag_within_edge_distance = (0, 0)
-            if filter_spw_ranges is None:
-                filter_spw_ranges = [(0, self.Nfreqs)]
         elif ax == 'time':
             filterdim = 0
             filter2d = False
