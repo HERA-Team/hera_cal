@@ -1034,6 +1034,7 @@ class VisClean(object):
                 continue
             echo("Starting fourier filter of {} at {}".format(k, str(datetime.datetime.now())), verbose=verbose)
             for spw_range in filter_spw_ranges:
+                echo("Processing spw_range {} at {}".format(spw_range, str(datetime.datetime.now())), verbose=verbose)
                 if spw_range not in filtered_info[k]:
                     filtered_info[k][spw_range] = {}
                 spw_slice = slice(spw_range[0], spw_range[1])
