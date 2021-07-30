@@ -19,9 +19,10 @@ dependencies:
   - future
   - pytest-cov
   - coveralls
+  - pyvdata<2.2.0
 
   - pip:
-    - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
+    #- git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
     - git+https://github.com/HERA-Team/uvtools
     - git+https://github.com/HERA-Team/linsolve
     - git+https://github.com/HERA-Team/hera_qm
