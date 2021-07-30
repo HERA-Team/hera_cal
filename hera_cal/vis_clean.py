@@ -24,12 +24,17 @@ from .flag_utils import factorize_flags
 def find_discontinuity_edges(x, xtol=1e-3):
     """Find edges based on discontinuity in x-axis
 
+    This function helps us find discontinuities in the x-axis which exist if we have several non-contiguous subbands in our data (for example, excluding the FM band).
+
     Parameters
     ----------
     x: array-like
         1d numpy array of x-values.
     xtol: float, optional
-        fractional discontinuity in diff of xs above which an edge will be identified.
+        fractional discontinuity in diff (relative to median discontinuity)
+        to be used as a threshold for identifying discontinuities in the x-axis.
+        positions where the diff is larger then the median diff is identified as a
+        discontinuity.
 
     Returns
     -------
@@ -41,7 +46,7 @@ def find_discontinuity_edges(x, xtol=1e-3):
             x = [0, 1, 2, 4, 5, 6, 7, 11, 12] -> [(0, 3), (3, 7), (7, 9)]
     """
     xdiff = np.diff(x)
-    discontinuities = np.where(~np.isclose(xdiff, np.min(np.abs(xdiff)) * np.sign(xdiff[0]),
+    discontinuities = np.where(~np.isclose(xdiff, np.median(np.abs(xdiff)) * np.sign(xdiff[0]),
                                rtol=0.0, atol=np.abs(np.min(xdiff)) * xtol))[0]
     if len(discontinuities) == 0:
         edges = [(0, len(x))]
@@ -84,6 +89,12 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
         weights_in with completely flagged edges trimmed off.
     edges : list of 2-tuples or 2-list of lists of 2-tuples
         the width of the edges trimmed.
+        Example: Suppose we provide data 100 frequency channels and discontinuities
+        after channel 37 and after channel 59 and
+        suppose that channels [0, 12, 36, 37, 59, 60, 61] are flagged.
+        Then edges = [(1, 2), (0, 1), (2, 0)]
+        which is the number of edge channels flagged on each contiguous chunk.
+
         If ax == 'both' then a 2-list of lists of tuples
         first list is time dim, second list is freq dim.
     chunks : list of 2-tuples or 2-list of lists of 2-tuples
