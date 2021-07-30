@@ -127,13 +127,9 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
                 ind_right = np.max(unflagged_chans) + 1
             inds_left.append(ind_left)
             inds_right.append(ind_right)
-        if len(inds_left) > 1:
-            dout = np.hstack([data_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
-            wout = np.hstack([weights_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
 
-        else:
-            dout = data_in[:, inds_left[0]: inds_right[0]]
-            wout = weights_in[:, inds_left[0]: inds_right[0]]
+        dout = np.hstack([data_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
+        wout = np.hstack([weights_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
         edges = [(ind_left, chunk[1] - chunk[0] - ind_right) for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)]
         if ax == 'both':
             x1 = np.hstack([x[1][chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
@@ -225,7 +221,7 @@ def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_dista
     if ax == 'time':
         wout = flag_rows_with_flags_within_edge_distance(x, weights_in.T, min_flag_edge_distance).T
     else:
-        if isinstance(x, (tuple, list)) and len(x) == 2:
+        if isinstance(x, (tuple, list)) and len(x) == 2 and isinstance(x[0], (list, tuple, np.ndarray)):
             chunks = find_discontinuity_edges(x[1])
         else:
             chunks = find_discontinuity_edges(x)
@@ -314,13 +310,19 @@ def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_w
     max_contiguous_flag: int or 2-list containing the width of a region corresponding
         to the largest delay in the filter centers and filter_widths
     """
-    if len(x) == 2:
-        dx = [np.median(np.diff(x[0])), np.median(np.diff(x[1]))]
+    if isinstance(x, (tuple, list)) and len(x) == 2 and isinstance(x[0], (list, tuple, np.ndarray)):
+        if not len(x[0]) > 1 and len(x[1]) > 1:
+            raise ValueError("x-axes with only a single element are not supported.")
+        else:
+            dx = [np.median(np.diff(x[0])), np.median(np.diff(x[1]))]
         max_filter_freq = [np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[0], filter_half_widths[0])]))),
                            np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[1], filter_half_widths[1])])))]
         return [int(1. / (max_filter_freq[0] * dx[0])), int(1. / (max_filter_freq[1] * dx[1]))]
     else:
-        dx = np.median(np.diff(x))
+        if len(x) > 1:
+            dx = np.median(np.diff(x))
+        else:
+            raise ValueError("x-axes with only a single element are not supported.")
         max_filter_freq = np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers, filter_half_widths)])))
         return int(1. / (max_filter_freq * dx))
 
@@ -1007,8 +1009,16 @@ class VisClean(object):
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
         if filter_spw_ranges is None:
             filter_spw_ranges = [(0, self.Nfreqs)]
-        if len(self.freqs) != np.sum([spw_range[1] - spw_range[0] for spw_range in filter_spw_ranges]) or not np.allclose(self.freqs, self.freqs[np.hstack([np.arange(spw_range[0], spw_range[1]).astype(int) for spw_range in filter_spw_ranges])]):
-            raise NotImplementedError("No support for spw-ranges that do not disjointly cover the entire frequency band.")
+        # total number of frequencies in all spw ranges.
+        n_spw_chans_sum = np.sum([spw_range[1] - spw_range[0] for spw_range in filter_spw_ranges])
+        # frequencies from spw-ranges concatenated together.
+        spw_freqs_concatenated = self.freqs[np.hstack([np.arange(spw_range[0], spw_range[1]).astype(int) for spw_range in filter_spw_ranges])]
+
+        # check that combined spw-freqs are equal to original freq axis
+        # first conditional is faster (to short-circuit)
+        if len(self.freqs) != n_spw_chans_sum or not np.allclose(self.freqs, spw_freqs_concatenated):
+            raise NotImplementedError("Channels detected in original frequency array that do not fall into any of the specified SPWS."
+                                      "We currently only support SPWs that together include every channel in the original frequency axis.")
         # initialize containers
         containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
         for i, dc in enumerate(containers):
@@ -1153,8 +1163,6 @@ class VisClean(object):
                 # also flag skipped edge channels and integrations.
                 if skip_flagged_edges:
                     if ax == 'both':
-                        print(chunks[0], edges[0])
-                        print(chunks[1], edges[1])
                         for chunk, edge in zip(chunks[1], edges[1]):
                             cslice0 = slice(chunk[0], chunk[0] + edge[0])
                             cslice1 = slice(chunk[1] - edge[1], chunk[1])
