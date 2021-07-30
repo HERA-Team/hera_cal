@@ -46,7 +46,7 @@ def find_discontinuity_edges(x, xtol=1e-3):
             x = [0, 1, 2, 4, 5, 6, 7, 11, 12] -> [(0, 3), (3, 7), (7, 9)]
     """
     xdiff = np.diff(x)
-    discontinuities = np.where(~np.isclose(xdiff, np.median(np.abs(xdiff)) * np.sign(xdiff[0]),
+    discontinuities = np.where(~np.isclose(xdiff, np.min(np.abs(xdiff)) * np.sign(xdiff[0]),
                                rtol=0.0, atol=np.abs(np.min(xdiff)) * xtol))[0]
     if len(discontinuities) == 0:
         edges = [(0, len(x))]
