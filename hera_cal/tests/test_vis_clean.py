@@ -232,7 +232,7 @@ def test_get_max_contiguous_flag_from_filter_periods():
     assert tuple(mcf) == (3, 2)
     # test assertion errors
     pytest.raises(ValueError, vis_clean.get_max_contiguous_flag_from_filter_periods, [1.], [0.], [.5])
-    pytest.raises(ValueError, vis_clean.get_max_contiguous_flag_from_filter_periods, [[1.], [0.]], [0.], [.5])
+    pytest.raises(ValueError, vis_clean.get_max_contiguous_flag_from_filter_periods, [[1.], [0.]], [[0.], [0.]], [[.5], [.5]])
 
 
 def test_flag_model_rms():
