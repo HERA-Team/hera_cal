@@ -19,7 +19,7 @@ dependencies:
   - future
   - pytest-cov
   - coveralls
-  - pyvdata<2.2.0
+  - pyuvdata<2.2.0
 
   - pip:
     #- git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
