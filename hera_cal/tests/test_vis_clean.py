@@ -40,24 +40,59 @@ def test_truncate_flagged_edges():
     times = np.arange(60) * 10.
     freqs = np.arange(64) * 100e3
     # test freq truncation
-    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
+    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
     assert np.all(np.isclose(xout, freqs[:-1]))
     assert np.all(np.isclose(dout, data_in[:, :-1]))
     assert np.all(np.isclose(wout, weights_in[:, :-1]))
-    assert edges == [(0, 0), (0, 1)]
+    assert edges == [(0, 1)]
     # test time truncation
-    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
+    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
     assert np.all(np.isclose(xout, times[:-2]))
     assert np.all(np.isclose(dout, data_in[:-2, :]))
     assert np.all(np.isclose(wout, weights_in[:-2, :]))
-    assert edges == [(0, 2), (0, 0)]
+    assert edges == [(0, 2)]
     # test truncating both.
-    xout, dout, wout, edges = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
+    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
     assert np.all(np.isclose(xout[0], times[:-2]))
     assert np.all(np.isclose(xout[1], freqs[:-1]))
     assert np.all(np.isclose(dout, data_in[:-2, :-1]))
     assert np.all(np.isclose(wout, weights_in[:-2, :-1]))
-    assert edges == [(0, 2), (0, 1)]
+    assert edges == [[(0, 2)], [(0, 1)]]
+
+
+def test_restore_flagged_edges():
+    Nfreqs = 64
+    Ntimes = 60
+    data_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
+    weights_in = np.abs(data_in).astype(float)
+    data_in = data_in + .3j * data_in
+    # flag channel 30
+    weights_in[:, 30] = 0.
+    # flag last channel
+    weights_in[:, -1] = 0.
+    # flag last two integrations
+    weights_in[-2:, :] = 0.
+    times = np.arange(60) * 10.
+    freqs = np.arange(64) * 100e3
+    # test freq truncation
+    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
+    wrest = vis_clean.restore_flagged_edges(xout, wout, edges)
+    assert np.allclose(weights_in[:, :-1], wrest[:, :-1])
+    assert np.allclose(wrest[:, -1], 0.0)
+    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
+    wrest = vis_clean.restore_flagged_edges(xout, wout, edges, ax='time')
+    assert np.allclose(wout, wrest[:-2, :])
+    assert np.allclose(wrest[-2:, :], 0.0)
+    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
+    wrest = vis_clean.restore_flagged_edges(xout, wout, edges, ax='both')
+    assert np.allclose(wrest[-2:, :], 0.0)
+    assert np.allclose(wrest[:, -1], 0.0)
+    assert np.allclose(wout, wrest[:-2, :-1])
+
+
+def test_find_discontinuity_edges():
+    assert vis_clean.find_discontinuity_edges([0, 1, 4, 9]) == [(0, 2), (2, 3), (3, 4)]
+    assert vis_clean.find_discontinuity_edges([0, 1, 2, 4, 5, 6, 7, 9, 11, 12]) == [(0, 3), (3, 7), (7, 8), (8, 10)]
 
 
 def test_flag_rows_with_flags_within_edge_distance():
@@ -68,43 +103,73 @@ def test_flag_rows_with_flags_within_edge_distance():
     weights_in[33, 12] = 0.
     weights_in[2, 30] = 0.
     weights_in[-10, 20] = 0.
+    freqs = np.arange(Nfreqs) * 100e3
     # under the above flagging pattern
     # freq flagging with min_flag_edge_distance=2 yields 32nd integration flagged only.
-    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=3, ax='freq')
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(freqs, weights_in, min_flag_edge_distance=3, ax='freq')
     for i in range(wout.shape[0]):
         if i == 32:
             assert np.all(np.isclose(wout[i], 0.0))
         else:
             assert np.all(np.isclose(wout[i], weights_in[i]))
     # extending edge_distance to 12 should yield 33rd integration being flagged as well.
-    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=13, ax='freq')
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(freqs, weights_in, min_flag_edge_distance=13, ax='freq')
     for i in range(wout.shape[0]):
         if i == 32 or i == 33:
             assert np.all(np.isclose(wout[i], 0.0))
         else:
             assert np.all(np.isclose(wout[i], weights_in[i]))
     # now do time axis. 30th channel should be flagged for this case.
-    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=3, ax='time')
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(freqs, weights_in, min_flag_edge_distance=3, ax='time')
     for i in range(wout.shape[1]):
         if i == 30:
             assert np.all(np.isclose(wout[:, i], 0.0))
         else:
             assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
     # 30th and 20th channels should end up flagged for this case.
-    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=11, ax='time')
+    times = np.arange(Ntimes) * 10.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(times, weights_in, min_flag_edge_distance=11, ax='time')
     for i in range(wout.shape[1]):
         if i == 30 or i == 20:
             assert np.all(np.isclose(wout[:, i], 0.0))
         else:
             assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
     # now do both
-    wout = vis_clean.flag_rows_with_flags_within_edge_distance(weights_in, min_flag_edge_distance=(3, 3), ax='both')
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance([times, freqs], weights_in, min_flag_edge_distance=(3, 3), ax='both')
     for i in range(wout.shape[1]):
         if i == 30:
             assert np.all(np.isclose(wout[:, i], 0.0))
     for i in range(wout.shape[0]):
         if i == 32:
             assert np.all(np.isclose(wout[i], 0.0))
+
+
+def test_flag_rows_with_flags_within_edge_distance_with_breaks():
+    Nfreqs = 64
+    Ntimes = 60
+    freqs = np.hstack([np.arange(23), 30 + np.arange(24), 58 + np.arange(17)]) * 100e3 + 150e6  # freq axis with discontinuities at 23 and 47 integrations.
+    times = np.hstack([np.arange(20) * 11., 41 * 11. + np.arange(27) * 11., 200 * 11. + np.arange(13) * 11.])  # time axis with discontinuities at 29 abd 47 integrations
+    weights_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
+    # frequency direction and time direction separately.
+    weights_in[2, 30] = 0.  # time 2 should not get flagged
+    weights_in[21, 48] = 0.  # time 21 should get flagged
+    weights_in[55, 46] = 0.  # time 55 should get flagged
+    weights_in[25, -2] = 0.  # time 25 should get flagged
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(freqs, weights_in, min_flag_edge_distance=3, ax='freq')
+    assert list(np.where(np.all(np.isclose(wout, 0.), axis=1))[0]) == [21, 25, 55]
+    weights_in[22, 30] = 0.  # channel 30 should be flagged
+    # channel 48 will also be flagged.
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance(times, weights_in, min_flag_edge_distance=3, ax='time')
+    assert list(np.where(np.all(np.isclose(wout, 0.), axis=0))[0]) == [30, 48]
+    weights_in = np.outer(np.arange(1, Ntimes + 1), np.arange(1, Nfreqs + 1))
+    # both directions
+    weights_in[22, 30] = 0.  # time 2 should not get flagged
+    weights_in[55, 46] = 0.  # time 55 should get flagged
+    weights_in[25, -2] = 0.  # time 25 should get flagged
+    weights_in[22, 30] = 0.  # channel 30 should be flagged
+    wout = vis_clean.flag_rows_with_flags_within_edge_distance([times, freqs], weights_in, min_flag_edge_distance=[2, 3], ax='both')
+    assert list(np.where(np.all(np.isclose(wout, 0.), axis=0))[0]) == [30]
+    assert list(np.where(np.all(np.isclose(wout, 0.), axis=1))[0]) == [25, 55]
 
 
 def test_flag_rows_with_contiguous_flags():
@@ -165,6 +230,9 @@ def test_get_max_contiguous_flag_from_filter_periods():
     assert mcf == 3
     mcf = vis_clean.get_max_contiguous_flag_from_filter_periods((times, freqs), filter_centers, filter_half_widths)
     assert tuple(mcf) == (3, 2)
+    # test assertion errors
+    pytest.raises(ValueError, vis_clean.get_max_contiguous_flag_from_filter_periods, [1.], [0.], [.5])
+    pytest.raises(ValueError, vis_clean.get_max_contiguous_flag_from_filter_periods, [[1.], [0.]], [[0.], [0.]], [[.5], [.5]])
 
 
 def test_flag_model_rms():
@@ -314,21 +382,21 @@ class Test_VisClean(object):
         # this line is repeated to cover the overwrite skip
         V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fw, suppression_factors=ff, max_contiguous_edge_flags=20,
                          ax='freq', mode='dayenu', zeropad=10, output_prefix='clean', overwrite=False)
-        assert np.all([V.clean_info[k]['status']['axis_1'][i] == 'success' for i in V.clean_info[k]['status']['axis_1']])
+        assert np.all([V.clean_info[k][(0, V.Nfreqs)]['status']['axis_1'][i] == 'success' for i in V.clean_info[k][(0, V.Nfreqs)]['status']['axis_1']])
         # now do a time filter
         V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fwt, suppression_factors=ff, overwrite=True,
                          ax='time', mode='dayenu', zeropad=10, max_contiguous_edge_flags=20)
-        assert V.clean_info[k]['status']['axis_0'][0] == 'skipped'
-        assert V.clean_info[k]['status']['axis_0'][3] == 'success'
+        assert V.clean_info[k][(0, V.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[k][(0, V.Nfreqs)]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
         assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
         # check that filtered_data is the same in channels that were not flagged
+        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) ** .5
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
-                      V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-16))
-
+                      V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], rtol=0., atol=atol))
         # raise errors.
         assert pytest.raises(ValueError, V.fourier_filter, filter_centers=[fc, fc], ax='both',
                              filter_half_widths=[fwt, fw], suppression_factors=[ff, ff],
@@ -342,16 +410,17 @@ class Test_VisClean(object):
                          suppression_factors=[ff, ff],
                          mode='dayenu', overwrite=True,
                          zeropad=[20, 10], ax='both', max_contiguous_edge_flags=100)
-        assert V.clean_info[k]['status']['axis_0'][0] == 'skipped'
-        assert V.clean_info[k]['status']['axis_0'][3] == 'success'
+        assert V.clean_info[k][(0, V.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[k][(0, V.Nfreqs)]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
         assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
         # check that filtered_data is the same in channels that were not flagged
-        assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
-                      V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-16))
+        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) ** .5
+        assert np.allclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
+                           V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], rtol=0., atol=atol)
 
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean_dayenu(self):
@@ -370,9 +439,10 @@ class Test_VisClean(object):
         # check that filtered_data is the same in channels that were not flagged
         # had to set atol=1e-6 here so it won't fail on travis (it runs fine on my laptop). There are some funny
         # numpy issues.
+        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) ** .5
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
-                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-15))
-        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=atol, rtol=0.))
+        assert np.all([V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
 
         assert pytest.raises(AssertionError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', max_frate=None, mode='dayenu')
         assert pytest.raises(ValueError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', max_frate='arglebargle', mode='dayenu')
@@ -381,28 +451,30 @@ class Test_VisClean(object):
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='freq', overwrite=False, mode='dayenu')
 
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='time', overwrite=True, max_frate=1.0, mode='dayenu')
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0] == 'skipped'
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
         assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
         # check that filtered_data is the same in channels that were not flagged
-        assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
-                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-15))
+        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) ** .5
+        assert np.allclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
+                           V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=atol, rtol=0.)
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='both', overwrite=True, max_frate=1.0, mode='dayenu')
-        assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0] == 'skipped'
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
+        assert np.all(['success' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
         assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
         # check that filtered_data is the same in channels that were not flagged
-        assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
-                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-15))
+        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) ** .5
+        assert np.allclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
+                           V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=atol, rtol=0.)
         # check whether dayenu filtering axis 1 and then axis 0 is the same as dayenu filtering axis 1 and then filtering the resid.
         # note that filtering axis orders do not commute, we filter axis 1 (foregrounds) before filtering cross-talk.
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='both', overwrite=True, max_frate=1.0, mode='dayenu')
@@ -428,9 +500,10 @@ class Test_VisClean(object):
         assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
         # check that filtered_data is the same in channels that were not flagged
+        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) ** .5
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
-                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-6))
-        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=atol, rtol=0.))
+        assert np.all([V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
 
         assert pytest.raises(AssertionError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', mode='dpss_leastsq')
         assert pytest.raises(ValueError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', max_frate='arglebargle', mode='dpss_leastsq')
@@ -439,26 +512,28 @@ class Test_VisClean(object):
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='freq', overwrite=False, mode='dpss_leastsq')
 
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='time', overwrite=True, max_frate=1.0, mode='dpss_leastsq')
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0] == 'skipped'
-        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
         assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
         # check that filtered_data is the same in channels that were not flagged
+        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) ** .5
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
-                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-6))
+                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=atol, rtol=0.))
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='both', overwrite=True, max_frate=1.0, mode='dpss_leastsq')
-        assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert np.all(['success' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
         assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
         # check that filtered_data is the same in channels that were not flagged
+        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) ** .5
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
-                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-6))
+                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=atol, rtol=0.))
         # run with flag_model_rms_outliers
         for ax in ['freq', 'time', 'both']:
             for k in V.flags:
@@ -538,7 +613,7 @@ class Test_VisClean(object):
             assert np.all(V.clean_flags[k][0])
             assert np.all(V.clean_flags[k][:, 0])
         # now try using skip_contiguous flag gaps.
-        standoff = 1e9 / (np.mean(np.diff(V.freqs)))
+        standoff = 1e9 / (np.median(np.diff(V.freqs)))
         max_frate = datacontainer.DataContainer({(24, 25, 'ee'): 2. / np.abs(np.median(np.diff(V.times)) * 3.6 * 24.),
                                                  (24, 24, 'ee'): 1. / np.abs(2 * np.median(np.diff(V.times)) * 3.6 * 24.)})
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
@@ -567,7 +642,7 @@ class Test_VisClean(object):
         for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
             for i in range(V.Ntimes):
                 if i == 12:
-                    assert np.all(V.clean_flags[k][i])
+                    assert V.clean_info[k][(0, V.Nfreqs)]['status']['axis_1'][i] == 'skipped'
                 else:
                     assert not np.any(V.clean_flags[k][i])
 
@@ -602,6 +677,155 @@ class Test_VisClean(object):
                     max_frate=max_frate, standoff=0.0, min_dly=50., skip_wgt=0.5)
         for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
             assert np.all(V.clean_resid_flags[k][-1])
+
+    def test_vis_clean_spws(self, tmpdir):
+        # test selecting partial frequency chunks.
+        tmp_path = tmpdir.strpath
+        template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        # first run flagging channels and frequencies
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
+        hdt = io.HERAData(template)
+        d, f, n = hdt.read(frequencies=np.hstack([hdt.freqs[:30], hdt.freqs[32:48], hdt.freqs[49:]]))
+        for k in d:
+            f[k][:] = False
+            f[k][:, 0] = True
+            for i in (28, 29, 30, 31, 32, 33):
+                f[k][:, i] = True  # flags around first discont
+            f[k][:, 12] = True  # should be inpainted
+            f[k][:, 46] = True  # flag near second break
+            f[k][:, 47] = True  # flag near second break
+            f[k][:, 49] = True  # should be inpainted
+            d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
+            n[k] = np.ones(d[k].shape)
+        hdt.update(flags=f, data=d)
+        hdt.write_uvh5(fname_edgeflags)
+        V = VisClean(fname_edgeflags, filetype='uvh5')
+        V.read()
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_flagged_edges=True, mode='dpss_leastsq')
+        for k in V.clean_flags:
+            for i in range(V.Nfreqs):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
+                    assert np.all(V.clean_flags[k][:, i])
+                else:
+                    assert not np.any(V.clean_flags[k][:, i])
+        # test spw_range functionality.
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_flagged_edges=True, filter_spw_ranges=[(0, 30), (30, 46), (46, V.Nfreqs)])
+        for k in V.clean_flags:
+            for i in range(V.Nfreqs):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
+                    assert np.all(V.clean_flags[k][:, i])
+                else:
+                    assert not np.any(V.clean_flags[k][:, i])
+        # test NotImplementedError
+        pytest.raises(NotImplementedError, V.vis_clean, keys=[(24, 25, 'ee')], ax='freq', overwrite=True,
+                      filter_spw_ranges=[(0, 30), (31, V.Nfreqs)])
+
+    def test_vis_clean_spws_time(self, tmpdir):
+        # test spw-ranges with time filtering.
+        tmp_path = tmpdir.strpath
+        template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        # first run flagging channels and frequencies
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
+        hdt = io.HERAData(template)
+        d, f, n = hdt.read(times=np.hstack([hdt.times[:30], hdt.times[32:48], hdt.times[49:]]))
+        for k in d:
+            f[k][:] = False
+            f[k][0, :] = True
+            for i in (28, 29, 30, 31, 32, 33):
+                f[k][i, :] = True  # flags around first discont
+            f[k][12, :] = True  # should be inpainted
+            f[k][46, :] = True  # flag near second break
+            f[k][47, :] = True  # flag near second break
+            f[k][49, :] = True  # should be inpainted
+            d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
+            n[k] = np.ones(d[k].shape)
+        hdt.update(flags=f, data=d)
+        hdt.write_uvh5(fname_edgeflags)
+        V = VisClean(fname_edgeflags, filetype='uvh5')
+        V.read()
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_flagged_edges=True, mode='dpss_leastsq', max_frate=0.025)
+        for k in V.clean_flags:
+            for i in range(V.Ntimes):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
+                    assert np.all(V.clean_flags[k][i])
+                else:
+                    assert not np.any(V.clean_flags[k][i])
+        # test spw_range functionality in time axis clean.
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_flagged_edges=True, filter_spw_ranges=[(0, 30), (30, 46), (46, V.Nfreqs)], max_frate=0.025, mode='dpss_leastsq')
+        for k in V.clean_flags:
+            for i in range(V.Ntimes):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46, 47):
+                    assert np.all(V.clean_flags[k][i])
+                else:
+                    assert not np.any(V.clean_flags[k][i])
+
+    def test_vis_clean_spws_both(self, tmpdir):
+        # test spw-ranges with time filtering.
+        tmp_path = tmpdir.strpath
+        template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        # first run flagging channels and frequencies
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
+        hdt = io.HERAData(template)
+        d, f, n = hdt.read(times=np.hstack([hdt.times[:30], hdt.times[32:48], hdt.times[49:]]),
+                           frequencies=np.hstack([hdt.freqs[:21], hdt.freqs[23:45], hdt.freqs[52:]]))
+        for k in d:
+            f[k][:] = False
+            f[k][0, :] = True
+            for i in (12, 28, 29, 30, 31, 32, 33, 46, 49):
+                f[k][i, :] = True  # flags around first discont
+            for j in (4, 18, 21, 22, 23, 42, 43, 52):
+                f[k][:, j] = True
+
+            d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
+            n[k] = np.ones(d[k].shape)
+        hdt.update(flags=f, data=d)
+        hdt.write_uvh5(fname_edgeflags)
+        V = VisClean(fname_edgeflags, filetype='uvh5')
+        V.read()
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    skip_flagged_edges=True, mode='dpss_leastsq', max_frate=0.025)
+        for k in V.clean_flags:
+            for i in (range(V.Ntimes)):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46):
+                    assert np.all(V.clean_flags[k][i])
+                    for spw_range in V.clean_info[k]:
+                        assert i not in V.clean_info[k][spw_range]['status']['axis_1']
+                else:
+                    assert np.count_nonzero(~V.clean_flags[k][i]) == V.Nfreqs - 5
+            for j in range(V.Nfreqs):
+                if j in (21, 22, 23, 42, 43):
+                    assert np.all(V.clean_flags[k][:, j])
+                else:
+                    assert np.count_nonzero(~V.clean_flags[k][:, j]) == V.Ntimes - 8
+
+        # test spw_range functionality in time axis clean.
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    skip_flagged_edges=True, filter_spw_ranges=[(0, 30), (30, 46), (46, V.Nfreqs)], max_frate=0.025, mode='dpss_leastsq')
+        for k in V.clean_flags:
+            for i in (range(V.Ntimes)):
+                if i in (0, 28, 29, 30, 31, 32, 33, 46):
+                    assert np.all(V.clean_flags[k][i])
+                    for spw_range in V.clean_info[k]:
+                        assert i not in V.clean_info[k][spw_range]['status']['axis_1']
+                else:
+                    assert np.count_nonzero(~V.clean_flags[k][i]) == V.Nfreqs - 5
+                    for spw_range in V.clean_info[k]:
+                        assert i in V.clean_info[k][spw_range]['status']['axis_1']
+            for spw_range in V.clean_info[k]:
+                for j in range(spw_range[0], spw_range[1]):
+                    if j in (21, 22, 23, 42, 43):
+                        assert np.all(V.clean_flags[k][:, j])
+                        assert j not in V.clean_info[k][spw_range]['status']['axis_0']
+                    else:
+                        assert np.count_nonzero(~V.clean_flags[k][:, j]) == V.Ntimes - 8
+                        assert j in V.clean_info[k][spw_range]['status']['axis_0']
 
     def test_apply_flags(self):
         # cover edge cases of apply_flags not covered in test_delay_filter and
@@ -640,19 +864,20 @@ class Test_VisClean(object):
 
         # basic freq clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True)
-        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert np.all([V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
         assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
         # check that filtered_data is the same in channels that were not flagged
+        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) ** .5
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
-                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-16))
+                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=atol, rtol=0.))
         # basic time clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', max_frate=10., overwrite=True)
-        assert 'skipped' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0]
-        assert 'success' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3]
+        assert 'skipped' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][0]
+        assert 'success' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][3]
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
@@ -664,21 +889,22 @@ class Test_VisClean(object):
         # basic 2d clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
                     filt2d_mode='plus')
-        assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_0']])
-        assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert np.all(['success' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][i] for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0']])
+        assert np.all(['success' == V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
         # check that clean resid is equal to zero in flagged channels
         assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25, 'ee')] | V.flags[(24, 25, 'ee')])] != 0.)
         assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
         assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
         # check that filtered_data is the same in channels that were not flagged
+        atol = 1e-6 * np.mean(np.abs(V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')]]) ** 2.) ** .5
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
-                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-16))
+                                 V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=atol, rtol=0.))
 
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', flags=V.flags + True, max_frate=10.,
                     overwrite=True, filt2d_mode='plus')
-        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'skipped' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
-        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_0'][i] == 'skipped' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_0']])
+        assert np.all([V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1'][i] == 'skipped' for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_1']])
+        assert np.all([V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0'][i] == 'skipped' for i in V.clean_info[(24, 25, 'ee')][(0, V.Nfreqs)]['status']['axis_0']])
 
         # test fft data
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
@@ -757,11 +983,11 @@ class Test_VisClean(object):
         f[:, 625:630] = True
         V.flags[k] += f
         # Note that the intended delay width of this unit test was 300 ns but because of the dnu bug, the delay width was
-        # actuall 300 x V.dnu / np.mean(np.diff(V.freqs))
+        # actuall 300 x V.dnu / np.median(np.diff(V.freqs))
         # the new vis_clean never explicitly references V.dnu so it doesn't have problems and uses the correct delay width.
         # however, using the correct delay width causes this unit test to fail.
         # so we need to fix it. SEP (Somebody Elses PR).
-        V.vis_clean(data=V.data, flags=V.flags, keys=[k], tol=1e-6, min_dly=300. * (V.dnu / np.mean(np.diff(V.freqs))), ax='freq', overwrite=True, window='tukey', alpha=0.2)
+        V.vis_clean(data=V.data, flags=V.flags, keys=[k], tol=1e-6, min_dly=300. * (V.dnu / np.median(np.diff(V.freqs))), ax='freq', overwrite=True, window='tukey', alpha=0.2)
         V.fft_data(V.data, window='bh', overwrite=True, assign='dfft1')
         V.fft_data(V.clean_data, window='bh', overwrite=True, assign='dfft2')
 
@@ -846,13 +1072,25 @@ class Test_VisClean(object):
         pytest.raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'ee')], axis=(0, 1), zeropad=(0,))
 
     def test_filter_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20']
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20', '--filter_spw_ranges', '0~10,12~20']
         parser = vis_clean._filter_argparser()
         a = parser.parse_args()
         assert a.datafilelist == ['a']
         assert a.clobber is True
         assert a.spw_range[0] == 0
         assert a.spw_range[1] == 20
+        assert a.filter_spw_ranges == [(0, 10), (12, 20)]
+        assert a.time_thresh == 0.05
+        assert not a.factorize_flags
+        # test alternative.filter_spw_ranges format.
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20', '--filter_spw_ranges', '0 10,12 20']
+        parser = vis_clean._filter_argparser()
+        a = parser.parse_args()
+        assert a.datafilelist == ['a']
+        assert a.clobber is True
+        assert a.spw_range[0] == 0
+        assert a.spw_range[1] == 20
+        assert a.filter_spw_ranges == [(0, 10), (12, 20)]
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
 
