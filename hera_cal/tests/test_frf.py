@@ -90,11 +90,11 @@ def test_timeavg_waterfall():
     n = np.ones((4, 10))
     n[0, 0:5] *= 2
     ad, _, _, _, _ = frf.timeavg_waterfall(d, 2, rephase=False, nsamples=n, wgt_by_nsample=True)
-    np.testing.assert_array_equal(ad[1, :], 1.0) 
-    np.testing.assert_array_equal(ad[0, 0:5], 5. / 3) 
+    np.testing.assert_array_equal(ad[1, :], 1.0)
+    np.testing.assert_array_equal(ad[0, 0:5], 5. / 3)
     np.testing.assert_array_equal(ad[0, 5:10], 1.5)
     ad, _, _, _, _ = frf.timeavg_waterfall(d, 2, rephase=False, nsamples=n, wgt_by_nsample=False, wgt_by_favg_nsample=True)
-    np.testing.assert_array_equal(ad[1, :], 1.0) 
+    np.testing.assert_array_equal(ad[1, :], 1.0)
     np.testing.assert_array_equal(ad[0, :], 1.6)
 
 
@@ -290,7 +290,7 @@ class Test_FRFilter(object):
             wgts = {k: np.ones_like(frfil.flags[k], dtype=np.float)}
             wgts[k][:, 0] = 0.0
             frfil.run_tophat_frfilter(to_filter=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
-            assert frfil.clean_info[k]['status']['axis_0'][0] == 'skipped'
+            assert frfil.clean_info[k][(0, frfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
             np.testing.assert_array_equal(frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0]))
             np.testing.assert_array_equal(frfil.clean_model[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
             np.testing.assert_array_equal(frfil.clean_resid[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
