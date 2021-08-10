@@ -1419,8 +1419,8 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
     # Update chisq and chisq per ant to include all baselines between working antennas
     rekey_vis_sols(cal, good_ants_reds)
-    dts_by_bl = {bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY for bl in good_ants_bls}
-    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in good_ants_bls}
+    dts_by_bl = DataContainer({bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY for bl in good_ants_bls})
+    data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in good_ants_bls})
     cal['chisq'], cal['chisq_per_ant'] = normalized_chisq(data, data_wgts, good_ants_reds, cal['v_omnical'], cal['g_omnical'])
 
     # Reassign omnical visibility solutions to the first entry in each group in all_reds
@@ -1445,11 +1445,11 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
         # solve for new gains and update cal
         new_gains = {}
-        new_gain_ants = set([ant for bl in bls_to_use for ant in split_bl(bl) 
+        new_gain_ants = set([ant for bl in bls_to_use for ant in split_bl(bl)
                              if ant not in cal['g_omnical']])
         for ant in new_gain_ants:
-            new_gains.update(linear_cal_update([bl for bl in bls_to_use if ant in split_bl(bl)], 
-                                               cal, data, all_reds, 
+            new_gains.update(linear_cal_update([bl for bl in bls_to_use if ant in split_bl(bl)],
+                                               cal, data, all_reds,
                                                weight_by_nsamples=True, weight_by_flags=(i == 0)))
         make_sol_finite(new_gains)
         for ant, g in new_gains.items():
@@ -1740,7 +1740,7 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
     '''Helper function for writing the results of redcal_run.'''
     # get antnums2antnames dictionary
     antnums2antnames = dict(zip(hd.antenna_numbers, hd.antenna_names))
-    
+
     # Build UVCal metadata that might be different from UVData metadata
     cal_antnums = sorted(set([ant[0] for ant in cal['g_omnical']]))
     antenna_positions = np.array([hd.antenna_positions[hd.antenna_numbers == antnum].flatten() for antnum in cal_antnums])
@@ -1797,7 +1797,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         iter0_prefix: if not '', save the omnical results with this prefix appended to each file after the 0th
             iteration, but only if redcal has found any antennas to exclude and re-run without
         outdir: folder to save data products. If None, will be the same as the folder containing input_data
-        metrics_files: path or list of paths to file(s) containing ant_metrics or auto_metrics readable by 
+        metrics_files: path or list of paths to file(s) containing ant_metrics or auto_metrics readable by
             hera_qm.metrics_io.load_metric_file. Used for finding ex_ants and is combined with antennas
             excluded via ex_ants.
         a_priori_ex_ants_yaml : path to YAML with antenna flagging information parsable by

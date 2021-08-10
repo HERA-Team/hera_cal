@@ -1117,7 +1117,7 @@ def global_phase_slope_logcal(model, data, antpos, reds=None, solver='linfit', w
     ap = data.antpairs()
     reds_here = []
     for red in reds:
-        red_here = [bl[0:2] for bl in red if bl[0:2] in ap]  # if the reds have polarizations, ignore them
+        red_here = [bl[0:2] for bl in red if bl[0:2] in ap or bl[0:2][::-1] in ap]  # if the reds have polarizations, ignore them
         if len(red_here) > 0:
             reds_here.append(red_here)
     avg_data, avg_flags, _ = utils.red_average(data, reds=reds_here, flags=flags, inplace=False)
