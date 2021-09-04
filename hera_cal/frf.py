@@ -499,11 +499,12 @@ class FRFilter(VisClean):
             filt_nsamples[k] = eff_nsamples
 
     def run_tophat_frfilter(self, to_filter=None, weight_dict=None, mode='clean',
-                            frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.025,
-                            max_frate_coeffs=None,
+                            mainlobe_radius=None, frate_standoff=0.0,
+                            frac_frate_sky_max=1.0, min_frate=0.025, max_frate_coeffs=None,
                             skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
                             write_cache=False,
-                            data=None, flags=None, **filter_kwargs):
+                            data=None, flags=None, center_before_filtering=True,
+                            **filter_kwargs):
         '''
         Interpolate / filter data in time using the physical fringe-rates of the sky. (or constant frate)
         Arguments:
@@ -513,11 +514,15 @@ class FRFilter(VisClean):
               Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
               of self.flags. uvtools.dspec.fourier_filter will renormalize to compensate.
           mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
+          mainlobe_radius: float
+              Width of main-lobe in radians to set min/max fringe-rates to filter.
+              default is None -> filter fringe rates from horizon-to-horizo (mainlobe is entire sky).
+              this is only used if max_frate_coeffs is None.
           frate_standoff: float, optional
               Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
               default = 0.0.
           frac_frate_sky_max: float, optional
-             fraction of horizon to fringe-rate filter.
+             fraction of horizon or mainlobe radius to fringe-rate filter.
              default is 1.0
           min_frate: float, optional
              minimum fringe-rate to filter, regardless of baseline length in mHz.
@@ -539,6 +544,10 @@ class FRFilter(VisClean):
           cache: dictionary containing pre-computed filter products.
           skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
           verbose: bool, optional, lots of outputs!
+          center_before_filtering: bool, optional
+            shift the data by multiplying by the center fringe-rate and filter a window centered at zero fringe rate.
+            This improves filter stability when the filtering window is highly offset from zero since we avoid interpolating
+            with fine-time-scale modes.
           filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Results are stored in:
@@ -559,7 +568,7 @@ class FRFilter(VisClean):
             filter_cache = None
         if max_frate_coeffs is None:
             center_frates, width_frates = self.sky_frates(to_filter=to_filter, frate_standoff=frate_standoff,
-                                                          frac_frate_sky_max=frac_frate_sky_max, min_frate=min_frate)
+                                                          frac_frate_sky_max=frac_frate_sky_max, min_frate=min_frate, mainlobe_radius=mainlobe_radius)
         else:
             width_frates = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in to_filter})
             center_frates = io.DataContainer({k: 0.0 for k in to_filter})
@@ -569,10 +578,31 @@ class FRFilter(VisClean):
                 filter_kwargs['suppression_factors'] = [tol]
             else:
                 filter_kwargs['tol'] = tol
-            self.fourier_filter(keys=[k], filter_centers=[center_frates[k]], filter_half_widths=[width_frates[k]],
+            # center sky-modes at zero fringe-rate if we chose to center_before_filtering.
+            if center_before_filtering:
+                self.data[k] /= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
+                filter_center_to_use = 0.0
+            else:
+                filter_center_to_use = center_frates[k]
+            self.fourier_filter(keys=[k], filter_centers=[filter_center_to_use], filter_half_widths=[width_frates[k]],
                                 mode=mode, x=self.times * 3.6 * 24.,
                                 data=self.data, flags=self.flags, wgts=wgts,
                                 ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
+
+            # recenter data in fringe-rate by multiplying back the phaser if we chose to center_before_filtering.
+            if center_before_filtering:
+                if 'output_prefix' in filter_kwargs:
+                    filtered_data = getattr(self, filter_kwargs['output_prefix'] + '_data')
+                    filtered_model = getattr(self, filter_kwargs['output_prefix'] + '_model')
+                    filtered_resid = getattr(self, filter_kwargs['output_prefix'] + '_resid')
+                else:
+                    filtered_data = self.clean_data
+                    filtered_model = self.clean_model
+                    filtered_resid = self.clean_resid
+                filtered_data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
+                filtered_model[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
+                filtered_resid[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
+                self.data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frates[k])
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
@@ -664,7 +694,7 @@ def tophat_frfilter_argparser(mode='clean'):
                                                                                   "Providing these overrides the sky-based fringe-rate determination! Default is None.")
     ap.add_argument("--skip_autos", default=False, action="store_true", help="Exclude autos from filtering.")
     ap.add_argument("--select_mainlobe", default=False, action="store_true", help="Sets fringe-rate filter to filter around main-lobe")
-    ap.add_argument("--mainlobe_width", default=10. * 12 / np.pi, type=float, help="FWHM around zenith to select (in radians)."
+    ap.add_argument("--mainlobe_radius", default=10. * 12 / np.pi, type=float, help="FWHM around zenith to select (in radians)."
                                                                                    "Should provide one FWHM per spw_range in filter_spw_ranges."
                                                                                    "Only used if select_mainlobe is True.")
     return ap

@@ -1412,7 +1412,8 @@ class VisClean(object):
                         self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
                                         add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
 
-    def sky_frates(self, to_filter=None, frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.025):
+
+    def sky_frates(self, to_filter=None, frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.025, mainlobe_radius=None):
         """Automatically compute sky fringe-rate ranges based on baselines and telescope location.
 
         Parameters
@@ -1429,6 +1430,9 @@ class VisClean(object):
         min_frate: float, optional
             minimum fringe-rate to filter, regardless of baseline length in mHz.
             Default is 0.025
+        mainlobe_radius: float
+            Width of main-lobe in radians to set min/max fringe-rates to filter.
+            default is None -> filter fringe rates from horizon-to-horizo (mainlobe is entire sky).
         TODO: Look into per-frequency fringe-rate centers and widths (currently uses max freq for broadest frate range).
 
         Returns
@@ -1453,15 +1457,23 @@ class VisClean(object):
         min_frates = io.DataContainer({})
         center_frates = io.DataContainer({})
         width_frates = io.DataContainer({})
+        if mainlobe_radius is not None:
+            sinml = np.sin(mainlobe_radius)
+            coslat = np.cos(np.abs(self.hd.telescope_location_lat_lon_alt[0]))
         # calculate min/max center fringerates.
         # these depend on the sign of the blcosine.
         for k in to_filter:
-            if blcosines[k] >= 0:
-                max_frates[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
-                min_frates[k] = -frateamps[k] * sinlat
+            if mainlobe_radius is None:
+                if blcosines[k] >= 0:
+                        max_frates[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                        min_frates[k] = -frateamps[k] * sinlat
+                else:
+                        min_frates[k] = -frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                        max_frates[k] = frateamps[k] * sinlat
             else:
-                min_frates[k] = -frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
-                max_frates[k] = frateamps[k] * sinlat
+                max_frates[k] = frateamps[k] * (np.sqrt(1 - sinml ** 2.) * blcosines[k] * coslat + sinml * sinlat)
+                min_frates[k] = frateamps[k] * (np.sqrt(1 - sinml ** 2.) * blcosines[k] * coslat - sinml * sinlat)
+
             center_frates[k] = (max_frates[k] + min_frates[k]) / 2.
             width_frates[k] = np.abs(max_frates[k] - min_frates[k]) / 2. * frac_frate_sky_max + frate_standoff
             width_frates[k] = np.max([width_frates[k], min_frate])  # Don't allow frates smaller then min_frate
