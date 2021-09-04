@@ -1412,7 +1412,6 @@ class VisClean(object):
                         self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
                                         add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
 
-
     def sky_frates(self, to_filter=None, frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.025, mainlobe_radius=None):
         """Automatically compute sky fringe-rate ranges based on baselines and telescope location.
 
@@ -1465,11 +1464,11 @@ class VisClean(object):
         for k in to_filter:
             if mainlobe_radius is None:
                 if blcosines[k] >= 0:
-                        max_frates[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
-                        min_frates[k] = -frateamps[k] * sinlat
+                    max_frates[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                    min_frates[k] = -frateamps[k] * sinlat
                 else:
-                        min_frates[k] = -frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
-                        max_frates[k] = frateamps[k] * sinlat
+                    min_frates[k] = -frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                    max_frates[k] = frateamps[k] * sinlat
             else:
                 max_frates[k] = frateamps[k] * (np.sqrt(1 - sinml ** 2.) * blcosines[k] * coslat + sinml * sinlat)
                 min_frates[k] = frateamps[k] * (np.sqrt(1 - sinml ** 2.) * blcosines[k] * coslat - sinml * sinlat)
