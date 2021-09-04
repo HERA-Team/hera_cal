@@ -788,7 +788,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                                 key_baselines.append(key_bl)
                                 reds.append(bl_nightly_dict[j])
                                 bls_to_load.extend(bl_nightly_dict[j])
-                                
+
                         data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
                         # if we want to throw away data associated with flagged antennas, throw it away.
                         if ex_ant_yaml_files is not None:
@@ -1080,6 +1080,7 @@ def gen_bl_nightly_dicts(hds, bl_error_tol=1.0, include_autos=True, redundant=Fa
             for bl in grp:
                 # store baseline vectors for all data.
                 blvecs[bl] = hd.antpos[bl[1]] - hd.antpos[bl[0]]
+                blvecs[bl[::-1]] = hd.antpos[bl[0]] - hd.antpos[bl[1]]
         # otherwise, loop through baselines, for each bl_nightly_dict, see if the first
         # entry matches (or conjugate matches). If yes, append to that bl_nightly_dict
         for grp in reds:
