@@ -693,10 +693,7 @@ def tophat_frfilter_argparser(mode='clean'):
     ap.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
                                                                                   "Providing these overrides the sky-based fringe-rate determination! Default is None.")
     ap.add_argument("--skip_autos", default=False, action="store_true", help="Exclude autos from filtering.")
-    ap.add_argument("--select_mainlobe", default=False, action="store_true", help="Sets fringe-rate filter to filter around main-lobe")
-    ap.add_argument("--mainlobe_radius", default=10. * 12 / np.pi, type=float, help="FWHM around zenith to select (in radians)."
-                                                                                   "Should provide one FWHM per spw_range in filter_spw_ranges."
-                                                                                   "Only used if select_mainlobe is True.")
+    ap.add_argument("--mainlobe_radius", default=None, type=float, help="Radius around zenith to filter (in radians). Default is None -> Filter all fringe-rates on the sky.")
     return ap
 
 
