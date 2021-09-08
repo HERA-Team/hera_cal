@@ -39,13 +39,11 @@ def baselines_same_across_nights(data_list):
     # check whether baselines are the same across all nights
     # by checking that every baseline occurs in data_list the same number times.
     same_across_nights = False
-    baseline_counts = {}
+    baseline_counts = DataContainer({})
     for dlist in data_list:
         for k in dlist:
             if k in baseline_counts:
                 baseline_counts[k] += 1
-            elif utils.reverse_bl(k) in baseline_counts:
-                baseline_counts[utils.reverse_bl(k)] += 1
             else:
                 baseline_counts[k] = 1
     same_across_nights = np.all([baseline_counts[k] == baseline_counts[bl] for bl in baseline_counts])
