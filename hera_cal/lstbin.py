@@ -550,6 +550,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
     # get time arrays for each file
     lst_arrays = []
     time_arrays = []
+    lmax = None
     for di, dfs in enumerate(data_files):
         # get times
         dlsts, dtimes, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
@@ -568,8 +569,12 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
                 la += 2 * np.pi
 
         # get lmax (lst of maximum obs time)
-        if di == (len(data_files) - 1):
-            lmax = larrs[filemaxtime][np.argmax(tarrs[filemaxtime])]
+        lmax_t = larrs[filemaxtime][np.argmax(tarrs[filemaxtime])]
+        # don't necessarily assume that the last files in obs list have the
+        # greatest LSTs. This will also keep any LSTs in nights after first night
+        # that happened to have LSTs before the first obs on the first night.
+        if lmax is None or lmax_t > lmax:
+            lmax = lmax_t
 
         # append
         lst_arrays.append(larrs)
