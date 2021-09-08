@@ -555,9 +555,8 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
         # get times
         dlsts, dtimes, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
 
-        filemaxtime = np.argmax([tarr.max() for tarr in tarrs]) # we want lmax to be the lst from the file with the maximum time actually
-        filemintime = np.argmin([tarr.min() for tarr in tarrs]) # we want lmin to be the lst from the file with the minimum time actually
-
+        filemaxtime = np.argmax([tarr.max() for tarr in tarrs])  # we want lmax to be the lst from the file with the maximum time actually
+        filemintime = np.argmin([tarr.min() for tarr in tarrs])  # we want lmin to be the lst from the file with the minimum time actually
 
         # get lmin: LST of first integration.
         if di == 0:
