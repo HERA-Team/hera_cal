@@ -554,18 +554,22 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
         # get times
         dlsts, dtimes, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
 
-        # get lmin: LST of first integration from first file
+        filemaxtime = np.argmax([tarr.max() for tarr in tarrays]) # we want lmax to be the lst from the file with the maximum time actually
+        filemintime = np.argmin([tarr.min() for tarr in tarrays]) # we want lmin to be the lst from the file with the minimum time actually
+
+
+        # get lmin: LST of first integration.
         if di == 0:
-            lmin = larrs[0][0]
+            lmin = larrs[filemintime][np.argmin(tarrs[filemintime])]
 
         # unwrap relative to lmin
         for la in larrs:
             if la[0] < lmin:
                 la += 2 * np.pi
 
-        # get lmax
+        # get lmax (lst of maximum obs time)
         if di == (len(data_files) - 1):
-            lmax = larrs[-1][-1]
+            lmax = larrs[filemaxtime][np.argmax(tarrs[filemaxtime])]
 
         # append
         lst_arrays.append(larrs)
