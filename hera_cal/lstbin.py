@@ -512,13 +512,13 @@ def lst_bin_arg_parser():
     return a
 
 
-def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_stop=None, fixed_lst_start=False, verbose=True,
+def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verbose=True,
                          ntimes_per_file=60):
     """
     Configure data for LST binning.
 
-    Make an lst grid, starting LST and output files given
-    input data files and LSTbin params.
+    Make a 24 hour lst grid, starting LST and output files given
+    input data files and LSTbin params. Some of these may be empty.
 
     Parameters
     ----------
@@ -527,11 +527,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
                  by ascending Julian Date. Frequency axis of each file must be identical.
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
-        Default is first LST of first file.
-    lst_stop : type=float, stopping LST for binner as it sweeps from lst_start to lst_start + 2pi.
-        Default is lst_start + 2pi.
-    fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
-        record. Otherwise, LST grid starts at LST of first data record.
+        Default is first LST of the first file of the first night.
     ntimes_per_file : type=int, number of LST bins in a single output file
 
     Returns
@@ -539,10 +535,11 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
     lst_grid : float ndarray holding LST bin centers
     dlst : float, LST bin width of output lst_grid
     file_lsts : list, contains the lst grid of each output file
-    begin_lst : float, starting lst for LST binner. If fixed_lst_start, this equals lst_start.
+    begin_lst : float, starting lst for LST binner. If lst_start is not None, this equals lst_start.
     lst_arrays : list, list of lst arrays for each file
     time_arrays : list, list of time arrays for each file
     """
+
     # get dlst from first data file if None
     if dlst is None:
         dlst, _, _, _ = io.get_file_times(data_files[0][0], filetype='uvh5')
@@ -552,60 +549,37 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
     time_arrays = []
     for di, dfs in enumerate(data_files):
         # get times
-        dlsts, dtimes, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
-
-        # get lmin: LST of first integration from first file
-        if di == 0:
-            lmin = larrs[0][0]
-
-        # unwrap relative to lmin
-        for la in larrs:
-            if la[0] < lmin:
-                la += 2 * np.pi
-
-        # get lmax
-        if di == (len(data_files) - 1):
-            lmax = larrs[-1][-1]
-
+        _, _, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
         # append
         lst_arrays.append(larrs)
         time_arrays.append(tarrs)
 
-    # get starting LST for output binning
+    # check that days are in order
+    for i in range(len(time_arrays) - 1):
+        max_time_on_day = np.max([t for tarr in time_arrays[i] for t in tarr])
+        min_time_on_next_day = np.min([t for tarr in time_arrays[i + 1] for t in tarr])
+        if max_time_on_day > min_time_on_next_day:
+            raise ValueError('The days in the input data_files must be in chronological order.')
+
+    # check that each day is in order
+    for tarrs in time_arrays:
+        if not np.all(np.hstack(tarrs) == np.sorted(np.hstack(tarrs))):
+            raise ValueError('The data files in each day must be in chronological order.')
+
+    # get begin_lst from lst_start or from first file
     if lst_start is None:
-        lst_start = lmin
-
-    # if lst_start is sufficiently below lmin, shift everything down an octave
-    if lst_start < (lmin - np.pi):
-        lst_arrays = [[la - 2 * np.pi for la in day] for day in lst_arrays]
-        lmin -= 2 * np.pi
-        lmax -= 2 * np.pi
-
-    # get beginning LST for lst_grid
-    if fixed_lst_start:
-        begin_lst = lst_start
-    else:
-        begin_lst = lmin
-
-    # get stopping LST for output binning
-    if lst_stop is None:
-        lst_stop = lmax
-    if lst_stop < begin_lst:
-        lst_stop += 2 * np.pi
+        lst_start = lst_arrays[0][0][0]
+    begin_lst = lst_start
 
     # make LST grid
     lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
 
-    # get starting and stopping indicies
-    start_index = np.argmin(np.abs(lst_grid - lst_start))
-    stop_index = np.argmin(np.abs(lst_grid - lst_stop))
-
     # get number of output files
-    nfiles = int(np.ceil(float(stop_index - start_index) / ntimes_per_file))
+    nfiles = int(np.ceil(1.0 * len(lst_grid) / ntimes_per_file))
 
     # get output file lsts
-    file_lsts = [lst_grid[start_index:stop_index][ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
+    file_lsts = [lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
 
     return lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays
 
