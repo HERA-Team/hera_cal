@@ -72,6 +72,27 @@ class Test_lstbin(object):
         assert len(lst_grid) == 628
         assert np.isclose(lst_grid[0], 3.1365901175171982)
 
+    def test_config_lst_bin_files(self):
+        # test error for days in order
+        wrong_order_files = [self.data_files[1], self.data_files[0], self.data_files[2]]
+        with pytest.raises(ValueError):
+            lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays = lstbin.config_lst_bin_files(wrong_order_files)
+        
+        # test errror for each day in order
+        wrong_order_files = [self.data_files[0], self.data_files[1][::-1], self.data_files[2]]
+        with pytest.raises(ValueError):
+            lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays = lstbin.config_lst_bin_files(wrong_order_files)
+
+        # test that dlst is right
+        lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays = lstbin.config_lst_bin_files(self.data_files, ntimes_per_file=60)
+        np.testing.assert_allclose(dlst, 0.0007830490163485138)
+        # test that lst_grid spans full 2pi
+        np.testing.assert_allclose(2 * np.pi - lst_grid[-1] + lst_grid[0], dlst)
+        # test shape of file_lsts
+        assert len(file_lsts) == int(np.ceil(2 * np.pi / dlst / 60))
+        for file_lst in file_lsts[0:-1]:
+            assert len(file_lst) == 60
+
     @pytest.mark.filterwarnings("ignore:All-NaN slice encountered")
     @pytest.mark.filterwarnings("ignore:divide by zero encountered in true_divide")
     def test_lstbin(self):
