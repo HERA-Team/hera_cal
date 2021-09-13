@@ -560,7 +560,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
 
     # check that each day is in order
     for tarrs in time_arrays:
-        if not np.all(np.hstack(tarrs) == np.sorted(np.hstack(tarrs))):
+        if not np.all(np.hstack(tarrs) == np.sort(np.hstack(tarrs))):
             raise ValueError('The data files in each day must be in chronological order.')
 
     # get begin_lst from lst_start or from first file
