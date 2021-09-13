@@ -489,8 +489,6 @@ def lst_bin_arg_parser():
     a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly calibration files")
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
     a.add_argument("--lst_start", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is first LST of first file.")
-    a.add_argument("--lst_stop", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is lst_start + 2pi")
-    a.add_argument("--fixed_lst_start", action='store_true', default=False, help="If True, make the start of the LST grid equal to lst_start, rather than the LST of the first data record.")
     a.add_argument("--ntimes_per_file", type=int, default=60, help="number of LST bins to write per output file")
     a.add_argument("--file_ext", type=str, default="{type}.{time:7.5f}.uvh5", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
@@ -512,8 +510,7 @@ def lst_bin_arg_parser():
     return a
 
 
-def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verbose=True,
-                         ntimes_per_file=60):
+def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verbose=True, ntimes_per_file=60):
     """
     Configure data for LST binning.
 
@@ -586,10 +583,9 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
 
 def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None,
-                  lst_stop=None, fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
-                  output_file_select=None, Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
-                  bl_error_tol=1.0, include_autos=True, ex_ant_yaml_files=None,
-                  **kwargs):
+                  atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False, output_file_select=None,
+                  Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
+                  bl_error_tol=1.0, include_autos=True, ex_ant_yaml_files=None, **kwargs):
     """
     LST bin a series of UVH5 files with identical frequency bins, but varying
     time bins. Output file meta data (frequency bins, antennas positions, time_array)
@@ -608,9 +604,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         x_orientation is inferred from the first item in this list and assumed to be the same for all files
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
-    lst_stop : type=float, stopping LST for binner as it sweeps from lst_start to lst_start + 2pi.
-    fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
-        record. Otherwise, LST grid starts at LST of first data record.
     ntimes_per_file : type=int, number of LST bins in a single output file
     file_ext : type=str, extension to "zen." for output files. This must have at least a ".{type}." field
         where either "LST" or "STD" is inserted for data average or data standard dev., and also a ".{time:7.5f}"
@@ -650,8 +643,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     """
     # get file lst arrays
     (lst_grid, dlst, file_lsts, begin_lst, lst_arrs,
-     time_arrs) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, lst_stop=lst_stop, fixed_lst_start=fixed_lst_start,
-                                       ntimes_per_file=ntimes_per_file, verbose=verbose)
+     time_arrs) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, ntimes_per_file=ntimes_per_file, verbose=verbose)
     nfiles = len(file_lsts)
 
     # select file_lsts
