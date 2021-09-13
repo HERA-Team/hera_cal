@@ -720,7 +720,7 @@ class FRFilter(VisClean):
 
             width_frates[k] = np.abs(max_frates[k] - min_frates[k]) / 2. * frac_frate_sky_max + frate_standoff
             width_frates[k] = np.max([width_frates[k], min_frate])  # Don't allow frates smaller then min_frate
-            width_frates[utils.reverse_bl(k)] = width_frates
+            width_frates[utils.reverse_bl(k)] = width_frates[k]
         return center_frates, width_frates
 
 

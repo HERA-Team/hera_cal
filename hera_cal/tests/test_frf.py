@@ -425,7 +425,7 @@ class Test_FRFilter(object):
 
     def test_sky_frates_minfrate_and_to_filter(self):
         # test edge frates
-        V = FRFilter(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
+        V = frf.FRFilter(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
         V.read()
         for to_filter in [None, list(V.data.keys())[:1]]:
             cfrates, wfrates = V.sky_frates(min_frate=1000, to_filter=to_filter)
