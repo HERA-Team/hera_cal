@@ -103,7 +103,7 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
     return frate_centers, frate_half_widths
 
 
-def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95., exclude_autos=True,
+def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95., to_filter=None,
                                dfr=None, nfr=None, taper='none', frate_standoff=0.0,
                                frac_frate_sky_max=1.0, min_frate=0.025,):
     """
@@ -118,9 +118,8 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
         Percent of beam-squared power below lower fringe rate.
     percentile_high: float, optional
         Percent of beam-squared power above upper fringe rate.
-    exclude_autos: bool, optional
-        Do not get upper / lower bounds for autocorrelations.
-        default is True.
+    to_filter: list of antpairpol tuples
+        list of antpairpol tuples of baselines to calculate fringe-rate limits for.
     dfr: float, optional.
         spacing of fringe-rate grid used to perform binning and percentile calc
         in units of mHz.
@@ -198,9 +197,9 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
 
     center_frates = {}
     width_frates = {}
-    for bl in tqdm.tqdm_notebook(uvd.get_antpairpols()):
-        if exclude_autos and bl[0] == bl[1]:
-            continue
+    if to_filter is None:
+        to_filter = uvd.get_antpairpols()
+    for bl in to_filter:
         # sum beams from all frequencies
         # get polarization number
         polnum = np.where(uvutils.polstr2num(bl[-1], x_orientation=uvb.x_orientation) == uvb.polarization_array)[0][0]
@@ -890,7 +889,7 @@ class FRFilter(VisClean):
             center_frates, width_frates = build_fringe_rate_profiles(self.hd, uvb,
                                                                      percentile_low=percentile_low,
                                                                      percentile_high=percentile_high,
-                                                                     exclude_autos=skip_autos,
+                                                                     to_filter=to_filter,
                                                                      frate_standoff=frate_standoff,
                                                                      frac_frate_sky_max=frac_frate_sky_max,
                                                                      min_frate=min_frate)
