@@ -13,7 +13,7 @@ from . import utils
 
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
-from pyuvdata import UVData, UVFlag
+from pyuvdata import UVData, UVFlag, UVBeam
 import argparse
 from . import io
 from . import vis_clean
