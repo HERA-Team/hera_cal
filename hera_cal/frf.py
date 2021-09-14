@@ -24,7 +24,7 @@ import healpy as hp
 from astropy.time import Time
 from pyuvdata import utils as uvutils
 from . import utils
-
+import copy
 
 def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95., to_filter=None,
                                dfr=None, nfr=None, taper='none', frate_standoff=0.0,
@@ -118,7 +118,7 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
 
     # frequency tapering function expected for power spectra.
     # square b/c for power spectrum power preservation.
-    ftaper = dspec.gen_window(taper, vc.Nfreqs) ** 2.
+    ftaper = dspec.gen_window(taper, uvd.Nfreqs) ** 2.
 
     center_frates = {}
     width_frates = {}
@@ -136,8 +136,7 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
         # we will bin frate power together for all frequencies, weighted by taper.
         binned_power = np.zeros_like(fr_grid)
         # iterate over each frequency and ftaper weighting.
-        for f0, fw in zip(vc.freqs, ftaper):
-            eq_xyz = np.vstack([eq.x, eq.y, eq.z])
+        for f0, fw in zip(uvd.freq_array[0], ftaper):
             frates = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * 2 * np.pi * f0 / 3e8  / (24. * 3.6)
             # square of power beam values in directions of sky pixels
             bsq = np.abs(uvb.data_array[0, 0, polnum, np.argmin(np.abs(f0 - uvb.freq_array[0])), :].squeeze()) ** 2.
@@ -169,7 +168,7 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
             center_frates[utils.reverse_bl(bl)] = - .5 * (frlow + frhigh)
             width_frates[utils.reverse_bl(bl)] = width_frates[bl]
 
-    return frate_container
+    return center_frates, width_frates
 
 
 
