@@ -15,9 +15,8 @@ from pyuvdata import utils as uvutils
 import unittest
 from scipy import stats
 from scipy import constants
-from pyuvdata import UVFlag
-
-
+from pyuvdata import UVFlag, UVBeam
+from .. import utils
 from .. import datacontainer, io, frf
 from ..data import DATA_PATH
 
@@ -423,6 +422,34 @@ class Test_FRFilter(object):
         for k in doutput:
             assert doutput[k].shape == d[k].shape
 
+    def test_build_fringe_rate_profiles(self):
+        # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
+        test_beam = os.path.join(DATA_PATH, "fr_unittest_beam.beamfits")
+        test_data = os.path.join(DATA_PATH, "fr_unittest_data.uvh5")
+        uvd = UVData()
+        uvd.read_uvh5(test_data)
+        myfrf = frf.FRFilter(uvd)
+        myfrf.fft_data(data=myfrf.data, ax='time')
+        sim_c_frates = {}
+        sim_w_frates = {}
+        for bl in myfrf.dfft:
+            csum = np.cumsum(np.abs(myfrf.dfft[bl]) ** 2.)
+            csum /= csum.max()
+            frlow, frhigh = (myfrf.frates[np.argmin(np.abs(csum - 0.05))], myfrf.frates[np.argmin(np.abs(csum - 0.95))])
+            sim_c_frates[bl] = .5 * (frlow + frhigh)
+            sim_w_frates[bl] = .5 * np.abs(frlow - frhigh)
+            sim_w_frates[utils.reverse_bl(bl)] = sim_w_frates[bl]
+            sim_c_frates[utils.reverse_bl(bl)] = -sim_c_frates[bl]
+        uvb = UVBeam()
+        uvb.read_beamfits(test_beam)
+        c_frs, w_frs = frf.build_fringe_rate_profiles(uvd, uvb)
+        profile_frates = {}
+        for bl in sim_c_frates:
+            assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.2, rtol=0.)
+            assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.2, rtol=0.)
+
+
+
     def test_load_tophat_frfilter_and_write_beam_frates(self, tmpdir):
         # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
         # load in primary beam model and isotropic noise model of sky.
@@ -434,7 +461,8 @@ class Test_FRFilter(object):
         filled_outfilename = os.path.join(tmp_path, 'filled.uvh5')
         # perform cleaning.
         frf.load_tophat_frfilter_and_write(datafile_list=[test_data], uvbeam=test_beam, mode='dpss_leastsq', filled_outfilename=filled_outfilename,
-                                           CLEAN_outfilename=CLEAN_outfilename, resid_outfilename=resid_outfilename)
+                                           CLEAN_outfilename=CLEAN_outfilename, frate_standoff=0.075,
+                                           res_outfilename=res_outfilename, percentile_high=97.5, percentile_low=2.5)
         hd_input = io.HERAData(test_data)
         data, flags, nsamples = hd_input.read()
         hd_resid = io.HERAData(resid_outfilename)
@@ -443,7 +471,7 @@ class Test_FRFilter(object):
         data_f, flags_f, nsamples_f = hd_filled.read()
 
         for bl in data:
-            assert np.mean(np.abs(data_r[bl]) ** 2.) <= .1 * np.mean(np.abs(data[bl]) ** 2.)
+            assert np.mean(np.abs(data_r[bl]) ** 2.) <= .2 * np.mean(np.abs(data[bl]) ** 2.)
 
 
 

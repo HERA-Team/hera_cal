@@ -241,7 +241,7 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
             width_frates[bl] = .5 * np.abs(frlow - frhigh) * frac_frate_sky_max + frate_standoff
             width_frates[bl] = np.max([width_frates[bl], min_frate])
 
-            center_frates[utils.reverse_bl(bl)] = - .5 * (frlow + frhigh)
+            center_frates[utils.reverse_bl(bl)] = - center_frates[bl]
             width_frates[utils.reverse_bl(bl)] = width_frates[bl]
 
     return frate_container
