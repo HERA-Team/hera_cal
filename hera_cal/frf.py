@@ -150,23 +150,23 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
                 # times the frequency weighing value set by taper.
                 binned_power[binnum] += np.sum(bsq[fr_bins == binnum]) * fw  # add sum of beam squared times taper weight.
 
-            # normalize to sum to 100.
-            binned_power /= np.sum(binned_power)
-            binned_power *= 100.
-            # get CDF as function of fringe-rate bin.
-            cspower = np.cumsum(binned_power)
-            # find low and high bins containing mass between percentile_low and percentile_high.
-            frlow = np.argmin(np.abs(cspower - percentile_low))
-            frhigh = np.argmin(np.abs(cspower - percentile_high))
-            frlow = fr_grid[frlow]
-            frhigh = fr_grid[frhigh]
-            # save low and high fringe rates for bl and its conjugate
-            center_frates[bl] = .5 * (frlow + frhigh)
-            width_frates[bl] = .5 * np.abs(frlow - frhigh) * frac_frate_sky_max + frate_standoff
-            width_frates[bl] = np.max([width_frates[bl], min_frate])
+        # normalize to sum to 100.
+        binned_power /= np.sum(binned_power)
+        binned_power *= 100.
+        # get CDF as function of fringe-rate bin.
+        cspower = np.cumsum(binned_power)
+        # find low and high bins containing mass between percentile_low and percentile_high.
+        frlow = np.argmin(np.abs(cspower - percentile_low))
+        frhigh = np.argmin(np.abs(cspower - percentile_high))
+        frlow = fr_grid[frlow]
+        frhigh = fr_grid[frhigh]
+        # save low and high fringe rates for bl and its conjugate
+        center_frates[bl] = .5 * (frlow + frhigh)
+        width_frates[bl] = .5 * np.abs(frlow - frhigh) * frac_frate_sky_max + frate_standoff
+        width_frates[bl] = np.max([width_frates[bl], min_frate])
 
-            center_frates[utils.reverse_bl(bl)] = - center_frates[bl]
-            width_frates[utils.reverse_bl(bl)] = width_frates[bl]
+        center_frates[utils.reverse_bl(bl)] = - center_frates[bl]
+        width_frates[utils.reverse_bl(bl)] = width_frates[bl]
 
     return center_frates, width_frates
 
