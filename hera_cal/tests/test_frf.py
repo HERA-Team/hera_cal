@@ -448,8 +448,6 @@ class Test_FRFilter(object):
             assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.2, rtol=0.)
             assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.2, rtol=0.)
 
-
-
     def test_load_tophat_frfilter_and_write_beam_frates(self, tmpdir):
         # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
         # load in primary beam model and isotropic noise model of sky.
@@ -473,8 +471,6 @@ class Test_FRFilter(object):
 
         for bl in data:
             assert np.mean(np.abs(data_r[bl]) ** 2.) <= .2 * np.mean(np.abs(data[bl]) ** 2.)
-
-
 
     def test_sky_frates_minfrate_and_to_filter(self):
         # test edge frates

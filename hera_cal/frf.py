@@ -26,6 +26,7 @@ from pyuvdata import utils as uvutils
 from . import utils
 import copy
 
+
 def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95., to_filter=None,
                                dfr=None, nfr=None, taper='none', frate_standoff=0.0,
                                frac_frate_sky_max=1.0, min_frate=0.025,):
@@ -79,12 +80,11 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
     except ValueError as err:
         warnings.warn("UVBeam object already in healpix format...")
 
-    antpos_trf = uvd.antenna_positions # earth centered antenna positions
-    antnums = uvd.antenna_numbers # antenna numbers.
-
+    antpos_trf = uvd.antenna_positions  # earth centered antenna positions
+    antnums = uvd.antenna_numbers  # antenna numbers.
 
     lat, lon, alt = uvd.telescope_location_lat_lon_alt_degrees
-    location = EarthLocation(lon=lon * u.deg, lat=lat*u.deg, height=alt*u.m)
+    location = EarthLocation(lon=lon * u.deg, lat=lat * u.deg, height=alt * u.m)
 
     # get topocentricl AzEl Beam coordinates.
     npix = uvb.data_array.shape[-1]
@@ -105,12 +105,12 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
     eq_xyz = np.vstack([eq_coords.x, eq_coords.y, eq_coords.z])
 
     # generate fringe_rate grid in mHz.
-    dt = 3.6 * 24. * np.median(np.diff(np.unique(uvd.time_array))) # times in kSec
+    dt = 3.6 * 24. * np.median(np.diff(np.unique(uvd.time_array)))  # times in kSec
     if nfr is None:
         nfr = uvd.Ntimes
     if dfr is None:
         # if no dfr provided, set to 1 / (ntimes * dt)
-        dfr =  1. / (dt * nfr)
+        dfr = 1. / (dt * nfr)
 
     # build grid.
     fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
@@ -137,7 +137,7 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
         binned_power = np.zeros_like(fr_grid)
         # iterate over each frequency and ftaper weighting.
         for f0, fw in zip(uvd.freq_array[0], ftaper):
-            frates = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * 2 * np.pi * f0 / 3e8  / (24. * 3.6)
+            frates = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * 2 * np.pi * f0 / 3e8 / (24. * 3.6)
             # square of power beam values in directions of sky pixels
             bsq = np.abs(uvb.data_array[0, 0, polnum, np.argmin(np.abs(f0 - uvb.freq_array[0])), :].squeeze()) ** 2.
             # set beam below horizon to be zero.
@@ -148,7 +148,7 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
             for binnum in range(nfr):
                 # For each bin, find all pixels that fall in that fr bin and add the sum beam-square values in each pixel
                 # times the frequency weighing value set by taper.
-                binned_power[binnum] += np.sum(bsq[fr_bins == binnum]) * fw # add sum of beam squared times taper weight.
+                binned_power[binnum] += np.sum(bsq[fr_bins == binnum]) * fw  # add sum of beam squared times taper weight.
 
             # normalize to sum to 100.
             binned_power /= np.sum(binned_power)
@@ -169,7 +169,6 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
             width_frates[utils.reverse_bl(bl)] = width_frates[bl]
 
     return center_frates, width_frates
-
 
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True,
@@ -642,9 +641,6 @@ class FRFilter(VisClean):
             width_frates[utils.reverse_bl(k)] = width_frates[k]
         return center_frates, width_frates
 
-
-
-
     def filter_data(self, data, frps, flags=None, nsamples=None,
                     output_prefix='filt', keys=None, overwrite=False,
                     edgecut_low=0, edgecut_hi=0, axis=0, verbose=True):
@@ -723,7 +719,7 @@ class FRFilter(VisClean):
             filt_nsamples[k] = eff_nsamples
 
     def run_tophat_frfilter(self, to_filter=None, weight_dict=None, mode='clean',
-                            mainlobe_radius=None,  uvb=None, percentile_low=5., percentile_high=95.,
+                            mainlobe_radius=None, uvb=None, percentile_low=5., percentile_high=95.,
                             frate_standoff=0.0,
                             frac_frate_sky_max=1.0, min_frate=0.025, max_frate_coeffs=None,
                             skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
@@ -1045,7 +1041,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
                 uvb = UVBeam()
                 uvb.read_beamfits(uvbeam)
             else:
-                uvb=None
+                uvb = None
             if len(to_filter) > 0:
                 frfil.run_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, uvb=uvb,
                                           skip_flagged_edges=skip_flagged_edges, to_filter=to_filter, **filter_kwargs)
