@@ -533,7 +533,8 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
     dlst : float, LST bin width of output lst_grid
     file_lsts : list, contains the lst grid of each output file
     begin_lst : float, starting lst for LST binner. If lst_start is not None, this equals lst_start.
-    lst_arrays : list, list of lst arrays for each file
+    lst_arrays : list, list of lst arrays for each file. These will have 2 pis added or subtracted
+                 to match the range of lst_grid given lst_start
     time_arrays : list, list of time arrays for each file
     """
 
@@ -571,6 +572,14 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
     # make LST grid
     lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
+
+    # enforce that lst_arrays are in the same range as the lst_grid
+    for larrs in lst_arrays:
+        for larr in larrs:
+            while np.any(larr < np.min(lst_grid)):
+                larr[larr < np.min(lst_grid)] += 2 * np.pi
+            while np.any(larr > np.max(lst_grid)):
+                larr[larr > np.max(lst_grid)] -= 2 * np.pi
 
     # get number of output files
     nfiles = int(np.ceil(1.0 * len(lst_grid) / ntimes_per_file))
