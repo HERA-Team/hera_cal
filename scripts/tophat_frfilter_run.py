@@ -59,6 +59,7 @@ frf.load_tophat_frfilter_and_write(ap.datafilelist, calfile_list=ap.calfilelist,
                                    overwrite_flags=ap.overwrite_flags, skip_autos=ap.skip_autos,
                                    skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
                                    zeropad=ap.zeropad, tol=ap.tol, skip_wgt=ap.skip_wgt, max_frate_coeffs=ap.max_frate_coeffs,
-                                   frac_frate_sky_max=ap.frac_frate_sky_max, frate_standoff=ap.frate_standoff, min_frate=ap.min_frate,
+                                   frate_standoff=ap.frate_standoff, min_frate_width=ap.min_frate_width,
+                                   frate_width_multiplier=ap.frate_width_multiplier,
                                    uvbeam=ap.uvbeam, percentile_low=ap.percentile_low, percentile_high=ap.percentile_high,
                                    clean_flags_in_resid_flags=True, mainlobe_radius=ap.mainlobe_radius, **filter_kwargs)
