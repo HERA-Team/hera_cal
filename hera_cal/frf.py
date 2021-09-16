@@ -104,11 +104,10 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
 
 
 
-def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95., keys=None,
-                               dfr=None, nfr=None, taper='none', frate_standoff=0.0,
-                               frac_frate_sky_max=1.0, min_frate=0.025,):
+def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, nfr=None, dfr=None):
     """
-    Get bounding fringe-rates for isotropic emission for a UVBeam object across all frequencies.
+    Calculate fringe-rate profiles to either directly apply as an FIR filter or set a range to filter.
+
     Parameters
     ----------
     uvd: UVData object
@@ -133,19 +132,26 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
     frate_standoff: float, optional
         Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
         default = 0.0.
-    frac_frate_sky_max: float, optional
+    frate_width_multiplier: float, optional
         fraction of horizon to fringe-rate filter.
         default is 1.0
-    min_frate: float, optional
-        minimum fringe-rate to filter, regardless of baseline length in mHz.
+    min_frate_half_width: float, optional
+        minimum fringe-rate width to filter, regardless of baseline length in mHz.
+        Default is 0.025
 
     Returns
     -------
-    center_frates: dict object,
-        Dictionary with the center fringe-rate of each baseline in to_filter in units of mHz.
-    width_frates: dict object
-        Dictionary with the half widths of each fringe-rate window around the center_frates in units of mHz.
+    fr_grid: np.ndarray
+        length nfr grid of fringe-rates spaced by dfr centered at zero.
+
+    profiles: Dictionary object. Maps antpairpol tuples to numpy.ndarray object
+              with the sum of the beam squared in all directions falling into
+              a particular fringe-rate bin.
+
     """
+
+
+
     uvb = copy.deepcopy(uvb)
     # convert to power and healpix if necesssary
     if uvb.beam_type == 'efield':
@@ -157,6 +163,7 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
 
     antpos_trf = uvd.antenna_positions  # earth centered antenna positions
     antnums = uvd.antenna_numbers  # antenna numbers.
+
 
     lat, lon, alt = uvd.telescope_location_lat_lon_alt_degrees
     location = EarthLocation(lon=lon * u.deg, lat=lat * u.deg, height=alt * u.m)
@@ -193,12 +200,11 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
 
     # frequency tapering function expected for power spectra.
     # square b/c for power spectrum power preservation.
-    ftaper = dspec.gen_window(taper, vc.Nfreqs) ** 2.
-
-    center_frates = {}
-    width_frates = {}
+    ftaper = dspec.gen_window(taper, uvd.Nfreqs) ** 2.
     if keys is None:
         keys = uvd.get_antpairpols()
+    profiles = {}
+    ap_blkeys = {} # keep track of different polarizations for each antenna pair if we are going to sum over polarizations.
     for bl in keys:
         # sum beams from all frequencies
         # get polarization number
@@ -224,7 +230,84 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
                 # For each bin, find all pixels that fall in that fr bin and add the sum beam-square values in each pixel
                 # times the frequency weighing value set by taper.
                 binned_power[binnum] += np.sum(bsq[fr_bins == binnum]) * fw  # add sum of beam squared times taper weight.
+        profiles[bl] = binned_power
+        profiles[reverse_bl(bl)] = binned_power[::-1]
+        if bl[:2] not in ap_blkeys:
+            ap_blkeys[bl[:2]] = [bl]
+            ap_blkeys[utils.reverse_bl(bl)[:2]] = [utils.reverse_bl(bl)]
+        else:
+            ap_blkeys[bl[:2]].append(bl) # append baselines
+            ap_blkeys[utils.reverse_bl(bl)[:2]].append(utils.reverse_bl(bl))
 
+    # combine polarizations by summing over all profiles for each antenna-pair.
+    if combine_pols:
+        for ap in ap_blkeys:
+            profile_summed_over_pols = np.sum([profiles[bl] for bl in ap_blkeys[ap]], axis=0)
+            for bl in ap_blkeys[ap]:
+                profiles[bl] = profile_summed_over_pols
+    # normalize if desiered
+    if normed:
+        for bl in profiles:
+            profiles[bl] /= np.sum(profiles[bl])
+    return fr_grid, profiles
+
+
+
+
+def get_fringe_rate_limits(uvd, uvb, percentile_low=5., percentile_high=95., blkeys=None,
+                               dfr=None, nfr=None, taper='none', frate_standoff=0.0,
+                               frate_width_multiplier=1.0, min_frate_half_width=0.025,):
+    """
+    Get bounding fringe-rates for isotropic emission for a UVBeam object across all frequencies.
+
+    Parameters
+    ----------
+    uvd: UVData object
+        UVData holding baselines for which we will build fringe-rate profiles.
+    uvb: UVBeam object
+        UVBeam object holding beams that we will build uvbeam profiles for.
+    percentile_low: float, optional
+        Percent of beam-squared power below lower fringe rate.
+    percentile_high: float, optional
+        Percent of beam-squared power above upper fringe rate.
+    to_filter: list of antpairpol tuples
+        list of antpairpol tuples of baselines to calculate fringe-rate limits for.
+    dfr: float, optional.
+        spacing of fringe-rate grid used to perform binning and percentile calc
+        in units of mHz.
+        default is None -> set to 1 / (dtime * Ntime) of uvd.
+    nfr: float, optional.
+        number of points on fringe-rate grid to perform binning and percentile calc.
+        default is None -> set to uvd.Ntimes.
+    taper: str, optional
+        taper expected for power spectrum calculations. Fringe-rates from different frequencies
+    frate_standoff: float, optional
+        Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
+        default = 0.0.
+    frate_width_multiplier: float, optional
+        fraction of horizon to fringe-rate filter.
+        default is 1.0
+    min_frate_width: float, optional
+        minimum fringe-rate width to filter, regardless of baseline length in mHz.
+        Default is 0.025
+
+    Returns
+    -------
+    center_frates: dict object,
+        Dictionary with the center fringe-rate of each baseline in to_filter in units of mHz.
+    width_frates: dict object
+        Dictionary with the half widths of each fringe-rate window around the center_frates in units of mHz.
+    """
+
+
+    center_frates = {}
+    width_frates = {}
+    if blkeys is None:
+        blkeys = uvd.get_antpairpols()
+
+    fr_grid, fr_profiles = build_fringe_rate_profiles(uvd=uvd, uvb=uvb, blkeys=blkeys, normed=True, nfr=nfr, dfr=dfr)
+    for bl in blkeys:
+        binned_power = fr_profiles[bl]
         # normalize to sum to 100.
         binned_power /= np.sum(binned_power)
         binned_power *= 100.
@@ -237,8 +320,8 @@ def build_fringe_rate_profiles(uvd, uvb, percentile_low=5., percentile_high=95.,
         frhigh = fr_grid[frhigh]
         # save low and high fringe rates for bl and its conjugate
         center_frates[bl] = .5 * (frlow + frhigh)
-        width_frates[bl] = .5 * np.abs(frlow - frhigh) * frac_frate_sky_max + frate_standoff
-        width_frates[bl] = np.max([width_frates[bl], min_frate])
+        width_frates[bl] = .5 * np.abs(frlow - frhigh) * frate_width_multiplier + frate_standoff
+        width_frates[bl] = np.max([width_frates[bl], min_frate_width])
 
         center_frates[utils.reverse_bl(bl)] = - center_frates[bl]
         width_frates[utils.reverse_bl(bl)] = width_frates[bl]
@@ -651,75 +734,6 @@ class FRFilter(VisClean):
         self.t_avg = t_avg
         self.Navg = Navg
 
-    def sky_frates(self, to_filter=None, frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.025, mainlobe_radius=None):
-        """Automatically compute sky fringe-rate ranges based on baselines and telescope location.
-
-        Parameters
-        ----------
-        to_filter: list of antpairpol tuples, optional
-            list of antpairpols to generate sky fringe-rate centers and widths for.
-            Default is None -> use all keys in self.data.
-        frate_standoff: float, optional
-            Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
-            default = 0.0.
-        frac_frate_sky_max: float, optional
-            fraction of horizon to fringe-rate filter.
-            default is 1.0
-        min_frate: float, optional
-            minimum fringe-rate to filter, regardless of baseline length in mHz.
-            Default is 0.025
-        mainlobe_radius: float
-            Width of main-lobe in radians to set min/max fringe-rates to filter.
-            default is None -> filter fringe rates from horizon-to-horizo (mainlobe is entire sky).
-        TODO: Look into per-frequency fringe-rate centers and widths (currently uses max freq for broadest frate range).
-
-        Returns
-        -------
-        center_frates: DataContainer object,
-            DataContainer with the center fringe-rate of each baseline in to_filter in units of mHz.
-        width_frates: DataContainer object
-            DataContainer with the half widths of each fringe-rate window around the center_frates in units of mHz.
-
-        """
-        if to_filter is None:
-            to_filter = self.data.keys()
-        # compute maximum fringe rate dict based on baseline lengths.
-        blcosines = {k: self.blvecs[k[:2]][0] / np.linalg.norm(self.blvecs[k[:2]]) for k in to_filter}
-        frateamps = {k: 1. / (24. * 3.6) * self.freqs.max() / 3e8 * 2 * np.pi * np.linalg.norm(self.blvecs[k[:2]]) for k in to_filter}
-        # set autocorrs to have blcose of 0.0
-        for k in blcosines:
-            if np.isnan(blcosines[k]):
-                blcosines[k] = 0.0
-        sinlat = np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))
-        max_frates = {}
-        min_frates = {}
-        center_frates = {}
-        width_frates = {}
-        if mainlobe_radius is not None:
-            sinml = np.sin(mainlobe_radius)
-            coslat = np.cos(np.abs(self.hd.telescope_location_lat_lon_alt[0]))
-        # calculate min/max center fringerates.
-        # these depend on the sign of the blcosine.
-        for k in to_filter:
-            if mainlobe_radius is None:
-                if blcosines[k] >= 0:
-                    max_frates[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
-                    min_frates[k] = -frateamps[k] * sinlat
-                else:
-                    min_frates[k] = -frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
-                    max_frates[k] = frateamps[k] * sinlat
-            else:
-                max_frates[k] = frateamps[k] * (np.sqrt(1 - sinml ** 2.) * blcosines[k] * coslat + sinml * sinlat)
-                min_frates[k] = frateamps[k] * (np.sqrt(1 - sinml ** 2.) * blcosines[k] * coslat - sinml * sinlat)
-
-            center_frates[k] = (max_frates[k] + min_frates[k]) / 2.
-            center_frates[utils.reverse_bl(k)] = -center_frates[k]
-
-            width_frates[k] = np.abs(max_frates[k] - min_frates[k]) / 2. * frac_frate_sky_max + frate_standoff
-            width_frates[k] = np.max([width_frates[k], min_frate])  # Don't allow frates smaller then min_frate
-            width_frates[utils.reverse_bl(k)] = width_frates[k]
-        return center_frates, width_frates
-
     def filter_data(self, data, frps, flags=None, nsamples=None,
                     output_prefix='filt', keys=None, overwrite=False,
                     edgecut_low=0, edgecut_hi=0, axis=0, verbose=True):
@@ -846,11 +860,11 @@ class FRFilter(VisClean):
          see uvtools.dspec.dayenu_filter for key formats.
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
-         that were not in previously loaded cache files.
+            that were not in previously loaded cache files.
         center_before_filtering: bool, optional
-            if True, center fringe-rate filter at zero by dividing data by phasor
-            and multiplying back after applying filter. Better stability then
-            explicitly filtering offset from zero.
+            shift the data by multiplying by the center fringe-rate and filter a window centered at zero fringe rate.
+            This improves filter stability when the filtering window is highly offset from zero since we avoid interpolating
+            with fine-time-scale modes.
         verbose: bool, optional, lots of outputs!
         filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
@@ -880,15 +894,15 @@ class FRFilter(VisClean):
         elif uvb is None and max_frate_coeffs is not None:
             width_frates = {k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in keys}
             center_frates = {k: 0.0 for k in keys}
-        else:
+        elif uvb is not None:
             # if uvb is not None, get fringe-rates from binning.
             center_frates, width_frates = build_fringe_rate_profiles(self.hd, uvb,
                                                                      percentile_low=percentile_low,
                                                                      percentile_high=percentile_high,
-                                                                     to_filter=to_filter,
+                                                                     keys=keys,
                                                                      frate_standoff=frate_standoff,
-                                                                     frac_frate_sky_max=frac_frate_sky_max,
-                                                                     min_frate=min_frate)
+                                                                     frate_width_multiplier=frate_width_multiplier,
+                                                                     min_frate_half_width=min_frate_half_width)
         wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         for k in keys:
             if mode != 'clean':
