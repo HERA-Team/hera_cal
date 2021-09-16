@@ -1086,7 +1086,6 @@ def tophat_frfilter_argparser(mode='clean'):
     ap.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
                                                                                   "Providing these overrides the sky-based fringe-rate determination! Default is None.")
     ap.add_argument("--skip_autos", default=False, action="store_true", help="Exclude autos from filtering.")
-    ap.add_argument("--mainlobe_radius", default=None, type=float, help="Radius around zenith to filter (in radians). Default is None -> Filter all fringe-rates on the sky.")
     ap.add_argument("--uvbeam", default=None, type=str, help="Path to UVBeam beamfits file to use for determining isotropic sky fringe-rates to filter.")
     ap.add_argument("--percentile_low", default=5.0, type=float, help="Reject fringe-rates with beam power below this percentile if uvbeam is provided.")
     ap.add_argument("--percentile_high", default=95.0, type=float, help="Reject fringe-rates with beam power above this percentile if uvbeam is provided.")
