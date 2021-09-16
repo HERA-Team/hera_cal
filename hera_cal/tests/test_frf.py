@@ -422,7 +422,7 @@ class Test_FRFilter(object):
         for k in doutput:
             assert doutput[k].shape == d[k].shape
 
-    def test_build_fringe_rate_profiles(self):
+    def test_get_fringe_rate_limits(self):
         # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
         test_beam = os.path.join(DATA_PATH, "fr_unittest_beam.beamfits")
         test_data = os.path.join(DATA_PATH, "fr_unittest_data.uvh5")
@@ -442,7 +442,7 @@ class Test_FRFilter(object):
             sim_c_frates[utils.reverse_bl(bl)] = -sim_c_frates[bl]
         uvb = UVBeam()
         uvb.read_beamfits(test_beam)
-        c_frs, w_frs = frf.build_fringe_rate_profiles(uvd, uvb)
+        c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb)
         profile_frates = {}
         for bl in sim_c_frates:
             assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.2, rtol=0.)
@@ -476,7 +476,7 @@ class Test_FRFilter(object):
         V = frf.FRFilter(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
         V.read()
         for to_filter in [None, list(V.data.keys())[:1]]:
-            cfrates, wfrates = V.sky_frates(min_frate=1000, to_filter=to_filter)
+            cfrates, wfrates = frf.sky_frates(V.hd, min_frate_width=1000, blkeys=to_filter)
             # to_filter set to None -> all keys should be present.
             if to_filter is None:
                 for k in V.data:
