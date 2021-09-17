@@ -148,8 +148,6 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
 
     """
 
-
-
     uvb = copy.deepcopy(uvb)
     # convert to power and healpix if necesssary
     if uvb.beam_type == 'efield':
@@ -185,7 +183,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
     eq_xyz = np.vstack([eq_coords.x, eq_coords.y, eq_coords.z])
 
     # generate fringe_rate grid in mHz.
-    dt = 3.6 * 24. * np.median(np.diff(np.unique(uvd.time_array)))  # times in kSec
+    dt = SDAY_KSEC * np.median(np.diff(np.unique(uvd.time_array)))  # times in kSec
     if nfr is None:
         nfr = uvd.Ntimes
     if dfr is None:
@@ -219,7 +217,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
         # use linspace to make sure we get first and last frequencies.
         chans_to_use = np.linspace(0, uvd.Nfreqs - 1, int(uvd.Nfreqs / fr_freq_skip)).astype(int)
         for f0, fw in zip(uvd.freq_array[0, chans_to_use], ftaper[chans_to_use]):
-            frates = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * 2 * np.pi * f0 / (units.cds.c * units.s / units.m) / (units.si.sday / (1000 * units.s))
+            frates = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * 2 * np.pi * f0 / SPEED_OF_LIGHT / SDAY_KSEC
             # square of power beam values in directions of sky pixels
             bsq = np.abs(uvb.data_array[0, 0, polnum, np.argmin(np.abs(f0 - uvb.freq_array[0])), :].squeeze()) ** 2.
             # set beam below horizon to be zero.
@@ -381,7 +379,7 @@ def sky_frates(uvd, blkeys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
         blvec = antpos[ind1] - antpos[ind2]
         blcos = blvec[0] / np.linalg.norm(blvec[:2])
         if np.isfinite(blcos):
-            frateamp_df = np.linalg.norm(blvec[:2]) / (units.si.sday / (1000 * units.s)) / (units.cds.c * units.s / units.m) * 2 * np.pi
+            frateamp_df = np.linalg.norm(blvec[:2]) / SDAY_KSEC / SPEED_OF_LIGHT * 2 * np.pi
             # set autocorrs to have blcose of 0.0
 
             if blcos >= 0:
@@ -1012,13 +1010,18 @@ class FRFilter(VisClean):
                 filter_kwargs['tol'] = tol
             # center sky-modes at zero fringe-rate if we chose to center_before_filtering.
             if center_before_filtering:
-                self.data[k] /= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * frate_centers[k])
+                phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
+                if 'data' in filter_kwargs:
+                    input_data = filter_kwargs['data']
+                else:
+                    input_data = self.data
+                input_data[k] /= phasor
                 filter_center_to_use = 0.0
             else:
                 filter_center_to_use = frate_centers[k]
             self.fourier_filter(keys=[k], filter_centers=[filter_center_to_use], filter_half_widths=[frate_half_widths[k]],
-                                mode=mode, x=self.times * 3.6 * 24.,
-                                data=self.data, flags=self.flags, wgts=wgts,
+                                mode=mode, x=self.times * SDAY_KSEC,
+                                flags=self.flags, wgts=wgts,
                                 ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
 
             # recenter data in fringe-rate by multiplying back the phaser if we chose to center_before_filtering.
@@ -1031,10 +1034,14 @@ class FRFilter(VisClean):
                     filtered_data = self.clean_data
                     filtered_model = self.clean_model
                     filtered_resid = self.clean_resid
-                filtered_data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * frate_centers[k])
-                filtered_model[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * frate_centers[k])
-                filtered_resid[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * frate_centers[k])
-                self.data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * frate_centers[k])
+                filtered_data[k] *= phasor
+                filtered_model[k] *= phasor
+                filtered_resid[k] *= phasor
+                if 'data' in filter_kwargs:
+                    input_data = filter_kwargs['data']
+                else:
+                    input_data = self.data
+                input_data[k] *= phasor
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
