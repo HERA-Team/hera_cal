@@ -60,6 +60,6 @@ frf.load_tophat_frfilter_and_write(ap.datafilelist, calfile_list=ap.calfilelist,
                                    skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
                                    zeropad=ap.zeropad, tol=ap.tol, skip_wgt=ap.skip_wgt, max_frate_coeffs=ap.max_frate_coeffs,
                                    frate_standoff=ap.frate_standoff, min_frate_width=ap.min_frate_width,
-                                   frate_width_multiplier=ap.frate_width_multiplier,
+                                   frate_width_multiplier=ap.frate_width_multiplier, fr_freq_skip=ap.fr_freq_skip,
                                    uvbeam=ap.uvbeam, percentile_low=ap.percentile_low, percentile_high=ap.percentile_high,
                                    clean_flags_in_resid_flags=True, **filter_kwargs)
