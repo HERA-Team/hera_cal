@@ -486,9 +486,7 @@ def lst_bin_arg_parser():
                                 "'2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv' \n"
                                 "Consult lstbin.lst_bin_files() for further details on functionality.")
     a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files (UVH5)")
-    a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly calibration files")
-    a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
-    a.add_argument("--lst_start", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is first LST of first file.")
+    a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to tims LST of first file.")
     a.add_argument("--ntimes_per_file", type=int, default=60, help="number of LST bins to write per output file")
     a.add_argument("--file_ext", type=str, default="{type}.{time:7.5f}.uvh5", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
@@ -519,9 +517,8 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
 
     Parameters
     ----------
-    data_files : type=list of lists: nested set of lists, with each nested list containing
-                 paths to data files from a particular night. These files should be sorted
-                 by ascending Julian Date. Frequency axis of each file must be identical.
+    data_files : type=list of lists: nested set of lists, with each nested list containing paths to
+                 data files from a particular night. Frequency axis of each file must be identical.
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
         Default is first LST of the first file of the first night.
@@ -552,21 +549,11 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
         lst_arrays.append(larrs)
         time_arrays.append(tarrs)
 
-    # check that days are in order
-    for i in range(len(time_arrays) - 1):
-        max_time_on_day = np.max([t for tarr in time_arrays[i] for t in tarr])
-        min_time_on_next_day = np.min([t for tarr in time_arrays[i + 1] for t in tarr])
-        if max_time_on_day > min_time_on_next_day:
-            raise ValueError('The days in the input data_files must be in chronological order.')
-
-    # check that each day is in order
-    for tarrs in time_arrays:
-        if not np.all(np.hstack(tarrs) == np.sort(np.hstack(tarrs))):
-            raise ValueError('The data files in each day must be in chronological order.')
-
-    # get begin_lst from lst_start or from first file
+    # get begin_lst from lst_start or from the first JD in the data_files
     if lst_start is None:
-        lst_start = lst_arrays[0][0][0]
+        all_lsts = [l for larrs in lst_arrays for larr in larrs for l in larr]
+        all_times = [t for tarrs in time_arrays for tarr in tarrs for l in tarr]
+        lst_start = all_lsts[np.argmin(all_times)]
     begin_lst = lst_start
 
     # make LST grid
@@ -608,9 +595,9 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     Parameters:
     -----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
-        paths to files from a particular night. These files should be sorted
-        by ascending Julian Date. Frequency axis of each file must be identical.
-        x_orientation is inferred from the first item in this list and assumed to be the same for all files
+        paths to files from a particular night. Frequency axis of each file must be identical.
+        Metadata like x_orientation is inferred from the lowest JD file on the night with the 
+        highest JDs (i.e. the last night) and assumed to be the same for all files
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
     ntimes_per_file : type=int, number of LST bins in a single output file
@@ -679,7 +666,9 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     kwargs['outdir'] = outdir
     kwargs['overwrite'] = overwrite
     # get metadata from the zeroth data file in the last day
-    hd = io.HERAData(data_files[-1][0])
+    last_day_index = np.argmax([np.min(tarrs) for tarrs in time_arrs])
+    zeroth_file_on_last_day_index = np.argmin([np.min(tarr) for tarr in time_arrs[last_day_index]])
+    hd = io.HERAData(data_files[last_day_index][zeroth_file_on_last_day_index])
     x_orientation = hd.x_orientation
 
     # get metadata
@@ -690,15 +679,20 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     kwargs['start_jd'] = start_jd
     integration_time = np.median(hd.integration_time)
     assert np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
-    # get antpos over all nights
-    for dlist in data_files:
-        hd = io.HERAData(dlist[-1])
+
+    # get antpos over all nights looking at last file on each night
+    nightly_last_hds = []
+    for dlist, tarrs in zip(data_files, time_arrs):
+        last_file_index = np.argmin([np.min(tarr) for tarr in tarrs])
+        hd = io.HERAData(dlist[last_file_index])
         for a in hd.antpos:
             if a not in antpos:
                 antpos[a] = hd.antpos[a]
+        nightly_last_hds.append(hd)
+    
     # generate a list of dictionaries which contain the nights occupied by each unique baseline
     # (or unique baseline group if average_redundant_baselines is true)
-    bl_nightly_dicts = gen_bl_nightly_dicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol,
+    bl_nightly_dicts = gen_bl_nightly_dicts(nightly_last_hds, bl_error_tol=bl_error_tol,
                                             include_autos=include_autos, redundant=average_redundant_baselines, ex_ant_yaml_files=ex_ant_yaml_files)
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = len(bl_nightly_dicts) + 1
