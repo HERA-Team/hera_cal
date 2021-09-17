@@ -1015,7 +1015,7 @@ class FRFilter(VisClean):
                     input_data = filter_kwargs['data']
                 else:
                     input_data = self.data
-                input_data[k] /= phasor
+                input_data[k] /= phasor[:, None]
                 filter_center_to_use = 0.0
             else:
                 filter_center_to_use = frate_centers[k]
@@ -1034,14 +1034,14 @@ class FRFilter(VisClean):
                     filtered_data = self.clean_data
                     filtered_model = self.clean_model
                     filtered_resid = self.clean_resid
-                filtered_data[k] *= phasor
-                filtered_model[k] *= phasor
-                filtered_resid[k] *= phasor
+                filtered_data[k] *= phasor[:, None]
+                filtered_model[k] *= phasor[:, None]
+                filtered_resid[k] *= phasor[:, None]
                 if 'data' in filter_kwargs:
                     input_data = filter_kwargs['data']
                 else:
                     input_data = self.data
-                input_data[k] *= phasor
+                input_data[k] *= phasor[:, None]
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
