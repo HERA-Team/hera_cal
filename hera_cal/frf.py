@@ -30,8 +30,8 @@ from .utils import echo
 import datetime
 
 
-SPEED_OF_LIGHT = (units.cds.c * units.s / units.m)
-SDAY_KSEC = units.si.sday /  (1000 * units.s)
+SPEED_OF_LIGHT = (units.cds.c * units.s / units.m).value
+SDAY_KSEC = (units.si.sday /  (1000 * units.s)).value
 
 
 def build_fringe_rate_profiles(uvd, uvb, blkeys=None, normed=True, combine_pols=True, nfr=None, dfr=None,
