@@ -552,8 +552,8 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
 
     # get begin_lst from lst_start or from the first JD in the data_files
     if lst_start is None:
-        all_lsts = [l for larrs in lst_arrays for larr in larrs for l in larr]
-        all_times = [t for tarrs in time_arrays for tarr in tarrs for t in tarr]
+        all_lsts = [lst for larrs in lst_arrays for larr in larrs for lst in larr]
+        all_times = [time for tarrs in time_arrays for tarr in tarrs for time in tarr]
         lst_start = all_lsts[np.argmin(all_times)]
     begin_lst = lst_start
 
