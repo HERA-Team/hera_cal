@@ -529,7 +529,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
 
     Returns
     -------
-    lst_grid : float ndarray holding LST bin centers
+    lst_grid : float ndarray holding LST bin centers. Spans 2 pi radians.
     dlst : float, LST bin width of output lst_grid
     file_lsts : list, contains the lst grid of each output file
     begin_lst : float, starting lst for LST binner. If lst_start is not None, this equals lst_start.
@@ -654,6 +654,10 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     (lst_grid, dlst, file_lsts, begin_lst, lst_arrs,
      time_arrs) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, ntimes_per_file=ntimes_per_file, verbose=verbose)
     nfiles = len(file_lsts)
+
+    # make sure the JD corresponding to file_lsts[0][0] is the lowest JD in the LST-binned data set
+    if (lst_start is not None) and ('lst_branch_cut' not in kwargs):
+        kwargs['lst_branch_cut'] = file_lsts[0][0]
 
     # select file_lsts
     if output_file_select is not None:
@@ -875,10 +879,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         bin_file = "zen." + file_ext.format(**fkwargs)
         fkwargs['type'] = 'STD'
         std_file = "zen." + file_ext.format(**fkwargs)
-
-        # make sure the JD corresponding to file_lsts[0][0] is the lowest JD in the LST-binned data set
-        if lst_start is not None:
-            kwargs['lst_branch_cut'] = file_lsts[0][0]
 
         # check for overwrite
         if os.path.exists(bin_file) and overwrite is False:
