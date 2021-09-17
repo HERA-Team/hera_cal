@@ -75,7 +75,7 @@ class Test_lstbin(object):
     def test_config_lst_bin_files(self):
         for data_files in [self.data_files,  # right order
                            [self.data_files[1], self.data_files[0], self.data_files[2]],  # days out of order
-                           [self.data_files[0], self.data_files[1][::-1], self.data_files[2]]]: #  single day out of order
+                           [self.data_files[0], self.data_files[1][::-1], self.data_files[2]]]:  # single day out of order
             # test that dlst is right
             lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays = lstbin.config_lst_bin_files(data_files, ntimes_per_file=60)
             np.testing.assert_allclose(dlst, 0.0007830490163485138)
