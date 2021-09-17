@@ -20,6 +20,7 @@ from . import vis_clean
 import warnings
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz, ITRS
 import astropy.units as units
+import astropy.constants as const
 import healpy as hp
 from astropy.time import Time
 from pyuvdata import utils as uvutils
@@ -30,8 +31,8 @@ from .utils import echo
 import datetime
 
 
-SPEED_OF_LIGHT = (units.cds.c * units.s / units.m).value
-SDAY_KSEC = (units.si.sday /  (1000 * units.s)).value
+SPEED_OF_LIGHT = const.c.si.value
+SDAY_KSEC = 86163.93 / 1000.
 
 
 def build_fringe_rate_profiles(uvd, uvb, blkeys=None, normed=True, combine_pols=True, nfr=None, dfr=None,
