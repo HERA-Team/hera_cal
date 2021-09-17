@@ -485,8 +485,9 @@ def lst_bin_arg_parser():
                                 "glob-parsable search strings to nightly data. For example: \n"
                                 "'2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv' \n"
                                 "Consult lstbin.lst_bin_files() for further details on functionality.")
-    a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files (UVH5)")
-    a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to tims LST of first file.")
+    a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to nightly data files (UVH5)")
+    a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to corresponding nightly calibration files")
+    a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
     a.add_argument("--ntimes_per_file", type=int, default=60, help="number of LST bins to write per output file")
     a.add_argument("--file_ext", type=str, default="{type}.{time:7.5f}.uvh5", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
