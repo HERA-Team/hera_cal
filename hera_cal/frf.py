@@ -26,7 +26,7 @@ from astropy.time import Time
 from pyuvdata import utils as uvutils
 from . import utils
 import copy
-import astropy.constants
+import astropy.constants as const
 from .utils import echo
 import datetime
 
