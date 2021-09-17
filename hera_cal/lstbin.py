@@ -514,7 +514,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
     Configure data for LST binning.
 
     Make a 24 hour lst grid, starting LST and output files given
-    input data files and LSTbin params. Some of these may be empty.
+    input data files and LSTbin params.
 
     Parameters
     ----------
@@ -530,7 +530,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
     -------
     lst_grid : float ndarray holding LST bin centers. Spans 2 pi radians.
     dlst : float, LST bin width of output lst_grid
-    file_lsts : list, contains the lst grid of each output file
+    file_lsts : list, contains the lst grid of each output file. Empty files are dropped.
     begin_lst : float, starting lst for LST binner. If lst_start is not None, this equals lst_start.
     lst_arrays : list, list of lst arrays for each file. These will have 2 pis added or subtracted
                  to match the range of lst_grid given lst_start
@@ -573,8 +573,16 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
     # get number of output files
     nfiles = int(np.ceil(1.0 * len(lst_grid) / ntimes_per_file))
 
-    # get output file lsts
-    file_lsts = [lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
+    # get output file lsts that are not empty
+    all_file_lsts = [lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
+    file_lsts = []
+    for i, f_lst in enumerate(all_file_lsts):
+        fmin = f_lst[0] - (dlst / 2 + atol)
+        fmax = f_lst[-1] + (dlst / 2 + atol)
+        for lst in [lst for larrs in lst_arrays for larr in larrs for lst in larr]:
+            if (lst >= fmin) and (lst <= fmax):
+                file_lsts.append(f_lst)
+                break
 
     return lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays
 
