@@ -521,6 +521,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
     data_files : type=list of lists: nested set of lists, with each nested list containing paths to
                  data files from a particular night. Frequency axis of each file must be identical.
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
+    atol : type=float, absolute tolerance for LST bin float comparison
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
         Default is first LST of the first file of the first night.
     ntimes_per_file : type=int, number of LST bins in a single output file
@@ -640,7 +641,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     """
     # get file lst arrays
     (lst_grid, dlst, file_lsts, begin_lst, lst_arrs,
-     time_arrs) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, ntimes_per_file=ntimes_per_file, verbose=verbose)
+     time_arrs) = config_lst_bin_files(data_files, dlst=dlst, atol=atol, lst_start=lst_start,
+                                       ntimes_per_file=ntimes_per_file, verbose=verbose)
     nfiles = len(file_lsts)
 
     # make sure the JD corresponding to file_lsts[0][0] is the lowest JD in the LST-binned data set
