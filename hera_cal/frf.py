@@ -20,6 +20,7 @@ from . import vis_clean
 import warnings
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz, ITRS
 import astropy.units as units
+import astropy.constants as const
 import healpy as hp
 from astropy.time import Time
 from pyuvdata import utils as uvutils
