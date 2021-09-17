@@ -182,7 +182,7 @@ def build_fringe_rate_profiles(uvd, uvb, blkeys=None, normed=True, combine_pols=
 
 
 
-def get_fringe_rate_limits(uvd, uvb, percentile_low=5., percentile_high=95., blkeys=None,
+def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5., percentile_high=95., blkeys=None,
                                dfr=None, nfr=None, taper='none', frate_standoff=0.0,
                                frate_width_multiplier=1.0, min_frate_half_width=0.025,
                                fr_freq_skip=1, verbose=False):
@@ -193,8 +193,12 @@ def get_fringe_rate_limits(uvd, uvb, percentile_low=5., percentile_high=95., blk
     ----------
     uvd: UVData object
         UVData holding baselines for which we will build fringe-rate profiles.
-    uvb: UVBeam object
+    uvb: UVBeam object, optional
         UVBeam object holding beams that we will build uvbeam profiles for.
+        default is None -> use pre-computed frate_profiles
+    frate_profiles: dict object, optional
+        Dictionary mapping antpairpol keys to fringe-rate profiles.
+        centered on a grid of length nfr spaced by dfr centered at 0.
     percentile_low: float, optional
         Percent of beam-squared power below lower fringe rate.
     percentile_high: float, optional
@@ -239,8 +243,18 @@ def get_fringe_rate_limits(uvd, uvb, percentile_low=5., percentile_high=95., blk
     if blkeys is None:
         blkeys = uvd.get_antpairpols()
 
-    fr_grid, fr_profiles = build_fringe_rate_profiles(uvd=uvd, uvb=uvb, blkeys=blkeys, normed=True, nfr=nfr, dfr=dfr,
-                                                      taper=taper, fr_freq_skip=fr_freq_skip, verbose=verbose)
+    if fr_profiles is None:
+        if uvb is not None:
+            fr_grid, fr_profiles = build_fringe_rate_profiles(uvd=uvd, uvb=uvb, blkeys=blkeys, normed=True, nfr=nfr, dfr=dfr,
+                                                              taper=taper, fr_freq_skip=fr_freq_skip, verbose=verbose)
+        else:
+            raise ValueError("Must either supply uvb or fr_profiles!")
+    else:
+        if nfr is None:
+            nfr = uvd.Ntimes
+        if dfr is None:
+            dfr = 1. / (nfr * np.mean(np.diff(np.unique(uvd.time_array))) * SDAY_KSEC)
+        fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
     for bl in blkeys:
         binned_power = fr_profiles[bl]
         # normalize to sum to 100.
