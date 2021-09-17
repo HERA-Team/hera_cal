@@ -82,7 +82,7 @@ class Test_lstbin(object):
             # test that lst_grid spans full 2pi
             np.testing.assert_allclose(2 * np.pi - lst_grid[-1] + lst_grid[0], dlst)
             # test shape of file_lsts
-            assert len(file_lsts) == int(np.ceil(2 * np.pi / dlst / 60))
+            assert len(file_lsts) == 4
             for file_lst in file_lsts[0:-1]:
                 assert len(file_lst) == 60
 
