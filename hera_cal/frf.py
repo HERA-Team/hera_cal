@@ -1069,6 +1069,9 @@ def tophat_frfilter_argparser(mode='clean'):
     ap.add_argument("--percentile_low", default=5.0, type=float, help="Reject fringe-rates with beam power below this percentile if uvbeam is provided.")
     ap.add_argument("--percentile_high", default=95.0, type=float, help="Reject fringe-rates with beam power above this percentile if uvbeam is provided.")
     ap.add_argument("--taper", default='none', type=str, help="Weight fringe-rates at different frequencies by the square of this taper if uvbeam is provided.")
+    ap.add_argument("--fr_freq_skip", default=1, type=int, help="fr_freq_skip: int, optional"
+                                                                 "bin fringe rates from every freq_skip channels."
+                                                                 "default is 1 -> takes a long time. We recommend setting this to be larger.")
     return ap
 
 
@@ -1230,7 +1233,5 @@ def time_average_argparser():
     ap.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
     ap.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
     ap.add_argument("--filetype", default="uvh5", type=str, help="optional filetype specifier. Default is 'uvh5'. Set to 'miriad' if reading miriad files etc...")
-    ap.add_argument("--fr_freq_skip", default=1, type=int, help="fr_freq_skip: int, optional"
-                                                                 "bin fringe rates from every freq_skip channels."
-                                                                 "default is 1 -> takes a long time. We recommend setting this to be larger.")
+
     return ap
