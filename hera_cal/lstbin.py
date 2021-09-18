@@ -492,6 +492,7 @@ def lst_bin_arg_parser():
     a.add_argument("--file_ext", type=str, default="{type}.{time:7.5f}.uvh5", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
+    a.add_argument("--lst_start", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is first LST of first file.")
     a.add_argument("--sig_clip", default=False, action='store_true', help="perform robust sigma clipping before binning")
     a.add_argument("--sigma", type=float, default=4.0, help="sigma threshold for sigma clipping")
     a.add_argument("--min_N", type=int, default=4, help="minimum number of points in bin needed to proceed with sigma clipping")
