@@ -182,7 +182,7 @@ def build_fringe_rate_profiles(uvd, uvb, blkeys=None, normed=True, combine_pols=
 
 
 
-def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5., percentile_high=95., blkeys=None,
+def get_fringe_rate_limits(uvd, uvb=None, fr_profiles=None, percentile_low=5., percentile_high=95., blkeys=None,
                                dfr=None, nfr=None, taper='none', frate_standoff=0.0,
                                frate_width_multiplier=1.0, min_frate_half_width=0.025,
                                fr_freq_skip=1, verbose=False):
@@ -196,7 +196,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     uvb: UVBeam object, optional
         UVBeam object holding beams that we will build uvbeam profiles for.
         default is None -> use pre-computed frate_profiles
-    frate_profiles: dict object, optional
+    fr_profiles: dict object, optional
         Dictionary mapping antpairpol keys to fringe-rate profiles.
         centered on a grid of length nfr spaced by dfr centered at 0.
     percentile_low: float, optional
