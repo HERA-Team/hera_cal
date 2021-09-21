@@ -62,4 +62,4 @@ frf.load_tophat_frfilter_and_write(ap.datafilelist, calfile_list=ap.calfilelist,
                                    frate_standoff=ap.frate_standoff, min_frate_half_width=ap.min_frate_half_width,
                                    frate_width_multiplier=ap.frate_width_multiplier, fr_freq_skip=ap.fr_freq_skip,
                                    uvbeam=ap.uvbeam, percentile_low=ap.percentile_low, percentile_high=ap.percentile_high,
-                                   clean_flags_in_resid_flags=True, **filter_kwargs)
+                                   clean_flags_in_resid_flags=True, use_tensorflow=ap.use_tensorflow,  **filter_kwargs)

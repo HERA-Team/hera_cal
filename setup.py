@@ -58,7 +58,7 @@ setup_args = {
     'extras_require': {
         "all": [
             'aipy>=3.0',
-            'uvtools @ git+git://github.com/HERA-Team/uvtools',
+            'uvtools @ git+git://github.com/HERA-Team/uvtools@gpu_support',
         ]
     },
     'zip_safe': False,
