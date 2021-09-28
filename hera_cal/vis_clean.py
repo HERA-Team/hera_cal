@@ -19,6 +19,7 @@ from . import io, apply_cal, version, redcal
 from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
+import tensorflow as tf
 
 
 def find_discontinuity_edges(x, xtol=1e-3):
@@ -793,6 +794,7 @@ class VisClean(object):
                        keep_flags=False, clean_flags_in_resid_flags=False,
                        skip_if_flag_within_edge_distance=0,
                        flag_model_rms_outliers=False, model_rms_threshold=1.1,
+                       gpu_index=None, gpu_memory_limit=None,
                        **filter_kwargs):
         """
         Generalized fourier filtering wrapper for uvtools.dspec.fourier_filter.
@@ -981,6 +983,19 @@ class VisClean(object):
                         unnecessarily long. If it is too high, clean does a poor job of deconvolving.
                     'alpha': float, if window is 'tukey', this is its alpha parameter.
         """
+        gpus = tf.config.list_physical_devices("GPU")
+        if gpu_index is not None:
+            # See https://www.tensorflow.org/guide/gpu
+            if gpus:
+                if gpu_memory_limit is None:
+                    tf.config.set_visible_devices(gpus[gpu_index], "GPU")
+                else:
+                    tf.config.set_logical_device_configuration(
+                        gpus[gpu_index], [tf.config.LogicalDeviceConfiguration(memory_limit=gpu_memory_limit * 1024)]
+                    )
+
+                logical_gpus = tf.config.list_logical_devices("GPU")
+                echo(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU", verbose=verbose)
         # type checks
         if ax == 'both':
             if zeropad is None:
@@ -1113,10 +1128,18 @@ class VisClean(object):
                     win = flag_rows_with_flags_within_edge_distance(xp, win, skip_if_flag_within_edge_distance, ax=ax)
 
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
-                mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
-                                                      filter_half_widths=filter_half_widths,
-                                                      mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
-                                                      **filter_kwargs)
+                # limit computations to use specified GPU if they were provided.
+                if gpu_index is not None and gpus:
+                    with tf.device(f"/device:GPU:{gpus[gpu_index].name[-1]}"):
+                        mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                                              filter_half_widths=filter_half_widths,
+                                                              mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                                              **filter_kwargs)
+                else:
+                        mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                                              filter_half_widths=filter_half_widths,
+                                                              mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                                              **filter_kwargs)
                 # insert back the filtered model if we are skipping flagged edgs.
                 if skip_flagged_edges:
                     mdl = restore_flagged_edges(xp, mdl, edges, ax=ax)
