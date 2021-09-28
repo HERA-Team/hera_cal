@@ -19,7 +19,7 @@ from hera_cal import io, datacontainer
 from hera_cal import vis_clean
 from hera_cal.vis_clean import VisClean
 from hera_cal.data import DATA_PATH
-from hera_cal import xtalk_filter as xf
+from hera_cal import frf
 import glob
 import copy
 
@@ -1134,9 +1134,9 @@ class Test_VisClean(object):
             baselines = io.baselines_from_filelist_position(file, datafiles)
             fname = 'temp.fragment.part.%d.h5' % filenum
             fragment_filename = tmp_path / fname
-            xf.load_xtalk_filter_and_write(datafiles, baseline_list=baselines, calfile_list=cals,
-                                           spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
-                                           res_outfilename=fragment_filename, clobber=True)
+            frf.load_tophat_frfilter_and_write(datafiles, baseline_list=baselines, calfile_list=cals,
+                                               spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
+                                               res_outfilename=fragment_filename, clobber=True)
             # load in fragment and make sure the number of baselines is equal to the length of the baseline list
             hd_fragment = io.HERAData(str(fragment_filename))
             assert len(hd_fragment.bls) == len(baselines)
@@ -1155,9 +1155,9 @@ class Test_VisClean(object):
         hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
         hd_reconstituted.read()
         # compare to xtalk filtering the whole file.
-        xf.load_xtalk_filter_and_write(datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
-                                       calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
-                                       res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20])
+        frf.load_tophat_frfilter_and_write(datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
+                                           calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
+                                           res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20])
         hd = io.HERAData(str(tmp_path / 'temp.h5'))
         hd.read()
         assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))
@@ -1174,9 +1174,9 @@ class Test_VisClean(object):
         hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
         hd_reconstituted.read()
         # compare to xtalk filtering the whole file.
-        xf.load_xtalk_filter_and_write(datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
-                                       calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
-                                       res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20])
+        frf.load_tophat_frfilter_and_write(datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
+                                           calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
+                                           res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20])
         hd = io.HERAData(str(tmp_path / 'temp.h5'))
         hd.read()
         assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))

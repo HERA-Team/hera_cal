@@ -19,6 +19,7 @@ from . import io, apply_cal, version, redcal
 from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
+import tensorflow as tf
 
 
 def find_discontinuity_edges(x, xtol=1e-3):
@@ -793,6 +794,7 @@ class VisClean(object):
                        keep_flags=False, clean_flags_in_resid_flags=False,
                        skip_if_flag_within_edge_distance=0,
                        flag_model_rms_outliers=False, model_rms_threshold=1.1,
+                       gpu_index=None, gpu_memory_limit=None,
                        **filter_kwargs):
         """
         Generalized fourier filtering wrapper for uvtools.dspec.fourier_filter.
@@ -981,6 +983,19 @@ class VisClean(object):
                         unnecessarily long. If it is too high, clean does a poor job of deconvolving.
                     'alpha': float, if window is 'tukey', this is its alpha parameter.
         """
+        gpus = tf.config.list_physical_devices("GPU")
+        if gpu_index is not None:
+            # See https://www.tensorflow.org/guide/gpu
+            if gpus:
+                if gpu_memory_limit is None:
+                    tf.config.set_visible_devices(gpus[gpu_index], "GPU")
+                else:
+                    tf.config.set_logical_device_configuration(
+                        gpus[gpu_index], [tf.config.LogicalDeviceConfiguration(memory_limit=gpu_memory_limit * 1024)]
+                    )
+
+                logical_gpus = tf.config.list_logical_devices("GPU")
+                echo(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU", verbose=verbose)
         # type checks
         if ax == 'both':
             if zeropad is None:
@@ -1113,10 +1128,18 @@ class VisClean(object):
                     win = flag_rows_with_flags_within_edge_distance(xp, win, skip_if_flag_within_edge_distance, ax=ax)
 
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
-                mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
-                                                      filter_half_widths=filter_half_widths,
-                                                      mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
-                                                      **filter_kwargs)
+                # limit computations to use specified GPU if they were provided.
+                if gpu_index is not None and gpus:
+                    with tf.device(f"/device:GPU:{gpus[gpu_index].name[-1]}"):
+                        mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                                              filter_half_widths=filter_half_widths,
+                                                              mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                                              **filter_kwargs)
+                else:
+                        mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                                              filter_half_widths=filter_half_widths,
+                                                              mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                                              **filter_kwargs)
                 # insert back the filtered model if we are skipping flagged edgs.
                 if skip_flagged_edges:
                     mdl = restore_flagged_edges(xp, mdl, edges, ax=ax)
@@ -1920,10 +1943,12 @@ def _filter_argparser():
     ap.add_argument("--flag_yaml", default=None, type=str, help="path to a flagging yaml containing apriori antenna, freq, and time flags.")
     ap.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter.")
     ap.add_argument("--verbose", default=False, action="store_true", help="Lots of text.")
+    ap.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
     ap.add_argument("--filter_spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections to filter independently. Two acceptable formats are "
                                                                                        "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
                                                                                        "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
-    # clean arguments.
+    ap.add_argument("--use_tensorflow", default=False, action="store_true", help="If provided, will use tensorflow GPU accelerated methods where possible.")
+    # Arguments for CLEAN. Not used in linear filtering methods.
     clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
                               see uvtools.dspec.gen_window for options')
@@ -1932,10 +1957,12 @@ def _filter_argparser():
     clean_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
     clean_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     clean_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
+    # Options for caching for linear filtering.
     cache_options = ap.add_argument_group(title='Options for caching (arguments only used if mode!="clean")')
     cache_options.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
     cache_options.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
     cache_options.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
+    # Options that are only used for linear filters like dayenu and dpss_leastsq.
     linear_options = ap.add_argument_group(title="Options for linear filtering (dayenu and dpss_leastsq)")
     linear_options.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
     return ap
