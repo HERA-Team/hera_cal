@@ -81,9 +81,9 @@ class Test_lstbin(object):
             np.testing.assert_allclose(dlst, 0.0007830490163485138)
             # test that lst_grid is reasonable
             assert np.median(np.diff(lst_grid)) == dlst
-            for fl in file_lsts:
-                for l in fl:
-                    assert l in lst_grid
+            for fla in file_lsts:
+                for fl in fla:
+                    assert fl in lst_grid
             # test shape of file_lsts
             assert len(file_lsts) == 4
             for file_lst in file_lsts[0:-1]:
