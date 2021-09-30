@@ -572,7 +572,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
                 larr[larr > np.max(lst_grid)] -= 2 * np.pi
 
     # get number of output files
-    nfiles = int(np.ceil(1.0 * len(lst_grid) / ntimes_per_file))
+    nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
 
     # get output file lsts that are not empty
     all_file_lsts = [lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
