@@ -574,13 +574,16 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
     # get number of output files
     nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
 
+    # flattened lsts across days, nights, files
+    flat_lsts = [lst for larrs in lst_arrays for larr in larrs for lst in larr]
+
     # get output file lsts that are not empty
     all_file_lsts = [lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
     file_lsts = []
     for i, f_lst in enumerate(all_file_lsts):
         fmin = f_lst[0] - (dlst / 2 + atol)
         fmax = f_lst[-1] + (dlst / 2 + atol)
-        for lst in [lst for larrs in lst_arrays for larr in larrs for lst in larr]:
+        for lst in flat_lsts:
             if (lst >= fmin) and (lst <= fmax):
                 file_lsts.append(f_lst)
                 break
