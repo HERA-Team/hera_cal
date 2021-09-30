@@ -529,7 +529,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
 
     Returns
     -------
-    lst_grid : float ndarray holding LST bin centers. Spans 2 pi radians.
+    lst_grid : float ndarray holding LST bin centers.
     dlst : float, LST bin width of output lst_grid
     file_lsts : list, contains the lst grid of each output file. Empty files are dropped.
     begin_lst : float, starting lst for LST binner. If lst_start is not None, this equals lst_start.
@@ -584,6 +584,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
             if (lst >= fmin) and (lst <= fmax):
                 file_lsts.append(f_lst)
                 break
+    lst_grid = np.array([lst for file_lsts in all_file_lsts for lst in file_lsts])
 
     return lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays
 

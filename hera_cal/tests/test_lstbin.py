@@ -79,8 +79,11 @@ class Test_lstbin(object):
             # test that dlst is right
             lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays = lstbin.config_lst_bin_files(data_files, ntimes_per_file=60)
             np.testing.assert_allclose(dlst, 0.0007830490163485138)
-            # test that lst_grid spans full 2pi
-            np.testing.assert_allclose(2 * np.pi - lst_grid[-1] + lst_grid[0], dlst)
+            # test that lst_grid is reasonable
+            assert np.median(np.diff(lst_grid)) == dlst
+            for fl in file_lsts:
+                for l in fl:
+                    assert l in lst_grid
             # test shape of file_lsts
             assert len(file_lsts) == 4
             for file_lst in file_lsts[0:-1]:
