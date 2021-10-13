@@ -365,7 +365,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
             else:
                 # for mean to account for varying nsamples, take nsamples weighted sum.
                 # (inverse variance weighted sum).
-                d_c = d.copy() # copy d as to not change it's nan entries
+                d_c = d.copy()  # copy d as to not change it's nan entries
                 isfinite = np.isfinite(d_c)
                 d_c[~isfinite] = 0.0
                 n[~isfinite] = 0.0
