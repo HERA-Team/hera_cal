@@ -365,13 +365,14 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
             else:
                 # for mean to account for varying nsamples, take nsamples weighted sum.
                 # (inverse variance weighted sum).
-                isfinite = np.isfinite(d)
-                d[~isfinite] = 0.0
+                d_c = d.copy() # copy d as to not change it's nan entries
+                isfinite = np.isfinite(d_c)
+                d_c[~isfinite] = 0.0
                 n[~isfinite] = 0.0
 
                 norm = np.sum(n, axis=0).clip(1e-99, np.inf)
-                real_avg.append(np.sum(d.real * n, axis=0) / norm)
-                imag_avg.append(np.sum(d.imag * n, axis=0) / norm)
+                real_avg.append(np.sum(d_c.real * n, axis=0) / norm)
+                imag_avg.append(np.sum(d_c.imag * n, axis=0) / norm)
 
             # get minimum bin flag
             f_min.append(np.nanmin(f, axis=0))
