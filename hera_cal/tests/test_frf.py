@@ -577,6 +577,21 @@ class Test_FRFilter(object):
         for k in f:
             assert np.all(~f[k])
 
+    def test_sky_frates_minfrate_and_to_filter(self):
+        # test edge frates
+        V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
+        V.read()
+        for to_filter in [None, list(V.data.keys())[:1]]:
+            cfrates, wfrates = frf.sky_frates(min_frate_half_width=1000, keys=to_filter)
+            # to_filter set to None -> all keys should be present.
+            if to_filter is None:
+                for k in V.data:
+                    assert k in cfrates
+                    assert k in wfrates
+            # min_frate = 1000 should set all wfrates to 1000
+            for k in cfrates:
+                assert wfrates[k] == 1000.
+
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
