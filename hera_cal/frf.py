@@ -19,8 +19,8 @@ from . import io
 from . import vis_clean
 import warnings
 
+SPEED_OF_LIGHT = const.c.si.value
 SDAY_KSEC = 86163.93 / 1000.
-
 
 def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
     """Automatically compute sky fringe-rate ranges based on baselines and telescope location.
