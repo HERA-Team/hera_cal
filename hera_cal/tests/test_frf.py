@@ -289,7 +289,7 @@ class Test_FRFilter(object):
                 frfil.avg_red_baseline_vectors()
             wgts = {k: np.ones_like(frfil.flags[k], dtype=np.float)}
             wgts[k][:, 0] = 0.0
-            frfil.tophat_frfilter(keys=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+            frfil.tophat_frfilter(keys=[k], wgts=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
             assert frfil.clean_info[k][(0, frfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
             np.testing.assert_array_equal(frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0]))
             np.testing.assert_array_equal(frfil.clean_model[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
@@ -579,10 +579,10 @@ class Test_FRFilter(object):
 
     def test_sky_frates_minfrate_and_to_filter(self):
         # test edge frates
-        V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
+        V = frf.FRFilter(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
         V.read()
         for to_filter in [None, list(V.data.keys())[:1]]:
-            cfrates, wfrates = frf.sky_frates(min_frate_half_width=1000, keys=to_filter)
+            cfrates, wfrates = frf.sky_frates(uvd=V.hd, min_frate_half_width=1000, keys=to_filter)
             # to_filter set to None -> all keys should be present.
             if to_filter is None:
                 for k in V.data:
