@@ -20,8 +20,76 @@ from . import vis_clean
 import warnings
 
 
-def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, 
-                      wgt_by_favg_nsample=False, rephase=False, lsts=None, freqs=None, 
+def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
+    """Automatically compute sky fringe-rate ranges based on baselines and telescope location.
+
+    Parameters
+    ----------
+    uvd: UVData object
+        uvdata object of data to compute sky-frate limits for.
+    keys: list of antpairpol tuples, optional
+        list of antpairpols to generate sky fringe-rate centers and widths for.
+        Default is None -> use all keys in self.data.
+    frate_standoff: float, optional
+        Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
+        default = 0.0.
+    frate_width_multiplier: float, optional
+        fraction of horizon to fringe-rate filter.
+        default is 1.0
+    min_frate_half_width: float, optional
+        minimum fringe-rate to filter, regardless of baseline length in mHz.
+        Default is 0.025
+
+    Returns
+    -------
+    frate_centers: DataContainer object,
+        DataContainer with the center fringe-rate of each baseline in keys in units of mHz.
+    frate_half_widths: DataContainer object
+        DataContainer with the half widths of each fringe-rate window around the frate_centers in units of mHz.
+
+    """
+    if blkeys is None:
+        blkeys = uvd.get_antpairpols()
+    antpos, antnums = uvd.get_ENU_antpos()
+    sinlat = np.sin(np.abs(uvd.telescope_location_lat_lon_alt[0]))
+    frate_centers = {}
+    frate_half_widths = {}
+
+    # compute maximum fringe rate dict based on baseline lengths.
+    for k in blkeys:
+        ind1 = np.where(antnums == k[0])[0][0]
+        ind2 = np.where(antnums == k[1])[0][0]
+        blvec = antpos[ind1] - antpos[ind2]
+        blcos = blvec[0] / np.linalg.norm(blvec[:2])
+        if np.isfinite(blcos):
+            frateamp_df = np.linalg.norm(blvec[:2]) / SDAY_KSEC / SPEED_OF_LIGHT * 2 * np.pi
+            # set autocorrs to have blcose of 0.0
+
+            if blcos >= 0:
+                max_frate_df = frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
+                min_frate_df = -frateamp_df * sinlat
+            else:
+                min_frate_df = -frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
+                max_frate_df = frateamp_df * sinlat
+
+            min_frate = np.min([f0 * min_frate_df for f0 in uvd.freq_array[0]])
+            max_frate = np.max([f0 * max_frate_df for f0 in uvd.freq_array[0]])
+        else:
+            max_frate = 0.0
+            min_frate = 0.0
+
+        frate_centers[k] = (max_frate + min_frate) / 2.
+        frate_centers[utils.reverse_bl(k)] = -frate_centers[k]
+
+        frate_half_widths[k] = np.abs(max_frate - min_frate) / 2. * frate_width_multiplier + frate_standoff
+        frate_half_widths[k] = np.max([frate_half_widths[k], min_frate_half_width])  # Don't allow frates smaller then min_frate
+        frate_half_widths[utils.reverse_bl(k)] = frate_half_widths[k]
+
+    return frate_centers, frate_half_widths
+
+
+def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True,
+                      wgt_by_favg_nsample=False, rephase=False, lsts=None, freqs=None,
                       bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
     """
     Calculate the time average of a visibility waterfall. The average is optionally
@@ -498,7 +566,7 @@ class FRFilter(VisClean):
             filt_flags[k] = f
             filt_nsamples[k] = eff_nsamples
 
-    def run_tophat_frfilter(self, to_filter=None, weight_dict=None, mode='clean',
+    def run_tophat_frfilter(self, keys=None, wgts=None, mode='clean',
                             frate_standoff=0.0, frac_frate_sky_max=1.0, min_frate=0.025,
                             max_frate_coeffs=None,
                             skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
@@ -507,9 +575,9 @@ class FRFilter(VisClean):
         '''
         Interpolate / filter data in time using the physical fringe-rates of the sky. (or constant frate)
         Arguments:
-          to_filter: list of visibilities to filter in the (i,j,pol) format.
+          keys: list of visibilities to filter in the (i,j,pol) format.
               If None (the default), all visibilities are filtered.
-          weight_dict: dictionary or DataContainer with all the same keys as self.data.
+          wgts: dictionary or DataContainer with all the same keys as self.data.
               Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
               of self.flags. uvtools.dspec.fourier_filter will renormalize to compensate.
           mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
@@ -546,8 +614,8 @@ class FRFilter(VisClean):
           self.clean_model: DataContainer formatted like self.data with only low-fringe-rate components
           self.clean_info: Dictionary of info from uvtools.dspec.fourier_filter with the same keys as self.data
         '''
-        if to_filter is None:
-            to_filter = list(self.data.keys())
+        if keys is None:
+            keys = list(self.data.keys())
         # read in cache
         if not mode == 'clean':
             if read_cache:
@@ -558,13 +626,13 @@ class FRFilter(VisClean):
         else:
             filter_cache = None
         if max_frate_coeffs is None:
-            center_frates, width_frates = self.sky_frates(to_filter=to_filter, frate_standoff=frate_standoff,
-                                                          frac_frate_sky_max=frac_frate_sky_max, min_frate=min_frate)
+            center_frates, width_frates = sky_frates(uvd=self.hd, keys=keys, frate_standoff=frate_standoff,
+                                                     frac_frate_sky_max=frac_frate_sky_max, min_frate=min_frate)
         else:
-            width_frates = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in to_filter})
-            center_frates = io.DataContainer({k: 0.0 for k in to_filter})
+            width_frates = {k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in keys}
+            center_frates = {k: 0.0 for k in keys}
         wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
-        for k in to_filter:
+        for k in keys:
             if mode != 'clean':
                 filter_kwargs['suppression_factors'] = [tol]
             else:
@@ -756,12 +824,12 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
                 frfil.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
             if factorize_flags:
                 frfil.factorize_flags(time_thresh=time_thresh, inplace=True)
-            to_filter = frfil.data.keys()
+            keys = frfil.data.keys()
             if skip_autos:
-                to_filter = [bl for bl in to_filter if bl[0] != bl[1]]
-            if len(to_filter) > 0:
+                keys = [bl for bl in keys if bl[0] != bl[1]]
+            if len(keys) > 0:
                 frfil.run_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                          skip_flagged_edges=skip_flagged_edges, to_filter=to_filter, **filter_kwargs)
+                                          skip_flagged_edges=skip_flagged_edges, keys=keys, **filter_kwargs)
             else:
                 frfil.clean_data = DataContainer({})
                 frfil.clean_flags = DataContainer({})
