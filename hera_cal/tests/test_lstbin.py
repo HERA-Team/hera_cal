@@ -72,6 +72,23 @@ class Test_lstbin(object):
         assert len(lst_grid) == 628
         assert np.isclose(lst_grid[0], 3.1365901175171982)
 
+    def test_config_lst_bin_files(self):
+        for data_files in [self.data_files,  # right order
+                           [self.data_files[1], self.data_files[0], self.data_files[2]],  # days out of order
+                           [self.data_files[0], self.data_files[1][::-1], self.data_files[2]]]:  # single day out of order
+            # test that dlst is right
+            lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays = lstbin.config_lst_bin_files(data_files, ntimes_per_file=60)
+            np.testing.assert_allclose(dlst, 0.0007830490163485138)
+            # test that lst_grid is reasonable
+            assert np.median(np.diff(lst_grid)) == dlst
+            for fla in file_lsts:
+                for fl in fla:
+                    assert fl in lst_grid
+            # test shape of file_lsts
+            assert len(file_lsts) == 4
+            for file_lst in file_lsts[0:-1]:
+                assert len(file_lst) == 60
+
     @pytest.mark.filterwarnings("ignore:All-NaN slice encountered")
     @pytest.mark.filterwarnings("ignore:divide by zero encountered in true_divide")
     def test_lstbin(self):
@@ -201,8 +218,9 @@ class Test_lstbin(object):
         uv1.read(output_lst_file)
         # assert nsample w.r.t time follows 1-2-3-2-1 pattern
         nsamps = np.mean(uv1.get_nsamples(52, 52, 'ee'), axis=1)
-        expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(21)]).astype(np.float)
-        assert np.allclose(nsamps, expectation)
+        expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(22)]).astype(np.float)
+        assert np.allclose(nsamps[0:len(expectation)], expectation)
+        assert np.allclose(nsamps[len(expectation):], 0)
         os.remove(output_lst_file)
         os.remove(output_std_file)
 

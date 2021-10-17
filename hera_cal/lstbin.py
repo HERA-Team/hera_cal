@@ -485,16 +485,14 @@ def lst_bin_arg_parser():
                                 "glob-parsable search strings to nightly data. For example: \n"
                                 "'2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv' \n"
                                 "Consult lstbin.lst_bin_files() for further details on functionality.")
-    a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files (UVH5)")
-    a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly calibration files")
+    a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to nightly data files (UVH5)")
+    a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to corresponding nightly calibration files")
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
-    a.add_argument("--lst_start", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is first LST of first file.")
-    a.add_argument("--lst_stop", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is lst_start + 2pi")
-    a.add_argument("--fixed_lst_start", action='store_true', default=False, help="If True, make the start of the LST grid equal to lst_start, rather than the LST of the first data record.")
     a.add_argument("--ntimes_per_file", type=int, default=60, help="number of LST bins to write per output file")
     a.add_argument("--file_ext", type=str, default="{type}.{time:7.5f}.uvh5", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
+    a.add_argument("--lst_start", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is first LST of first file.")
     a.add_argument("--sig_clip", default=False, action='store_true', help="perform robust sigma clipping before binning")
     a.add_argument("--sigma", type=float, default=4.0, help="sigma threshold for sigma clipping")
     a.add_argument("--min_N", type=int, default=4, help="minimum number of points in bin needed to proceed with sigma clipping")
@@ -512,37 +510,34 @@ def lst_bin_arg_parser():
     return a
 
 
-def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_stop=None, fixed_lst_start=False, verbose=True,
-                         ntimes_per_file=60):
+def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verbose=True, ntimes_per_file=60):
     """
     Configure data for LST binning.
 
-    Make an lst grid, starting LST and output files given
+    Make a 24 hour lst grid, starting LST and output files given
     input data files and LSTbin params.
 
     Parameters
     ----------
-    data_files : type=list of lists: nested set of lists, with each nested list containing
-                 paths to data files from a particular night. These files should be sorted
-                 by ascending Julian Date. Frequency axis of each file must be identical.
+    data_files : type=list of lists: nested set of lists, with each nested list containing paths to
+                 data files from a particular night. Frequency axis of each file must be identical.
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
+    atol : type=float, absolute tolerance for LST bin float comparison
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
-        Default is first LST of first file.
-    lst_stop : type=float, stopping LST for binner as it sweeps from lst_start to lst_start + 2pi.
-        Default is lst_start + 2pi.
-    fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
-        record. Otherwise, LST grid starts at LST of first data record.
+        Default is first LST of the first file of the first night.
     ntimes_per_file : type=int, number of LST bins in a single output file
 
     Returns
     -------
-    lst_grid : float ndarray holding LST bin centers
+    lst_grid : float ndarray holding LST bin centers.
     dlst : float, LST bin width of output lst_grid
-    file_lsts : list, contains the lst grid of each output file
-    begin_lst : float, starting lst for LST binner. If fixed_lst_start, this equals lst_start.
-    lst_arrays : list, list of lst arrays for each file
+    file_lsts : list, contains the lst grid of each output file. Empty files are dropped.
+    begin_lst : float, starting lst for LST binner. If lst_start is not None, this equals lst_start.
+    lst_arrays : list, list of lst arrays for each file. These will have 2 pis added or subtracted
+                 to match the range of lst_grid given lst_start
     time_arrays : list, list of time arrays for each file
     """
+
     # get dlst from first data file if None
     if dlst is None:
         dlst, _, _, _ = io.get_file_times(data_files[0][0], filetype='uvh5')
@@ -552,70 +547,56 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
     time_arrays = []
     for di, dfs in enumerate(data_files):
         # get times
-        dlsts, dtimes, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
-
-        # get lmin: LST of first integration from first file
-        if di == 0:
-            lmin = larrs[0][0]
-
-        # unwrap relative to lmin
-        for la in larrs:
-            if la[0] < lmin:
-                la += 2 * np.pi
-
-        # get lmax
-        if di == (len(data_files) - 1):
-            lmax = larrs[-1][-1]
-
+        _, _, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
         # append
         lst_arrays.append(larrs)
         time_arrays.append(tarrs)
 
-    # get starting LST for output binning
+    # get begin_lst from lst_start or from the first JD in the data_files
     if lst_start is None:
-        lst_start = lmin
+        all_lsts = [lst for larrs in lst_arrays for larr in larrs for lst in larr]
+        all_times = [time for tarrs in time_arrays for tarr in tarrs for time in tarr]
+        lst_start = all_lsts[np.argmin(all_times)]
+    begin_lst = lst_start
 
-    # if lst_start is sufficiently below lmin, shift everything down an octave
-    if lst_start < (lmin - np.pi):
-        lst_arrays = [[la - 2 * np.pi for la in day] for day in lst_arrays]
-        lmin -= 2 * np.pi
-        lmax -= 2 * np.pi
-
-    # get beginning LST for lst_grid
-    if fixed_lst_start:
-        begin_lst = lst_start
-    else:
-        begin_lst = lmin
-
-    # get stopping LST for output binning
-    if lst_stop is None:
-        lst_stop = lmax
-    if lst_stop < begin_lst:
-        lst_stop += 2 * np.pi
-
-    # make LST grid
+    # make 24 hour LST grid
     lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
 
-    # get starting and stopping indicies
-    start_index = np.argmin(np.abs(lst_grid - lst_start))
-    stop_index = np.argmin(np.abs(lst_grid - lst_stop))
+    # enforce that lst_arrays are in the same range as the lst_grid
+    for larrs in lst_arrays:
+        for larr in larrs:
+            while np.any(larr < np.min(lst_grid)):
+                larr[larr < np.min(lst_grid)] += 2 * np.pi
+            while np.any(larr > np.max(lst_grid)):
+                larr[larr > np.max(lst_grid)] -= 2 * np.pi
 
     # get number of output files
-    nfiles = int(np.ceil(float(stop_index - start_index) / ntimes_per_file))
+    nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
 
-    # get output file lsts
-    file_lsts = [lst_grid[start_index:stop_index][ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
+    # flattened lsts across days, nights, files
+    flat_lsts = [lst for larrs in lst_arrays for larr in larrs for lst in larr]
+
+    # get output file lsts that are not empty
+    all_file_lsts = [lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
+    file_lsts = []
+    for i, f_lst in enumerate(all_file_lsts):
+        fmin = f_lst[0] - (dlst / 2 + atol)
+        fmax = f_lst[-1] + (dlst / 2 + atol)
+        for lst in flat_lsts:
+            if (lst >= fmin) and (lst <= fmax):
+                file_lsts.append(f_lst)
+                break
+    lst_grid = np.array([lst for file_lsts in all_file_lsts for lst in file_lsts])
 
     return lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays
 
 
 def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None,
-                  lst_stop=None, fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
-                  output_file_select=None, Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
-                  bl_error_tol=1.0, include_autos=True, ex_ant_yaml_files=None,
-                  **kwargs):
+                  atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False, output_file_select=None,
+                  Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
+                  bl_error_tol=1.0, include_autos=True, ex_ant_yaml_files=None, **kwargs):
     """
     LST bin a series of UVH5 files with identical frequency bins, but varying
     time bins. Output file meta data (frequency bins, antennas positions, time_array)
@@ -629,14 +610,11 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     Parameters:
     -----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
-        paths to files from a particular night. These files should be sorted
-        by ascending Julian Date. Frequency axis of each file must be identical.
-        x_orientation is inferred from the first item in this list and assumed to be the same for all files
+        paths to files from a particular night. Frequency axis of each file must be identical.
+        Metadata like x_orientation is inferred from the lowest JD file on the night with the 
+        highest JDs (i.e. the last night) and assumed to be the same for all files
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
-    lst_stop : type=float, stopping LST for binner as it sweeps from lst_start to lst_start + 2pi.
-    fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
-        record. Otherwise, LST grid starts at LST of first data record.
     ntimes_per_file : type=int, number of LST bins in a single output file
     file_ext : type=str, extension to "zen." for output files. This must have at least a ".{type}." field
         where either "LST" or "STD" is inserted for data average or data standard dev., and also a ".{time:7.5f}"
@@ -676,9 +654,13 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     """
     # get file lst arrays
     (lst_grid, dlst, file_lsts, begin_lst, lst_arrs,
-     time_arrs) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, lst_stop=lst_stop, fixed_lst_start=fixed_lst_start,
+     time_arrs) = config_lst_bin_files(data_files, dlst=dlst, atol=atol, lst_start=lst_start,
                                        ntimes_per_file=ntimes_per_file, verbose=verbose)
     nfiles = len(file_lsts)
+
+    # make sure the JD corresponding to file_lsts[0][0] is the lowest JD in the LST-binned data set
+    if (lst_start is not None) and ('lst_branch_cut' not in kwargs):
+        kwargs['lst_branch_cut'] = file_lsts[0][0]
 
     # select file_lsts
     if output_file_select is not None:
@@ -700,7 +682,9 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     kwargs['outdir'] = outdir
     kwargs['overwrite'] = overwrite
     # get metadata from the zeroth data file in the last day
-    hd = io.HERAData(data_files[-1][0])
+    last_day_index = np.argmax([np.min([time for tarr in tarrs for time in tarr]) for tarrs in time_arrs])
+    zeroth_file_on_last_day_index = np.argmin([np.min(tarr) for tarr in time_arrs[last_day_index]])
+    hd = io.HERAData(data_files[last_day_index][zeroth_file_on_last_day_index])
     x_orientation = hd.x_orientation
 
     # get metadata
@@ -711,15 +695,20 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     kwargs['start_jd'] = start_jd
     integration_time = np.median(hd.integration_time)
     assert np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
-    # get antpos over all nights
-    for dlist in data_files:
-        hd = io.HERAData(dlist[-1])
+
+    # get antpos over all nights looking at last file on each night
+    nightly_last_hds = []
+    for dlist, tarrs in zip(data_files, time_arrs):
+        last_file_index = np.argmin([np.min(tarr) for tarr in tarrs])
+        hd = io.HERAData(dlist[last_file_index])
         for a in hd.antpos:
             if a not in antpos:
                 antpos[a] = hd.antpos[a]
+        nightly_last_hds.append(hd)
+    
     # generate a list of dictionaries which contain the nights occupied by each unique baseline
     # (or unique baseline group if average_redundant_baselines is true)
-    bl_nightly_dicts = gen_bl_nightly_dicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol,
+    bl_nightly_dicts = gen_bl_nightly_dicts(nightly_last_hds, bl_error_tol=bl_error_tol,
                                             include_autos=include_autos, redundant=average_redundant_baselines, ex_ant_yaml_files=ex_ant_yaml_files)
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = len(bl_nightly_dicts) + 1
@@ -900,10 +889,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         bin_file = "zen." + file_ext.format(**fkwargs)
         fkwargs['type'] = 'STD'
         std_file = "zen." + file_ext.format(**fkwargs)
-
-        # make sure the JD corresponding to file_lsts[0][0] is the lowest JD in the LST-binned data set
-        if lst_start is not None:
-            kwargs['lst_branch_cut'] = file_lsts[0][0]
 
         # check for overwrite
         if os.path.exists(bin_file) and overwrite is False:
