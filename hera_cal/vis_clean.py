@@ -1412,7 +1412,6 @@ class VisClean(object):
                         self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
                                         add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
 
-
     def zeropad_data(self, data, binvals=None, zeropad=0, axis=-1, undo=False):
         """
         Iterate through DataContainer "data" and zeropad it inplace.

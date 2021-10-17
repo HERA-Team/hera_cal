@@ -24,6 +24,7 @@ import astropy.constants as const
 SPEED_OF_LIGHT = const.c.si.value
 SDAY_KSEC = 86163.93 / 1000.
 
+
 def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
     """Automatically compute sky fringe-rate ranges based on baselines and telescope location.
 
@@ -735,7 +736,7 @@ def tophat_frfilter_argparser(mode='clean'):
     ap = vis_clean._filter_argparser()
     filt_options = ap.add_argument_group(title='Options for the fr-filter')
     ap.add_argument("--frate_width_multiplier", type=float, default=1.0, help="Fraction of maximum sky-fringe-rate to interpolate / filter."
-                                                                          "Used if select_mainlobe is False and max_frate_coeffs not specified.")
+                                                                              "Used if select_mainlobe is False and max_frate_coeffs not specified.")
     ap.add_argument("--frate_standoff", type=float, default=0.0, help="Standoff in fringe-rate to filter [mHz]."
                                                                       "Used of select_mainlobe is False and max_frate_coeffs not specified.")
     ap.add_argument("--min_frate_half_width", type=float, default=0.025, help="Minimum fringe-rate to filter [mHz].")
