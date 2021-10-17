@@ -29,6 +29,7 @@ import copy
 import astropy.constants as const
 from .utils import echo
 import datetime
+from . import redcal
 
 
 SPEED_OF_LIGHT = const.c.si.value
@@ -127,10 +128,22 @@ def build_fringe_rate_profiles(uvd, uvb, blkeys=None, normed=True, combine_pols=
     # square b/c for power spectrum power preservation.
     ftaper = dspec.gen_window(taper, uvd.Nfreqs) ** 2.
     if blkeys is None:
-        blkeys = uvd.get_antpairpols()
+        blkeys = uvd.get_antpairpols(uvd.antpos)
     profiles = {}
     ap_blkeys = {} # keep track of different polarizations for each antenna pair if we are going to sum over polarizations.
-    for bl in blkeys:
+    # generate redundancies
+    reds = redcal.get_pos_reds(uvd.antpos)
+    antpairs = uvd.get_antpairs()
+    reds = [[ap for ap in redgrp if ap in antpairs or ap[::-1] in antpairs] for redgrp in reds]
+    # build dictionary between antpairpol keys and a redundant group number
+    red_group_map = {}
+    for redgrp_number, redgrp in enumerate(reds):
+        for ap in redgrp:
+            red_group_map[ap] = redgrp_number
+            red_group_map[ap[::-1]] = -redgrp_number
+
+    redundant_profiles = {}
+    for redgrp in reds:
         echo("Generating FR-Profile of {} at {}".format(bl, str(datetime.datetime.now())), verbose=verbose)
         # sum beams from all frequencies
         # get polarization number
