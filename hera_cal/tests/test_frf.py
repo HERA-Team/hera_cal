@@ -264,7 +264,7 @@ class Test_FRFilter(object):
         assert args.flag_output is None
         assert args.filetype == "uvh5"
 
-    def test_run_tophat_frfilter(self):
+    def test_tophat_frfilter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         frfil = frf.FRFilter(fname, filetype='miriad')
@@ -272,7 +272,7 @@ class Test_FRFilter(object):
         bl = np.linalg.norm(frfil.antpos[24] - frfil.antpos[25]) / constants.c * 1e9
         sdf = (frfil.freqs[1] - frfil.freqs[0]) / 1e9
 
-        frfil.run_tophat_frfilter(tol=1e-2, output_prefix='frfiltered')
+        frfil.tophat_frfilter(tol=1e-2, output_prefix='frfiltered')
         for k in frfil.data.keys():
             assert frfil.frfiltered_resid[k].shape == (60, 64)
             assert frfil.frfiltered_model[k].shape == (60, 64)
@@ -289,7 +289,7 @@ class Test_FRFilter(object):
                 frfil.avg_red_baseline_vectors()
             wgts = {k: np.ones_like(frfil.flags[k], dtype=np.float)}
             wgts[k][:, 0] = 0.0
-            frfil.run_tophat_frfilter(to_filter=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+            frfil.tophat_frfilter(keys=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
             assert frfil.clean_info[k][(0, frfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
             np.testing.assert_array_equal(frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0]))
             np.testing.assert_array_equal(frfil.clean_model[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
@@ -437,7 +437,7 @@ class Test_FRFilter(object):
 
         frfil = frf.FRFilter(uvh5, filetype='uvh5')
         frfil.read(bls=[(53, 54, 'ee')])
-        frfil.run_tophat_frfilter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        frfil.tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
         # test NotImplementedError
@@ -457,7 +457,7 @@ class Test_FRFilter(object):
 
         frfil = frf.FRFilter(uvh5, filetype='uvh5')
         frfil.read(bls=[(53, 54, 'ee')])
-        frfil.run_tophat_frfilter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        frfil.tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
 

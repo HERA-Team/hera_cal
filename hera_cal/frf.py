@@ -18,6 +18,8 @@ import argparse
 from . import io
 from . import vis_clean
 import warnings
+import astropy.constants as const
+
 
 SPEED_OF_LIGHT = const.c.si.value
 SDAY_KSEC = 86163.93 / 1000.
