@@ -11,6 +11,7 @@ import numpy as np
 import operator
 import gc as garbage_collector
 import datetime
+import warnings
 
 from . import utils
 from . import version
@@ -378,8 +379,10 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
             f_min.append(np.nanmin(f, axis=0))
 
             # get other stats
-            real_std.append(np.nanstd(d.real, axis=0))
-            imag_std.append(np.nanstd(d.imag, axis=0))
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
+                real_std.append(np.nanstd(d.real, axis=0))
+                imag_std.append(np.nanstd(d.imag, axis=0))
             bin_count.append(np.nansum(~np.isnan(d) * n, axis=0))
 
         # get final statistics
