@@ -26,7 +26,7 @@ SDAY_KSEC = 86163.93 / 1000.
 
 
 def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
-    """Automatically compute sky fringe-rate ranges based on baselines and telescope location.
+    """Compute sky fringe-rate ranges based on baselines, telescope location, and frequencies in uvdata.
 
     Parameters
     ----------
@@ -34,12 +34,13 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
         uvdata object of data to compute sky-frate limits for.
     keys: list of antpairpol tuples, optional
         list of antpairpols to generate sky fringe-rate centers and widths for.
-        Default is None -> use all keys in self.data.
+        Default is None -> use all keys in uvd
     frate_standoff: float, optional
-        Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
+        additional fringe-rate to add to min and max of computed fringe-rate bounds [mHz]
+        to add to analytic calculation of fringe-rate bounds for emission on the sky.
         default = 0.0.
     frate_width_multiplier: float, optional
-        fraction of horizon to fringe-rate filter.
+        fraction of width of range of fringe-rates associated with sky emission to filter.
         default is 1.0
     min_frate_half_width: float, optional
         minimum fringe-rate to filter, regardless of baseline length in mHz.
@@ -61,6 +62,9 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
     frate_half_widths = {}
 
     # compute maximum fringe rate dict based on baseline lengths.
+    # see derivation in https://www.overleaf.com/read/chgpxydbhfhk
+    # which starts with expressions in
+    # https://ui.adsabs.harvard.edu/abs/2016ApJ...820...51P/exportcitation
     for k in keys:
         ind1 = np.where(antnums == k[0])[0][0]
         ind2 = np.where(antnums == k[1])[0][0]
