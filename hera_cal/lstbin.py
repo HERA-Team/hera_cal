@@ -372,8 +372,16 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 n[~isfinite] = 0.0
 
                 norm = np.sum(n, axis=0).clip(1e-99, np.inf)
-                real_avg.append(np.sum(d_c.real * n, axis=0) / norm)
-                imag_avg.append(np.sum(d_c.imag * n, axis=0) / norm)
+                real_avg_t = np.sum(d_c.real * n, axis=0) / norm
+                imag_avg_t = np.sum(d_c.imag * n, axis=0) / norm
+                
+                # add back nans
+                flagged_f = np.logical_not(isfinite).all(axis=0)
+                real_avg_t[flagged_f] = np.nan
+                imag_avg_t[flagged_f] = np.nan
+
+                real_avg.append(real_avg_t)
+                imag_avg.append(imag_avg_t)
 
             # get minimum bin flag
             f_min.append(np.nanmin(f, axis=0))
