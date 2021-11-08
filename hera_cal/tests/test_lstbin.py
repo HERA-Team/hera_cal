@@ -152,7 +152,7 @@ class Test_lstbin(object):
         assert (512, 512, 'ee') in output[4]
         assert np.allclose(output[4][(512, 512, 'ee')], 0.0)
         assert np.all(output[2][(512, 512, 'ee')])
-        assert np.allclose(output[1][(512, 512, 'ee')], 1.0)
+        assert np.allclose(output[1][(512, 512, 'ee')], 0.0)
         # test conjugated flags and nsamples
         flags_list_conj = copy.deepcopy(self.flgs_list)
         nsamp_list_conj = copy.deepcopy(self.nsmp_list)
