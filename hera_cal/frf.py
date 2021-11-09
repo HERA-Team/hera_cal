@@ -594,8 +594,9 @@ class FRFilter(VisClean):
          of self.flags. uvtools.dspec.fourier_filter will renormalize to compensate.
         mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
         frate_standoff: float, optional
-          Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
-          default = 0.0.
+            additional fringe-rate to add to min and max of computed fringe-rate bounds [mHz]
+            to add to analytic calculation of fringe-rate bounds for emission on the sky.
+            default = 0.0.
         frate_width_multiplier: float, optional
          fraction of horizon to fringe-rate filter.
          default is 1.0
