@@ -1319,7 +1319,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             wsum = np.sum(w, axis=0).clip(1e-10, np.inf)  # this is the normalization
             davg = np.sum(d * w, axis=0) / wsum  # weighted average
             # set flagged data to 1.0+0.0j
-            flagged_f = np.all(f==0, axis=0)
+            flagged_f = np.all(f == 0, axis=0)
             davg[flagged_f] = 1.0
             fmax = np.max(f, axis=2)  # collapse along freq: marks any fully flagged integrations
             if tint.squeeze().ndim == 1:  # tint.squeeze() can be one-dimensional if we have one time sample in our data.
