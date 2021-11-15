@@ -497,6 +497,7 @@ class Test_lstbin(object):
         d2, f2, n2 = uv2.build_datacontainers()
         # assert that all nsamples and data of lstbinned and red averaged equal to red average then lst bin.
         for k in d2:
+            d1[k][f1[k]] = 0.0  # as lst bin sets flagged data to 1.0+0.0j
             assert np.all(np.isclose(d1[k], d2[k]))
             assert np.all(np.isclose(n1[k], n2[k]))
             assert np.all(np.isclose(f1[k], f2[k]))
@@ -506,6 +507,7 @@ class Test_lstbin(object):
         d3, f3, n3 = uv3.read()
         # assert that all nsamples and data of lstbinned and red averaged equal to red average then lst bin.
         for k in d2:
+            d3[k][f3[k]] = 0.0  # as lst bin sets flagged data to 1.0+0.0j
             assert np.all(np.isclose(d3[k], d2[k]))
             assert np.all(np.isclose(n3[k], n2[k]))
             assert np.all(np.isclose(f3[k], f2[k]))
@@ -539,6 +541,7 @@ class Test_lstbin(object):
         # assert that all nsamples and data of lstbinned and red averaged equal to red average then lst bin.
         for k in d2:
             if not(k[:2] in reds_data[1] or k[:2][::-1] in reds_data[1]):
+                d4[k][f4[k]] = 0.0  # as lst bin sets flagged data to 1.0+0.0j
                 assert np.all(np.isclose(n4[k], n2[k]))
                 assert np.all(np.isclose(d4[k], d2[k]))
                 assert np.all(np.isclose(f4[k], f2[k]))
