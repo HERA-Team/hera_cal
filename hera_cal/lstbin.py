@@ -366,16 +366,14 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
             else:
                 # for mean to account for varying nsamples, take nsamples weighted sum.
                 # (inverse variance weighted sum).
-                d_c = d.copy()  # copy d as to not change it's nan entries
-                isfinite = np.isfinite(d_c)
-                d_c[~isfinite] = 0.0
+                isfinite = np.isfinite(d)
                 n[~isfinite] = 0.0
 
                 norm = np.sum(n, axis=0).clip(1e-99, np.inf)
-                real_avg_t = np.sum(d_c.real * n, axis=0) / norm
-                imag_avg_t = np.sum(d_c.imag * n, axis=0) / norm
-                
-                # add back nans
+                real_avg_t = np.nansum(d.real * n, axis=0) / norm
+                imag_avg_t = np.nansum(d.imag * n, axis=0) / norm
+
+                # add back nans as np.nansum sums nan slices to 0
                 flagged_f = np.logical_not(isfinite).all(axis=0)
                 real_avg_t[flagged_f] = np.nan
                 imag_avg_t[flagged_f] = np.nan
