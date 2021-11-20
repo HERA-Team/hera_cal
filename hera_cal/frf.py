@@ -106,7 +106,6 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
     return frate_centers, frate_half_widths
 
 
-
 def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, nfr=None, dfr=None,
                                taper='none', fr_freq_skip=1, verbose=False):
     """
@@ -161,7 +160,6 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
     antpos_trf = uvd.antenna_positions  # earth centered antenna positions
     antnums = uvd.antenna_numbers  # antenna numbers.
 
-
     lat, lon, alt = uvd.telescope_location_lat_lon_alt_degrees
     location = EarthLocation(lon=lon * units.deg, lat=lat * units.deg, height=alt * units.m)
 
@@ -196,7 +194,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
     fr0 = fr_grid[uvd.Ntimes // 2]
 
     # frequency tapering function expected for power spectra.
-    # square b/c for power spectrum power preservation.
+    # square b/c for power spectrum.
     ftaper = dspec.gen_window(taper, uvd.Nfreqs) ** 2.
     if keys is None:
         keys = uvd.get_antpairpols()
@@ -205,9 +203,11 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
         if bl[-1] not in unique_pols:
             unique_pols.add(bl[-1])
 
-    profiles = {}
-    ap_blkeys = {} # keep track of different polarizations for each antenna pair if we are going to sum over polarizations.
-    # get redundancies
+    profiles = {}  # store profiles here.
+    ap_blkeys = {}
+    # keeps track of different polarizations for each antenna pair
+    # for if we are going to sum over polarizations.
+    # get redundancies (will only compute fr-profile once for each red group).
     antpos, antnums = uvd.get_ENU_antpos()
     antpos = {an: ap for an, ap in zip(antnums, antpos)}
     reds = redcal.get_reds(antpos, pols=list(unique_pols))
@@ -252,7 +252,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
                 ap_blkeys[blk[:2]] = [blk]
                 ap_blkeys[utils.reverse_bl(blk)[:2]] = [utils.reverse_bl(blk)]
             else:
-                ap_blkeys[blk[:2]].append(blk) # append baselines
+                ap_blkeys[blk[:2]].append(blk)  # append baselines
                 ap_blkeys[utils.reverse_bl(blk)[:2]].append(utils.reverse_bl(blk))
 
     # combine polarizations by summing over all profiles for each antenna-pair.
@@ -261,19 +261,17 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
             profile_summed_over_pols = np.sum([profiles[bl] for bl in ap_blkeys[ap]], axis=0)
             for bl in ap_blkeys[ap]:
                 profiles[bl] = profile_summed_over_pols
-    # normalize if desiered
+    # normalize if desired
     if normed:
         for bl in profiles:
             profiles[bl] /= np.sum(profiles[bl])
     return fr_grid, profiles
 
 
-
-
 def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5., percentile_high=95., keys=None,
-                               dfr=None, nfr=None, taper='none', frate_standoff=0.0,
-                               frate_width_multiplier=1.0, min_frate_half_width=0.025,
-                               fr_freq_skip=1, verbose=False):
+                           dfr=None, nfr=None, taper='none', frate_standoff=0.0,
+                           frate_width_multiplier=1.0, min_frate_half_width=0.025,
+                           fr_freq_skip=1, verbose=False):
     """
     Get bounding fringe-rates for isotropic emission for a UVBeam object across all frequencies.
 
@@ -327,8 +325,6 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     frate_half_widths: dict object
         Dictionary with the half widths of each fringe-rate window around the frate_centers in units of mHz.
     """
-
-
     frate_centers = {}
     frate_half_widths = {}
     if keys is None:
@@ -436,9 +432,10 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
 
     return frate_centers, frate_half_widths
 
+
 def sky_mainlobe_complement(uvd, uvb, percentile_low=5., percentile_high=95., keys=None,
-                               dfr=None, nfr=None, taper='none', frate_standoff=0.0,
-                               frate_width_multiplier=1.0, min_frate_half_width=0.025, side='lower', extension=0.0):
+                            dfr=None, nfr=None, taper='none', frate_standoff=0.0,
+                            frate_width_multiplier=1.0, min_frate_half_width=0.025, side='lower', extension=0.0):
     """
     Method for finding the fringe-rates that fall on the sky but are outside of the main-lobe.
 
@@ -935,9 +932,8 @@ class FRFilter(VisClean):
 
     def tophat_frfilter(self, keys=None, wgts=None, mode='clean', uvb=None, percentile_low=5., percentile_high=95.,
                         frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
-                        max_frate_coeffs=None,
-                        skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
-                        write_cache=False, center_before_filtering=True,  fr_freq_skip=1,
+                        max_frate_coeffs=None, skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
+                        write_cache=False, center_before_filtering=True, fr_freq_skip=1,
                         verbose=False, **filter_kwargs):
         '''
         A wrapper around VisClean.fourier_filter specifically for
@@ -1017,7 +1013,7 @@ class FRFilter(VisClean):
         if uvb is None and max_frate_coeffs is None:
             # if max_frate_coeffs is none and uvb is none, fringe-rate filter all modes that could be occupied by sky emission.
             frate_centers, frate_half_widths = sky_frates(self.hd, keys=keys, frate_standoff=frate_standoff,
-                                                    frate_width_multiplier=frate_width_multiplier, min_frate_half_width=min_frate_half_width)
+                                                          frate_width_multiplier=frate_width_multiplier, min_frate_half_width=min_frate_half_width)
         elif uvb is None and max_frate_coeffs is not None:
             # if uvb is None and max_frate_coeffs is not None, use max_frate_coeffs.
             frate_half_widths = {k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in keys}
@@ -1026,13 +1022,12 @@ class FRFilter(VisClean):
         elif uvb is not None:
             # if uvb is not None, get fringe-rates from binning.
             frate_centers, frate_half_widths = get_fringe_rate_limits(self.hd, uvb,
-                                                                 percentile_low=percentile_low,
-                                                                 percentile_high=percentile_high,
-                                                                 keys=keys, verbose=verbose,
-                                                                 frate_standoff=frate_standoff, fr_freq_skip=fr_freq_skip,
-                                                                 frate_width_multiplier=frate_width_multiplier,
-                                                                 min_frate_half_width=min_frate_half_width)
-
+                                                                      percentile_low=percentile_low,
+                                                                      percentile_high=percentile_high,
+                                                                      keys=keys, verbose=verbose,
+                                                                      frate_standoff=frate_standoff, fr_freq_skip=fr_freq_skip,
+                                                                      frate_width_multiplier=frate_width_multiplier,
+                                                                      min_frate_half_width=min_frate_half_width)
 
         wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         for k in keys:
@@ -1170,8 +1165,8 @@ def tophat_frfilter_argparser(mode='clean'):
     ap.add_argument("--percentile_high", default=95.0, type=float, help="Reject fringe-rates with beam power above this percentile if uvbeam is provided.")
     ap.add_argument("--taper", default='none', type=str, help="Weight fringe-rates at different frequencies by the square of this taper if uvbeam is provided.")
     ap.add_argument("--fr_freq_skip", default=1, type=int, help="fr_freq_skip: int, optional"
-                                                                 "bin fringe rates from every freq_skip channels."
-                                                                 "default is 1 -> takes a long time. We recommend setting this to be larger.")
+                                                                "bin fringe rates from every freq_skip channels."
+                                                                "default is 1 -> takes a long time. We recommend setting this to be larger.")
     return ap
 
 
@@ -1282,7 +1277,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
                 uvb = None
             if len(keys) > 0:
                 frfil.tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, uvb=uvb,
-                                          skip_flagged_edges=skip_flagged_edges, keys=keys, verbose=verbose, **filter_kwargs)
+                                      skip_flagged_edges=skip_flagged_edges, keys=keys, verbose=verbose, **filter_kwargs)
             else:
                 frfil.clean_data = DataContainer({})
                 frfil.clean_flags = DataContainer({})
