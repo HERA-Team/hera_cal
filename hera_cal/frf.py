@@ -347,7 +347,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
             dfr = 1. / (nfr * np.mean(np.diff(np.unique(uvd.time_array))) * SDAY_KSEC)
         fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
     for bl in keys:
-        binned_power = fr_profiles[bl]
+        binned_power = frate_profiles[bl]
         # normalize to sum to 100.
         binned_power /= np.sum(binned_power)
         binned_power *= 100.
