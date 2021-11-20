@@ -10,7 +10,7 @@ except ImportError:
     HAVE_UVTOOLS = False
 
 from . import utils
-
+import scipy.interpolate as interp
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
 from pyuvdata import UVData, UVFlag, UVBeam
@@ -346,25 +346,36 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
         if dfr is None:
             dfr = 1. / (nfr * np.mean(np.diff(np.unique(uvd.time_array))) * SDAY_KSEC)
         fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
-    for bl in keys:
+
+    # get redundancies (will only compute fr-profile once for each red group).
+    antpos, antnums = uvd.get_ENU_antpos()
+    antpos = {an: ap for an, ap in zip(antnums, antpos)}
+    reds = redcal.get_reds(antpos, pols=list(unique_pols), include_autos=True)
+    reds = [[bl for bl in rg if bl in keys or utils.reverse_bl(bl) in keys] for rg in reds]
+    reds = [rg for rg in reds if len(rg) > 0]
+
+    for redgrp in reds:
+        bl = reds[0]
         binned_power = frate_profiles[bl]
         # normalize to sum to 100.
         binned_power /= np.sum(binned_power)
         binned_power *= 100.
         # get CDF as function of fringe-rate bin.
         cspower = np.cumsum(binned_power)
+        cspower_func = interp.interp1d(cspower, fr_grid)
         # find low and high bins containing mass between percentile_low and percentile_high.
-        frlow = np.argmin(np.abs(cspower - percentile_low))
-        frhigh = np.argmin(np.abs(cspower - percentile_high))
-        frlow = fr_grid[frlow]
-        frhigh = fr_grid[frhigh]
-        # save low and high fringe rates for bl and its conjugate
-        frate_centers[bl] = .5 * (frlow + frhigh)
-        frate_half_widths[bl] = .5 * np.abs(frlow - frhigh) * frate_width_multiplier + frate_standoff
-        frate_half_widths[bl] = np.max([frate_half_widths[bl], min_frate_half_width])
+        frlow = cspower_func(percentile_low)
+        frhigh = cspower_func(percentile_high)
+        # iterate through redundant group and assign centers / half-widths.
+        for bl in redgrp:
+            # save low and high fringe rates for bl and its conjugate
+            frate_centers[bl] = .5 * (frlow + frhigh)
+            frate_half_widths[bl] = .5 * np.abs(frlow - frhigh) * frate_width_multiplier + frate_standoff
+            frate_half_widths[bl] = np.max([frate_half_widths[bl], min_frate_half_width])
 
-        frate_centers[utils.reverse_bl(bl)] = - frate_centers[bl]
-        frate_half_widths[utils.reverse_bl(bl)] = frate_half_widths[bl]
+            frate_centers[utils.reverse_bl(bl)] = - frate_centers[bl]
+            frate_half_widths[utils.reverse_bl(bl)] = frate_half_widths[bl]
+
 
     return frate_centers, frate_half_widths
 
