@@ -336,8 +336,8 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
 
     if frate_profiles is None:
         if uvb is not None:
-            fr_grid, fr_profiles = build_fringe_rate_profiles(uvd=uvd, uvb=uvb, keys=keys, normed=True, nfr=nfr, dfr=dfr,
-                                                              taper=taper, fr_freq_skip=fr_freq_skip, verbose=verbose)
+            fr_grid, frate_profiles = build_fringe_rate_profiles(uvd=uvd, uvb=uvb, keys=keys, normed=True, nfr=nfr, dfr=dfr,
+                                                                 taper=taper, fr_freq_skip=fr_freq_skip, verbose=verbose)
         else:
             raise ValueError("Must either supply uvb or fr_profiles!")
     else:
