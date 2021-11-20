@@ -29,7 +29,7 @@ import copy
 from .utils import echo
 import datetime
 import astropy.constants as const
-
+from . import redcal
 
 SPEED_OF_LIGHT = const.c.si.value
 SDAY_KSEC = 86163.93 / 1000.
@@ -118,12 +118,12 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
         UVData holding baselines for which we will build fringe-rate profiles.
     uvb: UVBeam object
         UVBeam object holding beams that we will build uvbeam profiles for.
-    percentile_low: float, optional
-        Percent of beam-squared power below lower fringe rate.
-    percentile_high: float, optional
-        Percent of beam-squared power above upper fringe rate.
     keys: list of antpairpol tuples
         list of antpairpol tuples of baselines to calculate fringe-rate limits for.
+    normed: bool, optional
+        if True, normalize profiles by sum.
+    combine_pols: bool, optional
+        if True, set profiles for all pols equal to the sum of the profiles of individual pols.
     dfr: float, optional.
         spacing of fringe-rate grid used to perform binning and percentile calc
         in units of mHz.
@@ -200,9 +200,23 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
     ftaper = dspec.gen_window(taper, uvd.Nfreqs) ** 2.
     if keys is None:
         keys = uvd.get_antpairpols()
+    unique_pols = set({})
+    for bl in keys:
+        if bl[-1] not in unique_pols:
+            unique_pols.add(bl[-1])
+
     profiles = {}
     ap_blkeys = {} # keep track of different polarizations for each antenna pair if we are going to sum over polarizations.
-    for bl in keys:
+    # get redundancies
+    antpos, antnums = uvd.get_ENU_antpos()
+    antpos = {an: ap for an, ap in zip(antnums, antpos)}
+    reds = redcal.get_reds(antpos, pols=list(unique_pols))
+    reds = [[bl for bl in rg if bl in keys or utils.reverse_bl(bl) in keys] for rg in reds]
+    reds = [rg for rg in reds if len(rg) > 0]
+
+    for redgrp in reds:
+        # only explicitly calculate fr profile for the first vis in each redgroup.
+        bl = redgrp[0]
         echo("Generating FR-Profile of {} at {}".format(bl, str(datetime.datetime.now())), verbose=verbose)
         # sum beams from all frequencies
         # get polarization number
@@ -230,14 +244,16 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
                 # For each bin, find all pixels that fall in that fr bin and add the sum beam-square values in each pixel
                 # times the frequency weighing value set by taper.
                 binned_power[binnum] += np.sum(bsq[fr_bins == binnum]) * fw  # add sum of beam squared times taper weight.
-        profiles[bl] = binned_power
-        profiles[utils.reverse_bl(bl)] = binned_power[::-1]
-        if bl[:2] not in ap_blkeys:
-            ap_blkeys[bl[:2]] = [bl]
-            ap_blkeys[utils.reverse_bl(bl)[:2]] = [utils.reverse_bl(bl)]
-        else:
-            ap_blkeys[bl[:2]].append(bl) # append baselines
-            ap_blkeys[utils.reverse_bl(bl)[:2]].append(utils.reverse_bl(bl))
+        # iterate over redgrp and set profiles for each baseline key.
+        for blk in redgrp:
+            profiles[blk] = binned_power
+            profiles[utils.reverse_bl(blk)] = binned_power[::-1]
+            if blk[:2] not in ap_blkeys:
+                ap_blkeys[blk[:2]] = [blk]
+                ap_blkeys[utils.reverse_bl(blk)[:2]] = [utils.reverse_bl(blk)]
+            else:
+                ap_blkeys[blk[:2]].append(blk) # append baselines
+                ap_blkeys[utils.reverse_bl(blk)[:2]].append(utils.reverse_bl(blk))
 
     # combine polarizations by summing over all profiles for each antenna-pair.
     if combine_pols:
@@ -271,6 +287,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     frate_profiles: dict object, optional
         Dictionary mapping antpairpol keys to fringe-rate profiles.
         centered on a grid of length nfr spaced by dfr centered at 0.
+        default is None -> automatically calculate profiles using uvb.
     percentile_low: float, optional
         Percent of beam-squared power below lower fringe rate.
     keys: dict, optional
@@ -317,7 +334,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     if keys is None:
         keys = uvd.get_antpairpols()
 
-    if fr_profiles is None:
+    if frate_profiles is None:
         if uvb is not None:
             fr_grid, fr_profiles = build_fringe_rate_profiles(uvd=uvd, uvb=uvb, keys=keys, normed=True, nfr=nfr, dfr=dfr,
                                                               taper=taper, fr_freq_skip=fr_freq_skip, verbose=verbose)
@@ -919,7 +936,7 @@ class FRFilter(VisClean):
     def tophat_frfilter(self, keys=None, wgts=None, mode='clean', uvb=None, percentile_low=5., percentile_high=95.,
                         frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
                         max_frate_coeffs=None,
-                        skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
+                        skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
                         write_cache=False, center_before_filtering=True,  fr_freq_skip=1,
                         verbose=False, **filter_kwargs):
         '''

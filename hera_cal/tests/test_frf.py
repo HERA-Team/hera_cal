@@ -445,8 +445,8 @@ class Test_FRFilter(object):
         c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb)
         profile_frates = {}
         for bl in sim_c_frates:
-            assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.2, rtol=0.)
-            assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.2, rtol=0.)
+            assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.3, rtol=0.)
+            assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.3, rtol=0.)
 
     def test_load_tophat_frfilter_and_write_beam_frates(self, tmpdir):
         # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
@@ -460,7 +460,7 @@ class Test_FRFilter(object):
         # perform cleaning.
         frf.load_tophat_frfilter_and_write(datafile_list=[test_data], uvbeam=test_beam, mode='dpss_leastsq', filled_outfilename=filled_outfilename,
                                            CLEAN_outfilename=CLEAN_outfilename, frate_standoff=0.075,
-                                           res_outfilename=res_outfilename, percentile_high=97.5, percentile_low=2.5)
+                                           res_outfilename=resid_outfilename, percentile_high=97.5, percentile_low=2.5)
         hd_input = io.HERAData(test_data)
         data, flags, nsamples = hd_input.read()
         hd_resid = io.HERAData(resid_outfilename)
