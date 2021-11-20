@@ -348,6 +348,10 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
         fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
 
     # get redundancies (will only compute fr-profile once for each red group).
+    unique_pols = set({})
+    for bl in keys:
+        if bl[-1] not in unique_pols:
+            unique_pols.add(bl[-1])
     antpos, antnums = uvd.get_ENU_antpos()
     antpos = {an: ap for an, ap in zip(antnums, antpos)}
     reds = redcal.get_reds(antpos, pols=list(unique_pols), include_autos=True)
