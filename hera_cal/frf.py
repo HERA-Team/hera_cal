@@ -214,7 +214,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     # get redundancies (will only compute fr-profile once for each red group).
     antpos, antnums = uvd.get_ENU_antpos()
     antpos = {an: ap for an, ap in zip(antnums, antpos)}
-    reds = redcal.get_reds(antpos, pols=list(unique_pols))
+    reds = redcal.get_reds(antpos, pols=list(unique_pols), include_autos=True)
     reds = [[bl for bl in rg if bl in keys or utils.reverse_bl(bl) in keys] for rg in reds]
     reds = [rg for rg in reds if len(rg) > 0]
 
