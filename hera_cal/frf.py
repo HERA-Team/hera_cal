@@ -106,7 +106,7 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
     return frate_centers, frate_half_widths
 
 
-def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, nfr=None, dfr=None,
+def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=True, nfr=None, dfr=None,
                                taper='none', fr_freq_skip=1, verbose=False):
     """
     Calculate fringe-rate profiles to either directly apply as an FIR filter or set a range to filter.
@@ -119,6 +119,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
         UVBeam object holding beams that we will build uvbeam profiles for.
     keys: list of antpairpol tuples
         list of antpairpol tuples of baselines to calculate fringe-rate limits for.
+        default = None -> compute profiles for all antpairpols in uvd.
     normed: bool, optional
         if True, normalize profiles by sum.
     combine_pols: bool, optional
@@ -156,6 +157,9 @@ def build_fringe_rate_profiles(uvd, uvb, keys, normed=True, combine_pols=True, n
         uvb.to_healpix()
     except ValueError as err:
         warnings.warn("UVBeam object already in healpix format...")
+
+    if keys is None:
+        keys = uvd.get_antpairpols()
 
     antpos_trf = uvd.antenna_positions  # earth centered antenna positions
     antnums = uvd.antenna_numbers  # antenna numbers.
