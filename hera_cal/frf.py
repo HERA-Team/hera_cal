@@ -352,7 +352,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     return frate_centers, frate_half_widths
 
 
-def sky_frates(uvd, blkeys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
+def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
     """Automatically compute sky fringe-rate ranges based on baselines and telescope location.
 
     Parameters
@@ -419,7 +419,7 @@ def sky_frates(uvd, blkeys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
 
     return frate_centers, frate_half_widths
 
-def sky_mainlobe_complement(uvd, uvb, percentile_low=5., percentile_high=95., blkeys=None,
+def sky_mainlobe_complement(uvd, uvb, percentile_low=5., percentile_high=95., keys=None,
                                dfr=None, nfr=None, taper='none', frate_standoff=0.0,
                                frate_width_multiplier=1.0, min_frate_half_width=0.025, side='lower', extension=0.0):
     """
