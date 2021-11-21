@@ -384,9 +384,6 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
                 frate_half_widths[bl] = .5 * np.abs(frlows[cnum] - frhighs[cnum]) * frate_width_multiplier + frate_standoff
                 frate_half_widths[bl] = np.max([frate_half_widths[bl], min_frate_half_width])
 
-
-
-
     return frate_centers, frate_half_widths
 
 
