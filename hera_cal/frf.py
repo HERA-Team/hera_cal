@@ -195,7 +195,6 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
 
     # build grid.
     fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
-    fr0 = fr_grid[uvd.Ntimes // 2]
 
     # frequency tapering function expected for power spectra.
     # square b/c for power spectrum.
@@ -363,26 +362,29 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     reds = [rg for rg in reds if len(rg) > 0]
 
     for redgrp in reds:
-        bl = redgrp[0]
-        binned_power = frate_profiles[bl]
-        # normalize to sum to 100.
-        binned_power /= np.sum(binned_power)
-        binned_power *= 100.
-        # get CDF as function of fringe-rate bin.
-        cspower = np.cumsum(binned_power)
-        cspower_func = interp.interp1d(cspower, fr_grid)
-        # find low and high bins containing mass between percentile_low and percentile_high.
-        frlow = cspower_func(percentile_low)
-        frhigh = cspower_func(percentile_high)
+        bl0 = redgrp[0]
+        frlows = []
+        frhighs = []
+        for bl in [bl0, utils.reverse_bl(bl0)]:
+            binned_power = frate_profiles[bl]
+            # normalize to sum to 100.
+            binned_power /= np.sum(binned_power)
+            binned_power *= 100.
+            # get CDF as function of fringe-rate bin.
+            cspower = np.cumsum(binned_power)
+            cspower_func = interp.interp1d(cspower, fr_grid)
+            # find low and high bins containing mass between percentile_low and percentile_high.
+            frlows.append(cspower_func(percentile_low))
+            frhighs.append(cspower_func(percentile_high))
         # iterate through redundant group and assign centers / half-widths.
-        for bl in redgrp:
+        for blt in redgrp:
             # save low and high fringe rates for bl and its conjugate
-            frate_centers[bl] = .5 * (frlow + frhigh)
-            frate_half_widths[bl] = .5 * np.abs(frlow - frhigh) * frate_width_multiplier + frate_standoff
-            frate_half_widths[bl] = np.max([frate_half_widths[bl], min_frate_half_width])
+            for cnum, bl in enumerate([blt, utils.reverse_bl(blt)])
+                frate_centers[bl] = .5 * (frlows[cnum] + frhighs[cnum])
+                frate_half_widths[bl] = .5 * np.abs(frlows[cnum] - frhighs[cnum]) * frate_width_multiplier + frate_standoff
+                frate_half_widths[bl] = np.max([frate_half_widths[bl], min_frate_half_width])
 
-            frate_centers[utils.reverse_bl(bl)] = - frate_centers[bl]
-            frate_half_widths[utils.reverse_bl(bl)] = frate_half_widths[bl]
+
 
 
     return frate_centers, frate_half_widths
