@@ -232,6 +232,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         # initialize binned power.
         # we will bin frate power together for all frequencies, weighted by taper.
         binned_power = np.zeros_like(fr_grid)
+        binned_power_conj = np.zeros_like(fr_grid)
         # iterate over each frequency and ftaper weighting.
         # use linspace to make sure we get first and last frequencies.
         chans_to_use = np.linspace(0, uvd.Nfreqs - 1, int(uvd.Nfreqs / fr_freq_skip)).astype(int)
