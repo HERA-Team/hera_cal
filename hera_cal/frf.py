@@ -243,20 +243,23 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
             bsq[polar >= np.pi / 2.] = 0.
             # get fringe-rate bin membership for each pixel.
             fr_bins = np.round(frates / dfr + nfr / 2).astype(int)
+            fr_bins_conj = np.round(frates / -dfr + nfr / 2).astype(int)
             # bin power.
             for binnum in range(nfr):
                 # For each bin, find all pixels that fall in that fr bin and add the sum beam-square values in each pixel
                 # times the frequency weighing value set by taper.
                 binned_power[binnum] += np.sum(bsq[fr_bins == binnum]) * fw  # add sum of beam squared times taper weight.
+                binned_power_conj[binnum] += np.sum(bsq[fr_bins_conj == binnum]) * fw
+
         # iterate over redgrp and set profiles for each baseline key.
         for blk in redgrp:
             profiles[blk] = binned_power
-            profiles[utils.reverse_bl(blk)] = binned_power[::-1]
+            profiles[utils.reverse_bl(blk)] = binned_power_conj
             if blk[:2] not in ap_blkeys:
                 ap_blkeys[blk[:2]] = [blk]
                 ap_blkeys[utils.reverse_bl(blk)[:2]] = [utils.reverse_bl(blk)]
             else:
-                ap_blkeys[blk[:2]].append(blk)  # append baselines
+                ap_blkeys[blk[:2]].append(blk)  # append antpairpols
                 ap_blkeys[utils.reverse_bl(blk)[:2]].append(utils.reverse_bl(blk))
 
     # combine polarizations by summing over all profiles for each antenna-pair.
