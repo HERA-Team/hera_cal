@@ -379,7 +379,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
         # iterate through redundant group and assign centers / half-widths.
         for blt in redgrp:
             # save low and high fringe rates for bl and its conjugate
-            for cnum, bl in enumerate([blt, utils.reverse_bl(blt)])
+            for cnum, bl in enumerate([blt, utils.reverse_bl(blt)]):
                 frate_centers[bl] = .5 * (frlows[cnum] + frhighs[cnum])
                 frate_half_widths[bl] = .5 * np.abs(frlows[cnum] - frhighs[cnum]) * frate_width_multiplier + frate_standoff
                 frate_half_widths[bl] = np.max([frate_half_widths[bl], min_frate_half_width])
