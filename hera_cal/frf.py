@@ -359,7 +359,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     reds = [rg for rg in reds if len(rg) > 0]
 
     for redgrp in reds:
-        bl = reds[0]
+        bl = redgrp[0]
         binned_power = frate_profiles[bl]
         # normalize to sum to 100.
         binned_power /= np.sum(binned_power)
