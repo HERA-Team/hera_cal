@@ -387,74 +387,6 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     return frate_centers, frate_half_widths
 
 
-def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
-    """Automatically compute sky fringe-rate ranges based on baselines and telescope location.
-
-    Parameters
-    ----------
-    uvd: UVData object
-        uvdata object of data to compute sky-frate limits for.
-    keys: list of antpairpol tuples, optional
-        list of antpairpols to generate sky fringe-rate centers and widths for.
-        Default is None -> use all keys in self.data.
-    frate_standoff: float, optional
-        Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
-        default = 0.0.
-    frate_width_multiplier: float, optional
-        fraction of horizon to fringe-rate filter.
-        default is 1.0
-    min_frate_half_width: float, optional
-        minimum fringe-rate to filter, regardless of baseline length in mHz.
-        Default is 0.025
-
-    Returns
-    -------
-    frate_centers: DataContainer object,
-        DataContainer with the center fringe-rate of each baseline in to_filter in units of mHz.
-    frate_half_widths: DataContainer object
-        DataContainer with the half widths of each fringe-rate window around the frate_centers in units of mHz.
-
-    """
-    if keys is None:
-        keys = uvd.get_antpairpols()
-    antpos, antnums = uvd.get_ENU_antpos()
-    sinlat = np.sin(np.abs(uvd.telescope_location_lat_lon_alt[0]))
-    frate_centers = {}
-    frate_half_widths = {}
-
-    # compute maximum fringe rate dict based on baseline lengths.
-    for k in keys:
-        ind1 = np.where(antnums == k[0])[0][0]
-        ind2 = np.where(antnums == k[1])[0][0]
-        blvec = antpos[ind1] - antpos[ind2]
-        blcos = blvec[0] / np.linalg.norm(blvec[:2])
-        if np.isfinite(blcos):
-            frateamp_df = np.linalg.norm(blvec[:2]) / SDAY_KSEC / SPEED_OF_LIGHT * 2 * np.pi
-            # set autocorrs to have blcose of 0.0
-
-            if blcos >= 0:
-                max_frate_df = frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
-                min_frate_df = -frateamp_df * sinlat
-            else:
-                min_frate_df = -frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
-                max_frate_df = frateamp_df * sinlat
-
-            min_frate = np.min([f0 * min_frate_df for f0 in uvd.freq_array[0]])
-            max_frate = np.max([f0 * max_frate_df for f0 in uvd.freq_array[0]])
-        else:
-            max_frate = 0.0
-            min_frate = 0.0
-
-        frate_centers[k] = (max_frate + min_frate) / 2.
-        frate_centers[utils.reverse_bl(k)] = -frate_centers[k]
-
-        frate_half_widths[k] = np.abs(max_frate - min_frate) / 2. * frate_width_multiplier + frate_standoff
-        frate_half_widths[k] = np.max([frate_half_widths[k], min_frate_half_width])  # Don't allow frates smaller then min_frate
-        frate_half_widths[utils.reverse_bl(k)] = frate_half_widths[k]
-
-    return frate_centers, frate_half_widths
-
-
 def sky_mainlobe_complement(uvd, uvb, percentile_low=5., percentile_high=95., keys=None,
                             dfr=None, nfr=None, taper='none', frate_standoff=0.0,
                             frate_width_multiplier=1.0, min_frate_half_width=0.025, side='lower', extension=0.0):
@@ -956,7 +888,7 @@ class FRFilter(VisClean):
                         frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
                         max_frate_coeffs=None, skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
                         write_cache=False, center_before_filtering=True, fr_freq_skip=1,
-                        verbose=False, **filter_kwargs):
+                        verbose=False, nfr=None, dfr=None, **filter_kwargs):
         '''
         A wrapper around VisClean.fourier_filter specifically for
         filtering along the time axis with uniform fringe-rate weighting.
@@ -1010,6 +942,13 @@ class FRFilter(VisClean):
             bin fringe rates from every freq_skip channels.
             default is 1 -> takes a long time. We recommend setting this to be larger.
         verbose: bool, optional, lots of outputs!
+        dfr: float, optional.
+            spacing of fringe-rate grid used to perform binning and percentile calc
+            in units of mHz.
+            default is None -> set to 1 / (dtime * Ntime) of uvd.
+        nfr: float, optional.
+            number of points on fringe-rate grid to perform binning and percentile calc.
+            default is None -> set to uvd.Ntimes.
         filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Returns
@@ -1043,7 +982,7 @@ class FRFilter(VisClean):
 
         elif uvb is not None:
             # if uvb is not None, get fringe-rates from binning.
-            frate_centers, frate_half_widths = get_fringe_rate_limits(self.hd, uvb,
+            frate_centers, frate_half_widths = get_fringe_rate_limits(self.hd, uvb, nfr=nfr, dfr=dfr,
                                                                       percentile_low=percentile_low,
                                                                       percentile_high=percentile_high,
                                                                       keys=keys, verbose=verbose,
