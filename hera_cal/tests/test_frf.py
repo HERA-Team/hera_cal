@@ -282,17 +282,20 @@ class Test_FRFilter(object):
         k = (24, 25, 'ee')
         # check successful run when avg_red_bllens is True and when False.
         for avg_red_bllens in [True, False]:
-            frfil = frf.FRFilter(fname, filetype='miriad')
-            frfil.read(bls=[k])
-            if avg_red_bllens:
-                frfil.avg_red_baseline_vectors()
-            wgts = {k: np.ones_like(frfil.flags[k], dtype=np.float)}
-            wgts[k][:, 0] = 0.0
-            frfil.tophat_frfilter(keys=[k], wgts=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
-            assert frfil.clean_info[k][(0, frfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
-            np.testing.assert_array_equal(frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0]))
-            np.testing.assert_array_equal(frfil.clean_model[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
-            np.testing.assert_array_equal(frfil.clean_resid[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
+            for center_frates in [True, False]:
+                frfil = frf.FRFilter(fname, filetype='miriad')
+                frfil.read(bls=[k])
+                if avg_red_bllens:
+                    frfil.avg_red_baseline_vectors()
+                wgts = {k: np.ones_like(frfil.flags[k], dtype=np.float)}
+                wgts[k][:, 0] = 0.0
+                for data_kwargs in [{}, {'data': frfil.data}]:
+                    frfil.tophat_frfilter(keys=[k], wgts=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1,
+                                          maxiter=100, center_before_filtering=center_frates, **data_kwargs)
+                    assert frfil.clean_info[k][(0, frfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+                    np.testing.assert_array_equal(frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0]))
+                    np.testing.assert_array_equal(frfil.clean_model[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
+                    np.testing.assert_array_equal(frfil.clean_resid[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
 
     def test_load_tophat_frfilter_and_write_baseline_list(self, tmpdir):
         tmp_path = tmpdir.strpath
@@ -422,6 +425,16 @@ class Test_FRFilter(object):
         for k in doutput:
             assert doutput[k].shape == d[k].shape
 
+    def test_build_fringe_rate_profiles(self):
+        test_beam = os.path.join(DATA_PATH, "efield_test_nside16.beamfits")
+        test_data = os.path.join(DATA_PATH, "fr_unittest_data.uvh5")
+        uvd = UVData()
+        uvd.read_uvh5(test_data)
+        uvb = UVBeam()
+        uvb.read_beamfits(test_beam)
+        fr_grid, profiles = frf.build_fringe_rate_profiles(uvd, uvb)
+        assert len(fr_grid) == uvd.Ntimes
+
     def test_get_fringe_rate_limits(self):
         # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
         test_beam = os.path.join(DATA_PATH, "fr_unittest_beam.beamfits")
@@ -447,6 +460,13 @@ class Test_FRFilter(object):
         for bl in sim_c_frates:
             assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.3, rtol=0.)
             assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.3, rtol=0.)
+        # test providing fringe-rate profiles.
+        fr_grid, profiles = frf.build_fringe_rate_profiles(uvd, uvb)
+        c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb, frate_profiles=profiles)
+        for bl in sim_c_frates:
+            assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.3, rtol=0.)
+            assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.3, rtol=0.)
+        assert pytest.raises(frf.get_fringe_rate_limits, uvd, None, None)
 
     def test_load_tophat_frfilter_and_write_beam_frates(self, tmpdir):
         # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
