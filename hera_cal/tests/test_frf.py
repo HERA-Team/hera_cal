@@ -466,7 +466,7 @@ class Test_FRFilter(object):
         for bl in sim_c_frates:
             assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.3, rtol=0.)
             assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.3, rtol=0.)
-        assert pytest.raises(frf.get_fringe_rate_limits, uvd, None, None)
+        assert pytest.raises(ValueError, frf.get_fringe_rate_limits, uvd, None, None)
 
     def test_load_tophat_frfilter_and_write_beam_frates(self, tmpdir):
         # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
