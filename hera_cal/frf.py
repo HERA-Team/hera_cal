@@ -888,7 +888,8 @@ class FRFilter(VisClean):
                         frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
                         max_frate_coeffs=None, skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
                         write_cache=False, center_before_filtering=True, fr_freq_skip=1,
-                        verbose=False, nfr=None, dfr=None, **filter_kwargs):
+                        verbose=False, nfr=None, dfr=None, pre_filter_modes_between_lobe_minimum_and_zero=False,
+                        **filter_kwargs):
         '''
         A wrapper around VisClean.fourier_filter specifically for
         filtering along the time axis with uniform fringe-rate weighting.
@@ -949,6 +950,13 @@ class FRFilter(VisClean):
         nfr: float, optional.
             number of points on fringe-rate grid to perform binning and percentile calc.
             default is None -> set to uvd.Ntimes.
+        pre_filter_modes_between_lobe_minimum_and_zero: bool, optional
+            Subtract power between the main-lobe and zero before applying main-lobe filter.
+            This is to avoid having the main-lobe filter respond to any exceedingly high power
+            at low fringe rates which can happen during Galaxy set.
+            or if there is egregious cross-talk / ground pickup.
+            This arg is only used if uvbeam is not None.
+            Default is False.
         filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Returns
@@ -991,26 +999,59 @@ class FRFilter(VisClean):
                                                                       min_frate_half_width=min_frate_half_width)
 
         wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
+        if pre_filter_modes_between_lobe_minimum_and_zero:
+            self.pre_filter_resid = {}
+            filter_kwargs_no_data = copy.deepcopy(filter_kwargs)
+            del filter_kwargs_no_data['data']
         for k in keys:
             if mode != 'clean':
                 filter_kwargs['suppression_factors'] = [tol]
             else:
                 filter_kwargs['tol'] = tol
-            # center sky-modes at zero fringe-rate if we chose to center_before_filtering.
-            if center_before_filtering:
-                phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
-                if 'data' in filter_kwargs:
-                    input_data = filter_kwargs['data']
+
+            if pre_filter_modes_between_lobe_minimum_and_zero:
+                min_frate_abs = np.min([np.abs(filter_center_to_use[k] + frate_half_widths[k]),
+                                        np.abs(filter_center_to_use[k] - frate_half_widths[k])])
+                # only pre-filter if main-lobe does not include zero fringe-rates.
+                if not (filter_center_to_use[k] + frate_half_widths[k] >= 0. and filter_center_to_use[k] - frate_half_widths[k] <= 0.):
+                    self.fourier_filter(keys=[k], filter_centers=[0.], filter_half_widths=[min_frate_abs],
+                                        mode=mode, x=self.times * SDAY_KSEC,
+                                        wgts=wgts, output_prefix='pre_filter'
+                                        ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
                 else:
-                    input_data = self.data
-                input_data[k] /= phasor[:, None]
-                filter_center_to_use = 0.0
+                    if 'data' not in filter_kwargs:
+                        self.pre_filter_resid[k] = self.data[k]
+                    else:
+                        self.pre_filter_resid[k] = filter_kwargs['data'][k]
+                    if 'flags' not in filter_kwargs:
+                        self.pre_filter_resid_flags[k] = self.flags[k]
+                    else:
+                        self.pre_filter_flags[k] = filter_kwargs['flags'][k]
+                if center_before_filtering:
+                    phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
+                    self.pre_filter_resid[k] /= phasor[:, None]
+                    filter_center_to_use = 0.0
+                else:
+                    filter_center_to_use = frate_centers[k]
+                self.fourier_filter(keys=[k], filter_centers=[filter_center_to_use], filter_half_widths=[frate_half_widths[k]],
+                                    mode=mode, x=self.times * SDAY_KSEC,
+                                    wgts=wgts, data=self.pre_filter_resid, flags=self.pre_filter_resid_flags,
+                                    ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs_no_data)
             else:
-                filter_center_to_use = frate_centers[k]
-            self.fourier_filter(keys=[k], filter_centers=[filter_center_to_use], filter_half_widths=[frate_half_widths[k]],
-                                mode=mode, x=self.times * SDAY_KSEC,
-                                flags=self.flags, wgts=wgts,
-                                ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
+                # center sky-modes at zero fringe-rate if we chose to center_before_filtering.
+                if center_before_filtering:
+                    if 'data' in filter_kwargs:
+                        input_data = filter_kwargs['data']
+                    else:
+                        input_data = self.data
+                    input_data[k] /= phasor[:, None]
+                    filter_center_to_use = 0.0
+                else:
+                    filter_center_to_use = frate_centers[k]
+                self.fourier_filter(keys=[k], filter_centers=[filter_center_to_use], filter_half_widths=[frate_half_widths[k]],
+                                    mode=mode, x=self.times * SDAY_KSEC,
+                                    flags=self.flags, wgts=wgts,
+                                    ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
 
             # recenter data in fringe-rate by multiplying back the phaser if we chose to center_before_filtering.
             if center_before_filtering:
@@ -1128,6 +1169,10 @@ def tophat_frfilter_argparser(mode='clean'):
     ap.add_argument("--fr_freq_skip", default=1, type=int, help="fr_freq_skip: int, optional"
                                                                 "bin fringe rates from every freq_skip channels."
                                                                 "default is 1 -> takes a long time. We recommend setting this to be larger.")
+    ap.add_argument("--pre_filter_modes_between_lobe_minimum_and_zero", dtype=bool, default=False, help="Subtract emission between the main-lobe fringe-rate region and zero"
+                                                                                                        "before applying main-lobe fringe rate filter. This is to prevent"
+                                                                                                        "the main-lobe filter to responding to overwhelmingly bright emission"
+                                                                                                        "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
     return ap
 
 
