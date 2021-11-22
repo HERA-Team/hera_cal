@@ -44,7 +44,6 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
         default is 1.0
     min_frate_half_width: float, optional
         minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
-        Serves the same function as "min_dly" in delay filters.
         Default is 0.025
 
     Returns
@@ -603,7 +602,6 @@ class FRFilter(VisClean):
          default is 1.0
         min_frate_half_width: float, optional
             minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
-            Serves the same function as "min_dly" in delay filters.
             Default is 0.025
         max_frate_coeffs, 2-tuple float
         Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
@@ -747,7 +745,6 @@ def tophat_frfilter_argparser(mode='clean'):
     ap.add_argument("--frate_standoff", type=float, default=0.0, help="Standoff in fringe-rate to filter [mHz]."
                                                                       "Used of select_mainlobe is False and max_frate_coeffs not specified.")
     ap.add_argument("--min_frate_half_width", type=float, default=0.025, help="minimum half-width of fringe-rate filter, regardless of baseline length in mHz."
-                                                                              "Serves the same function as 'min_dly' in delay filters."
                                                                               "Default is 0.025.")
     ap.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
                                                                                   "Providing these overrides the sky-based fringe-rate determination! Default is None.")
