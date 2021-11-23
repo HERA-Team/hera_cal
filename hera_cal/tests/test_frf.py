@@ -263,7 +263,13 @@ class Test_FRFilter(object):
         assert args.flag_output is None
         assert args.filetype == "uvh5"
 
-    def test_tophat_frfilter(self):
+    @pytest.mark.parametrize(
+        "center_frates, avg_red_bllens, pass_data",
+        [(True, True, False), (True, False, False), (False, True, False), (False, False, False),
+         (True, True, True), (True, False, True),
+         (False, True, True), (False, False, True)],
+    )
+    def test_tophat_frfilter(self, center_frates, avg_red_bllens, pass_data):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         frfil = frf.FRFilter(fname, filetype='miriad')
@@ -281,21 +287,22 @@ class Test_FRFilter(object):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         # check successful run when avg_red_bllens is True and when False.
-        for avg_red_bllens in [True, False]:
-            for center_frates in [True, False]:
-                frfil = frf.FRFilter(fname, filetype='miriad')
-                frfil.read(bls=[k])
-                if avg_red_bllens:
-                    frfil.avg_red_baseline_vectors()
-                wgts = {k: np.ones_like(frfil.flags[k], dtype=np.float)}
-                wgts[k][:, 0] = 0.0
-                for data_kwargs in [{}, {'data': frfil.data}]:
-                    frfil.tophat_frfilter(keys=[k], wgts=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1,
-                                          maxiter=100, center_before_filtering=center_frates, **data_kwargs)
-                    assert frfil.clean_info[k][(0, frfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
-                    np.testing.assert_array_equal(frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0]))
-                    np.testing.assert_array_equal(frfil.clean_model[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
-                    np.testing.assert_array_equal(frfil.clean_resid[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
+        frfil = frf.FRFilter(fname, filetype='miriad')
+        frfil.read(bls=[k])
+        if avg_red_bllens:
+            frfil.avg_red_baseline_vectors()
+        wgts = {k: np.ones_like(frfil.flags[k], dtype=np.float)}
+        wgts[k][:, 0] = 0.0
+        if pass_data:
+            data_kwargs = {'data': frfil.data}
+        else:
+            data_kwargs = {}
+        frfil.tophat_frfilter(keys=[k], wgts=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1,
+                              maxiter=100, center_before_filtering=center_frates, **data_kwargs)
+        assert frfil.clean_info[k][(0, frfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+        np.testing.assert_array_equal(frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0]))
+        np.testing.assert_array_equal(frfil.clean_model[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
+        np.testing.assert_array_equal(frfil.clean_resid[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
 
     def test_load_tophat_frfilter_and_write_baseline_list(self, tmpdir):
         tmp_path = tmpdir.strpath
@@ -427,7 +434,7 @@ class Test_FRFilter(object):
 
     def test_build_fringe_rate_profiles(self):
         test_beam = os.path.join(DATA_PATH, "efield_test_nside16.beamfits")
-        test_data = os.path.join(DATA_PATH, "fr_unittest_data.uvh5")
+        test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
         uvd = UVData()
         uvd.read_uvh5(test_data)
         uvb = UVBeam()
@@ -438,25 +445,29 @@ class Test_FRFilter(object):
     def test_get_fringe_rate_limits(self):
         # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
         test_beam = os.path.join(DATA_PATH, "fr_unittest_beam.beamfits")
-        test_data = os.path.join(DATA_PATH, "fr_unittest_data.uvh5")
+        test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
         uvd = UVData()
         uvd.read_uvh5(test_data)
         myfrf = frf.FRFilter(uvd)
-        myfrf.fft_data(data=myfrf.data, ax='time')
         sim_c_frates = {}
         sim_w_frates = {}
-        for bl in myfrf.dfft:
+        uvb = UVBeam()
+        uvb.read_beamfits(test_beam)
+        c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb, percentile_low=10, percentile_high=90)
+        for bl in c_frs:
+            # fft data
+            myfrf.fft_data(data=myfrf.data, ax='time', keys=[bl], overwrite=True, window='bh')
             csum = np.cumsum(np.abs(myfrf.dfft[bl]) ** 2.)
             csum /= csum.max()
-            frlow, frhigh = (myfrf.frates[np.argmin(np.abs(csum - 0.05))], myfrf.frates[np.argmin(np.abs(csum - 0.95))])
+            csum = np.hstack([[0], csum, [1.]])
+            dfr = np.median(np.diff(myfrf.frates))
+            frates = np.hstack([[myfrf.frates.min() - dfr], myfrf.frates, [myfrf.frates.max() + dfr]])
+            frlow, frhigh = (frates[np.argmin(np.abs(csum - 0.1))], frates[np.argmin(np.abs(csum - 0.9))])
             sim_c_frates[bl] = .5 * (frlow + frhigh)
             sim_w_frates[bl] = .5 * np.abs(frlow - frhigh)
             sim_w_frates[utils.reverse_bl(bl)] = sim_w_frates[bl]
             sim_c_frates[utils.reverse_bl(bl)] = -sim_c_frates[bl]
-        uvb = UVBeam()
-        uvb.read_beamfits(test_beam)
-        c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb)
-        profile_frates = {}
+
         for bl in sim_c_frates:
             assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.3, rtol=0.)
             assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.3, rtol=0.)
@@ -468,18 +479,22 @@ class Test_FRFilter(object):
             assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.3, rtol=0.)
         assert pytest.raises(ValueError, frf.get_fringe_rate_limits, uvd, None, None)
 
-    def test_load_tophat_frfilter_and_write_beam_frates(self, tmpdir):
+    @pytest.mark.parametrize(
+        "pre_filter",
+        [True, False],
+    )
+    def test_load_tophat_frfilter_and_write_beam_frates(self, tmpdir, pre_filter):
         # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
         # load in primary beam model and isotropic noise model of sky.
         test_beam = os.path.join(DATA_PATH, "fr_unittest_beam.beamfits")
-        test_data = os.path.join(DATA_PATH, "fr_unittest_data.uvh5")
+        test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
         tmp_path = tmpdir.strpath
         resid_outfilename = os.path.join(tmp_path, 'resid.uvh5')
         CLEAN_outfilename = os.path.join(tmp_path, 'model.uvh5')
         filled_outfilename = os.path.join(tmp_path, 'filled.uvh5')
         # perform cleaning.
         frf.load_tophat_frfilter_and_write(datafile_list=[test_data], uvbeam=test_beam, mode='dpss_leastsq', filled_outfilename=filled_outfilename,
-                                           CLEAN_outfilename=CLEAN_outfilename, frate_standoff=0.075,
+                                           CLEAN_outfilename=CLEAN_outfilename, frate_standoff=0.075, pre_filter_modes_between_lobe_minimum_and_zero=pre_filter,
                                            res_outfilename=resid_outfilename, percentile_high=97.5, percentile_low=2.5)
         hd_input = io.HERAData(test_data)
         data, flags, nsamples = hd_input.read()

@@ -372,7 +372,13 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
             binned_power *= 100.
             # get CDF as function of fringe-rate bin.
             cspower = np.cumsum(binned_power)
-            cspower_func = interp.interp1d(cspower, fr_grid)
+            # add dfr to ends of grid and set to zero and 100 to avoid
+            # out of bounds errors.
+            nfr = len(fr_grid)
+            dfr = np.median(np.diff(fr_grid))
+            cspower_interp = np.hstack([[0], cspower, [100.]])
+            fr_grid_interp = np.hstack([[fr_grid.min() - dfr], fr_grid, [fr_grid.max() + dfr]])
+            cspower_func = interp.interp1d(cspower_interp, fr_grid_interp)
             # find low and high bins containing mass between percentile_low and percentile_high.
             frlows.append(cspower_func(percentile_low))
             frhighs.append(cspower_func(percentile_high))
@@ -1000,9 +1006,10 @@ class FRFilter(VisClean):
 
         wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         if pre_filter_modes_between_lobe_minimum_and_zero:
-            self.pre_filter_resid = {}
+            self.pre_filter_resid = DataContainer({})
             filter_kwargs_no_data = copy.deepcopy(filter_kwargs)
-            del filter_kwargs_no_data['data']
+            if 'data' in filter_kwargs_no_data:
+                del filter_kwargs_no_data['data']
         for k in keys:
             if mode != 'clean':
                 filter_kwargs['suppression_factors'] = [tol]
@@ -1010,13 +1017,13 @@ class FRFilter(VisClean):
                 filter_kwargs['tol'] = tol
 
             if pre_filter_modes_between_lobe_minimum_and_zero:
-                min_frate_abs = np.min([np.abs(filter_center_to_use[k] + frate_half_widths[k]),
-                                        np.abs(filter_center_to_use[k] - frate_half_widths[k])])
+                min_frate_abs = np.min([np.abs(frate_centers[k] + frate_half_widths[k]),
+                                        np.abs(frate_centers[k] - frate_half_widths[k])])
                 # only pre-filter if main-lobe does not include zero fringe-rates.
-                if not (filter_center_to_use[k] + frate_half_widths[k] >= 0. and filter_center_to_use[k] - frate_half_widths[k] <= 0.):
+                if not (frate_centers[k] + frate_half_widths[k] >= 0. and frate_centers[k] - frate_half_widths[k] <= 0.):
                     self.fourier_filter(keys=[k], filter_centers=[0.], filter_half_widths=[min_frate_abs],
                                         mode=mode, x=self.times * SDAY_KSEC,
-                                        wgts=wgts, output_prefix='pre_filter'
+                                        wgts=wgts, output_prefix='pre_filter',
                                         ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
                 else:
                     if 'data' not in filter_kwargs:
@@ -1040,6 +1047,7 @@ class FRFilter(VisClean):
             else:
                 # center sky-modes at zero fringe-rate if we chose to center_before_filtering.
                 if center_before_filtering:
+                    phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
                     if 'data' in filter_kwargs:
                         input_data = filter_kwargs['data']
                     else:
@@ -1169,10 +1177,10 @@ def tophat_frfilter_argparser(mode='clean'):
     ap.add_argument("--fr_freq_skip", default=1, type=int, help="fr_freq_skip: int, optional"
                                                                 "bin fringe rates from every freq_skip channels."
                                                                 "default is 1 -> takes a long time. We recommend setting this to be larger.")
-    ap.add_argument("--pre_filter_modes_between_lobe_minimum_and_zero", dtype=bool, default=False, help="Subtract emission between the main-lobe fringe-rate region and zero"
-                                                                                                        "before applying main-lobe fringe rate filter. This is to prevent"
-                                                                                                        "the main-lobe filter to responding to overwhelmingly bright emission"
-                                                                                                        "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
+    ap.add_argument("--pre_filter_modes_between_lobe_minimum_and_zero", type=bool, default=False, help="Subtract emission between the main-lobe fringe-rate region and zero"
+                                                                                                       "before applying main-lobe fringe rate filter. This is to prevent"
+                                                                                                       "the main-lobe filter to responding to overwhelmingly bright emission"
+                                                                                                       "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
     return ap
 
 
