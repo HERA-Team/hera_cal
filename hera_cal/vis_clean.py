@@ -1920,10 +1920,11 @@ def _filter_argparser():
     ap.add_argument("--flag_yaml", default=None, type=str, help="path to a flagging yaml containing apriori antenna, freq, and time flags.")
     ap.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter.")
     ap.add_argument("--verbose", default=False, action="store_true", help="Lots of text.")
+    ap.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
     ap.add_argument("--filter_spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections to filter independently. Two acceptable formats are "
                                                                                        "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
                                                                                        "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
-    # clean arguments.
+    # Arguments for CLEAN. Not used in linear filtering methods.
     clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
                               see uvtools.dspec.gen_window for options')
@@ -1932,10 +1933,12 @@ def _filter_argparser():
     clean_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
     clean_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     clean_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
+    # Options for caching for linear filtering.
     cache_options = ap.add_argument_group(title='Options for caching (arguments only used if mode!="clean")')
     cache_options.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
     cache_options.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
     cache_options.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
+    # Options that are only used for linear filters like dayenu and dpss_leastsq.
     linear_options = ap.add_argument_group(title="Options for linear filtering (dayenu and dpss_leastsq)")
     linear_options.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
     return ap

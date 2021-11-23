@@ -16,11 +16,89 @@ from .vis_clean import VisClean
 from pyuvdata import UVData, UVFlag
 import argparse
 from . import io
+from . import vis_clean
 import warnings
+import astropy.constants as const
 
 
-def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, 
-                      wgt_by_favg_nsample=False, rephase=False, lsts=None, freqs=None, 
+SPEED_OF_LIGHT = const.c.si.value
+SDAY_KSEC = 86163.93 / 1000.
+
+
+def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
+    """Compute sky fringe-rate ranges based on baselines, telescope location, and frequencies in uvdata.
+
+    Parameters
+    ----------
+    uvd: UVData object
+        uvdata object of data to compute sky-frate limits for.
+    keys: list of antpairpol tuples, optional
+        list of antpairpols to generate sky fringe-rate centers and widths for.
+        Default is None -> use all keys in uvd
+    frate_standoff: float, optional
+        additional fringe-rate to add to min and max of computed fringe-rate bounds [mHz]
+        to add to analytic calculation of fringe-rate bounds for emission on the sky.
+        default = 0.0.
+    frate_width_multiplier: float, optional
+        fraction of width of range of fringe-rates associated with sky emission to filter.
+        default is 1.0
+    min_frate_half_width: float, optional
+        minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
+        Default is 0.025
+
+    Returns
+    -------
+    frate_centers: DataContainer object,
+        DataContainer with the center fringe-rate of each baseline in keys in units of mHz.
+    frate_half_widths: DataContainer object
+        DataContainer with the half widths of each fringe-rate window around the frate_centers in units of mHz.
+
+    """
+    if keys is None:
+        keys = uvd.get_antpairpols()
+    antpos, antnums = uvd.get_ENU_antpos()
+    sinlat = np.sin(np.abs(uvd.telescope_location_lat_lon_alt[0]))
+    frate_centers = {}
+    frate_half_widths = {}
+
+    # compute maximum fringe rate dict based on baseline lengths.
+    # see derivation in https://www.overleaf.com/read/chgpxydbhfhk
+    # which starts with expressions in
+    # https://ui.adsabs.harvard.edu/abs/2016ApJ...820...51P/exportcitation
+    for k in keys:
+        ind1 = np.where(antnums == k[0])[0][0]
+        ind2 = np.where(antnums == k[1])[0][0]
+        blvec = antpos[ind1] - antpos[ind2]
+        blcos = blvec[0] / np.linalg.norm(blvec[:2])
+        if np.isfinite(blcos):
+            frateamp_df = np.linalg.norm(blvec[:2]) / SDAY_KSEC / SPEED_OF_LIGHT * 2 * np.pi
+            # set autocorrs to have blcose of 0.0
+
+            if blcos >= 0:
+                max_frate_df = frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
+                min_frate_df = -frateamp_df * sinlat
+            else:
+                min_frate_df = -frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
+                max_frate_df = frateamp_df * sinlat
+
+            min_frate = np.min([f0 * min_frate_df for f0 in uvd.freq_array[0]])
+            max_frate = np.max([f0 * max_frate_df for f0 in uvd.freq_array[0]])
+        else:
+            max_frate = 0.0
+            min_frate = 0.0
+
+        frate_centers[k] = (max_frate + min_frate) / 2.
+        frate_centers[utils.reverse_bl(k)] = -frate_centers[k]
+
+        frate_half_widths[k] = np.abs(max_frate - min_frate) / 2. * frate_width_multiplier + frate_standoff
+        frate_half_widths[k] = np.max([frate_half_widths[k], min_frate_half_width])  # Don't allow frates smaller then min_frate
+        frate_half_widths[utils.reverse_bl(k)] = frate_half_widths[k]
+
+    return frate_centers, frate_half_widths
+
+
+def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True,
+                      wgt_by_favg_nsample=False, rephase=False, lsts=None, freqs=None,
                       bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
     """
     Calculate the time average of a visibility waterfall. The average is optionally
@@ -497,6 +575,93 @@ class FRFilter(VisClean):
             filt_flags[k] = f
             filt_nsamples[k] = eff_nsamples
 
+    def tophat_frfilter(self, keys=None, wgts=None, mode='clean',
+                        frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
+                        max_frate_coeffs=None,
+                        skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
+                        write_cache=False,
+                        data=None, flags=None, **filter_kwargs):
+        '''
+        A wrapper around VisClean.fourier_filter specifically for
+        filtering along the time axis with uniform fringe-rate weighting.
+
+        Parameters
+        ----------
+        keys: list of visibilities to filter in the (i,j,pol) format.
+          If None (the default), all visibilities are filtered.
+        wgts: dictionary or DataContainer with all the same keys as self.data.
+         Linear multiplicative weights to use for the fr filter. Default, use np.logical_not
+         of self.flags. uvtools.dspec.fourier_filter will renormalize to compensate.
+        mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
+        frate_standoff: float, optional
+            additional fringe-rate to add to min and max of computed fringe-rate bounds [mHz]
+            to add to analytic calculation of fringe-rate bounds for emission on the sky.
+            default = 0.0.
+        frate_width_multiplier: float, optional
+         fraction of horizon to fringe-rate filter.
+         default is 1.0
+        min_frate_half_width: float, optional
+            minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
+            Default is 0.025
+        max_frate_coeffs, 2-tuple float
+        Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
+        Providing these overrides the sky-based fringe-rate determination! Default is None.
+        skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+          Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+          time. Skipped channels are then flagged in self.flags.
+          Only works properly when all weights are all between 0 and 1.
+        tol : float, optional. To what level are foregrounds subtracted.
+        verbose: If True print feedback to stdout
+        cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
+         see uvtools.dspec.dayenu_filter for key formats.
+        read_cache: bool, If true, read existing cache files in cache_dir before running.
+        write_cache: bool. If true, create new cache file with precomputed matrices
+         that were not in previously loaded cache files.
+        cache: dictionary containing pre-computed filter products.
+        skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
+        verbose: bool, optional, lots of outputs!
+        filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
+
+        Returns
+        -------
+        N/A
+
+        Results are stored in:
+          self.clean_resid: DataContainer formatted like self.data with only high-fringe-rate components
+          self.clean_model: DataContainer formatted like self.data with only low-fringe-rate components
+          self.clean_info: Dictionary of info from uvtools.dspec.fourier_filter with the same keys as self.data
+        '''
+        if keys is None:
+            keys = list(self.data.keys())
+        # read in cache
+        if not mode == 'clean':
+            if read_cache:
+                filter_cache = io.read_filter_cache_scratch(cache_dir)
+            else:
+                filter_cache = {}
+            keys_before = list(filter_cache.keys())
+        else:
+            filter_cache = None
+        if max_frate_coeffs is None:
+            center_frates, width_frates = sky_frates(uvd=self.hd, keys=keys, frate_standoff=frate_standoff,
+                                                     frate_width_multiplier=frate_width_multiplier, min_frate_half_width=min_frate_half_width)
+        else:
+            width_frates = {k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in keys}
+            center_frates = {k: 0.0 for k in keys}
+        wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
+        for k in keys:
+            if mode != 'clean':
+                filter_kwargs['suppression_factors'] = [tol]
+            else:
+                filter_kwargs['tol'] = tol
+            self.fourier_filter(keys=[k], filter_centers=[center_frates[k]], filter_half_widths=[width_frates[k]],
+                                mode=mode, x=self.times * 3.6 * 24.,
+                                data=self.data, flags=self.flags, wgts=wgts,
+                                ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
+        if not mode == 'clean':
+            if write_cache:
+                filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
+
 
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
                             wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
@@ -524,7 +689,7 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         rephase each time bin to central lst.
     filetype : str, optional
         specify if uvh5, miriad, ect...
-            default is uvh5.
+        default is uvh5.
     verbose: bool, optional
         if true, more outputs.
         default is False
@@ -556,6 +721,157 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
             uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
             uvf.to_waterfall(keep_pol=False, method='and')
             uvf.write(flag_output, clobber=clobber)
+
+
+def tophat_frfilter_argparser(mode='clean'):
+    '''Arg parser for commandline operation of tophat fr-filters.
+
+    Parameters
+    ----------
+    mode : string, optional.
+        Determines sets of arguments to load.
+        Can be 'clean', 'dayenu', or 'dpss_leastsq'.
+
+    Returns
+    -------
+    argparser
+        argparser for tophat fringe-rate (time-domain) filtering for specified filtering mode
+
+    '''
+    ap = vis_clean._filter_argparser()
+    filt_options = ap.add_argument_group(title='Options for the fr-filter')
+    ap.add_argument("--frate_width_multiplier", type=float, default=1.0, help="Fraction of maximum sky-fringe-rate to interpolate / filter."
+                                                                              "Used if select_mainlobe is False and max_frate_coeffs not specified.")
+    ap.add_argument("--frate_standoff", type=float, default=0.0, help="Standoff in fringe-rate to filter [mHz]."
+                                                                      "Used of select_mainlobe is False and max_frate_coeffs not specified.")
+    ap.add_argument("--min_frate_half_width", type=float, default=0.025, help="minimum half-width of fringe-rate filter, regardless of baseline length in mHz."
+                                                                              "Default is 0.025.")
+    ap.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
+                                                                                  "Providing these overrides the sky-based fringe-rate determination! Default is None.")
+    ap.add_argument("--skip_autos", default=False, action="store_true", help="Exclude autos from filtering.")
+    return ap
+
+
+def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_list=None,
+                                   Nbls_per_load=None, spw_range=None, cache_dir=None,
+                                   read_cache=False, write_cache=False, external_flags=None,
+                                   factorize_flags=False, time_thresh=0.05,
+                                   res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
+                                   clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
+                                   skip_flagged_edges=False, overwrite_flags=False,
+                                   flag_yaml=None, skip_autos=False,
+                                   clean_flags_in_resid_flags=True, **filter_kwargs):
+    '''
+    A tophat fr-filtering method that only simultaneously loads and writes user-provided
+    list of baselines. This is to support parallelization over baseline (rather then time) if baseline_list is specified.
+
+    Arguments:
+        datafile_list: list of data files to perform cross-talk filtering on
+        baseline_list: list of antenna-pair-pol triplets to filter and write out from the datafile_list.
+                       If None, load all baselines in files. Default is None.
+        calfile_list: optional list of calibration files to apply to data before fr filtering
+        Nbls_per_load: int, the number of baselines to load at once.
+            If None, load all baselines at once. default : None.
+        spw_range: 2-tuple or 2-list, spw_range of data to filter.
+        cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
+            see uvtools.dspec.dayenu_filter for key formats.
+        read_cache: bool, If true, read existing cache files in cache_dir before running.
+        write_cache: bool. If true, create new cache file with precomputed matrices
+            that were not in previously loaded cache files.
+        factorize_flags: bool, optional
+            If True, factorize flags before running fr filter. See vis_clean.factorize_flags.
+        time_thresh : float, optional
+            Fractional threshold of flagged pixels across time needed to flag all times
+            per freq channel. It is not recommend to set this greater than 0.5.
+            Fully flagged integrations do not count towards triggering time_thresh.
+        res_outfilename: path for writing the filtered visibilities with flags
+        CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
+        filled_outfilename: path for writing the original data but with flags unflagged and replaced
+            with CLEAN models wherever possible
+        clobber: if True, overwrites existing file at the outfilename
+        add_to_history: string appended to the history of the output file
+        avg_red_bllens: bool, if True, round baseline lengths to redundant average. Default is False.
+        polarizations : list of polarizations to process (and write out). Default None operates on all polarizations in data.
+        skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
+        overwrite_flags : bool, if true reset data flags to False except for flagged antennas.
+        flag_yaml: path to manual flagging text file.
+        skip_autos: bool, if true, exclude autocorrelations from filtering. Default is False.
+                 autos will still be saved in the resides as zeros, as the models as the data (with original flags).
+        clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
+                                    default is True.
+        filter_kwargs: additional keyword arguments to be passed to FRFilter.tophat_frfilter()
+    '''
+    if baseline_list is not None and Nbls_per_load is not None:
+        raise NotImplementedError("baseline loading and partial i/o not yet implemented.")
+    hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
+    if baseline_list is not None and len(baseline_list) == 0:
+        warnings.warn("Length of baseline list is zero."
+                      "This can happen under normal circumstances when there are more files in datafile_list then baselines."
+                      "in your dataset. Exiting without writing any output.", RuntimeWarning)
+    else:
+        if baseline_list is None:
+            if len(hd.filepaths) > 1:
+                baseline_list = list(hd.bls.values())[0]
+            else:
+                baseline_list = hd.bls
+        if spw_range is None:
+            spw_range = [0, hd.Nfreqs]
+        freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
+        baseline_antennas = []
+        for blpolpair in baseline_list:
+            baseline_antennas += list(blpolpair[:2])
+        baseline_antennas = np.unique(baseline_antennas).astype(int)
+        if calfile_list is not None:
+            cals = io.HERACal(calfile_list)
+            cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
+        else:
+            cals = None
+        if polarizations is None:
+            if len(hd.filepaths) > 1:
+                polarizations = list(hd.pols.values())[0]
+            else:
+                polarizations = hd.pols
+        if Nbls_per_load is None:
+            Nbls_per_load = len(baseline_list)
+        for i in range(0, len(baseline_list), Nbls_per_load):
+            frfil = FRFilter(hd, input_cal=cals, axis='blt')
+            frfil.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
+            if avg_red_bllens:
+                frfil.avg_red_baseline_vectors()
+            if external_flags is not None:
+                frfil.apply_flags(external_flags, overwrite_flags=overwrite_flags)
+            if flag_yaml is not None:
+                frfil.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
+            if factorize_flags:
+                frfil.factorize_flags(time_thresh=time_thresh, inplace=True)
+            keys = frfil.data.keys()
+            if skip_autos:
+                keys = [bl for bl in keys if bl[0] != bl[1]]
+            if len(keys) > 0:
+                frfil.tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                                      skip_flagged_edges=skip_flagged_edges, keys=keys, **filter_kwargs)
+            else:
+                frfil.clean_data = DataContainer({})
+                frfil.clean_flags = DataContainer({})
+                frfil.clean_resid = DataContainer({})
+                frfil.clean_resid_flags = DataContainer({})
+                frfil.clean_model = DataContainer({})
+            # put autocorr data into filtered data containers if skip_autos = True.
+            # so that it can be written out into the filtered files.
+            if skip_autos:
+                for bl in frfil.data.keys():
+                    if bl[0] == bl[1]:
+                        frfil.clean_data[bl] = frfil.data[bl]
+                        frfil.clean_flags[bl] = frfil.flags[bl]
+                        frfil.clean_resid[bl] = frfil.data[bl]
+                        frfil.clean_model[bl] = np.zeros_like(frfil.data[bl])
+                        frfil.clean_resid_flags[bl] = frfil.flags[bl]
+
+            frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                                      filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
+                                      clobber=clobber, add_to_history=add_to_history,
+                                      extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array})
+            frfil.hd.data_array = None  # this forces a reload in the next loop
 
 
 def time_average_argparser():
