@@ -1399,7 +1399,7 @@ class VisClean(object):
                     elif mode == 'CLEAN':
                         data_out, flags_out = getattr(self, prefix + '_model'), getattr(self, prefix + '_flags')
                     elif mode == 'filled':
-                        data_out, flags_out = self.get_filled_data()
+                        data_out, flags_out = self.get_filled_data(prefix=prefix)
                     if partial_write:
                         # add extra_attrs to kwargs
                         for k in extra_attrs:
