@@ -66,6 +66,45 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
 
     return np.sum(taus)
 
+def dpss_filters(freqs, times, freq_scale=10e6, time_scale=1800, eigenval_cutoff=[1e-7]):
+    """
+    """
+    freq_filters, nfreq_comps = dpss_operator(
+        freqs,
+        filter_centers=[0],
+        filter_half_widths=[1 / freq_scale],
+        eigenval_cutoff=eigenval_cutoff,
+    )
+    freq_filters = freq_filters.real.astype(np.float32)
+
+    time_filters, ntime_comps = dpss_operator(
+        times,
+        filter_centers=[0],
+        filter_half_widths=[1 / time_scale],
+        eigenval_cutoff=eigenval_cutoff,
+    )
+    time_filters = time_filters.real.astype(np.float32)
+
+    vectors = np.reshape(
+        time_filters[:, None, :, None] * freq_filters[None, :, None, :],
+        (times.shape[0] * freqs.shape[0], ntime_comps[0] * nfreq_comps[0]),
+    )
+    return vectors
+
+def fit_solution_matrix(vectors, weights=None):
+    """
+    """
+    if weights is None:
+        XtXinvX = np.linalg.pinv(vectors.T @ vectors) @ vectors.T
+
+    else:
+        XtXinvX = (
+            np.linalg.pinv((vectors.T * weights.ravel()) @ vectors)
+            @ vectors.T
+            * weights.ravel()
+        )
+    return XtXinvX
+
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
                 mode='clean', **filter_kwargs):
