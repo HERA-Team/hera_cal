@@ -759,7 +759,7 @@ class Test_Visibility_IO_Legacy(object):
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
 
         # make some modifications
-        new_data = {key: (2. + 1.j) * val for key, val in data.items()}
+        new_data = {key: (2.) * val for key, val in data.items()}
         new_flags = {key: np.logical_not(val) for key, val in flags.items()}
         io.update_vis(fname, outname, data=new_data, flags=new_flags,
                       add_to_history='hello world', clobber=True, telescope_name='PAPER')
