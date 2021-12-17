@@ -135,25 +135,37 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
         ap1, ap2 = utils.split_pol(pol)
         flag_all = False
 
-        # apply new gains for antennas i and j. If either is missing, flag the whole baseline
-        try:
-            data[(i, j, pol)] /= (new_gains[(i, ap1)])**exponent
-        except KeyError:
-            flag_all = True
-        try:
-            data[(i, j, pol)] /= np.conj(new_gains[(j, ap2)])**exponent
-        except KeyError:
-            flag_all = True
-        # unapply old gains for antennas i and j. If either is missing, flag the whole baseline
-        if old_gains is not None:
+        # handle autocorrelations separately to keep them real
+        if (i == j) & (ap1 == ap2):
             try:
-                data[(i, j, pol)] *= (old_gains[(i, ap1)])**exponent
+                data[(i, j, pol)] /= (np.abs(new_gains[(i, ap1)])**2)**exponent
+            except KeyError:
+                flag_all = True
+            if old_gains is not None:
+                try:
+                    data[(i, j, pol)] *= (np.abs(old_gains[(i, ap1)])**2)**exponent
+                except KeyError:
+                    flag_all = True
+        else:
+            # apply new gains for antennas i and j. If either is missing, flag the whole baseline
+            try:
+                data[(i, j, pol)] /= (new_gains[(i, ap1)])**exponent
             except KeyError:
                 flag_all = True
             try:
-                data[(i, j, pol)] *= np.conj(old_gains[(j, ap2)])**exponent
+                data[(i, j, pol)] /= np.conj(new_gains[(j, ap2)])**exponent
             except KeyError:
                 flag_all = True
+            # unapply old gains for antennas i and j. If either is missing, flag the whole baseline
+            if old_gains is not None:
+                try:
+                    data[(i, j, pol)] *= (old_gains[(i, ap1)])**exponent
+                except KeyError:
+                    flag_all = True
+                try:
+                    data[(i, j, pol)] *= np.conj(old_gains[(j, ap2)])**exponent
+                except KeyError:
+                    flag_all = True
 
         if data_flags is not None:
             # update data_flags in the case where flags are weights, flag all if cal_flags are missing
