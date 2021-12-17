@@ -460,7 +460,7 @@ class Test_HERAData(object):
         assert hd._writers == {}
         d, f, n = hd.read(bls=hd.bls[0])
         assert hd.last_read_kwargs['bls'] == (53, 53, parse_polstr('XX', x_orientation=hd.x_orientation))
-        d[(53, 53, 'EE')] *= (2.0 + 1.0j)
+        d[(53, 53, 'EE')] *= 2.0
         hd.partial_write('out.h5', data=d, clobber=True)
         assert 'out.h5' in hd._writers
         assert isinstance(hd._writers['out.h5'], HERAData)
@@ -473,12 +473,12 @@ class Test_HERAData(object):
 
         d, f, n = hd.read(bls=hd.bls[1])
         assert hd.last_read_kwargs['bls'] == (53, 54, parse_polstr('XX', x_orientation=hd.x_orientation))
-        d[(53, 54, 'EE')] *= (2.0 + 1.0j)
+        d[(53, 54, 'EE')] *= 2.0
         hd.partial_write('out.h5', data=d, clobber=True)
 
         d, f, n = hd.read(bls=hd.bls[2])
         assert hd.last_read_kwargs['bls'] == (54, 54, parse_polstr('XX', x_orientation=hd.x_orientation))
-        d[(54, 54, 'EE')] *= (2.0 + 1.0j)
+        d[(54, 54, 'EE')] *= 2.0
         hd.partial_write('out.h5', data=d, clobber=True, inplace=True)
         d_after, _, _ = hd.build_datacontainers()
         np.testing.assert_array_almost_equal(d[(54, 54, 'EE')], d_after[(54, 54, 'EE')])
@@ -488,7 +488,7 @@ class Test_HERAData(object):
         hd2 = HERAData('out.h5')
         d2, f2, n2 = hd2.read()
         for bl in hd.bls:
-            np.testing.assert_array_almost_equal(d[bl] * (2.0 + 1.0j), d2[bl])
+            np.testing.assert_array_almost_equal(d[bl] * 2.0, d2[bl])
             np.testing.assert_array_equal(f[bl], f2[bl])
             np.testing.assert_array_equal(n[bl], n2[bl])
         os.remove('out.h5')
