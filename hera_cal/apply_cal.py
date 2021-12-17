@@ -84,9 +84,11 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
                     old_gains[ant] = np.ones_like(list(old_gains.values())[0])
                     old_flags[ant] = np.ones_like(list(old_flags.values())[0])
 
-        # Compute all gain ratios within a redundant baseline
+        # Compute all gain ratios within a redundant baseline, ensuring autocorrelations say real
         gain_ratios = [old_gains[i, utils.split_pol(pol)[0]] * np.conj(old_gains[j, utils.split_pol(pol)[1]])
                        / new_gains[i, utils.split_pol(pol)[0]] / np.conj(new_gains[j, utils.split_pol(pol)[1]])
+                       if not ((i == j) and (utils.split_pol(pol)[0] == utils.split_pol(pol)[1]))
+                       else np.abs(old_gains[i, utils.split_pol(pol)[0]])**2 / np.abs(new_gains[i, utils.split_pol(pol)[0]])**2
                        for (i, j, pol) in red]
 
         # Set flagged values to np.nan for those gain rations
