@@ -449,7 +449,7 @@ class HERAData(UVData):
 
         return data, flags, nsamples
 
-    def read(self, bls=None, polarizations=None, times=None, frequencies=None,
+    def read(self, bls=None, polarizations=None, times=None, time_range=None, frequencies=None,
              freq_chans=None, axis=None, read_data=True, return_data=True,
              run_check=True, check_extra=True, run_check_acceptability=True, **kwargs):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
@@ -465,6 +465,8 @@ class HERAData(UVData):
                 the object.  Ignored if read_data is False.
             times: The times to include when reading data into the object.
                 Ignored if read_data is False. Miriad will load then select on this axis.
+            time_range : length-2 arraylike of float, optional. The time range in Julian Date 
+                to include. Cannot be used with `times`.
             frequencies: The frequencies to include when reading data. Ignored if read_data
                 is False. Miriad will load then select on this axis.
             freq_chans: The frequency channel numbers to include when reading data. Ignored
@@ -490,7 +492,7 @@ class HERAData(UVData):
         '''
         # save last read parameters
         locs = locals()
-        partials = ['bls', 'polarizations', 'times', 'frequencies', 'freq_chans']
+        partials = ['bls', 'polarizations', 'times', 'time_range', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
 
         # if filepaths is None, this was converted to HERAData
@@ -502,8 +504,8 @@ class HERAData(UVData):
             try:
                 if self.filetype == 'uvh5':
                     super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
-                                 times=times, frequencies=frequencies, freq_chans=freq_chans, read_data=read_data,
-                                 run_check=run_check, check_extra=check_extra,
+                                 times=times, time_range=time_range, frequencies=frequencies, freq_chans=freq_chans, 
+                                 read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
                 else:
                     if not read_data:
@@ -512,13 +514,13 @@ class HERAData(UVData):
                         super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
                                      run_check=run_check, check_extra=check_extra,
                                      run_check_acceptability=run_check_acceptability, **kwargs)
-                        if any([times is not None, frequencies is not None, freq_chans is not None]):
+                        if any([times is not None, time_range is not None, frequencies is not None, freq_chans is not None]):
                             warnings.warn('miriad does not support partial loading for times and frequencies. '
                                           'Loading the file first and then performing select.')
-                            self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
+                            self.select(times=times, time_range=time_range, frequencies=frequencies, freq_chans=freq_chans)
                     elif self.filetype == 'uvfits':
-                        super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations,
-                                     times=times, frequencies=frequencies, freq_chans=freq_chans, run_check=run_check,
+                        super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations, times=times,
+                                     time_range=time_range, frequencies=frequencies, freq_chans=freq_chans, run_check=run_check,
                                      check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs)
                         self.unphase_to_drift()
 
@@ -553,7 +555,7 @@ class HERAData(UVData):
 
         # recompute slices if necessary
         names = ['antenna_nums', 'antenna_names', 'ant_str',
-                 'bls', 'times', 'blt_inds']
+                 'bls', 'times', 'time_range', 'blt_inds']
         for n in names:
             if n in kwargs and kwargs[n] is not None:
                 output._determine_blt_slicing()
