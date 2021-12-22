@@ -766,7 +766,9 @@ class HERAData(UVData):
 
     def iterate_over_times(self, Nints=1, times=None):
         '''Produces a generator that iteratively yields successive calls to
-        HERAData.read() by time or group of contiguous times.
+        HERAData.read() by time or group of contiguous times. N.B. May 
+        produce unexpected results for BDA data that has not been upsampled
+        or downsampled to a common time resolution.
 
         Arguments:
             Nints: number of integrations to load at once.
