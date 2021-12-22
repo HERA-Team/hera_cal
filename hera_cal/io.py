@@ -14,6 +14,7 @@ from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 from astropy import units
 import h5py
+import scipy
 import pickle
 import random
 import glob
@@ -334,10 +335,12 @@ class HERAData(UVData):
         data_ants = np.unique(np.concatenate((self.ant_1_array, self.ant_2_array)))
         data_antpos = {ant: antpos[ant] for ant in data_ants}
 
+        # get times using the most commonly appearing baseline, presumably the one without BDA
+        most_common_bl_num = scipy.stats.mode(self.baseline_array)[0][0]
+        times = self.time_array[self.baseline_array == most_common_bl_num]
+        lsts = self.lst_array[self.baseline_array == most_common_bl_num]
+
         freqs = np.unique(self.freq_array)
-        times = np.unique(self.time_array)
-        lst_indices = np.unique(self.lst_array.ravel(), return_index=True)[1]
-        lsts = self.lst_array.ravel()[np.sort(lst_indices)]
         pols = [polnum2str(polnum, x_orientation=self.x_orientation) for polnum in self.polarization_array]
         antpairs = self.get_antpairs()
         bls = [antpair + (pol,) for antpair in antpairs for pol in pols]
