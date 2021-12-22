@@ -256,13 +256,15 @@ class HERAData(UVData):
     # times_by+bl: dictionary mapping antpairs to times (JD). Also includes all reverse pairs.
     # times_by+bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
 
-    def __init__(self, input_data, filetype='uvh5', **read_kwargs):
+    def __init__(self, input_data, upsample=False, downsample=False, filetype='uvh5', **read_kwargs):
         '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
         useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
 
         Arguments:
             input_data: string data file path or list of string data file paths
+            upsample: bool. If True, will upsample to match the shortest integration time.
+            downsample: bool. If True, will downsample to match the longest integration time.
             filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
@@ -285,6 +287,10 @@ class HERAData(UVData):
                 raise IOError('Cannot find file ' + f)
 
         # load metadata from file
+        self.upsample = upsample
+        self.downsample = downsample
+        if self.upsample and self.downsample:
+            raise ValueError('upsample and downsample cannot both be True.')
         self.filetype = filetype
         if self.filetype == 'uvh5':
             # read all UVData metadata from first file
@@ -512,6 +518,13 @@ class HERAData(UVData):
                                      times=times, frequencies=frequencies, freq_chans=freq_chans, run_check=run_check,
                                      check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs)
                         self.unphase_to_drift()
+
+                # upsample or downsample data, as appropriate, including metadata
+                if self.upsample:
+                    self.upsample_in_time(max_int_time=np.min(self.integration_time))
+                if self.downsample:
+                    self.downsample_in_time(min_int_time=np.max(self.integration_time))
+
             finally:
                 self.read = temp_read  # reset back to this function, regardless of whether the above try excecutes successfully
 
@@ -1033,7 +1046,7 @@ def partial_time_io(hd, times, **kwargs):
     assert hd.filetype == 'uvh5', 'This function only works for uvh5-based HERAData objects.'
     combined_hd = None
     for f in hd.filepaths:
-        hd_here = HERAData(f)
+        hd_here = HERAData(f, upsample=hd.upsample, downsample=hd.downsample)
         times_here = [t for t in times if t in hd_here.times]
         if len(times_here) > 0:
             hd_here.read(times=times_here, return_data=False, **kwargs)
