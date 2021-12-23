@@ -136,6 +136,7 @@ class Test_HERAData(object):
     def setup_method(self):
         self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5")
         self.uvh5_2 = os.path.join(DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5")
+        self.uvh5_bda = os.path.join(DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.uvh5")
         self.miriad_1 = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.miriad_2 = os.path.join(DATA_PATH, "zen.2458043.13298.xx.HH.uvORA")
         self.uvfits = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
@@ -146,6 +147,8 @@ class Test_HERAData(object):
         # single uvh5 file
         hd = HERAData(self.uvh5_1)
         assert hd.filepaths == [self.uvh5_1]
+        assert not hd.upsample
+        assert not hd.downsample
         for meta in hd.HERAData_metas:
             assert getattr(hd, meta) is not None
         assert len(hd.freqs) == 1024
@@ -184,15 +187,27 @@ class Test_HERAData(object):
         for meta in hd.HERAData_metas:
             assert getattr(hd, meta) is None
 
+        # bda upsample/downsample
+        hd = HERAData(self.uvh5_bda, upsample=True)
+        assert hd.upsample
+        assert not hd.downsample
+        assert hd.shortest_integration == pytest.approx(9.66367642)
+        hd = HERAData(self.uvh5_bda, downsample=True)
+        assert not hd.upsample
+        assert hd.downsample
+        assert hd.longest_integration == pytest.approx(77.30941133)
+
         # test errors
         with pytest.raises(TypeError):
             hd = HERAData([1, 2])
         with pytest.raises(ValueError):
             hd = HERAData(None)
         with pytest.raises(NotImplementedError):
-            hd = HERAData(self.uvh5_1, 'not a real type')
+            hd = HERAData(self.uvh5_1, filetype='not a real type')
         with pytest.raises(IOError):
             hd = HERAData('fake path')
+        with pytest.raises(ValueError):
+            hd = HERAData(self.uvh5_bda, upsample=True, downsample=True)
 
     def test_add(self):
         hd = HERAData(self.uvh5_1)
