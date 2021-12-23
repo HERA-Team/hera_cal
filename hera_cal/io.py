@@ -264,8 +264,8 @@ class HERAData(UVData):
 
         Arguments:
             input_data: string data file path or list of string data file paths
-            upsample: bool. If True, will upsample to match the shortest integration time.
-            downsample: bool. If True, will downsample to match the longest integration time.
+            upsample: bool. If True, will upsample to match the shortest integration time in the file.
+            downsample: bool. If True, will downsample to match the longest integration time in the file.
             filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
@@ -287,12 +287,14 @@ class HERAData(UVData):
             if not os.path.exists(f):
                 raise IOError('Cannot find file ' + f)
 
-        # load metadata from file
+        # parse arguments into object
         self.upsample = upsample
         self.downsample = downsample
         if self.upsample and self.downsample:
             raise ValueError('upsample and downsample cannot both be True.')
         self.filetype = filetype
+
+        # load metadata from file
         if self.filetype == 'uvh5':
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
@@ -318,6 +320,15 @@ class HERAData(UVData):
                 setattr(self, meta, None)  # no pre-loading of metadata
         else:
             raise NotImplementedError('Filetype ' + self.filetype + ' has not been implemented.')
+
+        # save longest and shortest integration times in the file for later use in up/downsampling
+        # if available, these will be used instead of the ones in self.integration_time during partial I/O
+        if self.integration_time is not None:
+            self.longest_integration = np.max(self.integration_time)
+            self.shortest_integration = np.min(self.integration_time)
+        else:
+            self.longest_integration = None
+            self.shortest_integration = None
 
     def reset(self):
         '''Resets all standard UVData attributes, potentially freeing memory.'''
@@ -524,11 +535,15 @@ class HERAData(UVData):
                                      check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs)
                         self.unphase_to_drift()
 
-                # upsample or downsample data, as appropriate, including metadata
+                # upsample or downsample data, as appropriate, including metadata. Will use self.longest/shortest_integration
+                # if available (which came from whole file metadata) since partial i/o might change the current longest or
+                # shortest integration in a way that would create insonsistency between partial reads/writes.
                 if self.upsample:
-                    self.upsample_in_time(max_int_time=np.min(self.integration_time))
+                    max_int_time = [self.shortest_integration, np.min(self.integration_time)][self.shortest_integration is None]
+                    self.upsample_in_time(max_int_time=max_int_time)
                 if self.downsample:
-                    self.downsample_in_time(min_int_time=np.max(self.integration_time))
+                    min_int_time = [self.longest_integration, np.max(self.integration_time)][self.longest_integration is None]
+                    self.downsample_in_time(min_int_time=min_int_time)
 
             finally:
                 self.read = temp_read  # reset back to this function, regardless of whether the above try excecutes successfully
