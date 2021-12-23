@@ -265,7 +265,9 @@ class HERAData(UVData):
         Arguments:
             input_data: string data file path or list of string data file paths
             upsample: bool. If True, will upsample to match the shortest integration time in the file.
+                Upsampling will affect the time metadata stored on this object.
             downsample: bool. If True, will downsample to match the longest integration time in the file.
+                Downsampling will affect the time metadata stored on this object.
             filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
