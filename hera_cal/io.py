@@ -1027,19 +1027,34 @@ def get_file_times(filepaths, filetype='uvh5'):
         elif filetype == 'uvh5':
             # get times directly from uvh5 file's header: faster than loading entire file via HERAData
             with h5py.File(f, mode='r') as _f:
-                time_array = np.unique(_f[u'Header'][u'time_array'])
+                # pull out time_array and lst_array
+                time_array = np.ravel(_f[u'Header'][u'time_array'])
                 if u'lst_array' in _f[u'Header']:
                     lst_array = np.ravel(_f[u'Header'][u'lst_array'])
                 else:
+                    # need to generate lst_array on the fly
                     lst_array = np.ravel(uvutils.get_lst_for_time(_f[u'Header'][u'time_array'],
                                                                   _f[u'Header'][u'latitude'][()],
                                                                   _f[u'Header'][u'longitude'][()],
                                                                   _f[u'Header'][u'altitude'][()]))
-            lst_indices = np.unique(lst_array, return_index=True)[1]
-            # resort by their appearance in lst_array, then unwrap
-            lst_array = np.unwrap(lst_array[np.sort(lst_indices)])
-            int_time_rad = np.median(np.diff(lst_array))
-            int_time = np.median(np.diff(time_array))
+                
+                # figure out which baseline has the most times in order to handle BDA appropriately
+                baseline_array = uvutils.antnums_to_baseline(np.array(_f[u'Header'][u'ant_1_array']), 
+                                                             np.array(_f[u'Header'][u'ant_2_array']), 
+                                                             np.array(_f[u'Header'][u'Nants_telescope']))
+                most_common_bl_num = scipy.stats.mode(baseline_array)[0][0]
+                time_array = time_array[baseline_array == most_common_bl_num]
+                lst_array = lst_array[baseline_array == most_common_bl_num]
+
+            # figure out dtime and dlst, handling the case where a diff cannot be done.
+            if len(time_array) > 1:
+                int_time = np.median(np.diff(time_array))
+                int_time_rad = np.median(np.diff(lst_array))
+            else:
+                warnings.warn(f'{f} has only one time, so we assume that dtime is the minimum '
+                              'integration time. This may be incorrect for LST-binned files.')
+                int_time = np.min(_f[u'Header'][u'integration_time']) / units.day.to(units.si.s)
+                int_time_rad = int_time / units.sday.to(units.day) * 2 * np.pi
 
         dlsts.append(int_time_rad)
         dtimes.append(int_time)
