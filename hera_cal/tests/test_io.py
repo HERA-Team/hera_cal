@@ -1134,6 +1134,20 @@ def test_get_file_times_bda():
     np.testing.assert_array_equal(tarrs, hd.times)
 
 
+def test_get_file_times_single_integraiton():
+    fp = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.single_time.uvh5')
+    dlsts, dtimes, larrs, tarrs = io.get_file_times(fp, filetype='uvh5')
+    assert len(larrs) == 1
+    assert len(tarrs) == 1
+
+    fp2 = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5')
+    dlsts2, dtimes2, larrs2, tarrs2 = io.get_file_times(fp, filetype='uvh5')
+    np.testing.assert_array_almost_equal(dlsts, dlsts2)
+    np.testing.assert_array_almost_equal(dtimes, dtimes2)
+    np.testing.assert_array_equal(larrs[0], larrs2[0])
+    np.testing.assert_array_equal(tarrs[0], tarrs2[0])
+
+
 def test_baselines_from_filelist_position(tmpdir):
     tmp_path = tmpdir.strpath
     filelist = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
