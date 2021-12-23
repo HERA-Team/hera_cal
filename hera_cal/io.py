@@ -459,8 +459,8 @@ class HERAData(UVData):
 
         return data, flags, nsamples
 
-    def read(self, bls=None, polarizations=None, times=None, time_range=None, frequencies=None,
-             freq_chans=None, axis=None, read_data=True, return_data=True,
+    def read(self, bls=None, polarizations=None, times=None, time_range=None, lsts=None, lst_range=None, 
+             frequencies=None, freq_chans=None, axis=None, read_data=True, return_data=True, 
              run_check=True, check_extra=True, run_check_acceptability=True, **kwargs):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
@@ -475,8 +475,17 @@ class HERAData(UVData):
                 the object.  Ignored if read_data is False.
             times: The times to include when reading data into the object.
                 Ignored if read_data is False. Miriad will load then select on this axis.
-            time_range : length-2 arraylike of float, optional. The time range in Julian Date 
+            time_range : length-2 array-like of float, optional. The time range in Julian Date 
                 to include. Cannot be used with `times`.
+            lsts: The lsts in radians to include when reading data into the object.
+                Ignored if read_data is False. Miriad will load then select on this axis.
+                Cannot be used with `times` or `time_range`.
+            lst_range : length-2 array-like of float, optional. The lst range in radians
+                to include when. Cannot be used with `times`, `time_range`, or `lsts`.
+                Miriad will load then select on this axis. If the second value is smaller than 
+                the first, the LSTs are treated as having phase-wrapped around LST = 2*pi = 0
+                and the LSTs kept on the object will run from the larger value, through 0, and
+                end at the smaller value.
             frequencies: The frequencies to include when reading data. Ignored if read_data
                 is False. Miriad will load then select on this axis.
             freq_chans: The frequency channel numbers to include when reading data. Ignored
@@ -502,7 +511,7 @@ class HERAData(UVData):
         '''
         # save last read parameters
         locs = locals()
-        partials = ['bls', 'polarizations', 'times', 'time_range', 'frequencies', 'freq_chans']
+        partials = ['bls', 'polarizations', 'times', 'time_range', 'lsts', 'lst_range', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
 
         # if filepaths is None, this was converted to HERAData
@@ -514,24 +523,25 @@ class HERAData(UVData):
             try:
                 if self.filetype == 'uvh5':
                     super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
-                                 times=times, time_range=time_range, frequencies=frequencies, freq_chans=freq_chans, 
-                                 read_data=read_data, run_check=run_check, check_extra=check_extra,
+                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, 
+                                 freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
                     if self.filetype == 'miriad':
                         super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
-                                     run_check=run_check, check_extra=check_extra,
+                                     time_range=time_range, run_check=run_check, check_extra=check_extra,
                                      run_check_acceptability=run_check_acceptability, **kwargs)
-                        if any([times is not None, time_range is not None, frequencies is not None, freq_chans is not None]):
-                            warnings.warn('miriad does not support partial loading for times and frequencies. '
+                        if any([times is not None, lsts is not None, lsts_range is not None,
+                                frequencies is not None, freq_chans is not None]):
+                            warnings.warn('miriad does not support partial loading for times/lsts (except time_range) and frequencies. '
                                           'Loading the file first and then performing select.')
-                            self.select(times=times, time_range=time_range, frequencies=frequencies, freq_chans=freq_chans)
+                            self.select(times=times, lsts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans)
                     elif self.filetype == 'uvfits':
                         super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations, times=times,
-                                     time_range=time_range, frequencies=frequencies, freq_chans=freq_chans, run_check=run_check,
-                                     check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs)
+                                     time_range=time_range, sts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans,
+                                     run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs)
                         self.unphase_to_drift()
 
                 # upsample or downsample data, as appropriate, including metadata. Will use self.longest/shortest_integration
@@ -572,8 +582,8 @@ class HERAData(UVData):
             output = self
 
         # recompute slices if necessary
-        names = ['antenna_nums', 'antenna_names', 'ant_str',
-                 'bls', 'times', 'time_range', 'blt_inds']
+        names = ['antenna_nums', 'antenna_names', 'ant_str', 'bls', 'blt_inds',
+                 'times', 'time_range', 'lsts', 'lst_range']
         for n in names:
             if n in kwargs and kwargs[n] is not None:
                 output._determine_blt_slicing()
