@@ -1124,6 +1124,16 @@ def test_get_file_times():
     pytest.raises(ValueError, io.get_file_times, fp, filetype='foo')
 
 
+def test_get_file_times_bda():
+    fp = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5')
+    dlsts, dtimes, larrs, tarrs = io.get_file_times(fp, filetype='uvh5')
+    hd = io.HERAData(fp)
+    assert dlsts == np.median(np.diff(hd.lsts))
+    assert dtimes == np.median(np.diff(hd.times))
+    np.testing.assert_array_equal(larrs, hd.lsts)
+    np.testing.assert_array_equal(tarrs, hd.times)
+
+
 def test_baselines_from_filelist_position(tmpdir):
     tmp_path = tmpdir.strpath
     filelist = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
