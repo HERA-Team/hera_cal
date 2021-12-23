@@ -326,9 +326,6 @@ class HERAData(UVData):
         if self.integration_time is not None:
             self.longest_integration = np.max(self.integration_time)
             self.shortest_integration = np.min(self.integration_time)
-        else:
-            self.longest_integration = None
-            self.shortest_integration = None
 
     def reset(self):
         '''Resets all standard UVData attributes, potentially freeing memory.'''
@@ -539,11 +536,15 @@ class HERAData(UVData):
                 # if available (which came from whole file metadata) since partial i/o might change the current longest or
                 # shortest integration in a way that would create insonsistency between partial reads/writes.
                 if self.upsample:
-                    max_int_time = [self.shortest_integration, np.min(self.integration_time)][self.shortest_integration is None]
-                    self.upsample_in_time(max_int_time=max_int_time)
+                    if hasattr(self, 'shortest_integration'):
+                        self.upsample_in_time(max_int_time=self.shortest_integration)
+                    else:
+                        self.upsample_in_time(max_int_time=np.min(self.integration_time))
                 if self.downsample:
-                    min_int_time = [self.longest_integration, np.max(self.integration_time)][self.longest_integration is None]
-                    self.downsample_in_time(min_int_time=min_int_time)
+                    if hasattr(self, 'longest_integration'):
+                        self.downsample_in_time(min_int_time=longest_integration)
+                    else:
+                        self.downsample_in_time(min_int_time=np.max(self.integration_time))
 
             finally:
                 self.read = temp_read  # reset back to this function, regardless of whether the above try excecutes successfully
