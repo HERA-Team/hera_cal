@@ -973,11 +973,15 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
 def get_file_times(filepaths, filetype='uvh5'):
     """
     Get a file's lst_array in radians and time_array in Julian Date.
-
-    Miriad standard is bin start, so a shift by int_time / 2 is performed.
-    UVH5 standard is bin center, so times are left untouched.
-
-    Note: this is not currently compatible with Baseline Dependent Averaged data.
+    
+    Some caveats:
+        - Miriad standard is bin start, so a shift by int_time / 2 is performed.
+          uvh5 standard is bin center, so times are left untouched.
+        - Miriad files do not support baseline-dependent averaging (BDA).
+        - With BDA for uvh5 files, the results will correspond to the least-averaged
+          baseline in the file.
+        - With uvh5 files with a single integration, it is assumed that the integration
+          time and dtime are the same. This may not be true in LST-binned files.
 
     Args:
         filepaths : type=list or str, filepath or list of filepaths
