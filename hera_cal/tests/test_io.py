@@ -450,6 +450,41 @@ class Test_HERAData(object):
         with pytest.raises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
 
+    def test_read_bda(self):
+        # no upsampling or downsampling
+        hd = HERAData(self.uvh5_bda)
+        assert np.max(hd.integration_time) == pytest.approx(77.30941133)
+        assert np.min(hd.integration_time) == pytest.approx(9.66367642)
+        assert len(np.unique(hd.time_array)) > 8
+        assert len(hd.times) == 8
+        assert len(hd.times_by_bl[117, 118]) == 1
+        assert len(hd.times_by_bl[104, 117]) == 8
+        d, f, n = hd.read()
+        assert len(d.times_by_bl[117, 118]) == 1
+        assert len(d.times_by_bl[104, 117]) == 8
+
+    def test_read_bda_upsample(self):
+        # show that upsampling works properly even with partial i/o
+        hd = HERAData(self.uvh5_bda, upsample=True)
+        assert len(hd.times_by_bl[117, 118]) == 8
+        d, f, n = hd.read(bls=[(117, 118, 'ee')])
+        assert d[(117, 118, 'ee')].shape == (8, len(hd.freqs))
+        np.testing.assert_array_almost_equal(hd.integration_time, 9.66367642)
+        np.testing.assert_array_almost_equal(np.diff(d.times), 9.66367642 / 24 / 3600)
+        assert len(d.times_by_bl[117, 118]) == 8
+        np.testing.assert_array_almost_equal(np.diff(d.times_by_bl[117, 118]), 9.66367642 / 24 / 3600)
+
+    def test_read_bda_downsample(self):
+        # show that downsampling works properly even with partial i/o
+        hd = HERAData(self.uvh5_bda, downsample=True)
+        assert len(hd.times_by_bl[104, 117]) == 1
+        d, f, n = hd.read(bls=[(104, 117, 'ee')])
+        assert d[(104, 117, 'ee')].shape == (1, len(hd.freqs))
+        np.testing.assert_array_almost_equal(hd.integration_time, 77.30941133)
+        np.testing.assert_array_almost_equal(np.diff(d.times), 77.30941133 / 24 / 3600)
+        assert len(d.times_by_bl[104, 117]) == 1
+        np.testing.assert_array_almost_equal(np.diff(d.times_by_bl[104, 117]), 77.30941133 / 24 / 3600)
+
     def test_getitem(self):
         hd = HERAData(self.uvh5_1)
         hd.read()
