@@ -1050,15 +1050,15 @@ def get_file_times(filepaths, filetype='uvh5'):
                 time_array = time_array[baseline_array == most_common_bl_num]
                 lst_array = lst_array[baseline_array == most_common_bl_num]
 
-            # figure out dtime and dlst, handling the case where a diff cannot be done.
-            if len(time_array) > 1:
-                int_time = np.median(np.diff(time_array))
-                int_time_rad = np.median(np.diff(lst_array))
-            else:
-                warnings.warn(f'{f} has only one time, so we assume that dtime is the minimum '
-                              'integration time. This may be incorrect for LST-binned files.')
-                int_time = np.min(_f[u'Header'][u'integration_time']) / units.day.to(units.si.s)
-                int_time_rad = int_time / units.sday.to(units.day) * 2 * np.pi
+                # figure out dtime and dlst, handling the case where a diff cannot be done.
+                if len(time_array) > 1:
+                    int_time = np.median(np.diff(time_array))
+                    int_time_rad = np.median(np.diff(lst_array))
+                else:
+                    warnings.warn(f'{f} has only one time, so we assume that dtime is the minimum '
+                                  'integration time. This may be incorrect for LST-binned files.')
+                    int_time = np.min(_f[u'Header'][u'integration_time']) / units.day.to(units.si.s)
+                    int_time_rad = int_time / units.sday.to(units.day) * 2 * np.pi
 
         dlsts.append(int_time_rad)
         dtimes.append(int_time)
