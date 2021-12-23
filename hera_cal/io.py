@@ -544,7 +544,7 @@ class HERAData(UVData):
                         self.upsample_in_time(max_int_time=np.min(self.integration_time))
                 if self.downsample:
                     if hasattr(self, 'longest_integration'):
-                        self.downsample_in_time(min_int_time=longest_integration)
+                        self.downsample_in_time(min_int_time=self.longest_integration)
                     else:
                         self.downsample_in_time(min_int_time=np.max(self.integration_time))
 
