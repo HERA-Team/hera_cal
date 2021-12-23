@@ -577,6 +577,7 @@ class HERAData(UVData):
         for n in names:
             if n in kwargs and kwargs[n] is not None:
                 output._determine_blt_slicing()
+                output._determine_pol_indexing()
                 break
         if 'polarizations' in kwargs and kwargs['polarizations'] is not None:
             output._determine_pol_indexing()
@@ -1057,6 +1058,8 @@ def get_file_times(filepaths, filetype='uvh5'):
 def partial_time_io(hd, times, **kwargs):
     '''Perform partial io with a time-select on a HERAData object, even if it is intialized
     using multiple files, some of which do not contain any of the specified times.
+
+    # TODO: support time range
 
     Arguments:
         hd: HERAData object intialized with (usually multiple) uvh5 files
