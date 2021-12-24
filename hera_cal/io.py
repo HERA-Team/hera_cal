@@ -1130,7 +1130,7 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
         # attempt to read this file's data
         try:
             hd_here.read(times=times_here, time_range=time_range, 
-                         lsts=lsts_here, lst_range=lst_range,
+                         lsts=lsts, lst_range=lst_range,
                          return_data=False, **kwargs)
         except ValueError as err:
             # check to see if the read failed because of the time range or lst range
