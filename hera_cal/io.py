@@ -1145,6 +1145,8 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
             combined_hd = hd_here
         else:
             combined_hd += hd_here
+    if combined_hd is None:
+        raise ValueError('No times or lsts matched any of the files in hd.')
     combined_hd = to_HERAData(combined_hd)  # re-runs the slicing and indexing
     return combined_hd.build_datacontainers()
 
