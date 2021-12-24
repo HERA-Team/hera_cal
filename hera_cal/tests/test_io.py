@@ -1125,13 +1125,25 @@ def test_get_file_times():
 
 
 def test_get_file_times_bda():
-    fp = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5')
-    dlsts, dtimes, larrs, tarrs = io.get_file_times(fp, filetype='uvh5')
-    hd = io.HERAData(fp)
+    fps = [os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5'),
+           os.path.join(DATA_PATH, 'zen.2459122.30119.sum.bda.downsampled.uvh5')]
+    
+    # test single file load
+    dlsts, dtimes, larrs, tarrs = io.get_file_times(fps[0], filetype='uvh5')
+    hd = io.HERAData(fps[0])
     assert dlsts == np.median(np.diff(hd.lsts))
     assert dtimes == np.median(np.diff(hd.times))
     np.testing.assert_array_equal(larrs, hd.lsts)
     np.testing.assert_array_equal(tarrs, hd.times)
+
+    # test multi-file load
+    dlsts, dtimes, larrs, tarrs = io.get_file_times(fps, filetype='uvh5')
+    hd = io.HERAData(fps)
+    for fp, dlst, dtime, larr, tarr in zip(fps, dlsts, dtimes, larrs, tarrs):
+        assert dlst == np.median(np.diff(hd.lsts[fp]))
+        assert dtime == np.median(np.diff(hd.times[fp]))
+        np.testing.assert_array_equal(larr, hd.lsts[fp])
+        np.testing.assert_array_equal(tarr, hd.times[fp])
 
 
 def test_get_file_times_single_integraiton():
