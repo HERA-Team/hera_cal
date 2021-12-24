@@ -1084,33 +1084,67 @@ def get_file_times(filepaths, filetype='uvh5'):
         return dlsts, dtimes, file_lst_arrays, file_time_arrays
 
 
-def partial_time_io(hd, times, **kwargs):
+def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, **kwargs):
     '''Perform partial io with a time-select on a HERAData object, even if it is intialized
     using multiple files, some of which do not contain any of the specified times.
-
-    # TODO: support time range
+    Note: can only use one of times, time_range, lsts, lst_range
 
     Arguments:
         hd: HERAData object intialized with (usually multiple) uvh5 files
         times: list of times in JD to load
+        time_range: length-2 array-like of range of JDs to load
+        lsts: list of lsts in radians to load
+        lst_range: length-2 array-like of range of lsts in radians to load.
+            If the 0th element is greater than the 1st, the range will wrap around 2pi
         kwargs: other partial i/o kwargs (see io.HERAData.read)
 
     Returns:
         data: DataContainer mapping baseline keys to complex visibility waterfalls
         flags: DataContainer mapping baseline keys to boolean flag waterfalls
         nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls
-        '''
+    '''
     assert hd.filetype == 'uvh5', 'This function only works for uvh5-based HERAData objects.'
+    if np.sum([times is not None, time_range is not None, lsts is not None, lst_range is not None]) > 1: 
+        raise ValueError('Only one of times, time_range, lsts, and lsts_range can be not None.')
+    
     combined_hd = None
     for f in hd.filepaths:
         hd_here = HERAData(f, upsample=hd.upsample, downsample=hd.downsample)
-        times_here = [t for t in times if t in hd_here.times]
-        if len(times_here) > 0:
-            hd_here.read(times=times_here, return_data=False, **kwargs)
-            if combined_hd is None:
-                combined_hd = hd_here
+        
+        # check if any of the selected times are in this particular file
+        if times is not None:
+            times_here = [time for time in times if time in hd_here.times]
+            if len(times_here) == 0:
+                continue  # skip this file
+        else:
+            times_here = None
+        
+        # check if any of the selected lsts are in this particular file
+        if lsts is not None:
+            lsts_here = [lst for lst in lsts if lst in hd_here.lsts]
+            if len(lsts_here) == 0:
+                continue  # skip this file
+        else:
+            lsts_here = None
+             
+        # attempt to read this file's data
+        try:
+            hd_here.read(times=times_here, time_range=time_range, 
+                         lsts=lsts_here, lst_range=lst_range,
+                         return_data=False, **kwargs)
+        except ValueError as err:
+            # check to see if the read failed because of the time range or lst range
+            if 'No elements in time range between ' in str(err):
+                continue  # no matching times, skip this file
+            elif 'No elements in LST range between ' in str(err):
+                continue  # no matchings lsts, skip this file
             else:
-                combined_hd += hd_here
+                raise
+            
+        if combined_hd is None:
+            combined_hd = hd_here
+        else:
+            combined_hd += hd_here
     combined_hd = to_HERAData(combined_hd)  # re-runs the slicing and indexing
     return combined_hd.build_datacontainers()
 
