@@ -1160,6 +1160,65 @@ def test_get_file_times_single_integraiton():
     np.testing.assert_array_equal(tarrs[0], tarrs2[0])
 
 
+def test_partial_time_io():
+    files = [os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5'),
+             os.path.join(DATA_PATH, 'zen.2459122.30119.sum.bda.downsampled.uvh5')]
+
+    # single file test
+    hd = io.HERAData(files[0])
+
+    # pick out specific times/lsts
+    d, f, n = io.partial_time_io(hd, times=hd.times[0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    d, f, n = io.partial_time_io(hd, lsts=hd.lsts[0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+
+    # pick out range of times/lsts (this should also get baselines with BDA)
+    d, f, n = io.partial_time_io(hd, time_range=hd.times[0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 1
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    d, f, n = io.partial_time_io(hd, lst_range=hd.lsts[0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 1
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+
+    # multi-file test, only taking times out of the first two files
+    hd = io.HERAData(files)
+
+    # pick out specific times/lsts
+    d, f, n = io.partial_time_io(hd, times=hd.times[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    d, f, n = io.partial_time_io(hd, lsts=hd.lsts[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+
+    # pick out range of times/lsts (this should also get baselines with BDA)
+    d, f, n = io.partial_time_io(hd, time_range=hd.times[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 1
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    d, f, n = io.partial_time_io(hd, lst_range=hd.lsts[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 1
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+
+    # test upsampling
+    hd = io.HERAData(files, upsample=True)
+    d, f, n = io.partial_time_io(hd, time_range=hd.times[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    d, f, n = io.partial_time_io(hd, lst_range=hd.lsts[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+
+    # test errors
+    hd = io.HERAData(files)
+    with pytest.raises(ValueError):
+        io.partial_time_io(hd, lst_range=[0,1])
+    with pytest.raises(ValueError):
+        io.partial_time_io(hd, lst_range=hd.lsts[hd.filepaths[0]][0:2], times=hd.times[hd.filepaths[0]][0:2])
+
+
 def test_baselines_from_filelist_position(tmpdir):
     tmp_path = tmpdir.strpath
     filelist = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
