@@ -1214,7 +1214,7 @@ def test_partial_time_io():
     # test errors
     hd = io.HERAData(files)
     with pytest.raises(ValueError):
-        io.partial_time_io(hd, lst_range=[0,1])
+        io.partial_time_io(hd, lst_range=[0, 1])
     with pytest.raises(ValueError):
         io.partial_time_io(hd, lst_range=hd.lsts[hd.filepaths[0]][0:2], times=hd.times[hd.filepaths[0]][0:2])
 
