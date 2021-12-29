@@ -1764,8 +1764,8 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
 
     if verbose:
         print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
-    hd_out = HERAData(hd.filepaths[0], filetype=hd.filetype)
-    hd_out.read(bls=cal['v_omnical'].keys())
+    hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
+    hd_out.read(bls=list(cal['v_omnical'].keys()))
     hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
     hd_out.history += version.history_string(add_to_history)
     hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
@@ -1778,11 +1778,11 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
                omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None,
-               metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None, pol_mode='2pol',
-               bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0,
-               flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50,
-               oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, add_to_history='',
-               max_dims=2, verbose=False, **filter_reds_kwargs):
+               metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None, 
+               upsample=False, downsample=False, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], 
+               ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, 
+               fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, 
+               check_after=50, gain=.4, add_to_history='', max_dims=2, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1807,6 +1807,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         clobber: if True, overwrites existing files for the firstcal and omnical results
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
             Partial io requires 'uvh5' filetype. Lower numbers save memory, but incur a CPU overhead.
+        upsample: if True, upsample baseline-dependent-averaged data file to highest temporal resolution
+        downsample: if True, downsample baseline-dependent-averaged data file to lowest temporal resolution
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
             See recal.get_reds for more information.
         bl_error_tol: the largest allowable difference between baselines in a redundant group
@@ -1842,12 +1844,13 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         cal: the dictionary result of the final run of redcal_iteration (see above for details)
     '''
     if isinstance(input_data, str):
-        hd = HERAData(input_data, filetype=filetype)
+        hd = HERAData(input_data, upsample=upsample, downsample=downsample, filetype=filetype)
         if filetype != 'uvh5' or nInt_to_load is None:
             hd.read()
-
     elif isinstance(input_data, HERAData):
         hd = input_data
+        hd.upsample = upsample
+        hd.downsample = downsample
         input_data = hd.filepaths[0]
     else:
         raise TypeError('input_data must be a single string path to a visibility data file or a HERAData object')
@@ -1946,6 +1949,8 @@ def redcal_argparser():
     redcal_opts.add_argument("--flag_nchan_high", type=int, default=0, help="integer number of channels at the high frequency end of the band to always flag (default 0)")
     redcal_opts.add_argument("--nInt_to_load", type=int, default=None, help="number of integrations to load and calibrate simultaneously. Lower numbers save memory, but incur a CPU overhead. \
                              Default None loads all integrations.")
+    redcal_opts.add_argument("--upsample", default=False, action="store_true", help="Upsample BDA files to the highest temporal resolution.")
+    redcal_opts.add_argument("--downsample", default=False, action="store_true", help="Downsample BDA files to the highest temporal resolution.")
     redcal_opts.add_argument("--pol_mode", type=str, default='2pol', help="polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'. See recal.get_reds documentation.")
     redcal_opts.add_argument("--bl_error_tol", type=float, default=1.0, help="the largest allowable difference between baselines in a redundant group")
     redcal_opts.add_argument("--min_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths shorter than this length in meters")
