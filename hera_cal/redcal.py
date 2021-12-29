@@ -10,7 +10,7 @@ import linsolve
 
 from . import utils
 from . import version
-from .noise import predict_noise_variance_from_autos
+from .noise import predict_noise_variance_from_autos, infer_dt
 from .datacontainer import DataContainer
 from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores
 from .io import HERAData, HERACal, write_cal, save_redcal_meta
@@ -1346,7 +1346,7 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight
     for bl in bls:
         ant0, ant1 = split_bl(bl)
         # weight by inverse noise variance inferred from autocorrelations
-        dt = np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY
+        dt = infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1)  # pick reasonable default for equal weights
         bl_wgts[bl] = (predict_noise_variance_from_autos(bl, data, dt=dt))**-1
         bl_wgts[bl][~np.isfinite(bl_wgts[bl])] = 0.0
         if weight_by_nsamples:
@@ -1419,7 +1419,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
     # Update chisq and chisq per ant to include all baselines between working antennas
     rekey_vis_sols(cal, good_ants_reds)
-    dts_by_bl = DataContainer({bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY for bl in good_ants_bls})
+    dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in good_ants_bls})
     data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in good_ants_bls})
     cal['chisq'], cal['chisq_per_ant'] = normalized_chisq(data, data_wgts, good_ants_reds, cal['v_omnical'], cal['g_omnical'])
 
@@ -1461,7 +1461,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
         # compute new chisq_per_ant for new gains
         data_subset = DataContainer({bl: data[bl] for bl in bls_to_use})
-        dts_by_bl = {bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY for bl in bls_to_use}
+        dts_by_bl = {bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in bls_to_use}
         data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in bls_to_use}
         _, _, chisq_per_ant, _ = utils.chisq(data_subset, cal['v_omnical'], data_wgts=data_wgts,
                                              gains=cal['g_omnical'], reds=all_reds)
@@ -1556,8 +1556,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     # perform logcal and omnical
     _, log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
     make_sol_finite(log_sol)
-    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
-                                                                     * SEC_PER_DAY))**-1 for bl in data.keys()}
+    dts_by_bl = {bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in data.keys()}
+    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl]) for bl in data.keys()}
     rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
                                            check_every=check_every, check_after=check_after, gain=gain)
 
