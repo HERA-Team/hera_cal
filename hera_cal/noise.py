@@ -7,6 +7,7 @@
 import numpy as np
 import argparse
 import scipy
+from astropy import units
 
 from . import io
 from . import version
@@ -34,6 +35,37 @@ def interleaved_noise_variance_estimate(vis, kernel=[[1, -2, 1], [-2, 4, -2], [1
     return variance
 
 
+def infer_dt(times_by_bl, bl, default_dt=None):
+    '''Attemps to infer dt for a baseline from times by bl. If len(times_by_bl[bl])
+    
+    Arguments:
+        times_by_bl: dictionary mapping antenna pair tuples to 1D time arrays (usually in JD)
+        bl: antpair tuple e.g. (0, 1) or basebline tuple e.g. (0, 1, 'ee'). Polarization ignored.
+        default_dt: default value to return if times cannot be infered. Default None raises ValueError.
+        
+    Returns:
+        dt: float. Delta time in units of times_by_bl
+    '''
+    # normal operation
+    if len(times_by_bl[bl[:2]]) > 1:
+        return np.median(np.ediff1d(times_by_bl[bl[0:2]]))
+    
+    # try to infer dt from other baselines
+    elif len(times_by_bl[bl[:2]]) == 1:
+        for bl2 in times_by_bl:
+            if len(times_by_bl[bl2]) > 1:
+                # this assumes that all baselines have the same total time
+                return np.median(np.ediff1d(times_by_bl[bl2])) * len(times_by_bl[bl2])
+    
+    # if dt cannot be inferred
+    if default_dt is not None:
+        return default_dt
+    if len(times_by_bl[bl[:2]]) == 0:
+        raise ValueError('Cannot infer dt when len(times_by_bl[bl[:2]]) == 0.')
+    else:
+        raise ValueError('Cannot infer dt when all len(times_by_bl) == 1 or fewer.')
+
+
 def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None):
     '''Predict the noise variance on a baseline using autocorrelation data.
 
@@ -51,8 +83,7 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None)
         Noise variance predicted on baseline bl in units of data squared
     '''
     if dt is None:
-        assert(len(data.times_by_bl[bl[0:2]]) > 1)  # cannot infer integration time if only one integration is given
-        dt = np.median(np.ediff1d(data.times_by_bl[bl[0:2]])) * 24. * 3600.
+        dt = infer_dt(data.times_by_bl, bl) * units.si.day.in_units(units.si.s)
     if df is None:
         assert(len(data.freqs) > 1)  # cannot infer channel width if only one channel is present
         df = np.median(np.ediff1d(data.freqs))
