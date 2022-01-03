@@ -1248,9 +1248,9 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
     else:
         if baseline_list is None:
             if len(hd.filepaths) > 1:
-                baseline_list = list(hd.bls.values())[0]
+                baseline_list = list(hd.antpairs.values())[0]
             else:
-                baseline_list = hd.bls
+                baseline_list = hd.antpairs
         if spw_range is None:
             spw_range = [0, hd.Nfreqs]
         freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
