@@ -1272,7 +1272,8 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
             Nbls_per_load = len(baseline_list)
         for i in range(0, len(baseline_list), Nbls_per_load):
             frfil = FRFilter(hd, input_cal=cals)
-            frfil.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
+            frfil.read(bls=baseline_list[i:i + Nbls_per_load],
+                       frequencies=freqs, polarizations=polarizations)
             if avg_red_bllens:
                 frfil.avg_red_baseline_vectors()
             if external_flags is not None:

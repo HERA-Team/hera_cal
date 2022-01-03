@@ -169,7 +169,8 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
             Nbls_per_load = len(baseline_list)
         for i in range(0, len(baseline_list), Nbls_per_load):
             df = DelayFilter(hd, input_cal=cals)
-            df.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
+            df.read(bls=baseline_list[i:i + Nbls_per_load],
+                    frequencies=freqs, polarizations=polarizations)
             if avg_red_bllens:
                 df.avg_red_baseline_vectors()
             if external_flags is not None:
