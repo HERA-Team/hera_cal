@@ -11,6 +11,7 @@ import numpy as np
 import operator
 import gc as garbage_collector
 import datetime
+import warnings
 
 from . import utils
 from . import version
@@ -366,19 +367,28 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 # for mean to account for varying nsamples, take nsamples weighted sum.
                 # (inverse variance weighted sum).
                 isfinite = np.isfinite(d)
-                d[~isfinite] = 0.0
                 n[~isfinite] = 0.0
 
                 norm = np.sum(n, axis=0).clip(1e-99, np.inf)
-                real_avg.append(np.sum(d.real * n, axis=0) / norm)
-                imag_avg.append(np.sum(d.imag * n, axis=0) / norm)
+                real_avg_t = np.nansum(d.real * n, axis=0) / norm
+                imag_avg_t = np.nansum(d.imag * n, axis=0) / norm
+
+                # add back nans as np.nansum sums nan slices to 0
+                flagged_f = np.logical_not(isfinite).all(axis=0)
+                real_avg_t[flagged_f] = np.nan
+                imag_avg_t[flagged_f] = np.nan
+
+                real_avg.append(real_avg_t)
+                imag_avg.append(imag_avg_t)
 
             # get minimum bin flag
             f_min.append(np.nanmin(f, axis=0))
 
             # get other stats
-            real_std.append(np.nanstd(d.real, axis=0))
-            imag_std.append(np.nanstd(d.imag, axis=0))
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
+                real_std.append(np.nanstd(d.real, axis=0))
+                imag_std.append(np.nanstd(d.imag, axis=0))
             bin_count.append(np.nansum(~np.isnan(d) * n, axis=0))
 
         # get final statistics
