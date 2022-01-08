@@ -324,7 +324,7 @@ class DataContainer:
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
-                    if not (np.any(np.iscomplex(self.__getitem__(k))) or np.any(np.iscomplex(D[k]))):
+                    if not (np.iscomplexobj(self.__getitem__(k)) or np.iscomplexobj(D[k])):
                         newD[k] = self.__getitem__(k) // D[k]
                     else:
                         div = self.__getitem__(k) / D[k]
@@ -335,7 +335,7 @@ class DataContainer:
         else:
             newD = copy.deepcopy(self)
             for k in newD.keys():
-                if not (np.any(np.iscomplex(newD[k])) or np.any(np.iscomplex(D))):
+                if not (np.iscomplexobj(newD[k]) or np.iscomplexobj(D)):
                     newD[k] = newD[k] // D
                 else:
                     div = newD[k] / D
