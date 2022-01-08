@@ -20,6 +20,7 @@ from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
 
+
 def discard_autocorr_imag(data_container):
     """
     Helper function to discard all imaginary components in autocorrs in a datacontainer.
@@ -35,6 +36,7 @@ def discard_autocorr_imag(data_container):
     for k in data_container:
         if k[0] == k[1]:
             data_container[k] = data_container[k].real + 0j
+
 
 def find_discontinuity_edges(x, xtol=1e-3):
     """Find edges based on discontinuity in x-axis
