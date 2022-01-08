@@ -61,7 +61,7 @@ class DataContainer:
             self._pols = set([k[-1] for k in self._data.keys()])
 
             # placeholders for metadata (or get them from data, if possible)
-            for attr in ['ants', 'data_ants', 'antpos', 'data_antpos', 
+            for attr in ['ants', 'data_ants', 'antpos', 'data_antpos',
                          'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
                 if hasattr(data, attr):
                     setattr(self, attr, getattr(data, attr))
@@ -324,14 +324,23 @@ class DataContainer:
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
-                    newD[k] = self.__getitem__(k) // D[k]
+                    if not (np.any(np.iscomplex(self.__getitem__(k))) or np.any(np.iscomplex(D[k]))):
+                        newD[k] =  self.__getitem__(k) // D[k]
+                    else:
+                        div = self.__getitem__(k) / D[k]
+                        newD[k] = np.real(div).astype(int) + 1j * np.imag(div).astype(int)
+
 
             return DataContainer(newD)
 
         else:
             newD = copy.deepcopy(self)
             for k in newD.keys():
-                newD[k] = newD[k] // D
+                if not (np.any(np.iscomplex(newD[k])) or np.any(np.iscomplex(D))):
+                    newD[k] = newD[k] // D
+                else:
+                    div = newD[k] / D
+                    newD[k] = np.real(div).astype(int) + 1j * np.imag(div).astype(int)
 
             return newD
 
