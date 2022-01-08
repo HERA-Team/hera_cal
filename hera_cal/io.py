@@ -547,15 +547,15 @@ class HERAData(UVData):
                         self.unphase_to_drift()
 
                 # upsample or downsample data, as appropriate, including metadata. Will use self.longest/shortest_integration
-                # if available (which came from whole file metadata) since partial i/o might change the current longest or
+                # if not None (which came from whole file metadata) since partial i/o might change the current longest or
                 # shortest integration in a way that would create insonsistency between partial reads/writes.
                 if self.upsample:
-                    if self.shortest_integration is not None:
+                    if hasattr(self, 'shortest_integration') and self.shortest_integration is not None:
                         self.upsample_in_time(max_int_time=self.shortest_integration)
                     else:
                         self.upsample_in_time(max_int_time=np.min(self.integration_time))
                 if self.downsample:
-                    if self.longest_integration is not None:
+                    if hasattr(self, 'longest_integration') and self.longest_integration is not None:
                         self.downsample_in_time(min_int_time=self.longest_integration)
                     else:
                         self.downsample_in_time(min_int_time=np.max(self.integration_time))
