@@ -359,6 +359,13 @@ class TestDataContainerWithRealData(object):
         assert np.allclose(d2[(24, 25, 'ee')][30, 30], 1.0)
         d2 = d // 2.0
         assert np.allclose(d2[(24, 25, 'ee')][30, 30], d[(24, 25, 'ee')][30, 30].real // 2.0 + d[(24, 25, 'ee')][30, 30].imag // 2.0)
+        # now convert d to floats and do the same thing.
+        for k in d:
+            d[k] = d[k].real
+        d2 = d // d
+        assert np.allclose(d2[(24, 25, 'ee')][30, 30], 1.0)
+        d2 = d // 2.0
+        assert np.allclose(d2[(24, 25, 'ee')][30, 30], d[(24, 25, 'ee')][30, 30] // 2.0)
 
     def test_invert(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
