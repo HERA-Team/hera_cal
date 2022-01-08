@@ -325,11 +325,10 @@ class DataContainer:
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
                     if not (np.any(np.iscomplex(self.__getitem__(k))) or np.any(np.iscomplex(D[k]))):
-                        newD[k] =  self.__getitem__(k) // D[k]
+                        newD[k] = self.__getitem__(k) // D[k]
                     else:
                         div = self.__getitem__(k) / D[k]
                         newD[k] = np.real(div).astype(int) + 1j * np.imag(div).astype(int)
-
 
             return DataContainer(newD)
 
