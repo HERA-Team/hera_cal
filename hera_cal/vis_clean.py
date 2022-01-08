@@ -20,6 +20,21 @@ from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
 
+def discard_autocorr_imag(data_container):
+    """
+    Helper function to discard all imaginary components in autocorrs in a datacontainer.
+
+    Parameters
+    ----------
+    data_container: io.DataContainer dictionary
+
+    Returns
+    -------
+    N/A modifies DataContainer in place.
+    """
+    for k in data_container:
+        if k[0] == k[1]:
+            data_container[k] = data_container[k].real + 0j
 
 def find_discontinuity_edges(x, xtol=1e-3):
     """Find edges based on discontinuity in x-axis
@@ -1203,6 +1218,10 @@ class VisClean(object):
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice]) | skipped
                 else:
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice])
+                # loop through resids, model, and data and make sure everything is real.
+                discard_autocorr_imag(filtered_model)
+                discard_autocorr_imag(filtered_resid)
+                discard_autocorr_imag(filtered_data)
 
         if hasattr(data, 'times'):
             filtered_data.times = data.times
