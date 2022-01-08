@@ -325,6 +325,8 @@ class HERAData(UVData):
 
         # save longest and shortest integration times in the file for later use in up/downsampling
         # if available, these will be used instead of the ones in self.integration_time during partial I/O
+        self.longest_integration = None
+        self.longest_integration = None
         if self.integration_time is not None:
             self.longest_integration = np.max(self.integration_time)
             self.shortest_integration = np.min(self.integration_time)
@@ -548,12 +550,12 @@ class HERAData(UVData):
                 # if available (which came from whole file metadata) since partial i/o might change the current longest or
                 # shortest integration in a way that would create insonsistency between partial reads/writes.
                 if self.upsample:
-                    if hasattr(self, 'shortest_integration'):
+                    if self.shortest_integration is not None:
                         self.upsample_in_time(max_int_time=self.shortest_integration)
                     else:
                         self.upsample_in_time(max_int_time=np.min(self.integration_time))
                 if self.downsample:
-                    if hasattr(self, 'longest_integration'):
+                    if self.longest_integration is not None:
                         self.downsample_in_time(min_int_time=self.longest_integration)
                     else:
                         self.downsample_in_time(min_int_time=np.max(self.integration_time))
