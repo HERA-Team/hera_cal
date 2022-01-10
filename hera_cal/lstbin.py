@@ -345,6 +345,10 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 # get real + imag flags
                 clip_flags = real_f + imag_f
 
+                # apply min_N condition as sigma_clip only checks axis size, not number of flags
+                sc_min_N = np.logical_not(f).sum(axis=0) < min_N
+                clip_flags[:, sc_min_N] = False
+
                 # set clipped data to nan
                 d[clip_flags] *= np.nan
 
