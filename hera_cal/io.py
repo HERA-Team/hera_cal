@@ -254,8 +254,8 @@ class HERAData(UVData):
     # pols: list of baseline polarization strings
     # antpairs: list of antenna number pairs in the data as 2-tuples
     # bls: list of baseline-pols in the data as 3-tuples
-    # times_by+bl: dictionary mapping antpairs to times (JD). Also includes all reverse pairs.
-    # times_by+bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
+    # times_by_bl: dictionary mapping antpairs to times (JD). Also includes all reverse pairs.
+    # lsts_by_bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
 
     def __init__(self, input_data, upsample=False, downsample=False, filetype='uvh5', **read_kwargs):
         '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
@@ -325,6 +325,8 @@ class HERAData(UVData):
 
         # save longest and shortest integration times in the file for later use in up/downsampling
         # if available, these will be used instead of the ones in self.integration_time during partial I/O
+        self.longest_integration = None
+        self.longest_integration = None
         if self.integration_time is not None:
             self.longest_integration = np.max(self.integration_time)
             self.shortest_integration = np.min(self.integration_time)
@@ -545,15 +547,15 @@ class HERAData(UVData):
                         self.unphase_to_drift()
 
                 # upsample or downsample data, as appropriate, including metadata. Will use self.longest/shortest_integration
-                # if available (which came from whole file metadata) since partial i/o might change the current longest or
+                # if not None (which came from whole file metadata) since partial i/o might change the current longest or
                 # shortest integration in a way that would create insonsistency between partial reads/writes.
                 if self.upsample:
-                    if hasattr(self, 'shortest_integration'):
+                    if hasattr(self, 'shortest_integration') and self.shortest_integration is not None:
                         self.upsample_in_time(max_int_time=self.shortest_integration)
                     else:
                         self.upsample_in_time(max_int_time=np.min(self.integration_time))
                 if self.downsample:
-                    if hasattr(self, 'longest_integration'):
+                    if hasattr(self, 'longest_integration') and self.longest_integration is not None:
                         self.downsample_in_time(min_int_time=self.longest_integration)
                     else:
                         self.downsample_in_time(min_int_time=np.max(self.integration_time))
