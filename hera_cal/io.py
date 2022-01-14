@@ -254,8 +254,8 @@ class HERAData(UVData):
     # pols: list of baseline polarization strings
     # antpairs: list of antenna number pairs in the data as 2-tuples
     # bls: list of baseline-pols in the data as 3-tuples
-    # times_by+bl: dictionary mapping antpairs to times (JD). Also includes all reverse pairs.
-    # times_by+bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
+    # times_by_bl: dictionary mapping antpairs to times (JD). Also includes all reverse pairs.
+    # lsts_by_bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
 
     def __init__(self, input_data, upsample=False, downsample=False, filetype='uvh5', **read_kwargs):
         '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
