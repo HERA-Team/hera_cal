@@ -50,6 +50,7 @@ setup_args = {
         'numpy>=1.10',
         'scipy',
         'astropy',
+        'astropy-healpix',
         'pyuvdata',
         'linsolve @ git+git://github.com/HERA-Team/linsolve',
         'hera_qm @ git+git://github.com/HERA-Team/hera_qm',

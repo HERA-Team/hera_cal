@@ -10,7 +10,7 @@ except ImportError:
     HAVE_UVTOOLS = False
 
 from . import utils
-import scipy.interpolate as interp
+from scipy.interpolate import interp1d
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
 from pyuvdata import UVData, UVFlag, UVBeam
@@ -19,9 +19,9 @@ from . import io
 from . import vis_clean
 import warnings
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz, ITRS
-import astropy.units as units
+from astropy import units
 import astropy.constants as const
-import healpy as hp
+from astropy_healpix import HEALPix
 from astropy.time import Time
 from pyuvdata import utils as uvutils
 from . import utils
@@ -32,7 +32,7 @@ import astropy.constants as const
 from . import redcal
 
 SPEED_OF_LIGHT = const.c.si.value
-SDAY_KSEC = 86163.93 / 1000.
+SDAY_KSEC = units.sday.to("ks")
 
 
 def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
@@ -58,10 +58,12 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
 
     Returns
     -------
-    center_frates: dict object,
+    frate_centers: dict object,
         Dictionary with the center fringe-rate of each baseline in to_filter in units of mHz.
-    width_frates: dict object
+        These are antpairpol format [e.g. (0, 1, 'ee')]
+    frate_half_widths: dict object
         Dictionary with the half widths of each fringe-rate window around the center_frates in units of mHz.
+        These are antpairpol format [e.g. (0, 1, 'ee')]
     """
     if keys is None:
         keys = uvd.get_antpairpols()
@@ -111,12 +113,27 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     """
     Calculate fringe-rate profiles to either directly apply as an FIR filter or set a range to filter.
 
+
+    Produces a dictionary of numpy arrays. Each array is the optimal weight
+    (SNR squared) to multiply data in each fringe-rate bin for an isotropic sky using the
+    instantaneous fringe-rates inside
+    of the fringe-rate kernel in equation  (4) in Parsons et al. 2016
+    https://ui.adsabs.harvard.edu/abs/2016ApJ...820...51P/abstract
+    The fringe-rate profile is integrated over all frequencies with some
+    unflagged data so we recommend only using this function on subbands
+    of <~ 10-20 MHz or frequency intervals
+    over which the primary beam does not evolve substantially.
+
     Parameters
     ----------
     uvd: UVData object
         UVData holding baselines for which we will build fringe-rate profiles.
     uvb: UVBeam object
         UVBeam object holding beams that we will build uvbeam profiles for.
+        Profiles are generated from power beams. If an efield beam is provided
+        a copy will be converted to the required power format. This function
+        also requires healpix formatted beams so this hidden copy will also
+        be converted to healpix if it was not already in this format.
     keys: list of antpairpol tuples
         list of antpairpol tuples of baselines to calculate fringe-rate limits for.
         default = None -> compute profiles for all antpairpols in uvd.
@@ -142,6 +159,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     -------
     fr_grid: np.ndarray
         length nfr grid of fringe-rates spaced by dfr centered at zero.
+        units are whatever the units of dfr are.
 
     profiles: Dictionary object. Maps antpairpol tuples to numpy.ndarray object
               with the sum of the beam squared in all directions falling into
@@ -157,7 +175,6 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         uvb.to_healpix()
     except ValueError as err:
         warnings.warn("UVBeam object already in healpix format...")
-
     if keys is None:
         keys = uvd.get_antpairpols()
 
@@ -168,20 +185,17 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     location = EarthLocation(lon=lon * units.deg, lat=lat * units.deg, height=alt * units.m)
 
     # get topocentricl AzEl Beam coordinates.
-    npix = uvb.data_array.shape[-1]
-    nside = hp.npix2nside(npix)
-    polar, az = hp.pix2ang(nside=nside, ipix=range(npix))
-    # cancel out super-horizon beam
-    alt = np.pi / 2. - polar
-
+    hp = HEALPix(nside=uvb.nside, order=uvb.ordering)
+    az, alt = hp.healpix_to_lonlat(range(uvb.Npixels))
+    # zero out beam below the horizon
+    uvb.data_array[0, 0, :, :, alt <= 0 * units.radian] = 0.
     # Covert AltAz coordinates of UVBeam pixels to barycentric coordinates.
     obstime = Time(np.median(np.unique(uvd.time_array)), format='jd')
     altaz = AltAz(obstime=obstime, location=location)
-    itrs = ITRS()
     # coordinates of beam pixels in topocentric frame.
-    altaz_coords = SkyCoord(alt=alt * units.rad, az=az * units.rad, frame=altaz)
+    altaz_coords = SkyCoord(alt=alt, az=az, frame=altaz)
     # transform beam pixels from topocentric to ITRS
-    eq_coords = altaz_coords.transform_to(itrs)
+    eq_coords = altaz_coords.transform_to(ITRS())
     # get cartesian xyz unit vectors in the direction of each beam pixle.
     eq_xyz = np.vstack([eq_coords.x, eq_coords.y, eq_coords.z])
 
@@ -194,7 +208,13 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         dfr = 1. / (dt * nfr)
 
     # build grid.
-    fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
+    min_frate = - dfr * nfr / 2
+    if np.mod(nfr, 2) != 0:
+        min_frate += dfr / 2
+    fr_grid = np.arange(nfr) * dfr + min_frate
+    # fringe rate bin edges including upper edge of rightmost bin.
+    frate_bins = np.hstack([frates - dfr / 2., [frates.max() + dfr / 2.])
+
 
     # frequency tapering function expected for power spectra.
     # square b/c for power spectrum.
@@ -212,7 +232,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     # for if we are going to sum over polarizations.
     # get redundancies (will only compute fr-profile once for each red group).
     antpos, antnums = uvd.get_ENU_antpos()
-    antpos = {an: ap for an, ap in zip(antnums, antpos)}
+    antpos = dict(zip(antnums, antpos))
     reds = redcal.get_reds(antpos, pols=list(unique_pols), include_autos=True)
     reds = [[bl for bl in rg if bl in keys or utils.reverse_bl(bl) in keys] for rg in reds]
     reds = [rg for rg in reds if len(rg) > 0]
@@ -220,36 +240,29 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     for redgrp in reds:
         # only explicitly calculate fr profile for the first vis in each redgroup.
         bl = redgrp[0]
-        echo("Generating FR-Profile of {} at {}".format(bl, str(datetime.datetime.now())), verbose=verbose)
+        echo(f"Generating FR-Profile of {bl} at {str(datetime.datetime.now())}", verbose=verbose)
         # sum beams from all frequencies
-        # get polarization number
-        polnum = np.where(uvutils.polstr2num(bl[-1], x_orientation=uvb.x_orientation) == uvb.polarization_array)[0][0]
+        # get polarization index
+        polindex = np.where(uvutils.polstr2num(bl[-1], x_orientation=uvb.x_orientation) == uvb.polarization_array)[0][0]
         # get baseline vector in equitorial coordinates.
-        ind1 = np.where(antnums == bl[0])[0][0]
-        ind2 = np.where(antnums == bl[1])[0][0]
-        blvec = uvd.antenna_positions[ind2] - uvd.antenna_positions[ind1]
+        blvec = antpos_trf[antnums == bl[1]] - antpos_trf[antnums == bl[0]]
         # initialize binned power.
         # we will bin frate power together for all frequencies, weighted by taper.
         binned_power = np.zeros_like(fr_grid)
         binned_power_conj = np.zeros_like(fr_grid)
         # iterate over each frequency and ftaper weighting.
         # use linspace to make sure we get first and last frequencies.
-        chans_to_use = np.linspace(0, uvd.Nfreqs - 1, int(uvd.Nfreqs / fr_freq_skip)).astype(int)
-        for f0, fw in zip(uvd.freq_array[0, chans_to_use], ftaper[chans_to_use]):
-            frates = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * 2 * np.pi * f0 / SPEED_OF_LIGHT / SDAY_KSEC
-            # square of power beam values in directions of sky pixels
-            bsq = np.abs(uvb.data_array[0, 0, polnum, np.argmin(np.abs(f0 - uvb.freq_array[0])), :].squeeze()) ** 2.
-            # set beam below horizon to be zero.
-            bsq[polar >= np.pi / 2.] = 0.
-            # get fringe-rate bin membership for each pixel.
-            fr_bins = np.round(frates / dfr + nfr / 2).astype(int)
-            fr_bins_conj = np.round(frates / -dfr + nfr / 2).astype(int)
-            # bin power.
-            for binnum in range(nfr):
-                # For each bin, find all pixels that fall in that fr bin and add the sum beam-square values in each pixel
-                # times the frequency weighing value set by taper.
-                binned_power[binnum] += np.sum(bsq[fr_bins == binnum]) * fw  # add sum of beam squared times taper weight.
-                binned_power_conj[binnum] += np.sum(bsq[fr_bins_conj == binnum]) * fw
+        unflagged_chans = ~np.all(np.all(uvd.flag_array[:, 0, :, :].squeeze(), axis=0), axis=-1)
+        chans_to_use = np.arange(uvd.Nfreqs).astype(int)[unflagged_chans][::fr_freq_skip]
+        frate_coeff = 2 * np.pi / SPEED_OF_LIGHT / SDAY_KSEC
+        frate_over_freq = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * frate_coeff
+        # histogram all frequencies together in one step.
+        frates = np.hstack([frate_over_freq * freq for freq in uvd.freq_array[0, chans_to_use]])
+        # beam squared values weighted by the taper function.
+        bsq = np.hstack([np.abs(uvb.data_array[0, 0, polindex, np.argmin(np.abs(freq - uvb.freq_array[0])), :].squeeze()) ** 2. * freqweight ** 2. for freq, freqweight in zip(uvd.freq_array[0, chans_to_use], ftaper[chans_to_use])])
+        # histogram fringe rates weighted by beam square values.
+        binned_power = np.histogram(frates, bins=frate_bins, weights=bsq)[0]
+        binned_power_conj = np.histogram(-frates, bins=frate_bins, weights=bsq)[0]
 
         # iterate over redgrp and set profiles for each baseline key.
         for blk in redgrp:
@@ -309,7 +322,11 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
         number of points on fringe-rate grid to perform binning and percentile calc.
         default is None -> set to uvd.Ntimes.
     taper: str, optional
-        taper expected for power spectrum calculations. Fringe-rates from different frequencies
+        taper expected for power spectrum calculations. Fringe-rate profiles from different frequencies
+        will be summed into the total fringe-rate profile with the weight of this taper.
+        Valid taper options can be found in uvtools.dspec.gen_window
+        Located here
+        https://github.com/HERA-Team/uvtools/blob/b1bbe5fd8cff06354bed6ca4ab195bf82b8db976/uvtools/dspec.py#L1155
     frate_standoff: float, optional
         Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
         default = 0.0.
@@ -351,7 +368,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
         fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
 
     # get redundancies (will only compute fr-profile once for each red group).
-    unique_pols = set({})
+    unique_pols = set()
     for bl in keys:
         if bl[-1] not in unique_pols:
             unique_pols.add(bl[-1])
@@ -378,7 +395,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
             dfr = np.median(np.diff(fr_grid))
             cspower_interp = np.hstack([[0], cspower, [100.]])
             fr_grid_interp = np.hstack([[fr_grid.min() - dfr], fr_grid, [fr_grid.max() + dfr]])
-            cspower_func = interp.interp1d(cspower_interp, fr_grid_interp)
+            cspower_func = interp1d(cspower_interp, fr_grid_interp)
             # find low and high bins containing mass between percentile_low and percentile_high.
             frlows.append(cspower_func(percentile_low))
             frhighs.append(cspower_func(percentile_high))
