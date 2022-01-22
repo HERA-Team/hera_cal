@@ -62,6 +62,7 @@ def _get_key_reds(antpos, keys):
     reds = redcal.filter_reds(reds, bls=keys)
     return reds
 
+
 def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
     """Compute sky fringe-rate ranges based on baselines, telescope location, and frequencies in uvdata.
 
@@ -243,8 +244,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         min_frate += dfr / 2
     fr_grid = np.arange(nfr) * dfr + min_frate
     # fringe rate bin edges including upper edge of rightmost bin.
-    frate_bins = np.hstack([frates - dfr / 2., [frates.max() + dfr / 2.])
-
+    frate_bins = np.hstack([fr_grid - dfr / 2., [fr_grid.max() + dfr / 2.]])
 
     # frequency tapering function expected for power spectra.
     # square b/c for power spectrum.
@@ -279,7 +279,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         frate_coeff = 2 * np.pi / SPEED_OF_LIGHT / SDAY_KSEC
         frate_over_freq = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * frate_coeff
         # histogram all frequencies together in one step.
-        frates = np.hstack([frate_over_freq * freq for freq in uvd.freq_array[0, chans_to_use]])
+        frates = np.hstack([frate_over_freq * freq for freq in uvd.freq_array[0, chans_to_use]]).squeeze()
         # beam squared values weighted by the taper function.
         bsq = np.hstack([np.abs(uvb.data_array[0, 0, polindex, np.argmin(np.abs(freq - uvb.freq_array[0])), :].squeeze()) ** 2. * freqweight ** 2. for freq, freqweight in zip(uvd.freq_array[0, chans_to_use], ftaper[chans_to_use])])
         # histogram fringe rates weighted by beam square values.
@@ -905,7 +905,6 @@ class FRFilter(VisClean):
             filt_data[k] = dfilt
             filt_flags[k] = f
             filt_nsamples[k] = eff_nsamples
-
 
     def tophat_frfilter(self, keys=None, wgts=None, mode='clean', uvb=None, percentile_low=5., percentile_high=95.,
                         frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
