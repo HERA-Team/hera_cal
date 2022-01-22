@@ -493,7 +493,7 @@ class Test_FRFilter(object):
         CLEAN_outfilename = os.path.join(tmp_path, 'model.uvh5')
         filled_outfilename = os.path.join(tmp_path, 'filled.uvh5')
         # perform cleaning.
-        frf.load_tophat_frfilter_and_write(datafile_list=[test_data], uvbeam=test_beam, mode='dpss_leastsq', filled_outfilename=filled_outfilename,
+        frf.load_tophat_frfilter_and_write(datafile_list=[test_data], beamfitsfile=test_beam, mode='dpss_leastsq', filled_outfilename=filled_outfilename,
                                            CLEAN_outfilename=CLEAN_outfilename, frate_standoff=0.075, pre_filter_modes_between_lobe_minimum_and_zero=pre_filter,
                                            res_outfilename=resid_outfilename, percentile_high=97.5, percentile_low=2.5)
         hd_input = io.HERAData(test_data)
