@@ -156,7 +156,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     uvd: UVData object
         UVData holding baselines for which we will build fringe-rate profiles.
     uvb: UVBeam object
-        UVBeam object holding beams that we will build uvbeam profiles for.
+        UVBeam object holding beams that we will build fr profiles for.
         Profiles are generated from power beams. If an efield beam is provided
         a copy will be converted to the required power format. This function
         also requires healpix formatted beams so this hidden copy will also
@@ -322,7 +322,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     uvd: UVData object
         UVData holding baselines for which we will build fringe-rate profiles.
     uvb: UVBeam object, optional
-        UVBeam object holding beams that we will build uvbeam profiles for.
+        UVBeam object holding beams that we will build fr profiles for.
         default is None -> use pre-computed frate_profiles.
         User must provide either frate_profiles or uvb. Otherwise an error
         will be raised.
@@ -906,6 +906,7 @@ class FRFilter(VisClean):
             filt_flags[k] = f
             filt_nsamples[k] = eff_nsamples
 
+
     def tophat_frfilter(self, keys=None, wgts=None, mode='clean', uvb=None, percentile_low=5., percentile_high=95.,
                         frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
                         max_frate_coeffs=None, skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
@@ -977,7 +978,7 @@ class FRFilter(VisClean):
             This is to avoid having the main-lobe filter respond to any exceedingly high power
             at low fringe rates which can happen during Galaxy set.
             or if there is egregious cross-talk / ground pickup.
-            This arg is only used if uvbeam is not None.
+            This arg is only used if beamfitsfile is not None.
             Default is False.
         filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
@@ -1186,10 +1187,10 @@ def tophat_frfilter_argparser(mode='clean'):
     ap.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
                                                                                   "Providing these overrides the sky-based fringe-rate determination! Default is None.")
     ap.add_argument("--skip_autos", default=False, action="store_true", help="Exclude autos from filtering.")
-    ap.add_argument("--uvbeam", default=None, type=str, help="Path to UVBeam beamfits file to use for determining isotropic sky fringe-rates to filter.")
-    ap.add_argument("--percentile_low", default=5.0, type=float, help="Reject fringe-rates with beam power below this percentile if uvbeam is provided.")
-    ap.add_argument("--percentile_high", default=95.0, type=float, help="Reject fringe-rates with beam power above this percentile if uvbeam is provided.")
-    ap.add_argument("--taper", default='none', type=str, help="Weight fringe-rates at different frequencies by the square of this taper if uvbeam is provided.")
+    ap.add_argument("--beamfitsfile", default=None, type=str, help="Path to UVBeam beamfits file to use for determining isotropic sky fringe-rates to filter.")
+    ap.add_argument("--percentile_low", default=5.0, type=float, help="Reject fringe-rates with beam power below this percentile if beamfitsfile is provided.")
+    ap.add_argument("--percentile_high", default=95.0, type=float, help="Reject fringe-rates with beam power above this percentile if beamfitsfile is provided.")
+    ap.add_argument("--taper", default='none', type=str, help="Weight fringe-rates at different frequencies by the square of this taper if beamfitsfile is provided.")
     ap.add_argument("--fr_freq_skip", default=1, type=int, help="fr_freq_skip: int, optional"
                                                                 "bin fringe rates from every freq_skip channels."
                                                                 "default is 1 -> takes a long time. We recommend setting this to be larger.")
@@ -1207,7 +1208,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
                                    res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                    clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
                                    skip_flagged_edges=False, overwrite_flags=False,
-                                   flag_yaml=None, skip_autos=False, uvbeam=None, verbose=False,
+                                   flag_yaml=None, skip_autos=False, beamfitsfile=None, verbose=False,
                                    clean_flags_in_resid_flags=True, **filter_kwargs):
     '''
     A tophat fr-filtering method that only simultaneously loads and writes user-provided
@@ -1215,7 +1216,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
 
     Arguments:
         datafile_list: list of data files to perform cross-talk filtering on
-        baseline_list: list of antenna-pair-pol triplets to filter and write out from the datafile_list.
+        baseline_list: list of antenna-pair 2-tuples to filter and write out from the datafile_list.
                        If None, load all baselines in files. Default is None.
         calfile_list: optional list of calibration files to apply to data before fr filtering
         Nbls_per_load: int, the number of baselines to load at once.
@@ -1245,7 +1246,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
         flag_yaml: path to manual flagging text file.
         skip_autos: bool, if true, exclude autocorrelations from filtering. Default is False.
                  autos will still be saved in the resides as zeros, as the models as the data (with original flags).
-        uvbeam: str, optional.
+        beamfitsfile: str, optional.
             path to UVBeam object for calculating frate bounds.
             default is None -> use other filter kwargs to determine fringe rate bounds.
         verbose: bool, optional
@@ -1301,9 +1302,9 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
             keys = frfil.data.keys()
             if skip_autos:
                 keys = [bl for bl in keys if bl[0] != bl[1]]
-            if uvbeam is not None:
+            if beamfitsfile is not None:
                 uvb = UVBeam()
-                uvb.read_beamfits(uvbeam)
+                uvb.read_beamfits(beamfitsfile)
             else:
                 uvb = None
             if len(keys) > 0:
