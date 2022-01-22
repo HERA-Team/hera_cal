@@ -297,12 +297,14 @@ class Test_FRFilter(object):
             data_kwargs = {'data': frfil.data}
         else:
             data_kwargs = {}
-        frfil.tophat_frfilter(keys=[k], wgts=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1,
-                              maxiter=100, center_before_filtering=center_frates, **data_kwargs)
-        assert frfil.clean_info[k][(0, frfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
-        np.testing.assert_array_equal(frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0]))
-        np.testing.assert_array_equal(frfil.clean_model[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
-        np.testing.assert_array_equal(frfil.clean_resid[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
+        for pre_filter in [True, False]:
+            frfil.tophat_frfilter(keys=[k], wgts=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1,
+                                  maxiter=100, center_before_filtering=center_frates,
+                                  pre_filter_modes_between_lobe_minimum_and_zero=pre_filter, **data_kwargs)
+            assert frfil.clean_info[k][(0, frfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
+            np.testing.assert_array_equal(frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0]))
+            np.testing.assert_array_equal(frfil.clean_model[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
+            np.testing.assert_array_equal(frfil.clean_resid[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
 
     def test_load_tophat_frfilter_and_write_baseline_list(self, tmpdir):
         tmp_path = tmpdir.strpath

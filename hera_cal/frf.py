@@ -1023,6 +1023,7 @@ class FRFilter(VisClean):
         wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         if pre_filter_modes_between_lobe_minimum_and_zero:
             self.pre_filter_resid = DataContainer({})
+            self.pre_filter_resid_flags = DataContainer({})
             filter_kwargs_no_data = copy.deepcopy(filter_kwargs)
             if 'data' in filter_kwargs_no_data:
                 del filter_kwargs_no_data['data']
