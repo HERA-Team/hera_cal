@@ -35,6 +35,33 @@ SPEED_OF_LIGHT = const.c.si.value
 SDAY_KSEC = units.sday.to("ks")
 
 
+def _get_key_reds(antpos, keys):
+    """
+    Private function to get redundant groups in list of antpairpol keys.
+
+    Parameters
+    ----------
+    antpos: dict
+        dictionary with integer keys mapping to length 3 numpy array ENU antenna positions.
+    keys:
+        list of antpairpols to split into redundant groups.
+
+    Returns
+    -------
+    reds: list of lists of tuples
+        list of lists where each sublist is a redundant group
+        and each element of each redundant group is a redundant antpairpol
+        in keys.
+    """
+    # get redundancies (will only compute fr-profile once for each red group).
+    unique_pols = set()
+    for bl in keys:
+        if bl[-1] not in unique_pols:
+            unique_pols.add(bl[-1])
+    reds = redcal.get_reds(antpos, pols=list(unique_pols), include_autos=True)
+    reds = redcal.filter_reds(reds, bls=keys)
+    return reds
+
 def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
     """Compute sky fringe-rate ranges based on baselines, telescope location, and frequencies in uvdata.
 
@@ -150,6 +177,9 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         default is None -> set to uvd.Ntimes.
     taper: str, optional
         taper expected for power spectrum calculations. Fringe-rates from different frequencies
+        Valid taper options can be found in uvtools.dspec.gen_window
+        Located here
+        https://github.com/HERA-Team/uvtools/blob/b1bbe5fd8cff06354bed6ca4ab195bf82b8db976/uvtools/dspec.py#L1155
     fr_freq_skip: int, optional
         bin fringe rates from every freq_skip channels.
         default is 1 -> takes a long time. We recommend setting this to be larger.
@@ -221,21 +251,13 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     ftaper = dspec.gen_window(taper, uvd.Nfreqs) ** 2.
     if keys is None:
         keys = uvd.get_antpairpols()
-    unique_pols = set({})
-    for bl in keys:
-        if bl[-1] not in unique_pols:
-            unique_pols.add(bl[-1])
 
     profiles = {}  # store profiles here.
     ap_blkeys = {}
     # keeps track of different polarizations for each antenna pair
     # for if we are going to sum over polarizations.
     # get redundancies (will only compute fr-profile once for each red group).
-    antpos, antnums = uvd.get_ENU_antpos()
-    antpos = dict(zip(antnums, antpos))
-    reds = redcal.get_reds(antpos, pols=list(unique_pols), include_autos=True)
-    reds = [[bl for bl in rg if bl in keys or utils.reverse_bl(bl) in keys] for rg in reds]
-    reds = [rg for rg in reds if len(rg) > 0]
+    reds = _get_key_reds(dict(zip(*uvd.get_ENU_antpos()[::-1])), keys)
 
     for redgrp in reds:
         # only explicitly calculate fr profile for the first vis in each redgroup.
@@ -301,19 +323,21 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
         UVData holding baselines for which we will build fringe-rate profiles.
     uvb: UVBeam object, optional
         UVBeam object holding beams that we will build uvbeam profiles for.
-        default is None -> use pre-computed frate_profiles
+        default is None -> use pre-computed frate_profiles.
+        User must provide either frate_profiles or uvb. Otherwise an error
+        will be raised.
     frate_profiles: dict object, optional
         Dictionary mapping antpairpol keys to fringe-rate profiles.
         centered on a grid of length nfr spaced by dfr centered at 0.
         default is None -> automatically calculate profiles using uvb.
+        User must provide either frate_profiles or uvb. Otherwise an error
+        will be raised.
     percentile_low: float, optional
         Percent of beam-squared power below lower fringe rate.
-    keys: dict, optional
-        antpairpol keys to compute fringe-rate limits for.
     percentile_high: float, optional
         Percent of beam-squared power above upper fringe rate.
-    to_filter: list of antpairpol tuples
-        list of antpairpol tuples of baselines to calculate fringe-rate limits for.
+    keys: dict, optional
+        antpairpol keys to compute fringe-rate limits for.
     dfr: float, optional.
         spacing of fringe-rate grid used to perform binning and percentile calc
         in units of mHz.
@@ -328,7 +352,8 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
         Located here
         https://github.com/HERA-Team/uvtools/blob/b1bbe5fd8cff06354bed6ca4ab195bf82b8db976/uvtools/dspec.py#L1155
     frate_standoff: float, optional
-        Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c for fringe-rate inpainting.
+        Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c to add
+        to limits computed from beam-squared histogram.
         default = 0.0.
     frate_width_multiplier: float, optional
         fraction of horizon to fringe-rate filter.
@@ -346,8 +371,10 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     -------
     frate_centers: dict object,
         Dictionary with the center fringe-rate of each baseline in to_filter in units of mHz.
+        keys are antpairpols.
     frate_half_widths: dict object
         Dictionary with the half widths of each fringe-rate window around the frate_centers in units of mHz.
+        keys are antpairpols
     """
     frate_centers = {}
     frate_half_widths = {}
@@ -367,16 +394,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
             dfr = 1. / (nfr * np.mean(np.diff(np.unique(uvd.time_array))) * SDAY_KSEC)
         fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
 
-    # get redundancies (will only compute fr-profile once for each red group).
-    unique_pols = set()
-    for bl in keys:
-        if bl[-1] not in unique_pols:
-            unique_pols.add(bl[-1])
-    antpos, antnums = uvd.get_ENU_antpos()
-    antpos = {an: ap for an, ap in zip(antnums, antpos)}
-    reds = redcal.get_reds(antpos, pols=list(unique_pols), include_autos=True)
-    reds = [[bl for bl in rg if bl in keys or utils.reverse_bl(bl) in keys] for rg in reds]
-    reds = [rg for rg in reds if len(rg) > 0]
+    reds = _get_key_reds(dict(zip(*uvd.get_ENU_antpos()[::-1])), keys)
 
     for redgrp in reds:
         bl0 = redgrp[0]
@@ -408,25 +426,6 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
                 frate_half_widths[bl] = np.max([frate_half_widths[bl], min_frate_half_width])
 
     return frate_centers, frate_half_widths
-
-
-def sky_mainlobe_complement(uvd, uvb, percentile_low=5., percentile_high=95., keys=None,
-                            dfr=None, nfr=None, taper='none', frate_standoff=0.0,
-                            frate_width_multiplier=1.0, min_frate_half_width=0.025, side='lower', extension=0.0):
-    """
-    Method for finding the fringe-rates that fall on the sky but are outside of the main-lobe.
-
-
-    This method is meant to allow for subtracting overwhelmingly bright emission from outside of the main-lobe
-    whose side-libes might be picked up by a main-lobe filter if it is not first subtracted.
-    It computes main-lobe fringe rates and sky-fringe rates and then gives the fringe-rate bounds for emission
-    below the main-lobe but still on the sky.
-
-    Parameters
-    ----------
-
-    """
-    return
 
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True,

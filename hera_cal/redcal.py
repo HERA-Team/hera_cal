@@ -225,7 +225,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
         ex_ants = expand_ants(ex_ants)
         bls = set(join_bl(i, j) for i, j in split_bls(bls) if i not in ex_ants and j not in ex_ants)
     bls.union(set(reverse_bl(k) for k in bls))  # put in reverse baselines, just in case
-    reds = [[key for key in gp if key in bls] for gp in reds]
+    reds = [[key for key in gp if key in or reverse_bl(key) in bls] for gp in reds]
     reds = [gp for gp in reds if len(gp) > 0]
 
     if min_bl_cut is not None or max_bl_cut is not None:
