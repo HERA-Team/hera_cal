@@ -36,12 +36,14 @@ def interleaved_noise_variance_estimate(vis, kernel=[[1, -2, 1], [-2, 4, -2], [1
 
 
 def infer_dt(times_by_bl, bl, default_dt=None):
-    '''Attemps to infer dt for a baseline from times by bl. If len(times_by_bl[bl])
+    '''Attemps to infer the length of each integration (i.e. Delta t) for a baseline from times by bl. 
+    If len(times_by_bl[bl]) is 1, this is inferred from Delta t of another baseline where len(times_by_bl[bl]) > 1.
     
     Arguments:
         times_by_bl: dictionary mapping antenna pair tuples to 1D time arrays (usually in JD)
         bl: antpair tuple e.g. (0, 1) or basebline tuple e.g. (0, 1, 'ee'). Polarization ignored.
         default_dt: default value to return if times cannot be infered. Default None raises ValueError.
+            Units should match those in times_by_bl (typically in JD).
         
     Returns:
         dt: float. Delta time in units of times_by_bl
@@ -67,7 +69,8 @@ def infer_dt(times_by_bl, bl, default_dt=None):
 
 
 def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None):
-    '''Predict the noise variance on a baseline using autocorrelation data.
+    '''Predict the noise variance on a baseline using autocorrelation data
+    using the formla sigma^2 = Vii * Vjj / Delta t / Delta nu.
 
     Arguments:
         bl: baseline tuple of the form (0, 1, 'nn')
@@ -80,7 +83,7 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None)
             integrations for that given baseline. Must include nsamples[bl].
 
     Returns:
-        Noise variance predicted on baseline bl in units of data squared
+        Noise variance predicted on baseline bl in units of data squared.
     '''
     if dt is None:
         dt = infer_dt(data.times_by_bl, bl) * units.si.day.in_units(units.si.s)
