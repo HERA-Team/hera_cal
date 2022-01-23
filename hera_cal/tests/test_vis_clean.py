@@ -697,6 +697,9 @@ class Test_VisClean(object):
             f[k][:, 47] = True  # flag near second break
             f[k][:, 49] = True  # should be inpainted
             d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
+            if k[0] == k[1]:
+                d[k] = d[k].real + 0j
+
             n[k] = np.ones(d[k].shape)
         hdt.update(flags=f, data=d)
         hdt.write_uvh5(fname_edgeflags)
@@ -743,6 +746,8 @@ class Test_VisClean(object):
             f[k][49, :] = True  # should be inpainted
             d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
             n[k] = np.ones(d[k].shape)
+            if k[0] == k[1]:
+                d[k] = d[k].real + 0j
         hdt.update(flags=f, data=d)
         hdt.write_uvh5(fname_edgeflags)
         V = VisClean(fname_edgeflags, filetype='uvh5')
@@ -784,6 +789,8 @@ class Test_VisClean(object):
                 f[k][:, j] = True
 
             d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
+            if k[0] == k[1]:
+                d[k] = d[k].real + 0j
             n[k] = np.ones(d[k].shape)
         hdt.update(flags=f, data=d)
         hdt.write_uvh5(fname_edgeflags)
