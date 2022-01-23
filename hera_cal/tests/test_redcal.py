@@ -1619,6 +1619,22 @@ class TestRunMethods(object):
         with pytest.raises(TypeError):
             cal = om.redcal_run({})
 
+    def test_redcal_run_bda(self):
+        uvh5_bda = os.path.join(DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.uvh5")
+        # test that gains have 8 times when we're upsampling
+        cal = om.redcal_run(uvh5_bda, upsample=True, clobber=True)
+        for gain in cal['g_omnical'].values():
+            assert gain.shape[0] == 8
+        # test that gains have 1 time when we're downsampling
+        cal = om.redcal_run(uvh5_bda, downsample=True, clobber=True)
+        for gain in cal['g_omnical'].values():
+            assert gain.shape[0] == 1
+        os.remove(os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.first.calfits'))
+        os.remove(os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.omni.calfits'))
+        os.remove(os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.omni_vis.uvh5'))
+        os.remove(os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.redcal_meta.hdf5'))
+
+
     def test_redcal_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--metrics_files', 'b', '--ex_ants', '5', '6', '--verbose']
         a = om.redcal_argparser()
