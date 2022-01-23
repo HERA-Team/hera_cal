@@ -1634,7 +1634,6 @@ class TestRunMethods(object):
         os.remove(os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.omni_vis.uvh5'))
         os.remove(os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.redcal_meta.hdf5'))
 
-
     def test_redcal_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--metrics_files', 'b', '--ex_ants', '5', '6', '--verbose']
         a = om.redcal_argparser()
