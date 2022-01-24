@@ -10,7 +10,7 @@ import linsolve
 
 from . import utils
 from . import version
-from .noise import predict_noise_variance_from_autos
+from .noise import predict_noise_variance_from_autos, infer_dt
 from .datacontainer import DataContainer
 from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores
 from .io import HERAData, HERACal, write_cal, save_redcal_meta
@@ -1346,7 +1346,7 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight
     for bl in bls:
         ant0, ant1 = split_bl(bl)
         # weight by inverse noise variance inferred from autocorrelations
-        dt = np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY
+        dt = infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1)  # pick reasonable default for equal weights
         bl_wgts[bl] = (predict_noise_variance_from_autos(bl, data, dt=dt))**-1
         bl_wgts[bl][~np.isfinite(bl_wgts[bl])] = 0.0
         if weight_by_nsamples:
@@ -1419,7 +1419,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
     # Update chisq and chisq per ant to include all baselines between working antennas
     rekey_vis_sols(cal, good_ants_reds)
-    dts_by_bl = DataContainer({bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY for bl in good_ants_bls})
+    dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in good_ants_bls})
     data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in good_ants_bls})
     cal['chisq'], cal['chisq_per_ant'] = normalized_chisq(data, data_wgts, good_ants_reds, cal['v_omnical'], cal['g_omnical'])
 
@@ -1461,7 +1461,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
         # compute new chisq_per_ant for new gains
         data_subset = DataContainer({bl: data[bl] for bl in bls_to_use})
-        dts_by_bl = {bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY for bl in bls_to_use}
+        dts_by_bl = {bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in bls_to_use}
         data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in bls_to_use}
         _, _, chisq_per_ant, _ = utils.chisq(data_subset, cal['v_omnical'], data_wgts=data_wgts,
                                              gains=cal['g_omnical'], reds=all_reds)
@@ -1556,8 +1556,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     # perform logcal and omnical
     _, log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
     make_sol_finite(log_sol)
-    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
-                                                                     * SEC_PER_DAY))**-1 for bl in data.keys()}
+    dts_by_bl = {bl: infer_dt(times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in data.keys()}
+    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in data.keys()}
     rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
                                            check_every=check_every, check_after=check_after, gain=gain)
 
@@ -1701,7 +1701,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                         data[bl] = data[bl][tinds, fSlice]  # cut down size of DataContainers to match unflagged indices
                         nsamples[bl] = nsamples[bl][tinds, fSlice]
                 else:  # perform partial i/o
-                    data, _, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
+                    data, _, nsamples = hd.read(time_range=(hd.times[tinds][0], hd.times[tinds][-1]), frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter,
                                             oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
@@ -1764,8 +1764,8 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
 
     if verbose:
         print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
-    hd_out = HERAData(hd.filepaths[0], filetype=hd.filetype)
-    hd_out.read(bls=cal['v_omnical'].keys())
+    hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
+    hd_out.read(bls=list(cal['v_omnical'].keys()))
     hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
     hd_out.history += version.history_string(add_to_history)
     hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
@@ -1778,11 +1778,11 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
                omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None,
-               metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None, pol_mode='2pol',
-               bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0,
-               flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50,
-               oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, add_to_history='',
-               max_dims=2, verbose=False, **filter_reds_kwargs):
+               metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None, 
+               upsample=False, downsample=False, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], 
+               ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, 
+               fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, 
+               check_after=50, gain=.4, add_to_history='', max_dims=2, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1807,6 +1807,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         clobber: if True, overwrites existing files for the firstcal and omnical results
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
             Partial io requires 'uvh5' filetype. Lower numbers save memory, but incur a CPU overhead.
+        upsample: if True, upsample baseline-dependent-averaged data file to highest temporal resolution
+        downsample: if True, downsample baseline-dependent-averaged data file to lowest temporal resolution
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
             See recal.get_reds for more information.
         bl_error_tol: the largest allowable difference between baselines in a redundant group
@@ -1842,12 +1844,13 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         cal: the dictionary result of the final run of redcal_iteration (see above for details)
     '''
     if isinstance(input_data, str):
-        hd = HERAData(input_data, filetype=filetype)
+        hd = HERAData(input_data, upsample=upsample, downsample=downsample, filetype=filetype)
         if filetype != 'uvh5' or nInt_to_load is None:
             hd.read()
-
     elif isinstance(input_data, HERAData):
         hd = input_data
+        hd.upsample = upsample
+        hd.downsample = downsample
         input_data = hd.filepaths[0]
     else:
         raise TypeError('input_data must be a single string path to a visibility data file or a HERAData object')
@@ -1946,6 +1949,8 @@ def redcal_argparser():
     redcal_opts.add_argument("--flag_nchan_high", type=int, default=0, help="integer number of channels at the high frequency end of the band to always flag (default 0)")
     redcal_opts.add_argument("--nInt_to_load", type=int, default=None, help="number of integrations to load and calibrate simultaneously. Lower numbers save memory, but incur a CPU overhead. \
                              Default None loads all integrations.")
+    redcal_opts.add_argument("--upsample", default=False, action="store_true", help="Upsample BDA files to the highest temporal resolution.")
+    redcal_opts.add_argument("--downsample", default=False, action="store_true", help="Downsample BDA files to the highest temporal resolution.")
     redcal_opts.add_argument("--pol_mode", type=str, default='2pol', help="polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'. See recal.get_reds documentation.")
     redcal_opts.add_argument("--bl_error_tol", type=float, default=1.0, help="the largest allowable difference between baselines in a redundant group")
     redcal_opts.add_argument("--min_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths shorter than this length in meters")
