@@ -969,8 +969,6 @@ def make_lst_grid(dlst, begin_lst=None, verbose=True):
 def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     """
     one-iteration robust sigma clipping algorithm. returns clip_flags array.
-    Warning: this function will directly replace flagged and clipped data in array with
-    a np.nan, so as to not make a copy of array.
 
     Parameters:
     -----------
@@ -1004,22 +1002,24 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     # create empty clip_flags array
     clip_flags = np.zeros_like(array, np.bool)
 
+    # make copy of data array as to not replace original array
+    array_ = array.copy()
+
     # inherit flags if fed and apply flags to data
     if flags is not None:
         clip_flags += flags
-        array[flags] *= np.nan
+        array_[flags] *= np.nan
 
     # get robust location
-    location = np.nanmedian(array, axis=axis)
+    location = np.nanmedian(array_, axis=axis)
 
     # get MAD! * 1.482579
-    scale = np.nanmedian(np.abs(array - location), axis=axis) * 1.482579
+    scale = np.nanmedian(np.abs(array_ - location), axis=axis) * 1.482579
 
     # get clipped data
-    clip = np.abs(array - location) / scale > sigma
+    clip = np.abs(array_ - location) / scale > sigma
 
-    # set clipped data to nan and set clipped flags to True
-    array[clip] *= np.nan
+    # set clipped flags to True
     clip_flags[clip] = True
 
     return clip_flags
