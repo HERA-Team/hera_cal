@@ -35,7 +35,7 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
     ideally all be the same) to figure out the proper gain to apply/unapply to the visibilities. If all
     gain ratios are flagged for a given time/frequency within a redundant group, the data_flags are
     updated. Typical use is to use absolute/smooth_calibrated gains as new_gains, omnical gains as
-    old_gains, and omnical visibility solutions as data.
+    old_gains, and omnical visibility solutions as data. NOTE: BDA not supported; gain and data shapes must match.
 
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
@@ -323,6 +323,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         upsample: if True, upsample baseline-dependent-averaged data file to the highest temporal resolution
         downsample: if True, downsample baseline-dependent-averaged data file to the lowest temporal resolution
         redundant_solution: If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.
+            NOTE: BDA data is not supported in this mode. Gain shapes must be made to match data samples using upsample/downsample.
         bl_error_tol: the largest allowable difference between baselines in a redundant group
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
