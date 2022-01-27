@@ -108,7 +108,6 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
                 data[bl] *= avg_gains**exponent
 
 
-
 def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
     ''' Builds dictionaries that map gains to the various cadences in potentially BDA data.
         As necessary, will upsample gains/flags by duplication and downsample gains/flags by
@@ -183,7 +182,6 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
                 gains_by_Nt[min_gain_Nt // 2][ant] = np.average([even_gains, odd_gains], axis=0)
 
     return gains_by_Nt, cal_flags_by_Nt
-
 
 
 def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None,
