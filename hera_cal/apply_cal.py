@@ -108,6 +108,84 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
                 data[bl] *= avg_gains**exponent
 
 
+
+def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
+    ''' Builds dictionaries that map gains to the various cadences in potentially BDA data.
+        As necessary, will upsample gains/flags by duplication and downsample gains/flags by
+        (weighted) averaging. When downsampling, flags are ORed and weights are averaged.
+
+    Arguments:
+        data: DataContainer containing baseline-pol complex visibility data. Only used
+            to figure out the various waterfall shapes.
+        gains: Dictionary mapping antenna tuples to complex gains to upsample/downsample as needed.
+        cal_flags: Dictionary mapping antenna tuples to boolean flags (or float weights).
+        flags_are_wgts: if True, treat data_flags as weights where 0s represent flags and
+            non-zero weights are unflagged data.
+
+    Returns:
+        gains_by_Nt: dictionary mapping numbers of integration to gain dictionaries
+        cal_flags_by_Nt: dictionary mapping numbers of integration to flag/weight dictionaries. 
+            If cal_flags is None, this will be None as well.
+    '''
+    # get all cadences (unique shapes of the time dimension in the data)
+    data_Nts = sorted(list(set([wf.shape[0] for wf in data.values()])))
+
+    # initialize results dictionaries, handling the case where there are None and/or empty dicts
+    if len(gains) == 0:
+        gains_by_Nt = {np.max(data_Nts): {}}
+    else:
+        gains_by_Nt = {gains[list(gains.keys())[0]].shape[0]: gains}
+    cal_flags_by_Nt = None
+    if cal_flags is not None:
+        if len(cal_flags) == 0:
+            cal_flags_by_Nt = {np.max(data_Nts): {}}
+        else:
+            cal_flags_by_Nt = {cal_flags[list(cal_flags.keys())[0]].shape[0]: cal_flags}
+
+    # If necessary, upsample gains (and flags) by repeating them
+    while True:
+        max_gain_Nt = np.max(list(gains_by_Nt.keys()))
+        if max_gain_Nt >= np.max(list(data_Nts)):
+            break
+        gains_by_Nt[max_gain_Nt * 2] = {ant: gains_by_Nt[max_gain_Nt][ant].repeat(2, axis=0) 
+                                        for ant in gains_by_Nt[max_gain_Nt]}
+        if cal_flags_by_Nt is not None:
+            cal_flags_by_Nt[max_gain_Nt * 2] = {ant: cal_flags_by_Nt[max_gain_Nt][ant].repeat(2, axis=0)
+                                                for ant in cal_flags_by_Nt[max_gain_Nt]}
+
+    # If necessary, downsample gains (and flags) by (flag-weigted) averaging (ORing) them
+    while True:
+        min_gain_Nt = np.min(list(gains_by_Nt.keys()))
+        if min_gain_Nt <= np.min(list(data_Nts)):
+            break
+        gains_by_Nt[min_gain_Nt // 2] = {}
+        if cal_flags_by_Nt is not None:
+            cal_flags_by_Nt[min_gain_Nt // 2] = {}
+        for ant, gain in gains_by_Nt[min_gain_Nt].items():
+            # break gains and flags into even and odd times to average together
+            even_gains = gain[0::2, :]
+            odd_gains = gain[1::2, :]
+            if cal_flags_by_Nt is not None:
+                # use flags/weights to perform a weighted average
+                even_flags = cal_flags_by_Nt[min_gain_Nt][ant][0::2, :]
+                odd_flags = cal_flags_by_Nt[min_gain_Nt][ant][1::2, :]
+                if flags_are_wgts:
+                    weights = [even_flags, odd_flags]
+                    # average weights
+                    cal_flags_by_Nt[min_gain_Nt // 2][ant] = (even_flags + odd_flags) / 2
+                else:
+                    weights = [(~even_flags).astype(float), (~odd_flags).astype(float)]
+                    # OR flags
+                    cal_flags_by_Nt[min_gain_Nt // 2][ant] = even_flags | odd_flags
+                gains_by_Nt[min_gain_Nt // 2][ant] = np.average([even_gains, odd_gains], axis=0, weights=weights)
+            else:
+                # just do a straight average
+                gains_by_Nt[min_gain_Nt // 2][ant] = np.average([even_gains, odd_gains], axis=0)
+
+    return gains_by_Nt, cal_flags_by_Nt
+
+
+
 def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None,
                        gain_convention='divide', flags_are_wgts=False):
     '''Update data and data_flags in place, taking out old calibration solutions, putting in new calibration
