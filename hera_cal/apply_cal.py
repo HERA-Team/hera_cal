@@ -628,6 +628,8 @@ def apply_cal_argparser():
     a.add_argument("--redundant_groups", type=int, default=1, help="Number of subgroups to split each redundant baseline into for cross power spectra. ")
     a.add_argument("--gain_convention", type=str, default='divide',
                    help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
+    a.add_argument("--upsample", default=False, action="store_true", help="Upsample BDA files to the highest temporal resolution.")
+    a.add_argument("--downsample", default=False, action="store_true", help="Downsample BDA files to the highest temporal resolution.")
     a.add_argument("--redundant_solution", default=False, action="store_true",
                    help="If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
