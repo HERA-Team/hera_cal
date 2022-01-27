@@ -210,40 +210,55 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
     _check_polarization_consistency(data, new_gains)
     exponent = {'divide': 1, 'multiply': -1}[gain_convention]
+
+    # build dictionary of all necessary gain shapes to account for calibration of BDA data
+    new_gains_by_Nt, cal_flags_by_Nt = build_gains_by_cadences(data, new_gains, cal_flags=cal_flags, flags_are_wgts=flags_are_wgts)
+    if old_gains is not None:
+        old_gains_by_Nt, _ = build_gains_by_cadences(data, old_gains, cal_flags=cal_flags, flags_are_wgts=flags_are_wgts)
+
     # loop over baselines in data
     for (i, j, pol) in data.keys():
+
         ap1, ap2 = utils.split_pol(pol)
         flag_all = False
+
+        # get relevant shaped gains for this data waterfall
+        Nt = data[(i, j, pol)].shape[0]
+        new_gains_here = new_gains_by_Nt[Nt]
+        cal_flags_here = cal_flags_by_Nt[Nt]
+        old_gains_here = None
+        if old_gains is not None:
+            old_gains_here = old_gains_by_Nt[Nt]
 
         # handle autocorrelations separately to keep them real
         if (i == j) & (ap1 == ap2):
             try:
-                data[(i, j, pol)] /= (np.abs(new_gains[(i, ap1)])**2)**exponent
+                data[(i, j, pol)] /= (np.abs(new_gains_here[(i, ap1)])**2)**exponent
             except KeyError:
                 flag_all = True
             if old_gains is not None:
                 try:
-                    data[(i, j, pol)] *= (np.abs(old_gains[(i, ap1)])**2)**exponent
+                    data[(i, j, pol)] *= (np.abs(old_gains_here[(i, ap1)])**2)**exponent
                 except KeyError:
                     flag_all = True
         else:
             # apply new gains for antennas i and j. If either is missing, flag the whole baseline
             try:
-                data[(i, j, pol)] /= (new_gains[(i, ap1)])**exponent
+                data[(i, j, pol)] /= (new_gains_here[(i, ap1)])**exponent
             except KeyError:
                 flag_all = True
             try:
-                data[(i, j, pol)] /= np.conj(new_gains[(j, ap2)])**exponent
+                data[(i, j, pol)] /= np.conj(new_gains_here[(j, ap2)])**exponent
             except KeyError:
                 flag_all = True
             # unapply old gains for antennas i and j. If either is missing, flag the whole baseline
             if old_gains is not None:
                 try:
-                    data[(i, j, pol)] *= (old_gains[(i, ap1)])**exponent
+                    data[(i, j, pol)] *= (old_gains_here[(i, ap1)])**exponent
                 except KeyError:
                     flag_all = True
                 try:
-                    data[(i, j, pol)] *= np.conj(old_gains[(j, ap2)])**exponent
+                    data[(i, j, pol)] *= np.conj(old_gains_here[(j, ap2)])**exponent
                 except KeyError:
                     flag_all = True
 
@@ -251,15 +266,15 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
             # update data_flags in the case where flags are weights, flag all if cal_flags are missing
             if flags_are_wgts:
                 try:
-                    data_flags[(i, j, pol)] *= (~cal_flags[(i, ap1)]).astype(np.float)
-                    data_flags[(i, j, pol)] *= (~cal_flags[(j, ap2)]).astype(np.float)
+                    data_flags[(i, j, pol)] *= (~cal_flags_here[(i, ap1)]).astype(np.float)
+                    data_flags[(i, j, pol)] *= (~cal_flags_here[(j, ap2)]).astype(np.float)
                 except KeyError:
                     flag_all = True
             # update data_flags in the case where flags are booleans, flag all if cal_flags are missing
             else:
                 try:
-                    data_flags[(i, j, pol)] += cal_flags[(i, ap1)]
-                    data_flags[(i, j, pol)] += cal_flags[(j, ap2)]
+                    data_flags[(i, j, pol)] += cal_flags_here[(i, ap1)]
+                    data_flags[(i, j, pol)] += cal_flags_here[(j, ap2)]
                 except KeyError:
                     flag_all = True
 
