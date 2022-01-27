@@ -288,7 +288,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
-              nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
+              nbl_per_load=None, gain_convention='divide', upsample=False, downsample=False, redundant_solution=False, bl_error_tol=1.0,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
               freq_atol=1., redundant_groups=1, dont_red_average_flagged_data=False, spw_range=None,
               exclude_from_redundant_mode="data", vis_units=None, **kwargs):
@@ -320,6 +320,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             nbl_per_load is only supported if filetype_in is .uvh5.
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
+        upsample: if True, upsample baseline-dependent-averaged data file to the highest temporal resolution
+        downsample: if True, downsample baseline-dependent-averaged data file to the lowest temporal resolution
         redundant_solution: If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.
         bl_error_tol: the largest allowable difference between baselines in a redundant group
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
@@ -395,7 +397,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         add_to_history += '\nOLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
     else:
         old_gains, old_flags = None, None
-    hd = io.HERAData(data_infilename, filetype=filetype_in)
+    hd = io.HERAData(data_infilename, filetype=filetype_in, upsample=upsample, downsample=downsample)
     if spw_range is None:
         spw_range = (0, hd.Nfreqs)
     else:
@@ -442,7 +444,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             # initialize a redunantly averaged HERAData on disk
             # first copy the original HERAData
             all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
-            hd_red = io.HERAData(data_infilename)
+            hd_red = io.HERAData(data_infilename, upsample=upsample, downsample=downsample)
             # go through all redundant groups and remove the groups that do not
             # have baselines in the data. Each group is still labeled by the
             # first baseline of each group regardless if that baseline is in
@@ -583,7 +585,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                                                                       reds=red_antpairs, red_bl_keys=reds_data_bls, wgts=redundant_weights, inplace=False,
                                                                       propagate_flags=True)
                 # update redundant data. Don't partial write.
-                hd_red = io.HERAData(data_infilename)
+                hd_red = io.HERAData(data_infilename, upsample=upsample, downsample=downsample)
                 if len(reds_data_bls) > 0:
                     hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
                     # update redundant data. Don't partial write.
