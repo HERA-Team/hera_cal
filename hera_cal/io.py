@@ -1574,6 +1574,18 @@ def update_uvdata(uvd, data=None, flags=None, nsamples=None, add_to_history='', 
     uvd.check()
 
 
+def _write_HERAData_to_filetype(hd, outfilename, filetype_out='miriad', clobber=False):
+    '''Helper function for update_vis().'''
+    if filetype_out == 'miriad':
+        hd.write_miriad(outfilename, clobber=clobber)
+    elif filetype_out == 'uvfits':
+        hd.write_uvfits(outfilename, force_phase=True, spoof_nonessential=True)
+    elif filetype_out == 'uvh5':
+        hd.write_uvh5(outfilename, clobber=clobber)
+    else:
+        raise TypeError("Input filetype must be either 'miriad', 'uvfits', or 'uvh5'.")
+
+
 def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miriad',
                data=None, flags=None, nsamples=None, add_to_history='', clobber=False, **kwargs):
     '''Loads an existing file with pyuvdata, modifies some subset of of its parameters, and
@@ -1607,14 +1619,7 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
     update_uvdata(hd, data=data, flags=flags, nsamples=nsamples, add_to_history=add_to_history, **kwargs)
 
     # write out results
-    if filetype_out == 'miriad':
-        hd.write_miriad(outfilename, clobber=clobber)
-    elif filetype_out == 'uvfits':
-        hd.write_uvfits(outfilename, force_phase=True, spoof_nonessential=True)
-    elif filetype_out == 'uvh5':
-        hd.write_uvh5(outfilename, clobber=clobber)
-    else:
-        raise TypeError("Input filetype must be either 'miriad', 'uvfits', or 'uvh5'.")
+    _write_HERAData_to_filetype(hd, outfilename, filetype_out=filetype_out, clobber=clobber)
 
 
 def to_HERACal(input_cal):
