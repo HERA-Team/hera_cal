@@ -1574,7 +1574,7 @@ def update_uvdata(uvd, data=None, flags=None, nsamples=None, add_to_history='', 
     uvd.check()
 
 
-def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miriad', upsample=False, downsample=False,
+def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miriad',
                data=None, flags=None, nsamples=None, add_to_history='', clobber=False, **kwargs):
     '''Loads an existing file with pyuvdata, modifies some subset of of its parameters, and
     then writes a new file to disk. Cannot modify the shape of data arrays. More than one
@@ -1586,10 +1586,6 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
         outfilename: filename of the new visibility file
         filetype_in: either 'miriad' or 'uvfits' (ignored if infile is a UVData/HERAData object)
         filetype_out: either 'miriad' or 'uvfits'
-        upsample: bool. If True, will upsample to match the shortest integration time in the file.
-            Ignored if infile is a UVData/HERAData object.
-        downsample: bool. If True, will downsample to match the longest integration time in the file.
-            Ignored if infile is a UVData/HERAData object.
         data: dictionary or DataContainer of complex visibility data to update. Keys
             like (0,1,'nn') and shape=(Ntimes,Nfreqs). Default (None) does not update.
         flags: dictionary or DataContainer of data flags to update.
@@ -1601,11 +1597,12 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
         kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
+
     # Load infile
     if isinstance(infilename, (UVData, HERAData)):
         hd = copy.deepcopy(infilename)
     else:
-        hd = HERAData(infilename, filetype=filetype_in, upsample=upsample, downsample=downsample)
+        hd = HERAData(infilename, filetype=filetype_in)
         hd.read()
     update_uvdata(hd, data=data, flags=flags, nsamples=nsamples, add_to_history=add_to_history, **kwargs)
 
