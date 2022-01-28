@@ -223,7 +223,9 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
         # get relevant shaped gains for this data waterfall
         Nt = data[(i, j, pol)].shape[0]
         new_gains_here = new_gains_by_Nt[Nt]
-        cal_flags_here = cal_flags_by_Nt[Nt]
+        cal_flags_here = None:
+        if cal_flags_by_Nt is not None:
+            cal_flags_here = cal_flags_by_Nt[Nt]
         old_gains_here = None
         if old_gains is not None:
             old_gains_here = old_gains_by_Nt[Nt]
