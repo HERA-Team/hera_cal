@@ -553,8 +553,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     vis_units = hc.gain_scale
             if vis_units is not None:
                 kwargs['vis_units'] = vis_units
-            io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
-                          data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
+            io.update_uvdata(hd, data=data, flags=data_flags, add_to_history=add_to_history, **kwargs)
+            io._write_HERAData_to_filetype(hd, data_outfilename, filetype_out=filetype_out, clobber=clobber)
+
         else:
             all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
             hd.update(data=data, flags=data_flags, nsamples=data_nsamples, **kwargs)
