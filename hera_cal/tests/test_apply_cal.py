@@ -42,6 +42,77 @@ class Test_Update_Cal(object):
         with pytest.raises(KeyError):
             ac._check_polarization_consistency(data, gains)
 
+    def test_build_gains_by_cadences(self):
+        # test upsampling
+        data = {(0, 1, 'nn'): np.ones((8, 10), dtype=complex)}
+        gains = {(0, 'Jnn'): np.arange(10)[np.newaxis, :].astype(complex)}
+        flags = {(0, 'Jnn'): np.zeros((1, 10), dtype=bool)}
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, gains, cal_flags=flags)
+        for Nt in [1, 2, 4, 8]:
+            assert Nt in gains_by_Nt
+            assert Nt in cal_flags_by_Nt
+            assert gains_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            assert cal_flags_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], np.outer(np.ones(Nt), np.arange(10).astype(complex)))
+            assert not np.any(cal_flags_by_Nt[Nt][(0, 'Jnn')])
+            
+        # test downsampling without flags
+        data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex)}
+        gains = {(0, 'Jnn'): np.outer(np.arange(4), np.ones(3)).astype(complex)}
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, gains)
+        assert cal_flags_by_Nt is None
+        for Nt in [1, 2, 4]:
+            assert Nt in gains_by_Nt
+            assert gains_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            if Nt == 1:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], 1.5)
+            if Nt == 2:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], np.outer([.5, 2.5], np.ones(3)))
+            if Nt == 4:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], gains[0, 'Jnn'])
+
+        # test downsampling
+        data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex)}
+        gains = {(0, 'Jnn'): np.outer(np.arange(4), np.ones(3)).astype(complex)}
+        flags = {(0, 'Jnn'): np.zeros((4, 3), dtype=bool)}
+        flags[(0, 'Jnn')][::3, 0] = True
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, gains, cal_flags=flags)
+        for Nt in [1, 2, 4]:
+            assert Nt in gains_by_Nt
+            assert Nt in cal_flags_by_Nt
+            assert gains_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            assert cal_flags_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            assert not np.any(cal_flags_by_Nt[Nt][(0, 'Jnn')][:, 1:])
+            if Nt < 4:
+                assert np.all(cal_flags_by_Nt[Nt][(0, 'Jnn')][:, 0])
+            if Nt == 1:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')][:, 1:], 1.5)
+            if Nt == 2:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')][:, 1:], np.outer([.5, 2.5], np.ones(2)))
+            if Nt == 4:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], gains[0, 'Jnn'])
+
+        # test downsampling with flags as weights
+        data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex)}
+        gains = {(0, 'Jnn'): np.outer(np.arange(4), np.ones(3)).astype(complex)}
+        flags = {(0, 'Jnn'): np.ones((4, 3), dtype=float)}
+        flags[(0, 'Jnn')][::3, 0] = 0
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, gains, cal_flags=flags, flags_are_wgts=True)
+        for Nt in [1, 2, 4]:
+            assert Nt in gains_by_Nt
+            assert Nt in cal_flags_by_Nt
+            assert gains_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            assert cal_flags_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            np.testing.assert_array_equal(cal_flags_by_Nt[Nt][(0, 'Jnn')][:, 1:], 1.0)
+            if Nt < 4:
+                assert np.all(cal_flags_by_Nt[Nt][(0, 'Jnn')][:, 0])
+            if Nt == 1:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')][:, 1:], 1.5)
+            if Nt == 2:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')][:, 1:], np.outer([.5, 2.5], np.ones(2)))
+            if Nt == 4:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], gains[0, 'Jnn'])
+
     def test_calibrate_avg_gains_in_place(self):
         np.random.seed(20)
         vis = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
