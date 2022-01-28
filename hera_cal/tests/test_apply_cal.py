@@ -246,6 +246,13 @@ class Test_Update_Cal(object):
         ac.calibrate_in_place(dc, g_new, wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
         assert np.allclose(wgts[(0, 1, 'xx')].max(), 0.0)
 
+        # test BDA
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis), (0, 2, 'xx'): deepcopy(vis[0:5, :])})
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f), (0, 2, 'xx'): deepcopy(f[0:5, :])})
+        g_here = deepcopy(g_new)
+        g_here[2, 'Jxx'] = deepcopy(g_here[1, 'Jxx'])
+        ac.calibrate_in_place(dc, g_here, flags)
+
     def test_apply_cal(self, tmpdir):
         tmp_path = tmpdir.strpath
         miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
