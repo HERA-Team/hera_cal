@@ -176,7 +176,7 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
                     weights = [(~even_flags).astype(float), (~odd_flags).astype(float)]
                     # OR flags
                     cal_flags_by_Nt[min_gain_Nt // 2][ant] = even_flags | odd_flags
-                gains_by_Nt[min_gain_Nt // 2][ant] = np.average([even_gains, odd_gains], axis=0, weights=weights)
+                gains_by_Nt[min_gain_Nt // 2][ant] = np.ma.average([even_gains, odd_gains], axis=0, weights=weights).data
             else:
                 # just do a straight average
                 gains_by_Nt[min_gain_Nt // 2][ant] = np.average([even_gains, odd_gains], axis=0)
