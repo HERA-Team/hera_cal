@@ -476,6 +476,51 @@ class Test_Update_Cal(object):
             # check that data is not equal.
             assert not np.any(equal_data)
 
+    def test_apply_cal_bda(self):
+        upsampled_oc = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.upsample_in_time.omni.calfits')
+        downsampled_oc = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.downsample_in_time.omni.calfits')
+
+        # load input data file
+        infile = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5')
+        hd_in = io.HERAData(infile)
+        d_in, f_in, n_in = hd_in.read()
+
+        # Try calibrating BDA data with omnical solution from downsampling
+        outfile = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.down_calibrated.uvh5')
+        ac.apply_cal(infile, outfile, downsampled_oc, clobber=True)
+        hd = io.HERAData(outfile)
+        d, f, n = hd.read()
+        for bl in d:
+            assert d[bl].shape == d_in[bl].shape
+        os.remove(outfile)
+
+        # Try calibrating BDA data with omnical solution from upsampling
+        outfile = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.up_calibrated.uvh5')
+        ac.apply_cal(infile, outfile, upsampled_oc, clobber=True)
+        hd = io.HERAData(outfile)
+        d, f, n = hd.read()
+        for bl in d:
+            assert d[bl].shape == d_in[bl].shape
+        os.remove(outfile)
+
+        # Try calibrating BDA and then downsampled data with omnical solution from downsampling
+        outfile = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.down_calibrated.uvh5')
+        ac.apply_cal(infile, outfile, downsampled_oc, clobber=True, downsample=True)
+        hd = io.HERAData(outfile)
+        d, f, n = hd.read()
+        for bl in d:
+            assert d[bl].shape[0] == 1
+        os.remove(outfile)
+
+        # Try calibrating BDA and then upsampled data with omnical solution from upsampling
+        outfile = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.up_calibrated.uvh5')
+        ac.apply_cal(infile, outfile, upsampled_oc, clobber=True, upsample=True)
+        hd = io.HERAData(outfile)
+        d, f, n = hd.read()
+        for bl in d:
+            assert d[bl].shape[0] == 8
+        os.remove(outfile)
+
     def test_apply_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']
         a = ac.apply_cal_argparser()
