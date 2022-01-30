@@ -1201,7 +1201,7 @@ class TestRedundantCalibrator(object):
 
         # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance 
         for antnum in antpos.keys():
-            noisy_data[(antnum, antnum, 'xx')] = np.sqrt(noise_var * dt * df)
+            noisy_data[(antnum, antnum, 'xx')] = np.ones((len(times), len(freqs))) * np.sqrt(noise_var * dt * df)
         noisy_data.freqs = deepcopy(freqs)
         noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
         cal = om.redundantly_calibrate(noisy_data, reds)
@@ -1253,7 +1253,7 @@ class TestRedundantCalibrator(object):
 
         # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance 
         for antnum in antpos.keys():
-            noisy_data[(antnum, antnum, 'xx')] = np.sqrt(noise_var * dt * df)
+            noisy_data[(antnum, antnum, 'xx')] = np.ones((len(times), len(freqs))) * np.sqrt(noise_var * dt * df)
         noisy_data.freqs = deepcopy(freqs)
         noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
         filtered_reds = om.filter_reds(reds, ex_ants=[6])
