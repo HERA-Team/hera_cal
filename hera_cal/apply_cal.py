@@ -205,7 +205,10 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
     '''Update data and data_flags in place, taking out old calibration solutions, putting in new calibration
     solutions, and updating flags from those calibration solutions. Previously flagged data is modified, but
     left flagged. Missing antennas from either the new gains, the cal_flags, or (if it's not None) the old
-    gains are automatically flagged in the data's visibilities that involves those antennas.
+    gains are automatically flagged in the data's visibilities that involves those antennas. Data and gain
+    shapes should always match in the frequency direction. Can apply Ntimes=1 gains by broadcasting. Can
+    also up/downsample gains with Ntimes differing from those in the data by a power of 2, which is useful
+    when the data is BDA and has Ntimes of multiple different powers of 2.
 
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
