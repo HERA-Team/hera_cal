@@ -130,16 +130,23 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
     data_Nts = sorted(list(set([wf.shape[0] for wf in data.values()])))
 
     # initialize results dictionaries, handling the case where there are None and/or empty dicts
-    if len(gains) == 0:
+    # and also the case where gains/flags are scalars, which then get recast as 2D arrays
+    if len(gains) == {}:
         gains_by_Nt = {np.max(data_Nts): {}}
     else:
-        gains_by_Nt = {gains[list(gains.keys())[0]].shape[0]: gains}
+        if np.isscalar(list(gains.values())[0]):
+            gains_by_Nt = {1: {ant: np.array([[gain]]) for ant, gain in gains.items()}}
+        else:
+            gains_by_Nt = {list(gains.values())[0].shape[0]: gains}
     cal_flags_by_Nt = None
     if cal_flags is not None:
-        if len(cal_flags) == 0:
+        if cal_flags == {}:
             cal_flags_by_Nt = {np.max(data_Nts): {}}
         else:
-            cal_flags_by_Nt = {cal_flags[list(cal_flags.keys())[0]].shape[0]: cal_flags}
+            if np.isscalar(list(cal_flags.values())[0]):
+                gains_by_Nt = {1: {ant: np.array([[cf]]) for ant, cf in cal_flags.items()}}
+            else:
+                gains_by_Nt = {list(cal_flags.values())[0].shape[0]: cal_flags}
 
     # If necessary, upsample gains (and flags) by repeating them
     while True:
