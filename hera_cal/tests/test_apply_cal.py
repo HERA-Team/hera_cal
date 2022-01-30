@@ -45,10 +45,10 @@ class Test_Update_Cal(object):
     def test_build_gains_by_cadences(self):
         # test upsampling
         data = {(0, 1, 'nn'): np.ones((8, 10), dtype=complex)}
-        gains = {(0, 'Jnn'): np.arange(10)[np.newaxis, :].astype(complex)}
-        flags = {(0, 'Jnn'): np.zeros((1, 10), dtype=bool)}
+        gains = {(0, 'Jnn'): np.array([np.arange(10)]).repeat(2, axis=0).astype(complex)}
+        flags = {(0, 'Jnn'): np.zeros((2, 10), dtype=bool)}
         gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, gains, cal_flags=flags)
-        for Nt in [1, 2, 4, 8]:
+        for Nt in [2, 4, 8]:
             assert Nt in gains_by_Nt
             assert Nt in cal_flags_by_Nt
             assert gains_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
@@ -246,7 +246,7 @@ class Test_Update_Cal(object):
         ac.calibrate_in_place(dc, g_new, wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
         assert np.allclose(wgts[(0, 1, 'xx')].max(), 0.0)
 
-        # test BDA
+        # test BDA runs without error
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis), (0, 2, 'xx'): deepcopy(vis[0:5, :])})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f), (0, 2, 'xx'): deepcopy(f[0:5, :])})
         g_here = deepcopy(g_new)
