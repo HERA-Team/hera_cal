@@ -131,8 +131,8 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
 
     # initialize results dictionaries, handling the case where there are None and/or empty dicts
     # and also the case where gains/flags are scalars, which then get recast as 2D arrays
-    if len(gains) == {}:
-        gains_by_Nt = {np.max(data_Nts): {}}
+    if gains == {}:
+        gains_by_Nt = {Nt: {} for Nt in data_Nts}
     else:
         if np.isscalar(list(gains.values())[0]):
             gains_by_Nt = {1: {ant: np.array([[gain]]) for ant, gain in gains.items()}}
@@ -141,12 +141,20 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
     cal_flags_by_Nt = None
     if cal_flags is not None:
         if cal_flags == {}:
-            cal_flags_by_Nt = {np.max(data_Nts): {}}
+            cal_flags_by_Nt = {Nt: {} for Nt in data_Nts}
         else:
             if np.isscalar(list(cal_flags.values())[0]):
-                gains_by_Nt = {1: {ant: np.array([[cf]]) for ant, cf in cal_flags.items()}}
+                cal_flags_by_Nt = {1: {ant: np.array([[cf]]) for ant, cf in cal_flags.items()}}
             else:
-                gains_by_Nt = {list(cal_flags.values())[0].shape[0]: cal_flags}
+                cal_flags_by_Nt = {list(cal_flags.values())[0].shape[0]: cal_flags}
+
+    # Handle the case where gains/flags have a single integration (and are thus trivially broadcastable)
+    if 1 in gains_by_Nt:
+        for Nt in data_Nts:
+            gains_by_Nt[Nt] = gains_by_Nt[1]
+    if cal_flags_by_Nt is not None and 1 in cal_flags_by_Nt:
+        for Nt in data_Nts:
+            cal_flags_by_Nt[Nt] = cal_flags_by_Nt[1]
 
     # If necessary, upsample gains (and flags) by repeating them
     while True:
