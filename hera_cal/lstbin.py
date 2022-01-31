@@ -337,10 +337,10 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
             # sigma clip if desired
             if sig_clip:
                 # clip real
-                real_f = sigma_clip(d.real, sigma=sigma, min_N=min_N, axis=0)
+                real_f = sigma_clip(d.real, sigma=sigma, min_N=min_N)
 
                 # clip imag
-                imag_f = sigma_clip(d.imag, sigma=sigma, min_N=min_N, axis=0)
+                imag_f = sigma_clip(d.imag, sigma=sigma, min_N=min_N)
 
                 # get real + imag flags
                 clip_flags = real_f + imag_f
@@ -966,61 +966,40 @@ def make_lst_grid(dlst, begin_lst=None, verbose=True):
     return lst_grid
 
 
-def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
+def sigma_clip(array, sigma=4.0, min_N=4):
     """
-    one-iteration robust sigma clipping algorithm. returns clip_flags array.
+    One-iteration robust sigma clipping algorithm. Returns clip_flags array.
 
     Parameters:
     -----------
-    array : ndarray of complex visibility data. If 2D, [0] axis is samples and [1] axis is freq.
-
-    flags : ndarray matching array shape containing boolean flags. True if flagged.
+    array : ndarray of complex visibility data. Clipping performed on 0th axis.
 
     sigma : float, sigma threshold to cut above
-
-    axis : int, axis of array to sigma clip
 
     min_N : int, minimum length of array to sigma clip, below which no sigma
                 clipping is performed.
 
-    return_arrs : type=boolean, if True, return array and flags
-
     Output: flags
     -------
     clip_flags : type=boolean ndarray, has same shape as input array, but has clipped
-                 values set to True. Also inherits any flagged data from flags array
-                 if passed.
+                 values set to True.
     """
     # ensure array is an array
     if not isinstance(array, np.ndarray):
         array = np.array(array)
 
     # ensure array passes min_N criteria:
-    if array.shape[axis] < min_N:
-        return np.zeros_like(array, np.bool)
-
-    # create empty clip_flags array
-    clip_flags = np.zeros_like(array, np.bool)
-
-    # make copy of data array as to not replace original array
-    array_ = array.copy()
-
-    # inherit flags if fed and apply flags to data
-    if flags is not None:
-        clip_flags += flags
-        array_[flags] *= np.nan
+    if array.shape[0] < min_N:
+        return np.zeros_like(array, dtype=bool)
 
     # get robust location
-    location = np.nanmedian(array_, axis=axis)
+    location = np.nanmedian(array, axis=0)
 
-    # get MAD! * 1.482579
-    scale = np.nanmedian(np.abs(array_ - location), axis=axis) * 1.482579
+    # get MAD * 1.482579 for consistency with Gaussian white noise
+    scale = np.nanmedian(np.abs(array - location), axis=0) * 1.482579
 
     # get clipped data
-    clip = np.abs(array_ - location) / scale > sigma
-
-    # set clipped flags to True
-    clip_flags[clip] = True
+    clip_flags = np.abs(array - location) / scale > sigma
 
     return clip_flags
 
