@@ -1103,7 +1103,7 @@ class FRFilter(VisClean):
 
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
                             wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
-                            filetype='uvh5', verbose=False, clobber=False, flag_output=None):
+                            filetype='uvh5', verbose=False, clobber=False, flag_output=None, **read_kwargs):
     """Time-averaging with a baseline cornerturn
 
 
@@ -1136,7 +1136,8 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         default is False
     flag_output: str, optional
         string to write flag output. Optional.
-
+    read_kwargs: kwargs dict
+        additional kwargs for for io.HERAData.read()
     Returns
     -------
     None
@@ -1147,7 +1148,7 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                       "in your dataset. Exiting without writing any output.", RuntimeWarning)
     else:
         fr = FRFilter(input_data_list, filetype=filetype)
-        fr.read(bls=baseline_list)
+        fr.read(bls=baseline_list, **read_kwargs)
 
         fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
                         wgt_by_nsample=wgt_by_nsample, wgt_by_favg_nsample=wgt_by_favg_nsample, rephase=rephase)
@@ -1209,7 +1210,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
                                    clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
                                    skip_flagged_edges=False, overwrite_flags=False,
                                    flag_yaml=None, skip_autos=False, beamfitsfile=None, verbose=False,
-                                   clean_flags_in_resid_flags=True, **filter_kwargs):
+                                   clean_flags_in_resid_flags=True, read_axis=None, **filter_kwargs):
     '''
     A tophat fr-filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time) if baseline_list is specified.
@@ -1253,6 +1254,8 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
             Helpful text outputs.
         clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
                                     default is True.
+        read_axis: str, optional
+            optional parameter to pass as the axis arg to io.HERAData.read()
         filter_kwargs: additional keyword arguments to be passed to FRFilter.tophat_frfilter()
     '''
     if baseline_list is not None and Nbls_per_load is not None:
@@ -1277,7 +1280,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
         baseline_antennas = np.unique(baseline_antennas).astype(int)
         if calfile_list is not None:
             cals = io.HERACal(calfile_list)
-            cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
+            cals.read(antenna_nums=baseline_antennas, frequencies=freqs, )
         else:
             cals = None
         if polarizations is None:
@@ -1290,7 +1293,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
         for i in range(0, len(baseline_list), Nbls_per_load):
             frfil = FRFilter(hd, input_cal=cals)
             frfil.read(bls=baseline_list[i:i + Nbls_per_load],
-                       frequencies=freqs, polarizations=polarizations)
+                       frequencies=freqs, polarizations=polarizations, axis=read_axis)
             if avg_red_bllens:
                 frfil.avg_red_baseline_vectors()
             if external_flags is not None:
