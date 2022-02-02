@@ -387,7 +387,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
                                                                  taper=taper, fr_freq_skip=fr_freq_skip, verbose=verbose)
         else:
             raise ValueError("Must either supply uvb or frate_profiles!")
-    if frate_profiles is not None and uvb is not None:
+    elif frate_profiles is not None and uvb is not None:
         raise ValueError("Must provide either uvb or frate_profiles but not both!")
     else:
         if nfr is None:
