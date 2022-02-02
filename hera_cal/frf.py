@@ -386,7 +386,9 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
             fr_grid, frate_profiles = build_fringe_rate_profiles(uvd=uvd, uvb=uvb, keys=keys, normed=True, nfr=nfr, dfr=dfr,
                                                                  taper=taper, fr_freq_skip=fr_freq_skip, verbose=verbose)
         else:
-            raise ValueError("Must either supply uvb or fr_profiles!")
+            raise ValueError("Must either supply uvb or frate_profiles!")
+    if frate_profiles is not None and uvb is not None:
+        raise ValueError("Must provide either uvb or frate_profiles but not both!")
     else:
         if nfr is None:
             nfr = uvd.Ntimes
@@ -911,7 +913,7 @@ class FRFilter(VisClean):
                         max_frate_coeffs=None, skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
                         write_cache=False, center_before_filtering=True, fr_freq_skip=1,
                         verbose=False, nfr=None, dfr=None, pre_filter_modes_between_lobe_minimum_and_zero=False,
-                        **filter_kwargs):
+                        frate_profiles=None, **filter_kwargs):
         '''
         A wrapper around VisClean.fourier_filter specifically for
         filtering along the time axis with uniform fringe-rate weighting.
@@ -979,6 +981,11 @@ class FRFilter(VisClean):
             or if there is egregious cross-talk / ground pickup.
             This arg is only used if beamfitsfile is not None.
             Default is False.
+        frate_profiles: dict object, optional
+            Dictionary mapping antpairpol keys to fringe-rate profiles.
+            centered on a grid of length nfr spaced by dfr centered at 0.
+            default is None -> automatically calculate profiles using uvb.
+            User cannot provide both frate_profiles and uvb -- An error will be raised.
         filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Returns
@@ -1010,7 +1017,7 @@ class FRFilter(VisClean):
             frate_half_widths = {k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in keys}
             frate_centers = {k: 0.0 for k in keys}
 
-        elif uvb is not None:
+        elif uvb is not None or frate_profiles is not None:
             # if uvb is not None, get fringe-rates from binning.
             frate_centers, frate_half_widths = get_fringe_rate_limits(self.hd, uvb, nfr=nfr, dfr=dfr,
                                                                       percentile_low=percentile_low,
@@ -1018,7 +1025,8 @@ class FRFilter(VisClean):
                                                                       keys=keys, verbose=verbose,
                                                                       frate_standoff=frate_standoff, fr_freq_skip=fr_freq_skip,
                                                                       frate_width_multiplier=frate_width_multiplier,
-                                                                      min_frate_half_width=min_frate_half_width)
+                                                                      min_frate_half_width=min_frate_half_width,
+                                                                      frate_profiles=frate_profiles)
 
         wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         if pre_filter_modes_between_lobe_minimum_and_zero:
@@ -1280,7 +1288,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
         baseline_antennas = np.unique(baseline_antennas).astype(int)
         if calfile_list is not None:
             cals = io.HERACal(calfile_list)
-            cals.read(antenna_nums=baseline_antennas, frequencies=freqs, )
+            cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
         else:
             cals = None
         if polarizations is None:

@@ -475,11 +475,12 @@ class Test_FRFilter(object):
             assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.3, rtol=0.)
         # test providing fringe-rate profiles.
         fr_grid, profiles = frf.build_fringe_rate_profiles(uvd, uvb)
-        c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb, frate_profiles=profiles)
+        c_frs, w_frs = frf.get_fringe_rate_limits(uvd, frate_profiles=profiles)
         for bl in sim_c_frates:
             assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.3, rtol=0.)
             assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.3, rtol=0.)
         assert pytest.raises(ValueError, frf.get_fringe_rate_limits, uvd, None, None)
+        assert pytest.raises(ValueError, frf.get_fringe_rate_limits, uvd, uvb, frate_profiles=profiles)
 
     @pytest.mark.parametrize(
         "pre_filter",
