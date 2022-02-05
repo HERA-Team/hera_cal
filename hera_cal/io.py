@@ -14,6 +14,7 @@ from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 from astropy import units
 import h5py
+import scipy
 import pickle
 import random
 import glob
@@ -253,16 +254,20 @@ class HERAData(UVData):
     # pols: list of baseline polarization strings
     # antpairs: list of antenna number pairs in the data as 2-tuples
     # bls: list of baseline-pols in the data as 3-tuples
-    # times_by+bl: dictionary mapping antpairs to times (JD). Also includes all reverse pairs.
-    # times_by+bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
+    # times_by_bl: dictionary mapping antpairs to times (JD). Also includes all reverse pairs.
+    # lsts_by_bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
 
-    def __init__(self, input_data, filetype='uvh5', **read_kwargs):
+    def __init__(self, input_data, upsample=False, downsample=False, filetype='uvh5', **read_kwargs):
         '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
         useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
 
         Arguments:
             input_data: string data file path or list of string data file paths
+            upsample: bool. If True, will upsample to match the shortest integration time in the file.
+                Upsampling will affect the time metadata stored on this object.
+            downsample: bool. If True, will downsample to match the longest integration time in the file.
+                Downsampling will affect the time metadata stored on this object.
             filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
@@ -284,8 +289,14 @@ class HERAData(UVData):
             if not os.path.exists(f):
                 raise IOError('Cannot find file ' + f)
 
-        # load metadata from file
+        # parse arguments into object
+        self.upsample = upsample
+        self.downsample = downsample
+        if self.upsample and self.downsample:
+            raise ValueError('upsample and downsample cannot both be True.')
         self.filetype = filetype
+
+        # load metadata from file
         if self.filetype == 'uvh5':
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
@@ -312,6 +323,14 @@ class HERAData(UVData):
         else:
             raise NotImplementedError('Filetype ' + self.filetype + ' has not been implemented.')
 
+        # save longest and shortest integration times in the file for later use in up/downsampling
+        # if available, these will be used instead of the ones in self.integration_time during partial I/O
+        self.longest_integration = None
+        self.longest_integration = None
+        if self.integration_time is not None:
+            self.longest_integration = np.max(self.integration_time)
+            self.shortest_integration = np.min(self.integration_time)
+
     def reset(self):
         '''Resets all standard UVData attributes, potentially freeing memory.'''
         super(HERAData, self).__init__()
@@ -328,10 +347,12 @@ class HERAData(UVData):
         data_ants = np.unique(np.concatenate((self.ant_1_array, self.ant_2_array)))
         data_antpos = {ant: antpos[ant] for ant in data_ants}
 
+        # get times using the most commonly appearing baseline, presumably the one without BDA
+        most_common_bl_num = scipy.stats.mode(self.baseline_array)[0][0]
+        times = self.time_array[self.baseline_array == most_common_bl_num]
+        lsts = self.lst_array[self.baseline_array == most_common_bl_num]
+
         freqs = np.unique(self.freq_array)
-        times = np.unique(self.time_array)
-        lst_indices = np.unique(self.lst_array.ravel(), return_index=True)[1]
-        lsts = self.lst_array.ravel()[np.sort(lst_indices)]
         pols = [polnum2str(polnum, x_orientation=self.x_orientation) for polnum in self.polarization_array]
         antpairs = self.get_antpairs()
         bls = [antpair + (pol,) for antpair in antpairs for pol in pols]
@@ -440,8 +461,8 @@ class HERAData(UVData):
 
         return data, flags, nsamples
 
-    def read(self, bls=None, polarizations=None, times=None, frequencies=None,
-             freq_chans=None, axis=None, read_data=True, return_data=True,
+    def read(self, bls=None, polarizations=None, times=None, time_range=None, lsts=None, lst_range=None, 
+             frequencies=None, freq_chans=None, axis=None, read_data=True, return_data=True, 
              run_check=True, check_extra=True, run_check_acceptability=True, **kwargs):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
@@ -456,6 +477,17 @@ class HERAData(UVData):
                 the object.  Ignored if read_data is False.
             times: The times to include when reading data into the object.
                 Ignored if read_data is False. Miriad will load then select on this axis.
+            time_range : length-2 array-like of float, optional. The time range in Julian Date 
+                to include. Cannot be used with `times`.
+            lsts: The lsts in radians to include when reading data into the object.
+                Ignored if read_data is False. Miriad will load then select on this axis.
+                Cannot be used with `times` or `time_range`.
+            lst_range : length-2 array-like of float, optional. The lst range in radians
+                to include when. Cannot be used with `times`, `time_range`, or `lsts`.
+                Miriad will load then select on this axis. If the second value is smaller than 
+                the first, the LSTs are treated as having phase-wrapped around LST = 2*pi = 0
+                and the LSTs kept on the object will run from the larger value, through 0, and
+                end at the smaller value.
             frequencies: The frequencies to include when reading data. Ignored if read_data
                 is False. Miriad will load then select on this axis.
             freq_chans: The frequency channel numbers to include when reading data. Ignored
@@ -481,7 +513,7 @@ class HERAData(UVData):
         '''
         # save last read parameters
         locs = locals()
-        partials = ['bls', 'polarizations', 'times', 'frequencies', 'freq_chans']
+        partials = ['bls', 'polarizations', 'times', 'time_range', 'lsts', 'lst_range', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
 
         # if filepaths is None, this was converted to HERAData
@@ -493,25 +525,41 @@ class HERAData(UVData):
             try:
                 if self.filetype == 'uvh5':
                     super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
-                                 times=times, frequencies=frequencies, freq_chans=freq_chans, read_data=read_data,
-                                 run_check=run_check, check_extra=check_extra,
+                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, 
+                                 freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
                     if self.filetype == 'miriad':
                         super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
-                                     run_check=run_check, check_extra=check_extra,
+                                     time_range=time_range, run_check=run_check, check_extra=check_extra,
                                      run_check_acceptability=run_check_acceptability, **kwargs)
-                        if any([times is not None, frequencies is not None, freq_chans is not None]):
-                            warnings.warn('miriad does not support partial loading for times and frequencies. '
+                        if any([times is not None, lsts is not None, lst_range is not None,
+                                frequencies is not None, freq_chans is not None]):
+                            warnings.warn('miriad does not support partial loading for times/lsts (except time_range) and frequencies. '
                                           'Loading the file first and then performing select.')
-                            self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
+                            self.select(times=times, lsts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans)
                     elif self.filetype == 'uvfits':
-                        super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations,
-                                     times=times, frequencies=frequencies, freq_chans=freq_chans, run_check=run_check,
-                                     check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs)
+                        super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations, times=times,
+                                     time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans,
+                                     run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs)
                         self.unphase_to_drift()
+
+                # upsample or downsample data, as appropriate, including metadata. Will use self.longest/shortest_integration
+                # if not None (which came from whole file metadata) since partial i/o might change the current longest or
+                # shortest integration in a way that would create insonsistency between partial reads/writes.
+                if self.upsample:
+                    if hasattr(self, 'shortest_integration') and self.shortest_integration is not None:
+                        self.upsample_in_time(max_int_time=self.shortest_integration)
+                    else:
+                        self.upsample_in_time(max_int_time=np.min(self.integration_time))
+                if self.downsample:
+                    if hasattr(self, 'longest_integration') and self.longest_integration is not None:
+                        self.downsample_in_time(min_int_time=self.longest_integration)
+                    else:
+                        self.downsample_in_time(min_int_time=np.max(self.integration_time))
+
             finally:
                 self.read = temp_read  # reset back to this function, regardless of whether the above try excecutes successfully
 
@@ -536,11 +584,12 @@ class HERAData(UVData):
             output = self
 
         # recompute slices if necessary
-        names = ['antenna_nums', 'antenna_names', 'ant_str',
-                 'bls', 'times', 'blt_inds']
+        names = ['antenna_nums', 'antenna_names', 'ant_str', 'bls', 'blt_inds',
+                 'times', 'time_range', 'lsts', 'lst_range']
         for n in names:
             if n in kwargs and kwargs[n] is not None:
                 output._determine_blt_slicing()
+                output._determine_pol_indexing()
                 break
         if 'polarizations' in kwargs and kwargs['polarizations'] is not None:
             output._determine_pol_indexing()
@@ -748,7 +797,9 @@ class HERAData(UVData):
 
     def iterate_over_times(self, Nints=1, times=None):
         '''Produces a generator that iteratively yields successive calls to
-        HERAData.read() by time or group of contiguous times.
+        HERAData.read() by time or group of contiguous times. N.B. May 
+        produce unexpected results for BDA data that has not been upsampled
+        or downsampled to a common time resolution.
 
         Arguments:
             Nints: number of integrations to load at once.
@@ -934,11 +985,15 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
 def get_file_times(filepaths, filetype='uvh5'):
     """
     Get a file's lst_array in radians and time_array in Julian Date.
-
-    Miriad standard is bin start, so a shift by int_time / 2 is performed.
-    UVH5 standard is bin center, so times are left untouched.
-
-    Note: this is not currently compatible with Baseline Dependent Averaged data.
+    
+    Some caveats:
+        - Miriad standard is bin start, so a shift by int_time / 2 is performed.
+          uvh5 standard is bin center, so times are left untouched.
+        - Miriad files do not support baseline-dependent averaging (BDA).
+        - With BDA for uvh5 files, the results will correspond to the least-averaged
+          baseline in the file.
+        - With uvh5 files with a single integration, it is assumed that the integration
+          time and dtime are the same. This may not be true in LST-binned files.
 
     Args:
         filepaths : type=list or str, filepath or list of filepaths
@@ -988,19 +1043,34 @@ def get_file_times(filepaths, filetype='uvh5'):
         elif filetype == 'uvh5':
             # get times directly from uvh5 file's header: faster than loading entire file via HERAData
             with h5py.File(f, mode='r') as _f:
-                time_array = np.unique(_f[u'Header'][u'time_array'])
+                # pull out time_array and lst_array
+                time_array = np.ravel(_f[u'Header'][u'time_array'])
                 if u'lst_array' in _f[u'Header']:
                     lst_array = np.ravel(_f[u'Header'][u'lst_array'])
                 else:
+                    # need to generate lst_array on the fly
                     lst_array = np.ravel(uvutils.get_lst_for_time(_f[u'Header'][u'time_array'],
                                                                   _f[u'Header'][u'latitude'][()],
                                                                   _f[u'Header'][u'longitude'][()],
                                                                   _f[u'Header'][u'altitude'][()]))
-            lst_indices = np.unique(lst_array, return_index=True)[1]
-            # resort by their appearance in lst_array, then unwrap
-            lst_array = np.unwrap(lst_array[np.sort(lst_indices)])
-            int_time_rad = np.median(np.diff(lst_array))
-            int_time = np.median(np.diff(time_array))
+                
+                # figure out which baseline has the most times in order to handle BDA appropriately
+                baseline_array = uvutils.antnums_to_baseline(np.array(_f[u'Header'][u'ant_1_array']), 
+                                                             np.array(_f[u'Header'][u'ant_2_array']), 
+                                                             np.array(_f[u'Header'][u'Nants_telescope']))
+                most_common_bl_num = scipy.stats.mode(baseline_array)[0][0]
+                time_array = time_array[baseline_array == most_common_bl_num]
+                lst_array = lst_array[baseline_array == most_common_bl_num]
+
+                # figure out dtime and dlst, handling the case where a diff cannot be done.
+                if len(time_array) > 1:
+                    int_time = np.median(np.diff(time_array))
+                    int_time_rad = np.median(np.diff(lst_array))
+                else:
+                    warnings.warn(f'{f} has only one time, so we assume that dtime is the minimum '
+                                  'integration time. This may be incorrect for LST-binned files.')
+                    int_time = np.min(_f[u'Header'][u'integration_time']) / units.day.to(units.si.s)
+                    int_time_rad = int_time / units.sday.to(units.day) * 2 * np.pi
 
         dlsts.append(int_time_rad)
         dtimes.append(int_time)
@@ -1016,31 +1086,69 @@ def get_file_times(filepaths, filetype='uvh5'):
         return dlsts, dtimes, file_lst_arrays, file_time_arrays
 
 
-def partial_time_io(hd, times, **kwargs):
+def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, **kwargs):
     '''Perform partial io with a time-select on a HERAData object, even if it is intialized
     using multiple files, some of which do not contain any of the specified times.
+    Note: can only use one of times, time_range, lsts, lst_range
 
     Arguments:
         hd: HERAData object intialized with (usually multiple) uvh5 files
         times: list of times in JD to load
+        time_range: length-2 array-like of range of JDs to load
+        lsts: list of lsts in radians to load
+        lst_range: length-2 array-like of range of lsts in radians to load.
+            If the 0th element is greater than the 1st, the range will wrap around 2pi
         kwargs: other partial i/o kwargs (see io.HERAData.read)
 
     Returns:
         data: DataContainer mapping baseline keys to complex visibility waterfalls
         flags: DataContainer mapping baseline keys to boolean flag waterfalls
         nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls
-        '''
+    '''
     assert hd.filetype == 'uvh5', 'This function only works for uvh5-based HERAData objects.'
+    if np.sum([times is not None, time_range is not None, lsts is not None, lst_range is not None]) > 1: 
+        raise ValueError('Only one of times, time_range, lsts, and lsts_range can be not None.')
+    
     combined_hd = None
     for f in hd.filepaths:
-        hd_here = HERAData(f)
-        times_here = [t for t in times if t in hd_here.times]
-        if len(times_here) > 0:
-            hd_here.read(times=times_here, return_data=False, **kwargs)
-            if combined_hd is None:
-                combined_hd = hd_here
+        hd_here = HERAData(f, upsample=hd.upsample, downsample=hd.downsample)
+        
+        # check if any of the selected times are in this particular file
+        if times is not None:
+            times_here = [time for time in times if time in hd_here.times]
+            if len(times_here) == 0:
+                continue  # skip this file
+        else:
+            times_here = None
+        
+        # check if any of the selected lsts are in this particular file
+        if lsts is not None:
+            lsts_here = [lst for lst in lsts if lst in hd_here.lsts]
+            if len(lsts_here) == 0:
+                continue  # skip this file
+        else:
+            lsts_here = None
+             
+        # attempt to read this file's data
+        try:
+            hd_here.read(times=times_here, time_range=time_range, 
+                         lsts=lsts_here, lst_range=lst_range,
+                         return_data=False, **kwargs)
+        except ValueError as err:
+            # check to see if the read failed because of the time range or lst range
+            if 'No elements in time range between ' in str(err):
+                continue  # no matching times, skip this file
+            elif 'No elements in LST range between ' in str(err):
+                continue  # no matchings lsts, skip this file
             else:
-                combined_hd += hd_here
+                raise
+            
+        if combined_hd is None:
+            combined_hd = hd_here
+        else:
+            combined_hd += hd_here
+    if combined_hd is None:
+        raise ValueError('No times or lsts matched any of the files in hd.')
     combined_hd = to_HERAData(combined_hd)  # re-runs the slicing and indexing
     return combined_hd.build_datacontainers()
 
