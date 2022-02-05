@@ -1520,7 +1520,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6,
                           fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
-                          check_after=50, gain=.4, max_dims=2):
+                          check_after=50, gain=.4, max_dims=2, fc_min_vis_per_ant=None):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -1546,6 +1546,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
             with remove_degen() and must be later abscaled. None is no limit. 2 is a classically
             "redundantly calibratable" planar array.  More than 2 usually arises with subarrays of
             redundant baselines. Antennas will be excluded from reds to satisfy this.
+        fc_min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
+            delay and phase offsets in firstcal. If None, all visibilities will be included.
 
     Returns a dictionary of results with the following keywords:
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
@@ -1575,7 +1577,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         times_by_bl = data.times_by_bl
 
     # perform firstcal
-    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit)
+    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit, 
+                                                  fc_min_vis_per_ant=fc_min_vis_per_ant)
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
     # perform logcal and omnical
@@ -1604,7 +1607,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
                      solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6,
                      fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
-                     gain=.4, max_dims=2, verbose=False, **filter_reds_kwargs):
+                     gain=.4, max_dims=2, fc_min_vis_per_ant=None, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
 
@@ -1635,6 +1638,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             with remove_degen() and must be later abscaled. None is no limit. 2 is a classically
             "redundantly calibratable" planar array.  More than 2 usually arises with subarrays of
             redundant baselines. Antennas will be excluded from reds to satisfy this.
+        fc_min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
+            delay and phase offsets in firstcal. If None, all visibilities will be included.
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
@@ -1730,7 +1735,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter,
                                             oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
-                                            check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain)
+                                            check_every=check_every, check_after=check_after, 
+                                            max_dims=max_dims, gain=gain, fc_min_vis_per_ant=fc_min_vis_per_ant)
                 expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
 
                 # gather results
@@ -1803,11 +1809,12 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
                omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None,
-               metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None, 
-               upsample=False, downsample=False, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], 
-               ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, 
-               fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, 
-               check_after=50, gain=.4, add_to_history='', max_dims=2, verbose=False, **filter_reds_kwargs):
+               metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None,
+               upsample=False, downsample=False, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
+               ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
+               fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
+               check_after=50, gain=.4, max_dims=2, fc_min_vis_per_ant=None, add_to_history='',
+               verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1861,6 +1868,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             with remove_degen() and must be later abscaled. None is no limit. 2 is a classically
             "redundantly calibratable" planar array.  More than 2 usually arises with subarrays of
             redundant baselines. Antennas will be excluded from reds to satisfy this.
+        fc_min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
+            delay and phase offsets in firstcal. If None, all visibilities will be included.
         add_to_history: string to add to history of output firstcal and omnical files
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
@@ -1991,6 +2000,8 @@ def redcal_argparser():
     omni_opts.add_argument("--check_every", type=int, default=10, help="compute omnical convergence every Nth iteration (saves computation).")
     omni_opts.add_argument("--check_after", type=int, default=50, help="start computing omnical convergence only after N iterations (saves computation).")
     omni_opts.add_argument("--gain", type=float, default=.4, help="The fractional step made toward the new solution each omnical iteration. Values in the range 0.1 to 0.5 are generally safe.")
+    omni_opts.add_argument("--fc_min_vis_per_ant", type=int, default=None, help="Minimum number of visibilities to include per antenna when solving for delay and phase offsets in firstcal. \
+                           Default None uses all visibilities.")
 
     args = a.parse_args()
     return args
