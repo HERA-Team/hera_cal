@@ -802,7 +802,7 @@ class RedundantCalibrator:
 
     def _firstcal_iteration(self, data, df, f0, wgts={}, offsets_only=False, edge_cut=0,
                             sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11),
-                            min_vis_per_ant=None,):
+                            fc_min_vis_per_ant=None):
         '''Runs a single iteration of firstcal, which uses phase differences between nominally
         redundant meausrements to solve for delays and phase offsets that produce gains of the
         form: np.exp(2j * np.pi * delay * freqs + 1j * offset).
@@ -850,9 +850,9 @@ class RedundantCalibrator:
                             for ant in utils.split_bl(bl_here):
                                 ants_used_count[ant] += 1
 
-            if min_vis_per_ant is not None:
+            if fc_min_vis_per_ant is not None:
                 reds_used.append(bls)
-                if np.all(np.array(list(ants_used_count.values())) >= min_vis_per_ant):
+                if np.all(np.array(list(ants_used_count.values())) >= fc_min_vis_per_ant):
                     ndims_here = len(list(reds_to_antpos(reds_used).values())[0])
                     if ndims_here == ndims:
                         break
@@ -877,7 +877,7 @@ class RedundantCalibrator:
 
     def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-6,
                  sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11),
-                 edge_cut=0, max_rel_angle=(np.pi / 8), max_recursion_depth=6, min_vis_per_ant=None):
+                 edge_cut=0, max_rel_angle=(np.pi / 8), max_recursion_depth=6, fc_min_vis_per_ant=None):
         """Solve for a calibration solution parameterized by a single delay and phase offset
         per antenna using the phase difference between nominally redundant measurements.
         Delays are solved in a single iteration, but phase offsets are solved for
@@ -905,8 +905,8 @@ class RedundantCalibrator:
                 (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
             max_recursion_depth: maximum number of assumptions to try before giving up.
                 Warning: the maximum complexity of this scales exponentially as 2^max_recursion_depth.
-            min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
-                delay and phase offsets. If None, all visibilities will be included
+            fc_min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
+                delay and phase offsets. If None, all visibilities will be included.
 
         Returns:
             meta: dictionary of metadata (including delays and suspected antenna flips for each integration)
@@ -920,7 +920,7 @@ class RedundantCalibrator:
         for i in range(maxiter):
             dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, edge_cut=edge_cut,
                                                        offsets_only=(i > 0), sparse=sparse, mode=mode,
-                                                       norm=norm, medfilt=medfilt, kernel=kernel, min_vis_per_ant=min_vis_per_ant)
+                                                       norm=norm, medfilt=medfilt, kernel=kernel, fc_min_vis_per_ant=fc_min_vis_per_ant)
             if i == 0:  # only solve for delays on the first iteration, also apply polarity flips
                 g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs)),
                                       dtype=dtype) for ant, dly in dlys.items()}
