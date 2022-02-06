@@ -824,12 +824,12 @@ class RedundantCalibrator:
         wgts = DataContainer(wgts)
         taus_offs, twgts = {}, {}
 
-        ndims = len(list(reds_to_antpos(self.reds).values())[0])
-        reds_used = []
-        ants = set(
-            [ant for red in self.reds for bl in red for ant in utils.split_bl(bl)]
-        )
-        ants_used_count = {ant: 0 for ant in ants}
+        # keep track of number of equations used per antenna and ndims
+        if fc_min_vis_per_ant is not None:
+            ndims = len(list(reds_to_antpos(self.reds).values())[0])
+            reds_used = []
+            ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
+            ants_used_count = {ant: 0 for ant in ants}
 
         taus_offs, twgts = {}, {}
         for bls in self.reds:
@@ -850,6 +850,7 @@ class RedundantCalibrator:
                             for ant in utils.split_bl(bl_here):
                                 ants_used_count[ant] += 1
 
+            # check to see if fc_min_vis_per_ant is satisfied without adding additional degeneracies
             if fc_min_vis_per_ant is not None:
                 reds_used.append(bls)
                 if np.all(np.array(list(ants_used_count.values())) >= fc_min_vis_per_ant):
