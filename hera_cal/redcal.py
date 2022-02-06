@@ -825,11 +825,11 @@ class RedundantCalibrator:
         taus_offs, twgts = {}, {}
 
         # keep track of number of equations used per antenna and ndims
+        ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
+        ants_used_count = {ant: 0 for ant in ants}
         if fc_min_vis_per_ant is not None:
             ndims = len(list(reds_to_antpos(self.reds).values())[0])
             reds_used = []
-            ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
-            ants_used_count = {ant: 0 for ant in ants}
 
         taus_offs, twgts = {}, {}
         for bls in self.reds:
