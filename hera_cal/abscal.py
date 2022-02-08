@@ -2029,7 +2029,8 @@ def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
 
     # shift data relative to model if needed
     data_lsts[data_lsts < model_starts[0]] += 2 * np.pi
-
+    # make sure monotonically increasing.
+    data_lsts[data_lsts < data_lsts[0]] += 2 * np.pi
     # select model files
     match = np.asarray(modelfiles)[(model_starts < data_lsts[-1] + atol)
                                    & (model_ends > data_lsts[0] - atol)]
