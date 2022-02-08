@@ -136,6 +136,8 @@ class Test_lstbin(object):
         # test sigma clip
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
                                 verbose=False, sig_clip=True, min_N=5, sigma=2)
+        output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
+                                verbose=False, sig_clip=True, min_N=15, flag_below_min_N=True, sigma=2)
         # test wrapping
         lst_list = list(map(lambda l: (copy.deepcopy(l) + 6) % (2 * np.pi), self.lst_list))
         output = lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, begin_lst=np.pi)
