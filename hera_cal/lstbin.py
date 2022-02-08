@@ -342,6 +342,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     below_min_N_freqs = np.where(f.sum(axis=0) < min_N)[0]
                     if below_min_N_freqs.size > 0:
                         d[:, below_min_N_freqs] *= np.nan
+                        f[:, below_min_N_freqs] = True
 
                 # clip real
                 real_f = sigma_clip(d.real, sigma=sigma, min_N=min_N)
