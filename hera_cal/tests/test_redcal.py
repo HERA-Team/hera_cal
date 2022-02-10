@@ -1300,7 +1300,8 @@ class TestRedundantCalibrator(object):
 
 class TestRedcalAndAbscal(object):
     
-    def test_post_redcal_abscal(self):
+    @pytest.mark.parametrize("fc_min_vis_per_ant", [16, None])
+    def test_post_redcal_abscal(self, fc_min_vis_per_ant):
         '''This test shows that performing a combination of redcal and abscal recovers the exact input gains
         up to an overall phase (which is handled by using a reference antenna).'''
         # Simulate Redundant Data
@@ -1328,7 +1329,7 @@ class TestRedcalAndAbscal(object):
         d.antpos = antpos
 
         # run redcal
-        cal = om.redundantly_calibrate(d, reds)
+        cal = om.redundantly_calibrate(d, reds, fc_min_vis_per_ant=fc_min_vis_per_ant)
 
         # set up abscal
         d_omnicaled = deepcopy(d)
