@@ -272,6 +272,20 @@ class Test_Update_Cal(object):
         g_here[2, 'Jxx'] = deepcopy(g_here[1, 'Jxx'])
         ac.calibrate_in_place(dc, g_here, flags)
 
+        # test BDA cadence errors
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis), (0, 2, 'xx'): deepcopy(vis[0:5, :])})
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f), (0, 2, 'xx'): deepcopy(f[0:5, :])})
+        g_here = {(0, 'Jxx'): g0_new[0:3, :], (1, 'Jxx'): g1_new[0:3, :]}
+        with pytest.raises(ValueError, match='new_gains with'):
+            ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=None, old_gains=None)
+        g_here = {(0, 'Jxx'): g0_new[0:1, :], (1, 'Jxx'): g1_new[0:1, :]}
+        cal_flags_here = {(0, 'Jxx'): cal_flags[(0, 'Jxx')][0:7, :], (1, 'Jxx'): cal_flags[(1, 'Jxx')][0:7, :]}
+        with pytest.raises(ValueError, match='cal_flags with'):
+            ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=cal_flags_here, old_gains=None)
+        old_g_here = {(0, 'Jxx'): g0_old[0:8, :], (1, 'Jxx'): g1_old[0:8, :]}
+        with pytest.raises(ValueError, match='old_gains with'):
+            ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=None, old_gains=old_g_here)
+
     def test_apply_cal(self, tmpdir):
         tmp_path = tmpdir.strpath
         miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
