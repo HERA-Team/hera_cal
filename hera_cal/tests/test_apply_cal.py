@@ -131,7 +131,6 @@ class Test_Update_Cal(object):
             gains = {(0, 'Jnn'): np.ones((2, 3), dtype=complex)}
             ac.build_gains_by_cadences(data, gains)
 
-
     def test_calibrate_avg_gains_in_place(self):
         np.random.seed(20)
         vis = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
