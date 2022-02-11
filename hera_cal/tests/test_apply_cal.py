@@ -115,9 +115,15 @@ class Test_Update_Cal(object):
 
         # test warnings
         with pytest.warns(UserWarning, match='is inconsistent with BDA by powers of 2'):
-            data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex), 
+            data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex),
                     (0, 2, 'nn'): np.ones((3, 3), dtype=complex)}
             ac.build_gains_by_cadences(data, {})
+        with pytest.warns(UserWarning, match='cannot be calibrated with any of gain cadences'):
+            data = {(0, 1, 'nn'): np.ones((2, 3), dtype=complex),
+                    (0, 2, 'nn'): np.ones((3, 3), dtype=complex)}
+            gains = {(0, 'Jnn'): np.ones((2, 3), dtype=complex)}
+            ac.build_gains_by_cadences(data, gains)
+
 
     def test_calibrate_avg_gains_in_place(self):
         np.random.seed(20)
