@@ -113,6 +113,13 @@ class Test_Update_Cal(object):
             if Nt == 4:
                 np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], gains[0, 'Jnn'])
 
+        # test empty dicts
+        data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex),
+                (0, 2, 'nn'): np.ones((2, 3), dtype=complex)}
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, {}, cal_flags={})
+        assert gains_by_Nt == {1: {}, 2: {}}
+        assert cal_flags_by_Nt == {1: {}, 2: {}}
+
         # test warnings
         with pytest.warns(UserWarning, match='is inconsistent with BDA by powers of 2'):
             data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex),
