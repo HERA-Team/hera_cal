@@ -113,6 +113,12 @@ class Test_Update_Cal(object):
             if Nt == 4:
                 np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], gains[0, 'Jnn'])
 
+        # test warnings
+        with pytest.warns(UserWarning, match='is inconsistent with BDA by powers of 2'):
+            data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex), 
+                    (0, 2, 'nn'): np.ones((3, 3), dtype=complex)}
+            ac.build_gains_by_cadences(data, {})
+
     def test_calibrate_avg_gains_in_place(self):
         np.random.seed(20)
         vis = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
