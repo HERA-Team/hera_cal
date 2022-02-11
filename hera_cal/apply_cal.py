@@ -253,13 +253,22 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
         # get relevant shaped gains for this data waterfall
         Nt = data[(i, j, pol)].shape[0]
-        new_gains_here = new_gains_by_Nt[Nt]
+        try:
+            new_gains_here = new_gains_by_Nt[Nt]
+        except KeyError:
+            raise ValueError(f'new_gains with {list(new_gains.values())[0].shape[0]} integrations are incompatible with data with {Nt} integrations.')
         cal_flags_here = None
         if cal_flags_by_Nt is not None:
-            cal_flags_here = cal_flags_by_Nt[Nt]
+            try:
+                cal_flags_here = cal_flags_by_Nt[Nt]
+            except KeyError:
+                raise ValueError(f'cal_flags with {list(cal_flags.values())[0].shape[0]} integrations are incompatible with data with {Nt} integrations.')
         old_gains_here = None
         if old_gains is not None:
-            old_gains_here = old_gains_by_Nt[Nt]
+            try:
+                old_gains_here = old_gains_by_Nt[Nt]
+            except KeyError:
+                raise ValueError(f'old_gains with {list(old_gains.values())[0].shape[0]} integrations are incompatible with data with {Nt} integrations.')
 
         # handle autocorrelations separately to keep them real
         if (i == j) & (ap1 == ap2):
