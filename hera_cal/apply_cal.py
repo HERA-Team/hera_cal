@@ -112,6 +112,7 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
     ''' Builds dictionaries that map gains to the various cadences in potentially BDA data.
         As necessary, will upsample gains/flags by duplication and downsample gains/flags by
         (weighted) averaging. When downsampling, flags are ORed and weights are averaged.
+        Assumes that the all cadences in the data are a power-of-two multiple of the slowest cadence.
 
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. Only used
