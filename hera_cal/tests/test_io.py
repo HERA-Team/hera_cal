@@ -825,6 +825,13 @@ class Test_Visibility_IO_Legacy(object):
         assert uvd2.telescope_name == 'PAPER'
         shutil.rmtree(outname)
 
+        # test writing uvfits instead
+        io.update_vis(fname, outname, data=new_data, flags=new_flags, filetype_out='uvfits',
+                      add_to_history='hello world', clobber=True, telescope_name='PAPER')
+        uvd_fits = UVData()
+        uvd_fits.read_uvfits(outname)
+        os.remove(outname)
+
         # Coverage for errors
         with pytest.raises(TypeError):
             io.update_vis(uvd, outname, data=new_data, flags=new_flags, filetype_out='not_a_real_filetype',
