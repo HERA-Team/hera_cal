@@ -243,7 +243,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
     # build dictionary of all necessary gain shapes to account for calibration of BDA data
     new_gains_by_Nt, cal_flags_by_Nt = build_gains_by_cadences(data, new_gains, cal_flags=cal_flags, flags_are_wgts=flags_are_wgts)
     if old_gains is not None:
-        old_gains_by_Nt, _ = build_gains_by_cadences(data, old_gains, cal_flags=cal_flags, flags_are_wgts=flags_are_wgts)
+        old_gains_by_Nt, _ = build_gains_by_cadences(data, old_gains)
 
     # loop over baselines in data
     for (i, j, pol) in data.keys():
