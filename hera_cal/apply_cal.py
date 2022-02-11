@@ -204,6 +204,11 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
                 # just do a straight average
                 gains_by_Nt[min_gain_Nt // 2][ant] = np.average([even_gains, odd_gains], axis=0)
 
+    # Warn if there cadences in the data that are missing that still aren't in gains_by_Nt
+    for Nt in data_Nts:
+        if Nt not in gains_by_Nt:
+            warnings.warn(f'Data with {Nt} integrations cannot be calibrated with any of gain cadences: {list(gains_by_Nt.keys())}')
+
     return gains_by_Nt, cal_flags_by_Nt
 
 
