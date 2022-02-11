@@ -128,6 +128,13 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
     '''
     # get all cadences (unique shapes of the time dimension in the data)
     data_Nts = sorted(list(set([wf.shape[0] for wf in data.values()])))
+    
+    # Warn the user if the data doesn't conform to the expectation that all BDA is by a power of 2
+    for Nt in data_Nts:
+        power_of_2 = np.log(Nt / np.min(data_Nts)) / np.log(2)
+        if not np.isclose(power_of_2, np.round(power_of_2)):
+            warnings.warn(f'Data with {Nt} integrations is inconsistent with BDA by powers of 2 '
+                          f'when the slowest cadence has {np.min(data_Nts)} integrations.')
 
     # initialize results dictionaries, handling the case where there are None and/or empty dicts
     # and also the case where gains/flags are scalars, which then get recast as 2D arrays
