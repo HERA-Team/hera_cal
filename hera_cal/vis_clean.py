@@ -489,6 +489,7 @@ class VisClean(object):
             mdict = self.hd.get_metadata_dict()
             self.antpos = mdict['antpos']
             self.ants = mdict['ants']
+            self.data_ants = mdict['data_ants']
             self.freqs = mdict['freqs']
             self.times = mdict['times']
             self.lsts = mdict['lsts']
