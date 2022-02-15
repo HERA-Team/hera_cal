@@ -1355,7 +1355,7 @@ def auto_reflection_argparser():
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output file if it already exists")
     a.add_argument("--write_npz", default=False, action='store_true', help="Write NPZ file with reflection params with same path name as output calfits.")
     a.add_argument("--input_cal", type=str, default=None, help="Path to input .calfits to apply to data before modeling")
-    a.add_argument("--antenna_numbers", default=None, type=int, nargs='*', help="List of antenna numbers to operate on. Default is all.")
+    a.add_argument("--antenna_numbers", default=None, type=int, nargs='*', help="List of antenna numbers to operate on. Default is all in data.")
     a.add_argument("--polarizations", default=None, type=str, nargs='*', help="List of polarization strings to operate on.")
     a.add_argument("--window", default='None', type=str, help="FFT window for CLEAN")
     a.add_argument("--alpha", default=0.2, type=float, help="Alpha parameter if window is tukey")
@@ -1399,7 +1399,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         input_cal : str or UVCal subclass, calibration to apply to data on-the-fly
         time_avg : bool, if True, time-average the entire input data before reflection modeling
         write_npz : bool, if True, write an NPZ with reflection parameters with matching path as output_fname
-        antenna_numbers : int list, list of antenna number integers to run on. Default is all.
+        antenna_numbers : int list, list of antenna number integers to run on. Default is all in data.
         polarizations : str list, list of polarization strings to run on, default is all
         edgecut_low : int, Nbins to flag but not window at low-side of the FFT axis.
         edgecut_hi : int, Nbins to flag but not window at high-side of the FFT axis.
