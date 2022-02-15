@@ -234,7 +234,6 @@ class Test_ReflectionFitter_Cables(object):
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True, write_npz=True)
         assert uvc.Ntimes == 100
         assert len(uvc.ant_array) == 5
-        # assert np.allclose(uvc.gain_array[0], 1.0)
         assert not np.allclose(uvc.gain_array[uvc.ant_array.tolist().index(23)], 1.0)
         # assert flag propagation
         assert np.all(uvc.get_flags(a_k)[:, 0])
