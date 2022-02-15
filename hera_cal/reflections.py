@@ -274,7 +274,7 @@ class ReflectionFitter(FRFilter):
         autopols = [p for p in self.pols if p[0] == p[1]]
         if len(self.ref_gains) > 0:
             antpol = split_bl(keys[0])[0]
-            for a in self.ants:
+            for a in self.data_ants:
                 for p in autopols:
                     k = (a, split_pol(p)[0])
                     if k not in self.ref_gains:
@@ -1447,8 +1447,8 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
     RF = ReflectionFitter(data, filetype=filetype, input_cal=input_cal)
 
     # get antennas if possible
-    if antenna_numbers is None and hasattr(RF, 'ants'):
-        bls = [(ant, ant) for ant in RF.ants]
+    if antenna_numbers is None and hasattr(RF, 'data_ants'):
+        bls = [(ant, ant) for ant in RF.data_ants]
     elif antenna_numbers is not None:
         bls = [(ant, ant) for ant in antenna_numbers]
     else:
