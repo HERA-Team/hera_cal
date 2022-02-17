@@ -484,11 +484,6 @@ class ReflectionFitter(FRFilter):
         else:
             kwargs = {'x_orientation': self.hd.x_orientation}
 
-        # Approriately handle the case where the gains have been time-averaged
-        if np.all([gain.shape[0] == 1 for gain in rgains.values()]):
-            if len(time_array) > 1:
-                time_array = np.mean(time_array, keepdims=True)            
-        
         # write calfits
         antnums2antnames = dict(zip(self.hd.antenna_numbers, self.hd.antenna_names))
         echo("...writing {}".format(output_calfits), verbose=verbose)
@@ -1410,7 +1405,8 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         output_fname : str, full path to output calfits file
         filetype : str, filetype if data is a str, options=['uvh5', 'miriad', 'uvfits']
         input_cal : str or UVCal subclass, calibration to apply to data on-the-fly
-        time_avg : bool, if True, time-average the entire input data before reflection modeling
+        time_avg : bool, if True, time-average the entire input data before reflection modeling.
+            This will produce single-integration calfits files.
         write_npz : bool, if True, write an NPZ with reflection parameters with matching path as output_fname
         antenna_numbers : int list, list of antenna number integers to run on. Default is all in data.
         polarizations : str list, list of polarization strings to run on, default is all
@@ -1493,6 +1489,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         flags = RF.avg_flags
         nsamples = RF.avg_nsamples
         model = RF.avgm_data
+        RF.times = np.mean(RF.times, keepdims=True)
 
     # iterate over dly_ranges
     gains = []
