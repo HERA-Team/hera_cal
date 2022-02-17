@@ -409,8 +409,8 @@ class ReflectionFitter(FRFilter):
         return out_ref_amp, out_ref_dly, out_ref_phs, out_ref_info, out_ref_eps, out_ref_gains
 
     def write_auto_reflections(self, output_calfits, input_calfits=None, time_array=None,
-                               freq_array=None, overwrite=False, write_npz=False,
                                add_to_history='', verbose=True):
+                               freq_array=None, overwrite=False, write_npz=False, write_calfits=True,
         """
         Write reflection gain terms from self.ref_gains.
 
@@ -431,11 +431,12 @@ class ReflectionFitter(FRFilter):
             overwrite : bool, if True, overwrite output file
             write_npz : bool, if True, write an NPZ file holding reflection
                 params with the same pathname as output_calfits
+            write_calfits : bool, if False, skip writing 
             add_to_history: string to add to history of output calfits file
             verbose : bool, report feedback to stdout
 
         Returns:
-            uvc : UVCal object with new gains
+            uvc : UVCal object with new gains (or None if write_calfits is False)
         """
         # Create reflection gains
         rgains, rflags = self.ref_gains, self.ref_flags
@@ -459,6 +460,10 @@ class ReflectionFitter(FRFilter):
                          lsts=self.lsts, antpos=self.antpos, flags=rflags,
                          history=version.history_string(add_to_history))
 
+        # return None if we don't want to write a calfits file
+        if not write_calfits:
+            return None
+
         if input_calfits is not None:
             # Load calfits
             cal = io.HERACal(input_calfits)
@@ -479,6 +484,7 @@ class ReflectionFitter(FRFilter):
         else:
             kwargs = {'x_orientation': self.hd.x_orientation}
 
+        # write calfits
         antnums2antnames = dict(zip(self.hd.antenna_numbers, self.hd.antenna_names))
         echo("...writing {}".format(output_calfits), verbose=verbose)
         uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=rflags,
