@@ -1398,7 +1398,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
                         edgecut_low=0, edgecut_hi=0, zeropad=0, tol=1e-6, gain=1e-1, maxiter=100,
                         skip_wgt=0.2, horizon=1.0, standoff=0.0, min_dly=100.0, Nphs=300, fthin=10,
                         ref_sig_cut=2.0, add_to_history='', skip_frac=0.9, reject_edges=True, opt_maxiter=0,
-                        opt_method='BFGS', opt_tol=1e-3, opt_buffer=(25, 25), overwrite=False):
+                        opt_method='BFGS', opt_tol=1e-3, opt_buffer=(25, 25), write_each_calfits=True, overwrite=False):
     """
     Run auto-correlation reflection modeling on files.
 
@@ -1435,6 +1435,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         opt_buffer : float or len-2 tuple, delay buffer [ns] +/- initial guess for setting range of objective function in delay
         skip_frac : float in range [0, 1], fraction of flagged channels (excluding edge flags) above which skip the integration
         reject_edges : bool, If True, reject peak solutions at delay edges
+        write_each_calfits : bool, if True, write calfits file for each fit in each dly_ranges, otherwise write one final calfits file
         overwrite : bool, if True, overwrite output files.
 
     Result:
@@ -1499,8 +1500,9 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         _output_fname = ''.join(_output_fname)
         if i == 0:
             _RF = RF
-            _output_fname = output_fname
             cdata = data
+            if write_each_calfits:
+                _output_fname = output_fname            
         else:
             _RF = RF.soft_copy()
             cdata = copy.deepcopy(data)
@@ -1522,7 +1524,13 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         # write gains
         RF.ref_gains = _RF.ref_gains
         RF.write_auto_reflections(_output_fname, overwrite=overwrite, add_to_history=add_to_history,
-                                  write_npz=write_npz)
+                                  write_npz=write_npz, write_calfits=write_each_calfits)
 
         # append gains
         gains.append(RF.ref_gains)
+    
+    # write out combined gains as a single calfits file
+    if not write_each_calfits:
+        RF.ref_gains = merge_gains(gains)
+        RF.write_auto_reflections(output_fname, overwrite=overwrite, add_to_history=add_to_history,
+                                  write_npz=False, write_calfits=True)
