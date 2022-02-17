@@ -340,7 +340,7 @@ class Test_ReflectionFitter_Cables(object):
         assert not os.path.exists("./ex.ref2.calfits")
         uvc3 = UVCal()
         uvc3.read_calfits('./ex.calfits')
-        np.testing.assert_array_equal(uvc3.gain_array, uvc.gain_array)
+        np.testing.assert_array_almost_equal(uvc3.gain_array, uvc.gain_array, 12)
         os.remove("./ex.calfits")
 
 
