@@ -1446,13 +1446,13 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         The CLEAN min_dly should always be less than the lower boundary of dly_range.
     """
     # dly_ranges type check
-    if isinstance(dly_ranges, (str, np.str)):
+    if isinstance(dly_ranges, str):
         dly_ranges = [ast.literal_eval(dly_ranges)]
     if isinstance(dly_ranges, tuple):
         dly_ranges = [dly_ranges]
     if isinstance(dly_ranges, list):
         for i, dlyr in enumerate(dly_ranges):
-            if isinstance(dlyr, (str, np.str)):
+            if isinstance(dlyr, str):
                 dly_ranges[i] = ast.literal_eval(dlyr)
 
     # initialize reflection fitter
