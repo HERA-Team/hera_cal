@@ -1390,6 +1390,8 @@ def auto_reflection_argparser():
     a.add_argument("--opt_tol", default=1e-3, type=float, help="Optimization stopping tolerance.")
     a.add_argument("--opt_buffer", default=[25, 25], type=float, nargs='*', help="delay buffer [ns] +/- initial guess for setting range of objective function")
     a.add_argument("--skip_frac", default=0.9, type=float, help="Float in range [0, 1]. Fraction of (non-edge) flagged channels above which integration is skipped in optimization.")
+    a.add_argument("--only_write_final_calfits", dest='write_each_calfits', default=True, action='store_false',
+                   help="Instead of writing one calfits file for each dly_range, instead only write a single combined calfits file with all reflections multiplied.")
     return a
 
 

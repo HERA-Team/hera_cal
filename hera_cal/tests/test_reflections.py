@@ -296,6 +296,12 @@ class Test_ReflectionFitter_Cables(object):
         assert a.dly_ranges[0] == '10,20'
         assert len(a.dly_ranges) == 2
         assert np.allclose(a.opt_buffer, [25, 75])
+        assert a.write_each_calfits
+
+        sys.argv = [sys.argv[0], 'a', '--only_write_final_calfits']
+        parser = reflections.auto_reflection_argparser()
+        a = parser.parse_args()
+        assert not a.write_each_calfits
 
     def test_auto_reflection_run(self):
         # most of the code tests have been done above, this is just to ensure this wrapper function runs
