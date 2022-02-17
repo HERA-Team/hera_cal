@@ -409,8 +409,8 @@ class ReflectionFitter(FRFilter):
         return out_ref_amp, out_ref_dly, out_ref_phs, out_ref_info, out_ref_eps, out_ref_gains
 
     def write_auto_reflections(self, output_calfits, input_calfits=None, time_array=None,
-                               add_to_history='', verbose=True):
-                               freq_array=None, overwrite=False, write_npz=False, write_calfits=True,
+                               freq_array=None, overwrite=False, write_npz=False,
+                               write_calfits=True, add_to_history='', verbose=True):
         """
         Write reflection gain terms from self.ref_gains.
 
@@ -484,6 +484,11 @@ class ReflectionFitter(FRFilter):
         else:
             kwargs = {'x_orientation': self.hd.x_orientation}
 
+        # Approriately handle the case where the gains have been time-averaged
+        if np.all([gain.shape[0] == 1 for gain in rgains.values()]):
+            if len(time_array) > 1:
+                time_array = np.mean(time_array, keepdims=True)            
+        
         # write calfits
         antnums2antnames = dict(zip(self.hd.antenna_numbers, self.hd.antenna_names))
         echo("...writing {}".format(output_calfits), verbose=verbose)
