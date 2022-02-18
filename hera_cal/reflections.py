@@ -274,7 +274,7 @@ class ReflectionFitter(FRFilter):
         autopols = [p for p in self.pols if p[0] == p[1]]
         if len(self.ref_gains) > 0:
             antpol = split_bl(keys[0])[0]
-            for a in self.ants:
+            for a in self.data_ants:
                 for p in autopols:
                     k = (a, split_pol(p)[0])
                     if k not in self.ref_gains:
@@ -1355,7 +1355,7 @@ def auto_reflection_argparser():
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output file if it already exists")
     a.add_argument("--write_npz", default=False, action='store_true', help="Write NPZ file with reflection params with same path name as output calfits.")
     a.add_argument("--input_cal", type=str, default=None, help="Path to input .calfits to apply to data before modeling")
-    a.add_argument("--antenna_numbers", default=None, type=int, nargs='*', help="List of antenna numbers to operate on. Default is all.")
+    a.add_argument("--antenna_numbers", default=None, type=int, nargs='*', help="List of antenna numbers to operate on. Default is all in data.")
     a.add_argument("--polarizations", default=None, type=str, nargs='*', help="List of polarization strings to operate on.")
     a.add_argument("--window", default='None', type=str, help="FFT window for CLEAN")
     a.add_argument("--alpha", default=0.2, type=float, help="Alpha parameter if window is tukey")
@@ -1399,7 +1399,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         input_cal : str or UVCal subclass, calibration to apply to data on-the-fly
         time_avg : bool, if True, time-average the entire input data before reflection modeling
         write_npz : bool, if True, write an NPZ with reflection parameters with matching path as output_fname
-        antenna_numbers : int list, list of antenna number integers to run on. Default is all.
+        antenna_numbers : int list, list of antenna number integers to run on. Default is all in data.
         polarizations : str list, list of polarization strings to run on, default is all
         edgecut_low : int, Nbins to flag but not window at low-side of the FFT axis.
         edgecut_hi : int, Nbins to flag but not window at high-side of the FFT axis.
@@ -1447,8 +1447,8 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
     RF = ReflectionFitter(data, filetype=filetype, input_cal=input_cal)
 
     # get antennas if possible
-    if antenna_numbers is None and hasattr(RF, 'ants'):
-        bls = [(ant, ant) for ant in RF.ants]
+    if antenna_numbers is None and hasattr(RF, 'data_ants'):
+        bls = [(ant, ant) for ant in RF.data_ants]
     elif antenna_numbers is not None:
         bls = [(ant, ant) for ant in antenna_numbers]
     else:

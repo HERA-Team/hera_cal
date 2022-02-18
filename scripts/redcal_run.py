@@ -43,5 +43,6 @@ redcal_run(a.input_data,
            check_after=a.check_after,
            gain=a.gain,
            max_dims=a.max_dims,
+           fc_min_vis_per_ant=a.fc_min_vis_per_ant,
            add_to_history=' '.join(sys.argv),
            verbose=a.verbose)

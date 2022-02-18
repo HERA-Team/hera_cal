@@ -35,7 +35,7 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
     ideally all be the same) to figure out the proper gain to apply/unapply to the visibilities. If all
     gain ratios are flagged for a given time/frequency within a redundant group, the data_flags are
     updated. Typical use is to use absolute/smooth_calibrated gains as new_gains, omnical gains as
-    old_gains, and omnical visibility solutions as data.
+    old_gains, and omnical visibility solutions as data. NOTE: BDA not supported; gain and data shapes must match.
 
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
@@ -108,12 +108,120 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
                 data[bl] *= avg_gains**exponent
 
 
+def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
+    ''' Builds dictionaries that map gains to the various cadences in potentially BDA data.
+        As necessary, will upsample gains/flags by duplication and downsample gains/flags by
+        (weighted) averaging. When downsampling, flags are ORed and weights are averaged.
+        Assumes that the all cadences in the data are a power-of-two multiple of the slowest cadence.
+
+    Arguments:
+        data: DataContainer containing baseline-pol complex visibility data. Only used
+            to figure out the various waterfall shapes.
+        gains: Dictionary mapping antenna tuples to complex gains to upsample/downsample as needed.
+        cal_flags: Dictionary mapping antenna tuples to boolean flags (or float weights).
+        flags_are_wgts: if True, treat data_flags as weights where 0s represent flags and
+            non-zero weights are unflagged data.
+
+    Returns:
+        gains_by_Nt: dictionary mapping numbers of integration to gain dictionaries
+        cal_flags_by_Nt: dictionary mapping numbers of integration to flag/weight dictionaries. 
+            If cal_flags is None, this will be None as well.
+    '''
+    # get all cadences (unique shapes of the time dimension in the data)
+    data_Nts = sorted(list(set([wf.shape[0] for wf in data.values()])))
+    
+    # Warn the user if the data doesn't conform to the expectation that all BDA is by a power of 2
+    for Nt in data_Nts:
+        power_of_2 = np.log(Nt / np.min(data_Nts)) / np.log(2)
+        if not np.isclose(power_of_2, np.round(power_of_2)):
+            warnings.warn(f'Data with {Nt} integrations is inconsistent with BDA by powers of 2 '
+                          f'when the slowest cadence has {np.min(data_Nts)} integrations.')
+
+    # initialize results dictionaries, handling the case where there are None and/or empty dicts
+    # and also the case where gains/flags are scalars, which then get recast as 2D arrays
+    if gains == {}:
+        gains_by_Nt = {Nt: {} for Nt in data_Nts}
+    else:
+        if np.isscalar(list(gains.values())[0]):
+            gains_by_Nt = {1: {ant: np.array([[gain]]) for ant, gain in gains.items()}}
+        else:
+            gains_by_Nt = {list(gains.values())[0].shape[0]: gains}
+    cal_flags_by_Nt = None
+    if cal_flags is not None:
+        if cal_flags == {}:
+            cal_flags_by_Nt = {Nt: {} for Nt in data_Nts}
+        else:
+            if np.isscalar(list(cal_flags.values())[0]):
+                cal_flags_by_Nt = {1: {ant: np.array([[cf]]) for ant, cf in cal_flags.items()}}
+            else:
+                cal_flags_by_Nt = {list(cal_flags.values())[0].shape[0]: cal_flags}
+
+    # Handle the case where gains/flags have a single integration (and are thus trivially broadcastable)
+    if 1 in gains_by_Nt:
+        for Nt in data_Nts:
+            gains_by_Nt[Nt] = gains_by_Nt[1]
+    if cal_flags_by_Nt is not None and 1 in cal_flags_by_Nt:
+        for Nt in data_Nts:
+            cal_flags_by_Nt[Nt] = cal_flags_by_Nt[1]
+
+    # If necessary, upsample gains (and flags) by repeating them
+    while True:
+        max_gain_Nt = np.max(list(gains_by_Nt.keys()))
+        if max_gain_Nt >= np.max(list(data_Nts)):
+            break
+        gains_by_Nt[max_gain_Nt * 2] = {ant: gains_by_Nt[max_gain_Nt][ant].repeat(2, axis=0) 
+                                        for ant in gains_by_Nt[max_gain_Nt]}
+        if cal_flags_by_Nt is not None:
+            cal_flags_by_Nt[max_gain_Nt * 2] = {ant: cal_flags_by_Nt[max_gain_Nt][ant].repeat(2, axis=0)
+                                                for ant in cal_flags_by_Nt[max_gain_Nt]}
+
+    # If necessary, downsample gains (and flags) by (flag-weigted) averaging (ORing) them
+    while True:
+        min_gain_Nt = np.min(list(gains_by_Nt.keys()))
+        if min_gain_Nt <= np.min(list(data_Nts)):
+            break
+        gains_by_Nt[min_gain_Nt // 2] = {}
+        if cal_flags_by_Nt is not None:
+            cal_flags_by_Nt[min_gain_Nt // 2] = {}
+        for ant, gain in gains_by_Nt[min_gain_Nt].items():
+            # break gains and flags into even and odd times to average together
+            even_gains = gain[0::2, :]
+            odd_gains = gain[1::2, :]
+            if cal_flags_by_Nt is not None:
+                # use flags/weights to perform a weighted average
+                even_flags = cal_flags_by_Nt[min_gain_Nt][ant][0::2, :]
+                odd_flags = cal_flags_by_Nt[min_gain_Nt][ant][1::2, :]
+                if flags_are_wgts:
+                    weights = [even_flags, odd_flags]
+                    # average weights
+                    cal_flags_by_Nt[min_gain_Nt // 2][ant] = (even_flags + odd_flags) / 2
+                else:
+                    weights = [(~even_flags).astype(float), (~odd_flags).astype(float)]
+                    # OR flags
+                    cal_flags_by_Nt[min_gain_Nt // 2][ant] = even_flags | odd_flags
+                # average with mask array to robustly handle case where weights sum to 0
+                gains_by_Nt[min_gain_Nt // 2][ant] = np.ma.average([even_gains, odd_gains], axis=0, weights=weights).data
+            else:
+                # just do a straight average
+                gains_by_Nt[min_gain_Nt // 2][ant] = np.average([even_gains, odd_gains], axis=0)
+
+    # Warn if there cadences in the data that are missing that still aren't in gains_by_Nt
+    for Nt in data_Nts:
+        if Nt not in gains_by_Nt:
+            warnings.warn(f'Data with {Nt} integrations cannot be calibrated with any of gain cadences: {list(gains_by_Nt.keys())}')
+
+    return gains_by_Nt, cal_flags_by_Nt
+
+
 def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None,
                        gain_convention='divide', flags_are_wgts=False):
     '''Update data and data_flags in place, taking out old calibration solutions, putting in new calibration
     solutions, and updating flags from those calibration solutions. Previously flagged data is modified, but
     left flagged. Missing antennas from either the new gains, the cal_flags, or (if it's not None) the old
-    gains are automatically flagged in the data's visibilities that involves those antennas.
+    gains are automatically flagged in the data's visibilities that involves those antennas. Data and gain
+    shapes should always match in the frequency direction. Can apply Ntimes=1 gains by broadcasting. Can
+    also up/downsample gains with Ntimes differing from those in the data by a power of 2, which is useful
+    when the data is BDA and has Ntimes of multiple different powers of 2.
 
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
@@ -132,58 +240,88 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
     _check_polarization_consistency(data, new_gains)
     exponent = {'divide': 1, 'multiply': -1}[gain_convention]
+
+    # build dictionary of all necessary gain shapes to account for calibration of BDA data
+    new_gains_by_Nt, cal_flags_by_Nt = build_gains_by_cadences(data, new_gains, cal_flags=cal_flags, flags_are_wgts=flags_are_wgts)
+    if old_gains is not None:
+        old_gains_by_Nt, _ = build_gains_by_cadences(data, old_gains)
+
     # loop over baselines in data
     for (i, j, pol) in data.keys():
+
         ap1, ap2 = utils.split_pol(pol)
         flag_all = False
+
+        # get relevant shaped gains for this data waterfall
+        Nt = data[(i, j, pol)].shape[0]
+        try:
+            new_gains_here = new_gains_by_Nt[Nt]
+        except KeyError:
+            raise ValueError(f'new_gains with {list(new_gains.values())[0].shape[0]} integrations are incompatible with data with {Nt} integrations.')
+        cal_flags_here = None
+        if cal_flags_by_Nt is not None:
+            try:
+                cal_flags_here = cal_flags_by_Nt[Nt]
+            except KeyError:
+                raise ValueError(f'cal_flags with {list(cal_flags.values())[0].shape[0]} integrations are incompatible with data with {Nt} integrations.')
+        old_gains_here = None
+        if old_gains is not None:
+            try:
+                old_gains_here = old_gains_by_Nt[Nt]
+            except KeyError:
+                raise ValueError(f'old_gains with {list(old_gains.values())[0].shape[0]} integrations are incompatible with data with {Nt} integrations.')
 
         # handle autocorrelations separately to keep them real
         if (i == j) & (ap1 == ap2):
             try:
-                data[(i, j, pol)] /= (np.abs(new_gains[(i, ap1)])**2)**exponent
+                data[(i, j, pol)] /= (np.abs(new_gains_here[(i, ap1)])**2)**exponent
             except KeyError:
                 flag_all = True
             if old_gains is not None:
                 try:
-                    data[(i, j, pol)] *= (np.abs(old_gains[(i, ap1)])**2)**exponent
+                    data[(i, j, pol)] *= (np.abs(old_gains_here[(i, ap1)])**2)**exponent
                 except KeyError:
                     flag_all = True
         else:
             # apply new gains for antennas i and j. If either is missing, flag the whole baseline
             try:
-                data[(i, j, pol)] /= (new_gains[(i, ap1)])**exponent
+                data[(i, j, pol)] /= (new_gains_here[(i, ap1)])**exponent
             except KeyError:
                 flag_all = True
             try:
-                data[(i, j, pol)] /= np.conj(new_gains[(j, ap2)])**exponent
+                data[(i, j, pol)] /= np.conj(new_gains_here[(j, ap2)])**exponent
             except KeyError:
                 flag_all = True
             # unapply old gains for antennas i and j. If either is missing, flag the whole baseline
             if old_gains is not None:
                 try:
-                    data[(i, j, pol)] *= (old_gains[(i, ap1)])**exponent
+                    data[(i, j, pol)] *= (old_gains_here[(i, ap1)])**exponent
                 except KeyError:
                     flag_all = True
                 try:
-                    data[(i, j, pol)] *= np.conj(old_gains[(j, ap2)])**exponent
+                    data[(i, j, pol)] *= np.conj(old_gains_here[(j, ap2)])**exponent
                 except KeyError:
                     flag_all = True
 
         if data_flags is not None:
-            # update data_flags in the case where flags are weights, flag all if cal_flags are missing
-            if flags_are_wgts:
-                try:
-                    data_flags[(i, j, pol)] *= (~cal_flags[(i, ap1)]).astype(np.float)
-                    data_flags[(i, j, pol)] *= (~cal_flags[(j, ap2)]).astype(np.float)
-                except KeyError:
-                    flag_all = True
-            # update data_flags in the case where flags are booleans, flag all if cal_flags are missing
+            if cal_flags is None:
+                # when data_flags is provided but cal_flags is not, flag everything
+                flag_all = True
             else:
-                try:
-                    data_flags[(i, j, pol)] += cal_flags[(i, ap1)]
-                    data_flags[(i, j, pol)] += cal_flags[(j, ap2)]
-                except KeyError:
-                    flag_all = True
+                # update data_flags in the case where flags are weights, flag all if cal_flags are missing
+                if flags_are_wgts:
+                    try:
+                        data_flags[(i, j, pol)] *= (~cal_flags_here[(i, ap1)]).astype(np.float)
+                        data_flags[(i, j, pol)] *= (~cal_flags_here[(j, ap2)]).astype(np.float)
+                    except KeyError:
+                        flag_all = True
+                # update data_flags in the case where flags are booleans, flag all if cal_flags are missing
+                else:
+                    try:
+                        data_flags[(i, j, pol)] += cal_flags_here[(i, ap1)]
+                        data_flags[(i, j, pol)] += cal_flags_here[(j, ap2)]
+                    except KeyError:
+                        flag_all = True
 
             # if the flag object is given, update it for this baseline to be totally flagged
             if flag_all:
@@ -195,7 +333,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
-              nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
+              nbl_per_load=None, gain_convention='divide', upsample=False, downsample=False, redundant_solution=False, bl_error_tol=1.0,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
               freq_atol=1., redundant_groups=1, dont_red_average_flagged_data=False, spw_range=None,
               exclude_from_redundant_mode="data", vis_units=None, **kwargs):
@@ -227,7 +365,10 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             nbl_per_load is only supported if filetype_in is .uvh5.
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
+        upsample: if True, upsample baseline-dependent-averaged data file to the highest temporal resolution
+        downsample: if True, downsample baseline-dependent-averaged data file to the lowest temporal resolution
         redundant_solution: If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.
+            NOTE: BDA data is not supported in this mode. Gain shapes must be made to match data samples using upsample/downsample.
         bl_error_tol: the largest allowable difference between baselines in a redundant group
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
@@ -302,7 +443,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         add_to_history += '\nOLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
     else:
         old_gains, old_flags = None, None
-    hd = io.HERAData(data_infilename, filetype=filetype_in)
+    hd = io.HERAData(data_infilename, filetype=filetype_in, upsample=upsample, downsample=downsample)
     if spw_range is None:
         spw_range = (0, hd.Nfreqs)
     else:
@@ -349,7 +490,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             # initialize a redunantly averaged HERAData on disk
             # first copy the original HERAData
             all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
-            hd_red = io.HERAData(data_infilename)
+            hd_red = io.HERAData(data_infilename, upsample=upsample, downsample=downsample)
             # go through all redundant groups and remove the groups that do not
             # have baselines in the data. Each group is still labeled by the
             # first baseline of each group regardless if that baseline is in
@@ -404,7 +545,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
                         if hd.vis_units is not None and hc.gain_scale.lower() != "uncalib" and hd.vis_units.lower() != hc.gain_scale.lower():
                             warnings.warn(f"Replacing original data vis_units of {hd.vis_units}"
-                                          " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
+                                          f" with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
                         vis_units = hc.gain_scale
                     else:
                         vis_units = hd.vis_units
@@ -416,7 +557,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             if hasattr(hc, 'gain_scale') and hc.gain_scale is not None:
                 if hd.vis_units is not None and hc.gain_scale.lower() != "uncalib" and hd.vis_units.lower() != hc.gain_scale.lower():
                     warnings.warn(f"Replacing original data vis_units of {hd.vis_units}"
-                                  " with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
+                                  f" with calibration vis_units of {hc.gain_scale}", RuntimeWarning)
                 hd_red.vis_units = hc.gain_scale
             if vis_units is not None:
                 hd_red.vis_units = vis_units
@@ -457,8 +598,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     vis_units = hc.gain_scale
             if vis_units is not None:
                 kwargs['vis_units'] = vis_units
-            io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
-                          data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
+            io.update_uvdata(hd, data=data, flags=data_flags, add_to_history=add_to_history, **kwargs)
+            io._write_HERAData_to_filetype(hd, data_outfilename, filetype_out=filetype_out, clobber=clobber)
+
         else:
             all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
             hd.update(data=data, flags=data_flags, nsamples=data_nsamples, **kwargs)
@@ -490,7 +632,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                                                                       reds=red_antpairs, red_bl_keys=reds_data_bls, wgts=redundant_weights, inplace=False,
                                                                       propagate_flags=True)
                 # update redundant data. Don't partial write.
-                hd_red = io.HERAData(data_infilename)
+                hd_red = io.HERAData(data_infilename, upsample=upsample, downsample=downsample)
                 if len(reds_data_bls) > 0:
                     hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
                     # update redundant data. Don't partial write.
@@ -533,6 +675,8 @@ def apply_cal_argparser():
     a.add_argument("--redundant_groups", type=int, default=1, help="Number of subgroups to split each redundant baseline into for cross power spectra. ")
     a.add_argument("--gain_convention", type=str, default='divide',
                    help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
+    a.add_argument("--upsample", default=False, action="store_true", help="Upsample BDA files to the highest temporal resolution.")
+    a.add_argument("--downsample", default=False, action="store_true", help="Downsample BDA files to the highest temporal resolution.")
     a.add_argument("--redundant_solution", default=False, action="store_true",
                    help="If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')

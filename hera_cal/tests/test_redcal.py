@@ -1201,7 +1201,7 @@ class TestRedundantCalibrator(object):
 
         # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance 
         for antnum in antpos.keys():
-            noisy_data[(antnum, antnum, 'xx')] = np.sqrt(noise_var * dt * df)
+            noisy_data[(antnum, antnum, 'xx')] = np.ones((len(times), len(freqs))) * np.sqrt(noise_var * dt * df)
         noisy_data.freqs = deepcopy(freqs)
         noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
         cal = om.redundantly_calibrate(noisy_data, reds)
@@ -1253,7 +1253,7 @@ class TestRedundantCalibrator(object):
 
         # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance 
         for antnum in antpos.keys():
-            noisy_data[(antnum, antnum, 'xx')] = np.sqrt(noise_var * dt * df)
+            noisy_data[(antnum, antnum, 'xx')] = np.ones((len(times), len(freqs))) * np.sqrt(noise_var * dt * df)
         noisy_data.freqs = deepcopy(freqs)
         noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
         filtered_reds = om.filter_reds(reds, ex_ants=[6])
@@ -1300,7 +1300,8 @@ class TestRedundantCalibrator(object):
 
 class TestRedcalAndAbscal(object):
     
-    def test_post_redcal_abscal(self):
+    @pytest.mark.parametrize("fc_min_vis_per_ant", [16, None])
+    def test_post_redcal_abscal(self, fc_min_vis_per_ant):
         '''This test shows that performing a combination of redcal and abscal recovers the exact input gains
         up to an overall phase (which is handled by using a reference antenna).'''
         # Simulate Redundant Data
@@ -1328,7 +1329,7 @@ class TestRedcalAndAbscal(object):
         d.antpos = antpos
 
         # run redcal
-        cal = om.redundantly_calibrate(d, reds)
+        cal = om.redundantly_calibrate(d, reds, fc_min_vis_per_ant=fc_min_vis_per_ant)
 
         # set up abscal
         d_omnicaled = deepcopy(d)
