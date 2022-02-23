@@ -1380,6 +1380,8 @@ def auto_reflection_argparser():
     a.add_argument("--ref_sig_cut", default=2, type=float, help="Reflection minimum 'significance' threshold for fitting.")
     a.add_argument("--add_to_history", default='', type=str, help="String to append to file history")
     a.add_argument("--time_avg", default=False, action='store_true', help='Time average file before reflection fitting.')
+    a.add_argument("--compress_tavg_calfits", default=False, action='store_true', help='Save final calfits files with a single integration (at the average JD) '
+                   'rather than duplicating identical calibration solutions for every intergration. Ignored if time_avg is False.')
     a.add_argument("--opt_maxiter", default=0, type=int, help="Optimization max Niter. Default is no optimization")
     a.add_argument("--opt_method", default='BFGS', type=str, help="Optimization algorithm. See scipy.optimize.minimize for details")
     a.add_argument("--opt_tol", default=1e-3, type=float, help="Optimization stopping tolerance.")
@@ -1390,7 +1392,7 @@ def auto_reflection_argparser():
     return a
 
 
-def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_cal=None, time_avg=False,
+def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_cal=None, time_avg=False, compress_tavg_calfits=False,
                         write_npz=False, antenna_numbers=None, polarizations=None, window='None', alpha=0.2,
                         edgecut_low=0, edgecut_hi=0, zeropad=0, tol=1e-6, gain=1e-1, maxiter=100,
                         skip_wgt=0.2, horizon=1.0, standoff=0.0, min_dly=100.0, Nphs=300, fthin=10,
@@ -1407,6 +1409,8 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         input_cal : str or UVCal subclass, calibration to apply to data on-the-fly
         time_avg : bool, if True, time-average the entire input data before reflection modeling.
             This will produce single-integration calfits files.
+        compress_tavg_calfits : Save final calfits files with a single integration (at the average JD) rather
+            than duplicating identical calibration solutions for every intergration. Ignored if time_avg is False.
         write_npz : bool, if True, write an NPZ with reflection parameters with matching path as output_fname
         antenna_numbers : int list, list of antenna number integers to run on. Default is all in data.
         polarizations : str list, list of polarization strings to run on, default is all
@@ -1489,7 +1493,9 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         flags = RF.avg_flags
         nsamples = RF.avg_nsamples
         model = RF.avgm_data
-        RF.times = np.mean(RF.times, keepdims=True)
+        if compress_tavg_calfits:
+            # Reduce time array to length one, thus making the ouput calfits waterfalls have shape (1, Nfreqs)
+            RF.times = np.mean(RF.times, keepdims=True)
 
     # iterate over dly_ranges
     gains = []
@@ -1501,7 +1507,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
             _RF = RF
             cdata = data
             if write_each_calfits:
-                _output_fname = output_fname            
+                _output_fname = output_fname
         else:
             _RF = RF.soft_copy()
             cdata = copy.deepcopy(data)
