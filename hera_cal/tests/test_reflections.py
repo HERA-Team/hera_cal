@@ -306,7 +306,8 @@ class Test_ReflectionFitter_Cables(object):
     def test_auto_reflection_run(self):
         # most of the code tests have been done above, this is just to ensure this wrapper function runs
         uvd = simulate_reflections(cdelay=[150.0, 250.0], cphase=[0.0, 0.0], camp=[1e-2, 1e-2], add_cable=True, cable_ants=[23], add_xtalk=False)
-        reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, window='blackmanharris', write_npz=True, overwrite=True, ref_sig_cut=1.0)
+        reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, compress_tavg_calfits=True, 
+                                        window='blackmanharris', write_npz=True, overwrite=True, ref_sig_cut=1.0)
         assert os.path.exists("./ex.calfits")
         assert os.path.exists("./ex.npz")
         assert os.path.exists("./ex.ref2.calfits")
@@ -334,8 +335,8 @@ class Test_ReflectionFitter_Cables(object):
         os.remove("./ex.ref2.npz")
 
         # Try with write_each_calfits = False
-        reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, window='blackmanharris', 
-                                        write_npz=False, overwrite=True, ref_sig_cut=1.0, write_each_calfits=False)
+        reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, compress_tavg_calfits=True,
+                                        window='blackmanharris', write_npz=False, overwrite=True, ref_sig_cut=1.0, write_each_calfits=False)
         assert os.path.exists("./ex.calfits")
         assert not os.path.exists("./ex.ref2.calfits")
         uvc3 = UVCal()
