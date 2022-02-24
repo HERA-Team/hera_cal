@@ -233,8 +233,7 @@ class Test_ReflectionFitter_Cables(object):
         RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True, write_npz=True)
         assert uvc.Ntimes == 100
-        assert len(uvc.ant_array) == 65
-        assert np.allclose(uvc.gain_array[0], 1.0)
+        assert len(uvc.ant_array) == 5
         assert not np.allclose(uvc.gain_array[uvc.ant_array.tolist().index(23)], 1.0)
         # assert flag propagation
         assert np.all(uvc.get_flags(a_k)[:, 0])
@@ -252,7 +251,7 @@ class Test_ReflectionFitter_Cables(object):
         RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True)
         assert uvc.Ntimes == 100
-        assert len(uvc.ant_array) == 65
+        assert len(uvc.ant_array) == 5
         # assert flag propagation
         assert np.all(uvc.get_flags(a_k)[:, :2])
 
@@ -297,11 +296,18 @@ class Test_ReflectionFitter_Cables(object):
         assert a.dly_ranges[0] == '10,20'
         assert len(a.dly_ranges) == 2
         assert np.allclose(a.opt_buffer, [25, 75])
+        assert a.write_each_calfits
+
+        sys.argv = [sys.argv[0], 'a', '--only_write_final_calfits']
+        parser = reflections.auto_reflection_argparser()
+        a = parser.parse_args()
+        assert not a.write_each_calfits
 
     def test_auto_reflection_run(self):
         # most of the code tests have been done above, this is just to ensure this wrapper function runs
         uvd = simulate_reflections(cdelay=[150.0, 250.0], cphase=[0.0, 0.0], camp=[1e-2, 1e-2], add_cable=True, cable_ants=[23], add_xtalk=False)
-        reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, window='blackmanharris', write_npz=True, overwrite=True, ref_sig_cut=1.0)
+        reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, compress_tavg_calfits=True, 
+                                        window='blackmanharris', write_npz=True, overwrite=True, ref_sig_cut=1.0)
         assert os.path.exists("./ex.calfits")
         assert os.path.exists("./ex.npz")
         assert os.path.exists("./ex.ref2.calfits")
@@ -310,8 +316,10 @@ class Test_ReflectionFitter_Cables(object):
         # ensure gains have two humps at 150 and 250 ns
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
+        assert uvc.Ntimes == 1  # because time_avg=True
         uvc2 = UVCal()
         uvc2.read_calfits('./ex.ref2.calfits')
+        assert uvc2.Ntimes == 1  # because time_avg=True
         uvc.gain_array *= uvc2.gain_array
         aind = np.argmin(np.abs(uvc.ant_array - 23))
         g = uvc.gain_array[aind, 0, :, :, 0].T
@@ -325,6 +333,16 @@ class Test_ReflectionFitter_Cables(object):
         os.remove("./ex.npz")
         os.remove("./ex.ref2.calfits")
         os.remove("./ex.ref2.npz")
+
+        # Try with write_each_calfits = False
+        reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, compress_tavg_calfits=True,
+                                        window='blackmanharris', write_npz=False, overwrite=True, ref_sig_cut=1.0, write_each_calfits=False)
+        assert os.path.exists("./ex.calfits")
+        assert not os.path.exists("./ex.ref2.calfits")
+        uvc3 = UVCal()
+        uvc3.read_calfits('./ex.calfits')
+        np.testing.assert_array_almost_equal(uvc3.gain_array, uvc.gain_array, 12)
+        os.remove("./ex.calfits")
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")

@@ -2020,17 +2020,17 @@ def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
 
     # shift model files relative to first file & first index if needed
     for ml in model_lsts:
-        if ml[0] < model_lsts[0][0]:
-            ml += 2 * np.pi
-
+        ml[ml < model_lsts[0][0]] += 2 * np.pi
+        # also ensure that ml is increasing
+        ml[ml < ml[0]] += 2 * np.pi
     # get model start and stop, buffering by dlst / 2
     model_starts = np.asarray([ml[0] - md / 2.0 for ml, md in zip(model_lsts, model_dlsts)])
     model_ends = np.asarray([ml[-1] + md / 2.0 for ml, md in zip(model_lsts, model_dlsts)])
 
     # shift data relative to model if needed
-    if data_lsts[-1] < model_starts[0]:
-        data_lsts += 2 * np.pi
-
+    data_lsts[data_lsts < model_starts[0]] += 2 * np.pi
+    # make sure monotonically increasing.
+    data_lsts = np.unwrap(data_lsts)
     # select model files
     match = np.asarray(modelfiles)[(model_starts < data_lsts[-1] + atol)
                                    & (model_ends > data_lsts[0] - atol)]

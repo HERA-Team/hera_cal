@@ -32,7 +32,7 @@ elif ap.mode == 'dpss_leastsq':
     avg_red_bllens = True
     filter_kwargs['skip_contiguous_flags'] = True
     skip_flagged_edges = True
-    filter_kwargs['max_contiguous_edge_flags'] = 1
+    filter_kwargs['max_contiguous_edge_flags'] = ap.max_contiguous_edge_flags
     filter_kwargs['flag_model_rms_outliers'] = True
 else:
     raise ValueError(f"mode {mode} not supported.")
