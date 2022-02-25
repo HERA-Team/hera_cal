@@ -359,6 +359,16 @@ class Test_Calibration_Smoother(object):
         assert not np.all(g == g2)
         assert g2.shape == g.shape
 
+        # Test DPSS mode
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.cs.time_freq_2D_filter(method='DPSS')
+
+        g3 = deepcopy(self.cs.gain_grids[54, 'Jee'])
+        assert not np.all(g3 == g2)
+        assert g2.shape == g3.shape
+
+
     @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_write(self):
         outfilename = os.path.join(DATA_PATH, 'test_output/smooth_test.calfits')
