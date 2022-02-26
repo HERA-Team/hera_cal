@@ -908,7 +908,6 @@ class FRFilter(VisClean):
             filt_flags[k] = f
             filt_nsamples[k] = eff_nsamples
 
-
     def select_tophat_frates(self, case, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
                              max_frate_coeffs=None, uvb=None, frate_profiles=None, percentile_low=5.0, percentile_high=95.0,
                              fr_freq_skip=1, nfr=None, dfr=None, verbose=False):
@@ -998,7 +997,7 @@ class FRFilter(VisClean):
                                                                       fr_freq_skip=fr_freq_skip, frate_width_multiplier=frate_width_multiplier,
                                                                       min_frate_half_width=min_frate_half_width, frate_profiles=frate_profiles)
         elif case == 'uvbeam':
-            assert uvb is note None, "uvb must be provided iv case='uvbeam'."
+            assert uvb is not None, "uvb must be provided iv case='uvbeam'."
             # if uvb is not None, get fringe-rates from binning.
             frate_centers, frate_half_widths = get_fringe_rate_limits(self.hd, uvb, nfr=nfr, dfr=dfr,
                                                                       percentile_low=percentile_low,
@@ -1010,12 +1009,9 @@ class FRFilter(VisClean):
                                                                       frate_profiles=frate_profiles)
         return frate_centers, frate_half_widths
 
-
-
-
     def tophat_frfilter(self, frate_centers, frate_half_widths, keys=None, wgts=None, mode='clean',
                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
-                        write_cache=False, verbose=False, pre_filter_modes_between_lobe_minimum_and_zero=False, **filter_kwargs):
+                        write_cache=False, pre_filter_modes_between_lobe_minimum_and_zero=False, **filter_kwargs):
         '''
         A wrapper around VisClean.fourier_filter specifically for
         filtering along the time axis with uniform fringe-rate weighting.
@@ -1045,7 +1041,6 @@ class FRFilter(VisClean):
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
             that were not in previously loaded cache files.
-        verbose: bool, optional,
         pre_filter_modes_between_lobe_minimum_and_zero: bool, optional
             Subtract power between the main-lobe and zero before applying main-lobe filter.
             This is to avoid having the main-lobe filter respond to any exceedingly high power
@@ -1113,14 +1108,12 @@ class FRFilter(VisClean):
                 phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
                 self.pre_filter_resid[k] /= phasor[:, None]
                 filter_center_to_use = 0.0
-                else:
-                    filter_center_to_use = frate_centers[k]
                 self.fourier_filter(keys=[k], filter_centers=[filter_center_to_use], filter_half_widths=[frate_half_widths[k]],
                                     mode=mode, x=self.times * SDAY_KSEC,
                                     wgts=wgts, data=self.pre_filter_resid, flags=self.pre_filter_resid_flags,
                                     ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs_no_data)
             else:
-            # center sky-modes at zero fringe-rate.
+                # center sky-modes at zero fringe-rate.
                 phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
                 if 'data' in filter_kwargs:
                     input_data = filter_kwargs['data']
@@ -1154,12 +1147,12 @@ class FRFilter(VisClean):
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
 
-def split_frates_and_tophat_frfilter(self, case, keys=None, wgts=None, mode='clean', uvb=None, percentile_low=5., percentile_high=95.,
-                        frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
-                        max_frate_coeffs=None, skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
-                        write_cache=False, center_before_filtering=True, fr_freq_skip=1,
-                        verbose=False, nfr=None, dfr=None, pre_filter_modes_between_lobe_minimum_and_zero=False,
-                        frate_profiles=None, **filter_kwargs):
+    def split_frates_and_tophat_frfilter(self, case, keys=None, wgts=None, mode='clean', uvb=None, percentile_low=5., percentile_high=95.,
+                                         frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
+                                         max_frate_coeffs=None, skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
+                                         write_cache=False, center_before_filtering=True, fr_freq_skip=1,
+                                         verbose=False, nfr=None, dfr=None, pre_filter_modes_between_lobe_minimum_and_zero=False,
+                                         frate_profiles=None, **filter_kwargs):
         '''
         A wrapper around VisClean.fourier_filter specifically for
         filtering along the time axis with uniform fringe-rate weighting.
@@ -1173,6 +1166,8 @@ def split_frates_and_tophat_frfilter(self, case, keys=None, wgts=None, mode='cle
             from histogram of main-beam wrt instantaneous sky fringe rates
             If case == 'frate_profiles': then use user-supplied fringe-rate profiles
             and compute cutoffs based on percentile_low and percentile_high
+            If case == 'sky': then use fringe-rates corresponding to range of
+            instantanous fringe-rates that include sky emission.
         keys: list of visibilities to filter in the (i,j,pol) format.
           If None (the default), all visibilities are filtered.
         wgts: dictionary or DataContainer with all the same keys as self.data.
@@ -1248,14 +1243,22 @@ def split_frates_and_tophat_frfilter(self, case, keys=None, wgts=None, mode='cle
           self.clean_model: DataContainer formatted like self.data with only low-fringe-rate components
           self.clean_info: Dictionary of info from uvtools.dspec.fourier_filter with the same keys as self.data
         '''
-        frate_centers, frate_half_widths = self.select_tophat_frates(case=case, keys=keys, frate_standoff=frate_standoff, frate_width_multiplier=frate_width_multiplier,
-                                 min_frate_half_width=min_frate_half_width, max_frate_coeffs=max_frate_coeffs, uvb=uvb, frate_profiles=frate_profiles, percentile_low=percentile_low,
-                                 percentile_high=percentile_high, fr_freq_skip=fr_freq_skip, nfr=nfr, dfr=dfr, verbose=verbose)
+        assert case in ['sky', 'max_frate_coeffs', 'uvbeam'], f'case={case} is not valid.'
+        frate_centers, frate_half_widths = self.select_tophat_frates(case=case, keys=keys, frate_standoff=frate_standoff,
+                                                                     frate_width_multiplier=frate_width_multiplier,
+                                                                     min_frate_half_width=min_frate_half_width,
+                                                                     max_frate_coeffs=max_frate_coeffs, uvb=uvb,
+                                                                     frate_profiles=frate_profiles, percentile_low=percentile_low,
+                                                                     percentile_high=percentile_high, fr_freq_skip=fr_freq_skip,
+                                                                     nfr=nfr, dfr=dfr, verbose=verbose)
 
-        self.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths, keys=keys, wgts=wgts, mode=mode,
-                            skip_wgt=skip_wgt, tol=tol, verbose=verbose, cache_dir=cache_dir, read_cache=read_cache,
-                            write_cache=write_cache, verbose=verbose, pre_filter_modes_between_lobe_minimum_and_zero=pre_filter_modes_between_lobe_minimum_and_zero,
-                            **filter_kwargs)
+        self.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
+                             keys=keys, wgts=wgts, mode=mode,
+                             skip_wgt=skip_wgt, tol=tol, verbose=verbose,
+                             cache_dir=cache_dir, read_cache=read_cache,
+                             write_cache=write_cache,
+                             pre_filter_modes_between_lobe_minimum_and_zero=pre_filter_modes_between_lobe_minimum_and_zero,
+                             **filter_kwargs)
 
 
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
@@ -1356,10 +1359,19 @@ def tophat_frfilter_argparser(mode='clean'):
                                                                                                        "before applying main-lobe fringe rate filter. This is to prevent"
                                                                                                        "the main-lobe filter to responding to overwhelmingly bright emission"
                                                                                                        "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
+
+    desc = ("Filtering case ['max_frate_coeffs', 'uvbeam', 'sky']",
+            "If case == 'max_frate_coeffs', then determine fringe rate centers",
+            "and half-widths based on the max_frate_coeffs arg (see below).",
+            "If case == 'uvbeam', then determine fringe rate centers and half widths",
+            "from histogram of main-beam wrt instantaneous sky fringe rates.",
+            "If case == 'sky': then use fringe-rates corresponding to range of ",
+            "instantanous fringe-rates that include sky emission.")
+    ap.add_argument("--case", default="sky", help=desc, type=str)
     return ap
 
 
-def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_list=None,
+def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calfile_list=None,
                                    Nbls_per_load=None, spw_range=None, cache_dir=None,
                                    read_cache=False, write_cache=False, external_flags=None,
                                    factorize_flags=False, time_thresh=0.05,
@@ -1374,6 +1386,14 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
 
     Arguments:
         datafile_list: list of data files to perform cross-talk filtering on
+        case: str
+            Filtering case ['max_frate_coeffs', 'uvbeam', 'frate_profiles', 'sky']
+            If case == 'max_frate_coeffs', then determine fringe rate centers
+            and half-widths based on the max_frate_coeffs arg (see below).
+            If case == 'uvbeam', then determine fringe rate centers and half widths
+            from histogram of main-beam wrt instantaneous sky fringe rates
+            If case == 'sky': then use fringe-rates corresponding to range of
+            instantanous fringe-rates that include sky emission.
         baseline_list: list of antenna-pair 2-tuples to filter and write out from the datafile_list.
                        If None, load all baselines in files. Default is None.
         calfile_list: optional list of calibration files to apply to data before fr filtering
@@ -1468,8 +1488,11 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
             else:
                 uvb = None
             if len(keys) > 0:
-                frfil.split_frates_and_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, uvb=uvb,
-                                      skip_flagged_edges=skip_flagged_edges, keys=keys, verbose=verbose, **filter_kwargs)
+                frfil.split_frates_and_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache,
+                                                       write_cache=write_cache, uvb=uvb,
+                                                       skip_flagged_edges=skip_flagged_edges,
+                                                       case=case,
+                                                       keys=keys, verbose=verbose, **filter_kwargs)
             else:
                 frfil.clean_data = DataContainer({})
                 frfil.clean_flags = DataContainer({})
