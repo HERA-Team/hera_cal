@@ -908,33 +908,23 @@ class FRFilter(VisClean):
             filt_flags[k] = f
             filt_nsamples[k] = eff_nsamples
 
-    def tophat_frfilter(self, keys=None, wgts=None, mode='clean', uvb=None, percentile_low=5., percentile_high=95.,
-                        frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
-                        max_frate_coeffs=None, skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
-                        write_cache=False, fr_freq_skip=1,
-                        verbose=False, nfr=None, dfr=None, pre_filter_modes_between_lobe_minimum_and_zero=False,
-                        frate_profiles=None, **filter_kwargs):
-        '''
-        A wrapper around VisClean.fourier_filter specifically for
-        filtering along the time axis with uniform fringe-rate weighting.
+
+    def select_tophat_frates(self, case, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
+                             max_frate_coeffs=None, uvb=None, frate_profiles=None, percentile_low=5.0, percentile_high=95.0,
+                             fr_freq_skip=1, nfr=None, dfr=None, verbose=False):
+        """
+        Select fringe-rates to filter given a filtering case.
 
         Parameters
         ----------
-        keys: list of visibilities to filter in the (i,j,pol) format.
-          If None (the default), all visibilities are filtered.
-        wgts: dictionary or DataContainer with all the same keys as self.data.
-         Linear multiplicative weights to use for the fr filter. Default, use np.logical_not
-         of self.flags. uvtools.dspec.fourier_filter will renormalize to compensate.
-        mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
-        uvb: UVBeam object, optional
-         UVBeam object with model of the primary beam. if provided, will supercede main-lobe
-         for determining fringe-rate limits.
-        percentile_low: float, optional
-            if uvb is provided, filter fringe rates that are larger then this percentile
-            in the histogram of beam squared powers for instantaneous fringe rates.
-        percentile_high: float, optional
-            if uvb is provided, filter fringe rates that are smaller then this percentile
-            in the histogram of beam squared powers for instantaneous fringe rates.
+        case: str
+            Filtering case ['max_frate_coeffs', 'uvbeam', 'frate_profiles', 'sky']
+            If case == 'max_frate_coeffs', then determine fringe rate centers
+            and half-widths based on the max_frate_coeffs arg (see below).
+            If case == 'uvbeam', then determine fringe rate centers and half widths
+            from histogram of main-beam wrt instantaneous sky fringe rates
+            If case == 'frate_profiles': then use user-supplied fringe-rate profiles
+            and compute cutoffs based on percentile_low and percentile_high
         frate_standoff: float, optional
             additional fringe-rate to add to min and max of computed fringe-rate bounds [mHz]
             to add to analytic calculation of fringe-rate bounds for emission on the sky.
@@ -945,9 +935,105 @@ class FRFilter(VisClean):
         min_frate_half_width: float, optional
             minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
             Default is 0.025
+        keys: list of visibilities to filter in the (i,j,pol) format.
+          If None (the default), all visibilities are filtered.
         max_frate_coeffs, 2-tuple float
-        Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
-        Providing these overrides the sky-based fringe-rate determination! Default is None.
+          Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
+          These are used only if case == 'max_frate_coeffs'.
+        uvb: UVBeam object, optional
+         UVBeam object with model of the primary beam. Only used if case=='uvbeam'
+        percentile_low: float, optional
+            if uvb is provided, filter fringe rates that are larger then this percentile
+            in the histogram of beam squared powers for instantaneous fringe rates.
+            Only used if case == 'uvbeam' or case == 'frate_profiles'
+        percentile_high: float, optional
+            if uvb is provided, filter fringe rates that are smaller then this percentile
+            in the histogram of beam squared powers for instantaneous fringe rates.
+            only used if case == 'uvbeam' or case == 'frate_profiles'
+        fr_freq_skip: int, optional
+            bin fringe rates from every freq_skip channels.
+            default is 1 -> takes a long time. We recommend setting this to be larger.
+            only used if case == 'uvbeam'
+        dfr: float, optional.
+            spacing of fringe-rate grid used to perform binning and percentile calc
+            in units of mHz.
+            default is None -> set to 1 / (dtime * Ntime) of uvd.
+            only used of case == 'uvbeam' or case == 'frate_profiles'
+        nfr: float, optional.
+            number of points on fringe-rate grid to perform binning and percentile calc.
+            default is None -> set to uvd.Ntimes.
+            only used of case == 'uvbeam' or case == 'frate_profiles'
+        verbose: bool, optional, lots of outputs!
+        frate_profiles: dict object, optional
+            Dictionary mapping antpairpol keys to fringe-rate profiles.
+            centered on a grid of length nfr spaced by dfr centered at 0.
+            only used if case == 'frate_profiles'
+        filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
+
+        Returns
+        -------
+            frate_centers: dict object,
+                Dictionary with the center fringe-rate of each baseline in to_filter in units of mHz.
+                keys are antpairpols.
+            frate_half_widths: dict object
+                Dictionary with the half widths of each fringe-rate window around the frate_centers in units of mHz.
+                keys are antpairpols
+
+        """
+        if keys is None:
+            keys = list(self.data.keys())
+        if case == 'sky':
+            # if max_frate_coeffs is none and uvb is none, fringe-rate filter all modes that could be occupied by sky emission.
+            frate_centers, frate_half_widths = sky_frates(self.hd, keys=keys, frate_standoff=frate_standoff,
+                                                          frate_width_multiplier=frate_width_multiplier, min_frate_half_width=min_frate_half_width)
+        elif case == 'max_frate_coeffs':
+            assert max_frate_coeffs is not None, "max_frate_coeffs must be provided if case='max_frate_coeffs'."
+            # if uvb is None and max_frate_coeffs is not None, use max_frate_coeffs.
+            frate_half_widths = {k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in keys}
+            frate_centers = {k: 0.0 for k in keys}
+        elif case == 'frate_profiles':
+            assert frate_profiles is not None, "frate_profiles must be provided if case='frate_profiles'"
+            frate_centers, frate_half_widths = get_fringe_rate_limits(self.hd, nfr=nfr, dfr=dfr, percentile_low=percentile_low,
+                                                                      percentile_high=percentile_high, keys=keys, verbose=verbose, frate_standoff=frate_standoff,
+                                                                      fr_freq_skip=fr_freq_skip, frate_width_multiplier=frate_width_multiplier,
+                                                                      min_frate_half_width=min_frate_half_width, frate_profiles=frate_profiles)
+        elif case == 'uvbeam':
+            assert uvb is note None, "uvb must be provided iv case='uvbeam'."
+            # if uvb is not None, get fringe-rates from binning.
+            frate_centers, frate_half_widths = get_fringe_rate_limits(self.hd, uvb, nfr=nfr, dfr=dfr,
+                                                                      percentile_low=percentile_low,
+                                                                      percentile_high=percentile_high,
+                                                                      keys=keys, verbose=verbose,
+                                                                      frate_standoff=frate_standoff, fr_freq_skip=fr_freq_skip,
+                                                                      frate_width_multiplier=frate_width_multiplier,
+                                                                      min_frate_half_width=min_frate_half_width,
+                                                                      frate_profiles=frate_profiles)
+        return frate_centers, frate_half_widths
+
+
+
+
+    def tophat_frfilter(self, frate_centers, frate_half_widths, keys=None, wgts=None, mode='clean',
+                        skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
+                        write_cache=False, verbose=False, pre_filter_modes_between_lobe_minimum_and_zero=False, **filter_kwargs):
+        '''
+        A wrapper around VisClean.fourier_filter specifically for
+        filtering along the time axis with uniform fringe-rate weighting.
+
+        Parameters
+        ----------
+        frate_centers: dict object,
+            Dictionary with the center fringe-rate of each baseline in to_filter in units of mHz.
+            keys are antpairpols.
+        frate_half_widths: dict object
+            Dictionary with the half widths of each fringe-rate window around the frate_centers in units of mHz.
+            keys are antpairpols
+        keys: list of visibilities to filter in the (i,j,pol) format.
+          If None (the default), all visibilities are filtered.
+        wgts: dictionary or DataContainer with all the same keys as self.data.
+            Linear multiplicative weights to use for the fr filter. Default, use np.logical_not
+            of self.flags. uvtools.dspec.fourier_filter will renormalize to compensate.
+        mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
           Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
           time. Skipped channels are then flagged in self.flags.
@@ -959,17 +1045,7 @@ class FRFilter(VisClean):
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
             that were not in previously loaded cache files.
-        fr_freq_skip: int, optional
-            bin fringe rates from every freq_skip channels.
-            default is 1 -> takes a long time. We recommend setting this to be larger.
-        verbose: bool, optional, lots of outputs!
-        dfr: float, optional.
-            spacing of fringe-rate grid used to perform binning and percentile calc
-            in units of mHz.
-            default is None -> set to 1 / (dtime * Ntime) of uvd.
-        nfr: float, optional.
-            number of points on fringe-rate grid to perform binning and percentile calc.
-            default is None -> set to uvd.Ntimes.
+        verbose: bool, optional,
         pre_filter_modes_between_lobe_minimum_and_zero: bool, optional
             Subtract power between the main-lobe and zero before applying main-lobe filter.
             This is to avoid having the main-lobe filter respond to any exceedingly high power
@@ -977,11 +1053,6 @@ class FRFilter(VisClean):
             or if there is egregious cross-talk / ground pickup.
             This arg is only used if beamfitsfile is not None.
             Default is False.
-        frate_profiles: dict object, optional
-            Dictionary mapping antpairpol keys to fringe-rate profiles.
-            centered on a grid of length nfr spaced by dfr centered at 0.
-            default is None -> automatically calculate profiles using uvb.
-            User cannot provide both frate_profiles and uvb -- An error will be raised.
         filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Returns
@@ -1004,27 +1075,9 @@ class FRFilter(VisClean):
             keys_before = list(filter_cache.keys())
         else:
             filter_cache = None
-        if uvb is None and max_frate_coeffs is None:
-            # if max_frate_coeffs is none and uvb is none, fringe-rate filter all modes that could be occupied by sky emission.
-            frate_centers, frate_half_widths = sky_frates(self.hd, keys=keys, frate_standoff=frate_standoff,
-                                                          frate_width_multiplier=frate_width_multiplier, min_frate_half_width=min_frate_half_width)
-        elif uvb is None and max_frate_coeffs is not None:
-            # if uvb is None and max_frate_coeffs is not None, use max_frate_coeffs.
-            frate_half_widths = {k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in keys}
-            frate_centers = {k: 0.0 for k in keys}
 
-        elif uvb is not None or frate_profiles is not None:
-            # if uvb is not None, get fringe-rates from binning.
-            frate_centers, frate_half_widths = get_fringe_rate_limits(self.hd, uvb, nfr=nfr, dfr=dfr,
-                                                                      percentile_low=percentile_low,
-                                                                      percentile_high=percentile_high,
-                                                                      keys=keys, verbose=verbose,
-                                                                      frate_standoff=frate_standoff, fr_freq_skip=fr_freq_skip,
-                                                                      frate_width_multiplier=frate_width_multiplier,
-                                                                      min_frate_half_width=min_frate_half_width,
-                                                                      frate_profiles=frate_profiles)
-
-        wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
+        if wgts is None:
+            wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         if pre_filter_modes_between_lobe_minimum_and_zero:
             self.pre_filter_resid = DataContainer({})
             self.pre_filter_resid_flags = DataContainer({})
@@ -1100,6 +1153,8 @@ class FRFilter(VisClean):
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
+
+def compute_frates_and_tophat_frfilter()
 
 
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
@@ -1312,7 +1367,8 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
             else:
                 uvb = None
             if len(keys) > 0:
-                frfil.tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, uvb=uvb,
+
+                frfil.compute_frates_and_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, uvb=uvb,
                                       skip_flagged_edges=skip_flagged_edges, keys=keys, verbose=verbose, **filter_kwargs)
             else:
                 frfil.clean_data = DataContainer({})
