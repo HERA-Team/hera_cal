@@ -1154,7 +1154,108 @@ class FRFilter(VisClean):
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
 
-def compute_frates_and_tophat_frfilter()
+def split_frates_and_tophat_frfilter(self, case, keys=None, wgts=None, mode='clean', uvb=None, percentile_low=5., percentile_high=95.,
+                        frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
+                        max_frate_coeffs=None, skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
+                        write_cache=False, center_before_filtering=True, fr_freq_skip=1,
+                        verbose=False, nfr=None, dfr=None, pre_filter_modes_between_lobe_minimum_and_zero=False,
+                        frate_profiles=None, **filter_kwargs):
+        '''
+        A wrapper around VisClean.fourier_filter specifically for
+        filtering along the time axis with uniform fringe-rate weighting.
+        Parameters
+        ----------
+        case: str
+            Filtering case ['max_frate_coeffs', 'uvbeam', 'frate_profiles', 'sky']
+            If case == 'max_frate_coeffs', then determine fringe rate centers
+            and half-widths based on the max_frate_coeffs arg (see below).
+            If case == 'uvbeam', then determine fringe rate centers and half widths
+            from histogram of main-beam wrt instantaneous sky fringe rates
+            If case == 'frate_profiles': then use user-supplied fringe-rate profiles
+            and compute cutoffs based on percentile_low and percentile_high
+        keys: list of visibilities to filter in the (i,j,pol) format.
+          If None (the default), all visibilities are filtered.
+        wgts: dictionary or DataContainer with all the same keys as self.data.
+         Linear multiplicative weights to use for the fr filter. Default, use np.logical_not
+         of self.flags. uvtools.dspec.fourier_filter will renormalize to compensate.
+        mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
+        uvb: UVBeam object, optional
+         UVBeam object with model of the primary beam. if provided, will supercede main-lobe
+         for determining fringe-rate limits.
+        percentile_low: float, optional
+            if uvb is provided, filter fringe rates that are larger then this percentile
+            in the histogram of beam squared powers for instantaneous fringe rates.
+        percentile_high: float, optional
+            if uvb is provided, filter fringe rates that are smaller then this percentile
+            in the histogram of beam squared powers for instantaneous fringe rates.
+        frate_standoff: float, optional
+            additional fringe-rate to add to min and max of computed fringe-rate bounds [mHz]
+            to add to analytic calculation of fringe-rate bounds for emission on the sky.
+            default = 0.0.
+        frate_width_multiplier: float, optional
+         fraction of horizon to fringe-rate filter.
+         default is 1.0
+        min_frate_half_width: float, optional
+            minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
+            Default is 0.025
+        max_frate_coeffs, 2-tuple float
+        Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
+        Providing these overrides the sky-based fringe-rate determination! Default is None.
+        skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+          Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+          time. Skipped channels are then flagged in self.flags.
+          Only works properly when all weights are all between 0 and 1.
+        tol : float, optional. To what level are foregrounds subtracted.
+        verbose: If True print feedback to stdout
+        cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
+         see uvtools.dspec.dayenu_filter for key formats.
+        read_cache: bool, If true, read existing cache files in cache_dir before running.
+        write_cache: bool. If true, create new cache file with precomputed matrices
+            that were not in previously loaded cache files.
+        center_before_filtering: bool, optional
+            shift the data by multiplying by the center fringe-rate and filter a window centered at zero fringe rate.
+            This improves filter stability when the filtering window is highly offset from zero since we avoid interpolating
+            with fine-time-scale modes.
+        fr_freq_skip: int, optional
+            bin fringe rates from every freq_skip channels.
+            default is 1 -> takes a long time. We recommend setting this to be larger.
+        verbose: bool, optional, lots of outputs!
+        dfr: float, optional.
+            spacing of fringe-rate grid used to perform binning and percentile calc
+            in units of mHz.
+            default is None -> set to 1 / (dtime * Ntime) of uvd.
+        nfr: float, optional.
+            number of points on fringe-rate grid to perform binning and percentile calc.
+            default is None -> set to uvd.Ntimes.
+        pre_filter_modes_between_lobe_minimum_and_zero: bool, optional
+            Subtract power between the main-lobe and zero before applying main-lobe filter.
+            This is to avoid having the main-lobe filter respond to any exceedingly high power
+            at low fringe rates which can happen during Galaxy set.
+            or if there is egregious cross-talk / ground pickup.
+            This arg is only used if beamfitsfile is not None.
+            Default is False.
+        frate_profiles: dict object, optional
+            Dictionary mapping antpairpol keys to fringe-rate profiles.
+            centered on a grid of length nfr spaced by dfr centered at 0.
+            default is None -> automatically calculate profiles using uvb.
+            User cannot provide both frate_profiles and uvb -- An error will be raised.
+        filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
+        Returns
+        -------
+        N/A
+        Results are stored in:
+          self.clean_resid: DataContainer formatted like self.data with only high-fringe-rate components
+          self.clean_model: DataContainer formatted like self.data with only low-fringe-rate components
+          self.clean_info: Dictionary of info from uvtools.dspec.fourier_filter with the same keys as self.data
+        '''
+        frate_centers, frate_half_widths = self.select_tophat_frates(case=case, keys=keys, frate_standoff=frate_standoff, frate_width_multiplier=frate_width_multiplier,
+                                 min_frate_half_width=min_frate_half_width, max_frate_coeffs=max_frate_coeffs, uvb=uvb, frate_profiles=frate_profiles, percentile_low=percentile_low,
+                                 percentile_high=percentile_high, fr_freq_skip=fr_freq_skip, nfr=nfr, dfr=dfr, verbose=verbose)
+
+        self.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths, keys=keys, wgts=wgts, mode=mode,
+                            skip_wgt=skip_wgt, tol=tol, verbose=verbose, cache_dir=cache_dir, read_cache=read_cache,
+                            write_cache=write_cache, verbose=verbose, pre_filter_modes_between_lobe_minimum_and_zero=pre_filter_modes_between_lobe_minimum_and_zero,
+                            **filter_kwargs)
 
 
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
@@ -1367,8 +1468,7 @@ def load_tophat_frfilter_and_write(datafile_list, baseline_list=None, calfile_li
             else:
                 uvb = None
             if len(keys) > 0:
-
-                frfil.compute_frates_and_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, uvb=uvb,
+                frfil.split_frates_and_tophat_frfilter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, uvb=uvb,
                                       skip_flagged_edges=skip_flagged_edges, keys=keys, verbose=verbose, **filter_kwargs)
             else:
                 frfil.clean_data = DataContainer({})
