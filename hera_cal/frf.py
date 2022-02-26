@@ -911,7 +911,7 @@ class FRFilter(VisClean):
     def tophat_frfilter(self, keys=None, wgts=None, mode='clean', uvb=None, percentile_low=5., percentile_high=95.,
                         frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
                         max_frate_coeffs=None, skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
-                        write_cache=False, center_before_filtering=True, fr_freq_skip=1,
+                        write_cache=False, fr_freq_skip=1,
                         verbose=False, nfr=None, dfr=None, pre_filter_modes_between_lobe_minimum_and_zero=False,
                         frate_profiles=None, **filter_kwargs):
         '''
@@ -959,10 +959,6 @@ class FRFilter(VisClean):
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
             that were not in previously loaded cache files.
-        center_before_filtering: bool, optional
-            shift the data by multiplying by the center fringe-rate and filter a window centered at zero fringe rate.
-            This improves filter stability when the filtering window is highly offset from zero since we avoid interpolating
-            with fine-time-scale modes.
         fr_freq_skip: int, optional
             bin fringe rates from every freq_skip channels.
             default is 1 -> takes a long time. We recommend setting this to be larger.
@@ -1059,10 +1055,11 @@ class FRFilter(VisClean):
                         self.pre_filter_resid_flags[k] = self.flags[k]
                     else:
                         self.pre_filter_flags[k] = filter_kwargs['flags'][k]
-                if center_before_filtering:
-                    phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
-                    self.pre_filter_resid[k] /= phasor[:, None]
-                    filter_center_to_use = 0.0
+                # center at zero fringe-rate since some fourier_filter modes are
+                # high pass only.
+                phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
+                self.pre_filter_resid[k] /= phasor[:, None]
+                filter_center_to_use = 0.0
                 else:
                     filter_center_to_use = frate_centers[k]
                 self.fourier_filter(keys=[k], filter_centers=[filter_center_to_use], filter_half_widths=[frate_half_widths[k]],
@@ -1070,40 +1067,36 @@ class FRFilter(VisClean):
                                     wgts=wgts, data=self.pre_filter_resid, flags=self.pre_filter_resid_flags,
                                     ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs_no_data)
             else:
-                # center sky-modes at zero fringe-rate if we chose to center_before_filtering.
-                if center_before_filtering:
-                    phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
-                    if 'data' in filter_kwargs:
-                        input_data = filter_kwargs['data']
-                    else:
-                        input_data = self.data
-                    input_data[k] /= phasor[:, None]
-                    filter_center_to_use = 0.0
+            # center sky-modes at zero fringe-rate.
+                phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
+                if 'data' in filter_kwargs:
+                    input_data = filter_kwargs['data']
                 else:
-                    filter_center_to_use = frate_centers[k]
+                    input_data = self.data
+                input_data[k] /= phasor[:, None]
+                filter_center_to_use = 0.0
                 self.fourier_filter(keys=[k], filter_centers=[filter_center_to_use], filter_half_widths=[frate_half_widths[k]],
                                     mode=mode, x=self.times * SDAY_KSEC,
                                     flags=self.flags, wgts=wgts,
                                     ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
 
-            # recenter data in fringe-rate by multiplying back the phaser if we chose to center_before_filtering.
-            if center_before_filtering:
-                if 'output_prefix' in filter_kwargs:
-                    filtered_data = getattr(self, filter_kwargs['output_prefix'] + '_data')
-                    filtered_model = getattr(self, filter_kwargs['output_prefix'] + '_model')
-                    filtered_resid = getattr(self, filter_kwargs['output_prefix'] + '_resid')
-                else:
-                    filtered_data = self.clean_data
-                    filtered_model = self.clean_model
-                    filtered_resid = self.clean_resid
-                filtered_data[k] *= phasor[:, None]
-                filtered_model[k] *= phasor[:, None]
-                filtered_resid[k] *= phasor[:, None]
-                if 'data' in filter_kwargs:
-                    input_data = filter_kwargs['data']
-                else:
-                    input_data = self.data
-                input_data[k] *= phasor[:, None]
+            # recenter data in fringe-rate by multiplying back the phaser.
+            if 'output_prefix' in filter_kwargs:
+                filtered_data = getattr(self, filter_kwargs['output_prefix'] + '_data')
+                filtered_model = getattr(self, filter_kwargs['output_prefix'] + '_model')
+                filtered_resid = getattr(self, filter_kwargs['output_prefix'] + '_resid')
+            else:
+                filtered_data = self.clean_data
+                filtered_model = self.clean_model
+                filtered_resid = self.clean_resid
+            filtered_data[k] *= phasor[:, None]
+            filtered_model[k] *= phasor[:, None]
+            filtered_resid[k] *= phasor[:, None]
+            if 'data' in filter_kwargs:
+                input_data = filter_kwargs['data']
+            else:
+                input_data = self.data
+            input_data[k] *= phasor[:, None]
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
