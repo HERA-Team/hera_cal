@@ -66,7 +66,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
 
     return np.sum(taus)
 
-def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[1e-7]):
+def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[1e-4]):
     """Generate a set of 2D discrete prolate spheroidal sequence (DPSS) filters
     to filter calibration solutions along the time and frequency axes simultaneously.
 
@@ -775,10 +775,10 @@ class CalibrationSmoother():
                 if method == 'DPSS':
                     smat = fit_solution_matrix(wgts_grid, design_matrix)
                     dly = single_iterative_fft_dly(gain_grid, wgts_grid, self.freqs)  # dly in seconds
-                    rephasor = np.exp(-2.0j * np.pi * dly * self.freqs)
-                    filtered = design_matrix @ (smat @ (gain_grid * rephasor).reshape(-1))
+                    #rephasor = np.exp(-2.0j * np.pi * dly * self.freqs)
+                    filtered = design_matrix @ (smat @ gain_grid.reshape(-1))
                     filtered = filtered.reshape(gain_grid.shape)
-                    filtered /= rephasor
+                    #filtered /= rephasor
 
                 else:
                     filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
