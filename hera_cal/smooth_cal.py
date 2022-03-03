@@ -775,10 +775,10 @@ class CalibrationSmoother():
                 if method == 'DPSS':
                     smat = fit_solution_matrix(wgts_grid, design_matrix)
                     dly = single_iterative_fft_dly(gain_grid, wgts_grid, self.freqs)  # dly in seconds
-                    #rephasor = np.exp(-2.0j * np.pi * dly * self.freqs)
+                    rephasor = np.exp(-2.0j * np.pi * dly * self.freqs)
                     filtered = design_matrix @ (smat @ gain_grid.reshape(-1))
                     filtered = filtered.reshape(gain_grid.shape)
-                    #filtered /= rephasor
+                    filtered /= rephasor
 
                 else:
                     filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
