@@ -86,16 +86,16 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[
     if not HAVE_UVTOOLS:
         raise ImportError("uvtools required, install hera_cal[all]")
 
-    delay_scale = (freq_scale * 1e6) ** -1 # Puts it in seconds
-    fringe_scale = (time_scale) ** -1 # fringe scale in Hz
-    time_in_seconds = (times - times.min()) * 60 * 60 * 24 # time array in seconds
+    delay_scale = (freq_scale * 1e6) ** -1  # Puts it in seconds
+    fringe_scale = (time_scale) ** -1  # fringe scale in Hz
+    time_in_seconds = (times - times.min()) * 60 * 60 * 24  # time array in seconds
 
     freq_filters, nfreq_comps = uvtools.dspec.dpss_operator(
         freqs,
         filter_centers=[0],
         filter_half_widths=[delay_scale],
         eigenval_cutoff=eigenval_cutoff,
-    ) # DPSS filters along the frequency-axis
+    )  # DPSS filters along the frequency-axis
     freq_filters = freq_filters.real.astype(np.float32)
 
     time_filters, ntime_comps = uvtools.dspec.dpss_operator(
@@ -103,14 +103,15 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[
         filter_centers=[0],
         filter_half_widths=[fringe_scale],
         eigenval_cutoff=eigenval_cutoff,
-    ) # DPSS filters along the time-axis
+    )  # DPSS filters along the time-axis
     time_filters = time_filters.real.astype(np.float32)
 
     filters = np.reshape(
         time_filters[:, None, :, None] * freq_filters[None, :, None, :],
         (times.shape[0] * freqs.shape[0], ntime_comps[0] * nfreq_comps[0]),
-    ) # 2D time-frequency DPSS vectors
+    )  # 2D time-frequency DPSS vectors
     return filters
+
 
 def fit_solution_matrix(weights, design_matrix):
     """
@@ -136,7 +137,6 @@ def fit_solution_matrix(weights, design_matrix):
         smat = np.linalg.inv(cmat) @ design_matrix.T * weights.reshape(-1)
 
     return smat
-
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
