@@ -66,7 +66,8 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
 
     return np.sum(taus)
 
-def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[1e-4]):
+
+def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[1e-7]):
     """Generate a set of 2D discrete prolate spheroidal sequence (DPSS) filters
     to filter calibration solutions along the time and frequency axes simultaneously.
 
@@ -121,13 +122,13 @@ def fit_solution_matrix(weights, design_matrix):
 
     Arguments:
         weights: ndarray of shape (Ntimes, Nfreqs) of calibration flags
-        design_matrx: ndarray of shape (Ntimes * Nfreqs, N_frequency_vectors * N_time_vectors)
+        design_matrix: ndarray of shape (Ntimes * Nfreqs, N_frequency_vectors * N_time_vectors)
             obtained from hera_cal.smooth_cal.dpss_filters
 
     Returns:
         S: ndarray of shape (N_frequency_vectors * N_time_vectors, )
     """
-    cmat = np.linalg.pinv((design_matrix.T * weights.reshape(-1)) @ design_matrix)
+    cmat = (design_matrix.T * weights.reshape(-1)) @ design_matrix
 
     if np.linalg.cond(cmat) >= 1e9:
         warnings.warn("Warning! Poorly conditioned matrix")
@@ -232,7 +233,8 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
-                        tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', **win_kwargs):
+                        tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
+                        design_matrix=None, smat=None, eigenval_cutoff=[1e-7], **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -254,15 +256,23 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                     and fringe rate = 0
             'plus': produce a separable calibration solution by only keeping modes with 0 delay,
                     0 fringe rate, or both
-        window: window function for filtering applied to the filtered axis.
+        window: window function for filtering applied to the filtered axis. Only used with when method used is 'CLEAN'.
             See aipy.dsp.gen_window for options.
         maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+        method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
+            'CLEAN': uses the CLEAN algorithm to
+            'DPSS': uses discrete prolate spheroidal sequences (DPSS) to filter calibration solutions
+        design_matrix: Matrix of DPSS filters calculated using smooth_cal.dpss_filters. If matrix is not provided,
+            one will be calculated using smooth_cal.dpss_filters and the time and frequency scale. Only used
+            when the method used is 'CLEAN'
+        sol_matrix: Solution matrix
         win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
             Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
 
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
-        info: dictionary of metadata from aipy.deconv.clean
+        info: dictionary of metadata from aipy.deconv.clean or DPSS, depending on the filter method
+            chosen.
     '''
     assert AIPY, "You need aipy to use this function"
     df = np.median(np.diff(freqs))
@@ -276,26 +286,46 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in seconds
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
 
-    # Build fourier space image and kernel for deconvolution
-    window = aipy.dsp.gen_window(len(freqs), window=window, **win_kwargs)
-    image = np.fft.ifft2(gains * rephasor * wgts * window)
-    kernel = np.fft.ifft2(wgts * window)
+    if method == 'DPSS':
+        info = {}
+        if filter_mode == 'rect':
+            design_matrix = design_matrix if design_matrix else dpss_filters(freq_scale=freq_scale, time_scale=time_scale, eigenval_cutoff=eigenval_cutoff)
+            sol_matrix = sol_matrix if sol_matrix else fit_solution_matrix(wgts, design_matrix)
+            filtered = design_matrix @ (sol_matrix @ (gains * rephasor).reshape(-1))
+            filtered = filtered.reshape(gains.shape)
+            info['sol_matrix'] = sol_matrix
 
-    # set up "area", the set of Fourier modes that are allowed to be non-zero in the CLEAN
-    if filter_mode == 'rect':
-        area = np.outer(np.where(np.abs(fringes) < fringe_scale, 1, 0),
-                        np.where(np.abs(delays) < delay_scale, 1, 0))
-    elif filter_mode == 'plus':
-        area = np.zeros(image.shape, dtype=int)
-        area[0] = np.where(np.abs(delays) < delay_scale, 1, 0)
-        area[:, 0] = np.where(np.abs(fringes) < fringe_scale, 1, 0)
+        elif filter_mode == 'plus':
+            raise NotImplementedError("filter_mode 'plus' only implemented for CLEAN")
+
+        else:
+            raise ValueError("DPSS mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
+
+    elif method == 'CLEAN':
+        # Build fourier space image and kernel for deconvolution
+        window = aipy.dsp.gen_window(len(freqs), window=window, **win_kwargs)
+        image = np.fft.ifft2(gains * rephasor * wgts * window)
+        kernel = np.fft.ifft2(wgts * window)
+
+        # set up "area", the set of Fourier modes that are allowed to be non-zero in the CLEAN
+        if filter_mode == 'rect':
+            area = np.outer(np.where(np.abs(fringes) < fringe_scale, 1, 0),
+                            np.where(np.abs(delays) < delay_scale, 1, 0))
+        elif filter_mode == 'plus':
+            area = np.zeros(image.shape, dtype=int)
+            area[0] = np.where(np.abs(delays) < delay_scale, 1, 0)
+            area[:, 0] = np.where(np.abs(fringes) < fringe_scale, 1, 0)
+        else:
+            raise ValueError("CLEAN mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
+
+        # perform deconvolution
+        CLEAN, info = aipy.deconv.clean(image, kernel, tol=tol, area=area, stop_if_div=False, maxiter=maxiter)
+        filtered = np.fft.fft2(CLEAN + info['res'] * area)
+        del info['res']  # this matches the convention in uvtools.dspec.high_pass_fourier_filter
+
     else:
-        raise ValueError("CLEAN mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
+        raise ValueError("Filter method {} not recognized. Must be 'CLEAN' or 'DPSS'".format(method))
 
-    # perform deconvolution
-    CLEAN, info = aipy.deconv.clean(image, kernel, tol=tol, area=area, stop_if_div=False, maxiter=maxiter)
-    filtered = np.fft.fft2(CLEAN + info['res'] * area)
-    del info['res']  # this matches the convention in uvtools.dspec.high_pass_fourier_filter
     return filtered / rephasor, info
 
 
@@ -739,8 +769,8 @@ class CalibrationSmoother():
                     self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
         self.rephase_to_refant(warn=False)
 
-    def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09,
-                            filter_mode='rect', window='tukey', maxiter=100, method="CLEAN", **win_kwargs):
+    def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
+                            window='tukey', maxiter=100, method="CLEAN", eigenval_cutoff=[1e-7], **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -754,9 +784,11 @@ class CalibrationSmoother():
                         and fringe rate = 0
                 'plus': produce a separable calibration solution by only keeping modes with 0 delay,
                         0 fringe rate, or both
-            window: window function for filtering applied to the frequency axis.
+            window: window function for filtering applied to the frequency axis. Only used when the method is 'CLEAN'
                 See aipy.dsp.gen_window for options.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+            eigenval_cutoff: list of sinc_matrix eigenvalue cutoffs to use for included dpss modes.
+                Only used when the filtering method is 'DPSS'
             method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
                 'CLEAN': uses the CLEAN algorithm to
                 'DPSS': uses discrete prolate spheroidal sequences to filter calibration solutions
@@ -764,7 +796,13 @@ class CalibrationSmoother():
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
         if method == 'DPSS':
-            design_matrix = dpss_filters(freqs=self.freqs, times=self.time_grid, freq_scale=freq_scale, time_scale=time_scale)
+            design_matrix = dpss_filters(freqs=self.freqs, times=self.time_grid, freq_scale=freq_scale, time_scale=time_scale,
+                                         eigenval_cutoff=eigenval_cutoff)
+        else:
+            design_matrix = None
+
+        sol_matrix = None
+        wgts_prev = np.zeros(1)
 
         # loop over all antennas that are not completely flagged and filter
         for ant, gain_grid in self.gain_grids.items():
@@ -773,17 +811,14 @@ class CalibrationSmoother():
                 wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
 
                 if method == 'DPSS':
-                    smat = fit_solution_matrix(wgts_grid, design_matrix)
-                    dly = single_iterative_fft_dly(gain_grid, wgts_grid, self.freqs)  # dly in seconds
-                    rephasor = np.exp(-2.0j * np.pi * dly * self.freqs)
-                    filtered = design_matrix @ (smat @ gain_grid.reshape(-1))
-                    filtered = filtered.reshape(gain_grid.shape)
-                    filtered /= rephasor
+                    sol_matrix = info['sol_matrix'] if np.allclose(wgts_grid, wgts_prev) else None
+                    wgts_prev = wgts_grid.copy()
 
-                else:
-                    filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
-                                                         time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
-                                                         window=window, **win_kwargs)
+                filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
+                                                     time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
+                                                     window=window, design_matrix=design_matrix, method=method, sol_matrix=sol_matrix,
+                                                     **win_kwargs)
+
                 self.gain_grids[ant] = filtered
 
         self.rephase_to_refant(warn=False)
