@@ -234,7 +234,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
-                        design_matrix=None, smat=None, eigenval_cutoff=[1e-7], **win_kwargs):
+                        design_matrix=None, sol_matrix=None, eigenval_cutoff=[1e-7], **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -289,8 +289,12 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     if method == 'DPSS':
         info = {}
         if filter_mode == 'rect':
-            design_matrix = design_matrix if design_matrix else dpss_filters(freq_scale=freq_scale, time_scale=time_scale, eigenval_cutoff=eigenval_cutoff)
-            sol_matrix = sol_matrix if sol_matrix else fit_solution_matrix(wgts, design_matrix)
+            if design_matrix is None:
+                design_matrix = dpss_filters(freq_scale=freq_scale, time_scale=time_scale, eigenval_cutoff=eigenval_cutoff)
+
+            if sol_matrix is None:
+                sol_matrix = fit_solution_matrix(wgts, design_matrix)
+            
             filtered = design_matrix @ (sol_matrix @ (gains * rephasor).reshape(-1))
             filtered = filtered.reshape(gains.shape)
             info['sol_matrix'] = sol_matrix
