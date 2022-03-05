@@ -598,25 +598,23 @@ class FRFilter(VisClean):
             to add to analytic calculation of fringe-rate bounds for emission on the sky.
             default = 0.0.
         frate_width_multiplier: float, optional
-         fraction of horizon to fringe-rate filter.
-         default is 1.0
+            fraction of horizon to fringe-rate filter. default is 1.0
         min_frate_half_width: float, optional
-            minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
-            Default is 0.025
+            minimum half-width of fringe-rate filter, regardless of baseline length in mHz. Default is 0.025
         max_frate_coeffs, 2-tuple float
             Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * |EW_bl_len| [ m ] + x2."
             Providing these overrides the sky-based fringe-rate determination! Default is None.
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
-          Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
-          time. Skipped channels are then flagged in self.flags.
-          Only works properly when all weights are all between 0 and 1.
+            Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+            time. Skipped channels are then flagged in self.flags.
+            Only works properly when all weights are all between 0 and 1.
         tol : float, optional. To what level are foregrounds subtracted.
         verbose: If True print feedback to stdout
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
          see uvtools.dspec.dayenu_filter for key formats.
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
-         that were not in previously loaded cache files.
+            that were not in previously loaded cache files.
         cache: dictionary containing pre-computed filter products.
         skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
         verbose: bool, optional, lots of outputs!
