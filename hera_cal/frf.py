@@ -604,8 +604,8 @@ class FRFilter(VisClean):
             minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
             Default is 0.025
         max_frate_coeffs, 2-tuple float
-        Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
-        Providing these overrides the sky-based fringe-rate determination! Default is None.
+            Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * |EW_bl_len| [ m ] + x2."
+            Providing these overrides the sky-based fringe-rate determination! Default is None.
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
           Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
           time. Skipped channels are then flagged in self.flags.
@@ -646,7 +646,7 @@ class FRFilter(VisClean):
             center_frates, width_frates = sky_frates(uvd=self.hd, keys=keys, frate_standoff=frate_standoff,
                                                      frate_width_multiplier=frate_width_multiplier, min_frate_half_width=min_frate_half_width)
         else:
-            width_frates = {k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in keys}
+            width_frates = {k: np.max([max_frate_coeffs[0] * np.abs(self.blvecs[k[:2]][0]) + max_frate_coeffs[1], 0.0]) for k in keys}
             center_frates = {k: 0.0 for k in keys}
         wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         for k in keys:
