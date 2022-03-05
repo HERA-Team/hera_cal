@@ -25,7 +25,8 @@ SPEED_OF_LIGHT = const.c.si.value
 SDAY_KSEC = 86163.93 / 1000.
 
 
-def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
+def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, 
+               min_frate_half_width=0.025, max_frate_half_width=np.inf):
     """Compute sky fringe-rate ranges based on baselines, telescope location, and frequencies in uvdata.
 
     Parameters
@@ -45,6 +46,9 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
     min_frate_half_width: float, optional
         minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
         Default is 0.025
+    max_frate_half_width: float, optional
+        maximum half-width of fringe-rate filter, regardless of baseline length in mHz.
+        Default is np.inf, i.e. no limit
 
     Returns
     -------
@@ -92,6 +96,7 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
 
         frate_half_widths[k] = np.abs(max_frate - min_frate) / 2. * frate_width_multiplier + frate_standoff
         frate_half_widths[k] = np.max([frate_half_widths[k], min_frate_half_width])  # Don't allow frates smaller then min_frate
+        frate_half_widths[k] = np.min([frate_half_widths[k], max_frate_half_width])  # Don't allow frates larger then max_frate
         frate_half_widths[utils.reverse_bl(k)] = frate_half_widths[k]
 
     return frate_centers, frate_half_widths
@@ -576,8 +581,9 @@ class FRFilter(VisClean):
             filt_nsamples[k] = eff_nsamples
 
     def tophat_frfilter(self, keys=None, wgts=None, mode='clean',
-                        frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
+                        frate_standoff=0.0, frate_width_multiplier=1.0, 
                         max_frate_coeffs=None,
+                        min_frate_half_width=0.0, max_frate_half_width=np.inf,
                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
                         write_cache=False,
                         data=None, flags=None, **filter_kwargs):
@@ -599,11 +605,13 @@ class FRFilter(VisClean):
             default = 0.0.
         frate_width_multiplier: float, optional
             fraction of horizon to fringe-rate filter. default is 1.0
-        min_frate_half_width: float, optional
-            minimum half-width of fringe-rate filter, regardless of baseline length in mHz. Default is 0.025
         max_frate_coeffs, 2-tuple float
-            Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * |EW_bl_len| [ m ] + x2."
+            Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * |EW_bl_len| [ m ] + x2.
             Providing these overrides the sky-based fringe-rate determination! Default is None.
+        min_frate_half_width: float, optional in units of mHz
+            Regardless of other considerations, this sets the minimum half-width of fringe-rate filter. Default is 0.0 mHz.
+        max_frate_half_width: float, optional in units of mHz
+            Regardless of other considerations, this sets the maximum half-width of fringe-rate filter. Default is np.inf, i.e. no limit.
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
             Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
             time. Skipped channels are then flagged in self.flags.
@@ -642,9 +650,14 @@ class FRFilter(VisClean):
             filter_cache = None
         if max_frate_coeffs is None:
             center_frates, width_frates = sky_frates(uvd=self.hd, keys=keys, frate_standoff=frate_standoff,
-                                                     frate_width_multiplier=frate_width_multiplier, min_frate_half_width=min_frate_half_width)
+                                                     frate_width_multiplier=frate_width_multiplier, 
+                                                     min_frate_half_width=min_frate_half_width,
+                                                     max_frate_half_width=max_frate_half_width)
         else:
-            width_frates = {k: np.max([max_frate_coeffs[0] * np.abs(self.blvecs[k[:2]][0]) + max_frate_coeffs[1], 0.0]) for k in keys}
+            # determine frate widths based on max_frate_coeffs
+            width_frates = {k: max_frate_coeffs[0] * np.abs(self.blvecs[k[:2]][0]) + max_frate_coeffs[1] for k in keys}
+            # enforce min_frate_half_width and max_frate_half_width
+            width_frates = {k: min(max(width, min_frate_half_width), max_frate_half_width) for k, width in width_frates.items()}
             center_frates = {k: 0.0 for k in keys}
         wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         for k in keys:
