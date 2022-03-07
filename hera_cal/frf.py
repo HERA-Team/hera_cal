@@ -63,7 +63,8 @@ def _get_key_reds(antpos, keys):
     return reds
 
 
-def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025):
+def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
+               min_frate_half_width=0.025, max_frate_half_width=np.inf):
     """Compute sky fringe-rate ranges based on baselines, telescope location, and frequencies in uvdata.
 
     Parameters
@@ -83,6 +84,9 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
     min_frate_half_width: float, optional
         minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
         Default is 0.025
+    max_frate_half_width: float, optional
+        maximum half-width of fringe-rate filter, regardless of baseline length in mHz.
+        Default is np.inf, i.e. no limit
 
     Returns
     -------
@@ -131,6 +135,7 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, m
 
         frate_half_widths[k] = np.abs(max_frate - min_frate) / 2. * frate_width_multiplier + frate_standoff
         frate_half_widths[k] = np.max([frate_half_widths[k], min_frate_half_width])  # Don't allow frates smaller then min_frate
+        frate_half_widths[k] = np.min([frate_half_widths[k], max_frate_half_width])  # Don't allow frates larger then max_frate
         frate_half_widths[utils.reverse_bl(k)] = frate_half_widths[k]
 
     return frate_centers, frate_half_widths
@@ -937,7 +942,7 @@ class FRFilter(VisClean):
         keys: list of visibilities to filter in the (i,j,pol) format.
           If None (the default), all visibilities are filtered.
         max_frate_coeffs, 2-tuple float
-          Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
+          Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * | EW_bl_len | [ m ] + x2."
           These are used only if case == 'max_frate_coeffs'.
         uvb: UVBeam object, optional
          UVBeam object with model of the primary beam. Only used if case=='uvbeam'
@@ -988,7 +993,7 @@ class FRFilter(VisClean):
         elif case == 'max_frate_coeffs':
             assert max_frate_coeffs is not None, "max_frate_coeffs must be provided if case='max_frate_coeffs'."
             # if uvb is None and max_frate_coeffs is not None, use max_frate_coeffs.
-            frate_half_widths = {k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in keys}
+            frate_half_widths = {k: np.max([max_frate_coeffs[0] * np.abs(self.blvecs[k[:2]][0]) + max_frate_coeffs[1], 0.0]) for k in keys}
             frate_centers = {k: 0.0 for k in keys}
         elif case == 'frate_profiles':
             assert frate_profiles is not None, "frate_profiles must be provided if case='frate_profiles'"
@@ -1031,9 +1036,9 @@ class FRFilter(VisClean):
             of self.flags. uvtools.dspec.fourier_filter will renormalize to compensate.
         mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
-          Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
-          time. Skipped channels are then flagged in self.flags.
-          Only works properly when all weights are all between 0 and 1.
+            Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+            time. Skipped channels are then flagged in self.flags.
+            Only works properly when all weights are all between 0 and 1.
         tol : float, optional. To what level are foregrounds subtracted.
         verbose: If True print feedback to stdout
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
@@ -1194,7 +1199,7 @@ class FRFilter(VisClean):
             minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
             Default is 0.025
         max_frate_coeffs, 2-tuple float
-        Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
+        Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * | EW_bl_len | [ m ] + x2."
         Providing these overrides the sky-based fringe-rate determination! Default is None.
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
           Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
