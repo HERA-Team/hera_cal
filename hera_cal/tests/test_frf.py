@@ -264,20 +264,18 @@ class Test_FRFilter(object):
         assert args.filetype == "uvh5"
 
     @pytest.mark.parametrize(
-        "center_frates, avg_red_bllens, pass_data",
-        [(True, True, False), (True, False, False), (False, True, False), (False, False, False),
-         (True, True, True), (True, False, True),
-         (False, True, True), (False, False, True)],
+        "avg_red_bllens, pass_data",
+        [(True, False), (False, False), (True, False), (False, True)],
     )
-    def test_tophat_frfilter(self, center_frates, avg_red_bllens, pass_data):
+    def test_tophat_frfilter(self, avg_red_bllens, pass_data):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         frfil = frf.FRFilter(fname, filetype='miriad')
         frfil.read(bls=[k])
         bl = np.linalg.norm(frfil.antpos[24] - frfil.antpos[25]) / constants.c * 1e9
         sdf = (frfil.freqs[1] - frfil.freqs[0]) / 1e9
-
-        frfil.split_frates_and_tophat_frfilter(tol=1e-2, output_prefix='frfiltered', case='sky')
+        frate_centers, frate_half_widths = frf.select_tophat_frates(case='sky', uvd=frfil.hd, blvecs=frfil.blvecs)
+        frfil.tophat_frfilter(tol=1e-2, output_prefix='frfiltered', frate_centers=frate_centers, frate_half_widths=frate_half_widths)
         for k in frfil.data.keys():
             assert frfil.frfiltered_resid[k].shape == (60, 64)
             assert frfil.frfiltered_model[k].shape == (60, 64)
@@ -298,9 +296,12 @@ class Test_FRFilter(object):
         else:
             data_kwargs = {}
         for pre_filter in [True, False]:
-            frfil.split_frates_and_tophat_frfilter(keys=[k], wgts=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1,
-                                                   maxiter=100, center_before_filtering=center_frates, case='sky',
-                                                   pre_filter_modes_between_lobe_minimum_and_zero=pre_filter, **data_kwargs)
+            frate_centers, frate_half_widths = frf.select_tophat_frates(case='sky', uvd=frfil.hd, blvecs=frfil.blvecs)
+
+            frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
+                                  keys=[k], wgts=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1,
+                                  maxiter=100,
+                                  pre_filter_modes_between_lobe_minimum_and_zero=pre_filter, **data_kwargs)
             assert frfil.clean_info[k][(0, frfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
             np.testing.assert_array_equal(frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0]))
             np.testing.assert_array_equal(frfil.clean_model[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
@@ -538,7 +539,9 @@ class Test_FRFilter(object):
 
         frfil = frf.FRFilter(uvh5, filetype='uvh5')
         frfil.read(bls=[(53, 54, 'ee')])
-        frfil.split_frates_and_tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True, case='sky')
+        frate_centers, frate_half_widths = frf.select_tophat_frates(case='sky', uvd=frfil.hd, blvecs=frfil.blvecs)
+        frfil.tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True,
+                              frate_centers=frate_centers, frate_half_widths=frate_half_widths)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
         # test NotImplementedError
@@ -558,7 +561,8 @@ class Test_FRFilter(object):
 
         frfil = frf.FRFilter(uvh5, filetype='uvh5')
         frfil.read(bls=[(53, 54, 'ee')])
-        frfil.split_frates_and_tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True, case='sky')
+        frate_centers, frate_half_widths = frf.select_tophat_frates(case='sky', uvd=frfil.hd, blvecs=frfil.blvecs)
+        frfil.tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True, frate_centers=frate_centers, frate_half_widths=frate_half_widths)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
 
