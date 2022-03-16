@@ -290,11 +290,11 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         info = {}
         if filter_mode == 'rect':
             if design_matrix is None:
-                design_matrix = dpss_filters(freq_scale=freq_scale, time_scale=time_scale, eigenval_cutoff=eigenval_cutoff)
+                design_matrix = dpss_filters(freqs, times, freq_scale=freq_scale, time_scale=time_scale, eigenval_cutoff=eigenval_cutoff)
 
             if sol_matrix is None:
                 sol_matrix = fit_solution_matrix(wgts, design_matrix)
-            
+
             filtered = design_matrix @ (sol_matrix @ (gains * rephasor).reshape(-1))
             filtered = filtered.reshape(gains.shape)
             info['sol_matrix'] = sol_matrix
