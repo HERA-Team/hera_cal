@@ -368,7 +368,6 @@ class Test_Calibration_Smoother(object):
         assert not np.all(g3 == g2)
         assert g2.shape == g3.shape
 
-
     @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_write(self):
         outfilename = os.path.join(DATA_PATH, 'test_output/smooth_test.calfits')
