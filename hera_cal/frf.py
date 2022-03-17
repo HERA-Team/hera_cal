@@ -594,10 +594,10 @@ class FRFilter(VisClean):
         Parameters
         ----------
         keys: list of visibilities to filter in the (i,j,pol) format.
-          If None (the default), all visibilities are filtered.
+            If None (the default), all visibilities are filtered.
         wgts: dictionary or DataContainer with all the same keys as self.data.
-         Linear multiplicative weights to use for the fr filter. Default, use np.logical_not
-         of self.flags. uvtools.dspec.fourier_filter will renormalize to compensate.
+            Linear multiplicative weights to use for the fr filter. Default, use ~self.flags,
+            cast as floats. uvtools.dspec.fourier_filter will renormalize to compensate.
         mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
         frate_standoff: float, optional
             additional fringe-rate to add to min and max of computed fringe-rate bounds [mHz]
@@ -659,7 +659,10 @@ class FRFilter(VisClean):
             # enforce min_frate_half_width and max_frate_half_width
             width_frates = {k: min(max(width, min_frate_half_width), max_frate_half_width) for k, width in width_frates.items()}
             center_frates = {k: 0.0 for k in keys}
-        wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
+
+        if wgts is None:
+            wgts = DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
+
         for k in keys:
             if mode != 'clean':
                 filter_kwargs['suppression_factors'] = [tol]
