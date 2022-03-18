@@ -63,7 +63,7 @@ def _get_key_reds(antpos, keys):
     return reds
 
 
-def select_tophat_frates(uvd, blvecs, case, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
+def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
                          max_frate_coeffs=None, uvb=None, frate_profiles=None, percentile_low=5.0, percentile_high=95.0,
                          fr_freq_skip=1, nfr=None, dfr=None, verbose=False):
     """
@@ -71,8 +71,6 @@ def select_tophat_frates(uvd, blvecs, case, keys=None, frate_standoff=0.0, frate
 
     Parameters
     ----------
-    uvd: UVData object
-        uvdata containing data and metadata to which tophat fringe rate filter will be applied.
     blvecs: dict with int 2-tuple keys and 3-vector numpy array values.
         dictionary mapping antpair tuples to numpy 3-vector of baseline in ENU coords.
     case: str
@@ -83,23 +81,25 @@ def select_tophat_frates(uvd, blvecs, case, keys=None, frate_standoff=0.0, frate
         from histogram of main-beam wrt instantaneous sky fringe rates
         If case == 'frate_profiles': then use user-supplied fringe-rate profiles
         and compute cutoffs based on percentile_low and percentile_high
+    uvd: UVData object, optional
+        uvdata containing data and metadata to which tophat fringe rate filter will be applied.
     frate_standoff: float, optional
         additional fringe-rate to add to min and max of computed fringe-rate bounds [mHz]
         to add to analytic calculation of fringe-rate bounds for emission on the sky.
         default = 0.0.
     frate_width_multiplier: float, optional
-     fraction of horizon to fringe-rate filter.
-     default is 1.0
+        fraction of horizon to fringe-rate filter.
+        default is 1.0
     min_frate_half_width: float, optional
         minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
         Default is 0.025
     keys: list of visibilities to filter in the (i,j,pol) format.
-      If None (the default), all visibilities are filtered.
+        If None (the default), all visibilities are filtered.
     max_frate_coeffs, 2-tuple float
-      Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * | EW_bl_len | [ m ] + x2."
-      These are used only if case == 'max_frate_coeffs'.
+        Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * | EW_bl_len | [ m ] + x2."
+        These are used only if case == 'max_frate_coeffs'.
     uvb: UVBeam object, optional
-     UVBeam object with model of the primary beam. Only used if case=='uvbeam'
+        UVBeam object with model of the primary beam. Only used if case=='uvbeam'
     percentile_low: float, optional
         if uvb is provided, filter fringe rates that are larger then this percentile
         in the histogram of beam squared powers for instantaneous fringe rates.
@@ -137,26 +137,29 @@ def select_tophat_frates(uvd, blvecs, case, keys=None, frate_standoff=0.0, frate
         Dictionary with the half widths of each fringe-rate window around the frate_centers in units of mHz.
         keys are antpairpols
     """
+    if case != 'max_frate_coeffs':
+        assert uvd is not None, "Must provide uvd if case != max_frate_coeffs."
     if keys is None:
         keys = list(uvd.get_antpairpols())
     if case == 'sky':
-        # if max_frate_coeffs is none and uvb is none, fringe-rate filter all modes that could be occupied by sky emission.
+        # Fringe-rate filter all modes that could be occupied by sky emission.
         frate_centers, frate_half_widths = sky_frates(uvd, keys=keys, frate_standoff=frate_standoff,
                                                       frate_width_multiplier=frate_width_multiplier, min_frate_half_width=min_frate_half_width)
     elif case == 'max_frate_coeffs':
+        # Fringe-rate filter based on max_frate_coeffs
         assert max_frate_coeffs is not None, "max_frate_coeffs must be provided if case='max_frate_coeffs'."
-        # if uvb is None and max_frate_coeffs is not None, use max_frate_coeffs.
         frate_half_widths = {k: np.max([max_frate_coeffs[0] * np.abs(blvecs[k[:2]][0]) + max_frate_coeffs[1], 0.0]) for k in keys}
         frate_centers = {k: 0.0 for k in keys}
     elif case == 'frate_profiles':
+        # Fringe-rate filter based on frate_profiles
         assert frate_profiles is not None, "frate_profiles must be provided if case='frate_profiles'"
         frate_centers, frate_half_widths = get_fringe_rate_limits(uvd, nfr=nfr, dfr=dfr, percentile_low=percentile_low,
                                                                   percentile_high=percentile_high, keys=keys, verbose=verbose, frate_standoff=frate_standoff,
                                                                   fr_freq_skip=fr_freq_skip, frate_width_multiplier=frate_width_multiplier,
                                                                   min_frate_half_width=min_frate_half_width, frate_profiles=frate_profiles)
     elif case == 'uvbeam':
+        # Fringe-rate filter based on the instantanous fringe-rates on uvbeam object.
         assert uvb is not None, "uvb must be provided iv case='uvbeam'."
-        # if uvb is not None, get fringe-rates from binning.
         frate_centers, frate_half_widths = get_fringe_rate_limits(uvd, uvb, nfr=nfr, dfr=dfr,
                                                                   percentile_low=percentile_low,
                                                                   percentile_high=percentile_high,
