@@ -14,7 +14,7 @@ from pyuvdata import utils as uvutils
 
 def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
                 polarizations=None, spw_range=None, throw_away_flagged_ants=False,
-                clobber=False, ant_flag_yaml=None):
+                clobber=False, ant_flag_yaml=None, **read_kwargs):
     """Chunk a list of data or cal files together into a single file.
 
     Parameters
@@ -44,7 +44,8 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
         defualt is false.
     flag_yaml : str, optional
         yaml file with list of antennas to flag and throw away if throw_away_flagged_ants is True
-
+    read_kwargs: kwargs dict
+        additional kwargs for for io.HERAData.read()
     Returns
     -------
     None
@@ -68,8 +69,8 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
                 polarizations = chunked_files.pols
         if spw_range is None:
             spw_range = (0, chunked_files.Nfreqs)
-        data, flags, nsamples = chunked_files.read(axis='blt', polarizations=polarizations,
-                                                   freq_chans=range(spw_range[0], spw_range[1]))
+        data, flags, nsamples = chunked_files.read(polarizations=polarizations,
+                                                   freq_chans=range(spw_range[0], spw_range[1]), **read_kwargs)
     elif type == 'gains':
         chunked_files.read()
         if polarizations is None:

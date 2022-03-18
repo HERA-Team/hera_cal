@@ -97,7 +97,7 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', polarizations=None,
                                 skip_flagged_edges=False, overwrite_flags=False,
-                                flag_yaml=None, **filter_kwargs):
+                                flag_yaml=None, read_axis=None, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
     While this function reads from multiple files (in datafile_list)
@@ -133,6 +133,8 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         polarizations: list of polarizations to include and write.
         skip_flagged_edges: if true, skip flagged edges in filtering.
         flag_yaml: path to manual flagging text file.
+        read_axis: str
+            str to pass to axis arg for io.HERAData.read(). Default is None
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
     if baseline_list is not None and Nbls_per_load is not None:
@@ -145,9 +147,9 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
     else:
         if baseline_list is None:
             if len(hd.filepaths) > 1:
-                baseline_list = list(hd.bls.values())[0]
+                baseline_list = list(hd.antpairs.values())[0]
             else:
-                baseline_list = hd.bls
+                baseline_list = hd.antpairs
         if spw_range is None:
             spw_range = [0, hd.Nfreqs]
         freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
@@ -169,7 +171,8 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
             Nbls_per_load = len(baseline_list)
         for i in range(0, len(baseline_list), Nbls_per_load):
             df = DelayFilter(hd, input_cal=cals)
-            df.read(bls=baseline_list[i:i + Nbls_per_load], frequencies=freqs)
+            df.read(bls=baseline_list[i:i + Nbls_per_load],
+                    frequencies=freqs, polarizations=polarizations, axis=read_axis)
             if avg_red_bllens:
                 df.avg_red_baseline_vectors()
             if external_flags is not None:
