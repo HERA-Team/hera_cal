@@ -273,7 +273,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         design_matrix: Matrix of DPSS filters calculated using smooth_cal.dpss_filters. If matrix is not provided,
             one will be calculated using smooth_cal.dpss_filters and the time and frequency scale. Only used
             when the method used is 'DPSS'
-        sol_matrix: Solution matrix
+        sol_matrix: Solution matrix obtained from performing linear least squares with 2D DPSS vectors
         skip_flagged_edges : bool, optional
             if True, do not filter over flagged edge times/freqs (filter over sub-region). Only used when method used is 'DPSS'
             default is False
@@ -826,7 +826,7 @@ class CalibrationSmoother():
                 'CLEAN': uses the CLEAN algorithm to
                 'DPSS': uses discrete prolate spheroidal sequences to filter calibration solutions
             skip_flagged_edges : if True, do not filter over flagged edge times (filter over sub-region)
-                defualt is False, only used when method='DPSS'
+                default is False, only used when method='DPSS'
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
@@ -866,7 +866,7 @@ class CalibrationSmoother():
                                     freqs=xout[1], times=xout[0], freq_scale=freq_scale, time_scale=time_scale,
                                     eigenval_cutoff=eigenval_cutoff, return_1D_filters=True
                                 )
-                                filter_dict[str(edges)]= (freq_filters, time_filters)
+                                filter_dict[str(edges)] = (freq_filters, time_filters)
 
                             else:
                                 freq_filters, time_filters = filter_dict.get(str(edges))
@@ -880,7 +880,6 @@ class CalibrationSmoother():
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, design_matrix=design_matrix, method=method, sol_matrix=sol_matrix,
                                                      skip_flagged_edges=skip_flagged_edges, **win_kwargs)
-
 
                 self.gain_grids[ant] = filtered
 
