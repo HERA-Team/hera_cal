@@ -26,7 +26,7 @@ from . import io
 from . import version
 from . import utils
 from . import flag_utils
-from .vis_clean import truncate_flagged_edges
+from .vis_clean import truncate_flagged_edges, restore_flagged_edges
 from .noise import interleaved_noise_variance_estimate
 
 
@@ -300,29 +300,29 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     if method == 'DPSS':
         info = {}
         if skip_flagged_edges:
-            xout, gout, wout, edges, chunks = truncate_flagged_edges(gains, wgts, (times, freqs), ax='both')
+            xout, gout, wout, edges, chunks = truncate_flagged_edges(gains * rephasor, wgts, (times, freqs), ax='both')
 
         else:
-            gout = deepcopy(gains)
+            gout = deepcopy(gains * rephasor)
             wout = deepcopy(wgts)
 
         if filter_mode == 'rect':
             if design_matrix is None:
-                design_matrix, info['freq_filters'], info['time_filters'] = dpss_filters(
-                    xout[1], xout[0], freq_scale=freq_scale, time_scale=time_scale,
-                    eigenval_cutoff=eigenval_cutoff, return_1D_filters=True
+                design_matrix = dpss_filters(
+                    xout[1], xout[0], freq_scale=freq_scale, time_scale=time_scale, eigenval_cutoff=eigenval_cutoff
                 )
 
             if sol_matrix is None:
                 sol_matrix = fit_solution_matrix(wout, design_matrix)
 
-            filtered = design_matrix @ (sol_matrix @ (gout * rephasor).reshape(-1))
+            filtered = design_matrix @ (sol_matrix @ gout.reshape(-1))
             filtered = filtered.reshape(gout.shape)
 
             if skip_flagged_edges:
                 tind, find = edges
                 mask = np.ones(gains.shape, dtype=bool)
                 mask[tind[0][0]:-tind[0][1], find[0][0]:-find[0][1]] = False
+                filtered = restore_flagged_edges(xout, filtered, edges, ax='both')
                 filtered[mask] = gains[mask]
 
             info['sol_matrix'] = sol_matrix
@@ -830,15 +830,20 @@ class CalibrationSmoother():
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
-        if method == 'DPSS' and not skip_flagged_edges:
-            design_matrix = dpss_filters(freqs=self.freqs, times=self.time_grid, freq_scale=freq_scale, time_scale=time_scale,
-                                         eigenval_cutoff=eigenval_cutoff)
+        if method == 'DPSS':
+            design_matrix, freq_filters, time_filters = dpss_filters(
+                freqs=self.freqs, times=self.time_grid, freq_scale=freq_scale, time_scale=time_scale,
+                eigenval_cutoff=eigenval_cutoff, return_1D_filters=True
+            )
+            if skip_flagged_edges:
+                filter_dict = {}
+                edges_prev = []
+                x = np.ones(shape=(self.time_grid.shape[0], self.freqs.shape[0]))
+                _, _, _, edges, _ = truncate_flagged_edges(x, x, (self.time_grid, self.freqs), ax='both')
+                filter_dict[str(edges)] = (freq_filters, time_filters)
+
         else:
             design_matrix = None
-
-        if skip_flagged_edges:
-            filter_dict = {}
-            edges_prev = []
 
         sol_matrix = None
         wgts_prev = np.zeros(1)
@@ -853,23 +858,29 @@ class CalibrationSmoother():
                     sol_matrix = info['sol_matrix'] if np.allclose(wgts_grid, wgts_prev) else None
                     wgts_prev = np.copy(wgts_grid)
 
+                    if skip_flagged_edges:
+                        xout, _, _, edges, chunks = truncate_flagged_edges(gain_grid, wgts_grid, (self.time_grid, self.freqs), ax='both')
+                        if edges != edges_prev:
+                            if str(edges) not in filter_dict:
+                                design_matrix, freq_filters, time_filters = dpss_filters(
+                                    freqs=xout[1], times=xout[0], freq_scale=freq_scale, time_scale=time_scale,
+                                    eigenval_cutoff=eigenval_cutoff, return_1D_filters=True
+                                )
+                                filter_dict[str(edges)]= (freq_filters, time_filters)
+
+                            else:
+                                freq_filters, time_filters = filter_dict.get(str(edges))
+                                design_matrix = np.reshape(
+                                    time_filters[:, None, :, None] * freq_filters[None, :, None, :],
+                                    (time_filters.shape[0] * freq_filters.shape[0], time_filters.shape[1] * freq_filters.shape[1]),
+                                )
+                        edges_prev = deepcopy(edges)
+
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, design_matrix=design_matrix, method=method, sol_matrix=sol_matrix,
                                                      skip_flagged_edges=skip_flagged_edges, **win_kwargs)
 
-                if skip_flagged_edges:
-                    _, _, _, edges, _ = truncate_flagged_edges(gains, wgts_grid, (self.time_grid, self.freqs), ax='both')
-                    if edges != edges_prev:
-                        if str(edges) not in filter_dict:
-                            filter_dict[str(edges)] = (info['freq_filters'], info['time_filters'])
-
-                        freq_filters, time_filters = filter_dict.get(str(edges))
-                        design_matrix = np.reshape(
-                            time_filters[:, None, :, None] * freq_filters[None, :, None, :],
-                            (time_filters.shape[0] * freq_filters.shape[0], time_filters.shape[1] * freq_filters.shape[1]),
-                        )
-                    edges_prev = deepcopy(edges)
 
                 self.gain_grids[ant] = filtered
 
