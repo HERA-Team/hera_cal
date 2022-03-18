@@ -26,6 +26,7 @@ from . import io
 from . import version
 from . import utils
 from . import flag_utils
+from .vis_clean import truncate_flagged_edges
 from .noise import interleaved_noise_variance_estimate
 
 
@@ -67,7 +68,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     return np.sum(taus)
 
 
-def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[1e-7]):
+def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[1e-7], return_1D_filters=False):
     """Generate a set of 2D discrete prolate spheroidal sequence (DPSS) filters
     to filter calibration solutions along the time and frequency axes simultaneously.
 
@@ -80,6 +81,8 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[
             Note that freq_scale is in MHz while freqs is in Hz.
         time_scale: time scale in seconds. Defined analogously to freq_scale.
             Note that time_scale is in seconds, times is in days.
+        return_1D_filters: if True, return the 1D filters that make up the 2D DPSS filter.
+            Default is False
 
     Returns:
         filters: DPSS filtering vectors, ndarray of size (Ntimes * Nfreqs, N_frequency_vectors * N_time_vectors)
@@ -111,7 +114,11 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[
         time_filters[:, None, :, None] * freq_filters[None, :, None, :],
         (times.shape[0] * freqs.shape[0], ntime_comps[0] * nfreq_comps[0]),
     )  # 2D time-frequency DPSS vectors
-    return filters
+    if return_1D_filters:
+        return filters, freq_filters, time_filters
+
+    else:
+        return filters
 
 
 def fit_solution_matrix(weights, design_matrix):
@@ -234,7 +241,8 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
-                        design_matrix=None, sol_matrix=None, eigenval_cutoff=[1e-7], **win_kwargs):
+                        design_matrix=None, sol_matrix=None, eigenval_cutoff=[1e-7], skip_flagged_edges=False,
+                        **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -264,8 +272,11 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             'DPSS': uses discrete prolate spheroidal sequences (DPSS) to filter calibration solutions
         design_matrix: Matrix of DPSS filters calculated using smooth_cal.dpss_filters. If matrix is not provided,
             one will be calculated using smooth_cal.dpss_filters and the time and frequency scale. Only used
-            when the method used is 'CLEAN'
+            when the method used is 'DPSS'
         sol_matrix: Solution matrix
+        skip_flagged_edges : bool, optional
+            if True, do not filter over flagged edge times/freqs (filter over sub-region). Only used when method used is 'DPSS'
+            default is False
         win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
             Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
 
@@ -288,15 +299,32 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
 
     if method == 'DPSS':
         info = {}
+        if skip_flagged_edges:
+            xout, gout, wout, edges, chunks = truncate_flagged_edges(gains, wgts, (times, freqs), ax='both')
+
+        else:
+            gout = deepcopy(gains)
+            wout = deepcopy(wgts)
+
         if filter_mode == 'rect':
             if design_matrix is None:
-                design_matrix = dpss_filters(freqs, times, freq_scale=freq_scale, time_scale=time_scale, eigenval_cutoff=eigenval_cutoff)
+                design_matrix, info['freq_filters'], info['time_filters'] = dpss_filters(
+                    xout[1], xout[0], freq_scale=freq_scale, time_scale=time_scale,
+                    eigenval_cutoff=eigenval_cutoff, return_1D_filters=True
+                )
 
             if sol_matrix is None:
-                sol_matrix = fit_solution_matrix(wgts, design_matrix)
+                sol_matrix = fit_solution_matrix(wout, design_matrix)
 
-            filtered = design_matrix @ (sol_matrix @ (gains * rephasor).reshape(-1))
-            filtered = filtered.reshape(gains.shape)
+            filtered = design_matrix @ (sol_matrix @ (gout * rephasor).reshape(-1))
+            filtered = filtered.reshape(gout.shape)
+
+            if skip_flagged_edges:
+                tind, find = edges
+                mask = np.ones(gains.shape, dtype=bool)
+                mask[tind[0][0]:-tind[0][1], find[0][0]:-find[0][1]] = False
+                filtered[mask] = gains[mask]
+
             info['sol_matrix'] = sol_matrix
 
         elif filter_mode == 'plus':
@@ -774,7 +802,8 @@ class CalibrationSmoother():
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
-                            window='tukey', maxiter=100, method="CLEAN", eigenval_cutoff=[1e-7], **win_kwargs):
+                            window='tukey', maxiter=100, method="CLEAN", eigenval_cutoff=[1e-7], skip_flagged_edges=False,
+                            **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -796,14 +825,20 @@ class CalibrationSmoother():
             method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
                 'CLEAN': uses the CLEAN algorithm to
                 'DPSS': uses discrete prolate spheroidal sequences to filter calibration solutions
+            skip_flagged_edges : if True, do not filter over flagged edge times (filter over sub-region)
+                defualt is False, only used when method='DPSS'
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
-        if method == 'DPSS':
+        if method == 'DPSS' and not skip_flagged_edges:
             design_matrix = dpss_filters(freqs=self.freqs, times=self.time_grid, freq_scale=freq_scale, time_scale=time_scale,
                                          eigenval_cutoff=eigenval_cutoff)
         else:
             design_matrix = None
+
+        if skip_flagged_edges:
+            filter_dict = {}
+            edges_prev = []
 
         sol_matrix = None
         wgts_prev = np.zeros(1)
@@ -816,12 +851,25 @@ class CalibrationSmoother():
 
                 if method == 'DPSS':
                     sol_matrix = info['sol_matrix'] if np.allclose(wgts_grid, wgts_prev) else None
-                    wgts_prev = wgts_grid.copy()
+                    wgts_prev = np.copy(wgts_grid)
 
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, design_matrix=design_matrix, method=method, sol_matrix=sol_matrix,
-                                                     **win_kwargs)
+                                                     skip_flagged_edges=skip_flagged_edges, **win_kwargs)
+
+                if skip_flagged_edges:
+                    _, _, _, edges, _ = truncate_flagged_edges(gains, wgts_grid, (self.time_grid, self.freqs), ax='both')
+                    if edges != edges_prev:
+                        if str(edges) not in filter_dict:
+                            filter_dict[str(edges)] = (info['freq_filters'], info['time_filters'])
+
+                        freq_filters, time_filters = filter_dict.get(str(edges))
+                        design_matrix = np.reshape(
+                            time_filters[:, None, :, None] * freq_filters[None, :, None, :],
+                            (time_filters.shape[0] * freq_filters.shape[0], time_filters.shape[1] * freq_filters.shape[1]),
+                        )
+                    edges_prev = deepcopy(edges)
 
                 self.gain_grids[ant] = filtered
 
