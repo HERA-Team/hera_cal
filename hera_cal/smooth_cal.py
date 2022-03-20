@@ -307,21 +307,26 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             wout = deepcopy(wgts)
 
         if filter_mode == 'rect':
+            # Generate filters if not provided
             if design_matrix is None:
                 design_matrix = dpss_filters(
                     xout[1], xout[0], freq_scale=freq_scale, time_scale=time_scale, eigenval_cutoff=eigenval_cutoff
                 )
 
+            # Fit solution matrix if not provided
             if sol_matrix is None:
                 sol_matrix = fit_solution_matrix(wout, design_matrix)
 
+            # Filter gains
             filtered = design_matrix @ (sol_matrix @ gout.reshape(-1))
             filtered = filtered.reshape(gout.shape)
 
             if skip_flagged_edges:
-                tind, find = edges
+                ((tstart, tend),), ((fstart, fend),) = edges
+                # Create a mask to fill-in flagged region
                 mask = np.ones(gains.shape, dtype=bool)
-                mask[tind[0][0]:-tind[0][1], find[0][0]:-find[0][1]] = False
+                mask[tstart:gains.shape[0] - tend, fstart:gains.shape[1] - fend] = False
+                # Restore flagged region with zeros and fill-in with original data
                 filtered = restore_flagged_edges(xout, filtered, edges, ax='both')
                 filtered[mask] = gains[mask]
 
