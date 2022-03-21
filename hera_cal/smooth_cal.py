@@ -68,7 +68,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     return np.sum(taus)
 
 
-def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[1e-7], return_1D_filters=False):
+def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1e-9, return_1D_filters=False):
     """Generate a set of 2D discrete prolate spheroidal sequence (DPSS) filters
     to filter calibration solutions along the time and frequency axes simultaneously.
 
@@ -81,6 +81,8 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[
             Note that freq_scale is in MHz while freqs is in Hz.
         time_scale: time scale in seconds. Defined analogously to freq_scale.
             Note that time_scale is in seconds, times is in days.
+        eigenval_cutoff: sinc_matrix eigenvalue cutoff to use for included dpss modes.
+            Only used when the filtering method is 'DPSS'
         return_1D_filters: if True, return the 1D filters that make up the 2D DPSS filter.
             Default is False
 
@@ -98,7 +100,7 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[
         freqs,
         filter_centers=[0],
         filter_half_widths=[delay_scale],
-        eigenval_cutoff=eigenval_cutoff,
+        eigenval_cutoff=[eigenval_cutoff],
     )  # DPSS filters along the frequency-axis
     freq_filters = freq_filters.real.astype(np.float32)
 
@@ -106,7 +108,7 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=[
         time_in_seconds,
         filter_centers=[0],
         filter_half_widths=[fringe_scale],
-        eigenval_cutoff=eigenval_cutoff,
+        eigenval_cutoff=[eigenval_cutoff],
     )  # DPSS filters along the time-axis
     time_filters = time_filters.real.astype(np.float32)
 
@@ -241,7 +243,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
-                        design_matrix=None, sol_matrix=None, eigenval_cutoff=[1e-7], skip_flagged_edges=False,
+                        design_matrix=None, sol_matrix=None, eigenval_cutoff=1e-9, skip_flagged_edges=False,
                         **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
@@ -274,6 +276,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             one will be calculated using smooth_cal.dpss_filters and the time and frequency scale. Only used
             when the method used is 'DPSS'
         sol_matrix: Solution matrix obtained from performing linear least squares with 2D DPSS vectors
+        eigenval_cutoff: sinc_matrix eigenvalue cutoffs to use for included dpss modes.
+            Only used when the filtering method is 'DPSS'
         skip_flagged_edges : bool, optional
             if True, do not filter over flagged edge times/freqs (filter over sub-region). Only used when method used is 'DPSS'
             default is False
@@ -305,6 +309,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         else:
             gout = deepcopy(gains * rephasor)
             wout = deepcopy(wgts)
+            xout = (times, freqs)
 
         if filter_mode == 'rect':
             # Generate filters if not provided
@@ -807,7 +812,7 @@ class CalibrationSmoother():
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
-                            window='tukey', maxiter=100, method="CLEAN", eigenval_cutoff=[1e-7], skip_flagged_edges=False,
+                            window='tukey', maxiter=100, method="CLEAN", eigenval_cutoff=1e-9, skip_flagged_edges=False,
                             **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
@@ -825,7 +830,7 @@ class CalibrationSmoother():
             window: window function for filtering applied to the frequency axis. Only used when the method is 'CLEAN'
                 See aipy.dsp.gen_window for options.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
-            eigenval_cutoff: list of sinc_matrix eigenvalue cutoffs to use for included dpss modes.
+            eigenval_cutoff: sinc_matrix eigenvalue cutoffs to use for included dpss modes.
                 Only used when the filtering method is 'DPSS'
             method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
                 'CLEAN': uses the CLEAN algorithm to
@@ -981,5 +986,9 @@ def smooth_cal_argparser():
     flt_opts.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
     flt_opts.add_argument("--method", type=str, default='CLEAN', help='Algorithm used to smooth calibration solutions. Default is "CLEAN". "DPSS" uses \
                           discrete prolate spheroidal sequences to smooth calibration solutions.')
+    flt_opts.add_argument("--eigenval_cutoff", type=str, default=1e-9, help="sinc_matrix eigenvalue cutoff to use for included dpss modes. \
+                          Only used when the filtering method is 'DPSS'")
+    flt_opts.add_argument("--skip_flagged_edges", type=str, default=False, help="if True, do not filter over flagged edge times/freqs (filter over sub-region).\
+                          Only used when method used is 'DPSS'")
     args = a.parse_args()
     return args
