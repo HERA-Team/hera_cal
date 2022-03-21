@@ -89,9 +89,6 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
     Returns:
         filters: DPSS filtering vectors, ndarray of size (Ntimes * Nfreqs, N_frequency_vectors * N_time_vectors)
     """
-    if not HAVE_UVTOOLS:
-        raise ImportError("uvtools required, install hera_cal[all]")
-
     delay_scale = (freq_scale * 1e6) ** -1  # Puts it in seconds
     fringe_scale = (time_scale) ** -1  # fringe scale in Hz
     time_in_seconds = (times - times.min()) * 60 * 60 * 24  # time array in seconds
