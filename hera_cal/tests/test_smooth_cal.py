@@ -420,6 +420,20 @@ class Test_Calibration_Smoother(object):
         assert not np.all(g4 == g2)
         assert g2.shape == g4.shape
 
+        # Test case of skip_flagged_edges where all grids aren't the same
+        cs2 = deepcopy(self.cs)
+        cs2.ants.append((55, 'Jee'))
+        cs2.ants.append((56, 'Jee'))
+        cs2.flag_grids[cs2.ants[1]] = np.ones_like(cs2.flag_grids[cs2.ants[0]], dtype=bool)
+        cs2.flag_grids[cs2.ants[1]][10:-10, 10:-10] = False
+        cs2.flag_grids[cs2.ants[2]] = deepcopy(cs2.flag_grids[cs2.ants[0]])
+        cs2.gain_grids[cs2.ants[1]] = deepcopy(cs2.gain_grids[cs2.ants[0]])
+        cs2.gain_grids[cs2.ants[2]] = deepcopy(cs2.gain_grids[cs2.ants[0]])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            cs2.time_freq_2D_filter(method='DPSS', skip_flagged_edges=True)
+        del cs2
+
     @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_write(self):
         outfilename = os.path.join(DATA_PATH, 'test_output/smooth_test.calfits')
