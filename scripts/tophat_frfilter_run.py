@@ -28,14 +28,13 @@ elif ap.mode == 'dayenu':
     filter_kwargs['skip_contiguous_flags'] = False
     filter_kwargs['skip_flagged_edges'] = False
     filter_kwargs['flag_model_rms_outliers'] = False
-elif ap.mode == 'dpss_leastsq':
+elif ap.mode == 'dpss_leastsq' or ap.mode == 'dft_leastsq':
     filter_kwargs = {}
     avg_red_bllens = True
     filter_kwargs['skip_contiguous_flags']=True
     filter_kwargs['skip_flagged_edges'] = True
     filter_kwargs['max_contiguous_edge_flags'] = 1
     filter_kwargs['flag_model_rms_outliers'] = True
-
 
 if ap.cornerturnfile is not None:
     baseline_list = io.baselines_from_filelist_position(filename=ap.cornerturnfile, filelist=ap.datafilelist)
@@ -55,11 +54,12 @@ frf.load_tophat_frfilter_and_write(ap.datafilelist, calfile_list=ap.calfilelist,
                                    read_cache=ap.read_cache, mode=ap.mode, res_outfilename=ap.res_outfilename,
                                    factorize_flags=ap.factorize_flags, time_thresh=ap.time_thresh,
                                    add_to_history=' '.join(sys.argv), verbose=ap.verbose,
-                                   flag_yaml=ap.flag_yaml, Nbls_per_load=ap.Nbls_per_load,
+                                   flag_yaml=ap.flag_yaml, Nbls_per_load=ap.Nbls_per_load, case=ap.case,
                                    external_flags=ap.external_flags, filter_spw_ranges=ap.filter_spw_ranges,
                                    overwrite_flags=ap.overwrite_flags, skip_autos=ap.skip_autos,
                                    skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
                                    zeropad=ap.zeropad, tol=ap.tol, skip_wgt=ap.skip_wgt, max_frate_coeffs=ap.max_frate_coeffs,
-                                   frate_width_multiplier=ap.frate_width_multiplier, frate_standoff=ap.frate_standoff,
-                                   min_frate_half_width=ap.min_frate_half_width,
-                                   clean_flags_in_resid_flags=True, **filter_kwargs)
+                                   frate_width_multiplier=ap.frate_width_multiplier, frate_standoff=ap.frate_standoff, fr_freq_skip=ap.fr_freq_skip,
+                                   min_frate_half_width=ap.min_frate_half_width, beamfitsfile=ap.beamfitsfile, percentile_low=ap.percentile_low, percentile_high=ap.percentile_high,
+                                   clean_flags_in_resid_flags=True, pre_filter_modes_between_lobe_minimum_and_zero=ap.pre_filter_modes_between_lobe_minimum_and_zero,
+                                   **filter_kwargs)

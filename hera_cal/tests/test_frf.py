@@ -15,9 +15,8 @@ from pyuvdata import utils as uvutils
 import unittest
 from scipy import stats
 from scipy import constants
-from pyuvdata import UVFlag
-
-
+from pyuvdata import UVFlag, UVBeam
+from .. import utils
 from .. import datacontainer, io, frf
 from ..data import DATA_PATH
 
@@ -264,15 +263,19 @@ class Test_FRFilter(object):
         assert args.flag_output is None
         assert args.filetype == "uvh5"
 
-    def test_tophat_frfilter(self):
+    @pytest.mark.parametrize(
+        "avg_red_bllens, pass_data",
+        [(True, False), (False, False), (True, False), (False, True)],
+    )
+    def test_tophat_frfilter(self, avg_red_bllens, pass_data):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         frfil = frf.FRFilter(fname, filetype='miriad')
         frfil.read(bls=[k])
         bl = np.linalg.norm(frfil.antpos[24] - frfil.antpos[25]) / constants.c * 1e9
         sdf = (frfil.freqs[1] - frfil.freqs[0]) / 1e9
-
-        frfil.tophat_frfilter(tol=1e-2, output_prefix='frfiltered')
+        frate_centers, frate_half_widths = frf.select_tophat_frates(case='sky', uvd=frfil.hd, blvecs=frfil.blvecs)
+        frfil.tophat_frfilter(tol=1e-2, output_prefix='frfiltered', frate_centers=frate_centers, frate_half_widths=frate_half_widths)
         for k in frfil.data.keys():
             assert frfil.frfiltered_resid[k].shape == (60, 64)
             assert frfil.frfiltered_model[k].shape == (60, 64)
@@ -282,14 +285,23 @@ class Test_FRFilter(object):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         # check successful run when avg_red_bllens is True and when False.
-        for avg_red_bllens in [True, False]:
-            frfil = frf.FRFilter(fname, filetype='miriad')
-            frfil.read(bls=[k])
-            if avg_red_bllens:
-                frfil.avg_red_baseline_vectors()
-            wgts = {k: np.ones_like(frfil.flags[k], dtype=np.float)}
-            wgts[k][:, 0] = 0.0
-            frfil.tophat_frfilter(keys=[k], wgts=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+        frfil = frf.FRFilter(fname, filetype='miriad')
+        frfil.read(bls=[k])
+        if avg_red_bllens:
+            frfil.avg_red_baseline_vectors()
+        wgts = {k: np.ones_like(frfil.flags[k], dtype=np.float)}
+        wgts[k][:, 0] = 0.0
+        if pass_data:
+            data_kwargs = {'data': frfil.data}
+        else:
+            data_kwargs = {}
+        for pre_filter in [True, False]:
+            frate_centers, frate_half_widths = frf.select_tophat_frates(case='sky', uvd=frfil.hd, blvecs=frfil.blvecs)
+
+            frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
+                                  keys=[k], wgts=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1,
+                                  maxiter=100,
+                                  pre_filter_modes_between_lobe_minimum_and_zero=pre_filter, **data_kwargs)
             assert frfil.clean_info[k][(0, frfil.Nfreqs)]['status']['axis_0'][0] == 'skipped'
             np.testing.assert_array_equal(frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0]))
             np.testing.assert_array_equal(frfil.clean_model[k][:, 0], np.zeros_like(frfil.clean_resid[k][:, 0]))
@@ -313,13 +325,13 @@ class Test_FRFilter(object):
                                                calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
                                                read_cache=True, write_cache=True, avg_red_bllens=True,
                                                res_outfilename=outfilename, clobber=True,
-                                               mode='dayenu')
+                                               mode='dayenu', case='sky')
         for avg_bl in [True, False]:
             frf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)], polarizations=['ee'],
                                                calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
                                                read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
                                                res_outfilename=outfilename, clobber=True,
-                                               mode='dayenu')
+                                               mode='dayenu', case='sky')
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
@@ -330,7 +342,7 @@ class Test_FRFilter(object):
                                                cache_dir=cdir,
                                                read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
                                                res_outfilename=outfilename, clobber=True,
-                                               mode='dayenu')
+                                               mode='dayenu', case='sky')
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
@@ -363,7 +375,7 @@ class Test_FRFilter(object):
             frf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
                                                tol=1e-4, baseline_list=[bl[:2]], polarizations=[bl[-1]],
                                                cache_dir=cdir,
-                                               factorize_flags=True,
+                                               factorize_flags=True, case='sky',
                                                time_thresh=time_thresh, clobber=True)
         # now load all of the outputs in
         output_files = glob.glob(tmp_path + '/bl_chunk_*.h5')
@@ -386,7 +398,7 @@ class Test_FRFilter(object):
         uvf.write(flagfile, clobber=True)
         frf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
                                            tol=1e-4, baseline_list=[bl[:2]], polarizations=[bl[-1]],
-                                           clobber=True, mode='dayenu',
+                                           clobber=True, mode='dayenu', case='sky',
                                            external_flags=flagfile, overwrite_flags=True)
         # test that all flags are False
         hd = io.HERAData(outfilename)
@@ -396,7 +408,7 @@ class Test_FRFilter(object):
         # now do the external yaml
         frf.load_tophat_frfilter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
                                            tol=1e-4, baseline_list=[bl[:2]], polarizations=[bl[-1]],
-                                           clobber=True, mode='dayenu',
+                                           clobber=True, mode='dayenu', case='sky',
                                            external_flags=flagfile, overwrite_flags=True,
                                            flag_yaml=flag_yaml)
         # test that all flags are af yaml flags
@@ -415,7 +427,7 @@ class Test_FRFilter(object):
         uvh5s = sorted(glob.glob(DATA_PATH + '/zen.2458045.*.uvh5'))
         tmp_path = tmpdir.strpath
         outfilename = os.path.join(tmp_path, 'temp_output.uvh5')
-        frf.load_tophat_frfilter_and_write(uvh5s, filled_outfilename=outfilename, tol=1e-4, clobber=True)
+        frf.load_tophat_frfilter_and_write(uvh5s, filled_outfilename=outfilename, tol=1e-4, clobber=True, case='sky')
         hd = io.HERAData(uvh5s)
         d, f, n = hd.read()
         hdoutput = io.HERAData(outfilename)
@@ -423,13 +435,103 @@ class Test_FRFilter(object):
         for k in doutput:
             assert doutput[k].shape == d[k].shape
 
+    def test_build_fringe_rate_profiles(self):
+        test_beam = os.path.join(DATA_PATH, "efield_test_nside16.beamfits")
+        test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
+        uvd = UVData()
+        uvd.read_uvh5(test_data)
+        uvb = UVBeam()
+        uvb.read_beamfits(test_beam)
+        fr_grid, profiles = frf.build_fringe_rate_profiles(uvd, uvb)
+        assert len(fr_grid) == uvd.Ntimes
+
+    def test_get_fringe_rate_limits(self):
+        # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
+        test_beam = os.path.join(DATA_PATH, "fr_unittest_beam.beamfits")
+        test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
+        uvd = UVData()
+        uvd.read_uvh5(test_data)
+        myfrf = frf.FRFilter(uvd)
+        sim_c_frates = {}
+        sim_w_frates = {}
+        uvb = UVBeam()
+        uvb.read_beamfits(test_beam)
+        c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb, percentile_low=10, percentile_high=90)
+        for bl in c_frs:
+            # fft data
+            myfrf.fft_data(data=myfrf.data, ax='time', keys=[bl], overwrite=True, window='bh')
+            csum = np.cumsum(np.abs(myfrf.dfft[bl]) ** 2.)
+            csum /= csum.max()
+            csum = np.hstack([[0], csum, [1.]])
+            dfr = np.median(np.diff(myfrf.frates))
+            frates = np.hstack([[myfrf.frates.min() - dfr], myfrf.frates, [myfrf.frates.max() + dfr]])
+            frlow, frhigh = (frates[np.argmin(np.abs(csum - 0.1))], frates[np.argmin(np.abs(csum - 0.9))])
+            sim_c_frates[bl] = .5 * (frlow + frhigh)
+            sim_w_frates[bl] = .5 * np.abs(frlow - frhigh)
+            sim_w_frates[utils.reverse_bl(bl)] = sim_w_frates[bl]
+            sim_c_frates[utils.reverse_bl(bl)] = -sim_c_frates[bl]
+
+        for bl in sim_c_frates:
+            assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.3, rtol=0.)
+            assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.3, rtol=0.)
+        # test providing fringe-rate profiles.
+        fr_grid, profiles = frf.build_fringe_rate_profiles(uvd, uvb)
+        c_frs, w_frs = frf.get_fringe_rate_limits(uvd, frate_profiles=profiles)
+        for bl in sim_c_frates:
+            assert np.isclose(c_frs[bl], sim_c_frates[bl], atol=0.3, rtol=0.)
+            assert np.isclose(w_frs[bl], sim_w_frates[bl], atol=0.3, rtol=0.)
+        assert pytest.raises(ValueError, frf.get_fringe_rate_limits, uvd, None, None)
+        assert pytest.raises(ValueError, frf.get_fringe_rate_limits, uvd, uvb, frate_profiles=profiles)
+
+    @pytest.mark.parametrize(
+        "pre_filter",
+        [True, False],
+    )
+    def test_load_tophat_frfilter_and_write_beam_frates(self, tmpdir, pre_filter):
+        # simulations constructed with the notebook at https://drive.google.com/file/d/1jPPSmL3nqQbp7tTgP77j9KC0802iWyow/view?usp=sharing
+        # load in primary beam model and isotropic noise model of sky.
+        test_beam = os.path.join(DATA_PATH, "fr_unittest_beam.beamfits")
+        test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
+        tmp_path = tmpdir.strpath
+        resid_outfilename = os.path.join(tmp_path, 'resid.uvh5')
+        CLEAN_outfilename = os.path.join(tmp_path, 'model.uvh5')
+        filled_outfilename = os.path.join(tmp_path, 'filled.uvh5')
+        # perform cleaning.
+        frf.load_tophat_frfilter_and_write(datafile_list=[test_data], beamfitsfile=test_beam, mode='dpss_leastsq', filled_outfilename=filled_outfilename,
+                                           CLEAN_outfilename=CLEAN_outfilename, frate_standoff=0.075, pre_filter_modes_between_lobe_minimum_and_zero=pre_filter,
+                                           res_outfilename=resid_outfilename, percentile_high=97.5, percentile_low=2.5, case='uvbeam')
+        hd_input = io.HERAData(test_data)
+        data, flags, nsamples = hd_input.read()
+        hd_resid = io.HERAData(resid_outfilename)
+        data_r, flags_r, nsamples_r = hd_resid.read()
+        hd_filled = io.HERAData(filled_outfilename)
+        data_f, flags_f, nsamples_f = hd_filled.read()
+
+        for bl in data:
+            assert np.mean(np.abs(data_r[bl]) ** 2.) <= .2 * np.mean(np.abs(data[bl]) ** 2.)
+
+    def test_sky_frates_minfrate_and_to_filter(self):
+        # test edge frates
+        V = frf.FRFilter(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
+        V.read()
+        for to_filter in [None, list(V.data.keys())[:1]]:
+            cfrates, wfrates = frf.sky_frates(V.hd, min_frate_width=1000, blkeys=to_filter)
+            # to_filter set to None -> all keys should be present.
+            if to_filter is None:
+                for k in V.data:
+                    assert k in cfrates
+                    assert k in wfrates
+            # min_frate = 1000 should set all wfrates to 1000
+            for k in cfrates:
+                assert wfrates[k] == 1000.
+
     def test_load_tophat_frfilter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, 'temp.h5')
         CLEAN_outfilename = os.path.join(tmp_path, 'temp_clean.h5')
         filled_outfilename = os.path.join(tmp_path, 'temp_filled.h5')
-        frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1)
+        frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1, case='sky')
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in d:
@@ -437,11 +539,13 @@ class Test_FRFilter(object):
 
         frfil = frf.FRFilter(uvh5, filetype='uvh5')
         frfil.read(bls=[(53, 54, 'ee')])
-        frfil.tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        frate_centers, frate_half_widths = frf.select_tophat_frates(case='sky', uvd=frfil.hd, blvecs=frfil.blvecs)
+        frfil.tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True,
+                              frate_centers=frate_centers, frate_half_widths=frate_half_widths)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
         # test NotImplementedError
-        pytest.raises(NotImplementedError, frf.load_tophat_frfilter_and_write, uvh5, res_outfilename=outfilename, tol=1e-4,
+        pytest.raises(NotImplementedError, frf.load_tophat_frfilter_and_write, uvh5, 'sky', res_outfilename=outfilename, tol=1e-4,
                       clobber=True, Nbls_per_load=1, avg_red_bllens=True, baseline_list=[(54, 54)], polarizations=['ee'])
 
         # test loading and writing all baselines at once.
@@ -449,7 +553,7 @@ class Test_FRFilter(object):
         outfilename = os.path.join(tmp_path, 'temp.h5')
         for avg_bl in [True, False]:
             frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True,
-                                               Nbls_per_load=None, avg_red_bllens=avg_bl)
+                                               Nbls_per_load=None, avg_red_bllens=avg_bl, case='sky')
             hd = io.HERAData(outfilename)
             d, f, n = hd.read(bls=[(53, 54, 'ee')])
             for bl in d:
@@ -457,7 +561,8 @@ class Test_FRFilter(object):
 
         frfil = frf.FRFilter(uvh5, filetype='uvh5')
         frfil.read(bls=[(53, 54, 'ee')])
-        frfil.tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        frate_centers, frate_half_widths = frf.select_tophat_frates(case='sky', uvd=frfil.hd, blvecs=frfil.blvecs)
+        frfil.tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True, frate_centers=frate_centers, frate_half_widths=frate_half_widths)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
 
@@ -466,7 +571,7 @@ class Test_FRFilter(object):
         os.remove(outfilename)
         for avg_bl in [True, False]:
             frf.load_tophat_frfilter_and_write(uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename,
-                                               Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl)
+                                               Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl, case='sky')
             hd = io.HERAData(outfilename)
             assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
             d, f, n = hd.read()
@@ -478,7 +583,7 @@ class Test_FRFilter(object):
         # test skip_autos
         frf.load_tophat_frfilter_and_write(uvh5, calfile_list=None, tol=1e-4, res_outfilename=outfilename,
                                            filled_outfilename=filled_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                           Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl, skip_autos=True)
+                                           Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl, skip_autos=True, case='sky')
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
         hd_original = io.HERAData(uvh5)
@@ -519,7 +624,7 @@ class Test_FRFilter(object):
         # and entire final channel being flagged
         # when flags are broadcasted.
         time_thresh = 2. / hd.Ntimes
-        frf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
+        frf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, case='sky',
                                            factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -528,7 +633,7 @@ class Test_FRFilter(object):
             assert np.all(f[bl][0, :])
 
         # test delay filtering and writing with factorized flags and partial i/o
-        frf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
+        frf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, case='sky',
                                            factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -539,7 +644,7 @@ class Test_FRFilter(object):
             assert not np.all(np.isclose(d[bl], 0.))
 
         frf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, Nbls_per_load=1,
-                                           factorize_flags=True, time_thresh=time_thresh, clobber=True)
+                                           factorize_flags=True, time_thresh=time_thresh, clobber=True, case='sky')
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in f:
@@ -560,7 +665,7 @@ class Test_FRFilter(object):
         frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
                                            Nbls_per_load=1, clobber=True, mode='dayenu',
                                            external_flags=flagfile,
-                                           overwrite_flags=True)
+                                           overwrite_flags=True, case='sky')
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -570,7 +675,7 @@ class Test_FRFilter(object):
         frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
                                            clobber=True, mode='dayenu',
                                            external_flags=flagfile,
-                                           overwrite_flags=True)
+                                           overwrite_flags=True, case='sky')
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -604,12 +709,12 @@ class Test_FRFilter(object):
         # run dayenu filter
         avg_bl = True
         frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
-                                           cache_dir=cdir, mode='dayenu',
+                                           cache_dir=cdir, mode='dayenu', case='sky',
                                            Nbls_per_load=1, clobber=True, avg_red_bllens=avg_bl,
                                            spw_range=(0, 32), write_cache=True)
         # generate duplicate cache files to test duplicate key handle for cache load.
         frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, cache_dir=cdir,
-                                           mode='dayenu', avg_red_bllens=avg_bl,
+                                           mode='dayenu', avg_red_bllens=avg_bl, case='sky',
                                            Nbls_per_load=1, clobber=True, read_cache=False,
                                            spw_range=(0, 32), write_cache=True)
         # there should now be six cache files (one per i/o/filter). There are three baselines.
@@ -625,7 +730,7 @@ class Test_FRFilter(object):
         for avg_bl in [True, False]:
             frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
                                                cache_dir=cdir, mode='dayenu', avg_red_bllens=avg_bl,
-                                               Nbls_per_load=None, clobber=True,
+                                               Nbls_per_load=None, clobber=True, case='sky',
                                                spw_range=(0, 32), write_cache=True)
             if avg_bl:
                 assert len(glob.glob(cdir + '/*')) == 1
@@ -641,7 +746,7 @@ class Test_FRFilter(object):
         frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, max_frate_coeffs=[0.0, 0.025],
                                            cache_dir=cdir, calfile_list=calfile, read_cache=True,
                                            Nbls_per_load=1, clobber=True, mode='dayenu',
-                                           spw_range=(0, 32), write_cache=True)
+                                           spw_range=(0, 32), write_cache=True, case='max_frate_coeffs')
         # no new cache files should be generated.
         assert len(glob.glob(cdir + '/*')) == 1
         hd = io.HERAData(outfilename)
