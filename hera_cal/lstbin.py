@@ -814,8 +814,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                         if np.all([j not in list(bl_nightly_dict.keys()) for bl_nightly_dict in blgroup]):
                             utils.echo(f"The current night {j} is not present in any of the baseline dicts in the current blgroup.", verbose=verbose)
                         continue
-                    data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
-                    data.phase_type = 'drift'
+                    # data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
+                    # data.phase_type = 'drift'
 
                     # load calibration
                     if input_cals is not None:
