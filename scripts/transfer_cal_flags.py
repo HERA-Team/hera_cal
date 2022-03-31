@@ -21,8 +21,8 @@ args = ap.parse_args()
 uvo = UVCal()
 uvo.read_calfits(args.flag_origin)
 
-uvd = UVCal()
-uvd.read_calfits(args.flag_destination)
+uvc = UVCal()
+uvc.read_calfits(args.flag_destination)
 
 if args.keep_old_flags:
     uvc.flag_array = uvc.flag_array | uvo.flag_array
