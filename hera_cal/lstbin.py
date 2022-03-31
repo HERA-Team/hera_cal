@@ -256,6 +256,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     key = antpair + (pol,)
                     if key not in data and ((key[0] != key[1] and utils.reverse_bl(key) not in data) or key[0] == key[1]):
                         # last part lets us spoof ne and en for autocorrs. If we dont include it, only en xor ne will be spoofed.
+                        # using int8 and complex64 to allow numpy to promote the precision of these arrays only if needed
                         nsamples[key] = odict({ind: np.empty((0, Nfreqs), dtype=np.int8) for ind in range(len(lst_grid))})
                         data[key] = odict({ind: np.empty((0, Nfreqs), dtype=np.complex64) for ind in range(len(lst_grid))})
                         flags[key] = odict({ind: np.empty((0, Nfreqs), dtype=bool) for ind in range(len(lst_grid))})
