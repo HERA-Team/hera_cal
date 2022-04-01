@@ -32,6 +32,7 @@ from functools import reduce
 from scipy import signal, interpolate, spatial
 from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
+from pyuvdata.uvcal import initialize_from_uvdata
 import linsolve
 import warnings
 
@@ -3691,6 +3692,74 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     hc.history += version.history_string(add_to_history)
     hc.write_calfits(output_file, clobber=clobber)
     return hc
+
+
+def model_based_calibration(data_file, model_file, auto_file=None, clobber=False):
+    """Driver function for model based calibration including i/o
+
+    Solve for gain parameters based on a foreground model.
+
+    Parameters
+    ----------
+    data_file: str
+        path to pyuvdata visibility file.
+        flags from this datafile are used for gains.
+    model_file: str
+        path to pyuvdata model file.
+    auto_file: str, optional
+        path to file containing autocorrelations and nsamples for inverse
+        variance weights. Default None -> use binary flag weights in calibration.
+    abscal_kwargs: keyword args for AbsCal.init
+
+    """
+    hda = HERAData(auto_file)
+    hdd = HERAData(data_file)
+    hdm = HERAData(model_file)
+    # initialize HERACal to store new cal solutions
+    hc = initialize_from_uvdata(uvdata=hdd, gain_convention='divide', cal_style='sky')
+    hc.write_calfits(ouput_filename, clobber=clobber)
+    hc = io.HERACal(ouput_filename)
+    # generate cal object from model to hold model flags.
+    hcm = initialize_from_uvdata(uvdata=hdm, gain_convention='divide', cal_style='sky')
+
+    _, abscal_flags, _, _ = hc.read()
+    _, model_flags, _, _ = hcm.read()
+
+    # make sure that any flags in the model file are also included in final flags.
+    for k in abscal_flags:
+        abscal_flags[k] = abscal_flags[k] | model_flags[k]
+
+    # load in weights if supplied.
+    if auto_file is not None:
+        bls = [ap for ap in hda.get_antpairs() if ap[0] == ap[1]]
+        auto_data, auto_flags, auto_nsamples = hda.read(bls=bls)
+        data, data_flags, data_nsamples = hdd.read()
+        model, model_flags, model_nsamples = hdm.read()
+        # generate wgts from autocorrelations
+        build_data_wgts(data_flags=data_flags, data_nsamples=data_nsamples, model_flags=model_flags,
+                        autocorrs=auto_data, )
+    else:
+        wgts = None
+
+
+
+    abscal = AbsCal(data=data_file, model=model_file, wgts=wgts)
+    abscal.amp_logcal()
+    abscal.phs_logcal()
+
+    abscal_gains = DataContainer({})
+
+    # set flags to be where wgts are close to zero.
+    abscal_flags = DataContainer({k: ~np.isclose(self.wgts[k], 0.0) for k in self.wgts})
+
+    #phase to refant.
+    if refant is None:
+        refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs, per_pol=True)
+    rephase_to_refant(abscal_gains, refant, flags=abscal_flags, propagate_refant_flags=True)
+
+    # update the calibration array.
+    hc.update(gains=abscal_gains, flags=abscal_flags)
+    hc.write_calfits(output_filename, clobber=clobber)
 
 
 def post_redcal_abscal_argparser():
