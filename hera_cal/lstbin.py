@@ -241,11 +241,11 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     data[key][ind] = np.vstack((data[key][ind], d[key][k]))
                     # also insert flags if fed
                     if flags_list is None:
-                        flags[key][ind] = np.vstack((flags[key][ind], np.zeros_like(d[key][k], bool)))
+                        flags[key][ind] = np.vstack((flags[key][ind], np.zeros_like(d[key][k], dtype=bool)))
                     else:
                         flags[key][ind] = np.vstack((flags[key][ind], flags_list[i][key][k]))
                     if nsamples_list is None:
-                        nsamples[key][ind] = np.vstack((nsamples[key][ind], np.ones_like(d[key][k], np.int8)))
+                        nsamples[key][ind] = np.vstack((nsamples[key][ind], np.ones_like(d[key][k], dtype=np.int8)))
                     else:
                         nsamples[key][ind] = np.vstack((nsamples[key][ind], nsamples_list[i][key][k]))
 
@@ -272,7 +272,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                             flags[key][ind] = np.empty((0, Nfreqs), dtype=bool)
                             data[key][ind] = np.empty((0, Nfreqs), dtype=np.complex64)
                         if len(nsamples[key][ind]) == 0:
-                            nsamples[key][ind] = np.vstack((nsamples[key][ind], np.zeros(Nfreqs, np.int8)))
+                            nsamples[key][ind] = np.vstack((nsamples[key][ind], np.zeros(Nfreqs, dtype=np.int8)))
                             flags[key][ind] = np.vstack((flags[key][ind], np.ones(Nfreqs, dtype=bool)))
                             data[key][ind] = np.vstack((data[key][ind], np.zeros(Nfreqs, dtype=np.complex64)))
 
@@ -290,9 +290,9 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     # fill data with blank data
                     # if the index is not present.
                     if index not in data[key]:
-                        data[key][index] = np.array([np.zeros(Nfreqs, np.complex64)])
-                        flags[key][index] = np.array([np.ones(Nfreqs, np.bool)])
-                        nsamples[key][index] = np.array([np.zeros(Nfreqs, np.int8)])
+                        data[key][index] = np.array([np.zeros(Nfreqs, dtype=np.complex64)])
+                        flags[key][index] = np.array([np.ones(Nfreqs, dtype=np.bool)])
+                        nsamples[key][index] = np.array([np.zeros(Nfreqs, dtype=np.int8)])
 
         # use all LST bins
         lst_bins = lst_grid
