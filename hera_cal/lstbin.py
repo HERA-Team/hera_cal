@@ -368,7 +368,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
             if len(f) == 1:
                 flag_bin = np.zeros(f.shape[1], np.bool)
             else:
-                flag_bin = np.sum(f, axis=0).astype(np.float) / len(f) > flag_thresh
+                flag_bin = np.sum(f, axis=0).astype(float) / len(f) > flag_thresh
             d[:, flag_bin] *= np.nan
             f[:, flag_bin] = True
 
@@ -408,7 +408,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         d_avg = np.array(real_avg) + 1j * np.array(imag_avg)
         f_min = np.array(f_min)
         d_std = np.array(real_std) + 1j * np.array(imag_std)
-        d_num = np.array(bin_count).astype(np.float)
+        d_num = np.array(bin_count).astype(float)
 
         # fill nans
         d_nan = np.isnan(d_avg)
@@ -950,7 +950,7 @@ def make_lst_grid(dlst, begin_lst=None, verbose=True):
     # check 2pi is equally divisible by dlst
     if not np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5) and not np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5):
         # generate array of appropriate dlsts
-        dlsts = 2 * np.pi / np.arange(1, 1000000).astype(np.float)
+        dlsts = 2 * np.pi / np.arange(1, 1000000).astype(float)
 
         # get dlsts closest to dlst, but also greater than dlst
         dlst_diff = dlsts - dlst
