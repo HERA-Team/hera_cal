@@ -3695,7 +3695,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
 
 def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None,
-                                clobber=False, iterations=1, refant=None, ant_threshold=0.0):
+                                clobber=False, iterations=1, refant=None, ant_threshold=0.0,
+                                verbose=False):
     """Driver function for model based calibration including i/o
 
     Solve for gain parameters based on a foreground model.
@@ -3717,11 +3718,14 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     iterations: int, optional
         number of times to perform logcal.
         default is 1
-    refant: int, optional
-        referance antenna. Default is None -> automatically select a refant.
+    refant: tuple, optional
+        referance antenna in form of (antnum, polstr).
+        Default is None -> automatically select a refant.
     ant_threshold: float, optional
         threshold of flags in frequency and time for a given antenna to completely
         flag this antenna rom calibration.
+    verbose: bool, optional
+        lots of outputs.
     """
     hdd = io.HERAData(data_file)
     hdm = io.HERAData(model_file)
@@ -3786,8 +3790,8 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
 
     for iter in range(iterations):
         abscal = AbsCal(data=hdd, model=hdm, wgts=wgts)
-        abscal.amp_logcal()
-        abscal.phs_logcal()
+        abscal.amp_logcal(verbose=verbose)
+        abscal.phs_logcal(verbose=verbose)
         abscal_gains_iteration = {}
         for k in abscal.ant_eta_gain:
             abscal_gains_iteration[k] = abscal.ant_eta_gain[k] * abscal.ant_phi_gain[k]
@@ -3840,11 +3844,12 @@ def post_redcal_abscal_argparser():
 
 def model_calibration_argparser():
     '''Argparser for commandline operation of run_model_based_calibration'''
-    a = argparse.ArgumentParser(description="Command-line drive script for model based calibration")
-    a.add_argument("data_file", type=str, help="string path to data file to calibrate.")
-    a.add_argument("model_file", type=str, help="string path to model file to calibrate.")
-    a.add_argument("output_filename", type=str, help="string path to output calfits file to store gains.")
-    a.add_argument("--auto_file", type=str, default=None, help="string path to file containing autocorrelations to use as inverse variants weights. If not specified, use uniform weights with flags.")
-    a.add_argument("--clobber", default=False, action="store_true", help="overwrite output calfits if it already exists.")
-    a.add_argument("--iterations", default=1, type=int, help="number of calibration rounds to run.")
-    a.add_argument("--refant", default=None, help="Reference antenna. If non specified, then will automatically select a refant.")
+    ap = argparse.ArgumentParser(description="Command-line drive script for model based calibration")
+    ap.add_argument("data_file", type=str, help="string path to data file to calibrate.")
+    ap.add_argument("model_file", type=str, help="string path to model file to calibrate.")
+    ap.add_argument("output_filename", type=str, help="string path to output calfits file to store gains.")
+    ap.add_argument("--auto_file", type=str, default=None, help="string path to file containing autocorrelations to use as inverse variants weights. If not specified, use uniform weights with flags.")
+    ap.add_argument("--clobber", default=False, action="store_true", help="overwrite output calfits if it already exists.")
+    ap.add_argument("--iterations", default=1, type=int, help="number of calibration rounds to run.")
+    ap.add_argument("--verbose", default=False, action="store_true", help="lots of outputs.")
+    return ap
