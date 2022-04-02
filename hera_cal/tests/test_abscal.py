@@ -954,6 +954,14 @@ class Test_AbsCal(object):
         gains, gain_flags, _, _ = hc.read()
         for k in gains:
             np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
+        # include auto_file
+        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname, auto_file=data_fname,
+                                           output_filename=cal_fname, clobber=True)
+        # check that gains equal to 0.5
+        hc = io.HERACal(cal_fname)
+        gains, gain_flags, _, _ = hc.read()
+        for k in gains:
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")

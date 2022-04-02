@@ -3773,8 +3773,8 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         data, data_flags, data_nsamples = hdd.read()
         model, model_flags, model_nsamples = hdm.read()
         # generate wgts from autocorrelations
-        build_data_wgts(data_flags=data_flags, data_nsamples=data_nsamples, model_flags=model_flags,
-                        autocorrs=auto_data, )
+        wgts = build_data_wgts(data_flags=data_flags, data_nsamples=data_nsamples, model_flags=model_flags,
+                               autocorrs=auto_data, auto_flags=auto_flags)
     else:
         wgts = None
 
