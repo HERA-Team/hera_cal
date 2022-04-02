@@ -928,6 +928,33 @@ class Test_AbsCal(object):
         assert np.allclose(np.median(AC.TT_Phi_arr[0, 1, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(np.bool)]),
                            1e-3, atol=1e-4)
 
+    def test_run_model_based_calibration(self, tmpdir):
+        data_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.uvh5_downselected')
+        tmppath = tmpdir.strpath
+        hd = io.HERAData(data_file)
+        hd.read()
+        hdm = io.HERAData(data_file)
+        hdm.read()
+        # include a model random scale factor tiomes the amplitude of the data.
+        scale_factor = np.random.rand() * 0.8 + 0.1
+        hdm.data_array *= scale_factor
+        # there are integrations and channels that need to be flagged.
+        hdm.flag_array[np.isclose(hdm.data_array, 0.)] = True
+        hd.flag_array[np.isclose(hd.data_array, 0.)] = True
+        model_fname = os.path.join(tmppath, 'test_model.uvh5')
+        data_fname = os.path.join(tmppath, 'test_data.uvh5')
+        hdm.write_uvh5(model_fname)
+        hd.write_uvh5(data_fname)
+        # Now run abscal run
+        cal_fname = os.path.join(tmppath, 'test_cal.calfits')
+        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname,
+                                           output_filename=cal_fname, clobber=True)
+        # check that gains equal to 0.5
+        hc = io.HERACal(cal_fname)
+        gains, gain_flags, _, _ = hc.read()
+        for k in gains:
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
+
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class Test_Post_Redcal_Abscal_Run(object):

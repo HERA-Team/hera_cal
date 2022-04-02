@@ -32,7 +32,6 @@ from functools import reduce
 from scipy import signal, interpolate, spatial
 from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
-from pyuvdata.uvcal import initialize_from_uvdata
 from pyuvdata.utils import uvcalibrate
 import linsolve
 import warnings
@@ -3696,7 +3695,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
 
 def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None,
-                                clobber=False, iterations=1, refant=None):
+                                clobber=False, iterations=1, refant=None, ant_threshold=0.0):
     """Driver function for model based calibration including i/o
 
     Solve for gain parameters based on a foreground model.
@@ -3714,38 +3713,61 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         path to file containing autocorrelations and nsamples for inverse
         variance weights. Default None -> use binary flag weights in calibration.
     clobber: bool, optional
-        overwrite ouputs if True.
+        overwrite outputs if True.
     iterations: int, optional
         number of times to perform logcal.
         default is 1
     refant: int, optional
         referance antenna. Default is None -> automatically select a refant.
+    ant_threshold: float, optional
+        threshold of flags in frequency and time for a given antenna to completely
+        flag this antenna rom calibration.
     """
-    hda = HERAData(auto_file)
-    hdd = HERAData(data_file)
-    hdm = HERAData(model_file)
+    hdd = io.HERAData(data_file)
+    hdm = io.HERAData(model_file)
+
+    _, data_flags, _ = hdd.read()
+    _, model_flags, _ = hdm.read()
+
+    data_flags = synthesize_ant_flags(data_flags, threshold=ant_threshold)
+    model_flags = synthesize_ant_flags(model_flags, threshold=ant_threshold)
+
+    lst_center = hdd.lsts[hdd.Ntimes // 2] * 12 / np.pi
+    field_str = 'LST={lst_center:%.2f} hrs'
+
+    if refant is None:
+        # dummy refant. Could be completely flagged for all we know.
+        refant_init = str(hdd.ant_1_array[0])
+    else:
+        refant_init = str(refant)
     # initialize HERACal to store new cal solutions
-    hc = initialize_from_uvdata(uvdata=hdd, gain_convention='divide', cal_style='sky', metadata_only=False)
-    hc.write_calfits(ouput_filename, clobber=clobber)
-    hc = io.HERACal(ouput_filename)
+    hc = UVCal()
+    hc = hc.initialize_from_uvdata(uvdata=hdd, gain_convention='divide', cal_style='sky',
+                                   ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
+                                   metadata_only=False, sky_field=field_str, cal_type='gain')
+    hc.write_calfits(output_filename, clobber=clobber)
+    hc = io.HERACal(output_filename)
+    hc.read()
+    hc.update(flags=data_flags)
     # generate cal object from model to hold model flags.
-    hcm = initialize_from_uvdata(uvdata=hdm, gain_convention='divide', cal_style='sky', metadata_only=False)
+    hcm = UVCal()
+    hcm = hcm.initialize_from_uvdata(uvdata=hdm, gain_convention='divide', cal_style='sky',
+                                     ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
+                                     metadata_only=False, sky_field=field_str, cal_type='gain')
+    hcm.write_calfits(output_filename + '.tmp')
+    hcm = io.HERACal(output_filename + '.tmp')
+    hcm.read()
+    hcm.update(flags=model_flags)
     # init all gains to unity.
     hcm.gain_array[:] = 1. + 0.j
     hc.gain_array[:] = 1. + 0.j
+    hc.flag_array = hc.flag_array | hcm.flag_array
 
-    abscal_gains, abscal_flags, _, _ = hc.read()
-    _, model_flags, _, _ = hcm.read()
-
-    # make sure that any flags in the model file are also included in final flags.
-    for k in abscal_flags:
-        abscal_flags[k] = abscal_flags[k] | model_flags[k]
-
-    hc.update(flags=abscal_flags)
-    hcm.update(flags=abscal_flags)
+    abscal_gains, abscal_flags, _, _ = hc.build_calcontainers()
 
     # load in weights if supplied.
     if auto_file is not None:
+        hda = io.HERAData(auto_file)
         bls = [ap for ap in hda.get_antpairs() if ap[0] == ap[1]]
         auto_data, auto_flags, auto_nsamples = hda.read(bls=bls)
         data, data_flags, data_nsamples = hdd.read()
@@ -3756,22 +3778,21 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     else:
         wgts = None
 
-    hdd.read()
-    hdm.read()
     # select refant if not specified.
     if refant is None:
         refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs, per_pol=True)
+    hc.ref_antenna_name = str(refant)
+    hcm.ref_antenna_name = str(refant)
 
     for iter in range(iterations):
         abscal = AbsCal(data=hdd, model=hdm, wgts=wgts)
         abscal.amp_logcal()
         abscal.phs_logcal()
-        abscal_gains_iteration = DataContainer({})
+        abscal_gains_iteration = {}
         for k in abscal.ant_eta_gain:
             abscal_gains_iteration[k] = abscal.ant_eta_gain[k] * abscal.ant_phi_gain[k]
-        #phase to refant.
+        # phase to refant.
         rephase_to_refant(abscal_gains_iteration, refant, flags=abscal_flags, propagate_refant_flags=True)
-
         # update abscal gains with iteration.
         for k in abscal_gains:
             abscal_gains[k] = abscal_gains[k] * abscal_gains_iteration[k]
@@ -3779,12 +3800,14 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         # use hcm to apply iteration gains.
         hcm.update(gains=abscal_gains_iteration)
 
-        #apply iteration gains to data
+        # apply iteration gains to data
         uvcalibrate(hdd, hcm)
 
     # update the calibration array.
-    hc.update(gains=abscal_gain)
+    hc.update(gains=abscal_gains)
     hc.write_calfits(output_filename, clobber=clobber)
+    # cleanup temp file
+    os.remove(output_filename + '.tmp')
 
 
 def post_redcal_abscal_argparser():
@@ -3814,6 +3837,7 @@ def post_redcal_abscal_argparser():
     args = a.parse_args()
     return args
 
+
 def model_calibration_argparser():
     '''Argparser for commandline operation of run_model_based_calibration'''
     a = argparse.ArgumentParser(description="Command-line drive script for model based calibration")
@@ -3824,4 +3848,3 @@ def model_calibration_argparser():
     a.add_argument("--clobber", default=False, action="store_true", help="overwrite output calfits if it already exists.")
     a.add_argument("--iterations", default=1, type=int, help="number of calibration rounds to run.")
     a.add_argument("--refant", default=None, help="Reference antenna. If non specified, then will automatically select a refant.")
-    
