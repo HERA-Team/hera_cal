@@ -3695,7 +3695,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
 
 def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None,
-                                inflate_model_by_redundancy=False,
+                                inflate_model_by_redundancy=False, constrain_model_to_data_ants=False,
                                 clobber=False, iterations=1, refant=None, ant_threshold=0.0,
                                 verbose=False):
     """Driver function for model based calibration including i/o
@@ -3719,6 +3719,13 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         default is False.
         Should be set to True if a redundant model is supplied or bad things
         will happen!
+    constrain_model_to_data_ants: bool, optional
+        before inflating by redundancy, downselect array antennas in model to only
+        include antennas in the data. This avoids inflating model to full HERA array
+        which is memory inefficient for analyses using a small fraction of the array
+        but will break if the redundant baselines are keyed to antennas that are not
+        present in the data so only use this if you are confident that this is the case.
+        default is False.
     clobber: bool, optional
         overwrite outputs if True.
     iterations: int, optional
@@ -3740,11 +3747,15 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     _, data_flags, _ = hdd.read()
     hdm.read()
     if inflate_model_by_redundancy:
-        # In order to avoid inflating to full interferometer dataset
-        # which will be unecessary for many earlier analyses
-        # prune model antennas to only include data antennas in hdd
-        hdm.select(antenna_nums=np.unique(np.hstack([hdd.ant_1_array, hdd.ant_2_array])),
-                   keep_all_metadata=False)
+        if constrain_model_to_data_ants:
+            # In order to avoid inflating to full interferometer dataset
+            # which will be unecessary for many earlier analyses
+            # prune model antennas to only include data antennas in hdd
+            # this will only work if theantennas in the baseline keys for each redundant group
+            # in the model are also present in the dataset so only use this if you are confident
+            # that this is the case.
+            hdm.select(antenna_nums=np.unique(np.hstack([hdd.ant_1_array, hdd.ant_2_array])),
+                       keep_all_metadata=False)
         hdm.inflate_by_redundancy()
         # also make sure to only include baselines present in hdd.
         hdm.select(bls=hdd.bls)
@@ -3870,5 +3881,11 @@ def model_calibration_argparser():
     ap.add_argument("--clobber", default=False, action="store_true", help="overwrite output calfits if it already exists.")
     ap.add_argument("--iterations", default=1, type=int, help="number of calibration rounds to run.")
     ap.add_argument("--inflate_model_by_redundancy", default=False, action="store_true", help="If redundant model file is provided, inflate it!")
+    ap.add_argument("--constrain_model_to_data_ants", default=False, action="store_true", help=("before inflating by redundancy, downselect array antennas in model to only \
+                                                                                                 include antennas in the data. This avoids inflating model to full HERA array \
+                                                                                                 which is memory inefficient for analyses using a small fraction of the array \
+                                                                                                 but will break if the redundant baselines are keyed to antennas that are not \
+                                                                                                 present in the data so only use this if you are confident that this is the case. \
+                                                                                                 Default is False.")
     ap.add_argument("--verbose", default=False, action="store_true", help="lots of outputs.")
     return ap
