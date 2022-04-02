@@ -3754,7 +3754,10 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
             # this will only work if theantennas in the baseline keys for each redundant group
             # in the model are also present in the dataset so only use this if you are confident
             # that this is the case.
-            hdm.select(antenna_nums=np.unique(np.hstack([hdd.ant_1_array, hdd.ant_2_array])),
+            all_data_ants = np.unique(np.hstack([hdd.ant_1_array, hdd.ant_2_array]))
+            all_model_ants = np.unique(np.hstack([hdm.ant_1_array, hdm.ant_2_array]))
+            assert np.all([ant in all_data_ants for ant in all_model_ants]), "All model antennas must be present in data if constrain_model_to_data_ants is True!"
+            hdm.select(antenna_nums=all_data_ants,
                        keep_all_metadata=False)
         hdm.inflate_by_redundancy()
         # also make sure to only include baselines present in hdd.
@@ -3881,11 +3884,11 @@ def model_calibration_argparser():
     ap.add_argument("--clobber", default=False, action="store_true", help="overwrite output calfits if it already exists.")
     ap.add_argument("--iterations", default=1, type=int, help="number of calibration rounds to run.")
     ap.add_argument("--inflate_model_by_redundancy", default=False, action="store_true", help="If redundant model file is provided, inflate it!")
-    ap.add_argument("--constrain_model_to_data_ants", default=False, action="store_true", help=("before inflating by redundancy, downselect array antennas in model to only \
-                                                                                                 include antennas in the data. This avoids inflating model to full HERA array \
-                                                                                                 which is memory inefficient for analyses using a small fraction of the array \
-                                                                                                 but will break if the redundant baselines are keyed to antennas that are not \
-                                                                                                 present in the data so only use this if you are confident that this is the case. \
-                                                                                                 Default is False.")
+    ap.add_argument("--constrain_model_to_data_ants", default=False, action="store_true", help="before inflating by redundancy, downselect array antennas in model to only \
+                                                                                                include antennas in the data. This avoids inflating model to full HERA array \
+                                                                                                which is memory inefficient for analyses using a small fraction of the array \
+                                                                                                but will break if the redundant baselines are keyed to antennas that are not \
+                                                                                                present in the data so only use this if you are confident that this is the case. \
+                                                                                                Default is False.")
     ap.add_argument("--verbose", default=False, action="store_true", help="lots of outputs.")
     return ap
