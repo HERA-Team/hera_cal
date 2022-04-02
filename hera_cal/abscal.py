@@ -3695,6 +3695,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
 
 def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None,
+                                inflate_model_by_redundancy=False,
                                 clobber=False, iterations=1, refant=None, ant_threshold=0.0,
                                 verbose=False):
     """Driver function for model based calibration including i/o
@@ -3713,6 +3714,11 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     auto_file: str, optional
         path to file containing autocorrelations and nsamples for inverse
         variance weights. Default None -> use binary flag weights in calibration.
+    inflate_model_by_redundancy: bool, optional
+        expand model to match the redundant groups present in data file.
+        default is False.
+        Should be set to True if a redundant model is supplied or bad things
+        will happen!
     clobber: bool, optional
         overwrite outputs if True.
     iterations: int, optional
@@ -3730,8 +3736,20 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hdd = io.HERAData(data_file)
     hdm = io.HERAData(model_file)
 
+    # expand hdm by redundancy
     _, data_flags, _ = hdd.read()
-    _, model_flags, _ = hdm.read()
+    hdm.read()
+    if inflate_model_by_redundancy:
+        # In order to avoid inflating to full interferometer dataset
+        # which will be unecessary for many earlier analyses
+        # prune model antennas to only include data antennas in hdd
+        hdm.select(antenna_nums=np.unique(np.hstack([hdd.ant_1_array, hdd.ant_2_array])),
+                   keep_all_metadata=False)
+        hdm.inflate_by_redundancy()
+        # also make sure to only include baselines present in hdd.
+        hdm.select(bls=hdd.bls)
+
+    _, model_flags, _ = hdm.build_datacontainers()
 
     data_flags = synthesize_ant_flags(data_flags, threshold=ant_threshold)
     model_flags = synthesize_ant_flags(model_flags, threshold=ant_threshold)
@@ -3851,5 +3869,6 @@ def model_calibration_argparser():
     ap.add_argument("--auto_file", type=str, default=None, help="string path to file containing autocorrelations to use as inverse variants weights. If not specified, use uniform weights with flags.")
     ap.add_argument("--clobber", default=False, action="store_true", help="overwrite output calfits if it already exists.")
     ap.add_argument("--iterations", default=1, type=int, help="number of calibration rounds to run.")
+    ap.add_argument("--inflate_model_by_redundancy", default=False, action="store_true", help="If redundant model file is provided, inflate it!")
     ap.add_argument("--verbose", default=False, action="store_true", help="lots of outputs.")
     return ap
