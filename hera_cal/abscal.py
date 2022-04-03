@@ -3824,9 +3824,9 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     else:
         # if no autocorrelation file supplied, use nsamples weights times
         # or of data and model flags
-        wgts = DataContainer({k: (~data_flags[k]).astype(np.float64) \
-                                * (~model_flags[k]).astype(np.float64) \
-                                * data_nsamples[k] for k in data_flags})
+        wgts = DataContainer({k: (~data_flags[k]).astype(np.float64)
+                             * (~model_flags[k]).astype(np.float64)
+                             * data_nsamples[k] for k in data_flags})
 
     # select refant if not specified.
     if refant is None:
@@ -3856,6 +3856,11 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
 
     # update the calibration array.
     hc.update(gains=abscal_gains)
+
+    # multiply gains by precal gains
+    if precalibration_gain_file is not None:
+        hc.gain_array *= uvc_precal.gain_array
+
     hc.write_calfits(output_filename, clobber=clobber)
     # cleanup temp file
     os.remove(output_filename + '.tmp')
