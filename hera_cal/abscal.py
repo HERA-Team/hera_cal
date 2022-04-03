@@ -3746,13 +3746,14 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hdd = io.HERAData(data_file)
     hdm = io.HERAData(model_file)
 
-    _, data_flags, _ = hdd.read()
+    data, data_flags, data_nsamples = hdd.read()
 
     if precalibration_gain_file is not None:
-        uvc_precal = UVCal()
-        uvc_precal.read_calfits(precalibration_gain_file)
+        uvc_precal = io.HERACal(precalibration_gain_file)
+        gains_precal, flags_precal, _, _ = uvc_precal.read()
         # apply precal gains to data
-        uvcalibrate(hdd, uvc_precal)
+        calibrate_in_place(data=data, data_flags=data_flags,
+                           new_gains=gains_precal, cal_flags=flags_precal)
 
     # expand hdm by redundancy
     hdm.read()
@@ -3773,10 +3774,10 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         # also make sure to only include baselines present in hdd.
         hdm.select(bls=hdd.bls)
 
-    _, model_flags, _ = hdm.build_datacontainers()
+    model, model_flags, model_nsamples = hdm.read()
 
-    data_flags = synthesize_ant_flags(data_flags, threshold=ant_threshold)
-    model_flags = synthesize_ant_flags(model_flags, threshold=ant_threshold)
+    data_ant_flags = synthesize_ant_flags(data_flags, threshold=ant_threshold)
+    model_ant_flags = synthesize_ant_flags(model_flags, threshold=ant_threshold)
 
     lst_center = hdd.lsts[hdd.Ntimes // 2] * 12 / np.pi
     field_str = 'LST={lst_center:%.2f} hrs'
@@ -3794,7 +3795,7 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hc.write_calfits(output_filename, clobber=clobber)
     hc = io.HERACal(output_filename)
     hc.read()
-    hc.update(flags=data_flags)
+    hc.update(flags=data_ant_flags)
     # generate cal object from model to hold model flags.
     hcm = UVCal()
     hcm = hcm.initialize_from_uvdata(uvdata=hdm, gain_convention='divide', cal_style='sky',
@@ -3803,10 +3804,11 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hcm.write_calfits(output_filename + '.tmp')
     hcm = io.HERACal(output_filename + '.tmp')
     hcm.read()
-    hcm.update(flags=model_flags)
+    hcm.update(flags=model_ant_flags)
     # init all gains to unity.
     hcm.gain_array[:] = 1. + 0.j
     hc.gain_array[:] = 1. + 0.j
+    # set calibration flags to be or of data and model flags
     hc.flag_array = hc.flag_array | hcm.flag_array
 
     abscal_gains, abscal_flags, _, _ = hc.build_calcontainers()
@@ -3816,13 +3818,15 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         hda = io.HERAData(auto_file)
         bls = [ap for ap in hda.get_antpairs() if ap[0] == ap[1]]
         auto_data, auto_flags, auto_nsamples = hda.read(bls=bls)
-        data, data_flags, data_nsamples = hdd.read()
-        model, model_flags, model_nsamples = hdm.read()
         # generate wgts from autocorrelations
         wgts = build_data_wgts(data_flags=data_flags, data_nsamples=data_nsamples, model_flags=model_flags,
                                autocorrs=auto_data, auto_flags=auto_flags)
     else:
-        wgts = None
+        # if no autocorrelation file supplied, use nsamples weights times
+        # or of data and model flags
+        wgts = DataContainer({k: (~data_flags[k]).astype(np.float64) \
+                                * (~model_flags[k]).astype(np.float64) \
+                                * data_nsamples[k] for k in data_flags})
 
     # select refant if not specified.
     if refant is None:
@@ -3830,8 +3834,8 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hc.ref_antenna_name = str(refant)
     hcm.ref_antenna_name = str(refant)
 
-    abscal = AbsCal(data=hdd, model=hdm, wgts=wgts)
-    
+    abscal = AbsCal(data=data, model=model, wgts=wgts)
+
     for iter in range(iterations):
         abscal.amp_logcal(verbose=verbose)
         abscal.phs_logcal(verbose=verbose)
@@ -3847,8 +3851,8 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         # use hcm to apply iteration gains.
         hcm.update(gains=abscal_gains_iteration)
 
-        # apply iteration gains to data
-        uvcalibrate(hdd, hcm)
+        # apply iteration gains to abscal.data
+        apply_cal.calibrate_in_place(data=abscal.data, new_gains=abscal_gains_iteration)
 
     # update the calibration array.
     hc.update(gains=abscal_gains)

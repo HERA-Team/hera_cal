@@ -941,9 +941,11 @@ class Test_AbsCal(object):
 
         precal_fname = os.path.join(tmppath, 'test_precal.calfits')
 
-        uvc_precal = hc.initialize_from_uvdata(uvdata=hd, gain_convention='divide', cal_style='sky',
-                                               ref_antenna_name=(0, 'Jnn'), sky_catalog='The Library of Congress.',
-                                               metadata_only=False, sky_field='The Fields of Athenry', cal_type='gain')
+        # precalibration test gain (with unity gains).
+        uvc_precal = UVCal()
+        uvc_precal = uvc_precal.initialize_from_uvdata(uvdata=hd, gain_convention='divide', cal_style='sky',
+                                                       ref_antenna_name='Amadeus', sky_catalog='The Library of Congress.',
+                                                       metadata_only=False, sky_field='The Fields of Athenry', cal_type='gain')
         uvc_precal.gain_array[:] = 1. + 0j
         uvc_precal.write_calfits(precal_fname)
 
@@ -962,7 +964,7 @@ class Test_AbsCal(object):
 
         # Now run abscal run
         cal_fname = os.path.join(tmppath, 'test_cal.calfits')
-        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname,
+        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname, iterations=np.random.randint(low=1, high=10),
                                            output_filename=cal_fname, clobber=True, precalibration_gain_file=precal_fname)
         # check that gains equal to 1/sqrt(scale_factor)
         hc = io.HERACal(cal_fname)
@@ -970,7 +972,7 @@ class Test_AbsCal(object):
         for k in gains:
             np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
         # include auto_file and specify referance antenna.
-        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname, auto_file=data_fname,
+        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname, auto_file=data_fname, iterations=np.random.randint(low=1, high=10),
                                            output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'), precalibration_gain_file=precal_fname)
         # check that gains equal to1/sqrt(scale_factor)
         hc = io.HERACal(cal_fname)
@@ -1005,7 +1007,7 @@ class Test_AbsCal(object):
 
         # use inflated redundant model.
         abscal.run_model_based_calibration(data_file=red_data_fname, model_file=red_model_fname,
-                                           auto_file=red_data_fname,
+                                           auto_file=red_data_fname, iterations=np.random.randint(low=1, high=10),
                                            output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'),
                                            inflate_model_by_redundancy=True, precalibration_gain_file=precal_fname)
 
