@@ -3694,7 +3694,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     return hc
 
 
-def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None,
+def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None, precalibration_gain_file=None,
                                 inflate_model_by_redundancy=False, constrain_model_to_data_ants=False,
                                 clobber=False, iterations=1, refant=None, ant_threshold=0.0,
                                 verbose=False):
@@ -3714,6 +3714,9 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     auto_file: str, optional
         path to file containing autocorrelations and nsamples for inverse
         variance weights. Default None -> use binary flag weights in calibration.
+    precalibration_gain_file: str, optional
+        Path to a gain file to apply to data before running calibration
+        default is None.
     inflate_model_by_redundancy: bool, optional
         expand model to match the redundant groups present in data file.
         default is False.
@@ -3743,15 +3746,22 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hdd = io.HERAData(data_file)
     hdm = io.HERAData(model_file)
 
-    # expand hdm by redundancy
     _, data_flags, _ = hdd.read()
+
+    if precalibration_gain_file is not None:
+        uvc_precal = UVCal()
+        uvc_precal.read_calfits(precalibration_gain_file)
+        # apply precal gains to data
+        uvcalibrate(hdd, uvc_precal)
+
+    # expand hdm by redundancy
     hdm.read()
     if inflate_model_by_redundancy:
         if constrain_model_to_data_ants:
             # In order to avoid inflating to full interferometer dataset
             # which will be unecessary for many earlier analyses
             # prune model antennas to only include data antennas in hdd
-            # this will only work if theantennas in the baseline keys for each redundant group
+            # this will only work if the antennas in the baseline keys for each redundant group
             # in the model are also present in the dataset so only use this if you are confident
             # that this is the case.
             all_data_ants = np.unique(np.hstack([hdd.ant_1_array, hdd.ant_2_array]))
@@ -3820,8 +3830,9 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hc.ref_antenna_name = str(refant)
     hcm.ref_antenna_name = str(refant)
 
+    abscal = AbsCal(data=hdd, model=hdm, wgts=wgts)
+    
     for iter in range(iterations):
-        abscal = AbsCal(data=hdd, model=hdm, wgts=wgts)
         abscal.amp_logcal(verbose=verbose)
         abscal.phs_logcal(verbose=verbose)
         abscal_gains_iteration = {}
@@ -3890,5 +3901,7 @@ def model_calibration_argparser():
                                                                                                 but will break if the redundant baselines are keyed to antennas that are not \
                                                                                                 present in the data so only use this if you are confident that this is the case. \
                                                                                                 Default is False.")
+    ap.add_argument("--precalibration_gain_file", default=None, type=str, help="Path to a gain file to apply to data before running calibration \
+                                                                                default is None.")
     ap.add_argument("--verbose", default=False, action="store_true", help="lots of outputs.")
     return ap
