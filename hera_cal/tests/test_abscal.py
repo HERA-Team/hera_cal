@@ -964,15 +964,26 @@ class Test_AbsCal(object):
 
         # Now run abscal run
         cal_fname = os.path.join(tmppath, 'test_cal.calfits')
-        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname, iterations=np.random.randint(low=1, high=10),
+        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname,
                                            output_filename=cal_fname, clobber=True, precalibration_gain_file=precal_fname)
         # check that gains equal to 1/sqrt(scale_factor)
         hc = io.HERACal(cal_fname)
         gains, gain_flags, _, _ = hc.read()
         for k in gains:
             np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
+
+        # Now run abscal run with dly_lincal
+        cal_fname = os.path.join(tmppath, 'test_cal.calfits')
+        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname, dly_lincal=True,
+                                           output_filename=cal_fname, clobber=True, precalibration_gain_file=precal_fname)
+        # check that gains equal to 1/sqrt(scale_factor)
+        hc = io.HERACal(cal_fname)
+        gains, gain_flags, _, _ = hc.read()
+        for k in gains:
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
+
         # include auto_file and specify referance antenna.
-        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname, auto_file=data_fname, iterations=np.random.randint(low=1, high=10),
+        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname, auto_file=data_fname,
                                            output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'), precalibration_gain_file=precal_fname)
         # check that gains equal to1/sqrt(scale_factor)
         hc = io.HERACal(cal_fname)
@@ -1007,7 +1018,7 @@ class Test_AbsCal(object):
 
         # use inflated redundant model.
         abscal.run_model_based_calibration(data_file=red_data_fname, model_file=red_model_fname,
-                                           auto_file=red_data_fname, iterations=np.random.randint(low=1, high=10),
+                                           auto_file=red_data_fname,
                                            output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'), constrain_model_to_data_ants=True,
                                            inflate_model_by_redundancy=True, precalibration_gain_file=precal_fname)
 

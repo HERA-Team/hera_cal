@@ -3696,7 +3696,9 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
 def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None, precalibration_gain_file=None,
                                 inflate_model_by_redundancy=False, constrain_model_to_data_ants=False,
-                                clobber=False, iterations=1, refant=None, ant_threshold=0.0,
+                                clobber=False, tol=1e-6, max_iter=10,
+                                refant=None, ant_threshold=0.0, no_ampcal=False, no_phscal=False,
+                                dly_lincal=False,
                                 verbose=False):
     """Driver function for model based calibration including i/o
 
@@ -3731,15 +3733,26 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         default is False.
     clobber: bool, optional
         overwrite outputs if True.
-    iterations: int, optional
-        number of times to perform logcal.
-        default is 1
+    tol: float, optional
+        perform calibration loop until differences in gain solutions are at this level.
+    max_iter: int, optional
+        maximum number of iterations to perform
+        default is 10
     refant: tuple, optional
         referance antenna in form of (antnum, polstr).
         Default is None -> automatically select a refant.
     ant_threshold: float, optional
         threshold of flags in frequency and time for a given antenna to completely
         flag this antenna rom calibration.
+    no_ampcal: bool, optional
+        skip amplitude calibration (only calibrate phases)
+        default is False.
+    no_phscal: bool, optional
+        skip phase calibration (only calibrate amplitudes)
+        default is False.
+    dly_lincal: bool, optional
+        perform initial delay calibration before abscal
+        default is False.
     verbose: bool, optional
         lots of outputs.
     """
@@ -3834,25 +3847,53 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hc.ref_antenna_name = str(refant)
     hcm.ref_antenna_name = str(refant)
 
-    abscal = AbsCal(data=data, model=model, wgts=wgts)
+    abscal = AbsCal(data=data, model=model, wgts=wgts, freqs=data.freqs)
 
-    for iter in range(iterations):
-        abscal.amp_logcal(verbose=verbose)
-        abscal.phs_logcal(verbose=verbose)
-        abscal_gains_iteration = {}
+    delta = 9e99
+
+    abscal_gains_iteration = {}
+
+    # find initial starting point with lincal before performing abscal.
+    if dly_lincal:
+        abscal.delay_lincal()
+        for k in abscal_gains:
+            abscal_gains_iteration[k] = abscal.ant_dly_phi_gain[k] * abscal.ant_dly_gain[k]
+        apply_cal.calibrate_in_place(data=abscal.data, new_gains=abscal_gains_iteration)
+        for k in abscal_gains:
+            abscal_gains[k] *= abscal_gains_iteration[k]
+
+    niter = 0
+    while delta > tol and niter < max_iter:
+        if not no_ampcal:
+            abscal.amp_logcal(verbose=verbose)
+        if not no_phscal:
+            abscal.phs_logcal(verbose=verbose)
         for k in abscal.ant_eta_gain:
-            abscal_gains_iteration[k] = abscal.ant_eta_gain[k] * abscal.ant_phi_gain[k]
+            abscal_gains_iteration[k] = np.ones_like(abscal_gains[k])
+            if not no_ampcal:
+                abscal_gains_iteration[k] *= abscal.ant_eta_gain[k]
+            if not no_phscal:
+                abscal_gains_iteration[k] *= abscal.ant_phi_gain[k]
         # phase to refant.
         rephase_to_refant(abscal_gains_iteration, refant, flags=abscal_flags, propagate_refant_flags=True)
         # update abscal gains with iteration.
+        abscal_gains_new = {k: abscal_gains[k] * abscal_gains_iteration[k] for k in abscal_gains}
+        delta = np.max([np.max(np.abs(abscal_gains_new[k][np.invert(abscal_flags[k])]\
+                        - abscal_gains[k][np.invert(abscal_flags[k])])) for k in abscal_gains])
+
         for k in abscal_gains:
-            abscal_gains[k] = abscal_gains[k] * abscal_gains_iteration[k]
+            abscal_gains[k] = abscal_gains_new[k]
 
         # use hcm to apply iteration gains.
         hcm.update(gains=abscal_gains_iteration)
 
         # apply iteration gains to abscal.data
         apply_cal.calibrate_in_place(data=abscal.data, new_gains=abscal_gains_iteration)
+        niter += 1
+        if delta <= tol:
+            echo(f"Convergence achieved after {niter} iterations with max delta of {delta}", verbose=verbose)
+        if niter == max_iter - 1 and delta > tol:
+            echo(f"Convergence not achieved but max_iter of {max_iter} reached. delta={delta}.", verbose=verbose)
 
     # update the calibration array.
     hc.update(gains=abscal_gains)
@@ -3902,7 +3943,7 @@ def model_calibration_argparser():
     ap.add_argument("output_filename", type=str, help="string path to output calfits file to store gains.")
     ap.add_argument("--auto_file", type=str, default=None, help="string path to file containing autocorrelations to use as inverse variants weights. If not specified, use uniform weights with flags.")
     ap.add_argument("--clobber", default=False, action="store_true", help="overwrite output calfits if it already exists.")
-    ap.add_argument("--iterations", default=1, type=int, help="number of calibration rounds to run.")
+    ap.add_argument("--tol", default=1e-6, type=float, help="number of calibration rounds to run.")
     ap.add_argument("--inflate_model_by_redundancy", default=False, action="store_true", help="If redundant model file is provided, inflate it!")
     ap.add_argument("--constrain_model_to_data_ants", default=False, action="store_true", help="before inflating by redundancy, downselect array antennas in model to only \
                                                                                                 include antennas in the data. This avoids inflating model to full HERA array \
@@ -3913,4 +3954,7 @@ def model_calibration_argparser():
     ap.add_argument("--precalibration_gain_file", default=None, type=str, help="Path to a gain file to apply to data before running calibration \
                                                                                 default is None.")
     ap.add_argument("--verbose", default=False, action="store_true", help="lots of outputs.")
+    ap.add_argument("--no_ampcal", default=False, action="store_true", help="disable amp_cal")
+    ap.add_argument("--no_phscal", default=False, aciton="store_true", help="disable phs_cal")
+    ap.add_argument("--dly_cal", default=False, action="store_true", help="dly lincal to find starting point.")
     return ap
