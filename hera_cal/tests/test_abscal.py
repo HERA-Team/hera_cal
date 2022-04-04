@@ -1036,7 +1036,7 @@ class Test_AbsCal(object):
         assert args.model_file == 'b'
         assert args.output_filename == 'c'
         assert args.auto_file == 'd'
-        assert args.iterations == 1
+        assert args.tol == 1e-6
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
