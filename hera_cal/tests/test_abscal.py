@@ -1008,7 +1008,7 @@ class Test_AbsCal(object):
         # use inflated redundant model.
         abscal.run_model_based_calibration(data_file=red_data_fname, model_file=red_model_fname,
                                            auto_file=red_data_fname, iterations=np.random.randint(low=1, high=10),
-                                           output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'),
+                                           output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'), constrain_model_to_data_ants=True,
                                            inflate_model_by_redundancy=True, precalibration_gain_file=precal_fname)
 
         # check that gains equal to1/sqrt(scale_factor)
