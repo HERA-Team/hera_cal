@@ -3878,7 +3878,7 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         rephase_to_refant(abscal_gains_iteration, refant, flags=abscal_flags, propagate_refant_flags=True)
         # update abscal gains with iteration.
         abscal_gains_new = {k: abscal_gains[k] * abscal_gains_iteration[k] for k in abscal_gains}
-        delta = np.max([np.max(np.abs(abscal_gains_new[k][np.invert(abscal_flags[k])]\
+        delta = np.max([np.max(np.abs(abscal_gains_new[k][np.invert(abscal_flags[k])]
                         - abscal_gains[k][np.invert(abscal_flags[k])])) for k in abscal_gains])
 
         for k in abscal_gains:
