@@ -778,7 +778,7 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
-    def freq_filter(self, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1, maxiter=100, **win_kwargs):
+    def freq_filter(self, filter_scale=10.0, tol=1e-09, skip_wgt=0.1, mode='clean', maxiter=100, **filter_kwargs):
         '''Frequency-filter stored calibration solutions on a given scale in MHz.
 
         Arguments:
@@ -791,17 +791,17 @@ class CalibrationSmoother():
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 gains are left unchanged and self.wgts and self.flag_grids are set to 0 and True,
                 respectively. Only works properly when all weights are all between 0 and 1.
-            maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
-            win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
-                    Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
+            mode: str, optional
+                specify whether to use 'clean' or 'dpss_leastsq' filtering of gains.
+            filter_kwargs : any keyword arguments for uvtools.dspec.fourier_filter.
         '''
         # Loop over all antennas and perform a low-pass delay filter on gains
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
             wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
             self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
-                                                     filter_scale=filter_scale, tol=tol, window=window,
-                                                     skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
+                                                     filter_scale=filter_scale, tol=tol, mode=mode,
+                                                     skip_wgt=skip_wgt, maxiter=maxiter, **filter_kwargs)
             # flag all channels for any time that triggers the skip_wgt
             for i in info['status']['axis_1']:
                 if info['status']['axis_1'][i] == 'skipped':
