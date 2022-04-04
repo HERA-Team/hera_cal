@@ -234,20 +234,20 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 if data_in_bin[k]:
                     # if index not in data[key], insert it as empty list
                     if ind not in data[key]:
-                        data[key][ind] = []
-                        flags[key][ind] = []
-                        nsamples[key][ind] = []
+                        data[key][ind] = np.empty((0, Nfreqs), dtype=d[key].dtype)
+                        flags[key][ind] = np.empty((0, Nfreqs), dtype=bool)
+                        nsamples[key][ind] = np.empty((0, Nfreqs), dtype=np.int8)
                     # append data ndarray to LST bin
-                    data[key][ind].append(d[key][k])
+                    data[key][ind] = np.vstack((data[key][ind], d[key][k]))
                     # also insert flags if fed
                     if flags_list is None:
-                        flags[key][ind].append(np.zeros_like(d[key][k], np.bool))
+                        flags[key][ind] = np.vstack((flags[key][ind], np.zeros_like(d[key][k], dtype=bool)))
                     else:
-                        flags[key][ind].append(flags_list[i][key][k])
+                        flags[key][ind] = np.vstack((flags[key][ind], flags_list[i][key][k]))
                     if nsamples_list is None:
-                        nsamples[key][ind].append(np.ones_like(d[key][k], np.int8))
+                        nsamples[key][ind] = np.vstack((nsamples[key][ind], np.ones_like(d[key][k], dtype=np.int8)))
                     else:
-                        nsamples[key][ind].append(nsamples_list[i][key][k])
+                        nsamples[key][ind] = np.vstack((nsamples[key][ind], nsamples_list[i][key][k]))
 
         # add in spoofed baselines to keep baselines in different LST files consistent.
         if bl_list is not None:
@@ -256,9 +256,10 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     key = antpair + (pol,)
                     if key not in data and ((key[0] != key[1] and utils.reverse_bl(key) not in data) or key[0] == key[1]):
                         # last part lets us spoof ne and en for autocorrs. If we dont include it, only en xor ne will be spoofed.
-                        nsamples[key] = odict({ind: [] for ind in range(len(lst_grid))})
-                        data[key] = odict({ind: [] for ind in range(len(lst_grid))})
-                        flags[key] = odict({ind: [] for ind in range(len(lst_grid))})
+                        # using int8 and complex64 to allow numpy to promote the precision of these arrays only if needed
+                        nsamples[key] = odict({ind: np.empty((0, Nfreqs), dtype=np.int8) for ind in range(len(lst_grid))})
+                        data[key] = odict({ind: np.empty((0, Nfreqs), dtype=np.complex64) for ind in range(len(lst_grid))})
+                        flags[key] = odict({ind: np.empty((0, Nfreqs), dtype=bool) for ind in range(len(lst_grid))})
 
                     # Since different nights have different sets of baselines and different LST bins have different sets of nights,
                     # it is possible to get a baseline that appears in a subset of the LSTs within an LST chunk
@@ -267,13 +268,13 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     # The following lines address this case.
                     for ind in range(len(lst_grid)):
                         if ind not in nsamples[key]:
-                            nsamples[key][ind] = []
-                            flags[key][ind] = []
-                            data[key][ind] = []
+                            nsamples[key][ind] = np.empty((0, Nfreqs), dtype=np.int8)
+                            flags[key][ind] = np.empty((0, Nfreqs), dtype=bool)
+                            data[key][ind] = np.empty((0, Nfreqs), dtype=np.complex64)
                         if len(nsamples[key][ind]) == 0:
-                            nsamples[key][ind].append(np.zeros(Nfreqs, np.int8))
-                            flags[key][ind].append(np.ones(Nfreqs, dtype=bool))
-                            data[key][ind].append(np.zeros(Nfreqs, dtype=complex))
+                            nsamples[key][ind] = np.vstack((nsamples[key][ind], np.zeros(Nfreqs, dtype=np.int8)))
+                            flags[key][ind] = np.vstack((flags[key][ind], np.ones(Nfreqs, dtype=bool)))
+                            data[key][ind] = np.vstack((data[key][ind], np.zeros(Nfreqs, dtype=np.complex64)))
 
     # get final lst_bin array
     if truncate_empty:
@@ -289,9 +290,9 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     # fill data with blank data
                     # if the index is not present.
                     if index not in data[key]:
-                        data[key][index] = [np.zeros(Nfreqs, np.complex)]
-                        flags[key][index] = [np.ones(Nfreqs, np.bool)]
-                        nsamples[key][index] = [np.zeros(Nfreqs, np.int8)]
+                        data[key][index] = np.array([np.zeros(Nfreqs, dtype=np.complex64)])
+                        flags[key][index] = np.array([np.ones(Nfreqs, dtype=np.bool)])
+                        nsamples[key][index] = np.array([np.zeros(Nfreqs, dtype=np.int8)])
 
         # use all LST bins
         lst_bins = lst_grid
@@ -367,7 +368,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
             if len(f) == 1:
                 flag_bin = np.zeros(f.shape[1], np.bool)
             else:
-                flag_bin = np.sum(f, axis=0).astype(np.float) / len(f) > flag_thresh
+                flag_bin = np.sum(f, axis=0).astype(float) / len(f) > flag_thresh
             d[:, flag_bin] *= np.nan
             f[:, flag_bin] = True
 
@@ -407,7 +408,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         d_avg = np.array(real_avg) + 1j * np.array(imag_avg)
         f_min = np.array(f_min)
         d_std = np.array(real_std) + 1j * np.array(imag_std)
-        d_num = np.array(bin_count).astype(np.float)
+        d_num = np.array(bin_count).astype(float)
 
         # fill nans
         d_nan = np.isnan(d_avg)
@@ -814,8 +815,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                         if np.all([j not in list(bl_nightly_dict.keys()) for bl_nightly_dict in blgroup]):
                             utils.echo(f"The current night {j} is not present in any of the baseline dicts in the current blgroup.", verbose=verbose)
                         continue
-                    data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
-                    data.phase_type = 'drift'
 
                     # load calibration
                     if input_cals is not None:
@@ -951,7 +950,7 @@ def make_lst_grid(dlst, begin_lst=None, verbose=True):
     # check 2pi is equally divisible by dlst
     if not np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5) and not np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5):
         # generate array of appropriate dlsts
-        dlsts = 2 * np.pi / np.arange(1, 1000000).astype(np.float)
+        dlsts = 2 * np.pi / np.arange(1, 1000000).astype(float)
 
         # get dlsts closest to dlst, but also greater than dlst
         dlst_diff = dlsts - dlst
