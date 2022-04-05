@@ -987,5 +987,6 @@ def smooth_cal_argparser():
                           Only used when the filtering method is 'DPSS'")
     flt_opts.add_argument("--skip_flagged_edges", type=str, default=False, help="if True, do not filter over flagged edge times/freqs (filter over sub-region).\
                           Only used when method used is 'DPSS'")
+    flt_opts.add_argument("--axis", default="both", type=str, help="smooth either in 'freq', or 'both' (time and freq) axes.")
     args = a.parse_args()
     return args
