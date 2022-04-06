@@ -155,6 +155,8 @@ def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, 
         # Fringe-rate filter based on max_frate_coeffs
         assert max_frate_coeffs is not None, "max_frate_coeffs must be provided if case='max_frate_coeffs'."
         frate_half_widths = {k: np.max([max_frate_coeffs[0] * np.abs(blvecs[k[:2]][0]) + max_frate_coeffs[1], 0.0]) for k in keys}
+        # impose min_frate_half_width and max_frate_half_width
+        frate_half_widths = {k: np.max([min_frate_half_width, np.min([max_frate_half_width, frate_half_widths[k]])]) for k in keys}
         frate_centers = {k: 0.0 for k in keys}
     elif case == 'frate_profiles':
         # Fringe-rate filter based on frate_profiles
