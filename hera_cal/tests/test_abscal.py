@@ -1340,7 +1340,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         for pol in ['Jee', 'Jnn']:
             assert pol in ac_total_qual
             assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
-            assert np.issubdtype(ac_total_qual[pol].dtype, floating)
+            assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
 
         # test redundant model and full data
         with warnings.catch_warnings():
@@ -1377,7 +1377,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         for pol in ['Jee', 'Jnn']:
             assert pol in ac_total_qual
             assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
-            assert np.issubdtype(ac_total_qual[pol].dtype, floating)
+            assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
 
         # test redundant model and redundant data
         with warnings.catch_warnings():
@@ -1417,7 +1417,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         for pol in ['Jee', 'Jnn']:
             assert pol in ac_total_qual
             assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
-            assert np.issubdtype(ac_total_qual[pol].dtype, floating)
+            assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
 
         # compare all 3 versions
         g1, f1, q1, tq1 = hca.build_calcontainers()
