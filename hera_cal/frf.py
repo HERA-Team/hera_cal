@@ -63,7 +63,8 @@ def _get_key_reds(antpos, keys):
     return reds
 
 
-def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
+def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, 
+                         min_frate_half_width=0.025, max_frate_half_width=np.inf,
                          max_frate_coeffs=None, uvb=None, frate_profiles=None, percentile_low=5.0, percentile_high=95.0,
                          fr_freq_skip=1, nfr=None, dfr=None, verbose=False):
     """
@@ -93,6 +94,9 @@ def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, 
     min_frate_half_width: float, optional
         minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
         Default is 0.025
+    max_frate_half_width: float, optional
+        maximum half-width of fringe-rate filter, regardless of baseline length in mHz.
+        Default is np.inf, i.e. no limit
     keys: list of visibilities to filter in the (i,j,pol) format.
         If None (the default), all visibilities are filtered.
     max_frate_coeffs, 2-tuple float
@@ -144,11 +148,15 @@ def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, 
     if case == 'sky':
         # Fringe-rate filter all modes that could be occupied by sky emission.
         frate_centers, frate_half_widths = sky_frates(uvd, keys=keys, frate_standoff=frate_standoff,
-                                                      frate_width_multiplier=frate_width_multiplier, min_frate_half_width=min_frate_half_width)
+                                                      frate_width_multiplier=frate_width_multiplier, 
+                                                      min_frate_half_width=min_frate_half_width,
+                                                      max_frate_half_width=max_frate_half_width)
     elif case == 'max_frate_coeffs':
         # Fringe-rate filter based on max_frate_coeffs
         assert max_frate_coeffs is not None, "max_frate_coeffs must be provided if case='max_frate_coeffs'."
         frate_half_widths = {k: np.max([max_frate_coeffs[0] * np.abs(blvecs[k[:2]][0]) + max_frate_coeffs[1], 0.0]) for k in keys}
+        # impose min_frate_half_width and max_frate_half_width
+        frate_half_widths = {k: np.max([min_frate_half_width, np.min([max_frate_half_width, frate_half_widths[k]])]) for k in keys}
         frate_centers = {k: 0.0 for k in keys}
     elif case == 'frate_profiles':
         # Fringe-rate filter based on frate_profiles
@@ -156,7 +164,8 @@ def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, 
         frate_centers, frate_half_widths = get_fringe_rate_limits(uvd, nfr=nfr, dfr=dfr, percentile_low=percentile_low,
                                                                   percentile_high=percentile_high, keys=keys, verbose=verbose, frate_standoff=frate_standoff,
                                                                   fr_freq_skip=fr_freq_skip, frate_width_multiplier=frate_width_multiplier,
-                                                                  min_frate_half_width=min_frate_half_width, frate_profiles=frate_profiles)
+                                                                  min_frate_half_width=min_frate_half_width, max_frate_half_width=max_frate_half_width,
+                                                                  frate_profiles=frate_profiles)
     elif case == 'uvbeam':
         # Fringe-rate filter based on the instantanous fringe-rates on uvbeam object.
         assert uvb is not None, "uvb must be provided iv case='uvbeam'."
@@ -167,6 +176,7 @@ def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, 
                                                                   frate_standoff=frate_standoff, fr_freq_skip=fr_freq_skip,
                                                                   frate_width_multiplier=frate_width_multiplier,
                                                                   min_frate_half_width=min_frate_half_width,
+                                                                  max_frate_half_width=max_frate_half_width,
                                                                   frate_profiles=frate_profiles)
     return frate_centers, frate_half_widths
 
@@ -424,8 +434,8 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
 
 
 def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5., percentile_high=95., keys=None,
-                           dfr=None, nfr=None, taper='none', frate_standoff=0.0,
-                           frate_width_multiplier=1.0, min_frate_half_width=0.025,
+                           dfr=None, nfr=None, taper='none', frate_standoff=0.0, frate_width_multiplier=1.0,
+                           min_frate_half_width=0.025, max_frate_half_width=np.inf,
                            fr_freq_skip=1, verbose=False):
     """
     Get bounding fringe-rates for isotropic emission for a UVBeam object across all frequencies.
@@ -474,6 +484,9 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     min_frate_half_width: float, optional
         minimum fringe-rate width to filter, regardless of baseline length in mHz.
         Default is 0.025
+    max_frate_half_width: float, optional
+        maximum half-width of fringe-rate filter, regardless of baseline length in mHz.
+        Default is np.inf, i.e. no limit
     fr_freq_skip: int, optional
         bin fringe rates from every freq_skip channels.
         default is 1 -> takes a long time. We recommend setting this to be larger.
@@ -539,6 +552,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
                 frate_centers[bl] = .5 * (frlows[cnum] + frhighs[cnum])
                 frate_half_widths[bl] = .5 * np.abs(frlows[cnum] - frhighs[cnum]) * frate_width_multiplier + frate_standoff
                 frate_half_widths[bl] = np.max([frate_half_widths[bl], min_frate_half_width])
+                frate_half_widths[bl] = np.min([frate_half_widths[bl], max_frate_half_width])
 
     return frate_centers, frate_half_widths
 
@@ -1244,6 +1258,8 @@ def tophat_frfilter_argparser(mode='clean'):
                                                                       "Used of select_mainlobe is False and max_frate_coeffs not specified.")
     ap.add_argument("--min_frate_half_width", type=float, default=0.025, help="minimum half-width of fringe-rate filter, regardless of baseline length in mHz."
                                                                               "Default is 0.025.")
+    ap.add_argument("--max_frate_half_width", type=float, default=np.inf, help="maximum half-width of fringe-rate filter, regardless of baseline length in mHz."
+                                                                               "Default is np.inf, i.e. no limit.")
     ap.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
                                                                                   "Providing these overrides the sky-based fringe-rate determination! Default is None.")
     ap.add_argument("--skip_autos", default=False, action="store_true", help="Exclude autos from filtering.")
@@ -1280,7 +1296,8 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                                    flag_yaml=None, skip_autos=False, beamfitsfile=None, verbose=False,
                                    clean_flags_in_resid_flags=True, read_axis=None,
                                    percentile_low=5., percentile_high=95.,
-                                   frate_standoff=0.0, frate_width_multiplier=1.0, min_frate_half_width=0.025,
+                                   frate_standoff=0.0, frate_width_multiplier=1.0,
+                                   min_frate_half_width=0.025, max_frate_half_width=np.inf,
                                    max_frate_coeffs=None, fr_freq_skip=1,
                                    **filter_kwargs):
     '''
@@ -1352,6 +1369,9 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
         min_frate_half_width: float, optional
             minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
             Default is 0.025
+        max_frate_half_width: float, optional
+            maximum half-width of fringe-rate filter, regardless of baseline length in mHz.
+            Default is np.inf, i.e. no limit
         max_frate_coeffs, 2-tuple float
             Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * | EW_bl_len | [ m ] + x2."
             Providing these overrides the sky-based fringe-rate determination! Default is None.
@@ -1420,6 +1440,7 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                                                                         frate_standoff=frate_standoff,
                                                                         frate_width_multiplier=frate_width_multiplier,
                                                                         min_frate_half_width=min_frate_half_width,
+                                                                        max_frate_half_width=max_frate_half_width,
                                                                         max_frate_coeffs=max_frate_coeffs,
                                                                         percentile_low=percentile_low,
                                                                         percentile_high=percentile_high,

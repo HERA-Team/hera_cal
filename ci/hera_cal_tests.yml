@@ -5,9 +5,9 @@ channels:
 dependencies:
   - pip
   - aipy>=3.0.0rc2
-  - astropy>=3.2.3
-  - h5py<=3.2
-  - numpy>=1.10
+  - astropy>=5.0.4
+  - h5py
+  - numpy>=1.20
   - pytest
   - scipy
   - scikit-learn
