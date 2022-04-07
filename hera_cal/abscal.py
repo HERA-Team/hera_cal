@@ -1292,9 +1292,9 @@ def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
     keys = list(data.keys())
 
     # sort keys across key_index
-    key_sort = np.argsort(np.array(keys, dtype=np.object)[:, key_index])
+    key_sort = np.argsort(np.array(keys, dtype=object)[:, key_index])
     keys = list(map(lambda i: keys[i], key_sort))
-    popped_keys = np.unique(np.array(keys, dtype=np.object)[:, key_index])
+    popped_keys = np.unique(np.array(keys, dtype=object)[:, key_index])
 
     # get new keys
     new_keys = list(map(lambda k: k[:key_index] + k[key_index + 1:], keys))
