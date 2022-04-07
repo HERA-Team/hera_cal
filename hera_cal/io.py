@@ -145,7 +145,7 @@ class HERACal(UVCal):
                 for ant in antenna_nums:
                     if ant not in my_ants:
                         warnings.warn(f"Warning, antenna {ant} not present in calibration solution. Skipping!")
-                antenna_nums = intersect1d(my_ants, antenna_nums)
+                antenna_nums = np.intersect1d(my_ants, antenna_nums)
             select_dict = {'antenna_nums': antenna_nums, 'frequencies': frequencies,
                            'freq_chans': freq_chans, 'jones': pols}
             if np.any([s is not None for s in select_dict.values()]):
