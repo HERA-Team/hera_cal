@@ -776,7 +776,7 @@ class VisClean(object):
         wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
         # convert max_frate to DataContainer
         if max_frate is not None:
-            if isinstance(max_frate, (int, np.integer, float, float)):
+            if isinstance(max_frate, (int, integer, float, float)):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
             if not isinstance(max_frate, DataContainer):
                 raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
@@ -1106,7 +1106,7 @@ class VisClean(object):
                     xp[1] = xp[1][spw_slice]
                     if not isinstance(zeropad, (list, tuple)) or not len(zeropad) == 2:
                         raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
-                    if not (isinstance(zeropad[0], (int, np.int)) and isinstance(zeropad[0], (int, np.int))):
+                    if not (isinstance(zeropad[0], (int, int)) and isinstance(zeropad[0], (int, int))):
                         raise ValueError("zeropad values must all be integers. You provided %s" % (zeropad))
                     for m in range(2):
                         if zeropad[m] > 0:
@@ -1159,7 +1159,7 @@ class VisClean(object):
                     if skip_flagged_edges:
                         _adjust_info_indices(xp, info, edges, spw_range[0])
                 # flag integrations and channels that were skipped.
-                skipped = np.zeros_like(mdl, dtype=np.bool)
+                skipped = np.zeros_like(mdl, dtype=bool)
                 # this is not the correct thing to do for 2d filtering.
                 # For 2d filter, only look at time-axis skips.
                 # for 1d filter look at both time and freq axes.
@@ -1576,7 +1576,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
 
         # generate and apply window
         win = dspec.gen_window(window[i], Nbins, alpha=alpha[i], edgecut_low=edgecut_low[i], edgecut_hi=edgecut_hi[i])
-        wshape = np.ones(data.ndim, dtype=np.int)
+        wshape = np.ones(data.ndim, dtype=int)
         wshape[ax] = Nbins
         win.shape = tuple(wshape)
         data *= win
@@ -1721,7 +1721,7 @@ def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
         padded_bvals : bin array(s) padded (or un-padded) if binvals is fed, otherwise None
     """
     # get data type
-    bool_dtype = np.issubdtype(data.dtype, np.bool_)
+    bool_dtype = np.issubdtype(data.dtype, bool_)
 
     # type checks
     if not isinstance(axis, (list, tuple, np.ndarray)):
@@ -1750,7 +1750,7 @@ def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
                 zshape = list(data.shape)
                 zshape[ax] = zeropad[i]
                 if bool_dtype:
-                    z = np.ones(zshape, np.bool)
+                    z = np.ones(zshape, bool)
                 else:
                     z = np.zeros(zshape, data.dtype)
                 data = np.concatenate([z, data, z], axis=ax)

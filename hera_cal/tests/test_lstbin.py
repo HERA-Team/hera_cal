@@ -102,7 +102,7 @@ class Test_lstbin(object):
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
                                 verbose=False)
         # check shape and dtype
-        assert output[1][(24, 25, 'ee')].dtype == np.complex
+        assert output[1][(24, 25, 'ee')].dtype == complex
         assert output[1][(24, 25, 'ee')].shape == (224, 64)
         # check number of points in each bin
         assert np.allclose(output[-1][(24, 25, 'ee')].real[0, 30], 1)

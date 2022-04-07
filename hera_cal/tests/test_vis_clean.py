@@ -967,7 +967,7 @@ class Test_VisClean(object):
         freqs = np.linspace(120e6, 180e6, 768)
         for k in V.data:
             V.data[k] = interpolate.interp1d(V.freqs, V.data[k], axis=1, fill_value='extrapolate', kind='cubic')(freqs)
-            V.flags[k] = np.zeros_like(V.data[k], dtype=np.bool)
+            V.flags[k] = np.zeros_like(V.data[k], dtype=bool)
         V.freqs = freqs
         # the old unit test was using the wrong dnu (for the original frequencies) which means that it was actually cleaning
         # out to 1250 ns. I've fixed this dnu bug and used a larger min_dly below.
@@ -983,7 +983,7 @@ class Test_VisClean(object):
         V.data[k] += noise.sky_noise_jy(V.lsts, V.freqs / 1e9, omega_p=Op, integration_time=50, autovis=V.data[(23, 23, 'ee')])
 
         # add lots of random flags
-        f = np.zeros(V.Nfreqs, dtype=np.bool)[None, :]
+        f = np.zeros(V.Nfreqs, dtype=bool)[None, :]
         f[:, 127:156] = True
         f[:, 300:303] = True
         f[:, 450:455] = True

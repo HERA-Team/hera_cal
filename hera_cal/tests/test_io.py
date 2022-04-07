@@ -909,9 +909,9 @@ class Test_Calibration_IO_Legacy(object):
         for i, p in enumerate(pols):
             total_qual[p] = np.ones((Ntimes, Nfreqs), float)
             for j, a in enumerate(ants):
-                gains[(a, p)] = np.ones((Ntimes, Nfreqs), np.complex)
+                gains[(a, p)] = np.ones((Ntimes, Nfreqs), complex)
                 quality[(a, p)] = np.ones((Ntimes, Nfreqs), float) * 2
-                flags[(a, p)] = np.zeros((Ntimes, Nfreqs), np.bool)
+                flags[(a, p)] = np.zeros((Ntimes, Nfreqs), bool)
 
         # set some terms to zero
         gains[(5, 'Jnn')][20:30] *= 0

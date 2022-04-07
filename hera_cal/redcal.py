@@ -645,7 +645,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
         # wgts_u hold the wgts the user provides.  dwgts_u is what is actually used to wgt the data
         wgts_u = {k: (v * np.ones(chisq.shape, dtype=np.float32))[update].flatten() for k, v in self.wgts.items()}
         sol_u = {k: v[update].flatten() for k, v in sol.items()}
-        iters = np.zeros(chisq.shape, dtype=np.int)
+        iters = np.zeros(chisq.shape, dtype=int)
         conv = np.ones_like(chisq)
         for i in range(1, maxiter + 1):
             if verbose:
@@ -1167,7 +1167,7 @@ class RedundantCalibrator:
             else:  # '4pol_minV'
                 return 2 + 1 + nPhaseSlopes  # 4pol_minV ties overall phase together, so just 1 overall phase
         else:
-            dummy_data = DataContainer({bl: np.ones((1, 1), dtype=np.complex) for red in self.reds for bl in red})
+            dummy_data = DataContainer({bl: np.ones((1, 1), dtype=complex) for red in self.reds for bl in red})
             solver = self._solver(linsolve.LogProductSolver, dummy_data)
             return np.sum([A.shape[1] - np.linalg.matrix_rank(np.dot(np.squeeze(A).T, np.squeeze(A)))
                            for A in [solver.ls_amp.get_A(), solver.ls_phs.get_A()]])
@@ -1207,7 +1207,7 @@ def predict_chisq_per_bl(reds):
             value of chi^2 = |Vij - gigj*Vi-j|^2/sigmaij^2.
     '''
     bls = [bl for red in reds for bl in red]
-    dummy_data = DataContainer({bl: np.ones((1, 1), dtype=np.complex) for bl in bls})
+    dummy_data = DataContainer({bl: np.ones((1, 1), dtype=complex) for bl in bls})
     rc = RedundantCalibrator(reds)
     solver = rc._solver(linsolve.LogProductSolver, dummy_data)
 

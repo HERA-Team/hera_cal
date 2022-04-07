@@ -674,7 +674,7 @@ def get_sun_alt(jds, latitude=-30.721526120689507, longitude=21.428303826863015)
     """
     # type check
     array = True
-    if isinstance(jds, (float, float, np.float64, int, np.int, np.int32)):
+    if isinstance(jds, (float, float, np.float64, int, int, np.int32)):
         jds = [jds]
         array = False
 
@@ -1068,7 +1068,7 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
 
     # get flags
     if flags is None:
-        flags = np.zeros_like(y, dtype=np.bool)
+        flags = np.zeros_like(y, dtype=bool)
 
     # thin x-axis if desired
     if xthin is not None:
@@ -1248,7 +1248,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             flags = copy.deepcopy(flags)
             nsamples = copy.deepcopy(nsamples)
         if flags is None:
-            flags = datacontainer.DataContainer({k: np.zeros_like(data[k], np.bool) for k in data})
+            flags = datacontainer.DataContainer({k: np.zeros_like(data[k], bool) for k in data})
         if nsamples is None:
             nsamples = datacontainer.DataContainer({k: np.ones_like(data[k], float) for k in data})
 

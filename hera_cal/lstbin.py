@@ -176,7 +176,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         grid_indices = np.digitize(li, lst_grid_left[1:], right=True)
 
         # make data_in_bin boolean array, and set to False data that don't fall in any bin
-        data_in_bin = np.ones_like(li, np.bool)
+        data_in_bin = np.ones_like(li, bool)
         data_in_bin[(li < lst_grid_left.min() - atol)] = False
         data_in_bin[(li > lst_grid_left.max() + dlst + atol)] = False
 
@@ -236,7 +236,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     if ind not in data[key]:
                         data[key][ind] = np.empty((0, Nfreqs), dtype=d[key].dtype)
                         flags[key][ind] = np.empty((0, Nfreqs), dtype=bool)
-                        nsamples[key][ind] = np.empty((0, Nfreqs), dtype=np.int8)
+                        nsamples[key][ind] = np.empty((0, Nfreqs), dtype=int8)
                     # append data ndarray to LST bin
                     data[key][ind] = np.vstack((data[key][ind], d[key][k]))
                     # also insert flags if fed
@@ -245,7 +245,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     else:
                         flags[key][ind] = np.vstack((flags[key][ind], flags_list[i][key][k]))
                     if nsamples_list is None:
-                        nsamples[key][ind] = np.vstack((nsamples[key][ind], np.ones_like(d[key][k], dtype=np.int8)))
+                        nsamples[key][ind] = np.vstack((nsamples[key][ind], np.ones_like(d[key][k], dtype=int8)))
                     else:
                         nsamples[key][ind] = np.vstack((nsamples[key][ind], nsamples_list[i][key][k]))
 
@@ -257,7 +257,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     if key not in data and ((key[0] != key[1] and utils.reverse_bl(key) not in data) or key[0] == key[1]):
                         # last part lets us spoof ne and en for autocorrs. If we dont include it, only en xor ne will be spoofed.
                         # using int8 and complex64 to allow numpy to promote the precision of these arrays only if needed
-                        nsamples[key] = odict({ind: np.empty((0, Nfreqs), dtype=np.int8) for ind in range(len(lst_grid))})
+                        nsamples[key] = odict({ind: np.empty((0, Nfreqs), dtype=int8) for ind in range(len(lst_grid))})
                         data[key] = odict({ind: np.empty((0, Nfreqs), dtype=np.complex64) for ind in range(len(lst_grid))})
                         flags[key] = odict({ind: np.empty((0, Nfreqs), dtype=bool) for ind in range(len(lst_grid))})
 
@@ -268,11 +268,11 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     # The following lines address this case.
                     for ind in range(len(lst_grid)):
                         if ind not in nsamples[key]:
-                            nsamples[key][ind] = np.empty((0, Nfreqs), dtype=np.int8)
+                            nsamples[key][ind] = np.empty((0, Nfreqs), dtype=int8)
                             flags[key][ind] = np.empty((0, Nfreqs), dtype=bool)
                             data[key][ind] = np.empty((0, Nfreqs), dtype=np.complex64)
                         if len(nsamples[key][ind]) == 0:
-                            nsamples[key][ind] = np.vstack((nsamples[key][ind], np.zeros(Nfreqs, dtype=np.int8)))
+                            nsamples[key][ind] = np.vstack((nsamples[key][ind], np.zeros(Nfreqs, dtype=int8)))
                             flags[key][ind] = np.vstack((flags[key][ind], np.ones(Nfreqs, dtype=bool)))
                             data[key][ind] = np.vstack((data[key][ind], np.zeros(Nfreqs, dtype=np.complex64)))
 
@@ -291,8 +291,8 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     # if the index is not present.
                     if index not in data[key]:
                         data[key][index] = np.array([np.zeros(Nfreqs, dtype=np.complex64)])
-                        flags[key][index] = np.array([np.ones(Nfreqs, dtype=np.bool)])
-                        nsamples[key][index] = np.array([np.zeros(Nfreqs, dtype=np.int8)])
+                        flags[key][index] = np.array([np.ones(Nfreqs, dtype=bool)])
+                        nsamples[key][index] = np.array([np.zeros(Nfreqs, dtype=int8)])
 
         # use all LST bins
         lst_bins = lst_grid
@@ -366,7 +366,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
 
             # check thresholds for flagging entire output LST bins
             if len(f) == 1:
-                flag_bin = np.zeros(f.shape[1], np.bool)
+                flag_bin = np.zeros(f.shape[1], bool)
             else:
                 flag_bin = np.sum(f, axis=0).astype(float) / len(f) > flag_thresh
             d[:, flag_bin] *= np.nan
@@ -688,7 +688,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
 
     # select file_lsts
     if output_file_select is not None:
-        if isinstance(output_file_select, (int, np.integer)):
+        if isinstance(output_file_select, (int, integer)):
             output_file_select = [output_file_select]
         output_file_select = [int(o) for o in output_file_select]
         try:

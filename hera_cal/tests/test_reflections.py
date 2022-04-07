@@ -57,14 +57,14 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
 
     # form cable gains
     if add_cable:
-        if isinstance(cdelay, (float, float, int, np.int)):
+        if isinstance(cdelay, (float, float, int, int)):
             cdelay = [cdelay]
-        if isinstance(camp, (float, float, int, np.int)):
+        if isinstance(camp, (float, float, int, int)):
             camp = [camp]
-        if isinstance(cphase, (float, float, int, np.int)):
+        if isinstance(cphase, (float, float, int, int)):
             cphase = [cphase]
 
-        cable_gains = dict([(k, np.ones((uvd.Ntimes, uvd.Nfreqs), dtype=np.complex)) for k in uvd.antenna_numbers])
+        cable_gains = dict([(k, np.ones((uvd.Ntimes, uvd.Nfreqs), dtype=complex)) for k in uvd.antenna_numbers])
 
         for ca, cd, cp in zip(camp, cdelay, cphase):
             cg = hs.sigchain.gen_reflection_gains(freqs / 1e9, cable_ants, amp=[ca for a in cable_ants],

@@ -228,7 +228,7 @@ class ReflectionFitter(FRFilter):
         """
         # get flags
         if clean_flags is None:
-            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_resid[k], dtype=np.bool)) for k in clean_resid]))
+            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_resid[k], dtype=bool)) for k in clean_resid]))
 
         # get keys: only use auto correlations and auto pols to model reflections
         if keys is None:
@@ -278,9 +278,9 @@ class ReflectionFitter(FRFilter):
                 for p in autopols:
                     k = (a, split_pol(p)[0])
                     if k not in self.ref_gains:
-                        self.ref_gains[k] = np.ones_like(self.ref_gains[antpol], dtype=np.complex)
+                        self.ref_gains[k] = np.ones_like(self.ref_gains[antpol], dtype=complex)
                     if k not in self.ref_flags:
-                        self.ref_flags[k] = np.zeros_like(self.ref_flags[antpol], dtype=np.bool)
+                        self.ref_flags[k] = np.zeros_like(self.ref_flags[antpol], dtype=bool)
 
     def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs, ref_flags=None,
                                 keys=None, clean_flags=None, clean_model=None, fix_amp=False,
@@ -346,7 +346,7 @@ class ReflectionFitter(FRFilter):
         """
         # check inputs
         if clean_flags is None:
-            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_data[k], dtype=np.bool)) for k in clean_data]))
+            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_data[k], dtype=bool)) for k in clean_data]))
         if clean_model is None:
             clean_model = DataContainer(dict([(k, np.zeros_like(clean_data[k])) for k in clean_data]))
 
@@ -561,7 +561,7 @@ class ReflectionFitter(FRFilter):
         """
         # get flags
         if flags is None:
-            flags = DataContainer(dict([(k, np.zeros_like(dfft[k], dtype=np.bool)) for k in dfft]))
+            flags = DataContainer(dict([(k, np.zeros_like(dfft[k], dtype=bool)) for k in dfft]))
 
         # get weights
         if wgts is None:
@@ -866,7 +866,7 @@ class ReflectionFitter(FRFilter):
             keys = list(umodes.keys())
 
         # parse gp_frate
-        if isinstance(gp_frate, (int, np.integer, float, float)):
+        if isinstance(gp_frate, (int, integer, float, float)):
             gp_frate = DataContainer(dict([(k, gp_frate) for k in umodes.keys()]))
 
         # setup X predict
@@ -1294,7 +1294,7 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
         raise ValueError("Can't hold amp, dly and phs fixed")
 
     # create delay range
-    if isinstance(dly_range, (int, np.int, float, float)):
+    if isinstance(dly_range, (int, int, float, float)):
         dly_range = [dly_range, dly_range]
     dly_range = (np.nanmedian(dly0) - np.abs(dly_range[0]), np.nanmedian(dly0) + np.abs(dly_range[1]))
 

@@ -81,10 +81,10 @@ def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
     # edgeflag
     if edgeflag is not None:
         if flags is None:
-            flags = np.zeros_like(data, np.bool)
+            flags = np.zeros_like(data, bool)
         else:
             flags = copy.deepcopy(flags)
-        if isinstance(edgeflag, (int, np.int, float, float)):
+        if isinstance(edgeflag, (int, int, float, float)):
             edgeflag = (edgeflag, edgeflag)
         assert len(edgeflag) == 2
         if edgeflag[0] > 0:
@@ -165,7 +165,7 @@ def avg_gain_ants(gains, antkeys, gflags=None, inplace=True):
 
     # get gflags
     if gflags is None:
-        gflags = dict([(k, np.zeros_like(gains[k], np.bool)) for k in gains])
+        gflags = dict([(k, np.zeros_like(gains[k], bool)) for k in gains])
 
     # iterate over antenna lists
     gkeys = [k for k in antkeys if k in gains]
