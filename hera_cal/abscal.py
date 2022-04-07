@@ -1246,7 +1246,7 @@ def merge_gains(gains, merge_shared=True):
 
     # determine if gains or flags from first entry in gains
     fedflags = False
-    if gains[0][list(gains[0].keys())[0]].dtype == bool_:
+    if gains[0][list(gains[0].keys())[0]].dtype == np.bool_:
         fedflags = True
 
     # iterate over keys
