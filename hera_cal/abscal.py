@@ -102,7 +102,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True, return_gains=False, gai
     if wgts is None:
         wgts = odict()
         for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(ydata[k], dtype=np.float)
+            wgts[k] = np.ones_like(ydata[k], dtype=float)
 
     # fill nans and infs
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
@@ -200,7 +200,7 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True, return_gains=False, gai
     if wgts is None:
         wgts = odict()
         for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(data[k], dtype=np.float)
+            wgts[k] = np.ones_like(data[k], dtype=float)
 
     # fill nans and infs, minimally duplicating data to save memory
     data_here = {}
@@ -358,7 +358,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True,
 
     # make unit weights if None
     if wgts is None:
-        wgts = {k: np.ones_like(ydata[k], dtype=np.float) for k in keys}
+        wgts = {k: np.ones_like(ydata[k], dtype=float) for k in keys}
 
     # fill nans and infs
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
@@ -471,7 +471,7 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     if wgts is None:
         wgts = odict()
         for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(ydata[k], dtype=np.float)
+            wgts[k] = np.ones_like(ydata[k], dtype=float)
 
     # fill nans and infs
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
@@ -540,7 +540,7 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     if wgts is None:
         wgts = odict()
         for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(ydata[k], dtype=np.float)
+            wgts[k] = np.ones_like(ydata[k], dtype=float)
 
     # fill nans and infs
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
@@ -634,7 +634,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solv
     if wgts is None:
         wgts = odict()
         for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(data[k], dtype=np.float)
+            wgts[k] = np.ones_like(data[k], dtype=float)
 
     # median filter and FFT to get delays
     ratio_delays = []
@@ -800,7 +800,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
     # make unit wgts if None
     if wgts is None:
-        wgts = {k: np.ones_like(data[k], dtype=np.float) for k in keys}
+        wgts = {k: np.ones_like(data[k], dtype=float) for k in keys}
 
     # center antenna positions about the reference antenna
     if refant is None:
@@ -1099,7 +1099,7 @@ def global_phase_slope_logcal(model, data, antpos, reds=None, solver='linfit', w
     if wgts is None:
         wgts = odict()
         for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(data[k], dtype=np.float)
+            wgts[k] = np.ones_like(data[k], dtype=float)
     flags = DataContainer({k: ~wgts[k].astype(np.bool) for k in wgts})
 
     # center antenna positions about the reference antenna
@@ -1122,7 +1122,7 @@ def global_phase_slope_logcal(model, data, antpos, reds=None, solver='linfit', w
             reds_here.append(red_here)
     avg_data, avg_flags, _ = utils.red_average(data, reds=reds_here, flags=flags, inplace=False)
     red_keys = list(avg_data.keys())
-    avg_wgts = DataContainer({k: (~avg_flags[k]).astype(np.float) for k in avg_flags})
+    avg_wgts = DataContainer({k: (~avg_flags[k]).astype(float) for k in avg_flags})
     avg_model, _, _ = utils.red_average(model, reds=reds_here, flags=flags, inplace=False)
 
     ls_data, ls_wgts, bl_vecs, pols = {}, {}, {}, {}
@@ -1504,7 +1504,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
     # ensure flags are booleans
     if flags is not None:
-        if np.issubdtype(flags[list(flags.keys())[0]].dtype, np.floating):
+        if np.issubdtype(flags[list(flags.keys())[0]].dtype, floating):
             flags = DataContainer(odict(list(map(lambda k: (k, ~flags[k].astype(np.bool)), flags.keys()))))
 
     # loop over keys
@@ -1531,8 +1531,8 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
             l_indices = mod_L[flags[k]]
 
             # construct fill arrays
-            real_fill = np.empty(len(f_indices), np.float)
-            imag_fill = np.empty(len(f_indices), np.float)
+            real_fill = np.empty(len(f_indices), float)
+            imag_fill = np.empty(len(f_indices), float)
 
             # iterate over flagged data and replace w/ medfilt
             for j, (find, tind) in enumerate(zip(f_indices, l_indices)):
@@ -1576,7 +1576,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
         if flags is not None:
             f = flags[k][time_nn, freq_nn]
             # check f is boolean type
-            if np.issubdtype(f.dtype, np.floating):
+            if np.issubdtype(f.dtype, floating):
                 f = ~(f.astype(np.bool))
         else:
             f = np.zeros_like(real, bool)
@@ -1734,7 +1734,7 @@ class Baseline(object):
         tol : tolerance for baseline length comparison in meters
         """
         self.label = "{:06.1f}:{:06.1f}:{:06.1f}".format(float(bl[0]), float(bl[1]), float(bl[2]))
-        self.bl = np.array(bl, dtype=np.float)
+        self.bl = np.array(bl, dtype=float)
         self.tol = tol
 
     def __repr__(self):
@@ -1869,7 +1869,7 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     pols = np.unique(list(map(lambda k: k[2], data.keys())))
     ants = np.unique(np.concatenate(keys))
     if wgts is None:
-        wgts = DataContainer(odict(list(map(lambda k: (k, np.ones_like(data[k]).astype(np.float)), data.keys()))))
+        wgts = DataContainer(odict(list(map(lambda k: (k, np.ones_like(data[k]).astype(float)), data.keys()))))
 
     # get redundant baselines if not provided
     if reds is None:
@@ -1897,9 +1897,9 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
 
         # get wgts
         if broadcast_wgts:
-            w = np.array(reduce(operator.mul, list(map(lambda k: wgts[k], bl_group))), np.float) ** (1. / len(bl_group))
+            w = np.array(reduce(operator.mul, list(map(lambda k: wgts[k], bl_group))), float) ** (1. / len(bl_group))
         else:
-            w = np.array(reduce(operator.add, list(map(lambda k: wgts[k], bl_group))), np.float) / len(bl_group)
+            w = np.array(reduce(operator.add, list(map(lambda k: wgts[k], bl_group))), float) / len(bl_group)
 
         # iterate over bl_group
         for j, key in enumerate(sorted(bl_group)):
@@ -2254,12 +2254,12 @@ class AbsCal(object):
         if wgts is None:
             # use data flags if present
             if 'flags' in locals() and flags is not None:
-                wgts = DataContainer(dict([(k, (~flags[k]).astype(np.float)) for k in self.keys]))
+                wgts = DataContainer(dict([(k, (~flags[k]).astype(float)) for k in self.keys]))
             else:
-                wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=np.float)) for k in self.keys]))
+                wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=float)) for k in self.keys]))
             if 'model_flags' in locals():
                 for k in self.keys:
-                    wgts[k] *= (~model_flags[k]).astype(np.float)
+                    wgts[k] *= (~model_flags[k]).astype(float)
         self.wgts = wgts
 
         # setup ants
@@ -3309,7 +3309,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
     wgts = {}
     for bl in data_flags:
         dt = (np.median(np.ediff1d(times_by_bl[bl[:2]])) * 86400.)
-        wgts[bl] = (data_nsamples[bl] * (~data_flags[bl]) * (~model_flags[bl])).astype(np.float)
+        wgts[bl] = (data_nsamples[bl] * (~data_flags[bl]) * (~model_flags[bl])).astype(float)
 
         if not np.all(wgts[bl] == 0.0):
             # use autocorrelations to produce weights
@@ -3443,7 +3443,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     apply_cal.calibrate_in_place(data, gains_here)
 
     # Abscal Step 2: Global Delay Slope Calibration
-    binary_wgts = DataContainer({bl: (data_wgts[bl] > 0).astype(np.float) for bl in data_wgts})
+    binary_wgts = DataContainer({bl: (data_wgts[bl] > 0).astype(float) for bl in data_wgts})
     df = np.median(np.diff(data.freqs))
     for time_avg in [True, False]:  # first use the time-averaged solution to try to avoid false minima
         gains_here = delay_slope_lincal(model, data, idealized_antpos, wgts=binary_wgts, df=df, f0=data.freqs[0], medfilt=True, kernel=kernel,

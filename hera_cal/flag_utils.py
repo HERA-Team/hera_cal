@@ -139,7 +139,7 @@ def synthesize_ant_flags(flags, threshold=0.0):
     # and dictionary of number of flagged visibilities each antenna has (excluding dead ants)
     # per time and freq
     ant_Nvis = {ap: 0 for ap in antpols}
-    ant_Nflag = {ap: np.zeros((Ntimes, Nfreqs), np.float) for ap in antpols}
+    ant_Nflag = {ap: np.zeros((Ntimes, Nfreqs), float) for ap in antpols}
     for (i, j, pol), flags_here in flags.items():
         # get antenna keys
         ap1 = (i, split_pol(pol)[0])
@@ -150,8 +150,8 @@ def synthesize_ant_flags(flags, threshold=0.0):
             ant_Nvis[ap1] += 1
             ant_Nvis[ap2] += 1
             # Add to Nflag count
-            ant_Nflag[ap1] += flags_here.astype(np.float)
-            ant_Nflag[ap2] += flags_here.astype(np.float)
+            ant_Nflag[ap1] += flags_here.astype(float)
+            ant_Nflag[ap2] += flags_here.astype(float)
 
     # iterate over antpols and construct antenna gain dictionaries
     ant_flags = {}
@@ -223,10 +223,10 @@ def factorize_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
 
             # identify fully flagged integrations
             fully_flagged_ints = np.isclose(np.sum(flags, axis=1), Nfreqs, atol=1e-6)
-            unflagged_Ntimes = np.sum(~fully_flagged_ints, dtype=np.float)
+            unflagged_Ntimes = np.sum(~fully_flagged_ints, dtype=float)
 
             # identify channels where flagged fraction exceeds time threshold
-            exceeds_thresh = (np.sum(flags[~fully_flagged_ints, spw1:spw2], axis=0, dtype=np.float)
+            exceeds_thresh = (np.sum(flags[~fully_flagged_ints, spw1:spw2], axis=0, dtype=float)
                               / unflagged_Ntimes > time_thresh)
             exceeds_thresh = np.where(exceeds_thresh)[0]
 

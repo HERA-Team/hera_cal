@@ -40,7 +40,7 @@ class Test_AbsCal_Funcs(object):
         data, flgs = io.load_vis(self.uvd, pop_autos=True)
         wgts = odict()
         for k in flgs.keys():
-            wgts[k] = (~flgs[k]).astype(np.float)
+            wgts[k] = (~flgs[k]).astype(float)
         wgts = DataContainer(wgts)
 
         # configure baselines
@@ -155,7 +155,7 @@ class Test_AbsCal_Funcs(object):
         assert np.allclose(data[(24, 25, 'ee')][30, 30], d[(38, 39, 'ee')][30, 30])
         # test reweighting
         w = abscal.mirror_data_to_red_bls(self.wgts, self.antpos, weights=True)
-        assert w[(24, 25, 'ee')].dtype == np.float
+        assert w[(24, 25, 'ee')].dtype == float
         assert np.allclose(w[(24, 25, 'ee')].max(), 16.0)
 
     def test_flatten(self):
@@ -693,7 +693,7 @@ class Test_AbsCal(object):
         assert self.AC.ant_eta[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_eta_gain[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_eta_arr.shape == (7, 60, 64, 1)
-        assert self.AC.ant_eta_arr.dtype == np.float
+        assert self.AC.ant_eta_arr.dtype == float
         assert self.AC.ant_eta_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_eta_gain_arr.dtype == np.complex
         # test Nones
@@ -711,7 +711,7 @@ class Test_AbsCal(object):
         assert self.AC.ant_phi[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_phi_gain[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_phi_arr.shape == (7, 60, 64, 1)
-        assert self.AC.ant_phi_arr.dtype == np.float
+        assert self.AC.ant_phi_arr.dtype == float
         assert self.AC.ant_phi_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_phi_gain_arr.dtype == np.complex
         assert np.allclose(np.angle(self.AC.ant_phi_gain[(24, 'Jee')]), 0.0)
@@ -739,7 +739,7 @@ class Test_AbsCal(object):
         assert self.AC.ant_dly_phi_arr.shape == (7, 60, 1, 1)
         assert self.AC.ant_dly_phi_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_dly_arr.shape == (7, 60, 1, 1)
-        assert self.AC.ant_dly_arr.dtype == np.float
+        assert self.AC.ant_dly_arr.dtype == float
         assert self.AC.ant_dly_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_dly_gain_arr.dtype == np.complex
         assert np.allclose(np.angle(self.AC.ant_dly_gain[(24, 'Jee')]), 0.0)
@@ -891,7 +891,7 @@ class Test_AbsCal(object):
         data, flgs, ap, a, f, t, l, p = io.load_vis(data_file, return_meta=True)
         wgts = odict()
         for k in flgs.keys():
-            wgts[k] = (~flgs[k]).astype(np.float)
+            wgts[k] = (~flgs[k]).astype(float)
         wgts = DataContainer(wgts)
         # make mock data
         dly_slope = np.array([-1e-9, 2e-9, 0])
@@ -1248,7 +1248,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
         calibrate_in_place(data, rc_gains_subset, data_flags=flags,
                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
-        wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
+        wgts = DataContainer({k: (~flags[k]).astype(float) for k in flags.keys()})
 
         # run function
         with warnings.catch_warnings():
@@ -1340,7 +1340,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         for pol in ['Jee', 'Jnn']:
             assert pol in ac_total_qual
             assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
-            assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
+            assert np.issubdtype(ac_total_qual[pol].dtype, floating)
 
         # test redundant model and full data
         with warnings.catch_warnings():
@@ -1377,7 +1377,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         for pol in ['Jee', 'Jnn']:
             assert pol in ac_total_qual
             assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
-            assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
+            assert np.issubdtype(ac_total_qual[pol].dtype, floating)
 
         # test redundant model and redundant data
         with warnings.catch_warnings():
@@ -1417,7 +1417,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         for pol in ['Jee', 'Jnn']:
             assert pol in ac_total_qual
             assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
-            assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
+            assert np.issubdtype(ac_total_qual[pol].dtype, floating)
 
         # compare all 3 versions
         g1, f1, q1, tq1 = hca.build_calcontainers()

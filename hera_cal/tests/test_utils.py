@@ -233,7 +233,7 @@ class TestFftDly(object):
         # code testing is done in TestFftDly, so just check optional parameters here
         # check reject_edges
         x = np.linspace(0, 10, 101)
-        y = (x - 5)**2 + np.isclose(x, 5.0).astype(np.float)
+        y = (x - 5)**2 + np.isclose(x, 5.0).astype(float)
         # check peak is zeroth bin
         inds, bs, peaks, p = utils.interp_peak(y[None, :], method='quadratic', reject_edges=False)
         assert inds[0] == 0
