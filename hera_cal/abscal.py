@@ -1504,7 +1504,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
     # ensure flags are booleans
     if flags is not None:
-        if np.issubdtype(flags[list(flags.keys())[0]].dtype, floating):
+        if np.issubdtype(flags[list(flags.keys())[0]].dtype, np.floating):
             flags = DataContainer(odict(list(map(lambda k: (k, ~flags[k].astype(bool)), flags.keys()))))
 
     # loop over keys
@@ -1576,7 +1576,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
         if flags is not None:
             f = flags[k][time_nn, freq_nn]
             # check f is boolean type
-            if np.issubdtype(f.dtype, floating):
+            if np.issubdtype(f.dtype, np.floating):
                 f = ~(f.astype(bool))
         else:
             f = np.zeros_like(real, bool)
