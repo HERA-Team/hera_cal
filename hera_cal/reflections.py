@@ -866,7 +866,7 @@ class ReflectionFitter(FRFilter):
             keys = list(umodes.keys())
 
         # parse gp_frate
-        if isinstance(gp_frate, (int, integer, float, float)):
+        if isinstance(gp_frate, (int, np.integer, float, np.floating)):
             gp_frate = DataContainer(dict([(k, gp_frate) for k in umodes.keys()]))
 
         # setup X predict

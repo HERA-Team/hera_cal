@@ -688,7 +688,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
 
     # select file_lsts
     if output_file_select is not None:
-        if isinstance(output_file_select, (int, integer)):
+        if isinstance(output_file_select, (int, np.integer)):
             output_file_select = [output_file_select]
         output_file_select = [int(o) for o in output_file_select]
         try:
