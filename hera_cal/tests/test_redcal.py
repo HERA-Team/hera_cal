@@ -1329,7 +1329,7 @@ class TestRedcalAndAbscal(object):
         d.antpos = antpos
 
         # run redcal
-        cal = om.redundantly_calibrate(d, reds, fc_min_vis_per_ant=fc_min_vis_per_ant)
+        cal = om.redundantly_calibrate(d, reds, fc_min_vis_per_ant=fc_min_vis_per_ant, oc_conv_crit=1e-13, oc_maxiter=5000)
 
         # set up abscal
         d_omnicaled = deepcopy(d)
@@ -1342,7 +1342,7 @@ class TestRedcalAndAbscal(object):
         model.antpos = antpos
         
         # run abscal
-        abscal_delta_gains = abscal.post_redcal_abscal(model, d_omnicaled, wgts, cal['gf_omnical'], verbose=True)
+        abscal_delta_gains = abscal.post_redcal_abscal(model, d_omnicaled, wgts, cal['gf_omnical'], verbose=True, phs_max_iter=200, phs_conv_crit=1e-10)
 
         # evaluate solutions, rephasing to antenna 0 as a reference
         abscal_gains = {ant: cal['g_omnical'][ant] * abscal_delta_gains[ant] for ant in cal['g_omnical']}
