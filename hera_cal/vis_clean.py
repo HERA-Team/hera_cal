@@ -776,7 +776,7 @@ class VisClean(object):
         wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
         # convert max_frate to DataContainer
         if max_frate is not None:
-            if isinstance(max_frate, (int, integer, float, float)):
+            if isinstance(max_frate, (int, np.integer, float, float)):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
             if not isinstance(max_frate, DataContainer):
                 raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
