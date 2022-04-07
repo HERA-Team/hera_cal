@@ -220,7 +220,7 @@ class Test_lstbin(object):
         uv1.read(output_lst_file)
         # assert nsample w.r.t time follows 1-2-3-2-1 pattern
         nsamps = np.mean(uv1.get_nsamples(52, 52, 'ee'), axis=1)
-        expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(22)]).astype(np.float)
+        expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(22)]).astype(float)
         assert np.allclose(nsamps[0:len(expectation)], expectation)
         assert np.allclose(nsamps[len(expectation):], 0)
         os.remove(output_lst_file)

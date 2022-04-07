@@ -515,7 +515,7 @@ class ReflectionFitter(FRFilter):
         """
         wgts = DataContainer({})
         for k in dfft:
-            w = np.ones_like(dfft[k], dtype=np.float)
+            w = np.ones_like(dfft[k], dtype=float)
             # get horizon
             h = np.linalg.norm(self.antpos[k[1]] - self.antpos[k[0]]) / constants.c.value * 1e9 * horizon + standoff
             if min_dly is not None:
@@ -565,7 +565,7 @@ class ReflectionFitter(FRFilter):
 
         # get weights
         if wgts is None:
-            wgts = DataContainer(dict([(k, np.ones_like(dfft[k], dtype=np.float)) for k in dfft]))
+            wgts = DataContainer(dict([(k, np.ones_like(dfft[k], dtype=float)) for k in dfft]))
 
         # get keys
         if keys is None:
@@ -866,7 +866,7 @@ class ReflectionFitter(FRFilter):
             keys = list(umodes.keys())
 
         # parse gp_frate
-        if isinstance(gp_frate, (int, np.integer, float, np.float)):
+        if isinstance(gp_frate, (int, np.integer, float, float)):
             gp_frate = DataContainer(dict([(k, gp_frate) for k in umodes.keys()]))
 
         # setup X predict
@@ -1143,9 +1143,9 @@ def fit_reflection_params(clean_resid, dly_range, freqs, clean_flags=None, clean
 
     # get wgts
     if clean_flags is None:
-        wgts = np.ones_like(clean_resid, dtype=np.float)
+        wgts = np.ones_like(clean_resid, dtype=float)
     else:
-        wgts = (~clean_flags).astype(np.float)
+        wgts = (~clean_flags).astype(float)
 
     # fourier transform
     rfft, delays = vis_clean.fft_data(clean_resid, dnu, wgts=wgts, axis=-1, window=window, alpha=alpha, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, fftshift=True, zeropad=zeropad)
@@ -1287,14 +1287,14 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
     if clean_flags is None:
         clean_wgts = np.ones_like(clean_data)
     else:
-        clean_wgts = (~clean_flags).astype(np.float)
+        clean_wgts = (~clean_flags).astype(float)
     edge_flags = np.isclose(np.mean(clean_wgts, axis=0), 0.0)
     edge_flags[np.argmin(edge_flags):-np.argmin(edge_flags[::-1])] = False
     if fix_amp and fix_dly and fix_phs:
         raise ValueError("Can't hold amp, dly and phs fixed")
 
     # create delay range
-    if isinstance(dly_range, (int, np.int, float, np.float)):
+    if isinstance(dly_range, (int, np.int, float, float)):
         dly_range = [dly_range, dly_range]
     dly_range = (np.nanmedian(dly0) - np.abs(dly_range[0]), np.nanmedian(dly0) + np.abs(dly_range[1]))
 
