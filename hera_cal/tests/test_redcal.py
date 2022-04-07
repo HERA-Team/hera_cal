@@ -1352,7 +1352,7 @@ class TestRedcalAndAbscal(object):
         tgr = {ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]] 
                for ant in true_gains.keys()}
         gain_errors = [agr[ant] - tgr[ant] for ant in tgr if ant[1] == 'Jxx']
-        np.testing.assert_almost_equal(np.abs(gain_errors), 0, decimal=10)
+        np.testing.assert_almost_equal(np.abs(gain_errors), 0, decimal=9)
 
 
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
