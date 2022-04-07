@@ -1721,7 +1721,7 @@ def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
         padded_bvals : bin array(s) padded (or un-padded) if binvals is fed, otherwise None
     """
     # get data type
-    bool_dtype = np.issubdtype(data.dtype, bool_)
+    bool_dtype = np.issubdtype(data.dtype, np.bool_)
 
     # type checks
     if not isinstance(axis, (list, tuple, np.ndarray)):

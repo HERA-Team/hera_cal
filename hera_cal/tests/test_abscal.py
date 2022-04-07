@@ -859,7 +859,7 @@ class Test_AbsCal(object):
         f1 = {(1, 'Jee'): np.zeros(5, bool)}
         f2 = {(1, 'Jee'): np.zeros(5, bool)}
         f3 = abscal.merge_gains([f1, f2])
-        assert f3[(1, 'Jee')].dtype == bool_
+        assert f3[(1, 'Jee')].dtype == np.bool_
         assert not np.any(f3[(1, 'Jee')])
         f2[(1, 'Jee')][:] = True
         f3 = abscal.merge_gains([f1, f2])
