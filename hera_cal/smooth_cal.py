@@ -668,7 +668,7 @@ class CalibrationSmoother():
         # build empty multi-file grids for each antenna's gains and flags (and optionally for cspa)
         self.freqs = self.cal_freqs[self.cals[0]]
         self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
-        self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=np.complex) for ant in self.ants}
+        self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=complex) for ant in self.ants}
         self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
         if load_cspa:
             self.cspa_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=float) for ant in self.ants}

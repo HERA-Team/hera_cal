@@ -101,7 +101,7 @@ class Test_AbsCal_Funcs(object):
         # test smoothing
         d = abscal.wiener(self.data, window=(5, 15), noise=None, medfilt=True, medfilt_kernel=(1, 13))
         assert d[(24, 37, 'ee')].shape == (60, 64)
-        assert d[(24, 37, 'ee')].dtype == np.complex
+        assert d[(24, 37, 'ee')].dtype == complex
         # test w/ noise
         d = abscal.wiener(self.data, window=(5, 15), noise=0.1, medfilt=True, medfilt_kernel=(1, 13))
         assert d[(24, 37, 'ee')].shape == (60, 64)
@@ -111,7 +111,7 @@ class Test_AbsCal_Funcs(object):
         # test as array
         d = abscal.wiener(self.data[(24, 37, 'ee')], window=(5, 15), medfilt=False, array=True)
         assert d.shape == (60, 64)
-        assert d.dtype == np.complex
+        assert d.dtype == complex
 
     def test_Baseline(self):
         # test basic execution
@@ -695,7 +695,7 @@ class Test_AbsCal(object):
         assert self.AC.ant_eta_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_eta_arr.dtype == float
         assert self.AC.ant_eta_gain_arr.shape == (7, 60, 64, 1)
-        assert self.AC.ant_eta_gain_arr.dtype == np.complex
+        assert self.AC.ant_eta_gain_arr.dtype == complex
         # test Nones
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
         assert AC.ant_eta is None
@@ -713,7 +713,7 @@ class Test_AbsCal(object):
         assert self.AC.ant_phi_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_phi_arr.dtype == float
         assert self.AC.ant_phi_gain_arr.shape == (7, 60, 64, 1)
-        assert self.AC.ant_phi_gain_arr.dtype == np.complex
+        assert self.AC.ant_phi_gain_arr.dtype == complex
         assert np.allclose(np.angle(self.AC.ant_phi_gain[(24, 'Jee')]), 0.0)
         self.AC.phs_logcal(verbose=False, avg=True)
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
@@ -741,7 +741,7 @@ class Test_AbsCal(object):
         assert self.AC.ant_dly_arr.shape == (7, 60, 1, 1)
         assert self.AC.ant_dly_arr.dtype == float
         assert self.AC.ant_dly_gain_arr.shape == (7, 60, 64, 1)
-        assert self.AC.ant_dly_gain_arr.dtype == np.complex
+        assert self.AC.ant_dly_gain_arr.dtype == complex
         assert np.allclose(np.angle(self.AC.ant_dly_gain[(24, 'Jee')]), 0.0)
         assert np.allclose(np.angle(self.AC.ant_dly_phi_gain[(24, 'Jee')]), 0.0)
         # test exception
@@ -850,16 +850,16 @@ class Test_AbsCal(object):
         # test merge
         k = (53, 'Jee')
         assert mgains[k].shape == (60, 64)
-        assert mgains[k].dtype == np.complex
+        assert mgains[k].dtype == complex
         assert np.allclose(np.abs(mgains[k][0, 0]), np.abs(self.AC.abs_eta_gain[k] * self.AC.ant_eta_gain[k])[0, 0])
         assert np.allclose(np.angle(mgains[k][0, 0]), np.angle(self.AC.TT_Phi_gain[k] * self.AC.abs_psi_gain[k]
                                                                * self.AC.ant_dly_gain[k] * self.AC.ant_phi_gain[k])[0, 0])
 
         # test merge of flag dictionaries
-        f1 = {(1, 'Jee'): np.zeros(5, np.bool)}
-        f2 = {(1, 'Jee'): np.zeros(5, np.bool)}
+        f1 = {(1, 'Jee'): np.zeros(5, bool)}
+        f2 = {(1, 'Jee'): np.zeros(5, bool)}
         f3 = abscal.merge_gains([f1, f2])
-        assert f3[(1, 'Jee')].dtype == np.bool_
+        assert f3[(1, 'Jee')].dtype == bool_
         assert not np.any(f3[(1, 'Jee')])
         f2[(1, 'Jee')][:] = True
         f3 = abscal.merge_gains([f1, f2])
@@ -921,11 +921,11 @@ class Test_AbsCal(object):
         AC.abs_amp_logcal(verbose=False)
         # run TT_phs_logcal
         AC.TT_phs_logcal(verbose=False)
-        assert np.allclose(np.median(AC.abs_eta_arr[0, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(np.bool)]),
+        assert np.allclose(np.median(AC.abs_eta_arr[0, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(bool)]),
                            -0.01, atol=1e-3)
-        assert np.allclose(np.median(AC.TT_Phi_arr[0, 0, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(np.bool)]),
+        assert np.allclose(np.median(AC.TT_Phi_arr[0, 0, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(bool)]),
                            -1e-3, atol=1e-4)
-        assert np.allclose(np.median(AC.TT_Phi_arr[0, 1, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(np.bool)]),
+        assert np.allclose(np.median(AC.TT_Phi_arr[0, 1, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(bool)]),
                            1e-3, atol=1e-4)
 
 
@@ -1263,7 +1263,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         for k in rc_gains.keys():
             assert k in delta_gains
             assert delta_gains[k].shape == (3, rc_gains[k].shape[1])
-            assert delta_gains[k].dtype == np.complex
+            assert delta_gains[k].dtype == complex
 
     def test_post_redcal_abscal_run_units_warning(self, tmpdir):
         tmp_path = tmpdir.strpath

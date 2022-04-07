@@ -663,7 +663,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
 
     # form flags if None
     if flags is None:
-        flags = np.zeros_like(data, dtype=np.bool)
+        flags = np.zeros_like(data, dtype=bool)
     assert isinstance(flags, np.ndarray), "flags must be fed as an ndarray"
 
     # turn flags into weights
@@ -738,8 +738,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
         for a in extra_arrays:
             avg_extra_arrays['avg_{}'.format(a)].append(np.mean(extra_arrays[a][start:end]))
 
-    avg_data = np.asarray(avg_data, np.complex)
-    win_flags = np.asarray(win_flags, np.bool)
+    avg_data = np.asarray(avg_data, complex)
+    win_flags = np.asarray(win_flags, bool)
     avg_nsamples = np.asarray(avg_nsamples, float)
     avg_lsts = np.asarray(avg_lsts, float)
 
@@ -784,7 +784,7 @@ def apply_fir(data, fir, wgts=None, axis=0):
     if wgts is None:
         wgts = np.ones_like(data, dtype=float)
 
-    new_data = np.empty_like(data, dtype=np.complex)
+    new_data = np.empty_like(data, dtype=complex)
 
     shape.pop(axis)
     for i in range(shape[0]):
@@ -929,7 +929,7 @@ class FRFilter(VisClean):
 
         # setup averaging quantities
         if flags is None:
-            flags = DataContainer(dict([(k, np.zeros_like(data[k], np.bool)) for k in data]))
+            flags = DataContainer(dict([(k, np.zeros_like(data[k], bool)) for k in data]))
         if nsamples is None:
             nsamples = DataContainer(dict([(k, np.ones_like(data[k], float)) for k in data]))
 
@@ -999,7 +999,7 @@ class FRFilter(VisClean):
 
         # setup averaging quantities
         if flags is None:
-            flags = DataContainer(dict([(k, np.zeros_like(data[k], np.bool)) for k in data]))
+            flags = DataContainer(dict([(k, np.zeros_like(data[k], bool)) for k in data]))
         if nsamples is None:
             nsamples = DataContainer(dict([(k, np.ones_like(data[k], float)) for k in data]))
 

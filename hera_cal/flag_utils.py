@@ -158,7 +158,7 @@ def synthesize_ant_flags(flags, threshold=0.0):
     for ap in antpols:
         # create flagged arrays for excluded ants
         if is_excluded[ap]:
-            ant_flags[ap] = np.ones((Ntimes, Nfreqs), np.bool)
+            ant_flags[ap] = np.ones((Ntimes, Nfreqs), bool)
         # else create flags based on threshold
         else:
             # handle Nvis = 0 cases

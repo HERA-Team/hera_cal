@@ -126,7 +126,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True, return_gains=False, gai
     if not return_gains:
         return fit
     else:
-        return {ant: np.exp(fit['eta_{}'.format(ant[1])]).astype(np.complex) for ant in gain_ants}
+        return {ant: np.exp(fit['eta_{}'.format(ant[1])]).astype(complex) for ant in gain_ants}
 
 
 def abs_amp_lincal(model, data, wgts=None, verbose=True, return_gains=False, gain_ants=[],
@@ -257,7 +257,7 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True, return_gains=False, gai
     if not return_gains:
         return fit
     else:
-        return {ant: np.abs(fit[f'A_{ant[1]}']).astype(np.complex) for ant in gain_ants}
+        return {ant: np.abs(fit[f'A_{ant[1]}']).astype(complex) for ant in gain_ants}
 
 
 def _count_nDims(antpos, assume_2D=True):
@@ -1100,7 +1100,7 @@ def global_phase_slope_logcal(model, data, antpos, reds=None, solver='linfit', w
         wgts = odict()
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(data[k], dtype=float)
-    flags = DataContainer({k: ~wgts[k].astype(np.bool) for k in wgts})
+    flags = DataContainer({k: ~wgts[k].astype(bool) for k in wgts})
 
     # center antenna positions about the reference antenna
     if refant is None:
@@ -1246,7 +1246,7 @@ def merge_gains(gains, merge_shared=True):
 
     # determine if gains or flags from first entry in gains
     fedflags = False
-    if gains[0][list(gains[0].keys())[0]].dtype == np.bool_:
+    if gains[0][list(gains[0].keys())[0]].dtype == bool_:
         fedflags = True
 
     # iterate over keys
@@ -1505,7 +1505,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     # ensure flags are booleans
     if flags is not None:
         if np.issubdtype(flags[list(flags.keys())[0]].dtype, floating):
-            flags = DataContainer(odict(list(map(lambda k: (k, ~flags[k].astype(np.bool)), flags.keys()))))
+            flags = DataContainer(odict(list(map(lambda k: (k, ~flags[k].astype(bool)), flags.keys()))))
 
     # loop over keys
     for i, k in enumerate(list(model.keys())):
@@ -1577,7 +1577,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
             f = flags[k][time_nn, freq_nn]
             # check f is boolean type
             if np.issubdtype(f.dtype, floating):
-                f = ~(f.astype(np.bool))
+                f = ~(f.astype(bool))
         else:
             f = np.zeros_like(real, bool)
 
@@ -1640,7 +1640,7 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, inplace=False, flags=N
     dlst = data_lsts - model_lsts[lst_nn]
 
     # flag dlst above threshold
-    flag_lst = np.zeros_like(dlst, np.bool)
+    flag_lst = np.zeros_like(dlst, bool)
     flag_lst[np.abs(dlst) > max_dlst] = True
 
     # make new_model and new_flags
@@ -1657,7 +1657,7 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, inplace=False, flags=N
         m = model[k][lst_nn, :]
         new_model[k] = m
         if flags is None:
-            new_flags[k] = np.zeros_like(m, np.bool)
+            new_flags[k] = np.zeros_like(m, bool)
         else:
             new_flags[k] = flags[k][lst_nn, :]
         new_flags[k][flag_lst, :] = True
@@ -1973,15 +1973,15 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
                     if m:
                         if k not in red_data:
                             red_data[k] = copy.copy(data[k])
-                            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j]) - 1
+                            red_data[k][red_data[k].astype(bool)] = red_data[k][red_data[k].astype(bool)] + len(reds[j]) - 1
                         else:
-                            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j])
+                            red_data[k][red_data[k].astype(bool)] = red_data[k][red_data[k].astype(bool)] + len(reds[j])
                     elif cm:
                         if k not in red_data:
                             red_data[k] = copy.copy(data[k])
-                            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j]) - 1
+                            red_data[k][red_data[k].astype(bool)] = red_data[k][red_data[k].astype(bool)] + len(reds[j]) - 1
                         else:
-                            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j])
+                            red_data[k][red_data[k].astype(bool)] = red_data[k][red_data[k].astype(bool)] + len(reds[j])
                 else:
                     # if match, insert all bls in bl_group into red_data
                     if m:
@@ -1994,7 +1994,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
     # re-sort, square if weights to match linsolve
     if weights:
         for i, k in enumerate(red_data):
-            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)]**(2.0)
+            red_data[k][red_data[k].astype(bool)] = red_data[k][red_data[k].astype(bool)]**(2.0)
     else:
         red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
 
@@ -2640,7 +2640,7 @@ class AbsCal(object):
         """ form complex gain from _ant_eta dict """
         if hasattr(self, '_ant_eta'):
             ant_eta = self.ant_eta
-            return odict(list(map(lambda k: (k, np.exp(ant_eta[k]).astype(np.complex)), flatten(self._gain_keys))))
+            return odict(list(map(lambda k: (k, np.exp(ant_eta[k]).astype(complex)), flatten(self._gain_keys))))
         else:
             return None
 
@@ -2656,7 +2656,7 @@ class AbsCal(object):
     def ant_eta_gain_arr(self):
         """ return _ant_eta_gain in ndarray format """
         if hasattr(self, '_ant_eta_arr'):
-            return np.exp(self.ant_eta_arr).astype(np.complex)
+            return np.exp(self.ant_eta_arr).astype(complex)
         else:
             return None
 
@@ -2914,7 +2914,7 @@ class AbsCal(object):
         """form complex gain from _abs_eta dict"""
         if hasattr(self, '_abs_eta'):
             abs_eta = self.abs_eta
-            return odict(list(map(lambda k: (k, np.exp(abs_eta[k]).astype(np.complex)), flatten(self._gain_keys))))
+            return odict(list(map(lambda k: (k, np.exp(abs_eta[k]).astype(complex)), flatten(self._gain_keys))))
         else:
             return None
 
@@ -2932,7 +2932,7 @@ class AbsCal(object):
             # turn abs eta into per-antenna complex gains, while iterating over input gain_keys
             abs_eta_gain = odict()
             for gk in gain_keys:
-                abs_eta_gain[gk] = np.exp(abs_eta_dict[gk[1]]).astype(np.complex)
+                abs_eta_gain[gk] = np.exp(abs_eta_dict[gk[1]]).astype(complex)
             return abs_eta_gain
 
         else:
@@ -2950,7 +2950,7 @@ class AbsCal(object):
     def abs_eta_gain_arr(self):
         """form complex gain from _abs_eta_arr array"""
         if hasattr(self, '_abs_eta_arr'):
-            return np.exp(self._abs_eta_arr).astype(np.complex)
+            return np.exp(self._abs_eta_arr).astype(complex)
         else:
             return None
 
