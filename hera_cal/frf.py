@@ -1335,7 +1335,8 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             If True, perform FRF with weighting proportional to nsamples (flags still get 0 weight).
             Default False, meaning use only ~flags as weights.
         excluded_lsts : list of 2-tuples, optional
-            List of LST ranges (in hours, inclusive) to assign zero weight when performing FRF. Not necessarily flagged.
+            List of LST ranges (in hours, inclusive) to assign zero weight when performing FRF (regardless of
+            whether or not they are flagged). Ranges crossing the 24h brach cut, e.g. [(23, 1)], are allowed.
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
@@ -1459,7 +1460,10 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                     if wgt_by_nsample:
                         wgts[k] *= frfil.nsamples[k]
                     for xlst in excluded_lsts:
-                        wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) & (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
+                        if xlst[0] < xlst[1]:
+                            wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) & (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
+                        else:
+                            wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) | (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
 
                 # run tophat filter
                 frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths, wgts=wgts,
