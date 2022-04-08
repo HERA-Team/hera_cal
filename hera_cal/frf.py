@@ -1355,7 +1355,7 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
         verbose: bool, optional
             Helpful text outputs.
         clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
-                                    default is True.
+            default is True.
         read_axis: str, optional
             optional parameter to pass as the axis arg to io.HERAData.read()
         percentile_low: float, optional
@@ -1369,8 +1369,8 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             to add to analytic calculation of fringe-rate bounds for emission on the sky.
             default = 0.0.
         frate_width_multiplier: float, optional
-         fraction of horizon to fringe-rate filter.
-         default is 1.0
+            fraction of horizon to fringe-rate filter.
+            default is 1.0
         min_frate_half_width: float, optional
             minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
             Default is 0.025
