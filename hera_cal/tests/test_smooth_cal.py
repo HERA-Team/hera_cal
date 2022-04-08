@@ -173,6 +173,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode='plus')
         np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
         ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, method='DPSS')
+        ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, method='DPSS', skip_flagged_edges=False)
 
         # test rephasing
         gains = np.ones((100, 100), dtype=complex)
