@@ -1293,7 +1293,7 @@ def tophat_frfilter_argparser(mode='clean'):
 def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calfile_list=None,
                                    Nbls_per_load=None, spw_range=None, cache_dir=None,
                                    read_cache=False, write_cache=False, external_flags=None,
-                                   factorize_flags=False, time_thresh=0.05, wgt_by_nsample=False, excluded_lsts=[],
+                                   factorize_flags=False, time_thresh=0.05, wgt_by_nsample=False, excluded_lsts=None,
                                    res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                    clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
                                    skip_flagged_edges=False, overwrite_flags=False,
@@ -1463,11 +1463,12 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                 for k in wgts:
                     if wgt_by_nsample:
                         wgts[k] *= frfil.nsamples[k]
-                    for xlst in excluded_lsts:
-                        if xlst[0] < xlst[1]:
-                            wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) & (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
-                        else:
-                            wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) | (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
+                    if excluded_lsts is not None:
+                        for xlst in excluded_lsts:
+                            if xlst[0] < xlst[1]:
+                                wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) & (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
+                            else:
+                                wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) | (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
 
                 # run tophat filter
                 frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths, wgts=wgts,
