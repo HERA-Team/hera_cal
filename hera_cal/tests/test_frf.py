@@ -580,6 +580,28 @@ class Test_FRFilter(object):
                     assert not np.all(np.isclose(d[bl], 0.))
             np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
             os.remove(outfilename)
+
+        # test wgt_by_nsample
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+        outfilename = os.path.join(tmp_path, 'temp.h5')
+        frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True,
+                                           Nbls_per_load=None, avg_red_bllens=False, case='sky', wgt_by_nsample=True)
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for bl in d:
+            assert not np.all(np.isclose(d[bl], 0.))
+
+        frfil = frf.FRFilter(uvh5, filetype='uvh5')
+        frfil.read(bls=[(53, 54, 'ee')])
+
+        wgts = datacontainer.DataContainer({k: (~frfil.flags[k]).astype(float) for k in frfil.flags})
+        for k in wgts:
+            wgts[k] *= frfil.nsamples[k]
+        frate_centers, frate_half_widths = frf.select_tophat_frates(case='sky', uvd=frfil.hd, blvecs=frfil.blvecs)
+        frfil.tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True, frate_centers=frate_centers, frate_half_widths=frate_half_widths, wgts=wgts)
+        np.testing.assert_almost_equal(d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5)
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
+
         # test skip_autos
         frf.load_tophat_frfilter_and_write(uvh5, calfile_list=None, tol=1e-4, res_outfilename=outfilename,
                                            filled_outfilename=filled_outfilename, CLEAN_outfilename=CLEAN_outfilename,
