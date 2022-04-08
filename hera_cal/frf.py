@@ -1287,8 +1287,7 @@ def tophat_frfilter_argparser(mode='clean'):
 
 
 def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calfile_list=None,
-                                   Nbls_per_load=None, spw_range=None, cache_dir=None,
-                                   read_cache=False, write_cache=False, external_flags=None,
+                                   Nbls_per_load=None, spw_range=None, external_flags=None,
                                    factorize_flags=False, time_thresh=0.05,
                                    res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                    clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
