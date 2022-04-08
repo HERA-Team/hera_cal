@@ -68,7 +68,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     return np.sum(taus)
 
 
-def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1e-9, return_1D_filters=False):
+def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1e-8):
     """Generate a set of 2D discrete prolate spheroidal sequence (DPSS) filters
     to filter calibration solutions along the time and frequency axes simultaneously.
 
@@ -83,8 +83,6 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
             Note that time_scale is in seconds, times is in days.
         eigenval_cutoff: sinc_matrix eigenvalue cutoff to use for included dpss modes.
             Only used when the filtering method is 'DPSS'
-        return_1D_filters: if True, return the 1D filters that make up the 2D DPSS filter.
-            Default is False
 
     Returns:
         filters: DPSS filtering vectors, ndarray of size (Ntimes * Nfreqs, N_frequency_vectors * N_time_vectors)
@@ -113,11 +111,7 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
         time_filters[:, None, :, None] * freq_filters[None, :, None, :],
         (times.shape[0] * freqs.shape[0], ntime_comps[0] * nfreq_comps[0]),
     )  # 2D time-frequency DPSS vectors
-    if return_1D_filters:
-        return filters, freq_filters, time_filters
-
-    else:
-        return filters
+    return filters
 
 
 def fit_solution_matrix(weights, design_matrix):
@@ -132,17 +126,10 @@ def fit_solution_matrix(weights, design_matrix):
             obtained from hera_cal.smooth_cal.dpss_filters
 
     Returns:
-        S: ndarray of shape (N_frequency_vectors * N_time_vectors, )
+        S: ndarray of shape (N_frequency_vectors * N_time_vectors, Ntimes * Nfreqs)
     """
     cmat = (design_matrix.T * weights.reshape(-1)) @ design_matrix
-
-    if np.linalg.cond(cmat) >= 1e9:
-        warnings.warn("Warning! Poorly conditioned matrix")
-        smat = np.linalg.pinv(cmat) @ design_matrix.T * weights.reshape(-1)
-
-    else:
-        smat = np.linalg.inv(cmat) @ design_matrix.T * weights.reshape(-1)
-
+    smat = np.linalg.pinv(cmat) @ design_matrix.T * weights.reshape(-1)
     return smat
 
 
@@ -240,7 +227,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
-                        design_matrix=None, sol_matrix=None, eigenval_cutoff=1e-9, skip_flagged_edges=False,
+                        design_matrix=None, sol_matrix=None, eigenval_cutoff=1e-8, skip_flagged_edges=True,
                         **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
@@ -262,12 +249,12 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0
                     and fringe rate = 0
             'plus': produce a separable calibration solution by only keeping modes with 0 delay,
-                    0 fringe rate, or both
+                    0 fringe rate, or both. Only used when method is 'CLEAN'
         window: window function for filtering applied to the filtered axis. Only used with when method used is 'CLEAN'.
             See aipy.dsp.gen_window for options.
         maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
         method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
-            'CLEAN': uses the CLEAN algorithm to
+            'CLEAN': uses the CLEAN algorithm to smooth calibration solutions
             'DPSS': uses discrete prolate spheroidal sequences (DPSS) to filter calibration solutions
         design_matrix: Matrix of DPSS filters calculated using smooth_cal.dpss_filters. If matrix is not provided,
             one will be calculated using smooth_cal.dpss_filters and the time and frequency scale. Only used
@@ -276,8 +263,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         eigenval_cutoff: sinc_matrix eigenvalue cutoffs to use for included dpss modes.
             Only used when the filtering method is 'DPSS'
         skip_flagged_edges : bool, optional
-            if True, do not filter over flagged edge times/freqs (filter over sub-region). Only used when method used is 'DPSS'
-            default is False
+            if True, do not filter over flagged edge times/freqs (filter over sub-region). Only used when method used is 'DPSS'.
+            Default is True
         win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
             Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
 
@@ -286,7 +273,6 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         info: dictionary of metadata from aipy.deconv.clean or DPSS, depending on the filter method
             chosen.
     '''
-    assert AIPY, "You need aipy to use this function"
     df = np.median(np.diff(freqs))
     dt = np.median(np.diff(times)) * 24.0 * 3600.0  # in seconds
     delays = np.fft.fftfreq(freqs.size, df)
@@ -333,6 +319,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                 filtered[mask] = gains[mask]
 
             info['sol_matrix'] = sol_matrix
+            info['design_matrix'] = design_matrix
 
         elif filter_mode == 'plus':
             raise NotImplementedError("filter_mode 'plus' only implemented for CLEAN")
@@ -341,6 +328,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             raise ValueError("DPSS mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
 
     elif method == 'CLEAN':
+        assert AIPY, "You need aipy to use this function"
         # Build fourier space image and kernel for deconvolution
         window = aipy.dsp.gen_window(len(freqs), window=window, **win_kwargs)
         image = np.fft.ifft2(gains * rephasor * wgts * window)
@@ -809,7 +797,7 @@ class CalibrationSmoother():
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
-                            window='tukey', maxiter=100, method="CLEAN", eigenval_cutoff=1e-9, skip_flagged_edges=False,
+                            window='tukey', maxiter=100, method="CLEAN", eigenval_cutoff=1e-8, skip_flagged_edges=True,
                             **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
@@ -833,27 +821,26 @@ class CalibrationSmoother():
                 'CLEAN': uses the CLEAN algorithm to
                 'DPSS': uses discrete prolate spheroidal sequences to filter calibration solutions
             skip_flagged_edges : if True, do not filter over flagged edge times (filter over sub-region)
-                default is False, only used when method='DPSS'
+                Default is True, only used when method='DPSS'
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
+        # Generate DPSS filters if method='DPSS'
         if method == 'DPSS':
-            design_matrix, freq_filters, time_filters = dpss_filters(
+            design_matrix = dpss_filters(
                 freqs=self.freqs, times=self.time_grid, freq_scale=freq_scale, time_scale=time_scale,
-                eigenval_cutoff=eigenval_cutoff, return_1D_filters=True
+                eigenval_cutoff=eigenval_cutoff
             )
+            # Keep track of the size of the weights grid after removing flagged edges
             if skip_flagged_edges:
-                filter_dict = {}
-                edges_prev = []
-                x = np.ones(shape=(self.time_grid.shape[0], self.freqs.shape[0]))
-                _, _, _, edges, _ = truncate_flagged_edges(x, x, (self.time_grid, self.freqs), ax='both')
-                filter_dict[str(edges)] = (freq_filters, time_filters)
+                edges_old = None
 
         else:
             design_matrix = None
 
+        # Create default variables to be passed in to time_freq_2D_filter
         sol_matrix = None
-        wgts_prev = np.zeros(1)
+        wgts_old = np.zeros(1)
 
         # loop over all antennas that are not completely flagged and filter
         for ant, gain_grid in self.gain_grids.items():
@@ -861,27 +848,17 @@ class CalibrationSmoother():
                 utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
                 wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
 
+                # If the weights grid is the same as the previous, the solution matrix can be reused to speed up computation
                 if method == 'DPSS':
-                    sol_matrix = info['sol_matrix'] if np.allclose(wgts_grid, wgts_prev) else None
-                    wgts_prev = np.copy(wgts_grid)
+                    sol_matrix = info['sol_matrix'] if np.allclose(wgts_grid, wgts_old) else None
+                    wgts_old = np.copy(wgts_grid)
 
+                    # Check to see if the grid size changes after removing the flagged edges
                     if skip_flagged_edges:
                         xout, _, _, edges, chunks = truncate_flagged_edges(gain_grid, wgts_grid, (self.time_grid, self.freqs), ax='both')
-                        if edges != edges_prev:
-                            if str(edges) not in filter_dict:
-                                design_matrix, freq_filters, time_filters = dpss_filters(
-                                    freqs=xout[1], times=xout[0], freq_scale=freq_scale, time_scale=time_scale,
-                                    eigenval_cutoff=eigenval_cutoff, return_1D_filters=True
-                                )
-                                filter_dict[str(edges)] = (freq_filters, time_filters)
-
-                            else:
-                                freq_filters, time_filters = filter_dict.get(str(edges))
-                                design_matrix = np.reshape(
-                                    time_filters[:, None, :, None] * freq_filters[None, :, None, :],
-                                    (time_filters.shape[0] * freq_filters.shape[0], time_filters.shape[1] * freq_filters.shape[1]),
-                                )
-                        edges_prev = deepcopy(edges)
+                        # If the grid size changes, recompute filters for new grid size
+                        design_matrix = info['design_matrix'] if edges == edges_old else None
+                        edges_old = deepcopy(edges)
 
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
@@ -983,7 +960,7 @@ def smooth_cal_argparser():
     flt_opts.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
     flt_opts.add_argument("--method", type=str, default='CLEAN', help='Algorithm used to smooth calibration solutions. Default is "CLEAN". "DPSS" uses \
                           discrete prolate spheroidal sequences to smooth calibration solutions.')
-    flt_opts.add_argument("--eigenval_cutoff", type=str, default=1e-9, help="sinc_matrix eigenvalue cutoff to use for included dpss modes. \
+    flt_opts.add_argument("--eigenval_cutoff", type=str, default=1e-8, help="sinc_matrix eigenvalue cutoff to use for included dpss modes. \
                           Only used when the filtering method is 'DPSS'")
     flt_opts.add_argument("--skip_flagged_edges", type=str, default=False, help="if True, do not filter over flagged edge times/freqs (filter over sub-region).\
                           Only used when method used is 'DPSS'")
