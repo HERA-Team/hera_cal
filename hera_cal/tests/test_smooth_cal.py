@@ -43,8 +43,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         time_scale = 0.5 / (np.diff(times)[0] * 3600 * 24)
         # Show that dpss_filter generates filters for a 2D grid of times and freqs
         design_matrix = smooth_cal.dpss_filters(
-            times=times, freqs=freqs, time_scale=1.01 / time_scale,
-            freq_scale=1.01 / freq_scale, return_1D_filters=False
+            times=times, freqs=freqs, time_scale=1.01 / time_scale, freq_scale=1.01 / freq_scale
         )
         assert design_matrix.shape[0] == int(freqs.shape[0] * times.shape[0])
         # test that error is thrown when filtering scale is too fine
@@ -52,13 +51,6 @@ class Test_Smooth_Cal_Helper_Functions(object):
                              time_scale=0.99 / time_scale, freq_scale=1.01 / freq_scale)
         assert pytest.raises(ValueError, smooth_cal.dpss_filters, times=times, freqs=freqs,
                              time_scale=1.01 / time_scale, freq_scale=0.99 / freq_scale)
-        # Show that is returns 1D filters if requested
-        design_matrix, freq_filters, time_filters = smooth_cal.dpss_filters(
-            times=times, freqs=freqs, time_scale=1.01 / time_scale,
-            freq_scale=1.01 / freq_scale, return_1D_filters=True
-        )
-        assert freq_filters.shape[0] == freqs.shape[0]
-        assert time_filters.shape[0] == times.shape[0]
 
     def test_fit_solution_matrix(self):
         design_matrix = np.random.uniform(0, 1, size=(100, 10))
