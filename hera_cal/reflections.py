@@ -274,7 +274,7 @@ class ReflectionFitter(FRFilter):
         autopols = [p for p in self.pols if p[0] == p[1]]
         if len(self.ref_gains) > 0:
             antpol = split_bl(keys[0])[0]
-            for a in self.ants:
+            for a in self.data_ants:
                 for p in autopols:
                     k = (a, split_pol(p)[0])
                     if k not in self.ref_gains:
@@ -410,7 +410,7 @@ class ReflectionFitter(FRFilter):
 
     def write_auto_reflections(self, output_calfits, input_calfits=None, time_array=None,
                                freq_array=None, overwrite=False, write_npz=False,
-                               add_to_history='', verbose=True):
+                               write_calfits=True, add_to_history='', verbose=True):
         """
         Write reflection gain terms from self.ref_gains.
 
@@ -431,11 +431,12 @@ class ReflectionFitter(FRFilter):
             overwrite : bool, if True, overwrite output file
             write_npz : bool, if True, write an NPZ file holding reflection
                 params with the same pathname as output_calfits
+            write_calfits : bool, if False, skip writing 
             add_to_history: string to add to history of output calfits file
             verbose : bool, report feedback to stdout
 
         Returns:
-            uvc : UVCal object with new gains
+            uvc : UVCal object with new gains (or None if write_calfits is False)
         """
         # Create reflection gains
         rgains, rflags = self.ref_gains, self.ref_flags
@@ -459,6 +460,10 @@ class ReflectionFitter(FRFilter):
                          lsts=self.lsts, antpos=self.antpos, flags=rflags,
                          history=version.history_string(add_to_history))
 
+        # return None if we don't want to write a calfits file
+        if not write_calfits:
+            return None
+
         if input_calfits is not None:
             # Load calfits
             cal = io.HERACal(input_calfits)
@@ -479,6 +484,7 @@ class ReflectionFitter(FRFilter):
         else:
             kwargs = {'x_orientation': self.hd.x_orientation}
 
+        # write calfits
         antnums2antnames = dict(zip(self.hd.antenna_numbers, self.hd.antenna_names))
         echo("...writing {}".format(output_calfits), verbose=verbose)
         uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=rflags,
@@ -1355,7 +1361,7 @@ def auto_reflection_argparser():
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output file if it already exists")
     a.add_argument("--write_npz", default=False, action='store_true', help="Write NPZ file with reflection params with same path name as output calfits.")
     a.add_argument("--input_cal", type=str, default=None, help="Path to input .calfits to apply to data before modeling")
-    a.add_argument("--antenna_numbers", default=None, type=int, nargs='*', help="List of antenna numbers to operate on. Default is all.")
+    a.add_argument("--antenna_numbers", default=None, type=int, nargs='*', help="List of antenna numbers to operate on. Default is all in data.")
     a.add_argument("--polarizations", default=None, type=str, nargs='*', help="List of polarization strings to operate on.")
     a.add_argument("--window", default='None', type=str, help="FFT window for CLEAN")
     a.add_argument("--alpha", default=0.2, type=float, help="Alpha parameter if window is tukey")
@@ -1374,20 +1380,24 @@ def auto_reflection_argparser():
     a.add_argument("--ref_sig_cut", default=2, type=float, help="Reflection minimum 'significance' threshold for fitting.")
     a.add_argument("--add_to_history", default='', type=str, help="String to append to file history")
     a.add_argument("--time_avg", default=False, action='store_true', help='Time average file before reflection fitting.')
+    a.add_argument("--compress_tavg_calfits", default=False, action='store_true', help='Save final calfits files with a single integration (at the average JD) '
+                   'rather than duplicating identical calibration solutions for every intergration. Ignored if time_avg is False.')
     a.add_argument("--opt_maxiter", default=0, type=int, help="Optimization max Niter. Default is no optimization")
     a.add_argument("--opt_method", default='BFGS', type=str, help="Optimization algorithm. See scipy.optimize.minimize for details")
     a.add_argument("--opt_tol", default=1e-3, type=float, help="Optimization stopping tolerance.")
     a.add_argument("--opt_buffer", default=[25, 25], type=float, nargs='*', help="delay buffer [ns] +/- initial guess for setting range of objective function")
     a.add_argument("--skip_frac", default=0.9, type=float, help="Float in range [0, 1]. Fraction of (non-edge) flagged channels above which integration is skipped in optimization.")
+    a.add_argument("--only_write_final_calfits", dest='write_each_calfits', default=True, action='store_false',
+                   help="Instead of writing one calfits file for each dly_range, instead only write a single combined calfits file with all reflections multiplied.")
     return a
 
 
-def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_cal=None, time_avg=False,
+def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_cal=None, time_avg=False, compress_tavg_calfits=False,
                         write_npz=False, antenna_numbers=None, polarizations=None, window='None', alpha=0.2,
                         edgecut_low=0, edgecut_hi=0, zeropad=0, tol=1e-6, gain=1e-1, maxiter=100,
                         skip_wgt=0.2, horizon=1.0, standoff=0.0, min_dly=100.0, Nphs=300, fthin=10,
                         ref_sig_cut=2.0, add_to_history='', skip_frac=0.9, reject_edges=True, opt_maxiter=0,
-                        opt_method='BFGS', opt_tol=1e-3, opt_buffer=(25, 25), overwrite=False):
+                        opt_method='BFGS', opt_tol=1e-3, opt_buffer=(25, 25), write_each_calfits=True, overwrite=False):
     """
     Run auto-correlation reflection modeling on files.
 
@@ -1397,9 +1407,12 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         output_fname : str, full path to output calfits file
         filetype : str, filetype if data is a str, options=['uvh5', 'miriad', 'uvfits']
         input_cal : str or UVCal subclass, calibration to apply to data on-the-fly
-        time_avg : bool, if True, time-average the entire input data before reflection modeling
+        time_avg : bool, if True, time-average the entire input data before reflection modeling.
+            This will produce single-integration calfits files.
+        compress_tavg_calfits : Save final calfits files with a single integration (at the average JD) rather
+            than duplicating identical calibration solutions for every intergration. Ignored if time_avg is False.
         write_npz : bool, if True, write an NPZ with reflection parameters with matching path as output_fname
-        antenna_numbers : int list, list of antenna number integers to run on. Default is all.
+        antenna_numbers : int list, list of antenna number integers to run on. Default is all in data.
         polarizations : str list, list of polarization strings to run on, default is all
         edgecut_low : int, Nbins to flag but not window at low-side of the FFT axis.
         edgecut_hi : int, Nbins to flag but not window at high-side of the FFT axis.
@@ -1424,6 +1437,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         opt_buffer : float or len-2 tuple, delay buffer [ns] +/- initial guess for setting range of objective function in delay
         skip_frac : float in range [0, 1], fraction of flagged channels (excluding edge flags) above which skip the integration
         reject_edges : bool, If True, reject peak solutions at delay edges
+        write_each_calfits : bool, if True, write calfits file for each fit in each dly_ranges, otherwise write one final calfits file
         overwrite : bool, if True, overwrite output files.
 
     Result:
@@ -1434,21 +1448,21 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         The CLEAN min_dly should always be less than the lower boundary of dly_range.
     """
     # dly_ranges type check
-    if isinstance(dly_ranges, (str, np.str)):
+    if isinstance(dly_ranges, str):
         dly_ranges = [ast.literal_eval(dly_ranges)]
     if isinstance(dly_ranges, tuple):
         dly_ranges = [dly_ranges]
     if isinstance(dly_ranges, list):
         for i, dlyr in enumerate(dly_ranges):
-            if isinstance(dlyr, (str, np.str)):
+            if isinstance(dlyr, str):
                 dly_ranges[i] = ast.literal_eval(dlyr)
 
     # initialize reflection fitter
     RF = ReflectionFitter(data, filetype=filetype, input_cal=input_cal)
 
     # get antennas if possible
-    if antenna_numbers is None and hasattr(RF, 'ants'):
-        bls = [(ant, ant) for ant in RF.ants]
+    if antenna_numbers is None and hasattr(RF, 'data_ants'):
+        bls = [(ant, ant) for ant in RF.data_ants]
     elif antenna_numbers is not None:
         bls = [(ant, ant) for ant in antenna_numbers]
     else:
@@ -1479,6 +1493,9 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         flags = RF.avg_flags
         nsamples = RF.avg_nsamples
         model = RF.avgm_data
+        if compress_tavg_calfits:
+            # Reduce time array to length one, thus making the ouput calfits waterfalls have shape (1, Nfreqs)
+            RF.times = np.mean(RF.times, keepdims=True)
 
     # iterate over dly_ranges
     gains = []
@@ -1488,8 +1505,9 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         _output_fname = ''.join(_output_fname)
         if i == 0:
             _RF = RF
-            _output_fname = output_fname
             cdata = data
+            if write_each_calfits:
+                _output_fname = output_fname
         else:
             _RF = RF.soft_copy()
             cdata = copy.deepcopy(data)
@@ -1511,7 +1529,13 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         # write gains
         RF.ref_gains = _RF.ref_gains
         RF.write_auto_reflections(_output_fname, overwrite=overwrite, add_to_history=add_to_history,
-                                  write_npz=write_npz)
+                                  write_npz=write_npz, write_calfits=write_each_calfits)
 
         # append gains
         gains.append(RF.ref_gains)
+    
+    # write out combined gains as a single calfits file
+    if not write_each_calfits:
+        RF.ref_gains = merge_gains(gains)
+        RF.write_auto_reflections(output_fname, overwrite=overwrite, add_to_history=add_to_history,
+                                  write_npz=False, write_calfits=True)

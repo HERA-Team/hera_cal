@@ -697,6 +697,9 @@ class Test_VisClean(object):
             f[k][:, 47] = True  # flag near second break
             f[k][:, 49] = True  # should be inpainted
             d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
+            if k[0] == k[1]:
+                d[k] = d[k].real + 0j
+
             n[k] = np.ones(d[k].shape)
         hdt.update(flags=f, data=d)
         hdt.write_uvh5(fname_edgeflags)
@@ -743,6 +746,8 @@ class Test_VisClean(object):
             f[k][49, :] = True  # should be inpainted
             d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
             n[k] = np.ones(d[k].shape)
+            if k[0] == k[1]:
+                d[k] = d[k].real + 0j
         hdt.update(flags=f, data=d)
         hdt.write_uvh5(fname_edgeflags)
         V = VisClean(fname_edgeflags, filetype='uvh5')
@@ -784,6 +789,8 @@ class Test_VisClean(object):
                 f[k][:, j] = True
 
             d[k] = np.random.randn(*d[k].shape) + np.random.randn(*d[k].shape) * 1j
+            if k[0] == k[1]:
+                d[k] = d[k].real + 0j
             n[k] = np.ones(d[k].shape)
         hdt.update(flags=f, data=d)
         hdt.write_uvh5(fname_edgeflags)
@@ -1136,7 +1143,7 @@ class Test_VisClean(object):
             fragment_filename = tmp_path / fname
             frf.load_tophat_frfilter_and_write(datafiles, baseline_list=baselines, calfile_list=cals,
                                                spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
-                                               res_outfilename=fragment_filename, clobber=True)
+                                               res_outfilename=fragment_filename, clobber=True, case='sky')
             # load in fragment and make sure the number of baselines is equal to the length of the baseline list
             hd_fragment = io.HERAData(str(fragment_filename))
             assert len(hd_fragment.bls) == len(baselines)
@@ -1157,7 +1164,7 @@ class Test_VisClean(object):
         # compare to xtalk filtering the whole file.
         frf.load_tophat_frfilter_and_write(datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
                                            calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
-                                           res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20])
+                                           res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20], case='sky')
         hd = io.HERAData(str(tmp_path / 'temp.h5'))
         hd.read()
         assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))
@@ -1176,7 +1183,7 @@ class Test_VisClean(object):
         # compare to xtalk filtering the whole file.
         frf.load_tophat_frfilter_and_write(datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
                                            calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
-                                           res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20])
+                                           res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20], case='sky')
         hd = io.HERAData(str(tmp_path / 'temp.h5'))
         hd.read()
         assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))

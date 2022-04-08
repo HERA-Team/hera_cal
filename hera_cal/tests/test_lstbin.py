@@ -136,6 +136,8 @@ class Test_lstbin(object):
         # test sigma clip
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
                                 verbose=False, sig_clip=True, min_N=5, sigma=2)
+        output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
+                                verbose=False, sig_clip=True, min_N=15, flag_below_min_N=True, sigma=2)
         # test wrapping
         lst_list = list(map(lambda l: (copy.deepcopy(l) + 6) % (2 * np.pi), self.lst_list))
         output = lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, begin_lst=np.pi)
@@ -152,7 +154,7 @@ class Test_lstbin(object):
         assert (512, 512, 'ee') in output[4]
         assert np.allclose(output[4][(512, 512, 'ee')], 0.0)
         assert np.all(output[2][(512, 512, 'ee')])
-        assert np.allclose(output[1][(512, 512, 'ee')], 0.0)
+        assert np.allclose(output[1][(512, 512, 'ee')], 1.0)
         # test conjugated flags and nsamples
         flags_list_conj = copy.deepcopy(self.flgs_list)
         nsamp_list_conj = copy.deepcopy(self.nsmp_list)
@@ -593,14 +595,6 @@ class Test_lstbin(object):
         arr = lstbin.sigma_clip(x, sigma=2.0)
         assert np.all(arr[0, 50])
         assert not np.any(arr[4, 50])
-        # test flags
-        arr = stats.norm.rvs(0, 1, 10).reshape(2, 5)
-        flg = np.zeros_like(arr, np.bool)
-        flg[0, 3] = True
-        out = lstbin.sigma_clip(arr, flags=flg, min_N=5)
-        assert not np.any(out[0, 3])
-        out = lstbin.sigma_clip(arr, flags=flg, min_N=1)
-        assert np.all(out[0, 3])
 
     def test_gen_nightly_bldicts(self):
         # Test some basic behavior for bl_nightly_dicts.

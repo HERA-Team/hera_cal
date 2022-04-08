@@ -42,6 +42,95 @@ class Test_Update_Cal(object):
         with pytest.raises(KeyError):
             ac._check_polarization_consistency(data, gains)
 
+    def test_build_gains_by_cadences(self):
+        # test upsampling
+        data = {(0, 1, 'nn'): np.ones((8, 10), dtype=complex)}
+        gains = {(0, 'Jnn'): np.array([np.arange(10)]).repeat(2, axis=0).astype(complex)}
+        flags = {(0, 'Jnn'): np.zeros((2, 10), dtype=bool)}
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, gains, cal_flags=flags)
+        for Nt in [2, 4, 8]:
+            assert Nt in gains_by_Nt
+            assert Nt in cal_flags_by_Nt
+            assert gains_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            assert cal_flags_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], np.outer(np.ones(Nt), np.arange(10).astype(complex)))
+            assert not np.any(cal_flags_by_Nt[Nt][(0, 'Jnn')])
+            
+        # test downsampling without flags
+        data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex)}
+        gains = {(0, 'Jnn'): np.outer(np.arange(4), np.ones(3)).astype(complex)}
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, gains)
+        assert cal_flags_by_Nt is None
+        for Nt in [1, 2, 4]:
+            assert Nt in gains_by_Nt
+            assert gains_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            if Nt == 1:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], 1.5)
+            if Nt == 2:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], np.outer([.5, 2.5], np.ones(3)))
+            if Nt == 4:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], gains[0, 'Jnn'])
+
+        # test downsampling
+        data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex)}
+        gains = {(0, 'Jnn'): np.outer(np.arange(4), np.ones(3)).astype(complex)}
+        flags = {(0, 'Jnn'): np.zeros((4, 3), dtype=bool)}
+        flags[(0, 'Jnn')][::3, 0] = True
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, gains, cal_flags=flags)
+        for Nt in [1, 2, 4]:
+            assert Nt in gains_by_Nt
+            assert Nt in cal_flags_by_Nt
+            assert gains_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            assert cal_flags_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            assert not np.any(cal_flags_by_Nt[Nt][(0, 'Jnn')][:, 1:])
+            if Nt < 4:
+                assert np.all(cal_flags_by_Nt[Nt][(0, 'Jnn')][:, 0])
+            if Nt == 1:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')][:, 1:], 1.5)
+            if Nt == 2:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')][:, 1:], np.outer([.5, 2.5], np.ones(2)))
+            if Nt == 4:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], gains[0, 'Jnn'])
+
+        # test downsampling with flags as weights
+        data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex)}
+        gains = {(0, 'Jnn'): np.outer(np.arange(4), np.ones(3)).astype(complex)}
+        flags = {(0, 'Jnn'): np.ones((4, 3), dtype=float)}
+        flags[(0, 'Jnn')][::3, 0] = 0
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, gains, cal_flags=flags, flags_are_wgts=True)
+        for Nt in [1, 2, 4]:
+            assert Nt in gains_by_Nt
+            assert Nt in cal_flags_by_Nt
+            assert gains_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            assert cal_flags_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
+            np.testing.assert_array_equal(cal_flags_by_Nt[Nt][(0, 'Jnn')][:, 1:], 1.0)
+            if Nt < 4:
+                assert np.all(cal_flags_by_Nt[Nt][(0, 'Jnn')][:, 0])
+            if Nt == 1:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')][:, 1:], 1.5)
+            if Nt == 2:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')][:, 1:], np.outer([.5, 2.5], np.ones(2)))
+            if Nt == 4:
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], gains[0, 'Jnn'])
+
+        # test empty dicts
+        data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex),
+                (0, 2, 'nn'): np.ones((2, 3), dtype=complex)}
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, {}, cal_flags={})
+        assert gains_by_Nt == {1: {}, 2: {}}
+        assert cal_flags_by_Nt == {1: {}, 2: {}}
+
+        # test warnings
+        with pytest.warns(UserWarning, match='is inconsistent with BDA by powers of 2'):
+            data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex),
+                    (0, 2, 'nn'): np.ones((3, 3), dtype=complex)}
+            ac.build_gains_by_cadences(data, {})
+        with pytest.warns(UserWarning, match='cannot be calibrated with any of gain cadences'):
+            data = {(0, 1, 'nn'): np.ones((2, 3), dtype=complex),
+                    (0, 2, 'nn'): np.ones((3, 3), dtype=complex)}
+            gains = {(0, 'Jnn'): np.ones((2, 3), dtype=complex)}
+            ac.build_gains_by_cadences(data, gains)
+
     def test_calibrate_avg_gains_in_place(self):
         np.random.seed(20)
         vis = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
@@ -174,6 +263,27 @@ class Test_Update_Cal(object):
         del g_new[(0, 'Jxx')]
         ac.calibrate_in_place(dc, g_new, wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
         assert np.allclose(wgts[(0, 1, 'xx')].max(), 0.0)
+
+        # test BDA runs without error
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis), (0, 2, 'xx'): deepcopy(vis[0:5, :])})
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f), (0, 2, 'xx'): deepcopy(f[0:5, :])})
+        g_here = deepcopy(g_new)
+        g_here[2, 'Jxx'] = deepcopy(g_here[1, 'Jxx'])
+        ac.calibrate_in_place(dc, g_here, flags)
+
+        # test BDA cadence errors
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis), (0, 2, 'xx'): deepcopy(vis[0:5, :])})
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f), (0, 2, 'xx'): deepcopy(f[0:5, :])})
+        g_here = {(0, 'Jxx'): g0_new[0:3, :], (1, 'Jxx'): g1_new[0:3, :]}
+        with pytest.raises(ValueError, match='new_gains with'):
+            ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=None, old_gains=None)
+        g_here = {(0, 'Jxx'): g0_new[0:1, :], (1, 'Jxx'): g1_new[0:1, :]}
+        cal_flags_here = {(0, 'Jxx'): cal_flags[(0, 'Jxx')][0:7, :], (1, 'Jxx'): cal_flags[(1, 'Jxx')][0:7, :]}
+        with pytest.raises(ValueError, match='cal_flags with'):
+            ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=cal_flags_here, old_gains=None)
+        old_g_here = {(0, 'Jxx'): g0_old[0:8, :], (1, 'Jxx'): g1_old[0:8, :]}
+        with pytest.raises(ValueError, match='old_gains with'):
+            ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=None, old_gains=old_g_here)
 
     def test_apply_cal(self, tmpdir):
         tmp_path = tmpdir.strpath
@@ -475,6 +585,51 @@ class Test_Update_Cal(object):
             assert np.all(equal_times)
             # check that data is not equal.
             assert not np.any(equal_data)
+
+    def test_apply_cal_bda(self):
+        upsampled_oc = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.upsample_in_time.omni.calfits')
+        downsampled_oc = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.downsample_in_time.omni.calfits')
+
+        # load input data file
+        infile = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5')
+        hd_in = io.HERAData(infile)
+        d_in, f_in, n_in = hd_in.read()
+
+        # Try calibrating BDA data with omnical solution from downsampling
+        outfile = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.down_calibrated.uvh5')
+        ac.apply_cal(infile, outfile, downsampled_oc, clobber=True)
+        hd = io.HERAData(outfile)
+        d, f, n = hd.read()
+        for bl in d:
+            assert d[bl].shape == d_in[bl].shape
+        os.remove(outfile)
+
+        # Try calibrating BDA data with omnical solution from upsampling
+        outfile = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.up_calibrated.uvh5')
+        ac.apply_cal(infile, outfile, upsampled_oc, clobber=True)
+        hd = io.HERAData(outfile)
+        d, f, n = hd.read()
+        for bl in d:
+            assert d[bl].shape == d_in[bl].shape
+        os.remove(outfile)
+
+        # Try calibrating BDA and then downsampled data with omnical solution from downsampling
+        outfile = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.down_calibrated.uvh5')
+        ac.apply_cal(infile, outfile, downsampled_oc, clobber=True, downsample=True)
+        hd = io.HERAData(outfile)
+        d, f, n = hd.read()
+        for bl in d:
+            assert d[bl].shape[0] == 1
+        os.remove(outfile)
+
+        # Try calibrating BDA and then upsampled data with omnical solution from upsampling
+        outfile = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.up_calibrated.uvh5')
+        ac.apply_cal(infile, outfile, upsampled_oc, clobber=True, upsample=True)
+        hd = io.HERAData(outfile)
+        d, f, n = hd.read()
+        for bl in d:
+            assert d[bl].shape[0] == 8
+        os.remove(outfile)
 
     def test_apply_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']

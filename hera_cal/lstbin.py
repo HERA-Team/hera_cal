@@ -11,6 +11,7 @@ import numpy as np
 import operator
 import gc as garbage_collector
 import datetime
+import warnings
 
 from . import utils
 from . import version
@@ -52,8 +53,8 @@ def baselines_same_across_nights(data_list):
 
 def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None, begin_lst=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
-            sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, antpos=None, rephase=False,
-            freq_array=None, lat=-30.72152, verbose=True, bl_list=None):
+            sig_clip=False, sigma=4.0, min_N=4, flag_below_min_N=False, return_no_avg=False, antpos=None,
+            rephase=False, freq_array=None, lat=-30.72152, verbose=True, bl_list=None):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -89,6 +90,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         Warning: This is considerably slow.
     sigma : type=float, input sigma threshold to use for sigma clipping algorithm.
     min_N : type=int, minimum number of points in averaged LST bin needed to perform sigma clipping
+    flag_below_min_N : type=bool, if True, flag frequency slices with fewer than min_N data points if sigma clipping
     return_no_avg : type=boolean, if True, return binned but un-averaged data and flags.
     rephase : type=bool, if True, phase data to center of the LST bin before binning.
         Note this produces a copy of the data.
@@ -232,20 +234,20 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 if data_in_bin[k]:
                     # if index not in data[key], insert it as empty list
                     if ind not in data[key]:
-                        data[key][ind] = []
-                        flags[key][ind] = []
-                        nsamples[key][ind] = []
+                        data[key][ind] = np.empty((0, Nfreqs), dtype=d[key].dtype)
+                        flags[key][ind] = np.empty((0, Nfreqs), dtype=bool)
+                        nsamples[key][ind] = np.empty((0, Nfreqs), dtype=np.int8)
                     # append data ndarray to LST bin
-                    data[key][ind].append(d[key][k])
+                    data[key][ind] = np.vstack((data[key][ind], d[key][k]))
                     # also insert flags if fed
                     if flags_list is None:
-                        flags[key][ind].append(np.zeros_like(d[key][k], np.bool))
+                        flags[key][ind] = np.vstack((flags[key][ind], np.zeros_like(d[key][k], dtype=bool)))
                     else:
-                        flags[key][ind].append(flags_list[i][key][k])
+                        flags[key][ind] = np.vstack((flags[key][ind], flags_list[i][key][k]))
                     if nsamples_list is None:
-                        nsamples[key][ind].append(np.ones_like(d[key][k], np.int8))
+                        nsamples[key][ind] = np.vstack((nsamples[key][ind], np.ones_like(d[key][k], dtype=np.int8)))
                     else:
-                        nsamples[key][ind].append(nsamples_list[i][key][k])
+                        nsamples[key][ind] = np.vstack((nsamples[key][ind], nsamples_list[i][key][k]))
 
         # add in spoofed baselines to keep baselines in different LST files consistent.
         if bl_list is not None:
@@ -254,9 +256,10 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     key = antpair + (pol,)
                     if key not in data and ((key[0] != key[1] and utils.reverse_bl(key) not in data) or key[0] == key[1]):
                         # last part lets us spoof ne and en for autocorrs. If we dont include it, only en xor ne will be spoofed.
-                        nsamples[key] = odict({ind: [] for ind in range(len(lst_grid))})
-                        data[key] = odict({ind: [] for ind in range(len(lst_grid))})
-                        flags[key] = odict({ind: [] for ind in range(len(lst_grid))})
+                        # using int8 and complex64 to allow numpy to promote the precision of these arrays only if needed
+                        nsamples[key] = odict({ind: np.empty((0, Nfreqs), dtype=np.int8) for ind in range(len(lst_grid))})
+                        data[key] = odict({ind: np.empty((0, Nfreqs), dtype=np.complex64) for ind in range(len(lst_grid))})
+                        flags[key] = odict({ind: np.empty((0, Nfreqs), dtype=bool) for ind in range(len(lst_grid))})
 
                     # Since different nights have different sets of baselines and different LST bins have different sets of nights,
                     # it is possible to get a baseline that appears in a subset of the LSTs within an LST chunk
@@ -265,13 +268,13 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     # The following lines address this case.
                     for ind in range(len(lst_grid)):
                         if ind not in nsamples[key]:
-                            nsamples[key][ind] = []
-                            flags[key][ind] = []
-                            data[key][ind] = []
+                            nsamples[key][ind] = np.empty((0, Nfreqs), dtype=np.int8)
+                            flags[key][ind] = np.empty((0, Nfreqs), dtype=bool)
+                            data[key][ind] = np.empty((0, Nfreqs), dtype=np.complex64)
                         if len(nsamples[key][ind]) == 0:
-                            nsamples[key][ind].append(np.zeros(Nfreqs, np.int8))
-                            flags[key][ind].append(np.ones(Nfreqs, dtype=bool))
-                            data[key][ind].append(np.zeros(Nfreqs, dtype=complex))
+                            nsamples[key][ind] = np.vstack((nsamples[key][ind], np.zeros(Nfreqs, dtype=np.int8)))
+                            flags[key][ind] = np.vstack((flags[key][ind], np.ones(Nfreqs, dtype=bool)))
+                            data[key][ind] = np.vstack((data[key][ind], np.zeros(Nfreqs, dtype=np.complex64)))
 
     # get final lst_bin array
     if truncate_empty:
@@ -287,9 +290,9 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     # fill data with blank data
                     # if the index is not present.
                     if index not in data[key]:
-                        data[key][index] = [np.zeros(Nfreqs, np.complex)]
-                        flags[key][index] = [np.ones(Nfreqs, np.bool)]
-                        nsamples[key][index] = [np.zeros(Nfreqs, np.int8)]
+                        data[key][index] = np.array([np.zeros(Nfreqs, dtype=np.complex64)])
+                        flags[key][index] = np.array([np.ones(Nfreqs, dtype=np.bool)])
+                        nsamples[key][index] = np.array([np.zeros(Nfreqs, dtype=np.int8)])
 
         # use all LST bins
         lst_bins = lst_grid
@@ -335,14 +338,25 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
 
             # sigma clip if desired
             if sig_clip:
+                # flag frequency slices with fewer than min_N data points
+                if flag_below_min_N:
+                    below_min_N_freqs = np.where(f.sum(axis=0) < min_N)[0]
+                    if below_min_N_freqs.size > 0:
+                        d[:, below_min_N_freqs] *= np.nan
+                        f[:, below_min_N_freqs] = True
+
                 # clip real
-                real_f = sigma_clip(d.real, sigma=sigma, min_N=min_N, axis=0)
+                real_f = sigma_clip(d.real, sigma=sigma, min_N=min_N)
 
                 # clip imag
-                imag_f = sigma_clip(d.imag, sigma=sigma, min_N=min_N, axis=0)
+                imag_f = sigma_clip(d.imag, sigma=sigma, min_N=min_N)
 
                 # get real + imag flags
                 clip_flags = real_f + imag_f
+
+                # apply min_N condition as sigma_clip only checks axis size, not number of flags
+                sc_min_N = np.logical_not(f).sum(axis=0) < min_N
+                clip_flags[:, sc_min_N] = False
 
                 # set clipped data to nan
                 d[clip_flags] *= np.nan
@@ -354,7 +368,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
             if len(f) == 1:
                 flag_bin = np.zeros(f.shape[1], np.bool)
             else:
-                flag_bin = np.sum(f, axis=0).astype(np.float) / len(f) > flag_thresh
+                flag_bin = np.sum(f, axis=0).astype(float) / len(f) > flag_thresh
             d[:, flag_bin] *= np.nan
             f[:, flag_bin] = True
 
@@ -366,26 +380,35 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 # for mean to account for varying nsamples, take nsamples weighted sum.
                 # (inverse variance weighted sum).
                 isfinite = np.isfinite(d)
-                d[~isfinite] = 0.0
                 n[~isfinite] = 0.0
 
                 norm = np.sum(n, axis=0).clip(1e-99, np.inf)
-                real_avg.append(np.sum(d.real * n, axis=0) / norm)
-                imag_avg.append(np.sum(d.imag * n, axis=0) / norm)
+                real_avg_t = np.nansum(d.real * n, axis=0) / norm
+                imag_avg_t = np.nansum(d.imag * n, axis=0) / norm
+
+                # add back nans as np.nansum sums nan slices to 0
+                flagged_f = np.logical_not(isfinite).all(axis=0)
+                real_avg_t[flagged_f] = np.nan
+                imag_avg_t[flagged_f] = np.nan
+
+                real_avg.append(real_avg_t)
+                imag_avg.append(imag_avg_t)
 
             # get minimum bin flag
             f_min.append(np.nanmin(f, axis=0))
 
             # get other stats
-            real_std.append(np.nanstd(d.real, axis=0))
-            imag_std.append(np.nanstd(d.imag, axis=0))
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
+                real_std.append(np.nanstd(d.real, axis=0))
+                imag_std.append(np.nanstd(d.imag, axis=0))
             bin_count.append(np.nansum(~np.isnan(d) * n, axis=0))
 
         # get final statistics
         d_avg = np.array(real_avg) + 1j * np.array(imag_avg)
         f_min = np.array(f_min)
         d_std = np.array(real_std) + 1j * np.array(imag_std)
-        d_num = np.array(bin_count).astype(np.float)
+        d_num = np.array(bin_count).astype(float)
 
         # fill nans
         d_nan = np.isnan(d_avg)
@@ -496,6 +519,7 @@ def lst_bin_arg_parser():
     a.add_argument("--sig_clip", default=False, action='store_true', help="perform robust sigma clipping before binning")
     a.add_argument("--sigma", type=float, default=4.0, help="sigma threshold for sigma clipping")
     a.add_argument("--min_N", type=int, default=4, help="minimum number of points in bin needed to proceed with sigma clipping")
+    a.add_argument("--flag_below_min_N", default=False, action='store_true', help="flag frequency slices if there are fewer than min_N data points when sigma clipping")
     a.add_argument("--rephase", default=False, action='store_true', help="rephase data to center of LST bin before binning")
     a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
     a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
@@ -594,8 +618,8 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
 
 def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None,
-                  atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False, output_file_select=None,
-                  Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
+                  atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, flag_below_min_N=False, rephase=False,
+                  output_file_select=None, Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
                   bl_error_tol=1.0, include_autos=True, ex_ant_yaml_files=None, **kwargs):
     """
     LST bin a series of UVH5 files with identical frequency bins, but varying
@@ -611,7 +635,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     -----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
         paths to files from a particular night. Frequency axis of each file must be identical.
-        Metadata like x_orientation is inferred from the lowest JD file on the night with the 
+        Metadata like x_orientation is inferred from the lowest JD file on the night with the
         highest JDs (i.e. the last night) and assumed to be the same for all files
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
@@ -705,7 +729,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             if a not in antpos:
                 antpos[a] = hd.antpos[a]
         nightly_last_hds.append(hd)
-    
+
     # generate a list of dictionaries which contain the nights occupied by each unique baseline
     # (or unique baseline group if average_redundant_baselines is true)
     bl_nightly_dicts = gen_bl_nightly_dicts(nightly_last_hds, bl_error_tol=bl_error_tol,
@@ -791,8 +815,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                         if np.all([j not in list(bl_nightly_dict.keys()) for bl_nightly_dict in blgroup]):
                             utils.echo(f"The current night {j} is not present in any of the baseline dicts in the current blgroup.", verbose=verbose)
                         continue
-                    data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
-                    data.phase_type = 'drift'
 
                     # load calibration
                     if input_cals is not None:
@@ -855,7 +877,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             (bin_lst, bin_data, flag_data, std_data,
              num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
                                  lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamples_list=nsamples_list,
-                                 sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos, bl_list=all_blgroup_baselines)
+                                 sigma=sigma, min_N=min_N, flag_below_min_N=flag_below_min_N, rephase=rephase, freq_array=freq_array,
+                                 antpos=antpos, bl_list=all_blgroup_baselines)
             # append to lists
             data_conts.append(bin_data)
             flag_conts.append(flag_data)
@@ -927,7 +950,7 @@ def make_lst_grid(dlst, begin_lst=None, verbose=True):
     # check 2pi is equally divisible by dlst
     if not np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5) and not np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5):
         # generate array of appropriate dlsts
-        dlsts = 2 * np.pi / np.arange(1, 1000000).astype(np.float)
+        dlsts = 2 * np.pi / np.arange(1, 1000000).astype(float)
 
         # get dlsts closest to dlst, but also greater than dlst
         dlst_diff = dlsts - dlst
@@ -952,61 +975,40 @@ def make_lst_grid(dlst, begin_lst=None, verbose=True):
     return lst_grid
 
 
-def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
+def sigma_clip(array, sigma=4.0, min_N=4):
     """
-    one-iteration robust sigma clipping algorithm. returns clip_flags array.
-    Warning: this function will directly replace flagged and clipped data in array with
-    a np.nan, so as to not make a copy of array.
+    One-iteration robust sigma clipping algorithm. Returns clip_flags array.
 
     Parameters:
     -----------
-    array : ndarray of complex visibility data. If 2D, [0] axis is samples and [1] axis is freq.
+    array : ndarray of complex visibility data. Clipping performed on 0th axis.
 
-    flags : ndarray matching array shape containing boolean flags. True if flagged.
-
-    sigma : float, sigma threshold to cut above
-
-    axis : int, axis of array to sigma clip
+    sigma : float, sigma threshold to cut above.
 
     min_N : int, minimum length of array to sigma clip, below which no sigma
-                clipping is performed.
-
-    return_arrs : type=boolean, if True, return array and flags
+            clipping is performed.
 
     Output: flags
     -------
     clip_flags : type=boolean ndarray, has same shape as input array, but has clipped
-                 values set to True. Also inherits any flagged data from flags array
-                 if passed.
+                 values set to True.
     """
     # ensure array is an array
     if not isinstance(array, np.ndarray):
         array = np.array(array)
 
-    # ensure array passes min_N criteria:
-    if array.shape[axis] < min_N:
-        return np.zeros_like(array, np.bool)
-
-    # create empty clip_flags array
-    clip_flags = np.zeros_like(array, np.bool)
-
-    # inherit flags if fed and apply flags to data
-    if flags is not None:
-        clip_flags += flags
-        array[flags] *= np.nan
+    # ensure array passes min_N criterion:
+    if array.shape[0] < min_N:
+        return np.zeros_like(array, dtype=bool)
 
     # get robust location
-    location = np.nanmedian(array, axis=axis)
+    location = np.nanmedian(array, axis=0)
 
-    # get MAD! * 1.482579
-    scale = np.nanmedian(np.abs(array - location), axis=axis) * 1.482579
+    # get MAD * 1.482579 for consistency with Gaussian white noise
+    scale = np.nanmedian(np.abs(array - location), axis=0) * 1.482579
 
     # get clipped data
-    clip = np.abs(array - location) / scale > sigma
-
-    # set clipped data to nan and set clipped flags to True
-    array[clip] *= np.nan
-    clip_flags[clip] = True
+    clip_flags = np.abs(array - location) / scale > sigma
 
     return clip_flags
 

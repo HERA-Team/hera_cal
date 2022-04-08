@@ -4,3 +4,4 @@ PULL ANTPOLS:/home/obs/src/RTP/scripts/hera/pull_antpols_simple.py -p yy -a 9,10
   Read/written with pyuvdata version: 1.1.  Downselected to specific times, frequencies using pyuvdata.
   Read/written with pyuvdata version: 1.1.  Git origin: https://github.com/HERA-Team/pyuvdata.git.  Git hash: f0ce5e984235ad274ece7b55032b679864f799f0.  Git branch: master.  Git description: v1.1-507-gf0ce5e9.
   Read/written with pyuvdata version: 1.4.2.  Git origin: https://github.com/RadioAstronomySoftwareGroup/pyuvdata.git.  Git hash: 1889573c13e27532aa1854463a4f38daa11c9772.  Git branch: master.  Git description: v1.4-363-g1889573.
+  Read/written with pyuvdata version: 2.2.5.dev128+g403956f0.head.

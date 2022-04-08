@@ -41,7 +41,7 @@ setup_args = {
                 'scripts/smooth_cal_run.py', 'scripts/redcal_run.py',
                 'scripts/auto_reflection_run.py', 'scripts/noise_from_autos.py',
                 'scripts/query_ex_ants.py', 'scripts/red_average.py',
-                'scripts/time_average.py',
+                'scripts/time_average.py', 'scripts/tophat_frfilter_run.py',
                 'scripts/time_chunk_from_baseline_chunks_run.py', 'scripts/chunk_files.py', 'scripts/transfer_flags.py',
                 'scripts/flag_all.py', 'scripts/throw_away_flagged_antennas.py', 'scripts/select_spw_ranges.py'],
     'version': version.version,
@@ -50,6 +50,7 @@ setup_args = {
         'numpy>=1.10',
         'scipy',
         'astropy',
+        'astropy-healpix',
         'pyuvdata',
         'linsolve @ git+http://github.com/HERA-Team/linsolve',
         'hera_qm @ git+http://github.com/HERA-Team/hera_qm',
@@ -58,7 +59,7 @@ setup_args = {
     'extras_require': {
         "all": [
             'aipy>=3.0',
-            'uvtools @ git+git://github.com/HERA-Team/uvtools',
+            'uvtools @ git+http://github.com/HERA-Team/uvtools',
         ]
     },
     'zip_safe': False,

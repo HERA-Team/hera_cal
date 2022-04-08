@@ -44,6 +44,22 @@ class Test_Noise(object):
         with pytest.raises(AssertionError):
             noise.interleaved_noise_variance_estimate(np.random.randn(10, 10), kernel=[-1, 1])
 
+    def test_infer_dt(self):
+        times_by_bl = {(0, 0): [1., 2.], (0, 1): [1.5]}
+
+        assert noise.infer_dt(times_by_bl, (0, 0)) == 1.0
+        assert noise.infer_dt(times_by_bl, (0, 0, 'ee')) == 1.0
+        assert noise.infer_dt(times_by_bl, (0, 1)) == 2.0
+        assert noise.infer_dt(times_by_bl, (0, 1), 'ee') == 2.0
+
+        times_by_bl = {(0, 0): [], (0, 1): [1.5]}
+        assert noise.infer_dt(times_by_bl, (0, 0), default_dt=.1) == .1
+        assert noise.infer_dt(times_by_bl, (0, 1), default_dt=.1) == .1
+        with pytest.raises(ValueError):
+            noise.infer_dt(times_by_bl, (0, 0))
+        with pytest.raises(ValueError):
+            noise.infer_dt(times_by_bl, (0, 1))
+
     def test_predict_noise_variance_from_autos(self):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5'))
         data, flags, nsamples = hd.read()

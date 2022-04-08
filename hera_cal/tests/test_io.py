@@ -136,6 +136,7 @@ class Test_HERAData(object):
     def setup_method(self):
         self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5")
         self.uvh5_2 = os.path.join(DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5")
+        self.uvh5_bda = os.path.join(DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.uvh5")
         self.miriad_1 = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.miriad_2 = os.path.join(DATA_PATH, "zen.2458043.13298.xx.HH.uvORA")
         self.uvfits = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
@@ -146,6 +147,8 @@ class Test_HERAData(object):
         # single uvh5 file
         hd = HERAData(self.uvh5_1)
         assert hd.filepaths == [self.uvh5_1]
+        assert not hd.upsample
+        assert not hd.downsample
         for meta in hd.HERAData_metas:
             assert getattr(hd, meta) is not None
         assert len(hd.freqs) == 1024
@@ -184,15 +187,27 @@ class Test_HERAData(object):
         for meta in hd.HERAData_metas:
             assert getattr(hd, meta) is None
 
+        # bda upsample/downsample
+        hd = HERAData(self.uvh5_bda, upsample=True)
+        assert hd.upsample
+        assert not hd.downsample
+        assert hd.shortest_integration == pytest.approx(9.66367642)
+        hd = HERAData(self.uvh5_bda, downsample=True)
+        assert not hd.upsample
+        assert hd.downsample
+        assert hd.longest_integration == pytest.approx(77.30941133)
+
         # test errors
         with pytest.raises(TypeError):
             hd = HERAData([1, 2])
         with pytest.raises(ValueError):
             hd = HERAData(None)
         with pytest.raises(NotImplementedError):
-            hd = HERAData(self.uvh5_1, 'not a real type')
+            hd = HERAData(self.uvh5_1, filetype='not a real type')
         with pytest.raises(IOError):
             hd = HERAData('fake path')
+        with pytest.raises(ValueError):
+            hd = HERAData(self.uvh5_bda, upsample=True, downsample=True)
 
     def test_add(self):
         hd = HERAData(self.uvh5_1)
@@ -435,6 +450,41 @@ class Test_HERAData(object):
         with pytest.raises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
 
+    def test_read_bda(self):
+        # no upsampling or downsampling
+        hd = HERAData(self.uvh5_bda)
+        assert np.max(hd.integration_time) == pytest.approx(77.30941133)
+        assert np.min(hd.integration_time) == pytest.approx(9.66367642)
+        assert len(np.unique(hd.time_array)) > 8
+        assert len(hd.times) == 8
+        assert len(hd.times_by_bl[117, 118]) == 1
+        assert len(hd.times_by_bl[104, 117]) == 8
+        d, f, n = hd.read()
+        assert len(d.times_by_bl[117, 118]) == 1
+        assert len(d.times_by_bl[104, 117]) == 8
+
+    def test_read_bda_upsample(self):
+        # show that upsampling works properly even with partial i/o
+        hd = HERAData(self.uvh5_bda, upsample=True)
+        assert len(hd.times_by_bl[117, 118]) == 8
+        d, f, n = hd.read(bls=[(117, 118, 'ee')])
+        assert d[(117, 118, 'ee')].shape == (8, len(hd.freqs))
+        np.testing.assert_array_almost_equal(hd.integration_time, 9.66367642)
+        np.testing.assert_array_almost_equal(np.diff(d.times), 9.66367642 / 24 / 3600)
+        assert len(d.times_by_bl[117, 118]) == 8
+        np.testing.assert_array_almost_equal(np.diff(d.times_by_bl[117, 118]), 9.66367642 / 24 / 3600)
+
+    def test_read_bda_downsample(self):
+        # show that downsampling works properly even with partial i/o
+        hd = HERAData(self.uvh5_bda, downsample=True)
+        assert len(hd.times_by_bl[104, 117]) == 1
+        d, f, n = hd.read(bls=[(104, 117, 'ee')])
+        assert d[(104, 117, 'ee')].shape == (1, len(hd.freqs))
+        np.testing.assert_array_almost_equal(hd.integration_time, 77.30941133)
+        np.testing.assert_array_almost_equal(np.diff(d.times), 77.30941133 / 24 / 3600)
+        assert len(d.times_by_bl[104, 117]) == 1
+        np.testing.assert_array_almost_equal(np.diff(d.times_by_bl[104, 117]), 77.30941133 / 24 / 3600)
+
     def test_getitem(self):
         hd = HERAData(self.uvh5_1)
         hd.read()
@@ -460,7 +510,7 @@ class Test_HERAData(object):
         assert hd._writers == {}
         d, f, n = hd.read(bls=hd.bls[0])
         assert hd.last_read_kwargs['bls'] == (53, 53, parse_polstr('XX', x_orientation=hd.x_orientation))
-        d[(53, 53, 'EE')] *= (2.0 + 1.0j)
+        d[(53, 53, 'EE')] *= 2.0
         hd.partial_write('out.h5', data=d, clobber=True)
         assert 'out.h5' in hd._writers
         assert isinstance(hd._writers['out.h5'], HERAData)
@@ -473,12 +523,12 @@ class Test_HERAData(object):
 
         d, f, n = hd.read(bls=hd.bls[1])
         assert hd.last_read_kwargs['bls'] == (53, 54, parse_polstr('XX', x_orientation=hd.x_orientation))
-        d[(53, 54, 'EE')] *= (2.0 + 1.0j)
+        d[(53, 54, 'EE')] *= 2.0
         hd.partial_write('out.h5', data=d, clobber=True)
 
         d, f, n = hd.read(bls=hd.bls[2])
         assert hd.last_read_kwargs['bls'] == (54, 54, parse_polstr('XX', x_orientation=hd.x_orientation))
-        d[(54, 54, 'EE')] *= (2.0 + 1.0j)
+        d[(54, 54, 'EE')] *= 2.0
         hd.partial_write('out.h5', data=d, clobber=True, inplace=True)
         d_after, _, _ = hd.build_datacontainers()
         np.testing.assert_array_almost_equal(d[(54, 54, 'EE')], d_after[(54, 54, 'EE')])
@@ -488,7 +538,7 @@ class Test_HERAData(object):
         hd2 = HERAData('out.h5')
         d2, f2, n2 = hd2.read()
         for bl in hd.bls:
-            np.testing.assert_array_almost_equal(d[bl] * (2.0 + 1.0j), d2[bl])
+            np.testing.assert_array_almost_equal(d[bl] * 2.0, d2[bl])
             np.testing.assert_array_equal(f[bl], f2[bl])
             np.testing.assert_array_equal(n[bl], n2[bl])
         os.remove('out.h5')
@@ -759,7 +809,7 @@ class Test_Visibility_IO_Legacy(object):
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
 
         # make some modifications
-        new_data = {key: (2. + 1.j) * val for key, val in data.items()}
+        new_data = {key: (2.) * val for key, val in data.items()}
         new_flags = {key: np.logical_not(val) for key, val in flags.items()}
         io.update_vis(fname, outname, data=new_data, flags=new_flags,
                       add_to_history='hello world', clobber=True, telescope_name='PAPER')
@@ -774,6 +824,13 @@ class Test_Visibility_IO_Legacy(object):
         assert pyuvdata.utils._check_histories(uvd2.history, uvd.history + 'hello world')
         assert uvd2.telescope_name == 'PAPER'
         shutil.rmtree(outname)
+
+        # test writing uvfits instead
+        io.update_vis(fname, outname, data=new_data, flags=new_flags, filetype_out='uvfits',
+                      add_to_history='hello world', clobber=True, telescope_name='PAPER')
+        uvd_fits = UVData()
+        uvd_fits.read_uvfits(outname)
+        os.remove(outname)
 
         # Coverage for errors
         with pytest.raises(TypeError):
@@ -1072,6 +1129,101 @@ def test_get_file_times():
 
     # exceptions
     pytest.raises(ValueError, io.get_file_times, fp, filetype='foo')
+
+
+def test_get_file_times_bda():
+    fps = [os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5'),
+           os.path.join(DATA_PATH, 'zen.2459122.30119.sum.bda.downsampled.uvh5')]
+    
+    # test single file load
+    dlsts, dtimes, larrs, tarrs = io.get_file_times(fps[0], filetype='uvh5')
+    hd = io.HERAData(fps[0])
+    assert dlsts == np.median(np.diff(hd.lsts))
+    assert dtimes == np.median(np.diff(hd.times))
+    np.testing.assert_array_equal(larrs, hd.lsts)
+    np.testing.assert_array_equal(tarrs, hd.times)
+
+    # test multi-file load
+    dlsts, dtimes, larrs, tarrs = io.get_file_times(fps, filetype='uvh5')
+    hd = io.HERAData(fps)
+    for fp, dlst, dtime, larr, tarr in zip(fps, dlsts, dtimes, larrs, tarrs):
+        assert dlst == np.median(np.diff(hd.lsts[fp]))
+        assert dtime == np.median(np.diff(hd.times[fp]))
+        np.testing.assert_array_equal(larr, hd.lsts[fp])
+        np.testing.assert_array_equal(tarr, hd.times[fp])
+
+
+def test_get_file_times_single_integraiton():
+    fp = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.single_time.uvh5')
+    dlsts, dtimes, larrs, tarrs = io.get_file_times(fp, filetype='uvh5')
+    assert len(larrs) == 1
+    assert len(tarrs) == 1
+
+    fp2 = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5')
+    dlsts2, dtimes2, larrs2, tarrs2 = io.get_file_times(fp, filetype='uvh5')
+    np.testing.assert_array_almost_equal(dlsts, dlsts2)
+    np.testing.assert_array_almost_equal(dtimes, dtimes2)
+    np.testing.assert_array_equal(larrs[0], larrs2[0])
+    np.testing.assert_array_equal(tarrs[0], tarrs2[0])
+
+
+def test_partial_time_io():
+    files = [os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5'),
+             os.path.join(DATA_PATH, 'zen.2459122.30119.sum.bda.downsampled.uvh5')]
+
+    # single file test
+    hd = io.HERAData(files[0])
+
+    # pick out specific times/lsts
+    d, f, n = io.partial_time_io(hd, times=hd.times[0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    d, f, n = io.partial_time_io(hd, lsts=hd.lsts[0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+
+    # pick out range of times/lsts (this should also get baselines with BDA)
+    d, f, n = io.partial_time_io(hd, time_range=hd.times[0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 1
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    d, f, n = io.partial_time_io(hd, lst_range=hd.lsts[0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 1
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+
+    # multi-file test, only taking times out of the first two files
+    hd = io.HERAData(files)
+
+    # pick out specific times/lsts
+    d, f, n = io.partial_time_io(hd, times=hd.times[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    d, f, n = io.partial_time_io(hd, lsts=hd.lsts[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+
+    # pick out range of times/lsts (this should also get baselines with BDA)
+    d, f, n = io.partial_time_io(hd, time_range=hd.times[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 1
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    d, f, n = io.partial_time_io(hd, lst_range=hd.lsts[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 1
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+
+    # test upsampling
+    hd = io.HERAData(files, upsample=True)
+    d, f, n = io.partial_time_io(hd, time_range=hd.times[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    d, f, n = io.partial_time_io(hd, lst_range=hd.lsts[hd.filepaths[0]][0:2])
+    assert np.min([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+    assert np.max([len(tbb) for tbb in d.times_by_bl.values()]) == 2
+
+    # test errors
+    hd = io.HERAData(files)
+    with pytest.raises(ValueError):
+        io.partial_time_io(hd, lst_range=[0, 1])
+    with pytest.raises(ValueError):
+        io.partial_time_io(hd, lst_range=hd.lsts[hd.filepaths[0]][0:2], times=hd.times[hd.filepaths[0]][0:2])
 
 
 def test_baselines_from_filelist_position(tmpdir):
