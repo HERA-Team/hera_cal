@@ -808,7 +808,7 @@ class VisClean(object):
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
                        skip_flagged_edges=False, filter_spw_ranges=None,
                        skip_contiguous_flags=False, max_contiguous_flag=None,
-                       keep_flags=False, clean_flags_in_resid_flags=False,
+                       keep_flags=False, clean_flags_in_resid_flags=True,
                        skip_if_flag_within_edge_distance=0,
                        flag_model_rms_outliers=False, model_rms_threshold=1.1,
                        **filter_kwargs):
@@ -907,7 +907,7 @@ class VisClean(object):
             if true, set the post-filtered flags equal to the original flags plus any skipped integrations / channels.
         clean_flags_in_resid_flags : bool, optional
             if true, include clean flags in residual flags that will be written out in res_outfilename.
-            default is False.
+            default is True.
         skip_if_flag_within_edge_distance : int (or 2-tuple/list), optional. Units of channels or integrations.
             If there is any flag within skip_if_flag_within_edge_distance
             of the edge of the band, then flag that integration (or channel).
@@ -1946,7 +1946,7 @@ def _filter_argparser():
     ap.add_argument("--filter_spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections to filter independently. Two acceptable formats are "
                                                                                        "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
                                                                                        "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
-    ap.add_argument("--clean_flags_in_resid_flags", default=False, action="store_true", help="include flags from times/channels skipped by filtering in the resid flags.")
+    ap.add_argument("--clean_flags_not_in_resid_flags", default=False, action="store_true", help="Do not include flags from times/channels skipped in the resid flags.")
     # Arguments for CLEAN. Not used in linear filtering methods.
     clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\

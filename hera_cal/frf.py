@@ -1463,7 +1463,7 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
 
                 # run tophat filter
                 frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
-                                      keys=keys, verbose=verbose, **filter_kwargs)
+                                      keys=keys, verbose=verbose, wgts=wgts, **filter_kwargs)
             else:
                 frfil.clean_data = DataContainer({})
                 frfil.clean_flags = DataContainer({})
