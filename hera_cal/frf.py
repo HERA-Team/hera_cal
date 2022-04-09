@@ -1274,6 +1274,10 @@ def tophat_frfilter_argparser(mode='clean'):
                                                                                                        "before applying main-lobe fringe rate filter. This is to prevent"
                                                                                                        "the main-lobe filter to responding to overwhelmingly bright emission"
                                                                                                        "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
+    ap.add_argument("--wgt_by_nsample", default=False, action="store_true", help="Use weights proportional to nsamples during FRF. Default is to just use flags by nsamples.")
+    from .smooth_cal import _pair
+    ap.add_argument("--excluded_lsts", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of LSTs in hours \
+                          bounding (inclusively) LSTs assigned zero weight during FRF, e.g. '3-4 10-12 23-.5'")
 
     desc = ("Filtering case ['max_frate_coeffs', 'uvbeam', 'sky']",
             "If case == 'max_frate_coeffs', then determine fringe rate centers",
@@ -1288,7 +1292,7 @@ def tophat_frfilter_argparser(mode='clean'):
 
 def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calfile_list=None,
                                    Nbls_per_load=None, spw_range=None, external_flags=None,
-                                   factorize_flags=False, time_thresh=0.05,
+                                   factorize_flags=False, time_thresh=0.05, wgt_by_nsample=False, excluded_lsts=None,
                                    res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                    clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
                                    overwrite_flags=False,
@@ -1325,6 +1329,12 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             Fractional threshold of flagged pixels across time needed to flag all times
             per freq channel. It is not recommend to set this greater than 0.5.
             Fully flagged integrations do not count towards triggering time_thresh.
+        wgt_by_nsample : bool, optional
+            If True, perform FRF with weighting proportional to nsamples (flags still get 0 weight).
+            Default False, meaning use only ~flags as weights.
+        excluded_lsts : list of 2-tuples, optional
+            List of LST ranges (in hours, inclusive) to assign zero weight when performing FRF (regardless of
+            whether or not they are flagged). Ranges crossing the 24h brach cut, e.g. [(23, 1)], are allowed.
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
@@ -1355,8 +1365,8 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             to add to analytic calculation of fringe-rate bounds for emission on the sky.
             default = 0.0.
         frate_width_multiplier: float, optional
-         fraction of horizon to fringe-rate filter.
-         default is 1.0
+            fraction of horizon to fringe-rate filter.
+            default is 1.0
         min_frate_half_width: float, optional
             minimum half-width of fringe-rate filter, regardless of baseline length in mHz.
             Default is 0.025
@@ -1425,6 +1435,7 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             else:
                 uvb = None
             if len(keys) > 0:
+                # figure out frige rate centers and half-widths
                 assert case in ['sky', 'max_frate_coeffs', 'uvbeam'], f'case={case} is not valid.'
                 frate_centers, frate_half_widths = select_tophat_frates(uvd=frfil.hd, blvecs=frfil.blvecs,
                                                                         case=case, keys=keys, uvb=uvb,
@@ -1438,9 +1449,21 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                                                                         fr_freq_skip=fr_freq_skip,
                                                                         verbose=verbose)
 
+                # Build weights using flags, nsamples, and exlcuded lsts
+                wgts = io.DataContainer({k: (~frfil.flags[k]).astype(float) for k in frfil.flags})
+                for k in wgts:
+                    if wgt_by_nsample:
+                        wgts[k] *= frfil.nsamples[k]
+                    if excluded_lsts is not None:
+                        for xlst in excluded_lsts:
+                            if xlst[0] < xlst[1]:
+                                wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) & (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
+                            else:
+                                wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) | (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
+
+                # run tophat filter
                 frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
                                       keys=keys, verbose=verbose, **filter_kwargs)
-
             else:
                 frfil.clean_data = DataContainer({})
                 frfil.clean_flags = DataContainer({})
