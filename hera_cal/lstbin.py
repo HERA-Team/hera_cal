@@ -349,7 +349,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 clip_flags = sigma_clip(d.real, sigma=sigma, min_N=min_N)
 
                 # clip imag and combine, skipping autocorrelations
-                if utils.split_bl(key)[0] == utils.split_bl(key)[1]:
+                if utils.split_bl(key)[0] != utils.split_bl(key)[1]:
                     imag_f = sigma_clip(d.imag, sigma=sigma, min_N=min_N)
                     clip_flags |= imag_f
 
