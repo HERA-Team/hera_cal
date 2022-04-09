@@ -5,7 +5,7 @@
 
 """Command-line driver script for model based calibration."""
 
-from hera_cal import model_calibration_argparser, run_model_based_calibration
+from hera_cal.abscal import model_calibration_argparser, run_model_based_calibration
 
 arparser = model_calibration_argparser()
 argvars = vars(argparser.parse_args())
