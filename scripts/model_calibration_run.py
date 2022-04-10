@@ -7,6 +7,6 @@
 
 from hera_cal.abscal import model_calibration_argparser, run_model_based_calibration
 
-arparser = model_calibration_argparser()
+argparser = model_calibration_argparser()
 argvars = vars(argparser.parse_args())
 run_model_based_calibration(**argvars)
