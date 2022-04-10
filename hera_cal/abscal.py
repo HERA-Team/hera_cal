@@ -3956,5 +3956,5 @@ def model_calibration_argparser():
     ap.add_argument("--verbose", default=False, action="store_true", help="lots of outputs.")
     ap.add_argument("--no_ampcal", default=False, action="store_true", help="disable amp_cal")
     ap.add_argument("--no_phscal", default=False, action="store_true", help="disable phs_cal")
-    ap.add_argument("--dly_cal", default=False, action="store_true", help="dly lincal to find starting point.")
+    ap.add_argument("--dly_lincal", default=False, action="store_true", help="dly lincal to find starting point.")
     return ap
