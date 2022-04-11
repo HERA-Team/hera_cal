@@ -1252,32 +1252,32 @@ def tophat_frfilter_argparser(mode='clean'):
     '''
     ap = vis_clean._filter_argparser()
     filt_options = ap.add_argument_group(title='Options for the fr-filter')
-    filt_options.add_argument("--frate_width_multiplier", type=float, default=1.0, help="Fraction of maximum sky-fringe-rate to interpolate / filter."
-                                                                              "Used if select_mainlobe is False and max_frate_coeffs not specified.")
-    filt_options.add_argument("--frate_standoff", type=float, default=0.0, help="Standoff in fringe-rate to filter [mHz]."
-                                                                      "Used of select_mainlobe is False and max_frate_coeffs not specified.")
-    filt_options.add_argument("--min_frate_half_width", type=float, default=0.025, help="minimum half-width of fringe-rate filter, regardless of baseline length in mHz."
-                                                                              "Default is 0.025.")
-    filt_options.add_argument("--max_frate_half_width", type=float, default=np.inf, help="maximum half-width of fringe-rate filter, regardless of baseline length in mHz."
-                                                                               "Default is np.inf, i.e. no limit.")
-    filt_options.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2."
-                                                                                  "Providing these overrides the sky-based fringe-rate determination! Default is None.")
+    filt_options.add_argument("--frate_width_multiplier", type=float, default=1.0, help="Fraction of maximum sky-fringe-rate to interpolate / filter. "
+                                                                                        "Used if select_mainlobe is False and max_frate_coeffs not specified.")
+    filt_options.add_argument("--frate_standoff", type=float, default=0.0, help="Standoff in fringe-rate to filter [mHz]. "
+                                                                                "Used of select_mainlobe is False and max_frate_coeffs not specified.")
+    filt_options.add_argument("--min_frate_half_width", type=float, default=0.025, help="minimum half-width of fringe-rate filter, regardless of baseline length in mHz. "
+                                                                                        "Default is 0.025.")
+    filt_options.add_argument("--max_frate_half_width", type=float, default=np.inf, help="maximum half-width of fringe-rate filter, regardless of baseline length in mHz. "
+                                                                                         "Default is np.inf, i.e. no limit.")
+    filt_options.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2. "
+                                                                                            "Providing these overrides the sky-based fringe-rate determination! Default is None.")
     filt_options.add_argument("--skip_autos", default=False, action="store_true", help="Exclude autos from filtering.")
     filt_options.add_argument("--beamfitsfile", default=None, type=str, help="Path to UVBeam beamfits file to use for determining isotropic sky fringe-rates to filter.")
     filt_options.add_argument("--percentile_low", default=5.0, type=float, help="Reject fringe-rates with beam power below this percentile if beamfitsfile is provided.")
     filt_options.add_argument("--percentile_high", default=95.0, type=float, help="Reject fringe-rates with beam power above this percentile if beamfitsfile is provided.")
     filt_options.add_argument("--taper", default='none', type=str, help="Weight fringe-rates at different frequencies by the square of this taper if beamfitsfile is provided.")
-    filt_options.add_argument("--fr_freq_skip", default=1, type=int, help="fr_freq_skip: int, optional"
-                                                                "bin fringe rates from every freq_skip channels."
-                                                                "default is 1 -> takes a long time. We recommend setting this to be larger.")
-    filt_options.add_argument("--pre_filter_modes_between_lobe_minimum_and_zero", type=bool, default=False, help="Subtract emission between the main-lobe fringe-rate region and zero"
-                                                                                                       "before applying main-lobe fringe rate filter. This is to prevent"
-                                                                                                       "the main-lobe filter to responding to overwhelmingly bright emission"
-                                                                                                       "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
+    filt_options.add_argument("--fr_freq_skip", default=1, type=int, help="fr_freq_skip: int, optional "
+                                                                          "bin fringe rates from every freq_skip channels. "
+                                                                          "default is 1 -> takes a long time. We recommend setting this to be larger.")
+    filt_options.add_argument("--pre_filter_modes_between_lobe_minimum_and_zero", type=bool, default=False, help="Subtract emission between the main-lobe fringe-rate region and zero "
+                                                                                                                 "before applying main-lobe fringe rate filter. This is to prevent "
+                                                                                                                 "the main-lobe filter to responding to overwhelmingly bright emission "
+                                                                                                                 "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
     filt_options.add_argument("--wgt_by_nsample", default=False, action="store_true", help="Use weights proportional to nsamples during FRF. Default is to just use flags by nsamples.")
     from .smooth_cal import _pair
-    filt_options.add_argument("--excluded_lsts", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of LSTs in hours \
-                          bounding (inclusively) LSTs assigned zero weight during FRF, e.g. '3-4 10-12 23-.5'")
+    filt_options.add_argument("--excluded_lsts", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of LSTs in hours "
+                                                                                         "bounding (inclusively) LSTs assigned zero weight during FRF, e.g. '3-4 10-12 23-.5'")
 
     desc = ("Filtering case ['max_frate_coeffs', 'uvbeam', 'sky']",
             "If case == 'max_frate_coeffs', then determine fringe rate centers",
