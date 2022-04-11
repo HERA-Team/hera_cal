@@ -346,13 +346,12 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                         f[:, below_min_N_freqs] = True
 
                 # clip real
-                real_f = sigma_clip(d.real, sigma=sigma, min_N=min_N)
+                clip_flags = sigma_clip(d.real, sigma=sigma, min_N=min_N)
 
-                # clip imag
-                imag_f = sigma_clip(d.imag, sigma=sigma, min_N=min_N)
-
-                # get real + imag flags
-                clip_flags = real_f + imag_f
+                # clip imag and combine, skipping autocorrelations
+                if utils.split_bl(key)[0] != utils.split_bl(key)[1]:
+                    imag_f = sigma_clip(d.imag, sigma=sigma, min_N=min_N)
+                    clip_flags |= imag_f
 
                 # apply min_N condition as sigma_clip only checks axis size, not number of flags
                 sc_min_N = np.logical_not(f).sum(axis=0) < min_N
