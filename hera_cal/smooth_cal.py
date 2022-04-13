@@ -68,7 +68,6 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     return np.sum(taus)
 
 
-
 def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1e-8):
     """Generate a set of 2D discrete prolate spheroidal sequence (DPSS) filters
     to filter calibration solutions along the time and frequency axes simultaneously.
@@ -84,7 +83,7 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
             Note that time_scale is in seconds, times is in days.
         eigenval_cutoff: sinc_matrix eigenvalue cutoff to use for included dpss modes.
             Only used when the filtering method is 'DPSS'
-            
+
     Returns:
         filters: DPSS filtering vectors, ndarray of size (Ntimes * Nfreqs, N_frequency_vectors * N_time_vectors)
     """
@@ -127,7 +126,7 @@ def fit_solution_matrix(weights, design_matrix):
             obtained from hera_cal.smooth_cal.dpss_filters
 
     Returns:
-    
+
         S: ndarray of shape (N_frequency_vectors * N_time_vectors, Ntimes * Nfreqs)
     """
     cmat = (design_matrix.T * weights.reshape(-1)) @ design_matrix
