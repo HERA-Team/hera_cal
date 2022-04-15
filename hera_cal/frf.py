@@ -63,7 +63,7 @@ def _get_key_reds(antpos, keys):
     return reds
 
 
-def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0, 
+def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
                          min_frate_half_width=0.025, max_frate_half_width=np.inf,
                          max_frate_coeffs=None, uvb=None, frate_profiles=None, percentile_low=5.0, percentile_high=95.0,
                          fr_freq_skip=1, nfr=None, dfr=None, verbose=False):
@@ -148,7 +148,7 @@ def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, 
     if case == 'sky':
         # Fringe-rate filter all modes that could be occupied by sky emission.
         frate_centers, frate_half_widths = sky_frates(uvd, keys=keys, frate_standoff=frate_standoff,
-                                                      frate_width_multiplier=frate_width_multiplier, 
+                                                      frate_width_multiplier=frate_width_multiplier,
                                                       min_frate_half_width=min_frate_half_width,
                                                       max_frate_half_width=max_frate_half_width)
     elif case == 'max_frate_coeffs':
@@ -1291,14 +1291,13 @@ def tophat_frfilter_argparser(mode='clean'):
 
 
 def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calfile_list=None,
-                                   Nbls_per_load=None, spw_range=None, cache_dir=None,
-                                   read_cache=False, write_cache=False, external_flags=None,
+                                   Nbls_per_load=None, spw_range=None, external_flags=None,
                                    factorize_flags=False, time_thresh=0.05, wgt_by_nsample=False, excluded_lsts=None,
                                    res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                    clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
-                                   skip_flagged_edges=False, overwrite_flags=False,
+                                   overwrite_flags=False,
                                    flag_yaml=None, skip_autos=False, beamfitsfile=None, verbose=False,
-                                   clean_flags_in_resid_flags=True, read_axis=None,
+                                   read_axis=None,
                                    percentile_low=5., percentile_high=95.,
                                    frate_standoff=0.0, frate_width_multiplier=1.0,
                                    min_frate_half_width=0.025, max_frate_half_width=np.inf,
@@ -1324,11 +1323,6 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
         Nbls_per_load: int, the number of baselines to load at once.
             If None, load all baselines at once. default : None.
         spw_range: 2-tuple or 2-list, spw_range of data to filter.
-        cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-            see uvtools.dspec.dayenu_filter for key formats.
-        read_cache: bool, If true, read existing cache files in cache_dir before running.
-        write_cache: bool. If true, create new cache file with precomputed matrices
-            that were not in previously loaded cache files.
         factorize_flags: bool, optional
             If True, factorize flags before running fr filter. See vis_clean.factorize_flags.
         time_thresh : float, optional
@@ -1349,7 +1343,6 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
         add_to_history: string appended to the history of the output file
         avg_red_bllens: bool, if True, round baseline lengths to redundant average. Default is False.
         polarizations : list of polarizations to process (and write out). Default None operates on all polarizations in data.
-        skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
         overwrite_flags : bool, if true reset data flags to False except for flagged antennas.
         flag_yaml: path to manual flagging text file.
         skip_autos: bool, if true, exclude autocorrelations from filtering. Default is False.
@@ -1359,8 +1352,6 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             default is None -> use other filter kwargs to determine fringe rate bounds.
         verbose: bool, optional
             Helpful text outputs.
-        clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
-            default is True.
         read_axis: str, optional
             optional parameter to pass as the axis arg to io.HERAData.read()
         percentile_low: float, optional
@@ -1471,10 +1462,8 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                                 wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) | (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
 
                 # run tophat filter
-                frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths, wgts=wgts,
-                                      keys=keys, verbose=verbose, cache_dir=cache_dir, read_cache=read_cache,
-                                      write_cache=write_cache, **filter_kwargs)
-
+                frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
+                                      keys=keys, verbose=verbose, wgts=wgts, **filter_kwargs)
             else:
                 frfil.clean_data = DataContainer({})
                 frfil.clean_flags = DataContainer({})
