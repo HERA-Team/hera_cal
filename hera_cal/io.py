@@ -461,8 +461,8 @@ class HERAData(UVData):
 
         return data, flags, nsamples
 
-    def read(self, bls=None, polarizations=None, times=None, time_range=None, lsts=None, lst_range=None, 
-             frequencies=None, freq_chans=None, axis=None, read_data=True, return_data=True, 
+    def read(self, bls=None, polarizations=None, times=None, time_range=None, lsts=None, lst_range=None,
+             frequencies=None, freq_chans=None, axis=None, read_data=True, return_data=True,
              run_check=True, check_extra=True, run_check_acceptability=True, **kwargs):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
@@ -477,14 +477,14 @@ class HERAData(UVData):
                 the object.  Ignored if read_data is False.
             times: The times to include when reading data into the object.
                 Ignored if read_data is False. Miriad will load then select on this axis.
-            time_range : length-2 array-like of float, optional. The time range in Julian Date 
+            time_range : length-2 array-like of float, optional. The time range in Julian Date
                 to include. Cannot be used with `times`.
             lsts: The lsts in radians to include when reading data into the object.
                 Ignored if read_data is False. Miriad will load then select on this axis.
                 Cannot be used with `times` or `time_range`.
             lst_range : length-2 array-like of float, optional. The lst range in radians
                 to include when. Cannot be used with `times`, `time_range`, or `lsts`.
-                Miriad will load then select on this axis. If the second value is smaller than 
+                Miriad will load then select on this axis. If the second value is smaller than
                 the first, the LSTs are treated as having phase-wrapped around LST = 2*pi = 0
                 and the LSTs kept on the object will run from the larger value, through 0, and
                 end at the smaller value.
@@ -525,7 +525,7 @@ class HERAData(UVData):
             try:
                 if self.filetype == 'uvh5':
                     super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
-                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, 
+                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
                 else:
@@ -797,7 +797,7 @@ class HERAData(UVData):
 
     def iterate_over_times(self, Nints=1, times=None):
         '''Produces a generator that iteratively yields successive calls to
-        HERAData.read() by time or group of contiguous times. N.B. May 
+        HERAData.read() by time or group of contiguous times. N.B. May
         produce unexpected results for BDA data that has not been upsampled
         or downsampled to a common time resolution.
 
@@ -985,7 +985,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
 def get_file_times(filepaths, filetype='uvh5'):
     """
     Get a file's lst_array in radians and time_array in Julian Date.
-    
+
     Some caveats:
         - Miriad standard is bin start, so a shift by int_time / 2 is performed.
           uvh5 standard is bin center, so times are left untouched.
@@ -1053,10 +1053,10 @@ def get_file_times(filepaths, filetype='uvh5'):
                                                                   _f[u'Header'][u'latitude'][()],
                                                                   _f[u'Header'][u'longitude'][()],
                                                                   _f[u'Header'][u'altitude'][()]))
-                
+
                 # figure out which baseline has the most times in order to handle BDA appropriately
-                baseline_array = uvutils.antnums_to_baseline(np.array(_f[u'Header'][u'ant_1_array']), 
-                                                             np.array(_f[u'Header'][u'ant_2_array']), 
+                baseline_array = uvutils.antnums_to_baseline(np.array(_f[u'Header'][u'ant_1_array']),
+                                                             np.array(_f[u'Header'][u'ant_2_array']),
                                                              np.array(_f[u'Header'][u'Nants_telescope']))
                 most_common_bl_num = scipy.stats.mode(baseline_array)[0][0]
                 time_array = time_array[baseline_array == most_common_bl_num]
@@ -1106,13 +1106,13 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
         nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls
     '''
     assert hd.filetype == 'uvh5', 'This function only works for uvh5-based HERAData objects.'
-    if np.sum([times is not None, time_range is not None, lsts is not None, lst_range is not None]) > 1: 
+    if np.sum([times is not None, time_range is not None, lsts is not None, lst_range is not None]) > 1:
         raise ValueError('Only one of times, time_range, lsts, and lsts_range can be not None.')
-    
+
     combined_hd = None
     for f in hd.filepaths:
         hd_here = HERAData(f, upsample=hd.upsample, downsample=hd.downsample)
-        
+
         # check if any of the selected times are in this particular file
         if times is not None:
             times_here = [time for time in times if time in hd_here.times]
@@ -1120,7 +1120,7 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
                 continue  # skip this file
         else:
             times_here = None
-        
+
         # check if any of the selected lsts are in this particular file
         if lsts is not None:
             lsts_here = [lst for lst in lsts if lst in hd_here.lsts]
@@ -1128,10 +1128,10 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
                 continue  # skip this file
         else:
             lsts_here = None
-             
+
         # attempt to read this file's data
         try:
-            hd_here.read(times=times_here, time_range=time_range, 
+            hd_here.read(times=times_here, time_range=time_range,
                          lsts=lsts_here, lst_range=lst_range,
                          return_data=False, **kwargs)
         except ValueError as err:
@@ -1142,7 +1142,7 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
                 continue  # no matchings lsts, skip this file
             else:
                 raise
-            
+
         if combined_hd is None:
             combined_hd = hd_here
         else:
@@ -1640,6 +1640,7 @@ def to_HERACal(input_cal):
     elif isinstance(input_cal, UVCal):  # single UVCal object
         input_cal.__class__ = HERACal
         input_cal.filepaths = None
+        input_cal._extract_metadata()  # initialize metadata vars.
         return input_cal
     elif isinstance(input_cal, Iterable):  # List loading
         if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths
