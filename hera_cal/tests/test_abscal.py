@@ -991,43 +991,6 @@ class Test_AbsCal(object):
         for k in gains:
             np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
 
-        # data file where all data in redundant group are equal to redundantly averaged data
-        # (inflated by redundancy)
-        red_data_fname = os.path.join(tmppath, 'test_data_red.uvh5')
-        # model file that is redundantly averaged
-        red_model_fname = os.path.join(tmppath, 'test_model_red.uvh5')
-
-        # create a redundantly averaged model file.
-        reds = redcal.get_pos_reds(hdm.antpos, include_autos=True)
-        reds = [[bl for bl in redgrp if bl in antpairs or reverse_bl(bl) in antpairs] for redgrp in reds]
-        reds = [redgrp for redgrp in reds if len(redgrp) > 0]
-
-        utils.red_average(model_data, reds=reds, flags=model_flags,
-                          nsamples=model_nsamples, inplace=False)
-        hdm.select(bls=list(model_data.keys()))
-        hdm.update(data=model_data, flags=model_flags, nsamples=model_nsamples)
-        hdm.write_uvh5(red_model_fname)
-
-        # generate a new data file that is inflated by redundancy from redundant odel file.
-        hdm.select(antenna_nums=np.unique(np.hstack([hd.ant_1_array, hd.ant_2_array])),
-                   keep_all_metadata=False)
-        hdm.inflate_by_redundancy()
-        hdm.select(bls=hd.bls)
-        hd.data_array /= scale_factor
-        hd.write_uvh5(red_data_fname)
-
-        # use inflated redundant model.
-        abscal.run_model_based_calibration(data_file=red_data_fname, model_file=red_model_fname,
-                                           auto_file=red_data_fname,
-                                           output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'), constrain_model_to_data_ants=True,
-                                           inflate_model_by_redundancy=True, precalibration_gain_file=precal_fname)
-
-        # check that gains equal to1/sqrt(scale_factor)
-        hc = io.HERACal(cal_fname)
-        gains, gain_flags, _, _ = hc.read()
-        for k in gains:
-            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
-
     def test_model_calibration_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', 'c', '--auto_file', 'd']
         ap = abscal.model_calibration_argparser()

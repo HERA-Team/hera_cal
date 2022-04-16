@@ -32,7 +32,6 @@ from functools import reduce
 from scipy import signal, interpolate, spatial
 from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
-from pyuvdata.utils import uvcalibrate
 import linsolve
 import warnings
 
@@ -3695,7 +3694,6 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
 
 def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None, precalibration_gain_file=None,
-                                inflate_model_by_redundancy=False, constrain_model_to_data_ants=False,
                                 clobber=False, tol=1e-6, max_iter=10,
                                 refant=None, ant_threshold=0.0, no_ampcal=False, no_phscal=False,
                                 dly_lincal=False,
@@ -3719,18 +3717,6 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     precalibration_gain_file: str, optional
         Path to a gain file to apply to data before running calibration
         default is None.
-    inflate_model_by_redundancy: bool, optional
-        expand model to match the redundant groups present in data file.
-        default is False.
-        Should be set to True if a redundant model is supplied or bad things
-        will happen!
-    constrain_model_to_data_ants: bool, optional
-        before inflating by redundancy, downselect array antennas in model to only
-        include antennas in the data. This avoids inflating model to full HERA array
-        which is memory inefficient for analyses using a small fraction of the array
-        but will break if the redundant baselines are keyed to antennas that are not
-        present in the data so only use this if you are confident that this is the case.
-        default is False.
     clobber: bool, optional
         overwrite outputs if True.
     tol: float, optional
@@ -3768,25 +3754,6 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         calibrate_in_place(data=data, data_flags=data_flags,
                            new_gains=gains_precal, cal_flags=flags_precal)
 
-    # expand hdm by redundancy
-    hdm.read()
-    if inflate_model_by_redundancy:
-        if constrain_model_to_data_ants:
-            # In order to avoid inflating to full interferometer dataset
-            # which will be unecessary for many earlier analyses
-            # prune model antennas to only include data antennas in hdd
-            # this will only work if the antennas in the baseline keys for each redundant group
-            # in the model are also present in the dataset so only use this if you are confident
-            # that this is the case.
-            all_data_ants = np.unique(np.hstack([hdd.ant_1_array, hdd.ant_2_array]))
-            all_model_ants = np.unique(np.hstack([hdm.ant_1_array, hdm.ant_2_array]))
-            assert np.all([ant in all_data_ants for ant in all_model_ants]), "All model antennas must be present in data if constrain_model_to_data_ants is True!"
-            hdm.select(antenna_nums=all_data_ants,
-                       keep_all_metadata=False)
-        hdm.inflate_by_redundancy()
-        # also make sure to only include baselines present in hdd.
-        hdm.select(bls=hdd.bls)
-
     model, model_flags, model_nsamples = hdm.read()
 
     data_ant_flags = synthesize_ant_flags(data_flags, threshold=ant_threshold)
@@ -3804,19 +3771,18 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hc = UVCal()
     hc = hc.initialize_from_uvdata(uvdata=hdd, gain_convention='divide', cal_style='sky',
                                    ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
-                                   metadata_only=False, sky_field=field_str, cal_type='gain')
-    hc.write_calfits(output_filename, clobber=clobber)
-    hc = io.HERACal(output_filename)
-    hc.read()
+                                   metadata_only=False, sky_field=field_str, cal_type='gain',
+                                   future_array_shapes=False)
+    hc = io.to_HERACal(hc)
     hc.update(flags=data_ant_flags)
     # generate cal object from model to hold model flags.
     hcm = UVCal()
     hcm = hcm.initialize_from_uvdata(uvdata=hdm, gain_convention='divide', cal_style='sky',
                                      ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
-                                     metadata_only=False, sky_field=field_str, cal_type='gain')
-    hcm.write_calfits(output_filename + '.tmp')
-    hcm = io.HERACal(output_filename + '.tmp')
-    hcm.read()
+                                     metadata_only=False, sky_field=field_str, cal_type='gain',
+                                     future_array_shapes=False)
+
+    hcm = io.to_HERACal(hcm)
     hcm.update(flags=model_ant_flags)
     # init all gains to unity.
     hcm.gain_array[:] = 1. + 0.j
@@ -3847,37 +3813,41 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hc.ref_antenna_name = str(refant)
     hcm.ref_antenna_name = str(refant)
 
-    abscal = AbsCal(data=data, model=model, wgts=wgts, freqs=data.freqs)
+    my_abscal = AbsCal(data=data, model=model, wgts=wgts, freqs=data.freqs)
 
-    delta = 9e99
+    # initialize convergence metric to be very large. This will always be greater then
+    # all non-infinite tols provided so calibration loop will run at least once.
+    delta = np.inf
 
-    abscal_gains_iteration = {}
+    abscal_gains_iteration = {k: np.ones((hc.Ntimes, hc.Nfreqs), dtype=complex) for k in abscal_gains}
 
     # find initial starting point with lincal before performing abscal.
     if dly_lincal:
-        abscal.delay_lincal()
-        for k in abscal_gains:
-            abscal_gains_iteration[k] = abscal.ant_dly_phi_gain[k] * abscal.ant_dly_gain[k]
-        apply_cal.calibrate_in_place(data=abscal.data, new_gains=abscal_gains_iteration)
-        for k in abscal_gains:
-            abscal_gains[k] *= abscal_gains_iteration[k]
+        my_abscal.delay_lincal()
+        abscal_gains_iteration = merge_gains([my_abscal.ant_dly_phi_gain, my_abscal.ant_dly_gain])
+        
+        apply_cal.calibrate_in_place(data=my_abscal.data, new_gains=abscal_gains_iteration)
+        abscal_gains = merge_gains([abscal_gains, abscal_gains_iteration])
 
     niter = 0
     while delta > tol and niter < max_iter:
+        for k in abscal_gains:
+            abscal_gains_iteration[k][:] = 1. + 0j
         if not no_ampcal:
-            abscal.amp_logcal(verbose=verbose)
+            my_abscal.amp_logcal(verbose=verbose)
+            abscal_gains_iteration = merge_gains([abscal_gains_iteration, my_abscal.ant_eta_gain])
+            # abscal_gains_iteration = {abscal_gains_iteration[k] * my_abscal.ant_eta_gain[k] for k in abscal_gains}
+
         if not no_phscal:
-            abscal.phs_logcal(verbose=verbose)
-        for k in abscal.ant_eta_gain:
-            abscal_gains_iteration[k] = np.ones_like(abscal_gains[k])
-            if not no_ampcal:
-                abscal_gains_iteration[k] *= abscal.ant_eta_gain[k]
-            if not no_phscal:
-                abscal_gains_iteration[k] *= abscal.ant_phi_gain[k]
+            my_abscal.phs_logcal(verbose=verbose)
+            abscal_gains_iteration = merge_gains([abscal_gains_iteration, my_abscal.ant_phi_gain])
+            # abscal_gains_iteration = {k: abscal_gains_iteration[k] * my_abscal.ant_phs_gain[k] for k in abscal_gains}
+
         # phase to refant.
         rephase_to_refant(abscal_gains_iteration, refant, flags=abscal_flags, propagate_refant_flags=True)
         # update abscal gains with iteration.
-        abscal_gains_new = {k: abscal_gains[k] * abscal_gains_iteration[k] for k in abscal_gains}
+        # abscal_gains_new = {k: abscal_gains[k] * abscal_gains_iteration[k]}
+        abscal_gains_new = merge_gains([abscal_gains, abscal_gains_iteration])
         delta = np.max([np.max(np.abs(abscal_gains_new[k][np.invert(abscal_flags[k])]
                         - abscal_gains[k][np.invert(abscal_flags[k])])) for k in abscal_gains])
 
@@ -3887,24 +3857,23 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         # use hcm to apply iteration gains.
         hcm.update(gains=abscal_gains_iteration)
 
-        # apply iteration gains to abscal.data
-        apply_cal.calibrate_in_place(data=abscal.data, new_gains=abscal_gains_iteration)
+        # apply iteration gains to my_abscal.data
+        apply_cal.calibrate_in_place(data=my_abscal.data, new_gains=abscal_gains_iteration)
         niter += 1
         if delta <= tol:
             echo(f"Convergence achieved after {niter} iterations with max delta of {delta}", verbose=verbose)
         if niter == max_iter - 1 and delta > tol:
             echo(f"Convergence not achieved but max_iter of {max_iter} reached. delta={delta}.", verbose=verbose)
 
+    # multiply gains by precal gains
+    if precalibration_gain_file is not None:
+        abscal_gains = merge_gains([abscal_gains, gains_precal])
+        # abscal_gains = {k: abscal_gains[k] * gains_precal[k] for k in abscal_gains}
+
     # update the calibration array.
     hc.update(gains=abscal_gains)
 
-    # multiply gains by precal gains
-    if precalibration_gain_file is not None:
-        hc.gain_array *= uvc_precal.gain_array
-
     hc.write_calfits(output_filename, clobber=clobber)
-    # cleanup temp file
-    os.remove(output_filename + '.tmp')
 
 
 def post_redcal_abscal_argparser():
@@ -3944,13 +3913,6 @@ def model_calibration_argparser():
     ap.add_argument("--auto_file", type=str, default=None, help="string path to file containing autocorrelations to use as inverse variants weights. If not specified, use uniform weights with flags.")
     ap.add_argument("--clobber", default=False, action="store_true", help="overwrite output calfits if it already exists.")
     ap.add_argument("--tol", default=1e-6, type=float, help="number of calibration rounds to run.")
-    ap.add_argument("--inflate_model_by_redundancy", default=False, action="store_true", help="If redundant model file is provided, inflate it!")
-    ap.add_argument("--constrain_model_to_data_ants", default=False, action="store_true", help="before inflating by redundancy, downselect array antennas in model to only \
-                                                                                                include antennas in the data. This avoids inflating model to full HERA array \
-                                                                                                which is memory inefficient for analyses using a small fraction of the array \
-                                                                                                but will break if the redundant baselines are keyed to antennas that are not \
-                                                                                                present in the data so only use this if you are confident that this is the case. \
-                                                                                                Default is False.")
     ap.add_argument("--precalibration_gain_file", default=None, type=str, help="Path to a gain file to apply to data before running calibration \
                                                                                 default is None.")
     ap.add_argument("--verbose", default=False, action="store_true", help="lots of outputs.")
