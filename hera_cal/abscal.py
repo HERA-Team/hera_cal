@@ -34,7 +34,6 @@ from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
 import linsolve
 import warnings
-from uvtools.dspec import place_data_on_uniform_grid
 
 from . import version
 from .apply_cal import calibrate_in_place
@@ -3698,7 +3697,7 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
                                 inflate_model_by_redundancy=False, constrain_model_to_data_ants=False,
                                 clobber=False, tol=1e-6, max_iter=10,
                                 refant=None, ant_threshold=0.0, no_ampcal=False, no_phscal=False,
-                                dly_lincal=False, fill_in_channel_gaps=True,
+                                dly_lincal=False, spoof_missing_channels=False,
                                 verbose=False):
     """Driver function for model based calibration including i/o
 
@@ -3756,8 +3755,9 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     dly_lincal: bool, optional
         perform initial delay calibration before abscal
         default is False.
-    fill_in_channel_gaps: bool, optional
+    spoof_missing_channels: bool, optional
         insert flagged gains in any frequency discontinunities.
+        default is False.
     verbose: bool, optional
         lots of outputs.
     """
@@ -3916,20 +3916,7 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     # update the calibration array.
     hc.update(gains=abscal_gains)
 
-    # Since calfits do not support frequency discontinunities, we add support here
-    # By spoofing frequencies between discontinunities with flagged gains.
-    # This line provides freqs_filled -- frequency axis with spoofed frequencies
-    # and inserted which is a boolean array that is True at frequencies that are being spoofed.
-    freqs_filled, _, _, inserted = place_data_on_uniform_grid(hc.freqs, np.ones_like(hc.freqs), np.ones_like(hc.freqs))
-    hc.freq_array = freqs_filled.reshape(hc.Nspws, len(freqs_filled))
-    hc.Nfreqs = len(freqs_filled)
-    # insert original flags and gains into appropriate channels.
-    new_gains = np.ones((hc.Nants_data, hc.Nspws, hc.Nfreqs, hc.Ntimes, hc.Njones), dtype=complex)
-    new_gains[:, :, ~inserted, :, :] = hc.gain_array
-    new_flags = np.ones(new_gains.shape, dtype=bool)
-    new_flags[:, :, ~inserted, :, :] = hc.flag_array
-
-    hc.write_calfits(output_filename, clobber=clobber)
+    hc.write(output_filename, clobber=clobber, spoof_missing_channels=spoof_missing_channels)
 
 
 def post_redcal_abscal_argparser():
@@ -3982,4 +3969,5 @@ def model_calibration_argparser():
     ap.add_argument("--no_ampcal", default=False, action="store_true", help="disable amp_cal")
     ap.add_argument("--no_phscal", default=False, action="store_true", help="disable phs_cal")
     ap.add_argument("--dly_lincal", default=False, action="store_true", help="dly lincal to find starting point.")
+    ap.add_argument("--spoof_missing_channels", default=False, action="store_true", help="Fill in missing channels with flagged gains. This ensures compatibility with calfits which only supports unifrom spaced channels.")
     return ap
