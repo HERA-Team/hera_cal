@@ -991,6 +991,95 @@ class Test_AbsCal(object):
         for k in gains:
             np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
 
+        hd = UVData()
+        hdm = UVData()
+        hd.read(data_fname)
+        hdm.read(model_fname)
+        # test feeding UVData objects instead.
+        abscal.run_model_based_calibration(data_file=hd, model_file=hdm, auto_file=hd,
+                                           output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'), precalibration_gain_file=precal_fname)
+
+        # check that gains equal to1/sqrt(scale_factor)
+        hc = io.HERACal(cal_fname)
+        gains, gain_flags, _, _ = hc.read()
+        for k in gains:
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
+
+    def test_run_model_based_calibration_redundant(self, tmpdir):
+
+        data_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.uvh5_downselected')
+        tmppath = tmpdir.strpath
+
+        hd = io.HERAData(data_file)
+        data, flags, nsamples = hd.read()
+        antpairs = hd.get_antpairs()
+
+        hdm = io.HERAData(data_file)
+        model_data, model_flags, model_nsamples = hdm.read()
+
+        precal_fname = os.path.join(tmppath, 'test_precal.calfits')
+        uvc_precal = UVCal()
+        uvc_precal = uvc_precal.initialize_from_uvdata(uvdata=hd, gain_convention='divide', cal_style='sky',
+                                                       ref_antenna_name='Amadeus', sky_catalog='The Library of Congress.',
+                                                       metadata_only=False, sky_field='The Fields of Athenry', cal_type='gain')
+        uvc_precal.gain_array[:] = 1. + 0j
+        uvc_precal.write_calfits(precal_fname)
+
+        # include a model random scale factor tiomes the amplitude of the data.
+        scale_factor = np.random.rand() * 0.8 + 0.1
+        hdm.data_array *= scale_factor
+        # there are integrations and channels that need to be flagged.
+        hdm.flag_array[np.isclose(hdm.data_array, 0.)] = True
+        hd.flag_array[np.isclose(hd.data_array, 0.)] = True
+
+        model_fname = os.path.join(tmppath, 'test_model.uvh5')
+        data_fname = os.path.join(tmppath, 'test_data.uvh5')
+
+        hdm.write_uvh5(model_fname)
+        hd.write_uvh5(data_fname)
+
+        cal_fname = os.path.join(tmppath, 'test_cal.calfits')
+
+        # data file where all data in redundant group are equal to redundantly averaged data
+        # (inflated by redundancy)
+        red_data_fname = os.path.join(tmppath, 'test_data_red.uvh5')
+        # model file that is redundantly averaged
+        red_model_fname = os.path.join(tmppath, 'test_model_red.uvh5')
+
+        # create a redundantly averaged model file.
+        reds = redcal.get_pos_reds(hdm.antpos, include_autos=True)
+        reds = [[bl for bl in redgrp if bl in antpairs or reverse_bl(bl) in antpairs] for redgrp in reds]
+        reds = [redgrp for redgrp in reds if len(redgrp) > 0]
+
+        utils.red_average(model_data, reds=reds, flags=model_flags,
+                          nsamples=model_nsamples, inplace=True)
+        hdm.select(bls=list(model_data.keys()))
+        hdm.update(data=model_data, flags=model_flags, nsamples=model_nsamples)
+        hdm.flag_array[np.isclose(hdm.data_array, 0.)] = True
+        hdm.write_uvh5(red_model_fname)
+
+        # generate a new data file that is inflated by redundancy from redundant odel file.
+        hdm.select(antenna_nums=np.unique(np.hstack([hd.ant_1_array, hd.ant_2_array])),
+                   keep_all_metadata=False)
+        hdm.inflate_by_redundancy()
+        hdm.select(bls=hd.bls)
+        hdm.data_array /= scale_factor
+        hdm.write_uvh5(red_data_fname)
+
+        # use inflated redundant model.
+        abscal.run_model_based_calibration(data_file=red_data_fname, model_file=red_model_fname,
+                                           auto_file=red_data_fname,
+                                           output_filename=cal_fname,
+                                           clobber=True, refant=(0, 'Jnn'),
+                                           constrain_model_to_data_ants=True, max_iter=1,
+                                           inflate_model_by_redundancy=True, precalibration_gain_file=precal_fname)
+
+        # check that gains equal to1/sqrt(scale_factor)
+        hc = io.HERACal(cal_fname)
+        gains, gain_flags, _, _ = hc.read()
+        for k in gains:
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
+
     def test_model_calibration_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', 'c', '--auto_file', 'd']
         ap = abscal.model_calibration_argparser()
