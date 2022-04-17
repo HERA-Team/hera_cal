@@ -22,6 +22,8 @@ from pyuvdata.utils import POL_STR2NUM_DICT
 from . import redcal
 import argparse
 from . import version
+from uvtools.dspec import place_data_on_uniform_grid
+
 
 try:
     import aipy
@@ -188,6 +190,44 @@ class HERACal(UVCal):
             for pol in total_qual.keys():
                 ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
                 self.total_quality_array[0, :, :, ip] = total_qual[pol].T
+
+    def write(self, filename, spoof_missing_channels=False, **write_kwargs):
+        """
+        Shallow wrapper for UVCal calfits writer with functionality to spoof missing channels.
+
+        Parameters
+        ----------
+        filename: str
+            name of file to write to.
+        fill_in_missing_freqs: bool, optional
+            If True, spoof missing channels with flagged gains set equal to unity.
+        write_kwargs: kwarg dict
+            kwargs for UVCal.write_calfits
+        """
+        if spoof_missing_channels:
+            writer = copy.deepcopy(self)
+            # Since calfits do not support frequency discontinunities, we add support here
+            # By spoofing frequencies between discontinunities with flagged gains.
+            # This line provides freqs_filled -- frequency axis with spoofed frequencies
+            # and inserted which is a boolean array that is True at frequencies that are being spoofed.
+            freqs_filled, _, _, inserted = place_data_on_uniform_grid(self.freqs, np.ones_like(self.freqs), np.ones_like(self.freqs))
+            writer.freq_array = freqs_filled.reshape(self.Nspws, len(freqs_filled))
+            writer.Nfreqs = len(freqs_filled)
+            # insert original flags and gains into appropriate channels.
+            new_gains = np.ones((writer.Nants_data, writer.Nspws, writer.Nfreqs, writer.Ntimes, writer.Njones), dtype=complex)
+            new_gains[:, :, ~inserted, :, :] = writer.gain_array
+            new_flags = np.ones(new_gains.shape, dtype=bool)
+            new_flags[:, :, ~inserted, :, :] = writer.flag_array
+            new_quality = np.zeros(new_gains.shape, dtype=float)
+            new_quality[:, :, ~inserted, :, :] = writer.quality_array
+
+            writer.flag_array = new_flags
+            writer.gain_array = new_gains
+            writer.quality_array = new_quality
+
+            writer.write_calfits(filename, **write_kwargs)
+        else:
+            self.write_calfits(filename, **write_kwargs)
 
 
 def get_blt_slices(uvo, tried_to_reorder=False):
