@@ -304,18 +304,7 @@ class HERAData(UVData):
             self.read(read_data=False, **read_kwargs)
             self.filepaths = temp_paths
 
-            if len(self.filepaths) > 1:  # save HERAData_metas in dicts
-                for meta in self.HERAData_metas:
-                    setattr(self, meta, {})
-                for f in self.filepaths:
-                    hd = HERAData(f, filetype='uvh5', **read_kwargs)
-                    meta_dict = hd.get_metadata_dict()
-                    for meta in self.HERAData_metas:
-                        getattr(self, meta)[f] = meta_dict[meta]
-            else:  # save HERAData_metas as attributes
-                self._writers = {}
-                for key, value in self.get_metadata_dict().items():
-                    setattr(self, key, value)
+            self._attach_metadata(**read_kwargs)
 
         elif self.filetype in ['miriad', 'uvfits']:
             for meta in self.HERAData_metas:
@@ -330,6 +319,23 @@ class HERAData(UVData):
         if self.integration_time is not None:
             self.longest_integration = np.max(self.integration_time)
             self.shortest_integration = np.min(self.integration_time)
+
+    def _attach_metadata(self, **read_kwargs):
+        """
+        Attach metadata.
+        """
+        if hasattr(self, "filepaths") and self.filepaths is not None and len(self.filepaths) > 1:  # save HERAData_metas in dicts
+            for meta in self.HERAData_metas:
+                setattr(self, meta, {})
+            for f in self.filepaths:
+                hd = HERAData(f, filetype='uvh5', **read_kwargs)
+                meta_dict = hd.get_metadata_dict()
+                for meta in self.HERAData_metas:
+                    getattr(self, meta)[f] = meta_dict[meta]
+        else:  # save HERAData_metas as attributes
+            self._writers = {}
+            for key, value in self.get_metadata_dict().items():
+                setattr(self, key, value)
 
     def reset(self):
         '''Resets all standard UVData attributes, potentially freeing memory.'''
@@ -1267,6 +1273,8 @@ def to_HERAData(input_data, filetype='miriad', **read_kwargs):
         hd.__class__ = HERAData
         hd._determine_blt_slicing()
         hd._determine_pol_indexing()
+        if filetype == 'uvh5':
+            hd._attach_metadata()
         hd.filepaths = None
         return hd
     elif isinstance(input_data, Iterable):  # List loading
