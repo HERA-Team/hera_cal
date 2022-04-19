@@ -965,6 +965,6 @@ def smooth_cal_argparser():
     flt_opts.add_argument("--dont_skip_flagged_edges", action="store_true", default=False, help="if True, use DPSS over integrations with flagged edge channels.\
                           Only used when method used is 'DPSS'")
     flt_opts.add_argument("--axis", default="both", type=str, help="smooth either in 'freq', or 'both' (time and freq) axes.")
-    fit_opts.add_argument("--skip_wgt", default=0.1, type=float, help="skip if this fraction is flagged.")
+    flt_opts.add_argument("--skip_wgt", default=0.1, type=float, help="skip if this fraction is flagged.")
     args = a.parse_args()
     return args
