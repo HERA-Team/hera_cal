@@ -3698,7 +3698,7 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
                                 clobber=False, tol=1e-6, max_iter=10,
                                 refant=None, ant_threshold=0.0, no_ampcal=False, no_phscal=False,
                                 dly_lincal=False, spoof_missing_channels=False,
-                                verbose=False):
+                                verbose=False, **dlycal_kwargs):
     """Driver function for model based calibration including i/o
 
     Solve for gain parameters based on a foreground model.
@@ -3760,6 +3760,8 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         default is False.
     verbose: bool, optional
         lots of outputs.
+    **dlycal_kwargs
+        keyword args for abscal.delay_lincal
     """
     hdd = io.to_HERAData(data_file, filetype="uvh5")
     if hasattr(hdd, "data_array") and hdd.data_array is not None:
@@ -3795,6 +3797,8 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         hdm.inflate_by_redundancy()
         # also make sure to only include baselines present in hdd.
         hdm.select(bls=hdd.bls)
+        hdm._determine_blt_slicing()
+        hdm._determine_pol_indexing()
 
     model, model_flags, model_nsamples = hdm.build_datacontainers()
 
@@ -3866,7 +3870,7 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
 
     # find initial starting point with lincal before performing abscal.
     if dly_lincal:
-        my_abscal.delay_lincal()
+        my_abscal.delay_lincal(**dlycal_kwargs)
         abscal_gains_iteration = merge_gains([my_abscal.ant_dly_phi_gain, my_abscal.ant_dly_gain])
 
         apply_cal.calibrate_in_place(data=my_abscal.data, new_gains=abscal_gains_iteration)
@@ -3879,17 +3883,14 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         if not no_ampcal:
             my_abscal.amp_logcal(verbose=verbose)
             abscal_gains_iteration = merge_gains([abscal_gains_iteration, my_abscal.ant_eta_gain])
-            # abscal_gains_iteration = {abscal_gains_iteration[k] * my_abscal.ant_eta_gain[k] for k in abscal_gains}
 
         if not no_phscal:
             my_abscal.phs_logcal(verbose=verbose)
             abscal_gains_iteration = merge_gains([abscal_gains_iteration, my_abscal.ant_phi_gain])
-            # abscal_gains_iteration = {k: abscal_gains_iteration[k] * my_abscal.ant_phs_gain[k] for k in abscal_gains}
 
         # phase to refant.
         rephase_to_refant(abscal_gains_iteration, refant, flags=abscal_flags, propagate_refant_flags=True)
         # update abscal gains with iteration.
-        # abscal_gains_new = {k: abscal_gains[k] * abscal_gains_iteration[k]}
         abscal_gains_new = merge_gains([abscal_gains, abscal_gains_iteration])
         delta = np.max([np.max(np.abs(abscal_gains_new[k][np.invert(abscal_flags[k])]
                         - abscal_gains[k][np.invert(abscal_flags[k])])) for k in abscal_gains])
@@ -3911,7 +3912,6 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     # multiply gains by precal gains
     if precalibration_gain_file is not None:
         abscal_gains = merge_gains([abscal_gains, gains_precal])
-        # abscal_gains = {k: abscal_gains[k] * gains_precal[k] for k in abscal_gains}
 
     # update the calibration array.
     hc.update(gains=abscal_gains)
