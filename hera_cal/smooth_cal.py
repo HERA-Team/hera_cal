@@ -82,7 +82,6 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
         time_scale: time scale in seconds. Defined analogously to freq_scale.
             Note that time_scale is in seconds, times is in days.
         eigenval_cutoff: sinc_matrix eigenvalue cutoff to use for included dpss modes.
-            Only used when the filtering method is 'DPSS'
         Nmax: Maximum number of time/frequency axis samples to attempt to compute the DPSS
             vectors for. If the number of time/frequency samples exceeds this threshold value,
             the number of non-zero eigenvalues will be estimated to attempt to reduce the computation
@@ -148,7 +147,7 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
     """
     # If (X^T W X)^-1 is not precalculated, calculate it
     if XTXinv is None:
-        # Make sure data types between weights and filters are compatible for einsum speedup
+        # Make sure data types between weights and filters are compatible for einsum optimization
         weights = weights.astype(time_filters.dtype)
 
         # Use einsum to calculate (X^T W X) in a memory efficient way
@@ -298,10 +297,13 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
             'CLEAN': uses the CLEAN algorithm to smooth calibration solutions
             'DPSS': uses discrete prolate spheroidal sequences (DPSS) to filter calibration solutions
-        design_matrix: Matrix of DPSS filters calculated using smooth_cal.dpss_filters. If matrix is not provided,
-            one will be calculated using smooth_cal.dpss_filters and the time and frequency scale. Only used
-            when the method used is 'DPSS'
-        sol_matrix: Solution matrix obtained from performing linear least squares with 2D DPSS vectors
+        design_matrix: Tuple of 2 1D DPSS filters, one for the time axis and one for the frequency axis
+            that form the least squares design matrix, X, when the outer product of the two is taken.
+            If design_matrix is not provided, one will be calculated using smooth_cal.dpss_filters and the
+            time and frequency scale. Only used when the method is 'DPSS'
+        sol_matrix: Matrix operation of (X^T W X)^{-1} where X are the set of 2D DPSS vectors and W is the
+            wgts grid. Useful when filtering many gain grids where wgts grid is the same between two or more
+            gain solutions. Only used when the filterign method is 'DPSS'
         eigenval_cutoff: sinc_matrix eigenvalue cutoffs to use for included dpss modes.
             Only used when the filtering method is 'DPSS'
         skip_flagged_edges : bool, optional
@@ -857,7 +859,7 @@ class CalibrationSmoother():
                         0 fringe rate, or both
             window: window function for filtering applied to the frequency axis. Only used when the method is 'CLEAN'
                 See aipy.dsp.gen_window for options.
-            maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+            maxiter: Maximum number of iterations for aipy.deconv.clean to converge. Only used when the method is 'CLEAN'
             eigenval_cutoff: sinc_matrix eigenvalue cutoffs to use for included dpss modes.
                 Only used when the filtering method is 'DPSS'
             method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
