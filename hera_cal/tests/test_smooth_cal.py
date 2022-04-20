@@ -42,27 +42,28 @@ class Test_Smooth_Cal_Helper_Functions(object):
         freq_scale = 0.5 / (np.diff(freqs)[0] / 1e6)
         time_scale = 0.5 / (np.diff(times)[0] * 3600 * 24)
         # Show that dpss_filter generates filters for a 2D grid of times and freqs
-        design_matrix = smooth_cal.dpss_filters(
+        time_filters, freq_filters = smooth_cal.dpss_filters(
             times=times, freqs=freqs, time_scale=1.01 / time_scale, freq_scale=1.01 / freq_scale
         )
-        assert design_matrix.shape[0] == int(freqs.shape[0] * times.shape[0])
+        assert time_filters.shape[0] == times.shape[0]
+        assert freq_filters.shape[0] == freqs.shape[0]
         # test that error is thrown when filtering scale is too fine
         assert pytest.raises(ValueError, smooth_cal.dpss_filters, times=times, freqs=freqs,
                              time_scale=0.99 / time_scale, freq_scale=1.01 / freq_scale)
         assert pytest.raises(ValueError, smooth_cal.dpss_filters, times=times, freqs=freqs,
                              time_scale=1.01 / time_scale, freq_scale=0.99 / freq_scale)
 
-    def test_fit_solution_matrix(self):
-        design_matrix = np.random.uniform(0, 1, size=(100, 10))
-        weights = np.random.uniform(0, 1, size=(10, 10))
-        sol_matrix = smooth_cal.fit_solution_matrix(weights, design_matrix)
+    def test_solve_2D_DPSS(self):
+        time_filters = np.random.uniform(0, 1, size=(50, 2))
+        freq_filters = np.random.uniform(0, 1, size=(40, 5))
+        weights = np.random.uniform(0, 1, size=(50, 40))
+        gains = np.random.uniform(0, 1, size=(50, 40))
+        fit, info = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters)
 
-        # test ill-conditioned matrix block
-        design_matrix = np.zeros((100, 10))
-        design_matrix[:, 0] = np.random.uniform(1, 2, size=100)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            fit = smooth_cal.fit_solution_matrix(weights, design_matrix)
+        # Check XTXinv
+        XTXinv = np.random.uniform(0, 1, size=(10, 10))
+        fit, info = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=XTXinv)
+
 
     def test_time_filter(self):
         gains = np.ones((10, 10), dtype=complex)
