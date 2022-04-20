@@ -84,10 +84,10 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
         eigenval_cutoff: sinc_matrix eigenvalue cutoff to use for included dpss modes.
             Only used when the filtering method is 'DPSS'
         Nmax: Maximum number of time/frequency axis samples to attempt to compute the DPSS
-            vectors for. If the number of time/frequency values exceeds this threshold value,
+            vectors for. If the number of time/frequency samples exceeds this threshold value,
             the number of non-zero eigenvalues will be estimated to attempt to reduce the computation
             time of the DPSS vectors while still keeping all vectors whose eigenvalue is greater than
-            eigenval_cutoff. Defaults is 2000
+            eigenval_cutoff. Default is 2000 grid points.
 
     Returns:
         time_filters: DPSS filtering vectors along the time axis, ndarray of size (Ntimes, N_time_vectors)
@@ -122,13 +122,13 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
 def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
     """
     Filters gain solutions by solving the weighted linear least squares problem
-    for a design matrix that can be factored into two kronecker products in the following way
+    for a design matrix that can be factored by a kronecker product in the following way
 
          y = X b = (A outer B) b
 
-    where A and B are time and frequency DPSS vector matrices. More memory and computationally
-    efficient than computing the design matrix from the time and frequency filters for
-    most input matrix sizes.
+    where A and B are DPSS vector matrices for the time and frequency axes. More memory
+    and computationally efficient than computing the design matrix from the time and frequency
+    filters for most input matrix sizes.
 
     Arguments:
         gains: ndarray of shape=(Ntimes,Nfreqs) of complex calibration solutions to filter
@@ -269,7 +269,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
-                        design_matrix=None, sol_matrix=None, eigenval_cutoff=1e-8, skip_flagged_edges=True,
+                        design_matrix=None, sol_matrix=None, eigenval_cutoff=1e-9, skip_flagged_edges=True,
                         **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
@@ -840,7 +840,7 @@ class CalibrationSmoother():
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
-                            window='tukey', maxiter=100, method="CLEAN", eigenval_cutoff=1e-8, skip_flagged_edges=True,
+                            window='tukey', maxiter=100, method="CLEAN", eigenval_cutoff=1e-9, skip_flagged_edges=True,
                             **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
@@ -995,7 +995,7 @@ def smooth_cal_argparser():
     flt_opts.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
     flt_opts.add_argument("--method", type=str, default='CLEAN', help='Algorithm used to smooth calibration solutions. Default is "CLEAN". "DPSS" uses \
                           discrete prolate spheroidal sequences to smooth calibration solutions.')
-    flt_opts.add_argument("--eigenval_cutoff", type=str, default=1e-8, help="sinc_matrix eigenvalue cutoff to use for included dpss modes. \
+    flt_opts.add_argument("--eigenval_cutoff", type=str, default=1e-9, help="sinc_matrix eigenvalue cutoff to use for included dpss modes. \
                           Only used when the filtering method is 'DPSS'")
     flt_opts.add_argument("--dont_skip_flagged_edges", default=False, action="store_true", help="if True, do not skip over flagged edge times/freqs (filter over sub-region).\
                           Only used when method used is 'DPSS'")
