@@ -68,7 +68,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     return np.sum(taus)
 
 
-def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1e-8):
+def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1e-9, Nmax=2000):
     """Generate a set of 2D discrete prolate spheroidal sequence (DPSS) filters
     to filter calibration solutions along the time and frequency axes simultaneously.
 
@@ -83,6 +83,11 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
             Note that time_scale is in seconds, times is in days.
         eigenval_cutoff: sinc_matrix eigenvalue cutoff to use for included dpss modes.
             Only used when the filtering method is 'DPSS'
+        Nmax: Maximum number of time/frequency axis samples to attempt to compute the DPSS
+            vectors for. If the number of time/frequency values exceeds this threshold value,
+            the number of non-zero eigenvalues will be estimated to attempt to reduce the computation
+            time of the DPSS vectors while still keeping all vectors whose eigenvalue is greater than
+            eigenval_cutoff. Defaults is 2000
 
     Returns:
         time_filters: DPSS filtering vectors along the time axis, ndarray of size (Ntimes, N_time_vectors)
@@ -92,25 +97,26 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
     fringe_scale = (time_scale) ** -1  # fringe scale in Hz
     time_in_seconds = (times - times.min()) * 60 * 60 * 24  # time array in seconds
 
-    # Generate DPSS filters along the time-axis
-    time_filters, ntime_comps = uvtools.dspec.dpss_operator(
-        time_in_seconds,
-        filter_centers=[0],
-        filter_half_widths=[fringe_scale],
-        eigenval_cutoff=[eigenval_cutoff],
-    )
-    time_filters = time_filters.real
+    dpss_windows = []
 
-    # Generate DPSS filters along the frequency-axis
-    freq_filters, nfreq_comps = uvtools.dspec.dpss_operator(
-        freqs,
-        filter_centers=[0],
-        filter_half_widths=[delay_scale],
-        eigenval_cutoff=[eigenval_cutoff],
-    )
-    freq_filters = freq_filters.real
+    for x0, fw in zip([time_in_seconds, freqs], [fringe_scale, delay_scale]):
 
-    return time_filters, freq_filters
+        if Nmax < x0.shape[0]:
+            Nw = 2 * x0.shape[0] * fw * np.diff(x0)[0]
+            Nterms = int(min(10 * Nw, x0.shape[0]))
+            windows, eigvals = uvtools.dspec.windows.dpss(x0.shape[0], Nw // 2, Nterms, return_ratios=True)
+            windows = windows[eigvals > eigenval_cutoff].T
+            dpss_windows.append(windows)
+
+        else:
+            # Generate DPSS filters
+            windows, _ = uvtools.dspec.dpss_operator(
+                x0, filter_centers=[0], filter_half_widths=[fw], eigenval_cutoff=[eigenval_cutoff],
+            )
+            windows = windows.real
+            dpss_windows.append(windows)
+
+    return dpss_windows[0], dpss_windows[1]
 
 
 def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
@@ -142,6 +148,9 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
     """
     # If (X^T W X)^-1 is not precalculated, calculate it
     if XTXinv is None:
+        # Make sure data types between weights and filters are compatible for einsum speedup
+        weights = weights.astype(time_filters.dtype)
+
         # Use einsum to calculate (X^T W X) in a memory efficient way
         XTX = np.einsum(
             "ij,kl,jl,jm,ln->ikmn", np.transpose(time_filters), np.transpose(freq_filters),
