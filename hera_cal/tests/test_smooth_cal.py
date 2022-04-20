@@ -68,7 +68,6 @@ class Test_Smooth_Cal_Helper_Functions(object):
         XTXinv = np.random.uniform(0, 1, size=(10, 10))
         fit, info = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=XTXinv)
 
-
     def test_time_filter(self):
         gains = np.ones((10, 10), dtype=complex)
         gains[3, 5] = 10.0
