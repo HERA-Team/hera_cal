@@ -99,7 +99,7 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
         filter_half_widths=[fringe_scale],
         eigenval_cutoff=[eigenval_cutoff],
     )
-    time_filters = time_filters.astype(np.float64)
+    time_filters = time_filters.real
 
     # Generate DPSS filters along the frequency-axis
     freq_filters, nfreq_comps = uvtools.dspec.dpss_operator(
@@ -108,7 +108,7 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
         filter_half_widths=[delay_scale],
         eigenval_cutoff=[eigenval_cutoff],
     )
-    freq_filters = freq_filters.astype(np.float64)
+    freq_filters = freq_filters.real
 
     return time_filters, freq_filters
 
@@ -148,14 +148,14 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
             weights, time_filters, freq_filters, optimize=True
         )
         ncomps = time_filters.shape[1] * freq_filters.shape[1]
-        XTX = np.reshape(XTX, ncomps, ncomps)
+        XTX = np.reshape(XTX, (ncomps, ncomps))
         XTXinv = np.linalg.pinv(XTX)
 
     # Calculate X^T W y using the property (A \otimes B) vec(y) = (A Y B)
     XTWy = np.ravel(np.transpose(time_filters) @ (gains * weights) @ freq_filters)
 
     # Calculate beta
-    beta = np.reshape(XTWy @ XTXinv, (time_filters.shape[0], freq_filters.shape[1]))
+    beta = np.reshape(XTXinv @ XTWy, (time_filters.shape[1], freq_filters.shape[1]))
 
     # Produce an estimate of the filtered gains
     filtered = time_filters @ beta @ np.transpose(freq_filters)
@@ -859,20 +859,12 @@ class CalibrationSmoother():
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
-        # Generate DPSS filters if method='DPSS'
-        if method == 'DPSS':
-            design_matrix = dpss_filters(
-                freqs=self.freqs, times=self.time_grid, freq_scale=freq_scale, time_scale=time_scale,
-                eigenval_cutoff=eigenval_cutoff
-            )
-            # Keep track of the size of the weights grid after removing flagged edges
-            if skip_flagged_edges:
-                edges_old = None
-
-        else:
-            design_matrix = None
+        # Keep track of the size of the weights grid after removing flagged edges
+        if skip_flagged_edges:
+            edges_old = None
 
         # Create default variables to be passed in to time_freq_2D_filter
+        design_matrix = None
         sol_matrix = None
         wgts_old = np.zeros(1)
 
