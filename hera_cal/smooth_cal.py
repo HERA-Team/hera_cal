@@ -962,7 +962,7 @@ def smooth_cal_argparser():
                           discrete prolate spheroidal sequences to smooth calibration solutions.')
     flt_opts.add_argument("--eigenval_cutoff", type=str, default=1e-8, help="sinc_matrix eigenvalue cutoff to use for included dpss modes. \
                           Only used when the filtering method is 'DPSS'")
-    flt_opts.add_argument("--skip_flagged_edges", type=str, default=False, help="if True, do not filter over flagged edge times/freqs (filter over sub-region).\
+    flt_opts.add_argument("--dont_skip_flagged_edges", default=False, action="store_true", help="if True, do not skip over flagged edge times/freqs (filter over sub-region).\
                           Only used when method used is 'DPSS'")
     args = a.parse_args()
     return args

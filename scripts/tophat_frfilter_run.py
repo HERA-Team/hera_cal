@@ -63,5 +63,5 @@ frf.load_tophat_frfilter_and_write(ap.datafilelist, calfile_list=ap.calfilelist,
                                    frate_width_multiplier=ap.frate_width_multiplier, frate_standoff=ap.frate_standoff, fr_freq_skip=ap.fr_freq_skip,
                                    min_frate_half_width=ap.min_frate_half_width, max_frate_half_width=ap.max_frate_half_width,
                                    beamfitsfile=ap.beamfitsfile, percentile_low=ap.percentile_low, percentile_high=ap.percentile_high,
-                                   clean_flags_in_resid_flags=True, pre_filter_modes_between_lobe_minimum_and_zero=ap.pre_filter_modes_between_lobe_minimum_and_zero,
+                                   clean_flags_in_resid_flags=not(ap.clean_flags_not_in_resid_flags), pre_filter_modes_between_lobe_minimum_and_zero=ap.pre_filter_modes_between_lobe_minimum_and_zero,
                                    **filter_kwargs)

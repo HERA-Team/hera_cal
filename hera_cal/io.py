@@ -258,7 +258,7 @@ class HERAData(UVData):
     # lsts_by_bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
 
     def __init__(self, input_data, upsample=False, downsample=False, filetype='uvh5', **read_kwargs):
-        '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
+        '''Instantiate a HERAData object. If the filetype is either uvh5 or uvfits, read in and store
         useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
 
@@ -268,7 +268,7 @@ class HERAData(UVData):
                 Upsampling will affect the time metadata stored on this object.
             downsample: bool. If True, will downsample to match the longest integration time in the file.
                 Downsampling will affect the time metadata stored on this object.
-            filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
+            filetype: supports 'uvh5' (default), 'miriad', 'uvfits'
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
         '''
@@ -297,7 +297,7 @@ class HERAData(UVData):
         self.filetype = filetype
 
         # load metadata from file
-        if self.filetype == 'uvh5':
+        if self.filetype in ['uvh5', 'uvfits']:
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
@@ -317,7 +317,7 @@ class HERAData(UVData):
                 for key, value in self.get_metadata_dict().items():
                     setattr(self, key, value)
 
-        elif self.filetype in ['miriad', 'uvfits']:
+        elif self.filetype == 'miriad':
             for meta in self.HERAData_metas:
                 setattr(self, meta, None)  # no pre-loading of metadata
         else:
@@ -523,11 +523,13 @@ class HERAData(UVData):
             self.read = super().read  # re-define self.read so UVData can call self.read recursively for lists of files
             # load data
             try:
-                if self.filetype == 'uvh5':
-                    super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
+                if self.filetype in ['uvh5', 'uvfits']:
+                    super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
                                  times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, 
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
+                    if self.filetype == 'uvfits':
+                        self.unphase_to_drift() 
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
@@ -540,11 +542,6 @@ class HERAData(UVData):
                             warnings.warn('miriad does not support partial loading for times/lsts (except time_range) and frequencies. '
                                           'Loading the file first and then performing select.')
                             self.select(times=times, lsts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans)
-                    elif self.filetype == 'uvfits':
-                        super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations, times=times,
-                                     time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans,
-                                     run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs)
-                        self.unphase_to_drift()
 
                 # upsample or downsample data, as appropriate, including metadata. Will use self.longest/shortest_integration
                 # if not None (which came from whole file metadata) since partial i/o might change the current longest or
@@ -564,7 +561,7 @@ class HERAData(UVData):
                 self.read = temp_read  # reset back to this function, regardless of whether the above try excecutes successfully
 
         # process data into DataContainers
-        if read_data or self.filetype == 'uvh5':
+        if read_data or self.filetype in ['uvh5', 'uvfits']:
             self._determine_blt_slicing()
             self._determine_pol_indexing()
         if read_data and return_data:
