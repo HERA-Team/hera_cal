@@ -523,18 +523,13 @@ class HERAData(UVData):
             self.read = super().read  # re-define self.read so UVData can call self.read recursively for lists of files
             # load data
             try:
-                if self.filetype == 'uvh5':
-                    super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
+                if self.filetype in ['uvh5', 'uvfits']:
+                    super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
                                  times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, 
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
-                elif self.filetype == 'uvfits':
-                    super().read(
-                        self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations, times=times,
-                        time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans,
-                        read_data=read_data, run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs
-                    )
-                    self.unphase_to_drift() 
+                    if self.filetype == 'uvfits':
+                        self.unphase_to_drift() 
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
