@@ -22,7 +22,7 @@ if mode != 'clean':
 else:
     if a.window == 'tukey' :  # set window kwargs
         filter_kwargs['alpha'] = a.alpha
-        filter_kwargs['max_iter'] = a.max_iter
+    filter_kwargs['max_iter'] = a.max_iter
 
 if a.run_if_first is None or sorted(a.calfits_list)[0] == a.run_if_first:
     cs = CalibrationSmoother(a.calfits_list, flag_file_list=a.flag_file_list, flag_filetype=a.flag_filetype,

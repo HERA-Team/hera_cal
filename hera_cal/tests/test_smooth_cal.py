@@ -107,7 +107,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts[3, 5] = 0
         freqs = np.linspace(100., 200., 10, endpoint=False) * 1e6
         ff, info = smooth_cal.freq_filter(gains, wgts, freqs)
-        np.testing.assert_array_almost_equal(ff, np.ones((10, 10), dtype=complex))
+        np.testing.assert_array_almost_equal(ff, np.ones((10, 10), dtype=complex), decimal=5)
 
         # test rephasing
         gains = np.ones((2, 1000), dtype=complex)
@@ -115,7 +115,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         freqs = np.linspace(100., 200., 1000, endpoint=False) * 1e6
         gains *= np.exp(2.0j * np.pi * np.outer(150e-9 * np.ones(2), freqs))
         ff, info = smooth_cal.freq_filter(gains, wgts, freqs)
-        np.testing.assert_array_almost_equal(ff, gains)
+        np.testing.assert_array_almost_equal(ff, gains, decimal=5)
 
         # test skip_wgt
         gains = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
@@ -123,11 +123,11 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts[0, 0:8] = 0
         freqs = np.linspace(100., 200., 10, endpoint=False) * 1e6
         ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5)
-        np.testing.assert_array_almost_equal(ff[0, :], gains[0, :])
+        np.testing.assert_array_almost_equal(ff[0, :], gains[0, :], decimal=5)
         assert info['status']['axis_1'][0] == 'skipped'
 
         ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5, filter_scale=50., mode='dpss_leastsq')
-        np.testing.assert_array_almost_equal(ff[0, :], gains[0, :])
+        np.testing.assert_array_almost_equal(ff[0, :], gains[0, :], decimal=5)
         assert info['status']['axis_1'][0] == 'skipped'
         assert info['status']['axis_1'][1] == 'success'
 
@@ -147,7 +147,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         freqs = np.linspace(100., 200., 1000, endpoint=False) * 1e6
         gains *= np.exp(2.0j * np.pi * np.outer(150e-9 * np.ones(2), freqs))
         ff, info = smooth_cal.freq_filter(gains, wgts, freqs, mode='dpss_leastsq')
-        np.testing.assert_array_almost_equal(ff, gains)
+        np.testing.assert_array_almost_equal(ff, gains, decimal=5)
 
         # test skip_wgt
         gains = np.random.randn(10, 100) + 1.0j * np.random.randn(10, 100)
@@ -160,6 +160,27 @@ class Test_Smooth_Cal_Helper_Functions(object):
 
         assert pytest.raises(ValueError, smooth_cal.freq_filter, gains=gains, wgts=wgts,
                              freqs=freqs, fitting_options=None, mode='dpss_leastsq')
+
+    def test_freq_filter_dpss_skip_flagged_edges(self):
+        # run freq_filter tests dpss modes.
+        # test skip_wgt
+        gains = (np.random.randn(10) + 1.0j * np.random.randn(10))[:, None] * np.ones((10, 100))
+        wgts = np.ones((10, 100), dtype=float)
+        wgts[0, 0:80] = 0.
+        wgts[7, 10:90] = 0.
+        wgts[:, :3] = 0.
+        freqs = np.linspace(100., 200., 100, endpoint=False) * 1e6
+        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5, mode='dpss_leastsq',
+                                          skip_flagged_edges=True, filter_scale=100)
+        for i in range(10):
+            if i in [0, 7]:
+                info['status']['axis_1'][i] == 'skipped'
+                np.testing.assert_array_almost_equal(ff[i, :], gains[i, :])
+            else:
+                info['status']['axis_1'][i] == 'success'
+                np.testing.assert_array_almost_equal(ff[i, :3], 0.)
+                np.testing.assert_array_almost_equal(ff[i, 3:], gains[i, 3:], decimal=4)
+
 
     def test_time_freq_2D_filter(self):
         gains = np.ones((100, 100), dtype=complex)

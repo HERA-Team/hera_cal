@@ -135,7 +135,7 @@ def fit_solution_matrix(weights, design_matrix):
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
-                mode='clean', **filter_kwargs):
+                mode='clean', tol=1e-6, skip_flagged_edges=False, **filter_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
 
@@ -151,6 +151,8 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
             Only works properly when all weights are all between 0 and 1.
         mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
               examples include 'dpss_leastsq', 'clean'.
+        skip_flagged_edges: bool, optional
+            if True, truncate flagged edges before filtering.
         filter_kwargs : any keyword arguments for the filtering mode being used.
         See vis_clean.fourier_filter or uvtools.dspec.fourier_filter for a full description.
     Returns:
@@ -162,14 +164,32 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
 
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
-    rephasor = np.exp(-2.0j * np.pi * dly * freqs)
-    if mode == 'DPSS':
+    if mode == 'DPSS' or mode == 'dpss_leastsq':
+        filter_kwargs['suppression_factors'] = [tol]
         mode = 'dpss_leastsq'
+        # Check to see if the grid size changes after removing the flagged edges
+        if skip_flagged_edges:
+            xin, din, win, edges, chunks = truncate_flagged_edges(gains, wgts, freqs, ax='freq')
+        else:
+            xin = freqs
+            win = wgts
+            din = gains
+    else:
+        xin = freqs
+        win = wgts
+        din = gains
+        filter_kwargs['tol'] = tol
 
-    filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, mode=mode, filter_centers=[0.],
-                                                       skip_wgt=skip_wgt, filter_half_widths=[filter_size], **filter_kwargs)
+    rephasor = np.exp(-2.0j * np.pi * dly * xin)
+    din = din * rephasor
+    filtered, res, info = uvtools.dspec.fourier_filter(x=xin, data=din, wgts=win, mode=mode, filter_centers=[0.],
+                                                       skip_wgt=skip_wgt, filter_half_widths=[filter_size],
+                                                       **filter_kwargs)
     # put back in unfilted values if skip_wgt is triggered
     filtered /= rephasor
+    if skip_flagged_edges:
+        filtered = restore_flagged_edges(xin, filtered, edges, ax='freq')
+
     for i in info['status']['axis_1']:
         if info['status']['axis_1'][i] == 'skipped':
             filtered[i, :] = gains[i, :]
@@ -287,7 +307,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in seconds
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
 
-    if method == 'DPSS':
+    if method == 'DPSS' or method == 'dpss_leastsq':
         info = {}
         if skip_flagged_edges:
             xout, gout, wout, edges, chunks = truncate_flagged_edges(gains * rephasor, wgts, (times, freqs), ax='both')
@@ -769,7 +789,7 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
-    def freq_filter(self, filter_scale=10.0, tol=1e-09, skip_wgt=0.1, mode='clean', maxiter=100, **filter_kwargs):
+    def freq_filter(self, filter_scale=10.0, tol=1e-09, skip_wgt=0.1, mode='clean', **filter_kwargs):
         '''Frequency-filter stored calibration solutions on a given scale in MHz.
 
         Arguments:
@@ -792,8 +812,8 @@ class CalibrationSmoother():
             wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
             self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
                                                      filter_scale=filter_scale, tol=tol, mode=mode,
-                                                     skip_wgt=skip_wgt, maxiter=maxiter, **filter_kwargs)
-            # flag all channels for any time that triggers the skip_wgt
+                                                     skip_wgt=skip_wgt, **filter_kwargs)
+            # flag all channels for any time that was skipped.
             for i in info['status']['axis_1']:
                 if info['status']['axis_1'][i] == 'skipped':
                     self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
@@ -829,7 +849,7 @@ class CalibrationSmoother():
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
         # Generate DPSS filters if method='DPSS'
-        if method == 'DPSS':
+        if method == 'DPSS' or method == 'dpss_leastsq':
             design_matrix = dpss_filters(
                 freqs=self.freqs, times=self.time_grid, freq_scale=freq_scale, time_scale=time_scale,
                 eigenval_cutoff=eigenval_cutoff
@@ -852,7 +872,7 @@ class CalibrationSmoother():
                 wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
 
                 # If the weights grid is the same as the previous, the solution matrix can be reused to speed up computation
-                if method == 'DPSS':
+                if method == 'DPSS' or method == 'dpss_leastsq':
                     sol_matrix = info['sol_matrix'] if np.allclose(wgts_grid, wgts_old) else None
                     wgts_old = np.copy(wgts_grid)
 
