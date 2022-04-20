@@ -104,7 +104,7 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
         if Nmax < x0.shape[0]:
             Nw = 2 * x0.shape[0] * fw * np.diff(x0)[0]
             Nterms = int(min(10 * Nw, x0.shape[0]))
-            windows, eigvals = uvtools.dspec.windows.dpss(x0.shape[0], Nw // 2, Nterms, return_ratios=True)
+            windows, eigvals = uvtools.dspec.windows.dpss(x0.shape[0], Nw / 2, Nterms, return_ratios=True)
             windows = windows[eigvals > eigenval_cutoff].T
             dpss_windows.append(windows)
 
