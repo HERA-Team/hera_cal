@@ -52,6 +52,10 @@ class Test_Smooth_Cal_Helper_Functions(object):
                              time_scale=0.99 / time_scale, freq_scale=1.01 / freq_scale)
         assert pytest.raises(ValueError, smooth_cal.dpss_filters, times=times, freqs=freqs,
                              time_scale=1.01 / time_scale, freq_scale=0.99 / freq_scale)
+        # test approximate estimator of the eigenvalues
+        time_filters, freq_filters = smooth_cal.dpss_filters(
+            times=times, freqs=freqs, time_scale=1.01 / time_scale, freq_scale=1.01 / freq_scale, Nmax=45
+        )
 
     def test_solve_2D_DPSS(self):
         time_filters = np.random.uniform(0, 1, size=(50, 2))
