@@ -85,52 +85,85 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
             Only used when the filtering method is 'DPSS'
 
     Returns:
-        filters: DPSS filtering vectors, ndarray of size (Ntimes * Nfreqs, N_frequency_vectors * N_time_vectors)
+        time_filters: DPSS filtering vectors along the time axis, ndarray of size (Ntimes, N_time_vectors)
+        freq_filters: DPSS filtering vectors along the frequency axis, (Nfreqs, N_freq_vectors)
     """
     delay_scale = (freq_scale * 1e6) ** -1  # Puts it in seconds
     fringe_scale = (time_scale) ** -1  # fringe scale in Hz
     time_in_seconds = (times - times.min()) * 60 * 60 * 24  # time array in seconds
 
-    freq_filters, nfreq_comps = uvtools.dspec.dpss_operator(
-        freqs,
-        filter_centers=[0],
-        filter_half_widths=[delay_scale],
-        eigenval_cutoff=[eigenval_cutoff],
-    )  # DPSS filters along the frequency-axis
-    freq_filters = freq_filters.real.astype(np.float32)
-
+    # Generate DPSS filters along the time-axis
     time_filters, ntime_comps = uvtools.dspec.dpss_operator(
         time_in_seconds,
         filter_centers=[0],
         filter_half_widths=[fringe_scale],
         eigenval_cutoff=[eigenval_cutoff],
-    )  # DPSS filters along the time-axis
-    time_filters = time_filters.real.astype(np.float32)
+    )
+    time_filters = time_filters.astype(np.float64)
 
-    filters = np.reshape(
-        time_filters[:, None, :, None] * freq_filters[None, :, None, :],
-        (times.shape[0] * freqs.shape[0], ntime_comps[0] * nfreq_comps[0]),
-    )  # 2D time-frequency DPSS vectors
-    return filters
+    # Generate DPSS filters along the frequency-axis
+    freq_filters, nfreq_comps = uvtools.dspec.dpss_operator(
+        freqs,
+        filter_centers=[0],
+        filter_half_widths=[delay_scale],
+        eigenval_cutoff=[eigenval_cutoff],
+    )
+    freq_filters = freq_filters.astype(np.float64)
+
+    return time_filters, freq_filters
 
 
-def fit_solution_matrix(weights, design_matrix):
+def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
     """
-    Calculate the linear least squares solution matrix
-    from a design matrix, A and a weights matrix W
-    S = [A^T W A]^{-1} A^T W
+    Filters gain solutions by solving the weighted linear least squares problem
+    for a design matrix that can be factored into two kronecker products in the following way
+
+         y = X b = (A outer B) b
+
+    where A and B are time and frequency DPSS vector matrices. More memory and computationally
+    efficient than computing the design matrix from the time and frequency filters for
+    most input matrix sizes.
 
     Arguments:
+        gains: ndarray of shape=(Ntimes,Nfreqs) of complex calibration solutions to filter
         weights: ndarray of shape (Ntimes, Nfreqs) of calibration flags
-        design_matrix: ndarray of shape (Ntimes * Nfreqs, N_frequency_vectors * N_time_vectors)
+        time_filters: DPSS filtering vectors along the time axis, ndarray of size (Ntimes, N_time_vectors)
             obtained from hera_cal.smooth_cal.dpss_filters
+        freq_filters: DPSS filtering vectors along the frequency axis, (Nfreqs, N_freq_vectors)
+            obtained from hera_cal.smooth_cal.dpss_filters
+        XTXinv: Matrix of (X^T W X)^{-1} for the input DPSS filters and weights. Useful for filtering
+            many gain grids with similar flagging patterns. np.ndarray of shape (N_time_vectors * N_freq_vectors,
+            N_time_vectors * N_freq_vectors)
 
     Returns:
-        S: ndarray of shape (N_frequency_vectors * N_time_vectors, Ntimes * Nfreqs)
+        filtered: filtered gain grids from least squares fit, np.ndarray with the
+            same shape as the input gain grid
+        info: dictionary containing fit components and XTXinv
     """
-    cmat = (design_matrix.T * weights.reshape(-1)) @ design_matrix
-    smat = np.linalg.pinv(cmat) @ design_matrix.T * weights.reshape(-1)
-    return smat
+    # If (X^T W X)^-1 is not precalculated, calculate it
+    if XTXinv is None:
+        # Use einsum to calculate (X^T W X) in a memory efficient way
+        XTX = np.einsum(
+            "ij,kl,jl,jm,ln->ikmn", np.transpose(time_filters), np.transpose(freq_filters),
+            weights, time_filters, freq_filters, optimize=True
+        )
+        ncomps = time_filters.shape[1] * freq_filters.shape[1]
+        XTX = np.reshape(XTX, ncomps, ncomps)
+        XTXinv = np.linalg.pinv(XTX)
+
+    # Calculate X^T W y using the property (A \otimes B) vec(y) = (A Y B)
+    XTWy = np.ravel(np.transpose(time_filters) @ (gains * weights) @ freq_filters)
+
+    # Calculate beta
+    beta = np.reshape(XTWy @ XTXinv, (time_filters.shape[0], freq_filters.shape[1]))
+
+    # Produce an estimate of the filtered gains
+    filtered = time_filters @ beta @ np.transpose(freq_filters)
+
+    # Dictionary for storing fitting information
+    info = {"beta": beta, "XTXinv": XTXinv}
+
+    return filtered, info
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
@@ -298,16 +331,16 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             # Generate filters if not provided
             if design_matrix is None:
                 design_matrix = dpss_filters(
-                    xout[1], xout[0], freq_scale=freq_scale, time_scale=time_scale, eigenval_cutoff=eigenval_cutoff
+                    freqs=xout[1], times=xout[0], freq_scale=freq_scale, time_scale=time_scale,
+                    eigenval_cutoff=eigenval_cutoff
                 )
 
-            # Fit solution matrix if not provided
-            if sol_matrix is None:
-                sol_matrix = fit_solution_matrix(wout, design_matrix)
+            time_filters, freq_filters = design_matrix
 
-            # Filter gains
-            filtered = design_matrix @ (sol_matrix @ gout.reshape(-1))
-            filtered = filtered.reshape(gout.shape)
+            # Filter gain solutions
+            filtered, fit_info = solve_2D_DPSS(
+                gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, XTXinv=sol_matrix
+            )
 
             if skip_flagged_edges:
                 ((tstart, tend),), ((fstart, fend),) = edges
@@ -318,7 +351,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                 filtered = restore_flagged_edges(xout, filtered, edges, ax='both')
                 filtered[mask] = gains[mask]
 
-            info['sol_matrix'] = sol_matrix
+            # Store design matrices and XTXinv for computational speed-up
+            info['sol_matrix'] = fit_info['XTXinv']
             info['design_matrix'] = design_matrix
 
         elif filter_mode == 'plus':
