@@ -529,9 +529,11 @@ class HERAData(UVData):
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
                 elif self.filetype == 'uvfits':
-                    super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations, times=times,
-                                    time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans,
-                                    read_data=read_data, run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs)
+                    super().read(
+                        self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations, times=times,
+                        time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans,
+                        read_data=read_data, run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs
+                    )
                     self.unphase_to_drift() 
                 else:
                     if not read_data:
