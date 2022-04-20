@@ -258,7 +258,7 @@ class HERAData(UVData):
     # lsts_by_bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
 
     def __init__(self, input_data, upsample=False, downsample=False, filetype='uvh5', **read_kwargs):
-        '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
+        '''Instantiate a HERAData object. If the filetype is either uvh5 or uvfits, read in and store
         useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
 
@@ -268,7 +268,7 @@ class HERAData(UVData):
                 Upsampling will affect the time metadata stored on this object.
             downsample: bool. If True, will downsample to match the longest integration time in the file.
                 Downsampling will affect the time metadata stored on this object.
-            filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
+            filetype: supports 'uvh5' (default), 'miriad', 'uvfits'
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
         '''
