@@ -62,7 +62,6 @@ class Test_Smooth_Cal_Helper_Functions(object):
         for i in range(v.shape[1]):
             np.testing.assert_allclose(v[:, i], freq_filters[:, i])
 
-
     def test_solve_2D_DPSS(self):
         time_filters = np.random.uniform(0, 1, size=(50, 2))
         freq_filters = np.random.uniform(0, 1, size=(40, 5))
