@@ -1111,8 +1111,8 @@ def test_get_file_times():
 
     # test if fed as a str
     dlsts, dtimes, larrs, tarrs = io.get_file_times(filepaths[0], filetype='miriad')
-    assert isinstance(dlsts, (float, float))
-    assert isinstance(dtimes, (float, float))
+    assert isinstance(dlsts, (float, np.floating))
+    assert isinstance(dtimes, (float, np.floating))
     assert larrs.ndim == 1
     assert tarrs.ndim == 1
 

@@ -674,7 +674,7 @@ def get_sun_alt(jds, latitude=-30.721526120689507, longitude=21.428303826863015)
     """
     # type check
     array = True
-    if isinstance(jds, (float, float, np.float64, int, int, np.int32)):
+    if isinstance(jds, (float, np.floating, np.float64, int, np.integer, np.int32)):
         jds = [jds]
         array = False
 
