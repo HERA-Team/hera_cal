@@ -776,7 +776,7 @@ class VisClean(object):
         wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
         # convert max_frate to DataContainer
         if max_frate is not None:
-            if isinstance(max_frate, (int, np.integer, float, float)):
+            if isinstance(max_frate, (int, np.integer, float, np.floating)):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
             if not isinstance(max_frate, DataContainer):
                 raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
@@ -1106,7 +1106,7 @@ class VisClean(object):
                     xp[1] = xp[1][spw_slice]
                     if not isinstance(zeropad, (list, tuple)) or not len(zeropad) == 2:
                         raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
-                    if not (isinstance(zeropad[0], (int, int)) and isinstance(zeropad[0], (int, int))):
+                    if not (isinstance(zeropad[0], (int, np.integer)) and isinstance(zeropad[1], (int, np.integer))):
                         raise ValueError("zeropad values must all be integers. You provided %s" % (zeropad))
                     for m in range(2):
                         if zeropad[m] > 0:

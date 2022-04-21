@@ -84,7 +84,7 @@ def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
             flags = np.zeros_like(data, bool)
         else:
             flags = copy.deepcopy(flags)
-        if isinstance(edgeflag, (int, int, float, float)):
+        if isinstance(edgeflag, (int, np.integer, float, np.floating)):
             edgeflag = (edgeflag, edgeflag)
         assert len(edgeflag) == 2
         if edgeflag[0] > 0:

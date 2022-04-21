@@ -1294,7 +1294,7 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
         raise ValueError("Can't hold amp, dly and phs fixed")
 
     # create delay range
-    if isinstance(dly_range, (int, int, float, float)):
+    if isinstance(dly_range, (int, np.integer, float, np.floating)):
         dly_range = [dly_range, dly_range]
     dly_range = (np.nanmedian(dly0) - np.abs(dly_range[0]), np.nanmedian(dly0) + np.abs(dly_range[1]))
 
