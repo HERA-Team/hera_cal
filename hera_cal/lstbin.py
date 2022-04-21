@@ -176,7 +176,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         grid_indices = np.digitize(li, lst_grid_left[1:], right=True)
 
         # make data_in_bin boolean array, and set to False data that don't fall in any bin
-        data_in_bin = np.ones_like(li, np.bool)
+        data_in_bin = np.ones_like(li, bool)
         data_in_bin[(li < lst_grid_left.min() - atol)] = False
         data_in_bin[(li > lst_grid_left.max() + dlst + atol)] = False
 
@@ -256,7 +256,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     key = antpair + (pol,)
                     if key not in data and ((key[0] != key[1] and utils.reverse_bl(key) not in data) or key[0] == key[1]):
                         # last part lets us spoof ne and en for autocorrs. If we dont include it, only en xor ne will be spoofed.
-                        # using int8 and complex64 to allow numpy to promote the precision of these arrays only if needed
+                        # using np.int8 and complex64 to allow numpy to promote the precision of these arrays only if needed
                         nsamples[key] = odict({ind: np.empty((0, Nfreqs), dtype=np.int8) for ind in range(len(lst_grid))})
                         data[key] = odict({ind: np.empty((0, Nfreqs), dtype=np.complex64) for ind in range(len(lst_grid))})
                         flags[key] = odict({ind: np.empty((0, Nfreqs), dtype=bool) for ind in range(len(lst_grid))})
@@ -291,7 +291,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                     # if the index is not present.
                     if index not in data[key]:
                         data[key][index] = np.array([np.zeros(Nfreqs, dtype=np.complex64)])
-                        flags[key][index] = np.array([np.ones(Nfreqs, dtype=np.bool)])
+                        flags[key][index] = np.array([np.ones(Nfreqs, dtype=bool)])
                         nsamples[key][index] = np.array([np.zeros(Nfreqs, dtype=np.int8)])
 
         # use all LST bins
@@ -365,7 +365,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
 
             # check thresholds for flagging entire output LST bins
             if len(f) == 1:
-                flag_bin = np.zeros(f.shape[1], np.bool)
+                flag_bin = np.zeros(f.shape[1], bool)
             else:
                 flag_bin = np.sum(f, axis=0).astype(float) / len(f) > flag_thresh
             d[:, flag_bin] *= np.nan

@@ -772,7 +772,7 @@ class Test_Visibility_IO_Legacy(object):
         data, flgs, ap, a, f, t, l, p = io.load_vis(uvd, return_meta=True)
         nsample = copy.deepcopy(data)
         for k in nsample.keys():
-            nsample[k] = np.ones_like(nsample[k], np.float)
+            nsample[k] = np.ones_like(nsample[k], float)
 
         # test basic execution
         uvd = io.write_vis("ex.uvh5", data, l, f, ap, start_jd=2458044, return_uvd=True, overwrite=True, verbose=True, x_orientation='east', filetype='uvh5')
@@ -909,11 +909,11 @@ class Test_Calibration_IO_Legacy(object):
         flags = {}
         total_qual = {}
         for i, p in enumerate(pols):
-            total_qual[p] = np.ones((Ntimes, Nfreqs), np.float)
+            total_qual[p] = np.ones((Ntimes, Nfreqs), float)
             for j, a in enumerate(ants):
-                gains[(a, p)] = np.ones((Ntimes, Nfreqs), np.complex)
-                quality[(a, p)] = np.ones((Ntimes, Nfreqs), np.float) * 2
-                flags[(a, p)] = np.zeros((Ntimes, Nfreqs), np.bool)
+                gains[(a, p)] = np.ones((Ntimes, Nfreqs), complex)
+                quality[(a, p)] = np.ones((Ntimes, Nfreqs), float) * 2
+                flags[(a, p)] = np.zeros((Ntimes, Nfreqs), bool)
 
         # set some terms to zero
         gains[(5, 'Jnn')][20:30] *= 0
@@ -1111,8 +1111,8 @@ def test_get_file_times():
 
     # test if fed as a str
     dlsts, dtimes, larrs, tarrs = io.get_file_times(filepaths[0], filetype='miriad')
-    assert isinstance(dlsts, (float, np.float))
-    assert isinstance(dtimes, (float, np.float))
+    assert isinstance(dlsts, (float, np.floating))
+    assert isinstance(dtimes, (float, np.floating))
     assert larrs.ndim == 1
     assert tarrs.ndim == 1
 

@@ -21,7 +21,7 @@ def test_solar_flag():
     data, flags, antp, ant, f, t, l, p = io.load_vis(uvd, return_meta=True)
     # get solar altitude
     a = utils.get_sun_alt(2458043)
-    assert isinstance(a, (float, np.float, np.float64))
+    assert isinstance(a, (float, np.floating, np.float64))
     a = utils.get_sun_alt([2458043, 2458043.5])
     assert isinstance(a, (np.ndarray))
     # test solar flag

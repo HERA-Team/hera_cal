@@ -163,7 +163,7 @@ class Test_FRFilter(object):
     def test_filter_data(self):
         # construct high-pass filter
         frates = np.fft.fftshift(np.fft.fftfreq(self.F.Ntimes, self.F.dtime)) * 1e3
-        w = np.ones((self.F.Ntimes, self.F.Nfreqs), dtype=np.float)
+        w = np.ones((self.F.Ntimes, self.F.Nfreqs), dtype=float)
         w[np.abs(frates) < 20] = 0.0
         frps = datacontainer.DataContainer(dict([(k, w) for k in self.F.data]))
 
@@ -289,7 +289,7 @@ class Test_FRFilter(object):
         frfil.read(bls=[k])
         if avg_red_bllens:
             frfil.avg_red_baseline_vectors()
-        wgts = {k: np.ones_like(frfil.flags[k], dtype=np.float)}
+        wgts = {k: np.ones_like(frfil.flags[k], dtype=float)}
         wgts[k][:, 0] = 0.0
         if pass_data:
             data_kwargs = {'data': frfil.data}
