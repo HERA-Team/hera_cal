@@ -3,6 +3,7 @@
 # Licensed under the MIT License
 
 import pytest
+import uvtools
 import numpy as np
 from copy import deepcopy
 import os
@@ -52,21 +53,33 @@ class Test_Smooth_Cal_Helper_Functions(object):
                              time_scale=0.99 / time_scale, freq_scale=1.01 / freq_scale)
         assert pytest.raises(ValueError, smooth_cal.dpss_filters, times=times, freqs=freqs,
                              time_scale=1.01 / time_scale, freq_scale=0.99 / freq_scale)
-        # test approximate estimator of the eigenvalues
-        time_filters, freq_filters = smooth_cal.dpss_filters(
-            times=times, freqs=freqs, time_scale=1.01 / time_scale, freq_scale=1.01 / freq_scale, Nmax=45
-        )
+
+        v = uvtools.dspec.dpss_operator(times * 60 * 60 * 24, [0], [time_scale / 1.01], eigenval_cutoff=[1e-9])[0].real
+        for i in range(v.shape[1]):
+            np.testing.assert_allclose(v[:, i], time_filters[:, i])
+
+        v = uvtools.dspec.dpss_operator(freqs, [0], [freq_scale / 1e6 / 1.01], eigenval_cutoff=[1e-9])[0].real
+        for i in range(v.shape[1]):
+            np.testing.assert_allclose(v[:, i], freq_filters[:, i])
+
 
     def test_solve_2D_DPSS(self):
         time_filters = np.random.uniform(0, 1, size=(50, 2))
         freq_filters = np.random.uniform(0, 1, size=(40, 5))
         weights = np.random.uniform(0, 1, size=(50, 40))
         gains = np.random.uniform(0, 1, size=(50, 40))
-        fit, info = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters)
+        fit1, info = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters)
+        assert fit1.shape == gains.shape
 
         # Check XTXinv
-        XTXinv = np.random.uniform(0, 1, size=(10, 10))
-        fit, info = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=XTXinv)
+        fit2, info = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=info['XTXinv'])
+        assert fit1.shape == fit2.shape
+        np.testing.assert_array_equal(fit1, fit2)
+
+        # Check to see that this function matches the true result
+        X = np.kron(time_filters, freq_filters)
+        fit_lsq = X @ np.linalg.pinv((X.T * weights.ravel()) @ X) @ (X.T * weights.ravel()) @ gains.ravel()
+        np.testing.assert_array_almost_equal(fit_lsq, fit2.ravel())
 
     def test_time_filter(self):
         gains = np.ones((10, 10), dtype=complex)
