@@ -97,7 +97,6 @@ class HERACal(UVCal):
             gains[(ant, pol)] = np.array(self.gain_array[i, 0, :, :, ip].T)
             flags[(ant, pol)] = np.array(self.flag_array[i, 0, :, :, ip].T)
             quals[(ant, pol)] = np.array(self.quality_array[i, 0, :, :, ip].T)
-
         # build dict of total_qual if available
         for pol in self.pols:
             ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
@@ -187,6 +186,8 @@ class HERACal(UVCal):
 
         # update total_qual
         if total_qual is not None:
+            if self.total_quality_array is None:
+                self.total_quality_array = np.zeros((1, ) + self.gain_array.shape[2:], dtype=float)
             for pol in total_qual.keys():
                 ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
                 self.total_quality_array[0, :, :, ip] = total_qual[pol].T

@@ -112,6 +112,8 @@ class Test_HERACal(object):
             quals[key] *= 2.0
         for key in total_qual.keys():
             total_qual[key] *= 2
+        # remove total quality array to test handling absence.
+        hc.total_quality_array = None
         hc.update(gains=gains, flags=flags, quals=quals, total_qual=total_qual)
         hc.write_calfits('test.calfits', clobber=True)
 
@@ -1134,7 +1136,7 @@ def test_get_file_times():
 def test_get_file_times_bda():
     fps = [os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5'),
            os.path.join(DATA_PATH, 'zen.2459122.30119.sum.bda.downsampled.uvh5')]
-    
+
     # test single file load
     dlsts, dtimes, larrs, tarrs = io.get_file_times(fps[0], filetype='uvh5')
     hd = io.HERAData(fps[0])
