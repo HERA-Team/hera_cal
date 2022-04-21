@@ -1005,6 +1005,49 @@ class Test_AbsCal(object):
         for k in gains:
             np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor ** -.5)
 
+    def test_run_model_based_calibration_flagged_gains(self, tmpdir):
+        """
+        Test case when all gains are flagged.
+        """
+        data_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.uvh5_downselected')
+        tmppath = tmpdir.strpath
+
+        hd = io.HERAData(data_file)
+        data, flags, nsamples = hd.read()
+        antpairs = hd.get_antpairs()
+
+        hdm = io.HERAData(data_file)
+        model_data, model_flags, model_nsamples = hdm.read()
+
+        precal_fname = os.path.join(tmppath, 'test_precal.calfits')
+
+        # include a model random scale factor tiomes the amplitude of the data.
+        scale_factor = np.random.rand() * 0.8 + 0.1
+        hdm.data_array *= scale_factor
+        # there are integrations and channels that need to be flagged.
+        hdm.flag_array[np.isclose(hdm.data_array, 0.)] = True
+        hd.flag_array[np.isclose(hd.data_array, 0.)] = True
+
+        model_fname = os.path.join(tmppath, 'test_model.uvh5')
+        data_fname = os.path.join(tmppath, 'test_data.uvh5')
+        hd.flag_array[:] = True
+
+        hdm.write_uvh5(model_fname)
+        hd.write_uvh5(data_fname)
+        cal_fname = os.path.join(tmppath, 'test_cal.calfits')
+        # test feeding UVData objects instead.
+        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname, auto_file=data_fname,
+                                           output_filename=cal_fname, clobber=True,
+                                           refant=(0, 'Jnn'),
+                                           spoof_missing_channels=True)
+        # assert all flags and gains equal 1.
+        hc = io.HERACal(cal_fname)
+        gains, gain_flags, _, _ = hc.read()
+        for k in gains:
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], 1.)
+            np.testing.assert_array_almost_equal(gain_flags[k], True)
+
+
     def test_run_model_based_calibration_nonuniform_channels(self, tmpdir):
         include_chans = np.hstack([np.arange(10), np.arange(12, 15), np.arange(64 - 10, 64)])
 
