@@ -18,7 +18,10 @@ mode = a.method
 filter_kwargs = {}
 if mode != 'clean':
     filter_kwargs['skip_flagged_edges'] = not(a.dont_skip_flagged_edges)
-    filter_kwargs['eigenval_cutoff'] = a.eigenval_cutoff
+    if a.axis == 'time':
+        filter_kwargs['eigenval_cutoff'] = a.eigenval_cutoff
+    else:
+        filter_kwargs['eigenval_cutoff'] = [a.eigenval_cutoff]
 else:
     if a.window == 'tukey' :  # set window kwargs
         filter_kwargs['alpha'] = a.alpha
