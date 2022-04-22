@@ -612,7 +612,7 @@ class CalibrationSmoother():
 
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
-                 pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, verbose=False):
+                 blacklist_wgt=0.0, pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -640,7 +640,7 @@ class CalibrationSmoother():
                 to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted times are not necessarily flagged.
             lst_blacklists:  list of pairs of LSTs in hours bounding (inclusively) regions of LST that are
-                to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
+                to receive 0 weight (by default) during smoothing, forcing the smoother to interpolate/extrapolate.
                 Regions crossing the 24h brach cut are acceptable (e.g. [(23, 1)] blacklists two total hours).
                 N.B. Blacklisted LSTS are not necessarily flagged.
             lat_lon_alt_degrees: length 3 list or array of latitude (deg), longitude (deg), and altitude (m) of
@@ -652,6 +652,8 @@ class CalibrationSmoother():
             chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions
                 that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted channels are not necessarily flagged.
+            blacklist_wgt: float weight to give to blacklisted times or frequencies. 0.0 weight will create
+                problems at edge times and frequencies when using DPSS filtering.
             pick_refant: if True, automatically picks one reference anteanna per polarization. The refants chosen have the
                 fewest total flags and causes the least noisy phases on other antennas when made the phase reference.
             freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
@@ -738,6 +740,7 @@ class CalibrationSmoother():
                                      time_threshold=time_threshold, ant_threshold=time_threshold)
 
         # build blacklists
+        self.blacklist_wgt = blacklist_wgt
         self.time_blacklist = build_time_blacklist(self.time_grid, time_blacklists=time_blacklists, lst_blacklists=lst_blacklists,
                                                    lat_lon_alt_degrees=lat_lon_alt_degrees, telescope_name=hc.telescope_name)
         self.freq_blacklist = build_freq_blacklist(self.freqs, freq_blacklists=freq_blacklists, chan_blacklists=chan_blacklists)
@@ -800,7 +803,7 @@ class CalibrationSmoother():
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now smoothing antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in time...', verbose=self.verbose)
             if not np.all(self.flag_grids[ant]):
-                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
+                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist, self.blacklist_wgt)
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
@@ -824,7 +827,7 @@ class CalibrationSmoother():
         # Loop over all antennas and perform a low-pass delay filter on gains
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
-            wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
+            wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist, self.blacklist_wgt)
             self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
                                                      filter_scale=filter_scale, tol=tol, window=window,
                                                      skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
@@ -877,7 +880,7 @@ class CalibrationSmoother():
         for ant, gain_grid in self.gain_grids.items():
             if not np.all(self.flag_grids[ant]):
                 utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
-                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
+                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist, self.blacklist_wgt)
 
                 # If the weights grid is the same as the previous, the solution matrix can be reused to speed up computation
                 if method == 'DPSS':
