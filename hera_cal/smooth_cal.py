@@ -969,7 +969,7 @@ def smooth_cal_argparser():
                           times and channels. 1.0 means no additional flagging (default 0.5).")
 
     # Options relating to blacklisting time or frequency ranges
-    bkl_opts = a.add_argument_group(title="Blacklisting options used for assigning 0 weight to times/frequencies so that smooth_cal\n"
+    bkl_opts = a.add_argument_group(title="Blacklisting options used for assigning 0 weight (by default) to times/frequencies so that smooth_cal\n"
                                     "interpolates/extrapoaltes over them (though they aren't necessarily flagged).")
     bkl_opts.add_argument("--time_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of times in Julian Day \
                           bounding (inclusively) blacklisted times, e.g. '2458098.1-2458098.4'.")
@@ -979,6 +979,8 @@ def smooth_cal_argparser():
                           bounding (inclusively) blacklisted spectral ranges, e.g. '0-256 800-900'")
     bkl_opts.add_argument("--freq_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of frequencies in Hz \
                           bounding (inclusively) blacklisted spectral ranges, e.g. '88e6-110e6 136e6-138e6'")
+    bkl_opts.add_argument("--blacklist_wgt", type=float, default=0.0, "Relative weight to assign to blacklisted times/freqs compared to 1.0. Default 0.0 \
+                          means no weight. Not that 0.0 will create problems for DPSS at edge times and frequencies.")
 
     # Options relating to performing the filter in time and frequency
     flt_opts = a.add_argument_group(title='Filtering options.')
