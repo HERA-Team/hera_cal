@@ -606,7 +606,7 @@ class Test_FRFilter(object):
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, 'temp.h5')
         frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True,
-                                           Nbls_per_load=None, avg_red_bllens=False, case='sky', lst_blacklists=[(23, 6.03), (6.18, 7)], blacklst_wgt=1e-3)  # first and last five bins
+                                           Nbls_per_load=None, avg_red_bllens=False, case='sky', lst_blacklists=[(23, 6.03), (6.18, 7)], blacklist_wgt=1e-3)  # first and last five bins
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in d:
