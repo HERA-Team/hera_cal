@@ -617,8 +617,8 @@ class Test_FRFilter(object):
 
         wgts = datacontainer.DataContainer({k: (~frfil.flags[k]).astype(float) for k in frfil.flags})
         for k in wgts:
-            wgts[k][0:5, :] = 0
-            wgts[k][-5:, :] = 0
+            wgts[k][0:5, :] = 1e-3
+            wgts[k][-5:, :] = 1e-3
         frate_centers, frate_half_widths = frf.select_tophat_frates(case='sky', uvd=frfil.hd, blvecs=frfil.blvecs)
         frfil.tophat_frfilter(keys=[(53, 54, 'ee')], tol=1e-4, verbose=True, frate_centers=frate_centers, frate_half_widths=frate_half_widths, wgts=wgts)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5)
