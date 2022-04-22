@@ -1276,8 +1276,11 @@ def tophat_frfilter_argparser(mode='clean'):
                                                                                                                  "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
     filt_options.add_argument("--wgt_by_nsample", default=False, action="store_true", help="Use weights proportional to nsamples during FRF. Default is to just use flags by nsamples.")
     from .smooth_cal import _pair
-    filt_options.add_argument("--excluded_lsts", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of LSTs in hours "
-                                                                                         "bounding (inclusively) LSTs assigned zero weight during FRF, e.g. '3-4 10-12 23-.5'")
+    filt_options.add_argument("--lst_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of LSTs in hours bounding (inclusively) \
+                                                                                           blacklisted LSTs assigned zero weight (by default) during FRF, e.g. '3-4 10-12 23-.5'")
+    filt_options.add_argument("--blacklist_wgt", type=float, default=0.0, help="Relative weight to assign to blacklisted lsts compared to 1.0. Default 0.0 \
+                                                                                means no weight. Note that 0.0 will create problems for DPSS at edge times and frequencies.")
+
 
     desc = ("Filtering case ['max_frate_coeffs', 'uvbeam', 'sky']",
             "If case == 'max_frate_coeffs', then determine fringe rate centers",
