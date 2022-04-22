@@ -979,7 +979,7 @@ def smooth_cal_argparser():
                           bounding (inclusively) blacklisted spectral ranges, e.g. '0-256 800-900'")
     bkl_opts.add_argument("--freq_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of frequencies in Hz \
                           bounding (inclusively) blacklisted spectral ranges, e.g. '88e6-110e6 136e6-138e6'")
-    bkl_opts.add_argument("--blacklist_wgt", type=float, default=0.0, "Relative weight to assign to blacklisted times/freqs compared to 1.0. Default 0.0 \
+    bkl_opts.add_argument("--blacklist_wgt", type=float, default=0.0, help="Relative weight to assign to blacklisted times/freqs compared to 1.0. Default 0.0 \
                           means no weight. Note that 0.0 will create problems for DPSS at edge times and frequencies.")
 
     # Options relating to performing the filter in time and frequency
