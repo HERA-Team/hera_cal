@@ -597,13 +597,14 @@ def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
     return freq_blacklist_array
 
 
-def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None):
+def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None, blacklist_wgt=0.0):
     '''Builds a wgts_grid float array (Ntimes, Nfreqs) with 0s flagged or blacklisted data and 1s otherwise.'''
-    wgts_grid = np.logical_not(flag_grid).astype(float)
+    wgts_grid = np.ones_like(flag_grid, dtype=float)
     if time_blacklist is not None:
-        wgts_grid[time_blacklist, :] = 0.0
+        wgts_grid[time_blacklist, :] = blacklist_wgt
     if freq_blacklist is not None:
-        wgts_grid[:, freq_blacklist] = 0.0
+        wgts_grid[:, freq_blacklist] = blacklist_wgt
+    wgts_grid[flag_grid] = 0.0
     return wgts_grid
 
 
