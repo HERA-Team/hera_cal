@@ -1281,7 +1281,6 @@ def tophat_frfilter_argparser(mode='clean'):
     filt_options.add_argument("--blacklist_wgt", type=float, default=0.0, help="Relative weight to assign to blacklisted lsts compared to 1.0. Default 0.0 \
                                                                                 means no weight. Note that 0.0 will create problems for DPSS at edge times and frequencies.")
 
-
     desc = ("Filtering case ['max_frate_coeffs', 'uvbeam', 'sky']",
             "If case == 'max_frate_coeffs', then determine fringe rate centers",
             "and half-widths based on the max_frate_coeffs arg (see below).",
