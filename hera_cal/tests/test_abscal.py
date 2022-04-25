@@ -1047,7 +1047,6 @@ class Test_AbsCal(object):
             np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], 1.)
             np.testing.assert_array_almost_equal(gain_flags[k], True)
 
-
     def test_run_model_based_calibration_nonuniform_channels(self, tmpdir):
         include_chans = np.hstack([np.arange(10), np.arange(12, 15), np.arange(64 - 10, 64)])
 
