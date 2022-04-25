@@ -3893,7 +3893,7 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         # update abscal gains with iteration.
         abscal_gains_new = merge_gains([abscal_gains, abscal_gains_iteration])
         maxvals = [np.max(np.abs(abscal_gains_new[k][np.invert(abscal_flags[k])]
-                        - abscal_gains[k][np.invert(abscal_flags[k])])) for k in abscal_gains if np.any(~abscal_flags[k])]
+                   - abscal_gains[k][np.invert(abscal_flags[k])])) for k in abscal_gains if np.any(~abscal_flags[k])]
         if len(maxvals) > 0:
             delta = np.max(maxvals)
         else:
