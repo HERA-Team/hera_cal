@@ -102,7 +102,7 @@ class Test_lstbin(object):
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
                                 verbose=False)
         # check shape and dtype
-        assert output[1][(24, 25, 'ee')].dtype == np.complex
+        assert output[1][(24, 25, 'ee')].dtype == complex
         assert output[1][(24, 25, 'ee')].shape == (224, 64)
         # check number of points in each bin
         assert np.allclose(output[-1][(24, 25, 'ee')].real[0, 30], 1)
@@ -220,7 +220,7 @@ class Test_lstbin(object):
         uv1.read(output_lst_file)
         # assert nsample w.r.t time follows 1-2-3-2-1 pattern
         nsamps = np.mean(uv1.get_nsamples(52, 52, 'ee'), axis=1)
-        expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(22)]).astype(np.float)
+        expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(22)]).astype(float)
         assert np.allclose(nsamps[0:len(expectation)], expectation)
         assert np.allclose(nsamps[len(expectation):], 0)
         os.remove(output_lst_file)

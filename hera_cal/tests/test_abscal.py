@@ -40,7 +40,7 @@ class Test_AbsCal_Funcs(object):
         data, flgs = io.load_vis(self.uvd, pop_autos=True)
         wgts = odict()
         for k in flgs.keys():
-            wgts[k] = (~flgs[k]).astype(np.float)
+            wgts[k] = (~flgs[k]).astype(float)
         wgts = DataContainer(wgts)
 
         # configure baselines
@@ -101,7 +101,7 @@ class Test_AbsCal_Funcs(object):
         # test smoothing
         d = abscal.wiener(self.data, window=(5, 15), noise=None, medfilt=True, medfilt_kernel=(1, 13))
         assert d[(24, 37, 'ee')].shape == (60, 64)
-        assert d[(24, 37, 'ee')].dtype == np.complex
+        assert d[(24, 37, 'ee')].dtype == complex
         # test w/ noise
         d = abscal.wiener(self.data, window=(5, 15), noise=0.1, medfilt=True, medfilt_kernel=(1, 13))
         assert d[(24, 37, 'ee')].shape == (60, 64)
@@ -111,7 +111,7 @@ class Test_AbsCal_Funcs(object):
         # test as array
         d = abscal.wiener(self.data[(24, 37, 'ee')], window=(5, 15), medfilt=False, array=True)
         assert d.shape == (60, 64)
-        assert d.dtype == np.complex
+        assert d.dtype == complex
 
     def test_Baseline(self):
         # test basic execution
@@ -155,7 +155,7 @@ class Test_AbsCal_Funcs(object):
         assert np.allclose(data[(24, 25, 'ee')][30, 30], d[(38, 39, 'ee')][30, 30])
         # test reweighting
         w = abscal.mirror_data_to_red_bls(self.wgts, self.antpos, weights=True)
-        assert w[(24, 25, 'ee')].dtype == np.float
+        assert w[(24, 25, 'ee')].dtype == float
         assert np.allclose(w[(24, 25, 'ee')].max(), 16.0)
 
     def test_flatten(self):
@@ -693,9 +693,9 @@ class Test_AbsCal(object):
         assert self.AC.ant_eta[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_eta_gain[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_eta_arr.shape == (7, 60, 64, 1)
-        assert self.AC.ant_eta_arr.dtype == np.float
+        assert self.AC.ant_eta_arr.dtype == float
         assert self.AC.ant_eta_gain_arr.shape == (7, 60, 64, 1)
-        assert self.AC.ant_eta_gain_arr.dtype == np.complex
+        assert self.AC.ant_eta_gain_arr.dtype == complex
         # test Nones
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
         assert AC.ant_eta is None
@@ -711,9 +711,9 @@ class Test_AbsCal(object):
         assert self.AC.ant_phi[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_phi_gain[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_phi_arr.shape == (7, 60, 64, 1)
-        assert self.AC.ant_phi_arr.dtype == np.float
+        assert self.AC.ant_phi_arr.dtype == float
         assert self.AC.ant_phi_gain_arr.shape == (7, 60, 64, 1)
-        assert self.AC.ant_phi_gain_arr.dtype == np.complex
+        assert self.AC.ant_phi_gain_arr.dtype == complex
         assert np.allclose(np.angle(self.AC.ant_phi_gain[(24, 'Jee')]), 0.0)
         self.AC.phs_logcal(verbose=False, avg=True)
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
@@ -739,9 +739,9 @@ class Test_AbsCal(object):
         assert self.AC.ant_dly_phi_arr.shape == (7, 60, 1, 1)
         assert self.AC.ant_dly_phi_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_dly_arr.shape == (7, 60, 1, 1)
-        assert self.AC.ant_dly_arr.dtype == np.float
+        assert self.AC.ant_dly_arr.dtype == float
         assert self.AC.ant_dly_gain_arr.shape == (7, 60, 64, 1)
-        assert self.AC.ant_dly_gain_arr.dtype == np.complex
+        assert self.AC.ant_dly_gain_arr.dtype == complex
         assert np.allclose(np.angle(self.AC.ant_dly_gain[(24, 'Jee')]), 0.0)
         assert np.allclose(np.angle(self.AC.ant_dly_phi_gain[(24, 'Jee')]), 0.0)
         # test exception
@@ -850,14 +850,14 @@ class Test_AbsCal(object):
         # test merge
         k = (53, 'Jee')
         assert mgains[k].shape == (60, 64)
-        assert mgains[k].dtype == np.complex
+        assert mgains[k].dtype == complex
         assert np.allclose(np.abs(mgains[k][0, 0]), np.abs(self.AC.abs_eta_gain[k] * self.AC.ant_eta_gain[k])[0, 0])
         assert np.allclose(np.angle(mgains[k][0, 0]), np.angle(self.AC.TT_Phi_gain[k] * self.AC.abs_psi_gain[k]
                                                                * self.AC.ant_dly_gain[k] * self.AC.ant_phi_gain[k])[0, 0])
 
         # test merge of flag dictionaries
-        f1 = {(1, 'Jee'): np.zeros(5, np.bool)}
-        f2 = {(1, 'Jee'): np.zeros(5, np.bool)}
+        f1 = {(1, 'Jee'): np.zeros(5, bool)}
+        f2 = {(1, 'Jee'): np.zeros(5, bool)}
         f3 = abscal.merge_gains([f1, f2])
         assert f3[(1, 'Jee')].dtype == np.bool_
         assert not np.any(f3[(1, 'Jee')])
@@ -891,7 +891,7 @@ class Test_AbsCal(object):
         data, flgs, ap, a, f, t, l, p = io.load_vis(data_file, return_meta=True)
         wgts = odict()
         for k in flgs.keys():
-            wgts[k] = (~flgs[k]).astype(np.float)
+            wgts[k] = (~flgs[k]).astype(float)
         wgts = DataContainer(wgts)
         # make mock data
         dly_slope = np.array([-1e-9, 2e-9, 0])
@@ -921,11 +921,11 @@ class Test_AbsCal(object):
         AC.abs_amp_logcal(verbose=False)
         # run TT_phs_logcal
         AC.TT_phs_logcal(verbose=False)
-        assert np.allclose(np.median(AC.abs_eta_arr[0, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(np.bool)]),
+        assert np.allclose(np.median(AC.abs_eta_arr[0, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(bool)]),
                            -0.01, atol=1e-3)
-        assert np.allclose(np.median(AC.TT_Phi_arr[0, 0, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(np.bool)]),
+        assert np.allclose(np.median(AC.TT_Phi_arr[0, 0, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(bool)]),
                            -1e-3, atol=1e-4)
-        assert np.allclose(np.median(AC.TT_Phi_arr[0, 1, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(np.bool)]),
+        assert np.allclose(np.median(AC.TT_Phi_arr[0, 1, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(bool)]),
                            1e-3, atol=1e-4)
 
     def test_run_model_based_calibration(self, tmpdir):
@@ -1493,7 +1493,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
         calibrate_in_place(data, rc_gains_subset, data_flags=flags,
                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
-        wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
+        wgts = DataContainer({k: (~flags[k]).astype(float) for k in flags.keys()})
 
         # run function
         with warnings.catch_warnings():
@@ -1508,7 +1508,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         for k in rc_gains.keys():
             assert k in delta_gains
             assert delta_gains[k].shape == (3, rc_gains[k].shape[1])
-            assert delta_gains[k].dtype == np.complex
+            assert delta_gains[k].dtype == complex
 
     def test_post_redcal_abscal_run_units_warning(self, tmpdir):
         tmp_path = tmpdir.strpath

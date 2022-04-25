@@ -298,7 +298,7 @@ class HERAData(UVData):
     # lsts_by_bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
 
     def __init__(self, input_data, upsample=False, downsample=False, filetype='uvh5', **read_kwargs):
-        '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
+        '''Instantiate a HERAData object. If the filetype is either uvh5 or uvfits, read in and store
         useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
 
@@ -308,7 +308,7 @@ class HERAData(UVData):
                 Upsampling will affect the time metadata stored on this object.
             downsample: bool. If True, will downsample to match the longest integration time in the file.
                 Downsampling will affect the time metadata stored on this object.
-            filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
+            filetype: supports 'uvh5' (default), 'miriad', 'uvfits'
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
         '''
@@ -337,7 +337,7 @@ class HERAData(UVData):
         self.filetype = filetype
 
         # load metadata from file
-        if self.filetype == 'uvh5':
+        if self.filetype in ['uvh5', 'uvfits']:
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
@@ -346,7 +346,7 @@ class HERAData(UVData):
 
             self._attach_metadata(**read_kwargs)
 
-        elif self.filetype in ['miriad', 'uvfits']:
+        elif self.filetype == 'miriad':
             for meta in self.HERAData_metas:
                 setattr(self, meta, None)  # no pre-loading of metadata
         else:
@@ -569,11 +569,13 @@ class HERAData(UVData):
             self.read = super().read  # re-define self.read so UVData can call self.read recursively for lists of files
             # load data
             try:
-                if self.filetype == 'uvh5':
-                    super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
-                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
+                if self.filetype in ['uvh5', 'uvfits']:
+                    super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
+                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, 
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
+                    if self.filetype == 'uvfits':
+                        self.unphase_to_drift() 
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
@@ -586,11 +588,6 @@ class HERAData(UVData):
                             warnings.warn('miriad does not support partial loading for times/lsts (except time_range) and frequencies. '
                                           'Loading the file first and then performing select.')
                             self.select(times=times, lsts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans)
-                    elif self.filetype == 'uvfits':
-                        super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations, times=times,
-                                     time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans,
-                                     run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs)
-                        self.unphase_to_drift()
 
                 # upsample or downsample data, as appropriate, including metadata. Will use self.longest/shortest_integration
                 # if not None (which came from whole file metadata) since partial i/o might change the current longest or
@@ -610,7 +607,7 @@ class HERAData(UVData):
                 self.read = temp_read  # reset back to this function, regardless of whether the above try excecutes successfully
 
         # process data into DataContainers
-        if read_data or self.filetype == 'uvh5':
+        if read_data or self.filetype in ['uvh5', 'uvfits']:
             self._determine_blt_slicing()
             self._determine_pol_indexing()
         if read_data and return_data:
@@ -1518,16 +1515,16 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # resort time and baseline axes
     data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
     if nsamples is None:
-        nsample_array = np.ones_like(data_array, np.float)
+        nsample_array = np.ones_like(data_array, float)
     else:
         nsample_array = np.moveaxis(list(map(lambda p: list(map(lambda ap: nsamples[str(p)][ap], antpairs)), pols)), 0, -1)
         nsample_array = nsample_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # flags
     if flags is None:
-        flag_array = np.zeros_like(data_array, np.float).astype(np.bool)
+        flag_array = np.zeros_like(data_array, float).astype(bool)
     else:
-        flag_array = np.moveaxis(list(map(lambda p: list(map(lambda ap: flags[str(p)][ap].astype(np.bool), antpairs)), pols)), 0, -1)
+        flag_array = np.moveaxis(list(map(lambda p: list(map(lambda ap: flags[str(p)][ap].astype(bool), antpairs)), pols)), 0, -1)
         flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # configure baselines
@@ -1783,7 +1780,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         else: returns None
     '''
     # get antenna info
-    ant_array = np.unique([k[0] for k in gains]).astype(np.int)
+    ant_array = np.unique([k[0] for k in gains]).astype(int)
     antenna_numbers = copy.copy(ant_array)
     if antnums2antnames is None:
         antenna_names = np.array(["ant{}".format(ant_num) for ant_num in antenna_numbers])
@@ -1799,16 +1796,16 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     Njones = len(jones_array)
 
     # get time info
-    time_array = np.array(times, np.float)
+    time_array = np.array(times, float)
     Ntimes = len(time_array)
-    time_range = np.array([time_array.min(), time_array.max()], np.float)
+    time_range = np.array([time_array.min(), time_array.max()], float)
     if len(time_array) > 1:
         integration_time = np.median(np.diff(time_array)) * 24. * 3600.
     else:
         integration_time = 0.0
 
     # get frequency info
-    freq_array = np.array(freqs, np.float)
+    freq_array = np.array(freqs, float)
     Nfreqs = len(freq_array)
     Nspws = 1
     freq_array = freq_array[None, :]
@@ -1816,10 +1813,10 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     channel_width = np.median(np.diff(freq_array))
 
     # form gain, flags and qualities
-    gain_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.complex)
-    flag_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.bool)
-    quality_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.float)
-    total_quality_array = np.empty((Nspws, Nfreqs, Ntimes, Njones), np.float)
+    gain_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), complex)
+    flag_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), bool)
+    quality_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), float)
+    total_quality_array = np.empty((Nspws, Nfreqs, Ntimes, Njones), float)
     for i, p in enumerate(pol_array):
         if total_qual is not None:
             total_quality_array[0, :, :, i] = total_qual[p].T[None, :, :]
@@ -1830,15 +1827,15 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
                 if flags is not None:
                     flag_array[j, :, :, :, i] = flags[(a, p)].T[None, :, :]
                 else:
-                    flag_array[j, :, :, :, i] = np.zeros((Nspws, Nfreqs, Ntimes), np.bool)
+                    flag_array[j, :, :, :, i] = np.zeros((Nspws, Nfreqs, Ntimes), bool)
                 if quality is not None:
                     quality_array[j, :, :, :, i] = quality[(a, p)].T[None, :, :]
                 else:
-                    quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.float)
+                    quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), float)
             else:
-                gain_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.complex)
-                flag_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.bool)
-                quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.float)
+                gain_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), complex)
+                flag_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), bool)
+                quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), float)
 
     if total_qual is None:
         total_quality_array = None

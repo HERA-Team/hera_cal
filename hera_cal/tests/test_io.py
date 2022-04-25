@@ -185,7 +185,7 @@ class Test_HERAData(object):
         hd = HERAData(self.uvfits, filetype='uvfits')
         assert hd.filepaths == [self.uvfits]
         for meta in hd.HERAData_metas:
-            assert getattr(hd, meta) is None
+            assert getattr(hd, meta) is not None
 
         # bda upsample/downsample
         hd = HERAData(self.uvh5_bda, upsample=True)
@@ -441,14 +441,16 @@ class Test_HERAData(object):
 
         # uvfits
         hd = HERAData(self.uvfits, filetype='uvfits')
-        d, f, n = hd.read(bls=(0, 1, 'xx'), freq_chans=list(range(10)))
+        hd.read(read_data=False)
+        ant_pairs = hd.get_antpairs()
+        d, f, n = hd.read(bls=(ant_pairs[0][0], ant_pairs[0][1], 'xx'), freq_chans=list(range(10)))
         assert hd.last_read_kwargs['freq_chans'] == list(range(10))
         for dc in [d, f, n]:
             assert len(dc) == 1
-            assert list(dc.keys()) == [(0, 1, parse_polstr('XX', x_orientation=hd.x_orientation))]
+            assert list(dc.keys()) == [
+                (ant_pairs[0][0], ant_pairs[0][1], parse_polstr('XX', x_orientation=hd.x_orientation))
+            ]
             assert dc[0, 1, 'ee'].shape == (60, 10)
-        with pytest.raises(NotImplementedError):
-            d, f, n = hd.read(read_data=False)
 
     def test_read_bda(self):
         # no upsampling or downsampling
@@ -770,7 +772,7 @@ class Test_Visibility_IO_Legacy(object):
         data, flgs, ap, a, f, t, l, p = io.load_vis(uvd, return_meta=True)
         nsample = copy.deepcopy(data)
         for k in nsample.keys():
-            nsample[k] = np.ones_like(nsample[k], np.float)
+            nsample[k] = np.ones_like(nsample[k], float)
 
         # test basic execution
         uvd = io.write_vis("ex.uvh5", data, l, f, ap, start_jd=2458044, return_uvd=True, overwrite=True, verbose=True, x_orientation='east', filetype='uvh5')
@@ -907,11 +909,11 @@ class Test_Calibration_IO_Legacy(object):
         flags = {}
         total_qual = {}
         for i, p in enumerate(pols):
-            total_qual[p] = np.ones((Ntimes, Nfreqs), np.float)
+            total_qual[p] = np.ones((Ntimes, Nfreqs), float)
             for j, a in enumerate(ants):
-                gains[(a, p)] = np.ones((Ntimes, Nfreqs), np.complex)
-                quality[(a, p)] = np.ones((Ntimes, Nfreqs), np.float) * 2
-                flags[(a, p)] = np.zeros((Ntimes, Nfreqs), np.bool)
+                gains[(a, p)] = np.ones((Ntimes, Nfreqs), complex)
+                quality[(a, p)] = np.ones((Ntimes, Nfreqs), float) * 2
+                flags[(a, p)] = np.zeros((Ntimes, Nfreqs), bool)
 
         # set some terms to zero
         gains[(5, 'Jnn')][20:30] *= 0
@@ -1109,8 +1111,8 @@ def test_get_file_times():
 
     # test if fed as a str
     dlsts, dtimes, larrs, tarrs = io.get_file_times(filepaths[0], filetype='miriad')
-    assert isinstance(dlsts, (float, np.float))
-    assert isinstance(dtimes, (float, np.float))
+    assert isinstance(dlsts, (float, np.floating))
+    assert isinstance(dtimes, (float, np.floating))
     assert larrs.ndim == 1
     assert tarrs.ndim == 1
 

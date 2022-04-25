@@ -771,12 +771,12 @@ class VisClean(object):
         if keys is None:
             keys = data.keys()
         if wgts is None:
-            wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
+            wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=float)) for k in keys]))
         # make sure flagged channels have zero weight, regardless of what user supplied.
         wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
         # convert max_frate to DataContainer
         if max_frate is not None:
-            if isinstance(max_frate, (int, np.integer, float, np.float)):
+            if isinstance(max_frate, (int, np.integer, float, np.floating)):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
             if not isinstance(max_frate, DataContainer):
                 raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
@@ -1083,7 +1083,7 @@ class VisClean(object):
                 spw_slice = slice(spw_range[0], spw_range[1])
                 d = data[k][:, spw_slice]
                 f = flags[k][:, spw_slice]
-                fw = (~f).astype(np.float)
+                fw = (~f).astype(float)
                 w = fw * wgts[k][:, spw_slice]
                 # avoid modifying x in-place with zero-padding.
                 xp = copy.deepcopy(x)
@@ -1106,7 +1106,7 @@ class VisClean(object):
                     xp[1] = xp[1][spw_slice]
                     if not isinstance(zeropad, (list, tuple)) or not len(zeropad) == 2:
                         raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
-                    if not (isinstance(zeropad[0], (int, np.int)) and isinstance(zeropad[0], (int, np.int))):
+                    if not (isinstance(zeropad[0], (int, np.integer)) and isinstance(zeropad[1], (int, np.integer))):
                         raise ValueError("zeropad values must all be integers. You provided %s" % (zeropad))
                     for m in range(2):
                         if zeropad[m] > 0:
@@ -1159,7 +1159,7 @@ class VisClean(object):
                     if skip_flagged_edges:
                         _adjust_info_indices(xp, info, edges, spw_range[0])
                 # flag integrations and channels that were skipped.
-                skipped = np.zeros_like(mdl, dtype=np.bool)
+                skipped = np.zeros_like(mdl, dtype=bool)
                 # this is not the correct thing to do for 2d filtering.
                 # For 2d filter, only look at time-axis skips.
                 # for 1d filter look at both time and freq axes.
@@ -1289,9 +1289,9 @@ class VisClean(object):
         if data is None:
             data = self.data
         if flags is not None:
-            wgts = DataContainer(dict([(k, (~flags[k]).astype(np.float)) for k in flags]))
+            wgts = DataContainer(dict([(k, (~flags[k]).astype(float)) for k in flags]))
         else:
-            wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=np.float)) for k in data]))
+            wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=float)) for k in data]))
 
         # get keys
         if keys is None:
@@ -1567,7 +1567,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
 
     # get wgts
     if wgts is None:
-        wgts = np.ones_like(data, dtype=np.float)
+        wgts = np.ones_like(data, dtype=float)
     data *= wgts
 
     # iterate over axis
@@ -1576,7 +1576,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
 
         # generate and apply window
         win = dspec.gen_window(window[i], Nbins, alpha=alpha[i], edgecut_low=edgecut_low[i], edgecut_hi=edgecut_hi[i])
-        wshape = np.ones(data.ndim, dtype=np.int)
+        wshape = np.ones(data.ndim, dtype=int)
         wshape[ax] = Nbins
         win.shape = tuple(wshape)
         data *= win
@@ -1661,7 +1661,7 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
         delays *= 1e9
 
         # get NEB of clean_resid: a top-hat window nulled where resid == 0 (i.e. flag pattern)
-        w = (~np.isclose(clean_resid[k], 0.0)).astype(np.float)
+        w = (~np.isclose(clean_resid[k], 0.0)).astype(float)
         neb = noise_eq_bandwidth(w[:, None])
 
         # get time-dependent noise level in Fourier space from FFT at high delays
@@ -1676,7 +1676,7 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
 
         # fit a polynomial if desired
         if polyfit_deg is not None:
-            x = np.arange(noise[k].size, dtype=np.float)
+            x = np.arange(noise[k].size, dtype=float)
             f = ~np.isnan(noise[k]) & ~np.isfinite(noise[k]) & ~np.isclose(noise[k], 0.0)
             # only fit if it is well-conditioned: Ntimes > polyfit_deg + 1
             if f.sum() >= (polyfit_deg + 1):
@@ -1750,7 +1750,7 @@ def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
                 zshape = list(data.shape)
                 zshape[ax] = zeropad[i]
                 if bool_dtype:
-                    z = np.ones(zshape, np.bool)
+                    z = np.ones(zshape, bool)
                 else:
                     z = np.zeros(zshape, data.dtype)
                 data = np.concatenate([z, data, z], axis=ax)
@@ -1782,7 +1782,7 @@ def noise_eq_bandwidth(window, axis=-1):
         neb : float or ndarray
             Noise equivalent bandwidth of the window
     """
-    return np.sqrt(window.shape[axis] * np.max(window, axis=axis)**2 / np.sum(window**2, dtype=np.float, axis=axis))
+    return np.sqrt(window.shape[axis] * np.max(window, axis=axis)**2 / np.sum(window**2, dtype=float, axis=axis))
 
 
 def gen_filter_properties(ax='freq', horizon=1, standoff=0, min_dly=0, bl_len=None,
