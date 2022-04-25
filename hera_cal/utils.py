@@ -674,7 +674,7 @@ def get_sun_alt(jds, latitude=-30.721526120689507, longitude=21.428303826863015)
     """
     # type check
     array = True
-    if isinstance(jds, (float, np.float, np.float64, int, np.int, np.int32)):
+    if isinstance(jds, (float, np.floating, np.float64, int, np.integer, np.int32)):
         jds = [jds]
         array = False
 
@@ -1068,7 +1068,7 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
 
     # get flags
     if flags is None:
-        flags = np.zeros_like(y, dtype=np.bool)
+        flags = np.zeros_like(y, dtype=bool)
 
     # thin x-axis if desired
     if xthin is not None:
@@ -1118,7 +1118,7 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
         _y = (_y - ymed) / ymad
 
         # iterate over flagging patterns
-        ypred = np.zeros((len(x_eval), _y.shape[1]), np.float)
+        ypred = np.zeros((len(x_eval), _y.shape[1]), float)
         for i, fh in enumerate(flag_hashes):
             # get 1st axis indices for this flagging pattern
             inds = flag_indices[fh]
@@ -1248,9 +1248,9 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             flags = copy.deepcopy(flags)
             nsamples = copy.deepcopy(nsamples)
         if flags is None:
-            flags = datacontainer.DataContainer({k: np.zeros_like(data[k], np.bool) for k in data})
+            flags = datacontainer.DataContainer({k: np.zeros_like(data[k], bool) for k in data})
         if nsamples is None:
-            nsamples = datacontainer.DataContainer({k: np.ones_like(data[k], np.float) for k in data})
+            nsamples = datacontainer.DataContainer({k: np.ones_like(data[k], float) for k in data})
 
     # get weights: if wgts are not fed, then use flags and nsamples
     if wgts is None:
@@ -1297,7 +1297,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             # get data and weighting for this pol-blgroup
             if fed_container:
                 d = np.asarray([data[bl + (pol,)] for bl in blg])
-                f = np.asarray([(~flags[bl + (pol,)]).astype(np.float) for bl in blg])
+                f = np.asarray([(~flags[bl + (pol,)]).astype(float) for bl in blg])
                 n = np.asarray([nsamples[bl + (pol,)] for bl in blg])
                 # DataContainer can't track integration time, so no tint here
                 tint = np.array([1.0])
@@ -1305,7 +1305,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
 
             else:
                 d = np.asarray([data.get_data(bl + (pol,)) for bl in blg])
-                f = np.asarray([(~data.get_flags(bl + (pol,))).astype(np.float) for bl in blg])
+                f = np.asarray([(~data.get_flags(bl + (pol,))).astype(float) for bl in blg])
                 n = np.asarray([data.get_nsamples(bl + (pol,)) for bl in blg])
                 tint = []
                 for bl in blg:
@@ -1327,7 +1327,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             else:
                 iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
 
-            binary_wgts = (~np.isclose(w, 0)).astype(np.float)  # binary weights.
+            binary_wgts = (~np.isclose(w, 0)).astype(float)  # binary weights.
             navg = np.sum(n * binary_wgts, axis=0)
             if propagate_flags:
                 favg = np.all(np.isclose(w * f, 0), axis=0)

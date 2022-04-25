@@ -311,8 +311,8 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
                 # update data_flags in the case where flags are weights, flag all if cal_flags are missing
                 if flags_are_wgts:
                     try:
-                        data_flags[(i, j, pol)] *= (~cal_flags_here[(i, ap1)]).astype(np.float)
-                        data_flags[(i, j, pol)] *= (~cal_flags_here[(j, ap2)]).astype(np.float)
+                        data_flags[(i, j, pol)] *= (~cal_flags_here[(i, ap1)]).astype(float)
+                        data_flags[(i, j, pol)] *= (~cal_flags_here[(j, ap2)]).astype(float)
                     except KeyError:
                         flag_all = True
                 # update data_flags in the case where flags are booleans, flag all if cal_flags are missing
@@ -326,9 +326,9 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
             # if the flag object is given, update it for this baseline to be totally flagged
             if flag_all:
                 if flags_are_wgts:
-                    data_flags[(i, j, pol)] = np.zeros_like(data[(i, j, pol)], dtype=np.float)
+                    data_flags[(i, j, pol)] = np.zeros_like(data[(i, j, pol)], dtype=float)
                 else:
-                    data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
+                    data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=bool)
 
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,

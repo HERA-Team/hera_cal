@@ -233,7 +233,7 @@ class TestFftDly(object):
         # code testing is done in TestFftDly, so just check optional parameters here
         # check reject_edges
         x = np.linspace(0, 10, 101)
-        y = (x - 5)**2 + np.isclose(x, 5.0).astype(np.float)
+        y = (x - 5)**2 + np.isclose(x, 5.0).astype(float)
         # check peak is zeroth bin
         inds, bs, peaks, p = utils.interp_peak(y[None, :], method='quadratic', reject_edges=False)
         assert inds[0] == 0
@@ -718,10 +718,10 @@ def test_red_average_conjugate_baseline_case():
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 def test_gain_relative_difference():
     # setup
-    old_gains = {(0, 'Jxx'): np.ones((10, 10), dtype=np.complex),
-                 (1, 'Jxx'): np.ones((10, 10), dtype=np.complex)}
-    new_gains = {(0, 'Jxx'): 2. * np.ones((10, 10), dtype=np.complex),
-                 (1, 'Jxx'): 4. * np.ones((10, 10), dtype=np.complex)}
+    old_gains = {(0, 'Jxx'): np.ones((10, 10), dtype=complex),
+                 (1, 'Jxx'): np.ones((10, 10), dtype=complex)}
+    new_gains = {(0, 'Jxx'): 2. * np.ones((10, 10), dtype=complex),
+                 (1, 'Jxx'): 4. * np.ones((10, 10), dtype=complex)}
     flags = {(0, 'Jxx'): np.zeros((10, 10), dtype=bool),
              (1, 'Jxx'): np.zeros((10, 10), dtype=bool)}
     flags[(0, 'Jxx')][3, 4:6] = True

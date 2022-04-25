@@ -567,7 +567,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
 
     avg_data = sum( data * flag_wgt * nsample ) / sum( flag_wgt * nsample )
 
-    where flag_wgt is constructed as (~flags).astype(np.float).
+    where flag_wgt is constructed as (~flags).astype(float).
 
     Additionally, one can rephase each integration in the averaging window to the LST of the
     window-center before taking their average. This assumes the
@@ -663,15 +663,15 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
 
     # form flags if None
     if flags is None:
-        flags = np.zeros_like(data, dtype=np.bool)
+        flags = np.zeros_like(data, dtype=bool)
     assert isinstance(flags, np.ndarray), "flags must be fed as an ndarray"
 
     # turn flags into weights
-    flagw = (~flags).astype(np.float)
+    flagw = (~flags).astype(float)
 
     # form nsamples if None
     if nsamples is None:
-        nsamples = np.ones_like(data, dtype=np.float)
+        nsamples = np.ones_like(data, dtype=float)
     assert isinstance(nsamples, np.ndarray), "nsamples must be fed as an ndarray"
 
     # assert Navg makes sense
@@ -738,10 +738,10 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
         for a in extra_arrays:
             avg_extra_arrays['avg_{}'.format(a)].append(np.mean(extra_arrays[a][start:end]))
 
-    avg_data = np.asarray(avg_data, np.complex)
-    win_flags = np.asarray(win_flags, np.bool)
-    avg_nsamples = np.asarray(avg_nsamples, np.float)
-    avg_lsts = np.asarray(avg_lsts, np.float)
+    avg_data = np.asarray(avg_data, complex)
+    win_flags = np.asarray(win_flags, bool)
+    avg_nsamples = np.asarray(avg_nsamples, float)
+    avg_lsts = np.asarray(avg_lsts, float)
 
     # wrap lsts
     avg_lsts = avg_lsts % (2 * np.pi)
@@ -782,9 +782,9 @@ def apply_fir(data, fir, wgts=None, axis=0):
 
     # get weights
     if wgts is None:
-        wgts = np.ones_like(data, dtype=np.float)
+        wgts = np.ones_like(data, dtype=float)
 
-    new_data = np.empty_like(data, dtype=np.complex)
+    new_data = np.empty_like(data, dtype=complex)
 
     shape.pop(axis)
     for i in range(shape[0]):
@@ -846,7 +846,7 @@ def fr_tavg(frp, noise_amp=None, axis=0):
         t_ratio : ndarray, effective integration ratio t_after / t_before
     """
     if noise_amp is None:
-        noise_amp = np.ones_like(frp, dtype=np.float)
+        noise_amp = np.ones_like(frp, dtype=float)
 
     t_ratio = np.sum(np.abs(noise_amp)**2, axis=axis, keepdims=True) / np.sum(np.abs(frp)**2 * np.abs(noise_amp)**2, axis=axis, keepdims=True).clip(1e-10, np.inf)
 
@@ -929,9 +929,9 @@ class FRFilter(VisClean):
 
         # setup averaging quantities
         if flags is None:
-            flags = DataContainer(dict([(k, np.zeros_like(data[k], np.bool)) for k in data]))
+            flags = DataContainer(dict([(k, np.zeros_like(data[k], bool)) for k in data]))
         if nsamples is None:
-            nsamples = DataContainer(dict([(k, np.ones_like(data[k], np.float)) for k in data]))
+            nsamples = DataContainer(dict([(k, np.ones_like(data[k], float)) for k in data]))
 
         if keys is None:
             keys = data.keys()
@@ -999,9 +999,9 @@ class FRFilter(VisClean):
 
         # setup averaging quantities
         if flags is None:
-            flags = DataContainer(dict([(k, np.zeros_like(data[k], np.bool)) for k in data]))
+            flags = DataContainer(dict([(k, np.zeros_like(data[k], bool)) for k in data]))
         if nsamples is None:
-            nsamples = DataContainer(dict([(k, np.ones_like(data[k], np.float)) for k in data]))
+            nsamples = DataContainer(dict([(k, np.ones_like(data[k], float)) for k in data]))
 
         if keys is None:
             keys = data.keys()
@@ -1013,7 +1013,7 @@ class FRFilter(VisClean):
                 continue
 
             # get wgts
-            w = (~flags[k]).astype(np.float)
+            w = (~flags[k]).astype(float)
             shape = [1, 1]
             shape[axis] = -1
             w *= dspec.gen_window('none', w.shape[axis], edgecut_low=edgecut_low, edgecut_hi=edgecut_hi).reshape(tuple(shape))

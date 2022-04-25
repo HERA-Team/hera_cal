@@ -284,7 +284,7 @@ class TestDataContainer(object):
         # test basic setting
         dc[(100, 101, 'xy')] = np.arange(100) + np.arange(100) * 1j
         assert dc[(100, 101, 'xy')].shape == (100,)
-        assert dc[(100, 101, 'xy')].dtype == np.complex
+        assert dc[(100, 101, 'xy')].dtype == complex
         assert np.allclose(dc[(100, 101, 'xy')][1], (1 + 1j))
         assert np.allclose(dc[(101, 100, 'yx')][1], (1 - 1j))
         assert len(dc.keys()) == 11
