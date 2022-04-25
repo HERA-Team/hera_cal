@@ -901,7 +901,7 @@ class CalibrationSmoother():
                 wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
 
                 # If the weights grid is the same as the previous, the solution matrix can be reused to speed up computation
-                if method == 'DPSS' or method == 'dpss_leastsq'::
+                if method == 'DPSS' or method == 'dpss_leastsq':
                     XTXinv = info['XTXinv'] if np.allclose(wgts_grid, wgts_old) else None
                     wgts_old = np.copy(wgts_grid)
 
