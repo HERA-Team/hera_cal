@@ -3491,7 +3491,8 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
 
 def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=None, data_is_redsol=False, model_is_redundant=False, output_file=None,
                            nInt_to_load=None, data_solar_horizon=90, model_solar_horizon=90, extrap_limit=.5, min_bl_cut=1.0, max_bl_cut=None,
-                           edge_cut=0, tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
+                           edge_cut=0, tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True,
+                           write_delta_gains=False, output_file_delta=None):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
     Does not work on data (or models) with baseline-dependant averaging.
 
@@ -3526,6 +3527,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         refant: tuple of the form (0, 'Jnn') indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
         clobber: if True, overwrites existing abscal calfits file at the output path
         add_to_history: string to add to history of output abscal file
+        write_delta_gains: write the degenerate gain component solved by abscal so a separate file specified by output_file_delta
+        output_file_delta: path to file to write delta gains if write_delta_gains=True
 
     Returns:
         hc: HERACal object which was written to disk. Matches the input redcal_file with an updated history.
@@ -3690,8 +3693,13 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     hc.total_quality_array[np.isnan(hc.total_quality_array)] = 0
     hc.history += version.history_string(add_to_history)
     hc.write_calfits(output_file, clobber=clobber)
+    if write_delta_gains:
+        hc.update(gains=delta_gains)
+        assert output_file_delta is not None, "output_file_delta must be specified if write_delta_gains=True"
+        hc.write_calfits(output_file_delta, clobber=True)
     return hc
 
+def combine_gains(gain_file_1, gain_file_2, )
 
 def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None, precalibration_gain_file=None,
                                 inflate_model_by_redundancy=False, constrain_model_to_data_ants=False,
