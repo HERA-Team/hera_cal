@@ -135,7 +135,10 @@ class HERACal(UVCal):
 
         if self.filepaths is not None:
             # load data
-            self.read_calfits(self.filepaths[0])
+            self.read_calfits(self.filepaths[0],
+                              run_check=False,
+                              check_extra=False,
+                              run_check_acceptability=False)
 
             if pols is not None:
                 pols = [jstr2num(ap, x_orientation=self.x_orientation) for ap in pols]
@@ -155,7 +158,10 @@ class HERACal(UVCal):
             if len(self.filepaths) > 1:
                 for fp in self.filepaths[1:]:
                     uvc = UVCal()
-                    uvc.read_calfits(fp)
+                    uvc.read_calfits(fp,
+                                     run_check=False,
+                                     check_extra=False,
+                                     run_check_acceptability=False)
                     if np.any([s is not None for s in select_dict.values()]):
                         uvc.select(inplace=True, **select_dict)
                     self += uvc
@@ -298,6 +304,9 @@ class HERAData(UVData):
 
         # load metadata from file
         if self.filetype in ['uvh5', 'uvfits']:
+            # Make default for run_check, etc, False
+            for k in ['run_check', 'check_extra', 'run_check_acceptability']:
+                read_kwargs[k] = read_kwargs.get(k, False)
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
