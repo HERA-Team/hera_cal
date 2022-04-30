@@ -3727,6 +3727,14 @@ def multiply_gains(gain_file_1, gain_file_2, output_file, clobber=False):
     hc1.quality_array = None
     hc1.write_calfits(output_file, clobber=clobber)
 
+def multiply_gains_argparser():
+    ap = argparse.ArgumentParser(description="Command-line drive script to multiply two gains together.")
+    ap.add_argument("gain_file_1", type=str, desc="Path to first gain to multiply.")
+    ap.add_argument("gain_file_2", type=str, desc="Path to second gain to multiply.")
+    ap.add_argument("output_file", type=str, desc="Path to write out multiplied gains.")
+    ap.add_argument("--clobber", default=False, action="store_true", desc="overwrite any existing output files.")
+    return ap
+
 def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None, precalibration_gain_file=None,
                                 inflate_model_by_redundancy=False, constrain_model_to_data_ants=False,
                                 clobber=False, tol=1e-6, max_iter=10,
