@@ -65,19 +65,21 @@ class Test_AbsCal_Funcs(object):
         gain_2_path = os.path.join(tmp_path, 'gain_2.calfits')
         output_path = os.path.join(tmp_path, 'output.calfits')
         uvc1 = UVCal()
-        uvc1.initialize_from_uvdata(self.uvd, gain_convention='divide',
-                                    cal_style='redundant', metadata_only=False)
+        uvc1 = uvc1.initialize_from_uvdata(self.uvd, gain_convention='divide', future_array_shapes=False,
+                                           cal_style='redundant', metadata_only=False)
         uvc2 = UVCal()
-        uvc2.initialize_from_uvdata(self.uvd, gain_convention='divide',
-                                    cal_style='redundant', metadata_only=False)
+        uvc2 = uvc2.initialize_from_uvdata(self.uvd, gain_convention='divide', future_array_shapes=False,
+                                           cal_style='redundant', metadata_only=False)
         uvc1.gain_array[:] = np.random.rand(*uvc1.gain_array.shape) + 1j * np.random.rand(*uvc1.gain_array.shape)
         uvc2.gain_array[:] = np.random.rand(*uvc2.gain_array.shape) + 1j * np.random.rand(*uvc2.gain_array.shape)
 
         flag_times_1 = np.random.randint(low=0, high=self.uvd.Ntimes, size=self.uvd.Ntimes // 4)
-        uvc1.flag_array[:, flag_times_1] = True
+        uvc1.flag_array[:, :, flag_times_1] = True
         flag_times_2 = np.random.randint(low=0, high=self.uvd.Ntimes, size=self.uvd.Ntimes // 4)
-        uvc2.flag_array[:, flag_times_2] = True
+        uvc2.flag_array[:, :, flag_times_2] = True
 
+        uvc1.quality_array = np.zeros_like(uvc1.gain_array, dtype=float) + 1.
+        uvc2.quality_array = np.zeros_like(uvc1.quality_array) + 2.
 
         uvc1.write_calfits(gain_1_path, clobber=True)
         uvc2.write_calfits(gain_2_path, clobber=True)
@@ -88,7 +90,8 @@ class Test_AbsCal_Funcs(object):
         uvc3.read_calfits(output_path)
         np.testing.assert_array_almost_equal(uvc1.gain_array * uvc2.gain_array, uvc3.gain_array)
         np.testing.assert_array_almost_equal(uvc1.flag_array | uvc2.flag_array, uvc3.flag_array)
-
+        np.testing.assert_array_almost_equal(uvc3.quality_array, 0.)
+        assert uvc3.total_quality_array is None
 
     def test_data_key_to_array_axis(self):
         m, pk = abscal.data_key_to_array_axis(self.model, 2)
