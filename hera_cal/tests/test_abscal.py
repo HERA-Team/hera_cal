@@ -59,6 +59,37 @@ class Test_AbsCal_Funcs(object):
         self.model = model
         self.wgts = wgts
 
+    def test_multiply_gains(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        gain_1_path = os.path.join(tmp_path, 'gain_1.calfits')
+        gain_2_path = os.path.join(tmp_path, 'gain_2.calfits')
+        output_path = os.path.join(tmp_path, 'output.calfits')
+        uvc1 = UVCal()
+        uvc1.initialize_from_uvdata(self.uvd, gain_convention='divide',
+                                    cal_style='redundant', metadata_only=False)
+        uvc2 = UVCal()
+        uvc2.initialize_from_uvdata(self.uvd, gain_convention='divide',
+                                    cal_style='redundant', metadata_only=False)
+        uvc1.gain_array[:] = np.random.rand(*uvc1.gain_array.shape) + 1j * np.random.rand(*uvc1.gain_array.shape)
+        uvc2.gain_array[:] = np.random.rand(*uvc2.gain_array.shape) + 1j * np.random.rand(*uvc2.gain_array.shape)
+
+        flag_times_1 = np.random.randint(low=0, high=self.uvd.Ntimes, size=self.uvd.Ntimes // 4)
+        uvc1.flag_array[:, flag_times_1] = True
+        flag_times_2 = np.random.randint(low=0, high=self.uvd.Ntimes, size=self.uvd.Ntimes // 4)
+        uvc2.flag_array[:, flag_times_2] = True
+
+
+        uvc1.write_calfits(gain_1_path, clobber=True)
+        uvc2.write_calfits(gain_2_path, clobber=True)
+
+        abscal.multiply_gains(gain_1_path, gain_2_path, output_path, clobber=True)
+
+        uvc3 = UVCal()
+        uvc3.read_calfits(output_path)
+        np.testing.assert_array_almost_equal(uvc1.gain_array * uvc2.gain_array, uvc3.gain_array)
+        np.testing.assert_array_almost_equal(uvc1.flag_array | uvc2.flag_array, uvc3.flag_array)
+
+
     def test_data_key_to_array_axis(self):
         m, pk = abscal.data_key_to_array_axis(self.model, 2)
         assert m[(24, 25)].shape == (60, 64, 1)
