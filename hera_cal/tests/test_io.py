@@ -452,7 +452,7 @@ class Test_HERAData(object):
             assert list(dc.keys()) == [
                 (ant_pairs[0][0], ant_pairs[0][1], parse_polstr('XX', x_orientation=hd.x_orientation))
             ]
-            assert dc[0, 1, 'ee'].shape == (60, 10)
+            assert dc[ant_pairs[0][0], ant_pairs[0][1], 'ee'].shape == (60, 10)
 
     def test_read_bda(self):
         # no upsampling or downsampling
