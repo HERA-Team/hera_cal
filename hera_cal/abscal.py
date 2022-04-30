@@ -3699,7 +3699,33 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         hc.write_calfits(output_file_delta, clobber=True)
     return hc
 
-def combine_gains(gain_file_1, gain_file_2, )
+def multiply_gains(gain_file_1, gain_file_2, output_file, clobber=False):
+    """Multiply gains from two files.
+
+    Flags are always Ord
+    quality and total quality arrays are set to None
+
+    Parameters
+    ----------
+    gain_file_1: str
+        path to first gain file to multiply
+    gain_file_2: str
+        path to second gain file to multiply
+    output_file: str
+        path to output file.
+    clobber: bool, optional
+        overwrite existing output_file
+        default is False.
+    """
+    hc1 = io.HERACal(gain_file_1)
+    hc1.read()
+    hc2 = io.HERACal(gain_file_2)
+    hc2.read()
+    hc1.gain_array *= hc2.gain_array
+    hc1.flag_array = hc1.flag_array | hc2.flag_array
+    hc1.total_quality_array = None
+    hc1.quality_array = None
+    hc1.write_calfits(output_file, clobber=clobber)
 
 def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None, precalibration_gain_file=None,
                                 inflate_model_by_redundancy=False, constrain_model_to_data_ants=False,
