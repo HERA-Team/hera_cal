@@ -166,7 +166,7 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
     return filtered, info
 
 
-def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
+def filter_1d(gains, wgts, xvals, filter_scale=10.0, skip_wgt=0.1, ax='freq',
                 mode='clean', tol=1e-6, skip_flagged_edges=False, **filter_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
@@ -193,17 +193,20 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
     '''
     if not HAVE_UVTOOLS:
         raise ImportError("uvtools required, instsall hera_cal[all]")
-
-    filter_size = (filter_scale * 1e6)**-1  # Puts it in s
-    dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
+    if ax == 'freq':
+        filter_size = (filter_scale * 1e6) ** -1  # Puts it in MHz
+        dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
+    else:
+        dly = 0.
+        filter_size = (filter_scale) ** -1 # units of inverse days
     if mode == 'DPSS' or mode == 'dpss_leastsq':
         filter_kwargs['suppression_factors'] = [tol]
         mode = 'dpss_leastsq'
         # Check to see if the grid size changes after removing the flagged edges
         if skip_flagged_edges:
-            xin, din, win, edges, chunks = truncate_flagged_edges(gains, wgts, freqs, ax='freq')
+            xin, din, win, edges, chunks = truncate_flagged_edges(gains, wgts, xvals, ax=ax)
         else:
-            xin = freqs
+            xin = xvals
             win = wgts
             din = gains
     else:
