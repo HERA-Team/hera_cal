@@ -1276,8 +1276,10 @@ def tophat_frfilter_argparser(mode='clean'):
                                                                                                                  "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
     filt_options.add_argument("--wgt_by_nsample", default=False, action="store_true", help="Use weights proportional to nsamples during FRF. Default is to just use flags by nsamples.")
     from .smooth_cal import _pair
-    filt_options.add_argument("--excluded_lsts", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of LSTs in hours "
-                                                                                         "bounding (inclusively) LSTs assigned zero weight during FRF, e.g. '3-4 10-12 23-.5'")
+    filt_options.add_argument("--lst_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of LSTs in hours bounding (inclusively) \
+                                                                                           blacklisted LSTs assigned zero weight (by default) during FRF, e.g. '3-4 10-12 23-.5'")
+    filt_options.add_argument("--blacklist_wgt", type=float, default=0.0, help="Relative weight to assign to blacklisted lsts compared to 1.0. Default 0.0 \
+                                                                                means no weight. Note that 0.0 will create problems for DPSS at edge times and frequencies.")
 
     desc = ("Filtering case ['max_frate_coeffs', 'uvbeam', 'sky']",
             "If case == 'max_frate_coeffs', then determine fringe rate centers",
@@ -1292,7 +1294,8 @@ def tophat_frfilter_argparser(mode='clean'):
 
 def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calfile_list=None,
                                    Nbls_per_load=None, spw_range=None, external_flags=None,
-                                   factorize_flags=False, time_thresh=0.05, wgt_by_nsample=False, excluded_lsts=None,
+                                   factorize_flags=False, time_thresh=0.05, wgt_by_nsample=False, 
+                                   lst_blacklists=None, blacklist_wgt=0.0,
                                    res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                    clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
                                    overwrite_flags=False,
@@ -1332,9 +1335,12 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
         wgt_by_nsample : bool, optional
             If True, perform FRF with weighting proportional to nsamples (flags still get 0 weight).
             Default False, meaning use only ~flags as weights.
-        excluded_lsts : list of 2-tuples, optional
-            List of LST ranges (in hours, inclusive) to assign zero weight when performing FRF (regardless of
-            whether or not they are flagged). Ranges crossing the 24h brach cut, e.g. [(23, 1)], are allowed.
+        lst_blacklists : list of 2-tuples, optional
+            List of LST ranges (in hours, inclusive) to assign zero weight (by default) when performing FRF (regardless
+            of whether or not they are flagged). Ranges crossing the 24h brach cut, e.g. [(23, 1)], are allowed.
+        blacklist_wgt : float, optional
+            Relative weight to assign to blacklisted lsts compared to 1.0. Default 0.0 means no weight. 
+            Note that 0.0 will create problems for DPSS at edge times and frequencies.
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
@@ -1454,12 +1460,13 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                 for k in wgts:
                     if wgt_by_nsample:
                         wgts[k] *= frfil.nsamples[k]
-                    if excluded_lsts is not None:
-                        for xlst in excluded_lsts:
-                            if xlst[0] < xlst[1]:
-                                wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) & (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
+                    if lst_blacklists is not None:
+                        for lb in lst_blacklists:
+                            if lb[0] < lb[1]:
+                                is_blacklisted = (frfil.lsts >= lb[0] * np.pi / 12) & (frfil.lsts <= lb[1] * np.pi / 12)
                             else:
-                                wgts[k][(frfil.lsts >= xlst[0] * np.pi / 12) | (frfil.lsts <= xlst[1] * np.pi / 12), :] = 0
+                                is_blacklisted = (frfil.lsts >= lb[0] * np.pi / 12) | (frfil.lsts <= lb[1] * np.pi / 12)
+                            wgts[k][is_blacklisted, :] = wgts[k][is_blacklisted, :] * blacklist_wgt
 
                 # run tophat filter
                 frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
