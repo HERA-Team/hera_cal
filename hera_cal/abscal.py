@@ -3694,9 +3694,12 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     hc.history += version.history_string(add_to_history)
     hc.write_calfits(output_file, clobber=clobber)
     if write_delta_gains:
-        hc.update(gains=delta_gains)
+        hcdelta = copy.deepcopy(hc)
+        # set delta gains to be the ratio between abscal gains (phased to refant) and redcal gains
+        delta_gains = {ant: abscal_gains[ant] / rc_gains[ant] for ant in abscal_gains}
+        hcdelta.update(gains=delta_gains)
         assert output_file_delta is not None, "output_file_delta must be specified if write_delta_gains=True"
-        hc.write_calfits(output_file_delta, clobber=True)
+        hcdelta.write_calfits(output_file_delta, clobber=True)
     return hc
 
 
@@ -3731,10 +3734,10 @@ def multiply_gains(gain_file_1, gain_file_2, output_file, clobber=False):
 
 def multiply_gains_argparser():
     ap = argparse.ArgumentParser(description="Command-line drive script to multiply two gains together.")
-    ap.add_argument("gain_file_1", type=str, desc="Path to first gain to multiply.")
-    ap.add_argument("gain_file_2", type=str, desc="Path to second gain to multiply.")
-    ap.add_argument("output_file", type=str, desc="Path to write out multiplied gains.")
-    ap.add_argument("--clobber", default=False, action="store_true", desc="overwrite any existing output files.")
+    ap.add_argument("gain_file_1", type=str, help="Path to first gain to multiply.")
+    ap.add_argument("gain_file_2", type=str, help="Path to second gain to multiply.")
+    ap.add_argument("output_file", type=str, help="Path to write out multiplied gains.")
+    ap.add_argument("--clobber", default=False, action="store_true", help="overwrite any existing output files.")
     return ap
 
 
@@ -3993,6 +3996,8 @@ def post_redcal_abscal_argparser():
     a.add_argument("--phs_conv_crit", default=1e-6, type=float, help="convergence criterion for updates to iterative phase calibration that compares them to all 1.0s.")
     a.add_argument("--clobber", default=False, action="store_true", help="overwrites existing abscal calfits file at the output path")
     a.add_argument("--verbose", default=False, action="store_true", help="print calibration progress updates")
+    a.add_argument("--write_delta_gains", default=False, action="store_true", help="Write degenerate abscal component of gains separately.")
+    a.add_argument("--output_file_delta", type=str, default=None, help="Filename to write delta gains too.")
     args = a.parse_args()
     return args
 
