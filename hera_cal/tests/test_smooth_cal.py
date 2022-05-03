@@ -13,6 +13,7 @@ import shutil
 from scipy import constants
 import warnings
 from pyuvdata import UVCal, UVData
+import pytest
 
 from .. import io, smooth_cal, utils
 from ..datacontainer import DataContainer
@@ -116,33 +117,49 @@ class Test_Smooth_Cal_Helper_Functions(object):
         gains *= np.exp(2.0j * np.pi * np.outer(-151e-9 * np.ones(2), freqs))
         assert smooth_cal.single_iterative_fft_dly(gains, wgts, freqs) == 0
 
-    def test_freq_filter(self):
+    @pytest.mark.parametrize("ax", ['freq', 'time']):
+    def test_filter_1d(self, ax):
         gains = np.ones((10, 10), dtype=complex)
         gains[3, 5] = 10.0
         wgts = np.ones((10, 10), dtype=float)
         wgts[3, 5] = 0
         freqs = np.linspace(100., 200., 10, endpoint=False) * 1e6
-        ff, info = smooth_cal.freq_filter(gains, wgts, freqs)
+        times = np.linspace(0, 100, 10, endpoint=False) / (24 * 3600.)
+        if ax == 'freq':
+            xaxis = freqs
+        else:
+            xaxis = times
+        ff, info = smooth_cal.filter_1d(gains, wgts, xaxis, ax=ax)
         np.testing.assert_array_almost_equal(ff, np.ones((10, 10), dtype=complex), decimal=5)
 
         # test rephasing
-        gains = np.ones((2, 1000), dtype=complex)
-        wgts = np.ones((2, 1000), dtype=float)
-        freqs = np.linspace(100., 200., 1000, endpoint=False) * 1e6
-        gains *= np.exp(2.0j * np.pi * np.outer(150e-9 * np.ones(2), freqs))
-        ff, info = smooth_cal.freq_filter(gains, wgts, freqs)
-        np.testing.assert_array_almost_equal(ff, gains, decimal=5)
+        if ax == 'freq':
+            gains = np.ones((2, 1000), dtype=complex)
+            wgts = np.ones((2, 1000), dtype=float)
+            freqs = np.linspace(100., 200., 1000, endpoint=False) * 1e6
+            gains *= np.exp(2.0j * np.pi * np.outer(150e-9 * np.ones(2), freqs))
+            ff, info = smooth_cal.freq_filter(gains, wgts, xaxis, ax=ax)
+            np.testing.assert_array_almost_equal(ff, gains, decimal=5)
 
         # test skip_wgt
         gains = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
         wgts = np.ones((10, 10), dtype=float)
         wgts[0, 0:8] = 0
         freqs = np.linspace(100., 200., 10, endpoint=False) * 1e6
-        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5)
+        times = np.linspace(0, 100, 10, endpoint=False) / (24 * 3600.)
+        if ax == 'freq':
+            xaxis = freqs
+        else:
+            xaxis = times
+        ff, info = smooth_cal.filter_1d(gains, wgts, xaxis, skip_wgt=.5, ax=ax)
         np.testing.assert_array_almost_equal(ff[0, :], gains[0, :], decimal=5)
-        assert info['status']['axis_1'][0] == 'skipped'
+        if ax == 'freq':
+            assert info['status']['axis_1'][0] == 'skipped'
+        else:
+            assert info['status']['axis_0'][0] == 'skipped'
 
-        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5, filter_scale=50., mode='dpss_leastsq')
+
+        ff, info = smooth_cal.filter_1d(gains, wgts, freqs, skip_wgt=.5, filter_scale=50., mode='dpss_leastsq')
         np.testing.assert_array_almost_equal(ff[0, :], gains[0, :], decimal=5)
         assert info['status']['axis_1'][0] == 'skipped'
         assert info['status']['axis_1'][1] == 'success'

@@ -166,7 +166,7 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
     return filtered, info
 
 
-def filter_1d(gains, wgts, xvals, filter_scale=10.0, skip_wgt=0.1, ax='freq',
+def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
                 mode='clean', tol=1e-6, skip_flagged_edges=False, **filter_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
@@ -181,6 +181,7 @@ def filter_1d(gains, wgts, xvals, filter_scale=10.0, skip_wgt=0.1, ax='freq',
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
             filtered is left unchanged and info is {'skipped': True} for that time.
             Only works properly when all weights are all between 0 and 1.
+        ax: str either 'freq' or 'time' specifying which axis to filter.
         mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
               examples include 'dpss_leastsq', 'clean'.
         skip_flagged_edges: bool, optional
@@ -191,6 +192,11 @@ def filter_1d(gains, wgts, xvals, filter_scale=10.0, skip_wgt=0.1, ax='freq',
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: info object from uvtools.dspec.high_pass_fourier_filter
     '''
+    if filter_scale is None:
+        if ax == 'time':
+            filter_scale = 1800.
+        else:
+            filter_scale = 10.
     if not HAVE_UVTOOLS:
         raise ImportError("uvtools required, instsall hera_cal[all]")
     if ax == 'freq':
@@ -223,7 +229,7 @@ def filter_1d(gains, wgts, xvals, filter_scale=10.0, skip_wgt=0.1, ax='freq',
     # put back in unfilted values if skip_wgt is triggered
     filtered /= rephasor
     if skip_flagged_edges:
-        filtered = restore_flagged_edges(xin, filtered, edges, ax='freq')
+        filtered = restore_flagged_edges(xin, filtered, edges, ax=ax)
 
     for i in info['status']['axis_1']:
         if info['status']['axis_1'][i] == 'skipped':
@@ -828,13 +834,15 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
-    def freq_filter(self, filter_scale=10.0, tol=1e-09, skip_wgt=0.1, mode='clean', **filter_kwargs):
+    def filter_1d(self, filter_scale=None, tol=1e-09, skip_wgt=0.1, mode='clean', ax='freq', **filter_kwargs):
         '''Frequency-filter stored calibration solutions on a given scale in MHz.
 
         Arguments:
-            filter_scale: frequency scale in MHz to use for the low-pass filter. filter_scale^-1 corresponds
+            filter_scale: scale to use for the low-pass filter. filter_scale^-1 corresponds
                 to the half-width (i.e. the width of the positive part) of the region in fourier
                 space, symmetric about 0, that is filtered out.
+                if ax='freq' then units are MHz
+                if ax='time' then units are days.
             tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
             window: window function for filtering applied to the filtered axis. Default tukey has alpha=0.5.
                 See aipy.dsp.gen_window for options.
@@ -843,19 +851,26 @@ class CalibrationSmoother():
                 respectively. Only works properly when all weights are all between 0 and 1.
             mode: str, optional
                 specify whether to use 'clean' or 'dpss_leastsq' filtering of gains.
+            ax: str, optional
+                specify axis to perform 1d smoothing over. Options are 'time' and 'freq'. default is 'freq'.
             filter_kwargs : any keyword arguments for uvtools.dspec.fourier_filter.
         '''
         # Loop over all antennas and perform a low-pass delay filter on gains
         for ant, gain_grid in self.gain_grids.items():
-            utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
+            utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + f' in {ax}...', verbose=self.verbose)
             wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
-            self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
-                                                     filter_scale=filter_scale, tol=tol, mode=mode,
-                                                     skip_wgt=skip_wgt, **filter_kwargs)
+            self.gain_grids[ant], info = filter_1d(gain_grid, wgts_grid, self.freqs, ax=ax,
+                                                   filter_scale=filter_scale, tol=tol, mode=mode,
+                                                   skip_wgt=skip_wgt, **filter_kwargs)
             # flag all channels for any time that was skipped.
-            for i in info['status']['axis_1']:
-                if info['status']['axis_1'][i] == 'skipped':
-                    self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
+            if ax == 'freq':
+                for i in info['status']['axis_1']:
+                    if info['status']['axis_1'][i] == 'skipped':
+                        self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
+            else:
+                for i in info['status']['axis_0']:
+                    if info['status']['axis_0'][i] == 'skipped':
+                        self.flag_grids[ant][:, i] = np.ones_like(self.flag_grids[ant][:, i])
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
