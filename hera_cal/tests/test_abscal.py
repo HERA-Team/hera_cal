@@ -59,7 +59,8 @@ class Test_AbsCal_Funcs(object):
         self.model = model
         self.wgts = wgts
 
-    def test_multiply_gains(self, tmpdir):
+    @pytest.mark.parametrize("divide_gains", [True, False])
+    def test_multiply_gains(self, tmpdir, divide_gains):
         tmp_path = tmpdir.strpath
         gain_1_path = os.path.join(tmp_path, 'gain_1.calfits')
         gain_2_path = os.path.join(tmp_path, 'gain_2.calfits')
@@ -84,11 +85,15 @@ class Test_AbsCal_Funcs(object):
         uvc1.write_calfits(gain_1_path, clobber=True)
         uvc2.write_calfits(gain_2_path, clobber=True)
 
-        abscal.multiply_gains(gain_1_path, gain_2_path, output_path, clobber=True)
+        abscal.multiply_gains(gain_1_path, gain_2_path, output_path,
+                              clobber=True, divide_gains=divide_gains)
 
         uvc3 = UVCal()
         uvc3.read_calfits(output_path)
-        np.testing.assert_array_almost_equal(uvc1.gain_array * uvc2.gain_array, uvc3.gain_array)
+        if divide_gains:
+            np.testing.assert_array_almost_equal(uvc1.gain_array / uvc2.gain_array, uvc3.gain_array)
+        else:
+            np.testing.assert_array_almost_equal(uvc1.gain_array * uvc2.gain_array, uvc3.gain_array)
         np.testing.assert_array_almost_equal(uvc1.flag_array | uvc2.flag_array, uvc3.flag_array)
         np.testing.assert_array_almost_equal(uvc3.quality_array, 0.)
         assert uvc3.total_quality_array is None
@@ -1748,3 +1753,4 @@ class Test_Post_Redcal_Abscal_Run(object):
         assert a.gain_file_2 == 'b'
         assert a.output_file == 'c'
         assert a.clobber
+        assert a.divide_gains is False
