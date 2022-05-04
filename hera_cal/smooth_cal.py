@@ -635,13 +635,14 @@ def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
     return freq_blacklist_array
 
 
-def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None):
+def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None, blacklist_wgt=0.0):
     '''Builds a wgts_grid float array (Ntimes, Nfreqs) with 0s flagged or blacklisted data and 1s otherwise.'''
-    wgts_grid = np.logical_not(flag_grid).astype(float)
+    wgts_grid = np.ones_like(flag_grid, dtype=float)
     if time_blacklist is not None:
-        wgts_grid[time_blacklist, :] = 0.0
+        wgts_grid[time_blacklist, :] = blacklist_wgt
     if freq_blacklist is not None:
-        wgts_grid[:, freq_blacklist] = 0.0
+        wgts_grid[:, freq_blacklist] = blacklist_wgt
+    wgts_grid[flag_grid] = 0.0
     return wgts_grid
 
 
@@ -649,7 +650,7 @@ class CalibrationSmoother():
 
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
-                 pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, verbose=False):
+                 blacklist_wgt=0.0, pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -677,7 +678,7 @@ class CalibrationSmoother():
                 to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted times are not necessarily flagged.
             lst_blacklists:  list of pairs of LSTs in hours bounding (inclusively) regions of LST that are
-                to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
+                to receive 0 weight (by default) during smoothing, forcing the smoother to interpolate/extrapolate.
                 Regions crossing the 24h brach cut are acceptable (e.g. [(23, 1)] blacklists two total hours).
                 N.B. Blacklisted LSTS are not necessarily flagged.
             lat_lon_alt_degrees: length 3 list or array of latitude (deg), longitude (deg), and altitude (m) of
@@ -689,6 +690,8 @@ class CalibrationSmoother():
             chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions
                 that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted channels are not necessarily flagged.
+            blacklist_wgt: float weight to give to blacklisted times or frequencies. 0.0 weight will create
+                problems at edge times and frequencies when using DPSS filtering.
             pick_refant: if True, automatically picks one reference anteanna per polarization. The refants chosen have the
                 fewest total flags and causes the least noisy phases on other antennas when made the phase reference.
             freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
@@ -775,6 +778,7 @@ class CalibrationSmoother():
                                      time_threshold=time_threshold, ant_threshold=time_threshold)
 
         # build blacklists
+        self.blacklist_wgt = blacklist_wgt
         self.time_blacklist = build_time_blacklist(self.time_grid, time_blacklists=time_blacklists, lst_blacklists=lst_blacklists,
                                                    lat_lon_alt_degrees=lat_lon_alt_degrees, telescope_name=hc.telescope_name)
         self.freq_blacklist = build_freq_blacklist(self.freqs, freq_blacklists=freq_blacklists, chan_blacklists=chan_blacklists)
@@ -837,7 +841,7 @@ class CalibrationSmoother():
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now smoothing antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in time...', verbose=self.verbose)
             if not np.all(self.flag_grids[ant]):
-                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
+                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist, self.blacklist_wgt)
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
@@ -869,7 +873,7 @@ class CalibrationSmoother():
             self.gain_grids[ant], info = filter_1d(gain_grid, wgts_grid, self.freqs, ax=ax,
                                                    filter_scale=filter_scale, tol=tol, mode=mode,
                                                    skip_wgt=skip_wgt, **filter_kwargs)
-            # flag all channels for any time that was skipped.
+            # flag all channels for any time that triggers the skip_wgt
             if ax == 'freq':
                 for i in info['status']['axis_1']:
                     if info['status']['axis_1'][i] == 'skipped':
@@ -923,7 +927,7 @@ class CalibrationSmoother():
         for ant, gain_grid in self.gain_grids.items():
             if not np.all(self.flag_grids[ant]):
                 utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
-                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
+                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist, self.blacklist_wgt)
 
                 # If the weights grid is the same as the previous, the solution matrix can be reused to speed up computation
                 if method == 'DPSS' or method == 'dpss_leastsq':
@@ -1011,7 +1015,7 @@ def smooth_cal_argparser():
                           times and channels. 1.0 means no additional flagging (default 0.5).")
 
     # Options relating to blacklisting time or frequency ranges
-    bkl_opts = a.add_argument_group(title="Blacklisting options used for assigning 0 weight to times/frequencies so that smooth_cal\n"
+    bkl_opts = a.add_argument_group(title="Blacklisting options used for assigning 0 weight (by default) to times/frequencies so that smooth_cal\n"
                                     "interpolates/extrapoaltes over them (though they aren't necessarily flagged).")
     bkl_opts.add_argument("--time_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of times in Julian Day \
                           bounding (inclusively) blacklisted times, e.g. '2458098.1-2458098.4'.")
@@ -1021,6 +1025,8 @@ def smooth_cal_argparser():
                           bounding (inclusively) blacklisted spectral ranges, e.g. '0-256 800-900'")
     bkl_opts.add_argument("--freq_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of frequencies in Hz \
                           bounding (inclusively) blacklisted spectral ranges, e.g. '88e6-110e6 136e6-138e6'")
+    bkl_opts.add_argument("--blacklist_wgt", type=float, default=0.0, help="Relative weight to assign to blacklisted times/freqs compared to 1.0. Default 0.0 \
+                          means no weight. Note that 0.0 will create problems for DPSS at edge times and frequencies.")
 
     # Options relating to performing the filter in time and frequency
     flt_opts = a.add_argument_group(title='Filtering options.')
