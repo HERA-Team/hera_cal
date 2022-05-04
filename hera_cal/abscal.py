@@ -3703,7 +3703,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     return hc
 
 
-def multiply_gains(gain_file_1, gain_file_2, output_file, clobber=False):
+def multiply_gains(gain_file_1, gain_file_2, output_file, clobber=False, divide_gains=False):
     """Multiply gains from two files.
 
     Flags are always Ord
@@ -3720,12 +3720,18 @@ def multiply_gains(gain_file_1, gain_file_2, output_file, clobber=False):
     clobber: bool, optional
         overwrite existing output_file
         default is False.
+    divide_gains: bool, optional
+        divide gain 1 by gain 2
+        default is False.
     """
     hc1 = io.HERACal(gain_file_1)
     hc1.read()
     hc2 = io.HERACal(gain_file_2)
     hc2.read()
-    hc1.gain_array *= hc2.gain_array
+    if divide_gains:
+        hc1.gain_array = hc1.gain_array / hc2.gain_array
+    else:
+        hc1.gain_array *= hc2.gain_array
     hc1.flag_array = hc1.flag_array | hc2.flag_array
     hc1.total_quality_array = None
     hc1.quality_array[:] = 0.
@@ -3737,6 +3743,7 @@ def multiply_gains_argparser():
     ap.add_argument("gain_file_1", type=str, help="Path to first gain to multiply.")
     ap.add_argument("gain_file_2", type=str, help="Path to second gain to multiply.")
     ap.add_argument("output_file", type=str, help="Path to write out multiplied gains.")
+    ap.add_argument("--divide_gains", default=False, action="store_true", help="divide gain 1 by gain 2 instead of multiplying.")
     ap.add_argument("--clobber", default=False, action="store_true", help="overwrite any existing output files.")
     return ap
 
