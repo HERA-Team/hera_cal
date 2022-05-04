@@ -167,7 +167,7 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
 
 
 def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
-                mode='clean', tol=1e-6, skip_flagged_edges=False, **filter_kwargs):
+              mode='clean', tol=1e-6, skip_flagged_edges=False, **filter_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
 
@@ -201,10 +201,10 @@ def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
         raise ImportError("uvtools required, instsall hera_cal[all]")
     if ax == 'freq':
         filter_size = (filter_scale * 1e6) ** -1  # Puts it in MHz
-        dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
+        dly = single_iterative_fft_dly(gains, wgts, xvals)  # dly in s
     else:
         dly = 0.
-        filter_size = (filter_scale) ** -1 # units of inverse days
+        filter_size = (filter_scale) ** -1  # units of inverse days
     if mode == 'DPSS' or mode == 'dpss_leastsq':
         filter_kwargs['suppression_factors'] = [tol]
         mode = 'dpss_leastsq'
@@ -216,24 +216,31 @@ def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
             win = wgts
             din = gains
     else:
-        xin = freqs
+        xin = xvals
         win = wgts
         din = gains
         filter_kwargs['tol'] = tol
 
     rephasor = np.exp(-2.0j * np.pi * dly * xin)
     din = din * rephasor
+    fdim = {'freq': 1, 'time': 0}[ax]
     filtered, res, info = uvtools.dspec.fourier_filter(x=xin, data=din, wgts=win, mode=mode, filter_centers=[0.],
                                                        skip_wgt=skip_wgt, filter_half_widths=[filter_size],
+                                                       filter_dims=fdim,
                                                        **filter_kwargs)
     # put back in unfilted values if skip_wgt is triggered
     filtered /= rephasor
     if skip_flagged_edges:
         filtered = restore_flagged_edges(xin, filtered, edges, ax=ax)
 
-    for i in info['status']['axis_1']:
-        if info['status']['axis_1'][i] == 'skipped':
-            filtered[i, :] = gains[i, :]
+    if ax == 'freq':
+        for i in info['status']['axis_1']:
+            if info['status']['axis_1'][i] == 'skipped':
+                filtered[i, :] = gains[i, :]
+    else:
+        for i in info['status']['axis_0']:
+            if info['status']['axis_0'][i] == 'skipped':
+                filtered[:, i] = gains[:, i]
 
     return filtered, info
 
