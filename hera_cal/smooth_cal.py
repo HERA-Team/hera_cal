@@ -220,8 +220,10 @@ def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
         win = wgts
         din = gains
         filter_kwargs['tol'] = tol
-
-    rephasor = np.exp(-2.0j * np.pi * dly * xin)
+    if ax == 'freq':
+        rephasor = np.exp(-2.0j * np.pi * dly * xin)
+    else:
+        rephasor = 1.
     din = din * rephasor
     fdim = {'freq': 1, 'time': 0}[ax]
     filtered, res, info = uvtools.dspec.fourier_filter(x=xin, data=din, wgts=win, mode=mode, filter_centers=[0.],
@@ -750,7 +752,6 @@ class CalibrationSmoother():
         self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
         if load_cspa:
             self.cspa_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=float) for ant in self.ants}
-
         # Now fill those grid
         for ant in self.ants:
             for cal in self.cals:
@@ -870,7 +871,11 @@ class CalibrationSmoother():
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + f' in {ax}...', verbose=self.verbose)
             wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
-            self.gain_grids[ant], info = filter_1d(gain_grid, wgts_grid, self.freqs, ax=ax,
+            if ax == 'freq':
+                xaxis = self.freqs
+            else:
+                xaxis = self.time_grid
+            self.gain_grids[ant], info = filter_1d(gain_grid, wgts_grid, xaxis, ax=ax,
                                                    filter_scale=filter_scale, tol=tol, mode=mode,
                                                    skip_wgt=skip_wgt, **filter_kwargs)
             # flag all channels for any time that triggers the skip_wgt

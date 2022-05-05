@@ -429,11 +429,12 @@ class Test_Calibration_Smoother(object):
         assert self.cs.flag_grids[54, 'Jee'].shape == (180, 1024)
         np.testing.assert_array_equal(self.cs.flag_grids[54, 'Jee'][60:120, :], True)
 
-    def test_1D_filtering(self):
+    @pytest.mark.parametrize("ax", ['freq', 'time'])
+    def test_1D_filtering(self, ax):
         g = deepcopy(self.cs.gain_grids[54, 'Jee'])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.cs.filter_1d(window='tukey', alpha=.45)
+            self.cs.filter_1d(window='tukey', alpha=.45, ax=ax)
         g2 = deepcopy(self.cs.gain_grids[54, 'Jee'])
         assert not np.all(g == g2)
         assert g2.shape == g.shape
@@ -455,10 +456,14 @@ class Test_Calibration_Smoother(object):
         self.setup_method()
         assert not np.all(self.cs.flag_grids[(54, 'Jee')] == np.ones_like(self.cs.flag_grids[(54, 'Jee')]))
         self.cs.flag_grids[(54, 'Jee')] = np.zeros_like(self.cs.flag_grids[(54, 'Jee')])
-        self.cs.flag_grids[(54, 'Jee')][:, 0:1000] = True
+        if ax == 'freq':
+            self.cs.flag_grids[(54, 'Jee')][:, 0:1000] = True
+        else:
+            self.cs.flag_grids[(54, 'Jee')][0:1000, :] = True
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.cs.filter_1d()
+            self.cs.filter_1d(ax=ax)
             np.testing.assert_array_equal(self.cs.gain_grids[(54, 'Jee')], g)
             self.cs.time_filter()
             np.testing.assert_array_equal(self.cs.gain_grids[(54, 'Jee')], g)
