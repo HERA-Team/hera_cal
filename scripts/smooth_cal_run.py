@@ -19,7 +19,7 @@ filter_kwargs = {}
 if mode != 'clean':
     filter_kwargs['skip_flagged_edges'] = not(a.dont_skip_flagged_edges)
     if a.axis == 'time':
-        filter_kwargs['eigenval_cutoff'] = a.eigenval_cutoff
+        filter_kwargs['eigenval_cutoff'] = [a.eigenval_cutoff]
     else:
         filter_kwargs['eigenval_cutoff'] = [a.eigenval_cutoff]
 else:
