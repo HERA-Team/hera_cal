@@ -1047,18 +1047,15 @@ def gen_bl_nightly_dicts(hds, bl_error_tol=1.0, include_autos=True, redundant=Fa
     bl_nightly_dicts = []
     for night, hd in enumerate(hds):
         assert len(hd.filepaths) == 1, 'HERAData objects must be for single data files.'
-        reds = redcal.get_reds(hd.antpos, bl_error_tol=bl_error_tol, pols=hd.pols[0], include_autos=include_autos)
-        # read to get baselines in data
-        d, _, _ = hd.read()
+        reds = redcal.get_reds(hd.antpos, bl_error_tol=bl_error_tol, pols=[hd.pols[0]], include_autos=include_autos)
+        # get data bls from ant_1_array and ant_2_array
+        data_bls = sorted(set(zip(hd.ant_1_array, hd.ant_2_array, [hd.pols[0]] * len(hd.ant_1_array))))
+        reds = redcal.filter_reds(reds, bls=data_bls)
         # if we are throwing away data with flagged ants, do it here.
         if ex_ant_yaml_files is not None:
-            from hera_qm.utils import apply_yaml_flags
-            hd = apply_yaml_flags(hd, a_priori_flag_yaml=ex_ant_yaml_files[night], ant_indices_only=True, flag_ants=True,
-                                  flag_freqs=False, flag_times=False, throw_away_flagged_ants=True)
-            d, _, _ = hd.build_datacontainers()
-        data_bls = d.antpairs()
-        reds = [[bl for bl in grp if bl[:2] in data_bls or bl[:2][::-1] in data_bls] for grp in reds]
-        reds = [grp for grp in reds if len(grp) > 0]
+            from hera_qm.metrics_io import read_a_priori_ant_flags
+            a_priori_antenna_flags = read_a_priori_ant_flags(ex_ant_yaml_files[night], ant_indices_only=True)
+            reds = redcal.filter_reds(reds, ex_ants=a_priori_antenna_flags)
         reds = [[bl[:2] for bl in grp] for grp in reds]
         for grp in reds:
             for bl in grp:
