@@ -167,7 +167,7 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
-                mode='clean', **filter_kwargs):
+                mode='clean', tol=1e-6, skip_flagged_edges=False, **filter_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
 
@@ -183,6 +183,8 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
             Only works properly when all weights are all between 0 and 1.
         mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
               examples include 'dpss_leastsq', 'clean'.
+        skip_flagged_edges: bool, optional
+            if True, truncate flagged edges before filtering.
         filter_kwargs : any keyword arguments for the filtering mode being used.
         See vis_clean.fourier_filter or uvtools.dspec.fourier_filter for a full description.
     Returns:
@@ -194,12 +196,32 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
 
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
-    rephasor = np.exp(-2.0j * np.pi * dly * freqs)
+    if mode == 'DPSS' or mode == 'dpss_leastsq':
+        filter_kwargs['suppression_factors'] = [tol]
+        mode = 'dpss_leastsq'
+        # Check to see if the grid size changes after removing the flagged edges
+        if skip_flagged_edges:
+            xin, din, win, edges, chunks = truncate_flagged_edges(gains, wgts, freqs, ax='freq')
+        else:
+            xin = freqs
+            win = wgts
+            din = gains
+    else:
+        xin = freqs
+        win = wgts
+        din = gains
+        filter_kwargs['tol'] = tol
 
-    filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, mode=mode, filter_centers=[0.],
-                                                       skip_wgt=skip_wgt, filter_half_widths=[filter_size], **filter_kwargs)
+    rephasor = np.exp(-2.0j * np.pi * dly * xin)
+    din = din * rephasor
+    filtered, res, info = uvtools.dspec.fourier_filter(x=xin, data=din, wgts=win, mode=mode, filter_centers=[0.],
+                                                       skip_wgt=skip_wgt, filter_half_widths=[filter_size],
+                                                       **filter_kwargs)
     # put back in unfilted values if skip_wgt is triggered
     filtered /= rephasor
+    if skip_flagged_edges:
+        filtered = restore_flagged_edges(xin, filtered, edges, ax='freq')
+
     for i in info['status']['axis_1']:
         if info['status']['axis_1'][i] == 'skipped':
             filtered[i, :] = gains[i, :]
@@ -320,7 +342,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in seconds
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
 
-    if method == 'DPSS':
+    if method == 'DPSS' or method == 'dpss_leastsq':
         info = {}
         if skip_flagged_edges:
             xout, gout, wout, edges, chunks = truncate_flagged_edges(gains * rephasor, wgts, (times, freqs), ax='both')
@@ -807,7 +829,7 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
-    def freq_filter(self, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1, maxiter=100, **win_kwargs):
+    def freq_filter(self, filter_scale=10.0, tol=1e-09, skip_wgt=0.1, mode='clean', **filter_kwargs):
         '''Frequency-filter stored calibration solutions on a given scale in MHz.
 
         Arguments:
@@ -820,18 +842,18 @@ class CalibrationSmoother():
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 gains are left unchanged and self.wgts and self.flag_grids are set to 0 and True,
                 respectively. Only works properly when all weights are all between 0 and 1.
-            maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
-            win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
-                    Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
+            mode: str, optional
+                specify whether to use 'clean' or 'dpss_leastsq' filtering of gains.
+            filter_kwargs : any keyword arguments for uvtools.dspec.fourier_filter.
         '''
         # Loop over all antennas and perform a low-pass delay filter on gains
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
             wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist, self.blacklist_wgt)
             self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
-                                                     filter_scale=filter_scale, tol=tol, window=window,
-                                                     skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
-            # flag all channels for any time that triggers the skip_wgt
+                                                     filter_scale=filter_scale, tol=tol, mode=mode,
+                                                     skip_wgt=skip_wgt, **filter_kwargs)
+            # flag all channels for any time that was skipped.
             for i in info['status']['axis_1']:
                 if info['status']['axis_1'][i] == 'skipped':
                     self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
@@ -883,7 +905,7 @@ class CalibrationSmoother():
                 wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist, self.blacklist_wgt)
 
                 # If the weights grid is the same as the previous, the solution matrix can be reused to speed up computation
-                if method == 'DPSS':
+                if method == 'DPSS' or method == 'dpss_leastsq':
                     XTXinv = info['XTXinv'] if np.allclose(wgts_grid, wgts_old) else None
                     wgts_old = np.copy(wgts_grid)
 
@@ -893,7 +915,6 @@ class CalibrationSmoother():
                         # If the grid size changes, recompute filters for new grid size
                         dpss_vectors = info['dpss_vectors'] if edges == edges_old else None
                         edges_old = deepcopy(edges)
-
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, dpss_vectors=dpss_vectors, method=method, XTXinv=XTXinv,
@@ -998,7 +1019,9 @@ def smooth_cal_argparser():
                           discrete prolate spheroidal sequences to smooth calibration solutions.')
     flt_opts.add_argument("--eigenval_cutoff", type=str, default=1e-9, help="sinc_matrix eigenvalue cutoff to use for included dpss modes. \
                           Only used when the filtering method is 'DPSS'")
-    flt_opts.add_argument("--dont_skip_flagged_edges", default=False, action="store_true", help="if True, do not skip over flagged edge times/freqs (filter over sub-region).\
+    flt_opts.add_argument("--dont_skip_flagged_edges", action="store_true", default=False, help="if True, use DPSS over integrations with flagged edge channels.\
                           Only used when method used is 'DPSS'")
+    flt_opts.add_argument("--axis", default="both", type=str, help="smooth either in 'freq', or 'both' (time and freq) axes.")
+    flt_opts.add_argument("--skip_wgt", default=0.1, type=float, help="skip if this fraction is flagged.")
     args = a.parse_args()
     return args
