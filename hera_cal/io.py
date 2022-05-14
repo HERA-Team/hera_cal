@@ -572,11 +572,11 @@ class HERAData(UVData):
             try:
                 if self.filetype in ['uvh5', 'uvfits']:
                     super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
-                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, 
+                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
                     if self.filetype == 'uvfits':
-                        self.unphase_to_drift() 
+                        self.unphase_to_drift()
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
@@ -1203,7 +1203,9 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
     Arguments:
         meta_filename: path to hdf5 file to save
         fc_meta: firstcal metadata dictionary, such as that produced by redcal.redcal_iteration()
+            if None -> No fc_meta written
         omni_meta: omnical metadata dictionary, such as that produced by redcal.redcal_iteration()
+            if None -> No omni_meta written
         freqs: 1D numpy array of frequencies in the data
         times: 1D numpy array of times in the data
         lsts: 1D numpy array of LSTs in the data
@@ -1222,22 +1224,24 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         header['history'] = np.string_(history)
 
         # save firstcal metadata, saving dictionary keys as attrs
-        fc_grp = outfile.create_group('fc_meta')
-        ant_keys = sorted(list(fc_meta['dlys'].keys()))
-        fc_grp['dlys'] = np.array([fc_meta['dlys'][ant] for ant in ant_keys])
-        fc_grp['dlys'].attrs['ants'] = np.string_(ant_keys)
-        fc_grp['polarity_flips'] = np.array([fc_meta['polarity_flips'][ant] for ant in ant_keys])
-        fc_grp['polarity_flips'].attrs['ants'] = np.string_(ant_keys)
+        if fc_meta is not None:
+            fc_grp = outfile.create_group('fc_meta')
+            ant_keys = sorted(list(fc_meta['dlys'].keys()))
+            fc_grp['dlys'] = np.array([fc_meta['dlys'][ant] for ant in ant_keys])
+            fc_grp['dlys'].attrs['ants'] = np.string_(ant_keys)
+            fc_grp['polarity_flips'] = np.array([fc_meta['polarity_flips'][ant] for ant in ant_keys])
+            fc_grp['polarity_flips'].attrs['ants'] = np.string_(ant_keys)
 
         # save the omnical metadata, saving dictionary keys as attrs
-        omni_grp = outfile.create_group('omni_meta')
-        pols_keys = sorted(list(omni_meta['chisq'].keys()))
-        omni_grp['chisq'] = np.array([omni_meta['chisq'][pols] for pols in pols_keys])
-        omni_grp['chisq'].attrs['pols'] = pols_keys
-        omni_grp['iter'] = np.array([omni_meta['iter'][pols] for pols in pols_keys])
-        omni_grp['iter'].attrs['pols'] = pols_keys
-        omni_grp['conv_crit'] = np.array([omni_meta['conv_crit'][pols] for pols in pols_keys])
-        omni_grp['conv_crit'].attrs['conv_crit'] = np.string_(pols_keys)
+        if omni_meta is not None:
+            omni_grp = outfile.create_group('omni_meta')
+            pols_keys = sorted(list(omni_meta['chisq'].keys()))
+            omni_grp['chisq'] = np.array([omni_meta['chisq'][pols] for pols in pols_keys])
+            omni_grp['chisq'].attrs['pols'] = pols_keys
+            omni_grp['iter'] = np.array([omni_meta['iter'][pols] for pols in pols_keys])
+            omni_grp['iter'].attrs['pols'] = pols_keys
+            omni_grp['conv_crit'] = np.array([omni_meta['conv_crit'][pols] for pols in pols_keys])
+            omni_grp['conv_crit'].attrs['conv_crit'] = np.string_(pols_keys)
 
 
 def read_redcal_meta(meta_filename):

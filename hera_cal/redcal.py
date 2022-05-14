@@ -1409,7 +1409,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
         3) cal['chisq'] and cal['chisq_per_ant'] are recalculated using the full set of redundancies
             (but still excluding the dead antennas)
         4) cal gets a new entry, cal['vns_omnical'] which is a nsamples data container of the number of
-            visibilites that went into each unique baseline visibility solution
+            visibilites that went into each unique baseline visibility solution.
         5) gains missing from cal['g_omnical'] (e.g. ex_ants) are backsolved using omnical solutions
             as fixed priors. These gains remain flagged in cal['gf_omnical']. For bookkeeping purposes,
             cal['g_firstcal'] and cal['gf_firstcal'] and filled in with 1.0s and Trues respectively.
@@ -1521,7 +1521,9 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6,
                           fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
-                          check_after=50, gain=.4, max_dims=2, fc_min_vis_per_ant=None):
+                          check_after=50, gain=.4, max_dims=2, fc_min_vis_per_ant=None
+                          firstcal=True, logcal_omnical=True,
+                          rv_firstcal=None):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -1549,6 +1551,15 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
             redundant baselines. Antennas will be excluded from reds to satisfy this.
         fc_min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
             delay and phase offsets in firstcal. If None, all visibilities will be included.
+        firstcal: bool, optional
+            Run firstcal. If False, then must provide firstcal_soln
+        logcal_omnical: bool, optional
+            Run logcal and omnical.
+        rv_firstcal: dict
+            dictionary with keys 'fc_meta' mapping to dictionary of 'dlys', 'polarity_flips' etc...
+                                 'g_firstcal' firstcal gain solution.
+                                 'gf_firstcal' gain flags for firstcal solution.
+
 
     Returns a dictionary of results with the following keywords:
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
@@ -1577,38 +1588,45 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     if times_by_bl is None:
         times_by_bl = data.times_by_bl
 
-    # perform firstcal
-    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit, 
-                                                  fc_min_vis_per_ant=fc_min_vis_per_ant)
-    rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
+    if firstcal:
+        # perform firstcal
+        rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit,
+                                                      fc_min_vis_per_ant=fc_min_vis_per_ant)
+        rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
+    else:
+        rv['g_firstcal'] = rv_firstcal['g_firstcal']
+        rv['gf_firstcal'] = rv_firstcal['gf_firstcal']
+        rv['fc_meta'] = rv_firstcal['fc_meta']
 
-    # perform logcal and omnical
-    _, log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
-    make_sol_finite(log_sol)
-    dts_by_bl = {bl: infer_dt(times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in data.keys()}
-    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in data.keys()}
-    rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
-                                           check_every=check_every, check_after=check_after, gain=gain)
+    if logcal_omnical:
+        # perform logcal and omnical
+        _, log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
+        make_sol_finite(log_sol)
+        dts_by_bl = {bl: infer_dt(times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in data.keys()}
+        data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in data.keys()}
+        rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
+                                               check_every=check_every, check_after=check_after, gain=gain)
 
-    # update omnical flags and then remove degeneracies
-    rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(omni_sol)
-    rv['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in rv['g_omnical'].items()}
-    rv['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in rv['v_omnical'].items()})
-    rd_sol = rc.remove_degen(omni_sol, degen_sol=rv['g_firstcal'])
-    make_sol_finite(rd_sol)
-    rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(rd_sol)
-    rv['v_omnical'] = DataContainer(rv['v_omnical'])
-    rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
+        # update omnical flags and then remove degeneracies
+        rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(omni_sol)
+        rv['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in rv['g_omnical'].items()}
+        rv['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in rv['v_omnical'].items()})
+        rd_sol = rc.remove_degen(omni_sol, degen_sol=rv['g_firstcal'])
+        make_sol_finite(rd_sol)
+        rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(rd_sol)
+        rv['v_omnical'] = DataContainer(rv['v_omnical'])
+        rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
-    # compute chisqs
-    rv['chisq'], rv['chisq_per_ant'] = normalized_chisq(data, data_wgts, filtered_reds, rv['v_omnical'], rv['g_omnical'])
+        # compute chisqs
+        rv['chisq'], rv['chisq_per_ant'] = normalized_chisq(data, data_wgts, filtered_reds, rv['v_omnical'], rv['g_omnical'])
     return rv
 
 
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
                      solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6,
                      fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
-                     gain=.4, max_dims=2, fc_min_vis_per_ant=None, verbose=False, **filter_reds_kwargs):
+                     gain=.4, max_dims=2, fc_min_vis_per_ant=None, verbose=False,
+                     firstcal=True, logcal_omnical=True, rv_firstcal=None, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
 
@@ -1642,6 +1660,12 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         fc_min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
             delay and phase offsets in firstcal. If None, all visibilities will be included.
         verbose: print calibration progress updates
+        firstcal: bool, optional. Run firstcal. If False, then must provide firstcal_soln
+        logcal_omnical: bool, optional. Run logcal and omnical.
+        rv_firstcal: dict
+            Dictionary with keys 'fc_meta' mapping to dictionary of 'dlys', 'polarity_flips' etc...
+                                 'g_firstcal' firstcal gain solution.
+                                 'gf_firstcal' gain flags for firstcal solution.
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
     Returns a dictionary of results with the following keywords:
@@ -1681,29 +1705,42 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     ants = [(ant, antpol) for ant in ant_nums for antpol in antpols]
     pol_load_list = _get_pol_load_list(hd.pols, pol_mode=pol_mode)
 
-    # initialize gains to 1s, gain flags to True, and chisq to 0s
-    rv = {}  # dictionary of return values
-    rv['g_firstcal'] = {ant: np.ones((nTimes, nFreqs), dtype=np.complex64) for ant in ants}
-    rv['gf_firstcal'] = {ant: np.ones((nTimes, nFreqs), dtype=bool) for ant in ants}
-    rv['g_omnical'] = {ant: np.ones((nTimes, nFreqs), dtype=np.complex64) for ant in ants}
-    rv['gf_omnical'] = {ant: np.ones((nTimes, nFreqs), dtype=bool) for ant in ants}
-    rv['chisq'] = {antpol: np.zeros((nTimes, nFreqs), dtype=np.float32) for antpol in antpols}
-    rv['chisq_per_ant'] = {ant: np.zeros((nTimes, nFreqs), dtype=np.float32) for ant in ants}
-
     # get reds and then intitialize omnical visibility solutions to all 1s and all flagged
     all_reds = get_reds({ant: hd.antpos[ant] for ant in ant_nums}, bl_error_tol=bl_error_tol,
                         pol_mode=pol_mode, pols=set([pol for pols in pol_load_list for pol in pols]))
-    rv['v_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds})
-    rv['vf_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds})
-    rv['vns_omnical'] = DataContainer({red[0]: np.zeros((nTimes, nFreqs), dtype=np.float32) for red in all_reds})
     filtered_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
 
-    # setup metadata dictionaries
-    rv['fc_meta'] = {'dlys': {ant: np.full(nTimes, np.nan) for ant in ants}}
-    rv['fc_meta']['polarity_flips'] = {ant: np.full(nTimes, np.nan) for ant in ants}
-    rv['omni_meta'] = {'chisq': {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}}
-    rv['omni_meta']['iter'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=int) for pols in pol_load_list}
-    rv['omni_meta']['conv_crit'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
+    # initialize gains to 1s, gain flags to True, and chisq to 0s
+    rv = {}  # dictionary of return values
+    if firstcal:
+        rv['g_firstcal'] = {ant: np.ones((nTimes, nFreqs), dtype=np.complex64) for ant in ants}
+        rv['gf_firstcal'] = {ant: np.ones((nTimes, nFreqs), dtype=bool) for ant in ants}
+        # setup metadata dictionaries
+        rv['fc_meta'] = {'dlys': {ant: np.full(nTimes, np.nan) for ant in ants}}
+        rv['fc_meta']['polarity_flips'] = {ant: np.full(nTimes, np.nan) for ant in ants}
+    else:
+        rv['g_firstcal'] = rv_firstcal['g_firstcal']
+        rv['gf_firstcal'] = rv_firstcal['gf_firstcal']
+        rv['fc_meta'] = rv_firstcal['fc_meta']
+
+    if logcal_omnical:
+        rv['g_omnical'] = {ant: np.ones((nTimes, nFreqs), dtype=np.complex64) for ant in ants}
+        rv['gf_omnical'] = {ant: np.ones((nTimes, nFreqs), dtype=bool) for ant in ants}
+        rv['chisq'] = {antpol: np.zeros((nTimes, nFreqs), dtype=np.float32) for antpol in antpols}
+        rv['chisq_per_ant'] = {ant: np.zeros((nTimes, nFreqs), dtype=np.float32) for ant in ants}
+
+        rv['v_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds})
+        rv['vf_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds})
+        rv['vns_omnical'] = DataContainer({red[0]: np.zeros((nTimes, nFreqs), dtype=np.float32) for red in all_reds})
+        rv['omni_meta'] = {'chisq': {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}}
+        rv['omni_meta']['iter'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=int) for pols in pol_load_list}
+        rv['omni_meta']['conv_crit'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
+    else:
+        rv['g_omnical'], rv['gf_omnical'], rv['chisq'], rv['chisq_per_ant'] = None, None, None, None
+        rv['v_omnical'], rv['vf_omnical'], rv['vns_omnical'], rv['omni_meta'] = None, None, None, None
+
+
+
 
     # solar flagging
     lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
@@ -1736,33 +1773,41 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter,
                                             oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
-                                            check_every=check_every, check_after=check_after, 
-                                            max_dims=max_dims, gain=gain, fc_min_vis_per_ant=fc_min_vis_per_ant)
-                expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
+                                            check_every=check_every, check_after=check_after,
+                                            max_dims=max_dims, gain=gain, fc_min_vis_per_ant=fc_min_vis_per_ant,
+                                            firstcal=firstcal, logcal_omnical=logcal_omnical,
+                                            rv_firstcal=rv_firstcal)
+                if logcal_omnical:
+                    expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
 
                 # gather results
-                for ant in cal['g_omnical'].keys():
-                    rv['g_firstcal'][ant][tinds, fSlice] = cal['g_firstcal'][ant]
-                    rv['gf_firstcal'][ant][tinds, fSlice] = cal['gf_firstcal'][ant]
-                    rv['g_omnical'][ant][tinds, fSlice] = cal['g_omnical'][ant]
-                    rv['gf_omnical'][ant][tinds, fSlice] = cal['gf_omnical'][ant]
-                    rv['chisq_per_ant'][ant][tinds, fSlice] = cal['chisq_per_ant'][ant]
-                for ant in cal['fc_meta']['dlys'].keys():
-                    rv['fc_meta']['dlys'][ant][tinds] = cal['fc_meta']['dlys'][ant]
-                    rv['fc_meta']['polarity_flips'][ant][tinds] = cal['fc_meta']['polarity_flips'][ant]
-                for bl in cal['v_omnical'].keys():
-                    rv['v_omnical'][bl][tinds, fSlice] = cal['v_omnical'][bl]
-                    rv['vf_omnical'][bl][tinds, fSlice] = cal['vf_omnical'][bl]
-                    rv['vns_omnical'][bl][tinds, fSlice] = cal['vns_omnical'][bl]
-                if pol_mode in ['1pol', '2pol']:
-                    for antpol in cal['chisq'].keys():
-                        rv['chisq'][antpol][tinds, fSlice] = cal['chisq'][antpol]
-                else:  # duplicate chi^2 into both antenna polarizations
-                    for antpol in rv['chisq'].keys():
-                        rv['chisq'][antpol][tinds, fSlice] = cal['chisq']
-                rv['omni_meta']['chisq'][str(pols)][tinds, fSlice] = cal['omni_meta']['chisq']
-                rv['omni_meta']['iter'][str(pols)][tinds, fSlice] = cal['omni_meta']['iter']
-                rv['omni_meta']['conv_crit'][str(pols)][tinds, fSlice] = cal['omni_meta']['conv_crit']
+                if firstcal:
+                    for ant in cal['g_firstcal'].keys():
+                        rv['g_firstcal'][ant][tinds, fSlice] = cal['g_firstcal'][ant]
+                        rv['gf_firstcal'][ant][tinds, fSlice] = cal['gf_firstcal'][ant]
+
+                    for ant in cal['fc_meta']['dlys'].keys():
+                        rv['fc_meta']['dlys'][ant][tinds] = cal['fc_meta']['dlys'][ant]
+                        rv['fc_meta']['polarity_flips'][ant][tinds] = cal['fc_meta']['polarity_flips'][ant]
+                if logcal_omnical:
+                    for ant in cal['g_omnical'].keys():
+                        rv['g_omnical'][ant][tinds, fSlice] = cal['g_omnical'][ant]
+                        rv['gf_omnical'][ant][tinds, fSlice] = cal['gf_omnical'][ant]
+                        rv['chisq_per_ant'][ant][tinds, fSlice] = cal['chisq_per_ant'][ant]
+
+                    for bl in cal['v_omnical'].keys():
+                        rv['v_omnical'][bl][tinds, fSlice] = cal['v_omnical'][bl]
+                        rv['vf_omnical'][bl][tinds, fSlice] = cal['vf_omnical'][bl]
+                        rv['vns_omnical'][bl][tinds, fSlice] = cal['vns_omnical'][bl]
+                    if pol_mode in ['1pol', '2pol']:
+                        for antpol in cal['chisq'].keys():
+                            rv['chisq'][antpol][tinds, fSlice] = cal['chisq'][antpol]
+                    else:  # duplicate chi^2 into both antenna polarizations
+                        for antpol in rv['chisq'].keys():
+                            rv['chisq'][antpol][tinds, fSlice] = cal['chisq']
+                    rv['omni_meta']['chisq'][str(pols)][tinds, fSlice] = cal['omni_meta']['chisq']
+                    rv['omni_meta']['iter'][str(pols)][tinds, fSlice] = cal['omni_meta']['iter']
+                    rv['omni_meta']['conv_crit'][str(pols)][tinds, fSlice] = cal['omni_meta']['conv_crit']
 
     return rv
 
@@ -1778,29 +1823,32 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
     antenna_positions = np.array([hd.antenna_positions[hd.antenna_numbers == antnum].flatten() for antnum in cal_antnums])
     lst_array = np.unique(hd.lsts)
 
-    if verbose:
-        print('\nNow saving firstcal gains to', os.path.join(outdir, fistcal_filename))
-    write_cal(fistcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
-              flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber,
-              x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
-              antenna_positions=antenna_positions, lst_array=lst_array,
-              history=version.history_string(add_to_history), antnums2antnames=antnums2antnames)
+    if firstcal_filename is not None:
+        if verbose:
+            print('\nNow saving firstcal gains to', os.path.join(outdir, fistcal_filename))
+        write_cal(fistcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
+                  flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber,
+                  x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
+                  antenna_positions=antenna_positions, lst_array=lst_array,
+                  history=version.history_string(add_to_history), antnums2antnames=antnums2antnames)
 
-    if verbose:
-        print('Now saving omnical gains to', os.path.join(outdir, omnical_filename))
-    write_cal(omnical_filename, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
-              quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
-              x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
-              antenna_positions=antenna_positions, lst_array=lst_array,
-              history=version.history_string(add_to_history), antnums2antnames=antnums2antnames)
+    if omnical_filename is not None:
+        if verbose:
+            print('Now saving omnical gains to', os.path.join(outdir, omnical_filename))
+        write_cal(omnical_filename, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
+                  quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
+                  x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
+                  antenna_positions=antenna_positions, lst_array=lst_array,
+                  history=version.history_string(add_to_history), antnums2antnames=antnums2antnames)
 
-    if verbose:
-        print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
-    hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
-    hd_out.read(bls=list(cal['v_omnical'].keys()))
-    hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
-    hd_out.history += version.history_string(add_to_history)
-    hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
+    if omnivis_filename is not None:
+        if verbose:
+            print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
+        hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
+        hd_out.read(bls=list(cal['v_omnical'].keys()))
+        hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
+        hd_out.history += version.history_string(add_to_history)
+        hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
 
     if verbose:
         print('Now saving redcal metadata to ', os.path.join(outdir, meta_filename))
@@ -1815,7 +1863,9 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
                fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
                check_after=50, gain=.4, max_dims=2, fc_min_vis_per_ant=None, add_to_history='',
-               verbose=False, **filter_reds_kwargs):
+               verbose=False, firstcal=True, logcal_omnical=True, input_firstcal_file=None,
+               input_firstcal_meta_file=None,
+               **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1873,8 +1923,10 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             delay and phase offsets in firstcal. If None, all visibilities will be included.
         add_to_history: string to add to history of output firstcal and omnical files
         verbose: print calibration progress updates
+        firstcal: bool, optional. Run firstcal. Default is True
+        logcal_omnical: bool, optional. Run logcal and omnical. Default is True.
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
-
+        input_firstcal: str, optional. If firstcal is False, use this firstcal file.
     Returns:
         cal: the dictionary result of the final run of redcal_iteration (see above for details)
     '''
@@ -1927,11 +1979,12 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                                solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high,
                                fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
                                check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain,
-                               verbose=verbose, **filter_reds_kwargs)
+                               verbose=verbose, fistcal=firstcal, logcal_omnical=logcal_omnical, **filter_reds_kwargs)
 
         # Determine whether to add additional antennas to exclude
-        z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items()
-                                                  if (ant[0] not in ex_ants) and not np.all(cspa == 0)})
+        if logcal_omnical:
+            z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items()
+                                                      if (ant[0] not in ex_ants) and not np.all(cspa == 0)})
         n_ex = len(ex_ants)
         for ant, score in z_scores.items():
             if (score >= ant_z_thresh):
@@ -1944,14 +1997,40 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         if len(ex_ants) == n_ex or run_number >= max_rerun:
             break
         # If there is going to be a re-run and if iter0_prefix is not the empty string, then save the iter0 results.
+        if logcal_omnical:
+            omnical_filename = filename_no_ext + iter0_prefix + omnical_ext
+            omnivis_filename = filename_no_ext + iter0_prefix + omnivis_ext
+        else:
+            omnical_filename = None
+            omnivis_filename = None
+
+        if firstcal:
+            firstcal_filename = filename_no_ext + iter0_prefix + firstcal_ext
+        else:
+            firstcal_filename = None
+
         if run_number == 1 and len(iter0_prefix) > 0:
-            _redcal_run_write_results(cal, hd, filename_no_ext + iter0_prefix + firstcal_ext, filename_no_ext + iter0_prefix + omnical_ext,
-                                      filename_no_ext + iter0_prefix + omnivis_ext, filename_no_ext + iter0_prefix + meta_ext, outdir,
+            _redcal_run_write_results(cal, hd, firstcal_filename, omnical_filename, omnivis_filename,
+                                      filename_no_ext + iter0_prefix + meta_ext, outdir,
                                       clobber=clobber, verbose=verbose, add_to_history=add_to_history + '\n' + 'Iteration 0 Results.\n')
 
     # output results files
-    _redcal_run_write_results(cal, hd, filename_no_ext + firstcal_ext, filename_no_ext + omnical_ext,
-                              filename_no_ext + omnivis_ext, filename_no_ext + meta_ext, outdir, clobber=clobber,
+
+    if logcal_omnical:
+        omnical_filename = filename_no_ext  + omnical_ext
+        omnivis_filename = filename_no_ext  + omnivis_ext
+    else:
+        omnical_filename = None
+        omnivis_filename = None
+
+    if firstcal:
+        firstcal_filename = filename_no_ext + firstcal_ext
+    else:
+        firstcal_filename = None
+
+
+    _redcal_run_write_results(cal, hd, firstcal_filename, omnical_filename,
+                              omnivis_filename, filename_no_ext + meta_ext, outdir, clobber=clobber,
                               verbose=verbose, add_to_history=add_to_history + '\n' + high_z_ant_hist)
 
     return cal
