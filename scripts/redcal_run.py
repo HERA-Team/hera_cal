@@ -45,4 +45,7 @@ redcal_run(a.input_data,
            max_dims=a.max_dims,
            fc_min_vis_per_ant=a.fc_min_vis_per_ant,
            add_to_history=' '.join(sys.argv),
+           logcal_omnical=not(a.firstcal_only),
+           input_firstcal_file=a.input_firstcal_file,
+           input_firstcal_meta_file=a.input_firstcal_file,
            verbose=a.verbose)

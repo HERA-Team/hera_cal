@@ -1863,7 +1863,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
                fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
                check_after=50, gain=.4, max_dims=2, fc_min_vis_per_ant=None, add_to_history='',
-               verbose=False, firstcal=True, logcal_omnical=True, input_firstcal_file=None,
+               verbose=False, logcal_omnical=True, input_firstcal_file=None,
                input_firstcal_meta_file=None,
                **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
@@ -1941,6 +1941,14 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         input_data = hd.filepaths[0]
     else:
         raise TypeError('input_data must be a single string path to a visibility data file or a HERAData object')
+
+    # read in firstcal and firstcal meta file.
+    if input_firstcal_file is not None:
+        firstcal = False
+        hcf = io.HERACal(input_firstcal_file)
+        gains_firstcal, gain_flags_firstcal, _, _ = hcf.read()
+    else:
+
 
     # parse ex_ants from function, metrics_files, and apriori yamls
     ex_ants = set(ex_ants)
@@ -2050,6 +2058,8 @@ def redcal_argparser():
                    but only if redcal has found any antennas to exclude and re-run without.")
     a.add_argument("--clobber", default=False, action="store_true", help="overwrites existing files for the firstcal and omnical results")
     a.add_argument("--verbose", default=False, action="store_true", help="print calibration progress updates")
+    a.add_argument("--input_firstcal_file", type=str, default=None, help="Path to firstcal file with delays to form basis for logcal and omnical. If specified, firstcal will not be run.")
+    a.add_argument("--input_firstcal_meta_file", type=str, default=None, help="Path to file with metadata on firstcal.")
 
     redcal_opts = a.add_argument_group(title='Runtime Options for Redcal')
     redcal_opts.add_argument("--metrics_files", type=str, nargs='*', default=[], help="path to file containing ant_metrics or auto_metrics readable by hera_qm.metrics_io.load_metric_file. \
@@ -2082,6 +2092,7 @@ def redcal_argparser():
     omni_opts.add_argument("--gain", type=float, default=.4, help="The fractional step made toward the new solution each omnical iteration. Values in the range 0.1 to 0.5 are generally safe.")
     omni_opts.add_argument("--fc_min_vis_per_ant", type=int, default=None, help="Minimum number of visibilities to include per antenna when solving for delay and phase offsets in firstcal. \
                            Default None uses all visibilities.")
+    omni_opts.add_argument("--firstcal_only", default=False, action="store_true", help="Only run firstcal.")
 
     args = a.parse_args()
     return args
