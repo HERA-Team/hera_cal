@@ -1224,8 +1224,8 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         header['history'] = np.string_(history)
 
         # save firstcal metadata, saving dictionary keys as attrs
+        fc_grp = outfile.create_group('fc_meta')
         if fc_meta is not None:
-            fc_grp = outfile.create_group('fc_meta')
             ant_keys = sorted(list(fc_meta['dlys'].keys()))
             fc_grp['dlys'] = np.array([fc_meta['dlys'][ant] for ant in ant_keys])
             fc_grp['dlys'].attrs['ants'] = np.string_(ant_keys)
@@ -1233,8 +1233,8 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
             fc_grp['polarity_flips'].attrs['ants'] = np.string_(ant_keys)
 
         # save the omnical metadata, saving dictionary keys as attrs
+        omni_grp = outfile.create_group('omni_meta')
         if omni_meta is not None:
-            omni_grp = outfile.create_group('omni_meta')
             pols_keys = sorted(list(omni_meta['chisq'].keys()))
             omni_grp['chisq'] = np.array([omni_meta['chisq'][pols] for pols in pols_keys])
             omni_grp['chisq'].attrs['pols'] = pols_keys
@@ -1268,19 +1268,27 @@ def read_redcal_meta(meta_filename):
                                                infile['header']['antpos'][:, :])}
         history = infile['header']['history'][()].tobytes().decode('utf8')
 
-        # reconstruct firstcal metadata
-        fc_meta = {}
-        ants = [(int(num.tobytes().decode('utf8')), pol.tobytes().decode('utf8'))
-                for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
-        fc_meta['dlys'] = {ant: dly for ant, dly in zip(ants, infile['fc_meta']['dlys'][:, :])}
-        fc_meta['polarity_flips'] = {ant: flips for ant, flips in zip(ants, infile['fc_meta']['polarity_flips'][:, :])}
+        # check that infile has fc_meta group.
+        if 'fc_meta' in infile:
+            # reconstruct firstcal metadata
+            fc_meta = {}
+            ants = [(int(num.tobytes().decode('utf8')), pol.tobytes().decode('utf8'))
+                    for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
+            fc_meta['dlys'] = {ant: dly for ant, dly in zip(ants, infile['fc_meta']['dlys'][:, :])}
+            fc_meta['polarity_flips'] = {ant: flips for ant, flips in zip(ants, infile['fc_meta']['polarity_flips'][:, :])
+        else:
+            fc_meta = None
 
-        # reconstruct omnical metadata
-        omni_meta = {}
-        pols_keys = infile['omni_meta']['chisq'].attrs['pols']
-        omni_meta['chisq'] = {pols: chisq for pols, chisq in zip(pols_keys, infile['omni_meta']['chisq'][:, :])}
-        omni_meta['iter'] = {pols: itr for pols, itr in zip(pols_keys, infile['omni_meta']['iter'][:, :])}
-        omni_meta['conv_crit'] = {pols: cc for pols, cc in zip(pols_keys, infile['omni_meta']['conv_crit'][:, :])}
+        # check if omni_meta group present.
+        if 'omni_meta' in infile:
+            # reconstruct omnical metadata
+            omni_meta = {}
+            pols_keys = infile['omni_meta']['chisq'].attrs['pols']
+            omni_meta['chisq'] = {pols: chisq for pols, chisq in zip(pols_keys, infile['omni_meta']['chisq'][:, :])}
+            omni_meta['iter'] = {pols: itr for pols, itr in zip(pols_keys, infile['omni_meta']['iter'][:, :])}
+            omni_meta['conv_crit'] = {pols: cc for pols, cc in zip(pols_keys, infile['omni_meta']['conv_crit'][:, :])}
+        else:
+            omni_meta = None
 
     return fc_meta, omni_meta, freqs, times, lsts, antpos, history
 

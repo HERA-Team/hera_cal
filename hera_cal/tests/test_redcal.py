@@ -167,7 +167,7 @@ class TestMethods(object):
         new_reds = om.filter_reds(reds, max_dims=2)
         ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
         assert ant_inds == set(range(0, 9))
-                
+
         # Max 3 dimensions means all 3 good rows, but keeps out the off-grid antenna
         new_reds = om.filter_reds(reds, max_dims=3)
         ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
@@ -385,14 +385,14 @@ class TestRedundantCalibrator(object):
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(1e8, 2e8, 1024)
-        
+
         # test firstcal where the degeneracies of the phases and delays have already been removed so no abscal is necessary
         gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
         fc_delays = {ant: [[100e-9 * np.random.randn()]] for ant in gains.keys()}  # in s
         fc_delays = rc.remove_degen_gains(fc_delays)
         fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
         fc_offsets = rc.remove_degen_gains(fc_offsets)
-        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs))) 
+        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs)))
                     for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
@@ -406,7 +406,7 @@ class TestRedundantCalibrator(object):
         fc_delays = {ant: [[0 * np.random.randn()]] for ant in gains.keys()}  # in s
         fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
         fc_offsets = rc.remove_degen_gains(fc_offsets)
-        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs))) 
+        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs)))
                     for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
@@ -1132,16 +1132,16 @@ class TestRedundantCalibrator(object):
         # factor of 2 comes from the fact that all baselines go into two antennas' chisq_per_ant
         non_degen_dof_per_ant = {ant: -2 for ant in ants}
         for red in reds:
-            for bl in red:        
+            for bl in red:
                 for ant in split_bl(bl):
                     non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
         for ant in ants:
             # show that the number of degrees of freedom (i.e. expected chi^2) per antenna is always a bit larger
-            # than the number expected from just antenna and ubl DoF, but that each antenna gets some of the 
+            # than the number expected from just antenna and ubl DoF, but that each antenna gets some of the
             # degenerate DoF
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
-            
+
         # Test hex array (see comments on analogous test above)
         antpos = hex_array(3, split_core=False, outriggers=0)
         ants = [(ant, 'Jxx') for ant in antpos]
@@ -1155,7 +1155,7 @@ class TestRedundantCalibrator(object):
         np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
         non_degen_dof_per_ant = {ant: -2 for ant in ants}
         for red in reds:
-            for bl in red:        
+            for bl in red:
                 for ant in split_bl(bl):
                     non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
         for ant in ants:
@@ -1175,7 +1175,7 @@ class TestRedundantCalibrator(object):
         np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
         non_degen_dof_per_ant = {ant: -2 for ant in ants}
         for red in reds:
-            for bl in red:        
+            for bl in red:
                 for ant in split_bl(bl):
                     non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
         for ant in ants:
@@ -1199,7 +1199,7 @@ class TestRedundantCalibrator(object):
         n = DataContainer({bl: np.sqrt(noise_var / 2) * (np.random.randn(*vis.shape) + 1j * np.random.randn(*vis.shape)) for bl, vis in d.items()})
         noisy_data = n + DataContainer(d)
 
-        # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance 
+        # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance
         for antnum in antpos.keys():
             noisy_data[(antnum, antnum, 'xx')] = np.ones((len(times), len(freqs))) * np.sqrt(noise_var * dt * df)
         noisy_data.freqs = deepcopy(freqs)
@@ -1251,7 +1251,7 @@ class TestRedundantCalibrator(object):
         noisy_data = n + DataContainer(d)
         nsamples = DataContainer({bl: np.ones_like(d[bl], dtype=float) for bl in d})
 
-        # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance 
+        # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance
         for antnum in antpos.keys():
             noisy_data[(antnum, antnum, 'xx')] = np.ones((len(times), len(freqs))) * np.sqrt(noise_var * dt * df)
         noisy_data.freqs = deepcopy(freqs)
@@ -1293,13 +1293,13 @@ class TestRedundantCalibrator(object):
             np.testing.assert_almost_equal(np.mean(chisq_per_ant[ant]), predicted_chisq_per_ant[ant], -np.log10(.03))
 
         # make sure excluded antenna has the highest chi^2, but not inexplicably large
-        assert np.mean(cal['chisq_per_ant'][6, 'Jxx']) <= len(antpos)  
+        assert np.mean(cal['chisq_per_ant'][6, 'Jxx']) <= len(antpos)
         for ant in cal['chisq_per_ant']:
             assert np.mean(cal['chisq_per_ant'][ant]) <= np.mean(cal['chisq_per_ant'][6, 'Jxx'])
 
 
 class TestRedcalAndAbscal(object):
-    
+
     @pytest.mark.parametrize("fc_min_vis_per_ant", [16, None])
     def test_post_redcal_abscal(self, fc_min_vis_per_ant):
         '''This test shows that performing a combination of redcal and abscal recovers the exact input gains
@@ -1314,7 +1314,7 @@ class TestRedcalAndAbscal(object):
         d = DataContainer(d)
         fc_delays = {ant: 100e-9 * np.random.randn() for ant in gains.keys()}  # in s
         fc_offsets = {ant: 2 * np.pi * np.random.rand() for ant in gains.keys()}  # random phase offsets
-        fc_gains = {ant: np.reshape(np.exp(2.0j * np.pi * freqs * delay + 1.0j * fc_offsets[ant]), 
+        fc_gains = {ant: np.reshape(np.exp(2.0j * np.pi * freqs * delay + 1.0j * fc_offsets[ant]),
                                     (1, len(freqs))) for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
@@ -1340,16 +1340,16 @@ class TestRedcalAndAbscal(object):
         model.freqs = freqs
         model.times_by_bl = {bl[0:2]: np.array([2458110.18523274, 2458110.18535701]) for bl in model.keys()}
         model.antpos = antpos
-        
+
         # run abscal
         abscal_delta_gains = abscal.post_redcal_abscal(model, d_omnicaled, wgts, cal['gf_omnical'], verbose=True, phs_max_iter=200, phs_conv_crit=1e-10)
 
         # evaluate solutions, rephasing to antenna 0 as a reference
         abscal_gains = {ant: cal['g_omnical'][ant] * abscal_delta_gains[ant] for ant in cal['g_omnical']}
         refant = {'Jxx': (0, 'Jxx'), 'Jyy': (0, 'Jyy')}
-        agr = {ant: abscal_gains[ant] * np.abs(abscal_gains[refant[ant[1]]]) / abscal_gains[refant[ant[1]]] 
+        agr = {ant: abscal_gains[ant] * np.abs(abscal_gains[refant[ant[1]]]) / abscal_gains[refant[ant[1]]]
                for ant in abscal_gains.keys()}
-        tgr = {ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]] 
+        tgr = {ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]]
                for ant in true_gains.keys()}
         gain_errors = [agr[ant] - tgr[ant] for ant in tgr if ant[1] == 'Jxx']
         np.testing.assert_almost_equal(np.abs(gain_errors), 0, decimal=10)
@@ -1451,7 +1451,7 @@ class TestRunMethods(object):
                 assert not np.all(flag[t, :])
                 assert np.all(flag[t, 0:30])
                 assert np.all(flag[t, -40:])
-        
+
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))  # test w/o partial loading
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -1499,19 +1499,45 @@ class TestRunMethods(object):
             assert not np.all(rv['chisq_per_ant'][ant] == 0.0)
             np.testing.assert_array_equal(rv['gf_omnical'][ant], True)
 
-    def test_redcal_run(self):
+    @pytest.mark.parametrize("separate_firstcal", [True, False])
+    def test_redcal_run(self, separate_firstcal):
         input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
         ant_metrics_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.43124.HH.uv.ant_metrics.json')
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sys.stdout = open(os.devnull, 'w')
-            cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
-                                a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
-                                iter0_prefix='.iter0', metrics_files=ant_metrics_file, clobber=True)
+            if separate_firstcal:
+                # remove any existing firstcal or omnical file.
+                os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
+                os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
+                os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
+                os.remove(os.path.splitext(input_data)[0] + '.redcal_meta.hdf5')
 
-            hd = io.HERAData(input_data)
-            cal0 = om.redcal_iteration(hd, ex_ants=[11, 50])
-            
+                firstcal_file = os.path.splitext(input_data)[0] + '.first.calfits'
+                firstcal_meta_file =  os.path.splitext(input_data)[0] + '.first_meta.hdf5'
+                cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
+                                    a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
+                                    iter0_prefix='.iter0', metrics_files=ant_metrics_file, clobber=True,
+                                    logcal_omnical=False, meta_ext='.first_meta.hdf5')
+                # check that firstcal has been written and that redcal has not been written.
+                assert not os.path.exists(os.path.splitext(input_data)[0] + '.omni.calfits')
+                assert not os.path.exists(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
+                assert not os.path.exists(os.path.splitext(input_data)[0] + '.redcal_meta.hdf5')
+                assert os.path.exists(os.path.splitext(input_data)[0] + '.first_meta.hdf5')
+                assert os.path.exists(os.path.splitext(input_data)[0] + '.first.calfits')
+                cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
+                                    a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
+                                    iter0_prefix='.iter0', metrics_files=ant_metrics_file, clobber=True,
+                                    input_firstcal_file=firstcal_file,
+                                    input_firstcal_meta_file=firstcal_meta_file)
+            else:
+                cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
+                                    a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
+                                    iter0_prefix='.iter0', metrics_files=ant_metrics_file, clobber=True)
+
+                hd = io.HERAData(input_data)
+                cal0 = om.redcal_iteration(hd, ex_ants=[11, 50])
+
             sys.stdout = sys.__stdout__
 
         for prefix, cal_here, bad_ants in [('', cal, [11, 50, 12]), ('.iter0', cal0, [11, 50])]:

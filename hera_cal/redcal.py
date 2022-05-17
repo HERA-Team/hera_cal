@@ -1926,7 +1926,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         firstcal: bool, optional. Run firstcal. Default is True
         logcal_omnical: bool, optional. Run logcal and omnical. Default is True.
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
-        input_firstcal: str, optional. If firstcal is False, use this firstcal file.
+        input_firstcal: str, optional. If this is supplied, then don't run firstcal but use this instead.
     Returns:
         cal: the dictionary result of the final run of redcal_iteration (see above for details)
     '''
@@ -1977,8 +1977,20 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     if outdir is None:
         outdir = os.path.dirname(input_data)
 
-    # loop over calibration, removing bad antennas and re-running if necessary
+    # loop over calibration, removing bad antennas and re-running if necessary.
     run_number = 0
+    if not firstcal:
+        # read input firstcal file and meta file.
+        hcf = io.HERACal(input_firstcal_file)
+        rv_firstcal['g_firstcal'], rv_firstcal['gf_firstcal'], _, _ = hcf.read()
+        if input_firstcal_meta_file is not None:
+            rv_firstcal['fc_meta'], _, _, _, _, _, firstcal_history = io.read_redcal_meta(input_firstcal_meta_file)
+            add_to_history += firstcal_history
+        else:
+            rv_firstcal['fc_meta'] = None
+    else:
+        rv_firstcal = None
+
     while True:
         # Run redundant calibration
         if verbose:
@@ -1987,7 +1999,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                                solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high,
                                fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
                                check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain,
-                               verbose=verbose, fistcal=firstcal, logcal_omnical=logcal_omnical, **filter_reds_kwargs)
+                               verbose=verbose, fistcal=firstcal, logcal_omnical=logcal_omnical,
+                               rv_firstcal=rv_firstcal, **filter_reds_kwargs)
 
         # Determine whether to add additional antennas to exclude
         if logcal_omnical:
