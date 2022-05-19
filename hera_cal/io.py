@@ -863,6 +863,99 @@ class HERAData(UVData):
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
 
+def read_hera_hdf5(filenames, bls, flags=False, nsamples=False, check=False,
+                   dtype=np.float64, cdtype=np.complex128, verbose=False):
+    '''A ~100x faster interface to getting data out of HERA HDF5 files. Only concatenates
+    along time axis. Assumes that if antenna_numbers header array stays the same,
+    the baseline order in the files stays the same. Puts times in ascending order,
+    but does not check that files are contiguous.
+
+    Arguments:
+        filenames: list of files to read
+        bls: list of (ant_1, ant_2, polstr) tuples to read out of files
+        flags (bool, False): read and return flags
+        nsamples (bool, False): read and return nsamples
+        check (bool, False): run basic sanity checks to make sure files match.
+        dtype (np.float64): numpy datatype for real-valued arrays (half of cdtype)
+        cdtype (np.complex128): numpy datatype for complex-valued array (twice dtype)
+        verbose: print some progress messages.
+
+    Returns:
+        info: dictionary of metadata 
+        data: dictionary of waterfalls with keys from bls.
+        flags [optional]: dictionary of flags with keys from bls.
+        nsamples [optional]: dictionary of nsamples with keys from bls.
+    '''
+    info = {}
+    times = []
+    bl2ind = {}
+    inds = {}
+    # Read file metadata to size up arrays and sort times
+    for filename in filenames:
+        if verbose:
+            print(f'Reading header of {filename}')
+        with h5py.File(filename, 'r') as f:
+            h = f['/Header']
+            if check:
+                assert int(h['Nspws'][()]) == 1 # not a hera file
+            if len(times) == 0:
+                info['freqs'] = h['freq_array'][()]
+            elif check:
+                assert int(h['Nfreqs'][()]) == info['freqs'].size
+            ntimes = int(h['Ntimes'][()])
+            times.append((h['time_array'][:ntimes], filename))
+            ants = h['antenna_numbers'][()]
+            _hash = hash(ants.tobytes())
+            # map baselines to array indices for each unique antenna order
+            if _hash not in inds:
+                ant1_array = h['ant_1_array'][()]
+                ant2_array = h['ant_2_array'][()]
+                pol_array = h['polarization_array'][()]
+                inds[_hash] = {}
+                for i, j, p in bls:
+                    _inds = np.argwhere(ant_1_array == i)
+                    _inds = _inds[ant_2_array[_inds] == j]
+                    pi = np.argwhere(pol_array == POL_STR2NUM_DICT[p])[0][0]
+                    inds[_hash][i,j,p] = (_inds, pi)
+            bl2ind[filename] = inds[_hash]
+
+    times.sort(key=lambda x: x[0][0]) # sort files by time of first integration
+    filenames = (v[-1] for v in times)
+    times = np.concatenate([t[0] for t in times], axis=0)
+
+    data = {bl:np.empty((times.size, info['freqs'].size), dtype=cdtype) for bl in bls}
+    if flags:
+        flgs = {bl:np.empty((times.size, info['freqs'].size), dtype=bool) for bl in bls}
+    if nsamples:
+        nsmp = {bl:np.empty((times.size, info['freqs'].size), dtype=int) for bl in bls}
+
+    info['times'] = times
+    t = 0
+    for filename in filenames:
+        if verbose:
+            print(f'Reading data from {filename}')
+        with h5py.File(filename, 'r') as f:
+            h = f['/Header']
+            ntimes = int(h['Ntimes'][()])
+            assert np.allclose(h['time_array'][:ntimes], times[t:t+ntimes])
+            d = f['/Data']
+            for bl in bls:
+                inds, pi = bl2ind[filename][bl]
+                _d = d['visdata'][inds,0,:,pi]
+                data[bl][t:t+ntimes].real = _d['r'].astype(dtype)
+                data[bl][t:t+ntimes].imag = _d['i'].astype(dtype)
+                if flags:
+                    flgs[bl][t:t+ntimes] = d['flags'][inds,0,:,pi]
+                if nsamples:
+                    nsmp[bl][t:t+ntimes] = d['nsamples'][inds,0,:,pi]
+            t += ntimes
+    rv = (info, data)
+    if flags:
+        rv = rv + (flgs,)
+    if nsamples:
+        rv = rv + (nsamples,)
+    return rv
+
 
 def read_filter_cache_scratch(cache_dir):
     """
