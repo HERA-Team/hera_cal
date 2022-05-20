@@ -913,8 +913,8 @@ def read_hera_hdf5(filenames, bls, flags=False, nsamples=False, check=False,
                 pol_array = h['polarization_array'][()]
                 inds[_hash] = {}
                 for i, j, p in bls:
-                    _inds = np.argwhere(ant_1_array == i)
-                    _inds = _inds[ant_2_array[_inds] == j]
+                    _inds = np.argwhere(ant1_array == i)
+                    _inds = _inds[ant2_array[_inds] == j]
                     pi = np.argwhere(pol_array == POL_STR2NUM_DICT[p])[0][0]
                     inds[_hash][i,j,p] = (_inds, pi)
             bl2ind[filename] = inds[_hash]
