@@ -16,7 +16,7 @@ def get_active_apriori(at_date, float_format, window=10.0):
     aap = {}
     try:
         with open('active_apriori_working.tmp', 'r') as fp:
-            timestamp = float(fp.readline().strip().split()[1])
+            timestamp = float(fp.readline().strip())
             valid_statuses = fp.readline().strip().split(',')
             if abs(at_date - timestamp) > window / 24.0 / 60.0:
                 make_new = True
