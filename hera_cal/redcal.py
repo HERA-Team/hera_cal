@@ -1578,7 +1578,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         times_by_bl = data.times_by_bl
 
     # perform firstcal
-    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit, 
+    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit,
                                                   fc_min_vis_per_ant=fc_min_vis_per_ant)
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
@@ -1736,7 +1736,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter,
                                             oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
-                                            check_every=check_every, check_after=check_after, 
+                                            check_every=check_every, check_after=check_after,
                                             max_dims=max_dims, gain=gain, fc_min_vis_per_ant=fc_min_vis_per_ant)
                 expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
 
@@ -1956,6 +1956,54 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
 
     return cal
 
+def build_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_meta.median_delay.hdf5',
+                                 output_replace='.redcal_meta.hdf5'):
+    """
+    Find the median delay and polarity for list of firstcal meta files.
+    and write them out with that median.
+
+    Parameters
+    ----------
+    redcal_meta_file_list: list of str
+        list of file names containing redcal meta data. All files should have same number of times.
+
+    """
+    recal_metas = []
+    for meta_file in recal_meta_file_list:
+        recal_metas.append(read_redcal_meta(meta_file))
+    # build list of delays and polarity flips for each antenna.
+    nfiles = len(redcal_metas)
+    ntimes = [len(rcm[4]) for rcm in redcal_metas]
+    delays = {ant: np.zeros(np.sum(ntimes)) for ant in recal_meta_list[0][1]['dlys']}
+    polarity_flips = copy.deepcopy(delays)
+    nt = 0
+    for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(recal_metas):
+        for ant in fc_meta['dlys']:
+            tslice = slice(nt, nt + len(times))
+            delays[ant][tslice] = fc_meta['dlys'][ant]
+            polarity_flips[tslice] = fc_meta['polarity_flips'][ant]
+        nt += len(times)
+    # compute medians.
+    for ant in delays:
+        delays[ant] = np.nanmedian(delays[ant])
+        polarity_flips[ant] = np.nanmedian(polarity_flips[ant])
+
+    # update metadata and write out.
+    for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(recal_metas):
+        for ant in fc_meta['dlys']:
+            fc_meta['dlys'][ant][:] = delays[ant]
+            fc_meta['polarity_flips'][:] = polarity_flips[ant]
+        save_redcal_meta(meta_filename.replace(output_replace, output_ext), fc_meta, omni_meta, freqs, times, lsts, antpos,
+                         history + '\nTook nightly time median on delay and polarity flips.')
+
+def build_median_firstcal_delays_argparser():
+    """Arg praser for build_median_firstcal_delays
+    """
+    ap = argparse.ArgumentParser(description="Compute nightly median of firstcal delays derived from per-observation firstcal meta files. Update the files and write out with medians.")
+    ap.add_argument("redcal_meta_file_list", type=str, nargs="+", help="List of reccal meta file names.")
+    ap.add_argument("--output_ext", type=str, default='.redcal_meta.median_delay.hdf5', help="File extensionf of output files. This will overwrite output_replace in original file names to drive output filenames.")
+    ap.add_argument("--output_replace", type=str, default=".redcal_meta.hdf5", help="File extension in non median files to replace in each file name with output_ext.")
+    return ap
 
 def redcal_argparser():
     '''Arg parser for commandline operation of redcal_run'''
