@@ -6,13 +6,12 @@
 """Command-line script for querying the HERA CM database for bad antennas"""
 
 import argparse
-import sys
 from hera_mc import cm_active
 
 
 def query_ex_ants(JD, good_statuses):
     '''Query the HERA CM database for antennas considered bad on a certain date.
-    
+
     Arguments
         JD: string, int, or float Julian Date on which to queury the database
         good_statuses: string of comma-separated statuses considered acceptable. Antennas
@@ -26,28 +25,27 @@ def query_ex_ants(JD, good_statuses):
                 * 'calibration_maintenance',
                 * 'calibration_ok',
                 * 'calibration_triage'
-    
+
     Returns:
         ex_ants: string of space-separated antennas considered bad
     '''
     # Load database
-    h = cm_active.ActiveData(at_date=JD)
-    h.load_apriori()
-    
+    h = cm_active.get_active(at_date=JD, float_format='jd')
+
     # Check that input statuses are sensible
     good_statuses = [status.strip() for status in good_statuses.split(',')]
     assert len(good_statuses) > 0, 'There must be at least one input good status.'
     valid_statuses = list(h.apriori.values())[0].valid_statuses() + list(h.apriori.values())[0].old_statuses()
     for status in good_statuses:
         assert status in valid_statuses, 'Invalid Status: {}'.format(status)
-    
+
     # Pick out antnenna names with bad statuses
     exants = []
     for ant in h.apriori:
         if h.apriori[ant].status not in good_statuses:
             exants.append(int(ant[2:].split(':')[0]))  # Assumes the format HH0:A or HA330:A
 
-    # Return sorted exants 
+    # Return sorted exants
     exants = ' '.join([str(ant) for ant in sorted(exants)])
     return exants
 
