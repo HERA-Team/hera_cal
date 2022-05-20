@@ -1956,7 +1956,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
 
     return cal
 
-def build_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_meta.median_delay.hdf5',
+def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_meta.median_delay.hdf5',
                                  output_replace='.redcal_meta.hdf5'):
     """
     Find the median delay and polarity for list of firstcal meta files.
@@ -1996,7 +1996,7 @@ def build_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_meta
         save_redcal_meta(meta_filename.replace(output_replace, output_ext), fc_meta, omni_meta, freqs, times, lsts, antpos,
                          history + '\nTook nightly time median on delay and polarity flips.')
 
-def build_median_firstcal_delays_argparser():
+def nightly_median_firstcal_delays_argparser():
     """Arg praser for build_median_firstcal_delays
     """
     ap = argparse.ArgumentParser(description="Compute nightly median of firstcal delays derived from per-observation firstcal meta files. Update the files and write out with medians.")
