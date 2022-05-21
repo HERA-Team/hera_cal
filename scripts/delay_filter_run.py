@@ -20,20 +20,20 @@ if ap.mode == 'clean':
         filter_kwargs['alpha'] = ap.alpha
     avg_red_bllens = False
     skip_flagged_edges = False
-    flag_model_rms_outliers = False
+    filter_kwargs['flag_model_rms_outliers'] = ap.flag_model_rms_outliers
 elif ap.mode == 'dayenu':
     filter_kwargs = {}
     avg_red_bllens = True
     filter_kwargs['skip_contiguous_flags'] = False
     filter_kwargs['max_contiguous_edge_flags'] = 10000
-    filter_kwargs['flag_model_rms_outliers'] = False
+    filter_kwargs['flag_model_rms_outliers'] = ap.flag_model_rms_outliers
 elif ap.mode == 'dpss_leastsq':
     filter_kwargs = {}
     avg_red_bllens = True
     filter_kwargs['skip_contiguous_flags'] = True
     skip_flagged_edges = True
     filter_kwargs['max_contiguous_edge_flags'] = ap.max_contiguous_edge_flags
-    filter_kwargs['flag_model_rms_outliers'] = True
+    filter_kwargs['flag_model_rms_outliers'] = not(ap.dont_flag_model_rms_outliers)
 else:
     raise ValueError(f"mode {mode} not supported.")
 
