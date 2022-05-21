@@ -21,20 +21,21 @@ if ap.mode == 'clean':
     if ap.window == 'tukey':
         filter_kwargs['alpha'] = ap.alpha
     avg_red_bllens = False
+    filter_kwargs['flag_model_rms_outliers'] = ap.flag_model_rms_outliers
 elif ap.mode == 'dayenu':
     filter_kwargs = {}
     avg_red_bllens = True
     filter_kwargs['max_contiguous_edge_flags'] = 10000
     filter_kwargs['skip_contiguous_flags'] = False
     filter_kwargs['skip_flagged_edges'] = False
-    filter_kwargs['flag_model_rms_outliers'] = False
+    filter_kwargs['flag_model_rms_outliers'] = ap.flag_model_rms_outliers
 elif ap.mode == 'dpss_leastsq' or ap.mode == 'dft_leastsq':
     filter_kwargs = {}
     avg_red_bllens = True
     filter_kwargs['skip_contiguous_flags']=True
     filter_kwargs['skip_flagged_edges'] = True
-    filter_kwargs['max_contiguous_edge_flags'] = 1
-    filter_kwargs['flag_model_rms_outliers'] = True
+    filter_kwargs['max_contiguous_edge_flags'] = ap.max_contiguous_edge_flags
+    filter_kwargs['flag_model_rms_outliers'] = not(ap.dont_flag_model_rms_outliers)
 
 if ap.cornerturnfile is not None:
     baseline_list = io.baselines_from_filelist_position(filename=ap.cornerturnfile, filelist=ap.datafilelist)
