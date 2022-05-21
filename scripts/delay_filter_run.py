@@ -46,7 +46,6 @@ delay_filter.load_delay_filter_and_write(ap.datafilelist, calfile_list=ap.calfil
                                          add_to_history=' '.join(sys.argv), polarizations=ap.polarizations,
                                          verbose=ap.verbose, skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
                                          flag_yaml=ap.flag_yaml, Nbls_per_load=ap.Nbls_per_load,
-                                         skip_flagged_edges=not(ap.dont_skip_flagged_edges),
                                          filled_outfilename=ap.filled_outfilename,
                                          CLEAN_outfilename=ap.CLEAN_outfilename,
                                          standoff=ap.standoff, horizon=ap.horizon, tol=ap.tol,
