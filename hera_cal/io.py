@@ -18,7 +18,7 @@ import scipy
 import pickle
 import random
 import glob
-from pyuvdata.utils import POL_STR2NUM_DICT
+from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT
 from . import redcal
 import argparse
 from . import version
@@ -863,8 +863,9 @@ class HERAData(UVData):
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
 
-def read_hera_hdf5(filenames, bls, flags=False, nsamples=False, check=False,
-                   dtype=np.float64, cdtype=np.complex128, verbose=False):
+def read_hera_hdf5(filenames, bls=None, full_read_thresh=0.01,
+                   flags=False, nsamples=False, check=False,
+                   dtype=np.complex128, verbose=False):
     '''A ~100x faster interface to getting data out of HERA HDF5 files. Only concatenates
     along time axis. Assumes that if antenna_numbers header array stays the same,
     the baseline order in the files stays the same. Puts times in ascending order,
@@ -876,8 +877,7 @@ def read_hera_hdf5(filenames, bls, flags=False, nsamples=False, check=False,
         flags (bool, False): read and return flags
         nsamples (bool, False): read and return nsamples
         check (bool, False): run basic sanity checks to make sure files match.
-        dtype (np.float64): numpy datatype for real-valued arrays (half of cdtype)
-        cdtype (np.complex128): numpy datatype for complex-valued array (twice dtype)
+        dtype (np.complex128): numpy datatype for complex-valued array (twice dtype)
         verbose: print some progress messages.
 
     Returns:
@@ -900,6 +900,9 @@ def read_hera_hdf5(filenames, bls, flags=False, nsamples=False, check=False,
                 assert int(h['Nspws'][()]) == 1 # not a hera file
             if len(times) == 0:
                 info['freqs'] = h['freq_array'][()]
+                info['pols'] = [POL_NUM2STR_DICT[p]
+                                    for p in h['polarization_array'][()]]
+                polind = {p:cnt for cnt,p in enumerate(info['pols'])}
             elif check:
                 assert int(h['Nfreqs'][()]) == info['freqs'].size
             ntimes = int(h['Ntimes'][()])
@@ -910,20 +913,23 @@ def read_hera_hdf5(filenames, bls, flags=False, nsamples=False, check=False,
             if _hash not in inds:
                 ant1_array = h['ant_1_array'][()]
                 ant2_array = h['ant_2_array'][()]
-                pol_array = h['polarization_array'][()]
-                inds[_hash] = {}
-                for i, j, p in bls:
-                    _inds = np.argwhere(ant1_array == i)
-                    _inds = _inds[ant2_array[_inds] == j]
-                    pi = np.argwhere(pol_array == POL_STR2NUM_DICT[p])[0][0]
-                    inds[_hash][i,j,p] = (_inds, pi)
+                inds[_hash] = {(i,j): slice(n*ntimes, (n+1)*ntimes)
+                               for n,(i,j) in enumerate(zip(ant1_array[::ntimes],
+                                                            ant2_array[::ntimes]))}
             bl2ind[filename] = inds[_hash]
 
+    if bls is None: # generate a set of bls if we didn't have one passed in
+        for inds in bl2ind.values():
+            if bls is None:
+                bls = set(inds.keys())
+            else:
+                bls.intersection_update(set(inds.keys()))
+        bls = set(bl+(p,) for bl in bls for p in info['pols'])
     times.sort(key=lambda x: x[0][0]) # sort files by time of first integration
     filenames = (v[-1] for v in times)
     times = np.concatenate([t[0] for t in times], axis=0)
 
-    data = {bl:np.empty((times.size, info['freqs'].size), dtype=cdtype) for bl in bls}
+    data = {bl:np.empty((times.size, info['freqs'].size), dtype=dtype) for bl in bls}
     if flags:
         flgs = {bl:np.empty((times.size, info['freqs'].size), dtype=bool) for bl in bls}
     if nsamples:
@@ -937,23 +943,49 @@ def read_hera_hdf5(filenames, bls, flags=False, nsamples=False, check=False,
         with h5py.File(filename, 'r') as f:
             h = f['/Header']
             ntimes = int(h['Ntimes'][()])
-            assert np.allclose(h['time_array'][:ntimes], times[t:t+ntimes])
-            d = f['/Data']
-            for bl in bls:
-                inds, pi = bl2ind[filename][bl]
-                _d = d['visdata'][inds,0,:,pi]
-                data[bl][t:t+ntimes].real = _d['r'].astype(dtype)
-                data[bl][t:t+ntimes].imag = _d['i'].astype(dtype)
-                if flags:
-                    flgs[bl][t:t+ntimes] = d['flags'][inds,0,:,pi]
-                if nsamples:
-                    nsmp[bl][t:t+ntimes] = d['nsamples'][inds,0,:,pi]
+            nbls = int(h['Nblts'][()]) // ntimes
+            if check:
+                assert np.allclose(h['time_array'][:ntimes], times[t:t+ntimes])
+            # decide whether to read all the data in, or use partial I/O
+            full_read = (len(bls) > full_read_thresh * nbls)
+            if verbose and full_read:
+                print('Reading full file')
+            if full_read:
+                d = f['/Data']['visdata'][()]
+            else:
+                d = f['/Data']['visdata'] # don't read data yet
+            # handle HERA's raw (int) and calibrated (complex) file formats
+            if not np.iscomplexobj(d):
+                for i,j,p in bls:
+                    _d = d[bl2ind[filename][i,j],0,:,polind[p]]
+                    data[i,j,p][t:t+ntimes].real = _d['r']
+                    data[i,j,p][t:t+ntimes].imag = _d['i']
+            else:
+                for i,j,p in bls:
+                    _d = d[bl2ind[filename][i,j],0,:,polind[p]]
+                    data[i,j,p][t:t+ntimes] = _d
+            if flags:
+                if full_read:
+                    d = f['/Data']['flags'][()]
+                else:
+                    d = f['/Data']['flags']
+                for i,j,p in bls:
+                    _d = d[bl2ind[filename][i,j],0,:,polind[p]]
+                    flgs[i,j,p][t:t+ntimes] = _d
+            if nsamples:
+                if full_read:
+                    d = f['/Data']['nsamples'][()]
+                else:
+                    d = f['/Data']['nsamples']
+                for i,j,p in bls:
+                    _d = d[bl2ind[filename][i,j],0,:,polind[p]]
+                    nsmp[i,j,p][t:t+ntimes] = _d
             t += ntimes
     rv = (info, data)
     if flags:
         rv = rv + (flgs,)
     if nsamples:
-        rv = rv + (nsamples,)
+        rv = rv + (nsmp,)
     return rv
 
 
