@@ -1956,6 +1956,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
 
     return cal
 
+
 def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_meta.median_delay.hdf5',
                                  output_replace='.redcal_meta.hdf5'):
     """
@@ -1970,12 +1971,12 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
     """
     recal_metas = []
     for meta_file in recal_meta_file_list:
-        recal_metas.append(read_redcal_meta(meta_file))
+        recal_metas.append((meta_file, ) + read_redcal_meta(meta_file))
     # build list of delays and polarity flips for each antenna.
     nfiles = len(redcal_metas)
     ntimes = [len(rcm[4]) for rcm in redcal_metas]
     delays = {ant: np.zeros(np.sum(ntimes)) for ant in recal_meta_list[0][1]['dlys']}
-    polarity_flips = copy.deepcopy(delays)
+    polarity_flips = copy.deepcopy(delays).astype(bool)
     nt = 0
     for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(recal_metas):
         for ant in fc_meta['dlys']:
@@ -1986,7 +1987,7 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
     # compute medians.
     for ant in delays:
         delays[ant] = np.nanmedian(delays[ant])
-        polarity_flips[ant] = np.nanmedian(polarity_flips[ant])
+        polarity_flips[ant] = bool(np.nanmedian(polarity_flips[ant]))
 
     # update metadata and write out.
     for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(recal_metas):
@@ -1996,13 +1997,54 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
         save_redcal_meta(meta_filename.replace(output_replace, output_ext), fc_meta, omni_meta, freqs, times, lsts, antpos,
                          history + '\nTook nightly time median on delay and polarity flips.')
 
+def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, output_file, clobber=False):
+    """Update the phase degenerate component of a redcal solution.
+
+    Parameters
+    ----------
+    redcal_file: str
+        path to calfits file containing redcal solution to update.
+    redcal_meta_file:
+        path to redcal meta file generated with io.save_redcal_meta()  with delays to be used to update degeneracy.
+    output_file: str
+        path to output file
+    clobber: bool, optional
+        overwrite output calfits.
+    """
+    hc = io.HERACal(redcal_file)
+    # get redundant calibrator.
+    # get reds
+    gains, _, _, _ = hc.read()
+    fc_meta, omni_meta, freqs, times, lsts, antpos, history = read_redcal_meta(redcal_meta_file)
+    reds = get_reds(antpos, pols=hc.pols)
+    rc = RedundantCalibrator(reds)
+    firstcal_gains = {}
+    for ant in fc_meta['dlys']:
+        polarity_coeffs = np.ones(len(times), dtype=complex)
+        polarity_coeffs[fc_meta['polarity_flips']] = -1. + 0j
+        firstcal_gains[ant] np.exp(1j * (2 * np.pi * freqs[None, :] * fc_meta['dlys'][:, None])) * polarity_coeffs[:, None]
+    # generate firstcal gains with degeneracy replaced by median degeneracy in firstcal.
+    new_gains = rc.remove_degen_gains(gains, degen_gains=firstcal_gains, mode='gains')
+    hc.update(gains=new_gains)
+    hc.write_calfits(output_file, clobber=clobber)
+
 def nightly_median_firstcal_delays_argparser():
-    """Arg praser for build_median_firstcal_delays
+    """Arg parser for build_median_firstcal_delays
     """
     ap = argparse.ArgumentParser(description="Compute nightly median of firstcal delays derived from per-observation firstcal meta files. Update the files and write out with medians.")
     ap.add_argument("redcal_meta_file_list", type=str, nargs="+", help="List of reccal meta file names.")
     ap.add_argument("--output_ext", type=str, default='.redcal_meta.median_delay.hdf5', help="File extensionf of output files. This will overwrite output_replace in original file names to drive output filenames.")
     ap.add_argument("--output_replace", type=str, default=".redcal_meta.hdf5", help="File extension in non median files to replace in each file name with output_ext.")
+    return ap
+
+def update_redcal_phase_degeneracy_argparser():
+    """Arg parser for update_redcal_phase_degeneracy.
+    """
+    ap = argparse.ArgumentParser(description="Replace redcal degeneracies with new delays")
+    ap.add_argument("redcal_file", type=str, help="Name of redcal calfits file to replace degeneracy in.")
+    ap.add_argument("redcal_meta_file", type=str, help="Name of redcal meta file with delays and polarity flips to use for degeneracy replacement.")
+    ap.add_argument("--output_file", type=str, help="Name of file to write new redcal solution too.")
+    ap.add_argument("--clobber", default=False, action="store_true", help="Replace existing output file.")
     return ap
 
 def redcal_argparser():
