@@ -53,7 +53,7 @@ frf.load_tophat_frfilter_and_write(ap.datafilelist, calfile_list=ap.calfilelist,
                                    beamfitsfile=ap.beamfitsfile, percentile_low=ap.percentile_low, percentile_high=ap.percentile_high,
                                    skip_contiguous_flags=not(ap.dont_skip_contiguous_flags), max_contiguous_flag=ap.max_contiguous_flag,
                                    skip_flagged_edges=not(ap.dont_skip_flagged_edges), max_contiguous_edge_flags=ap.max_contiguous_edge_flags,
-                                   flag_model_rms_outliers=not(dont_flag_model_rms_outliers), model_rms_threshold=ap.model_rms_threshold,
+                                   flag_model_rms_outliers=not(ap.dont_flag_model_rms_outliers), model_rms_threshold=ap.model_rms_threshold,
                                    clean_flags_in_resid_flags=not(ap.clean_flags_not_in_resid_flags), 
                                    pre_filter_modes_between_lobe_minimum_and_zero=ap.pre_filter_modes_between_lobe_minimum_and_zero,
                                    **filter_kwargs)

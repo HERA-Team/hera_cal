@@ -53,5 +53,5 @@ delay_filter.load_delay_filter_and_write(ap.datafilelist, calfile_list=ap.calfil
                                          filter_spw_ranges=ap.filter_spw_ranges,
                                          skip_contiguous_flags=not(ap.dont_skip_contiguous_flags), max_contiguous_flag=ap.max_contiguous_flag,
                                          skip_flagged_edges=not(ap.dont_skip_flagged_edges), max_contiguous_edge_flags=ap.max_contiguous_edge_flags,
-                                         flag_model_rms_outliers=not(dont_flag_model_rms_outliers), model_rms_threshold=ap.model_rms_threshold,
+                                         flag_model_rms_outliers=not(ap.dont_flag_model_rms_outliers), model_rms_threshold=ap.model_rms_threshold,
                                          clean_flags_in_resid_flags=not(ap.clean_flags_not_in_resid_flags), **filter_kwargs)
