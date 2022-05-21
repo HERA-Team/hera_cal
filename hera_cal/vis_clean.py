@@ -1947,6 +1947,10 @@ def _filter_argparser():
                                                                                        "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
                                                                                        "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     ap.add_argument("--clean_flags_not_in_resid_flags", default=False, action="store_true", help="Do not include flags from times/channels skipped in the resid flags.")
+    ap.add_argument("--flag_model_rms_outliers", default=False, action="store_true", help="Flag integrations or channels where the rms of the filter model exceeds the rms of the unflagged data. "
+                                                                                          "Ignored for dpss_leastsq, for which this is already the default behavior.")
+    ap.add_argument("--dont_flag_model_rms_outliers", default=False, action="store_true", help="Do not flag integrations or channels where the rms of the filter model exceeds the rms of the unflagged data. "
+                                                                                                "Ignored for clean and dayenu, for which this is already the default behavior.")
     # Arguments for CLEAN. Not used in linear filtering methods.
     clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
