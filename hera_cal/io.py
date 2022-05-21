@@ -863,8 +863,8 @@ class HERAData(UVData):
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
 
-def read_hera_hdf5(filenames, bls=None, full_read_thresh=0.01,
-                   flags=False, nsamples=False, check=False,
+def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
+                   read_data=True, read_flags=False, read_nsamples=False, check=False,
                    dtype=np.complex128, verbose=False):
     '''A ~100x faster interface to getting data out of HERA HDF5 files. Only concatenates
     along time axis. Assumes that if antenna_numbers header array stays the same,
@@ -873,18 +873,21 @@ def read_hera_hdf5(filenames, bls=None, full_read_thresh=0.01,
 
     Arguments:
         filenames: list of files to read
-        bls: list of (ant_1, ant_2, polstr) tuples to read out of files
-        flags (bool, False): read and return flags
-        nsamples (bool, False): read and return nsamples
-        check (bool, False): run basic sanity checks to make sure files match.
-        dtype (np.complex128): numpy datatype for complex-valued array (twice dtype)
+        bls: list of (ant_1, ant_2, [polstr]) tuples to read out of files
+        pols: list of pol strings to read out of files
+        full_read_thresh (0.01): fractional threshold for reading whole file 
+                                 instead of baseline by baseline.
+        read_data (bool, True): read visdata
+        read_flags (bool, False): read flags
+        read_nsamples (bool, False): read nsamples
+        check (bool, False): run sanity checks to make sure files match.
+        dtype (np.complex128): numpy datatype for output complex-valued arrays
         verbose: print some progress messages.
 
     Returns:
-        info: dictionary of metadata 
-        data: dictionary of waterfalls with keys from bls.
-        flags [optional]: dictionary of flags with keys from bls.
-        nsamples [optional]: dictionary of nsamples with keys from bls.
+        rv: dictionary with keys 'info' (metadata), 'visdata' (dictionary of waterfalls
+            with i,j,pol keys), 'flags', and 'nsamples'. Will omit keys according to
+            read_data, read_flags, and read_nsamples.
     '''
     info = {}
     times = []
@@ -900,9 +903,10 @@ def read_hera_hdf5(filenames, bls=None, full_read_thresh=0.01,
                 assert int(h['Nspws'][()]) == 1 # not a hera file
             if len(times) == 0:
                 info['freqs'] = h['freq_array'][()]
-                info['pols'] = [POL_NUM2STR_DICT[p]
-                                    for p in h['polarization_array'][()]]
-                polind = {p:cnt for cnt,p in enumerate(info['pols'])}
+                pol_array = h['polarization_array'][()]
+                npols = pol_array.size
+                pol_indices = {POL_NUM2STR_DICT[n]: cnt for cnt,n in enumerate(pol_array)}
+                info['pols'] = list(pol_indices.keys())
             elif check:
                 assert int(h['Nfreqs'][()]) == info['freqs'].size
             ntimes = int(h['Ntimes'][()])
@@ -916,28 +920,49 @@ def read_hera_hdf5(filenames, bls=None, full_read_thresh=0.01,
                 inds[_hash] = {(i,j): slice(n*ntimes, (n+1)*ntimes)
                                for n,(i,j) in enumerate(zip(ant1_array[::ntimes],
                                                             ant2_array[::ntimes]))}
+                if 'bls' not in info:
+                    info['bls'] = set(inds[_hash].keys())
+                else:
+                    info['bls'].intersection_update(set(inds[_hash].keys()))
             bl2ind[filename] = inds[_hash]
 
-    if bls is None: # generate a set of bls if we didn't have one passed in
-        for inds in bl2ind.values():
-            if bls is None:
-                bls = set(inds.keys())
-            else:
-                bls.intersection_update(set(inds.keys()))
-        bls = set(bl+(p,) for bl in bls for p in info['pols'])
-    times.sort(key=lambda x: x[0][0]) # sort files by time of first integration
+    if bls is None:
+        # generate a set of bls if we didn't have one passed in
+        if pols is None:
+            pols = list(pol_indices.keys())
+        bls = info['bls']
+        bls = set(bl+(p,) for bl in bls for p in pols)
+    else:
+        # if length 2 baselines are passed in, add on polarizations
+        bls_len2 = set(bl for bl in bls if len(bl) == 2)
+        if len(bls_len2) > 0:
+            if pols is None:
+                pols = list(pol_indices.keys())
+            bls = set(bl for bl in bls if len(bl) == 3)
+            bls = bls.union([bl+(p,) for bl in bls_len2 for p in pols])
+        # record polarizations as total of ones indexed in bls
+        pols = set(bl[2] for bl in bls)
+    # sort files by time of first integration
+    times.sort(key=lambda x: x[0][0])
     filenames = (v[-1] for v in times)
     times = np.concatenate([t[0] for t in times], axis=0)
-
-    data = {bl:np.empty((times.size, info['freqs'].size), dtype=dtype) for bl in bls}
-    if flags:
-        flgs = {bl:np.empty((times.size, info['freqs'].size), dtype=bool) for bl in bls}
-    if nsamples:
-        nsmp = {bl:np.empty((times.size, info['freqs'].size), dtype=int) for bl in bls}
-
     info['times'] = times
+
+    # preallocate buffers
+    rv = {}
+    if read_data:
+        rv['visdata'] = {bl:np.empty((times.size, info['freqs'].size), dtype=dtype) for bl in bls}
+    if read_flags:
+        rv['flags'] = {bl:np.empty((times.size, info['freqs'].size), dtype=bool) for bl in bls}
+    if read_nsamples:
+        rv['nsamples']= {bl:np.empty((times.size, info['freqs'].size), dtype=np.float32) for bl in bls}
+    # bail here if all we wanted was the info
+    if len(rv) == 0:
+        return {'info': info}
+
     t = 0
     for filename in filenames:
+        inds = bl2ind[filename]
         if verbose:
             print(f'Reading data from {filename}')
         with h5py.File(filename, 'r') as f:
@@ -947,47 +972,25 @@ def read_hera_hdf5(filenames, bls=None, full_read_thresh=0.01,
             if check:
                 assert np.allclose(h['time_array'][:ntimes], times[t:t+ntimes])
             # decide whether to read all the data in, or use partial I/O
-            full_read = (len(bls) > full_read_thresh * nbls)
-            if verbose and full_read:
+            full_read = (len(bls) > full_read_thresh * nbls * npols)
+            if full_read and verbose:
                 print('Reading full file')
-            if full_read:
-                d = f['/Data']['visdata'][()]
-            else:
-                d = f['/Data']['visdata'] # don't read data yet
-            # handle HERA's raw (int) and calibrated (complex) file formats
-            if not np.iscomplexobj(d):
-                for i,j,p in bls:
-                    _d = d[bl2ind[filename][i,j],0,:,polind[p]]
-                    data[i,j,p][t:t+ntimes].real = _d['r']
-                    data[i,j,p][t:t+ntimes].imag = _d['i']
-            else:
-                for i,j,p in bls:
-                    _d = d[bl2ind[filename][i,j],0,:,polind[p]]
-                    data[i,j,p][t:t+ntimes] = _d
-            if flags:
+            for key, data in rv.items():
+                d = f['/Data'][key] # data not read yet
                 if full_read:
-                    d = f['/Data']['flags'][()]
+                    d = d[()] # reads data
+                # handle HERA's raw (int) and calibrated (complex) file formats
+                if key == 'visdata' and not np.iscomplexobj(d):
+                    for i,j,p in bls:
+                        _d = d[inds[i,j],0,:,pol_indices[p]]
+                        data[i,j,p][t:t+ntimes].real = _d['r']
+                        data[i,j,p][t:t+ntimes].imag = _d['i']
                 else:
-                    d = f['/Data']['flags']
-                for i,j,p in bls:
-                    _d = d[bl2ind[filename][i,j],0,:,polind[p]]
-                    flgs[i,j,p][t:t+ntimes] = _d
-            if nsamples:
-                if full_read:
-                    d = f['/Data']['nsamples'][()]
-                else:
-                    d = f['/Data']['nsamples']
-                for i,j,p in bls:
-                    _d = d[bl2ind[filename][i,j],0,:,polind[p]]
-                    nsmp[i,j,p][t:t+ntimes] = _d
+                    for i,j,p in bls:
+                        data[i,j,p][t:t+ntimes] = d[inds[i,j],0,:,pol_indices[p]]
             t += ntimes
-    rv = (info, data)
-    if flags:
-        rv = rv + (flgs,)
-    if nsamples:
-        rv = rv + (nsmp,)
+    rv['info'] = info
     return rv
-
 
 def read_filter_cache_scratch(cache_dir):
     """
