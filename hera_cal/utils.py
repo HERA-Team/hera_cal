@@ -1129,8 +1129,7 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
                 # pick out unflagged data for training
                 GP.fit(X[select, :], _y[select, :][:, inds])
                 # insert predicted data at x_eval points into output vector
-                ypred[:, inds] = GP.predict(x_eval).reshape(x_eval.shape[0], len(inds)) \
-                                 * ymad[:, inds] + ymed[:, inds]
+                ypred[:, inds] = GP.predict(x_eval).reshape(x_eval.shape[0], len(inds)) * ymad[:, inds] + ymed[:, inds]
 
         # append
         ypredict.append(ypred)
