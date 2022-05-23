@@ -2020,7 +2020,7 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, output_file, c
     reds = get_reds(antpos, pols=[pol.replace('J', '').replace('j', '') for pol in hc.pols])
     rc = RedundantCalibrator(reds)
     firstcal_gains = {}
-    for ant in fc_meta['dlys']:
+    for ant in gains:
         polarity_coeffs = np.ones(len(times), dtype=complex)
         polarity_coeffs[fc_meta['polarity_flips'][ant].astype(bool)] = -1. + 0j
         firstcal_gains[ant] = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant][:, None]) * polarity_coeffs[:, None]
