@@ -21,7 +21,6 @@ if ap.mode == 'clean':
     if ap.window == 'tukey':
         filter_kwargs['alpha'] = ap.alpha
     avg_red_bllens = False
-    filter_kwargs['flag_model_rms_outliers'] = ap.flag_model_rms_outliers
 elif ap.mode in ['dayenu', 'dpss_leastsq']:
     filter_kwargs = {}
     avg_red_bllens=True
