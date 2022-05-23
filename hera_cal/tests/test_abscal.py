@@ -59,6 +59,45 @@ class Test_AbsCal_Funcs(object):
         self.model = model
         self.wgts = wgts
 
+    @pytest.mark.parametrize("divide_gains", [True, False])
+    def test_multiply_gains(self, tmpdir, divide_gains):
+        tmp_path = tmpdir.strpath
+        gain_1_path = os.path.join(tmp_path, 'gain_1.calfits')
+        gain_2_path = os.path.join(tmp_path, 'gain_2.calfits')
+        output_path = os.path.join(tmp_path, 'output.calfits')
+        uvc1 = UVCal()
+        uvc1 = uvc1.initialize_from_uvdata(self.uvd, gain_convention='divide', future_array_shapes=False,
+                                           cal_style='redundant', metadata_only=False)
+        uvc2 = UVCal()
+        uvc2 = uvc2.initialize_from_uvdata(self.uvd, gain_convention='divide', future_array_shapes=False,
+                                           cal_style='redundant', metadata_only=False)
+        uvc1.gain_array[:] = np.random.rand(*uvc1.gain_array.shape) + 1j * np.random.rand(*uvc1.gain_array.shape)
+        uvc2.gain_array[:] = np.random.rand(*uvc2.gain_array.shape) + 1j * np.random.rand(*uvc2.gain_array.shape)
+
+        flag_times_1 = np.random.randint(low=0, high=self.uvd.Ntimes, size=self.uvd.Ntimes // 4)
+        uvc1.flag_array[:, :, flag_times_1] = True
+        flag_times_2 = np.random.randint(low=0, high=self.uvd.Ntimes, size=self.uvd.Ntimes // 4)
+        uvc2.flag_array[:, :, flag_times_2] = True
+
+        uvc1.quality_array = np.zeros_like(uvc1.gain_array, dtype=float) + 1.
+        uvc2.quality_array = np.zeros_like(uvc1.quality_array) + 2.
+
+        uvc1.write_calfits(gain_1_path, clobber=True)
+        uvc2.write_calfits(gain_2_path, clobber=True)
+
+        abscal.multiply_gains(gain_1_path, gain_2_path, output_path,
+                              clobber=True, divide_gains=divide_gains)
+
+        uvc3 = UVCal()
+        uvc3.read_calfits(output_path)
+        if divide_gains:
+            np.testing.assert_array_almost_equal(uvc1.gain_array / uvc2.gain_array, uvc3.gain_array)
+        else:
+            np.testing.assert_array_almost_equal(uvc1.gain_array * uvc2.gain_array, uvc3.gain_array)
+        np.testing.assert_array_almost_equal(uvc1.flag_array | uvc2.flag_array, uvc3.flag_array)
+        np.testing.assert_array_almost_equal(uvc3.quality_array, 0.)
+        assert uvc3.total_quality_array is None
+
     def test_data_key_to_array_axis(self):
         m, pk = abscal.data_key_to_array_axis(self.model, 2)
         assert m[(24, 25)].shape == (60, 64, 1)
@@ -1526,7 +1565,9 @@ class Test_Post_Redcal_Abscal_Run(object):
                                                 nInt_to_load=30, verbose=False, add_to_history='testing')
         assert hca.gain_scale == 'Jy'
 
-    def test_post_redcal_abscal_run(self):
+    def test_post_redcal_abscal_run(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        output_file_delta = os.path.join(tmp_path, 'delta_gains.calfits')
         # test no model overlap
         hcr = io.HERACal(self.redcal_file)
         rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
@@ -1628,14 +1669,24 @@ class Test_Post_Redcal_Abscal_Run(object):
             warnings.simplefilter("ignore")
             hca_red_red = abscal.post_redcal_abscal_run(self.red_data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4,
                                                         nInt_to_load=10, verbose=False, add_to_history='testing3', model_is_redundant=True,
-                                                        data_is_redsol=True, raw_auto_file=self.data_file)
+                                                        data_is_redsol=True, raw_auto_file=self.data_file,
+                                                        write_delta_gains=True, output_file_delta=output_file_delta)
         hdm = io.HERAData(self.red_model_files)
         assert hca_red_red.gain_scale == hdm.vis_units
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
+        hcat = io.HERACal(self.redcal_file.replace('.omni.', '.abs.'))
+        hcat.read()
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
         ac_gains, ac_flags, ac_quals, ac_total_qual = hca_red_red.build_calcontainers()
         hcr = io.HERACal(self.redcal_file)
         rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
+        assert os.path.exists(output_file_delta)
+        hcg = io.HERACal(output_file_delta)
+        hcg.read()
+        # ensure that unflagged redundant gains times degenerate gains equal
+        # abscal gains.
+        assert np.allclose(hcat.gain_array[~hcat.flag_array],
+                           hcr.gain_array[~hcat.flag_array] * hcg.gain_array[~hcat.flag_array])
 
         assert hcr.history.replace('\n', '').replace(' ', '') in hca_red_red.history.replace('\n', '').replace(' ', '')
         assert 'testing3' in hca_red_red.history.replace('\n', '').replace(' ', '')
@@ -1693,3 +1744,13 @@ class Test_Post_Redcal_Abscal_Run(object):
         assert type(a.model_files) == list
         assert a.nInt_to_load == 6
         assert a.verbose is True
+
+    def test_multiply_gains_argparser(self):
+        sys.argv = [sys.argv[0], 'a', 'b', 'c', '--clobber']
+        a = abscal.multiply_gains_argparser()
+        a = a.parse_args()
+        assert a.gain_file_1 == 'a'
+        assert a.gain_file_2 == 'b'
+        assert a.output_file == 'c'
+        assert a.clobber
+        assert a.divide_gains is False

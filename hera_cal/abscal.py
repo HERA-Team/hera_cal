@@ -3491,7 +3491,8 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
 
 def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=None, data_is_redsol=False, model_is_redundant=False, output_file=None,
                            nInt_to_load=None, data_solar_horizon=90, model_solar_horizon=90, extrap_limit=.5, min_bl_cut=1.0, max_bl_cut=None,
-                           edge_cut=0, tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
+                           edge_cut=0, tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True,
+                           write_delta_gains=False, output_file_delta=None):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
     Does not work on data (or models) with baseline-dependant averaging.
 
@@ -3526,6 +3527,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         refant: tuple of the form (0, 'Jnn') indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
         clobber: if True, overwrites existing abscal calfits file at the output path
         add_to_history: string to add to history of output abscal file
+        write_delta_gains: write the degenerate gain component solved by abscal so a separate file specified by output_file_delta
+        output_file_delta: path to file to write delta gains if write_delta_gains=True
 
     Returns:
         hc: HERACal object which was written to disk. Matches the input redcal_file with an updated history.
@@ -3690,7 +3693,59 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     hc.total_quality_array[np.isnan(hc.total_quality_array)] = 0
     hc.history += version.history_string(add_to_history)
     hc.write_calfits(output_file, clobber=clobber)
+    if write_delta_gains:
+        hcdelta = copy.deepcopy(hc)
+        # set delta gains to be the ratio between abscal gains (phased to refant) and redcal gains
+        delta_gains = {ant: abscal_gains[ant] / rc_gains[ant] for ant in abscal_gains}
+        hcdelta.update(gains=delta_gains)
+        assert output_file_delta is not None, "output_file_delta must be specified if write_delta_gains=True"
+        hcdelta.write_calfits(output_file_delta, clobber=True)
     return hc
+
+
+def multiply_gains(gain_file_1, gain_file_2, output_file, clobber=False, divide_gains=False):
+    """Multiply gains from two files.
+
+    Flags are always Ord
+    quality and total quality arrays are set to None
+
+    Parameters
+    ----------
+    gain_file_1: str
+        path to first gain file to multiply
+    gain_file_2: str
+        path to second gain file to multiply
+    output_file: str
+        path to output file.
+    clobber: bool, optional
+        overwrite existing output_file
+        default is False.
+    divide_gains: bool, optional
+        divide gain 1 by gain 2
+        default is False.
+    """
+    hc1 = io.HERACal(gain_file_1)
+    hc1.read()
+    hc2 = io.HERACal(gain_file_2)
+    hc2.read()
+    if divide_gains:
+        hc1.gain_array = hc1.gain_array / hc2.gain_array
+    else:
+        hc1.gain_array *= hc2.gain_array
+    hc1.flag_array = hc1.flag_array | hc2.flag_array
+    hc1.total_quality_array = None
+    hc1.quality_array[:] = 0.
+    hc1.write_calfits(output_file, clobber=clobber)
+
+
+def multiply_gains_argparser():
+    ap = argparse.ArgumentParser(description="Command-line drive script to multiply two gains together.")
+    ap.add_argument("gain_file_1", type=str, help="Path to first gain to multiply.")
+    ap.add_argument("gain_file_2", type=str, help="Path to second gain to multiply.")
+    ap.add_argument("output_file", type=str, help="Path to write out multiplied gains.")
+    ap.add_argument("--divide_gains", default=False, action="store_true", help="divide gain 1 by gain 2 instead of multiplying.")
+    ap.add_argument("--clobber", default=False, action="store_true", help="overwrite any existing output files.")
+    return ap
 
 
 def run_model_based_calibration(data_file, model_file, output_filename, auto_file=None, precalibration_gain_file=None,
@@ -3948,6 +4003,8 @@ def post_redcal_abscal_argparser():
     a.add_argument("--phs_conv_crit", default=1e-6, type=float, help="convergence criterion for updates to iterative phase calibration that compares them to all 1.0s.")
     a.add_argument("--clobber", default=False, action="store_true", help="overwrites existing abscal calfits file at the output path")
     a.add_argument("--verbose", default=False, action="store_true", help="print calibration progress updates")
+    a.add_argument("--write_delta_gains", default=False, action="store_true", help="Write degenerate abscal component of gains separately.")
+    a.add_argument("--output_file_delta", type=str, default=None, help="Filename to write delta gains too.")
     args = a.parse_args()
     return args
 
