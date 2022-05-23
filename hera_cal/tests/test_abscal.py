@@ -95,7 +95,7 @@ class Test_AbsCal_Funcs(object):
         else:
             np.testing.assert_array_almost_equal(uvc1.gain_array * uvc2.gain_array, uvc3.gain_array)
         np.testing.assert_array_almost_equal(uvc1.flag_array | uvc2.flag_array, uvc3.flag_array)
-        np.testing.assert_array_almost_equal(uvc3.quality_array, 0.)
+        assert np.all(np.isnan(uvc3.quality_array))
         assert uvc3.total_quality_array is None
 
     def test_data_key_to_array_axis(self):
