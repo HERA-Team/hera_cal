@@ -3527,7 +3527,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         refant: tuple of the form (0, 'Jnn') indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
         clobber: if True, overwrites existing abscal calfits file at the output path
         add_to_history: string to add to history of output abscal file
-        write_delta_gains: write the degenerate gain component solved by abscal so a separate file specified by output_file_delta
+        write_delta_gains: write the degenerate gain component solved by abscal so a separate file specified by output_file_delta. Quality and flag arrays are equal to abscal file.
         output_file_delta: path to file to write delta gains if write_delta_gains=True
 
     Returns:
@@ -3707,7 +3707,8 @@ def multiply_gains(gain_file_1, gain_file_2, output_file, clobber=False, divide_
     """Multiply gains from two files.
 
     Flags are always Ord
-    quality and total quality arrays are set to None
+    total quality array is set to None
+    quality array is set to Nan since it's a required Parameter.
 
     Parameters
     ----------
@@ -3721,7 +3722,8 @@ def multiply_gains(gain_file_1, gain_file_2, output_file, clobber=False, divide_
         overwrite existing output_file
         default is False.
     divide_gains: bool, optional
-        divide gain 1 by gain 2
+        divide gain 1 by gain 2. Note -- This is not related to the gain convention.
+        Just whether we want to take the ratio of two gains we input or their product.
         default is False.
     """
     hc1 = io.HERACal(gain_file_1)
@@ -3729,12 +3731,12 @@ def multiply_gains(gain_file_1, gain_file_2, output_file, clobber=False, divide_
     hc2 = io.HERACal(gain_file_2)
     hc2.read()
     if divide_gains:
-        hc1.gain_array = hc1.gain_array / hc2.gain_array
+        hc1.gain_array /= hc2.gain_array
     else:
         hc1.gain_array *= hc2.gain_array
     hc1.flag_array = hc1.flag_array | hc2.flag_array
     hc1.total_quality_array = None
-    hc1.quality_array[:] = 0.
+    hc1.quality_array[:] = np.nan
     hc1.write_calfits(output_file, clobber=clobber)
 
 
