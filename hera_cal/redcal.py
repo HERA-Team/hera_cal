@@ -2023,13 +2023,15 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, old_redcal_met
     reds = get_reds(antpos, pols=[pol.replace('J', '').replace('j', '') for pol in hc.pols])
     rc = RedundantCalibrator(reds)
     firstcal_gains = {}
-    for ant in gains:
-        firstcal_gains[ant] = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant][:, None])
+    # for ant in gains:
+    #    polarity_coeffs = (-1 + 0j) ** np.abs(fc_meta['polarity_flips'][ant])
+    #    firstcal_gains[ant] = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant][:, None]) * polarity_coeffs[:, None]
     # generate firstcal gains with degeneracy replaced by median degeneracy in firstcal.
-    new_gains = rc.remove_degen_gains(gains, degen_gains=firstcal_gains, mode='complex')
+    #new_gains = rc.remove_degen_gains(gains, degen_gains=firstcal_gains, mode='complex')
     # fix polarity flips
+    new_gains = copy.deepcopy(gains)
     for ant in fc_meta['polarity_flips']:
-        new_gains[ant] *= (-1. + 0j) ** (fc_meta['polarity_flips'][ant][:, None] - fc_meta_old['polarity_flips'][ant][:, None])
+        new_gains[ant] *= (-1. + 0j) ** np.abs(fc_meta['polarity_flips'][ant][:, None] - fc_meta_old['polarity_flips'][ant][:, None])
 
     hc.update(gains=new_gains)
     hc.write_calfits(output_file, clobber=clobber)
