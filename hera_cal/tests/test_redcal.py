@@ -1540,8 +1540,8 @@ class TestRunMethods(object):
 
         # now replace the redcal degeneracies.
         omnifiles = [dfile.replace('.uvh5', '.omni.calfits') for dfile in data_files]
-        for omni_file, meta_file in zip(omnifiles, meta_files_median):
-            om.update_redcal_phase_degeneracy(omni_file, meta_file,
+        for omni_file, meta_file, meta_file_old in zip(omnifiles, meta_files_median, meta_files):
+            om.update_redcal_phase_degeneracy(omni_file, meta_file, meta_file_old,
                                               output_file=omni_file.replace('.calfits', '.medphase.calfits'), clobber=True)
 
         # check that files have been created

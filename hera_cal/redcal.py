@@ -1998,8 +1998,8 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
                          history + '\nTook nightly time median on delay and polarity flips.')
 
 
-def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, output_file, clobber=False):
-    """Update the phase degenerate component of a redcal solution.
+def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, old_redcal_meta_file, output_file, clobber=False):
+    """Update the phase degenerate component of a redcal solution and phase flips.
 
     Parameters
     ----------
@@ -2007,6 +2007,8 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, output_file, c
         path to calfits file containing redcal solution to update.
     redcal_meta_file:
         path to redcal meta file generated with io.save_redcal_meta()  with delays to be used to update degeneracy.
+    old_redcal_meta_file:
+        path to redcal meta file with old polarity flips.
     output_file: str
         path to output file
     clobber: bool, optional
@@ -2017,15 +2019,18 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, output_file, c
     # get reds
     gains, _, _, _ = hc.read()
     fc_meta, omni_meta, freqs, times, lsts, antpos, history = read_redcal_meta(redcal_meta_file)
+    fc_meta_old = read_redcal_meta(old_redcal_meta_file)[0]
     reds = get_reds(antpos, pols=[pol.replace('J', '').replace('j', '') for pol in hc.pols])
     rc = RedundantCalibrator(reds)
     firstcal_gains = {}
     for ant in gains:
-        polarity_coeffs = np.ones(len(times), dtype=complex)
-        polarity_coeffs[fc_meta['polarity_flips'][ant].astype(bool)] = -1. + 0j
-        firstcal_gains[ant] = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant][:, None]) * polarity_coeffs[:, None]
+        firstcal_gains[ant] = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant][:, None])
     # generate firstcal gains with degeneracy replaced by median degeneracy in firstcal.
     new_gains = rc.remove_degen_gains(gains, degen_gains=firstcal_gains, mode='complex')
+    # fix polarity flips
+    for ant in fc_meta['polarity_flips']:
+        new_gains[ant] *= (-1. + 0j) ** (fc_meta['polarity_flips'][ant][:, None] - fc_meta_old['polarity_flips'][ant][:, None])
+
     hc.update(gains=new_gains)
     hc.write_calfits(output_file, clobber=clobber)
 
