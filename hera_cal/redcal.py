@@ -13,9 +13,9 @@ from . import version
 from .noise import predict_noise_variance_from_autos, infer_dt
 from .datacontainer import DataContainer
 from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores
-from .io import HERAData, HERACal, write_cal, save_redcal_meta
+from .io import HERAData, HERACal, write_cal, save_redcal_meta, read_redcal_meta
 from .apply_cal import calibrate_in_place
-
+import copy
 
 SEC_PER_DAY = 86400.
 IDEALIZED_BL_TOL = 1e-8  # bl_error_tol for redcal.get_reds when using antenna positions calculated from reds
@@ -1618,7 +1618,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
             Partial io requires 'uvh5' filetype for hd. Lower numbers save memory, but incur a CPU overhead.
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
-            See recal.get_reds for more information.
+            See redcal.get_reds for more information.
         bl_error_tol: the largest allowable difference between baselines in a redundant group
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
         ex_ants: list of antennas to exclude from calibration and flag. Can be either antenna numbers or
@@ -1843,7 +1843,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         upsample: if True, upsample baseline-dependent-averaged data file to highest temporal resolution
         downsample: if True, downsample baseline-dependent-averaged data file to lowest temporal resolution
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
-            See recal.get_reds for more information.
+            See redcal.get_reds for more information.
         bl_error_tol: the largest allowable difference between baselines in a redundant group
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
         ex_ants: list of antennas to exclude from calibration and flag. Can be either antenna numbers or
@@ -1957,8 +1957,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     return cal
 
 
-def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_meta.median_delay.hdf5',
-                                 output_replace='.redcal_meta.hdf5'):
+def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_meta.median_phases.hdf5',
+                                   output_replace='.redcal_meta.hdf5'):
     """
     Find the median delay and polarity for list of firstcal meta files.
     and write them out with that median.
@@ -1969,20 +1969,20 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
         list of file names containing redcal meta data. All files should have same number of times.
 
     """
-    recal_metas = []
-    for meta_file in recal_meta_file_list:
-        recal_metas.append((meta_file, ) + read_redcal_meta(meta_file))
+    redcal_metas = []
+    for meta_file in redcal_meta_file_list:
+        redcal_metas.append((meta_file, ) + read_redcal_meta(meta_file))
     # build list of delays and polarity flips for each antenna.
-    nfiles = len(redcal_metas)
+    nfiles = len(redcal_meta_file_list)
     ntimes = [len(rcm[4]) for rcm in redcal_metas]
-    delays = {ant: np.zeros(np.sum(ntimes)) for ant in recal_meta_list[0][1]['dlys']}
-    polarity_flips = copy.deepcopy(delays).astype(bool)
+    delays = {ant: np.zeros(np.sum(ntimes)) for ant in redcal_metas[0][1]['dlys']}
+    polarity_flips = {ant: copy.deepcopy(delays[ant]).astype(bool) for ant in delays}
     nt = 0
-    for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(recal_metas):
+    for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(redcal_metas):
         for ant in fc_meta['dlys']:
             tslice = slice(nt, nt + len(times))
             delays[ant][tslice] = fc_meta['dlys'][ant]
-            polarity_flips[tslice] = fc_meta['polarity_flips'][ant]
+            polarity_flips[ant][tslice] = fc_meta['polarity_flips'][ant]
         nt += len(times)
     # compute medians.
     for ant in delays:
@@ -1990,12 +1990,13 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
         polarity_flips[ant] = bool(np.nanmedian(polarity_flips[ant]))
 
     # update metadata and write out.
-    for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(recal_metas):
+    for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(redcal_metas):
         for ant in fc_meta['dlys']:
             fc_meta['dlys'][ant][:] = delays[ant]
-            fc_meta['polarity_flips'][:] = polarity_flips[ant]
+            fc_meta['polarity_flips'][ant][:] = polarity_flips[ant]
         save_redcal_meta(meta_filename.replace(output_replace, output_ext), fc_meta, omni_meta, freqs, times, lsts, antpos,
                          history + '\nTook nightly time median on delay and polarity flips.')
+
 
 def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, output_file, clobber=False):
     """Update the phase degenerate component of a redcal solution.
@@ -2011,22 +2012,23 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, output_file, c
     clobber: bool, optional
         overwrite output calfits.
     """
-    hc = io.HERACal(redcal_file)
+    hc = HERACal(redcal_file)
     # get redundant calibrator.
     # get reds
     gains, _, _, _ = hc.read()
     fc_meta, omni_meta, freqs, times, lsts, antpos, history = read_redcal_meta(redcal_meta_file)
-    reds = get_reds(antpos, pols=hc.pols)
+    reds = get_reds(antpos, pols=[pol.replace('J', '').replace('j', '') for pol in hc.pols])
     rc = RedundantCalibrator(reds)
     firstcal_gains = {}
     for ant in fc_meta['dlys']:
         polarity_coeffs = np.ones(len(times), dtype=complex)
-        polarity_coeffs[fc_meta['polarity_flips']] = -1. + 0j
-        firstcal_gains[ant] np.exp(1j * (2 * np.pi * freqs[None, :] * fc_meta['dlys'][:, None])) * polarity_coeffs[:, None]
+        polarity_coeffs[fc_meta['polarity_flips'][ant].astype(bool)] = -1. + 0j
+        firstcal_gains[ant] = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant][:, None]) * polarity_coeffs[:, None]
     # generate firstcal gains with degeneracy replaced by median degeneracy in firstcal.
-    new_gains = rc.remove_degen_gains(gains, degen_gains=firstcal_gains, mode='gains')
+    new_gains = rc.remove_degen_gains(gains, degen_gains=firstcal_gains, mode='complex')
     hc.update(gains=new_gains)
     hc.write_calfits(output_file, clobber=clobber)
+
 
 def nightly_median_firstcal_delays_argparser():
     """Arg parser for build_median_firstcal_delays
@@ -2037,6 +2039,7 @@ def nightly_median_firstcal_delays_argparser():
     ap.add_argument("--output_replace", type=str, default=".redcal_meta.hdf5", help="File extension in non median files to replace in each file name with output_ext.")
     return ap
 
+
 def update_redcal_phase_degeneracy_argparser():
     """Arg parser for update_redcal_phase_degeneracy.
     """
@@ -2046,6 +2049,7 @@ def update_redcal_phase_degeneracy_argparser():
     ap.add_argument("--output_file", type=str, help="Name of file to write new redcal solution too.")
     ap.add_argument("--clobber", default=False, action="store_true", help="Replace existing output file.")
     return ap
+
 
 def redcal_argparser():
     '''Arg parser for commandline operation of redcal_run'''
@@ -2076,7 +2080,7 @@ def redcal_argparser():
                              Default None loads all integrations.")
     redcal_opts.add_argument("--upsample", default=False, action="store_true", help="Upsample BDA files to the highest temporal resolution.")
     redcal_opts.add_argument("--downsample", default=False, action="store_true", help="Downsample BDA files to the highest temporal resolution.")
-    redcal_opts.add_argument("--pol_mode", type=str, default='2pol', help="polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'. See recal.get_reds documentation.")
+    redcal_opts.add_argument("--pol_mode", type=str, default='2pol', help="polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'. See redcal.get_reds documentation.")
     redcal_opts.add_argument("--bl_error_tol", type=float, default=1.0, help="the largest allowable difference between baselines in a redundant group")
     redcal_opts.add_argument("--min_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths shorter than this length in meters")
     redcal_opts.add_argument("--max_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths longer than this length in meters")
