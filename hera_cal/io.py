@@ -22,7 +22,7 @@ from pyuvdata.utils import POL_STR2NUM_DICT
 from . import redcal
 import argparse
 from . import version
-from uvtools.dspec import place_data_on_uniform_grid
+from hera_filters.dspec import place_data_on_uniform_grid
 
 
 try:
@@ -572,11 +572,11 @@ class HERAData(UVData):
             try:
                 if self.filetype in ['uvh5', 'uvfits']:
                     super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
-                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, 
+                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
                     if self.filetype == 'uvfits':
-                        self.unphase_to_drift() 
+                        self.unphase_to_drift()
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)

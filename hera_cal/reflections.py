@@ -70,10 +70,10 @@ from scipy.optimize import minimize
 from scipy import sparse
 from sklearn import gaussian_process as gp
 try:
-    from uvtools import dspec
-    HAVE_UVTOOLS = True
+    from hera_filters import dspec
+    HAVE_HERA_FILTERS = True
 except ImportError:
-    HAVE_UVTOOLS = False
+    HAVE_HERA_FILTERS = False
 import argparse
 import ast
 from astropy import constants
@@ -431,7 +431,7 @@ class ReflectionFitter(FRFilter):
             overwrite : bool, if True, overwrite output file
             write_npz : bool, if True, write an NPZ file holding reflection
                 params with the same pathname as output_calfits
-            write_calfits : bool, if False, skip writing 
+            write_calfits : bool, if False, skip writing
             add_to_history: string to add to history of output calfits file
             verbose : bool, report feedback to stdout
 
@@ -757,8 +757,8 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid : DataContainer, ant-pair-pol keys and ndarray values
                 Holds the residual between input data and pcomp_model_fft.
         """
-        if not HAVE_UVTOOLS:
-            raise ImportError("uvtools required, install hera_cal[all]")
+        if not HAVE_HERA_FILTERS:
+            raise ImportError("hera_filters required, install hera_cal[all]")
 
         # get keys
         if keys is None:
@@ -803,7 +803,7 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid[k] = data[k] - model_fft
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False, Ninterp=None,
-                 gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, Nmirror=0, 
+                 gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, Nmirror=0,
                  xthin=None, verbose=True):
         """
         Interpolate u modes along time with a Gaussian Process.
@@ -1533,7 +1533,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
 
         # append gains
         gains.append(RF.ref_gains)
-    
+
     # write out combined gains as a single calfits file
     if not write_each_calfits:
         RF.ref_gains = merge_gains(gains)
