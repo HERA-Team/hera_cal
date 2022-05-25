@@ -911,12 +911,11 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 assert int(h['Nfreqs'][()]) == info['freqs'].size
             ntimes = int(h['Ntimes'][()])
             times.append((h['time_array'][:ntimes], filename))
-            ants = h['antenna_numbers'][()]
-            _hash = hash(ants.tobytes())
+            ant1_array = h['ant_1_array'][::ntimes]
+            ant2_array = h['ant_2_array'][::ntimes]
+            _hash = hash((ant1_array.tobytes(), ant2_array.tobytes()))
             # map baselines to array indices for each unique antenna order
             if _hash not in inds:
-                ant1_array = h['ant_1_array'][()]
-                ant2_array = h['ant_2_array'][()]
                 inds[_hash] = {(i,j): slice(n*ntimes, (n+1)*ntimes)
                                for n,(i,j) in enumerate(zip(ant1_array[::ntimes],
                                                             ant2_array[::ntimes]))}
@@ -981,13 +980,25 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                     d = d[()] # reads data
                 # handle HERA's raw (int) and calibrated (complex) file formats
                 if key == 'visdata' and not np.iscomplexobj(d):
-                    for i,j,p in bls:
-                        _d = d[inds[i,j],0,:,pol_indices[p]]
-                        data[i,j,p][t:t+ntimes].real = _d['r']
-                        data[i,j,p][t:t+ntimes].imag = _d['i']
+                    # Support polarization-transposed arrays
+                    if d.shape[-1] == info['freqs'].size:
+                        for i,j,p in bls:
+                            _d = d[inds[i,j],0,pol_indices[p]]
+                            data[i,j,p][t:t+ntimes].real = _d['r']
+                            data[i,j,p][t:t+ntimes].imag = _d['i']
+                    else:
+                        for i,j,p in bls:
+                            _d = d[inds[i,j],0,:,pol_indices[p]]
+                            data[i,j,p][t:t+ntimes].real = _d['r']
+                            data[i,j,p][t:t+ntimes].imag = _d['i']
                 else:
-                    for i,j,p in bls:
-                        data[i,j,p][t:t+ntimes] = d[inds[i,j],0,:,pol_indices[p]]
+                    # Support polarization-transposed arrays
+                    if d.shape[-1] == info['freqs'].size:
+                        for i,j,p in bls:
+                            data[i,j,p][t:t+ntimes] = d[inds[i,j],0,pol_indices[p]]
+                    else:
+                        for i,j,p in bls:
+                            data[i,j,p][t:t+ntimes] = d[inds[i,j],0,:,pol_indices[p]]
             t += ntimes
     rv['info'] = info
     return rv
