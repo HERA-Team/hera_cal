@@ -863,6 +863,7 @@ class HERAData(UVData):
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
 
+
 def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                    read_data=True, read_flags=False, read_nsamples=False, check=False,
                    dtype=np.complex128, verbose=False):
@@ -905,7 +906,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 info['freqs'] = h['freq_array'][()]
                 pol_array = h['polarization_array'][()]
                 npols = pol_array.size
-                pol_indices = {POL_NUM2STR_DICT[n]: cnt for cnt,n in enumerate(pol_array)}
+                pol_indices = {POL_NUM2STR_DICT[n]: cnt for cnt, n in enumerate(pol_array)}
                 info['pols'] = list(pol_indices.keys())
             elif check:
                 assert int(h['Nfreqs'][()]) == info['freqs'].size
@@ -916,8 +917,8 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
             _hash = hash((ant1_array.tobytes(), ant2_array.tobytes()))
             # map baselines to array indices for each unique antenna order
             if _hash not in inds:
-                inds[_hash] = {(i,j): slice(n*ntimes, (n+1)*ntimes)
-                               for n,(i,j) in enumerate(zip(ant1_array[::ntimes],
+                inds[_hash] = {(i,j): slice(n * ntimes, (n + 1) * ntimes)
+                               for n, (i, j) in enumerate(zip(ant1_array[::ntimes],
                                                             ant2_array[::ntimes]))}
                 if 'bls' not in info:
                     info['bls'] = set(inds[_hash].keys())
@@ -930,7 +931,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
         if pols is None:
             pols = list(pol_indices.keys())
         bls = info['bls']
-        bls = set(bl+(p,) for bl in bls for p in pols)
+        bls = set(bl + (p,) for bl in bls for p in pols)
     else:
         # if length 2 baselines are passed in, add on polarizations
         bls_len2 = set(bl for bl in bls if len(bl) == 2)
@@ -938,7 +939,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
             if pols is None:
                 pols = list(pol_indices.keys())
             bls = set(bl for bl in bls if len(bl) == 3)
-            bls = bls.union([bl+(p,) for bl in bls_len2 for p in pols])
+            bls = bls.union([bl + (p,) for bl in bls_len2 for p in pols])
         # record polarizations as total of ones indexed in bls
         pols = set(bl[2] for bl in bls)
     # sort files by time of first integration
@@ -982,23 +983,23 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 if key == 'visdata' and not np.iscomplexobj(d):
                     # Support polarization-transposed arrays
                     if d.shape[-1] == info['freqs'].size:
-                        for i,j,p in bls:
-                            _d = d[inds[i,j],0,pol_indices[p]]
-                            data[i,j,p][t:t+ntimes].real = _d['r']
-                            data[i,j,p][t:t+ntimes].imag = _d['i']
+                        for i, j, p in bls:
+                            _d = d[inds[i, j], 0, pol_indices[p]]
+                            data[i, j, p][t:t+ntimes].real = _d['r']
+                            data[i, j, p][t:t+ntimes].imag = _d['i']
                     else:
-                        for i,j,p in bls:
-                            _d = d[inds[i,j],0,:,pol_indices[p]]
-                            data[i,j,p][t:t+ntimes].real = _d['r']
-                            data[i,j,p][t:t+ntimes].imag = _d['i']
+                        for i, j, p in bls:
+                            _d = d[inds[i, j], 0, :, pol_indices[p]]
+                            data[i, j, p][t:t+ntimes].real = _d['r']
+                            data[i, j, p][t:t+ntimes].imag = _d['i']
                 else:
                     # Support polarization-transposed arrays
                     if d.shape[-1] == info['freqs'].size:
-                        for i,j,p in bls:
-                            data[i,j,p][t:t+ntimes] = d[inds[i,j],0,pol_indices[p]]
+                        for i, j, p in bls:
+                            data[i, j, p][t:t+ntimes] = d[inds[i, j], 0, pol_indices[p]]
                     else:
-                        for i,j,p in bls:
-                            data[i,j,p][t:t+ntimes] = d[inds[i,j],0,:,pol_indices[p]]
+                        for i, j, p in bls:
+                            data[i, j, p][t:t + ntimes] = d[inds[i, j], 0, :, pol_indices[p]]
             t += ntimes
     rv['info'] = info
     return rv
