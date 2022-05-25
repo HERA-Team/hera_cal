@@ -901,7 +901,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
         with h5py.File(filename, 'r') as f:
             h = f['/Header']
             if check:
-                assert int(h['Nspws'][()]) == 1 # not a hera file
+                assert int(h['Nspws'][()]) == 1  # not a hera file
             if len(times) == 0:
                 info['freqs'] = h['freq_array'][()]
                 pol_array = h['polarization_array'][()]
@@ -951,11 +951,11 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
     # preallocate buffers
     rv = {}
     if read_data:
-        rv['visdata'] = {bl:np.empty((times.size, info['freqs'].size), dtype=dtype) for bl in bls}
+        rv['visdata'] = {bl: np.empty((times.size, info['freqs'].size), dtype=dtype) for bl in bls}
     if read_flags:
-        rv['flags'] = {bl:np.empty((times.size, info['freqs'].size), dtype=bool) for bl in bls}
+        rv['flags'] = {bl: np.empty((times.size, info['freqs'].size), dtype=bool) for bl in bls}
     if read_nsamples:
-        rv['nsamples']= {bl:np.empty((times.size, info['freqs'].size), dtype=np.float32) for bl in bls}
+        rv['nsamples'] = {bl: np.empty((times.size, info['freqs'].size), dtype=np.float32) for bl in bls}
     # bail here if all we wanted was the info
     if len(rv) == 0:
         return {'info': info}
@@ -970,39 +970,40 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
             ntimes = int(h['Ntimes'][()])
             nbls = int(h['Nblts'][()]) // ntimes
             if check:
-                assert np.allclose(h['time_array'][:ntimes], times[t:t+ntimes])
+                assert np.allclose(h['time_array'][:ntimes], times[t:t + ntimes])
             # decide whether to read all the data in, or use partial I/O
             full_read = (len(bls) > full_read_thresh * nbls * npols)
             if full_read and verbose:
                 print('Reading full file')
             for key, data in rv.items():
-                d = f['/Data'][key] # data not read yet
+                d = f['/Data'][key]  # data not read yet
                 if full_read:
-                    d = d[()] # reads data
+                    d = d[()]  # reads data
                 # handle HERA's raw (int) and calibrated (complex) file formats
                 if key == 'visdata' and not np.iscomplexobj(d):
                     # Support polarization-transposed arrays
                     if d.shape[-1] == info['freqs'].size:
                         for i, j, p in bls:
                             _d = d[inds[i, j], 0, pol_indices[p]]
-                            data[i, j, p][t:t+ntimes].real = _d['r']
-                            data[i, j, p][t:t+ntimes].imag = _d['i']
+                            data[i, j, p][t:t + ntimes].real = _d['r']
+                            data[i, j, p][t:t + ntimes].imag = _d['i']
                     else:
                         for i, j, p in bls:
                             _d = d[inds[i, j], 0, :, pol_indices[p]]
-                            data[i, j, p][t:t+ntimes].real = _d['r']
-                            data[i, j, p][t:t+ntimes].imag = _d['i']
+                            data[i, j, p][t:t + ntimes].real = _d['r']
+                            data[i, j, p][t:t + ntimes].imag = _d['i']
                 else:
                     # Support polarization-transposed arrays
                     if d.shape[-1] == info['freqs'].size:
                         for i, j, p in bls:
-                            data[i, j, p][t:t+ntimes] = d[inds[i, j], 0, pol_indices[p]]
+                            data[i, j, p][t:t + ntimes] = d[inds[i, j], 0, pol_indices[p]]
                     else:
                         for i, j, p in bls:
                             data[i, j, p][t:t + ntimes] = d[inds[i, j], 0, :, pol_indices[p]]
             t += ntimes
     rv['info'] = info
     return rv
+
 
 def read_filter_cache_scratch(cache_dir):
     """
