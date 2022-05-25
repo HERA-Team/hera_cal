@@ -666,7 +666,7 @@ class Test_ReadHeraHdf5(object):
     def setup_method(self):
         self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5")
         self.uvh5_2 = os.path.join(DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5")
-        #self.uvh5_bda = os.path.join(DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.uvh5")
+        self.uvh5_pol = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5_poltranspose")
 
     def test_basic_read(self):
         rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], flags=False, nsamples=False,
@@ -704,6 +704,16 @@ class Test_ReadHeraHdf5(object):
         for bl, data in rv['nsamples'].items():
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
             assert data.dtype == np.float32
+
+    def test_read_allbls_poltranspose(self):
+        rv = io.read_hera_hdf5([self.uvh5_pol], dtype=np.complex128)
+        assert 'info' in rv
+        assert 'visdata' in rv
+        assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['visdata'])
+        for bl, data in rv['visdata'].items():
+            assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
+
+    
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
