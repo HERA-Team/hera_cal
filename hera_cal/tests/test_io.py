@@ -669,7 +669,8 @@ class Test_ReadHeraHdf5(object):
         self.uvh5_pol = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5_poltranspose")
 
     def test_basic_read(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], flags=False, nsamples=False,
+        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2],
+                               read_flags=False, read_nsamples=False,
                                dtype=np.complex128)
         assert 'info' in rv
         assert 'visdata' in rv
@@ -681,16 +682,16 @@ class Test_ReadHeraHdf5(object):
             assert data.dtype == np.complex128
 
     def test_info_only(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], data=False, flags=False, nsamples=False,
-                               dtype=np.complex128)
+        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2],
+                               read_data=False, read_flags=False, read_nsamples=False)
         assert 'info' in rv
         assert 'visdata' not in rv
         assert 'flags' not in rv
         assert 'nsamples' not in rv
 
     def test_read_all(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], flags=True, nsamples=True,
-                               dtype=np.complex128)
+        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2],
+                               read_flags=True, read_nsamples=True)
         assert 'info' in rv
         assert 'visdata' in rv
         assert 'flags' in rv
@@ -712,8 +713,26 @@ class Test_ReadHeraHdf5(object):
         assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['visdata'])
         for bl, data in rv['visdata'].items():
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
-
     
+    def test_read_one_bl(self):
+        rv = io.read_hera_hdf5([self.uvh5_1],
+                               read_data=False, read_flags=False, read_nsamples=False)
+        bl = list(rv['info']['bls'])[0]
+        pol = rv['info']['pols'][0]
+        bl = bl + (pol,)
+        rv = io.read_hera_hdf5([self.uvh5_1], bls=[bl])
+        assert len(rv['visdata']) == 1
+        assert bl in rv['visdata']
+
+    def test_read_one_bl_poltranpose(self):
+        rv = io.read_hera_hdf5([self.uvh5_pol],
+                               read_data=False, read_flags=False, read_nsamples=False)
+        bl = list(rv['info']['bls'])[0]
+        pol = rv['info']['pols'][0]
+        bl = bl + (pol,)
+        rv = io.read_hera_hdf5([self.uvh5_1], bls=[bl])
+        assert len(rv['visdata']) == 1
+        assert bl in rv['visdata']
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
