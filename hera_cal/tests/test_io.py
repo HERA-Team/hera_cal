@@ -670,7 +670,7 @@ class Test_ReadHeraHdf5(object):
 
     def test_basic_read(self):
         rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2],
-                               read_flags=False, read_nsamples=False,
+                               read_flags=False, read_nsamples=False, verbose=True,
                                dtype=np.complex128)
         assert 'info' in rv
         assert 'visdata' in rv
@@ -682,7 +682,7 @@ class Test_ReadHeraHdf5(object):
             assert data.dtype == np.complex128
 
     def test_info_only(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2],
+        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         assert 'info' in rv
         assert 'visdata' not in rv
@@ -690,7 +690,7 @@ class Test_ReadHeraHdf5(object):
         assert 'nsamples' not in rv
 
     def test_read_all(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2],
+        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True,
                                read_flags=True, read_nsamples=True)
         assert 'info' in rv
         assert 'visdata' in rv
@@ -707,7 +707,7 @@ class Test_ReadHeraHdf5(object):
             assert data.dtype == np.float32
 
     def test_read_allbls_poltranspose(self):
-        rv = io.read_hera_hdf5([self.uvh5_pol], dtype=np.complex128)
+        rv = io.read_hera_hdf5([self.uvh5_pol], dtype=np.complex128, verbose=True,)
         assert 'info' in rv
         assert 'visdata' in rv
         assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['visdata'])
@@ -715,7 +715,7 @@ class Test_ReadHeraHdf5(object):
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
     
     def test_read_one_bl(self):
-        rv = io.read_hera_hdf5([self.uvh5_1],
+        rv = io.read_hera_hdf5([self.uvh5_1], verbose=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         bl = list(rv['info']['bls'])[0]
         pol = rv['info']['pols'][0]
@@ -725,7 +725,7 @@ class Test_ReadHeraHdf5(object):
         assert bl in rv['visdata']
 
     def test_read_one_bl_poltranpose(self):
-        rv = io.read_hera_hdf5([self.uvh5_pol],
+        rv = io.read_hera_hdf5([self.uvh5_pol], verbose=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         bl = list(rv['info']['bls'])[0]
         pol = rv['info']['pols'][0]
