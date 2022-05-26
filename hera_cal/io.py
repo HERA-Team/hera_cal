@@ -917,9 +917,9 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
             _hash = hash((ant1_array.tobytes(), ant2_array.tobytes()))
             # map baselines to array indices for each unique antenna order
             if _hash not in inds:
-                inds[_hash] = {(i,j): slice(n * ntimes, (n + 1) * ntimes)
+                inds[_hash] = {(i, j): slice(n * ntimes, (n + 1) * ntimes)
                                for n, (i, j) in enumerate(zip(ant1_array,
-                                                            ant2_array))}
+                                                              ant2_array))}
                 if 'bls' not in info:
                     info['bls'] = set(inds[_hash].keys())
                 else:
