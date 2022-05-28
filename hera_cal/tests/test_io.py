@@ -673,19 +673,27 @@ class Test_ReadHeraHdf5(object):
                                read_flags=False, read_nsamples=False, verbose=True,
                                dtype=np.complex128)
         assert 'info' in rv
-        assert 'visdata' in rv
+        assert 'data' in rv
         assert 'flags' not in rv
         assert 'nsamples' not in rv
-        assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['visdata'])
-        for bl, data in rv['visdata'].items():
+        assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
+        for bl, data in rv['data'].items():
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
             assert data.dtype == np.complex128
+
+    def test_broken_read(self):
+        with pytest.raises(ValueError):
+            rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], bls=[(999, 999, 'xx')],
+                                   read_flags=False, read_nsamples=False, verbose=True,
+                                   dtype=np.complex128)
+
+    def test_info_only(self):
 
     def test_info_only(self):
         rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         assert 'info' in rv
-        assert 'visdata' not in rv
+        assert 'data' not in rv
         assert 'flags' not in rv
         assert 'nsamples' not in rv
 
@@ -693,10 +701,10 @@ class Test_ReadHeraHdf5(object):
         rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True,
                                read_flags=True, read_nsamples=True)
         assert 'info' in rv
-        assert 'visdata' in rv
+        assert 'data' in rv
         assert 'flags' in rv
         assert 'nsamples' in rv
-        assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['visdata'])
+        assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
         assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['flags'])
         assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['nsamples'])
         for bl, data in rv['flags'].items():
@@ -709,9 +717,9 @@ class Test_ReadHeraHdf5(object):
     def test_read_allbls_poltranspose(self):
         rv = io.read_hera_hdf5([self.uvh5_pol], dtype=np.complex128, verbose=True,)
         assert 'info' in rv
-        assert 'visdata' in rv
-        assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['visdata'])
-        for bl, data in rv['visdata'].items():
+        assert 'data' in rv
+        assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
+        for bl, data in rv['data'].items():
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
     
     def test_read_one_bl(self):
@@ -721,8 +729,8 @@ class Test_ReadHeraHdf5(object):
         pol = rv['info']['pols'][0]
         bl = bl + (pol,)
         rv = io.read_hera_hdf5([self.uvh5_1], bls=[bl])
-        assert len(rv['visdata']) == 1
-        assert bl in rv['visdata']
+        assert len(rv['data']) == 1
+        assert bl in rv['data']
 
     def test_read_one_bl_poltranpose(self):
         rv = io.read_hera_hdf5([self.uvh5_pol], verbose=True,
@@ -731,8 +739,8 @@ class Test_ReadHeraHdf5(object):
         pol = rv['info']['pols'][0]
         bl = bl + (pol,)
         rv = io.read_hera_hdf5([self.uvh5_1], bls=[bl])
-        assert len(rv['visdata']) == 1
-        assert bl in rv['visdata']
+        assert len(rv['data']) == 1
+        assert bl in rv['data']
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
