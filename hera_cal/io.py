@@ -890,9 +890,8 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
         rv: dict with keys 'info' and optionally 'data', 'flags', and 'nsamples', 
             based on whether read_data, read_flags, and read_nsamples are true.
         rv['info']: metadata dict with keys 'freqs' (1D array), 'times' (1D array),
-                    'lsts' (1D array), 'pols' (list), 'ants' (1D array),
-                    'bls' (list of all (ant_1, ant_2) baselines in the file),
-                    'antpos' (dict of antennas: 3D positions).
+                    'pols' (list), 'ants' (1D array), 'antpos' (dict of antenna: 3D position),
+                    'bls' (list of all (ant_1, ant_2) baselines in the file).
         rv['data']: dict of 2D data with (i, j, pol) keys.
         rv['flags']: dict of 2D flags with (i, j, pol) keys.
         rv['nsamples']: dict of 2D nsamples with (i, j, pol) keys.
@@ -911,7 +910,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 # Check that there aren't extra spectral windows
                 assert int(h['Nspws'][()]) == 1  # not a hera file
             if len(times) == 0:
-                info['freqs'] = h['freq_array'][()]
+                info['freqs'] = h['freq_array'][0]  # make 1D instead of 2D
                 nfreqs = info['freqs'].size
                 pol_array = h['polarization_array'][()]
                 npols = pol_array.size
@@ -923,7 +922,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 # Check that all files have the same number of frequencies
                 assert int(h['Nfreqs'][()]) == nfreqs
             ntimes = int(h['Ntimes'][()])
-            times.append((h['time_array'][:ntimes], h['lst_array'][:ntimes], filename))
+            times.append((h['time_array'][:ntimes], filename))
             ant1_array = h['ant_1_array'][::ntimes]
             ant2_array = h['ant_2_array'][::ntimes]
             _hash = hash((ant1_array.tobytes(), ant2_array.tobytes()))
@@ -934,7 +933,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                                                               ant2_array))}
                 if bls is not None:
                     # Make sure our baselines of interest are in this file
-                    if not all([bl[:2] in inds[_hash]):
+                    if not all([bl[:2] in inds[_hash]]):
                         missing_bls = [bl for bl in bls if bl[:2] not in inds[_hash]]
                         raise ValueError(f'File {filename} missing:' + str(missing_bls))
                         assert bl[:2] in inds[_hash]
@@ -962,15 +961,14 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
         pols = set(bl[2] for bl in bls)
     # sort files by time of first integration
     times.sort(key=lambda x: x[0][0])
-    info['lsts'] = np.concatenate([v[1] for v in times], axis=0)
-    filenames = (v[2] for v in times)
+    filenames = (v[1] for v in times)
     times = np.concatenate([t[0] for t in times], axis=0)
     info['times'] = times
 
     # preallocate buffers
     rv = {}
     if read_data:
-        rv['data'] = {bl: np.empty((times.size, nfreqs), dtype=dtype) for bl in bls}
+        rv['visdata'] = {bl: np.empty((times.size, nfreqs), dtype=dtype) for bl in bls}
     if read_flags:
         rv['flags'] = {bl: np.empty((times.size, nfreqs), dtype=bool) for bl in bls}
     if read_nsamples:
@@ -1000,7 +998,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 if full_read:
                     d = d[()]  # reads data
                 # handle HERA's raw (int) and calibrated (complex) file formats
-                if key == 'data' and not np.iscomplexobj(d):
+                if key == 'visdata' and not np.iscomplexobj(d):
                     # Support polarization-transposed arrays
                     if d.shape[-1] == nfreqs:
                         for i, j, p in bls:
@@ -1021,6 +1019,9 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                         for i, j, p in bls:
                             data[i, j, p][t:t + ntimes] = d[inds[i, j], 0, :, pol_indices[p]]
             t += ntimes
+    # Quick renaming of data key for niceness
+    if 'visdata' in rv:
+        rv['data'] = rv.pop('visdata', [])
     rv['info'] = info
     return rv
 
