@@ -688,8 +688,6 @@ class Test_ReadHeraHdf5(object):
                                    dtype=np.complex128)
 
     def test_info_only(self):
-
-    def test_info_only(self):
         rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         assert 'info' in rv
