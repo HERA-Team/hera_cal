@@ -11,6 +11,8 @@ import sys
 parser = delay_filter.delay_filter_argparser()
 ap = parser.parse_args()
 
+
+
 # set kwargs
 if ap.mode == 'clean':
     filter_kwargs = {'window': ap.window,
@@ -19,21 +21,9 @@ if ap.mode == 'clean':
     if ap.window == 'tukey':
         filter_kwargs['alpha'] = ap.alpha
     avg_red_bllens = False
-    skip_flagged_edges = False
-    flag_model_rms_outliers = False
-elif ap.mode == 'dayenu':
-    filter_kwargs = {}
-    avg_red_bllens = True
-    filter_kwargs['skip_contiguous_flags'] = False
-    filter_kwargs['max_contiguous_edge_flags'] = 10000
-    filter_kwargs['flag_model_rms_outliers'] = False
-elif ap.mode == 'dpss_leastsq':
-    filter_kwargs = {}
-    avg_red_bllens = True
-    filter_kwargs['skip_contiguous_flags'] = True
-    skip_flagged_edges = True
-    filter_kwargs['max_contiguous_edge_flags'] = ap.max_contiguous_edge_flags
-    filter_kwargs['flag_model_rms_outliers'] = True
+elif ap.mode in ['dayenu', 'dpss_leastsq']:
+    filter_kwargs = {'max_contiguous_edge_flags': ap.max_contiguous_edge_flags}
+    avg_red_bllens=True
 else:
     raise ValueError(f"mode {mode} not supported.")
 
@@ -55,10 +45,12 @@ delay_filter.load_delay_filter_and_write(ap.datafilelist, calfile_list=ap.calfil
                                          add_to_history=' '.join(sys.argv), polarizations=ap.polarizations,
                                          verbose=ap.verbose, skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
                                          flag_yaml=ap.flag_yaml, Nbls_per_load=ap.Nbls_per_load,
-                                         skip_flagged_edges=skip_flagged_edges,
                                          filled_outfilename=ap.filled_outfilename,
                                          CLEAN_outfilename=ap.CLEAN_outfilename,
                                          standoff=ap.standoff, horizon=ap.horizon, tol=ap.tol,
                                          skip_wgt=ap.skip_wgt, min_dly=ap.min_dly, zeropad=ap.zeropad,
                                          filter_spw_ranges=ap.filter_spw_ranges,
+                                         skip_contiguous_flags=not(ap.dont_skip_contiguous_flags), max_contiguous_flag=ap.max_contiguous_flag,
+                                         skip_flagged_edges=not(ap.dont_skip_flagged_edges),
+                                         flag_model_rms_outliers=not(ap.dont_flag_model_rms_outliers), model_rms_threshold=ap.model_rms_threshold,
                                          clean_flags_in_resid_flags=not(ap.clean_flags_not_in_resid_flags), **filter_kwargs)

@@ -20,21 +20,9 @@ if ap.mode == 'clean':
                     'edgecut_low': ap.edgecut_low, 'gain': ap.gain}
     if ap.window == 'tukey':
         filter_kwargs['alpha'] = ap.alpha
-    avg_red_bllens = False
-elif ap.mode == 'dayenu':
-    filter_kwargs = {}
-    avg_red_bllens = True
-    filter_kwargs['max_contiguous_edge_flags'] = 10000
-    filter_kwargs['skip_contiguous_flags'] = False
-    filter_kwargs['skip_flagged_edges'] = False
-    filter_kwargs['flag_model_rms_outliers'] = False
-elif ap.mode == 'dpss_leastsq' or ap.mode == 'dft_leastsq':
-    filter_kwargs = {}
-    avg_red_bllens = True
-    filter_kwargs['skip_contiguous_flags']=True
-    filter_kwargs['skip_flagged_edges'] = True
-    filter_kwargs['max_contiguous_edge_flags'] = 1
-    filter_kwargs['flag_model_rms_outliers'] = True
+    filter_kwargs['flag_model_rms_outliers'] = ap.flag_model_rms_outliers
+elif ap.mode in ['dayenu', 'dpss_leastsq']:
+    filter_kwargs = {'max_contiguous_edge_flags': ap.max_contiguous_edge_flags}
 
 if ap.cornerturnfile is not None:
     baseline_list = io.baselines_from_filelist_position(filename=ap.cornerturnfile, filelist=ap.datafilelist)
@@ -63,5 +51,9 @@ frf.load_tophat_frfilter_and_write(ap.datafilelist, calfile_list=ap.calfilelist,
                                    frate_width_multiplier=ap.frate_width_multiplier, frate_standoff=ap.frate_standoff, fr_freq_skip=ap.fr_freq_skip,
                                    min_frate_half_width=ap.min_frate_half_width, max_frate_half_width=ap.max_frate_half_width,
                                    beamfitsfile=ap.beamfitsfile, percentile_low=ap.percentile_low, percentile_high=ap.percentile_high,
-                                   clean_flags_in_resid_flags=not(ap.clean_flags_not_in_resid_flags), pre_filter_modes_between_lobe_minimum_and_zero=ap.pre_filter_modes_between_lobe_minimum_and_zero,
+                                   skip_contiguous_flags=not(ap.dont_skip_contiguous_flags), max_contiguous_flag=ap.max_contiguous_flag,
+                                   skip_flagged_edges=not(ap.dont_skip_flagged_edges),
+                                   flag_model_rms_outliers=not(ap.dont_flag_model_rms_outliers), model_rms_threshold=ap.model_rms_threshold,
+                                   clean_flags_in_resid_flags=not(ap.clean_flags_not_in_resid_flags), 
+                                   pre_filter_modes_between_lobe_minimum_and_zero=ap.pre_filter_modes_between_lobe_minimum_and_zero,
                                    **filter_kwargs)
