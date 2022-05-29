@@ -1434,7 +1434,8 @@ def read_redcal_meta(meta_filename):
                 for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
         fc_meta['dlys'] = {ant: dly for ant, dly in zip(ants, infile['fc_meta']['dlys'][:, :])}
         fc_meta['polarity_flips'] = {ant: flips for ant, flips in zip(ants, infile['fc_meta']['polarity_flips'][:, :])}
-        fc_meta['offsets'] = {ant: offsets for ant, offsets in zip(ants, infile['fc_meta']['offsets'][:, :])}
+        if 'offsets' in infile['fc_meta']:
+            fc_meta['offsets'] = {ant: offsets for ant, offsets in zip(ants, infile['fc_meta']['offsets'][:, :])}
         # reconstruct omnical metadata
         omni_meta = {}
         pols_keys = infile['omni_meta']['chisq'].attrs['pols']
