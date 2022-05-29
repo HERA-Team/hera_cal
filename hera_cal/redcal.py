@@ -946,7 +946,7 @@ class RedundantCalibrator:
                 g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
                 # update offsets in metadata.
                 for ant in meta['offsets']:
-                    meta['offsets'][ant] += delta_off[ant]
+                    meta['offsets'][ant] += delta_off[ant].flatten()
 
             if (np.linalg.norm(list(delta_off.values())) < conv_crit) and (i > 1):
                 break
@@ -1982,7 +1982,7 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
     nfiles = len(redcal_meta_file_list)
     ntimes = [len(rcm[4]) for rcm in redcal_metas]
     delays = {ant: np.zeros(np.sum(ntimes)) for ant in redcal_metas[0][1]['dlys']}
-    offsets = {ant: np.zeros(np.sum(ntimes)) for ant in recal_metas[0][1]['offsets']}
+    offsets = {ant: np.zeros(np.sum(ntimes)) for ant in redcal_metas[0][1]['offsets']}
     polarity_flips = {ant: copy.deepcopy(delays[ant]).astype(bool) for ant in delays}
     nt = 0
     for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(redcal_metas):
@@ -1996,7 +1996,7 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
     for ant in delays:
         delays[ant] = np.nanmedian(delays[ant])
         polarity_flips[ant] = bool(np.nanmedian(polarity_flips[ant]))
-        offsets[ant] = np.nanmedian(offests[ant])
+        offsets[ant] = np.nanmedian(offsets[ant])
 
     # update metadata and write out.
     for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(redcal_metas):
@@ -2043,11 +2043,10 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, old_redcal_met
     if not dont_replace_polarities:
         for ant in fc_meta['polarity_flips']:
             gains[ant] *= (-1. + 0j) ** np.abs(fc_meta['polarity_flips'][ant][:, None] - fc_meta_old['polarity_flips'][ant][:, None])
-
+    ntimes = hc.Ntimes
     if not dont_replace_degens:
         for ant in gains:
-            dly_factor = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant] * np.ones(ntimes)[:, None])\
-                       * np.exp(1j * fc_meta['offsets'][ant] * np.ones(ntimes)[:, None])
+            dly_factor = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant][:, None]) * np.exp(1j * fc_meta['offsets'][ant][:, None])
             firstcal_gains[ant] = dly_factor
         gains = rc.remove_degen_gains(gains, degen_gains=firstcal_gains, mode='complex')
 
