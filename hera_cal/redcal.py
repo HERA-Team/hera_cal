@@ -1998,7 +1998,9 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
                          history + '\nTook nightly time median on delay and polarity flips.')
 
 
-def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, old_redcal_meta_file, output_file, clobber=False):
+def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, output_file=None,
+                                   old_redcal_meta_file=None, replace_degens=True, fix_polarities=True,
+                                   clobber=False):
     """Update the phase degenerate component of a redcal solution and phase flips.
 
     Parameters
@@ -2007,10 +2009,14 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, old_redcal_met
         path to calfits file containing redcal solution to update.
     redcal_meta_file:
         path to redcal meta file generated with io.save_redcal_meta()  with delays to be used to update degeneracy.
+    output_file: str, optional
+        path to output file. Optional to write output to.
     old_redcal_meta_file:
         path to redcal meta file with old polarity flips.
-    output_file: str
-        path to output file
+    replace_degens: bool, optional
+        If True, replace degenerate portion of calibration solution with solution in redcal_meta_file.
+    fix_polarities: bool, optional
+        If True, fix polarities specified in old_redcal_meta_file.
     clobber: bool, optional
         overwrite output calfits.
     """
@@ -2023,18 +2029,22 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, old_redcal_met
     reds = get_reds(antpos, pols=[pol.replace('J', '').replace('j', '') for pol in hc.pols])
     rc = RedundantCalibrator(reds)
     firstcal_gains = {}
-    # for ant in gains:
-    #    polarity_coeffs = (-1 + 0j) ** np.abs(fc_meta['polarity_flips'][ant])
-    #    firstcal_gains[ant] = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant][:, None]) * polarity_coeffs[:, None]
-    # generate firstcal gains with degeneracy replaced by median degeneracy in firstcal.
-    #new_gains = rc.remove_degen_gains(gains, degen_gains=firstcal_gains, mode='complex')
-    # fix polarity flips
-    new_gains = copy.deepcopy(gains)
-    for ant in fc_meta['polarity_flips']:
-        new_gains[ant] *= (-1. + 0j) ** np.abs(fc_meta['polarity_flips'][ant][:, None] - fc_meta_old['polarity_flips'][ant][:, None])
 
-    hc.update(gains=new_gains)
-    hc.write_calfits(output_file, clobber=clobber)
+    if fix_polarities:
+        for ant in fc_meta['polarity_flips']:
+            gains[ant] *= (-1. + 0j) ** np.abs(fc_meta['polarity_flips'][ant][:, None] - fc_meta_old['polarity_flips'][ant][:, None])
+
+    if replace_degens:
+        for ant in gains:
+            dly_factor = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant] * np.ones(ntimes)[:, None])\
+                       * np.exp(1j * fc_meta['offsets'][ant] * np.ones(ntimes)[:, None])
+            firstcal_gains[ant] = dly_factor
+        gains = rc.remove_degen_gains(gains, degen_gains=firstcal_gains, mode='complex')
+
+    hc.update(gains=gains)
+    if output_file is not None:
+        hc.write_calfits(output_file, clobber=clobber)
+    return hc
 
 
 def nightly_median_firstcal_delays_argparser():
@@ -2053,7 +2063,10 @@ def update_redcal_phase_degeneracy_argparser():
     ap = argparse.ArgumentParser(description="Replace redcal degeneracies with new delays")
     ap.add_argument("redcal_file", type=str, help="Name of redcal calfits file to replace degeneracy in.")
     ap.add_argument("redcal_meta_file", type=str, help="Name of redcal meta file with delays and polarity flips to use for degeneracy replacement.")
-    ap.add_argument("--output_file", type=str, help="Name of file to write new redcal solution too.")
+    ap.add_argument("output_file", type=str, help="Name of file to write new redcal solution too.")
+    ap.add_argument("old_redcal_meta_file", type=str, help="Path to redcal meta file with old polarity flips.")
+    ap.add_argument("--dont_replace_degens", default=False, action="store_true", help="Don't Replace redcal degeneracies with those in redcal_meta_file.")
+    ap.add_argument("--dont_replace_polarities", default=False, action="store_true", help="Dont fix any potentially misidentified polarity flips using the median polarity.")
     ap.add_argument("--clobber", default=False, action="store_true", help="Replace existing output file.")
     return ap
 
