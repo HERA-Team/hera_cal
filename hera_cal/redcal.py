@@ -933,6 +933,7 @@ class RedundantCalibrator:
                                                             edge_cut=edge_cut, max_recursion_depth=max_recursion_depth)
                 meta['polarity_flips'] = {ant: np.array([polarity_flips[ant] for i in range(len(dlys[ant]))])
                                           for ant in polarity_flips}
+                meta['offsets'] = {ant: off.flatten() for ant, off in delta_off.items()}
                 if np.all([flip is not None for flip in polarity_flips.values()]):
                     polarities = {ant: -1.0 if polarity_flips[ant] else 1.0 for ant in g_fc}
                     calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
@@ -943,6 +944,9 @@ class RedundantCalibrator:
                                              dtype=dtype) for ant in g_fc.keys()}
                 calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
                 g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
+                # update offsets in metadata.
+                for ant in meta['offsets']:
+                    meta['offsets'][ant] += delta_off[ant]
 
             if (np.linalg.norm(list(delta_off.values())) < conv_crit) and (i > 1):
                 break
@@ -1701,6 +1705,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     # setup metadata dictionaries
     rv['fc_meta'] = {'dlys': {ant: np.full(nTimes, np.nan) for ant in ants}}
     rv['fc_meta']['polarity_flips'] = {ant: np.full(nTimes, np.nan) for ant in ants}
+    rv['fc_meta']['offsets'] = {ant: np.full(nTimes, np.nan) for ant in ants}
     rv['omni_meta'] = {'chisq': {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}}
     rv['omni_meta']['iter'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=int) for pols in pol_load_list}
     rv['omni_meta']['conv_crit'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
@@ -1749,6 +1754,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                     rv['chisq_per_ant'][ant][tinds, fSlice] = cal['chisq_per_ant'][ant]
                 for ant in cal['fc_meta']['dlys'].keys():
                     rv['fc_meta']['dlys'][ant][tinds] = cal['fc_meta']['dlys'][ant]
+                    rv['fc_meta']['offsets'][ant][tinds] = cal['fc_meta']['offsets'][ant]
                     rv['fc_meta']['polarity_flips'][ant][tinds] = cal['fc_meta']['polarity_flips'][ant]
                 for bl in cal['v_omnical'].keys():
                     rv['v_omnical'][bl][tinds, fSlice] = cal['v_omnical'][bl]
@@ -1976,6 +1982,7 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
     nfiles = len(redcal_meta_file_list)
     ntimes = [len(rcm[4]) for rcm in redcal_metas]
     delays = {ant: np.zeros(np.sum(ntimes)) for ant in redcal_metas[0][1]['dlys']}
+    offsets = {ant: np.zeros(np.sum(ntimes)) for ant in recal_metas[0][1]['offsets']}
     polarity_flips = {ant: copy.deepcopy(delays[ant]).astype(bool) for ant in delays}
     nt = 0
     for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(redcal_metas):
@@ -1983,23 +1990,26 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
             tslice = slice(nt, nt + len(times))
             delays[ant][tslice] = fc_meta['dlys'][ant]
             polarity_flips[ant][tslice] = fc_meta['polarity_flips'][ant]
+            offsets[ant][tslice] = fc_meta['offsets'][ant]
         nt += len(times)
     # compute medians.
     for ant in delays:
         delays[ant] = np.nanmedian(delays[ant])
         polarity_flips[ant] = bool(np.nanmedian(polarity_flips[ant]))
+        offsets[ant] = np.nanmedian(offests[ant])
 
     # update metadata and write out.
     for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(redcal_metas):
         for ant in fc_meta['dlys']:
             fc_meta['dlys'][ant][:] = delays[ant]
             fc_meta['polarity_flips'][ant][:] = polarity_flips[ant]
+            fc_meta['offsets'][ant][:] = offsets[ant]
         save_redcal_meta(meta_filename.replace(output_replace, output_ext), fc_meta, omni_meta, freqs, times, lsts, antpos,
                          history + '\nTook nightly time median on delay and polarity flips.')
 
 
-def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, output_file=None,
-                                   old_redcal_meta_file=None, replace_degens=True, fix_polarities=True,
+def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, old_redcal_meta_file, output_file=None,
+                                   dont_replace_degens=False, dont_replace_polarities=False,
                                    clobber=False):
     """Update the phase degenerate component of a redcal solution and phase flips.
 
@@ -2009,10 +2019,10 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, output_file=No
         path to calfits file containing redcal solution to update.
     redcal_meta_file:
         path to redcal meta file generated with io.save_redcal_meta()  with delays to be used to update degeneracy.
-    output_file: str, optional
-        path to output file. Optional to write output to.
     old_redcal_meta_file:
         path to redcal meta file with old polarity flips.
+    output_file: str, optional
+        path to output file. Optional to write output to.
     replace_degens: bool, optional
         If True, replace degenerate portion of calibration solution with solution in redcal_meta_file.
     fix_polarities: bool, optional
@@ -2030,11 +2040,11 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, output_file=No
     rc = RedundantCalibrator(reds)
     firstcal_gains = {}
 
-    if fix_polarities:
+    if not dont_replace_polarities:
         for ant in fc_meta['polarity_flips']:
             gains[ant] *= (-1. + 0j) ** np.abs(fc_meta['polarity_flips'][ant][:, None] - fc_meta_old['polarity_flips'][ant][:, None])
 
-    if replace_degens:
+    if not dont_replace_degens:
         for ant in gains:
             dly_factor = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant] * np.ones(ntimes)[:, None])\
                        * np.exp(1j * fc_meta['offsets'][ant] * np.ones(ntimes)[:, None])

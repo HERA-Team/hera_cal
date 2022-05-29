@@ -572,11 +572,11 @@ class HERAData(UVData):
             try:
                 if self.filetype in ['uvh5', 'uvfits']:
                     super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
-                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, 
+                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
                     if self.filetype == 'uvfits':
-                        self.unphase_to_drift() 
+                        self.unphase_to_drift()
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
@@ -868,7 +868,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                    read_data=True, read_flags=False, read_nsamples=False,
                    check=False, dtype=np.complex128, verbose=False):
     '''A potentially faster interface for reading HERA HDF5 files. Only concatenates
-    along time axis. Puts times in ascending order, but does not check that 
+    along time axis. Puts times in ascending order, but does not check that
     files are contiguous. Currently not BDA compatible.
 
     Arguments:
@@ -877,7 +877,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
              Default: all bls common to all files.
         pols: list of pol strings to read out of files. Default: all, but is
               superceded by any polstrs listed in bls.
-        full_read_thresh (0.002): fractional threshold for reading whole file 
+        full_read_thresh (0.002): fractional threshold for reading whole file
                                   instead of baseline by baseline.
         read_data (bool, True): read data
         read_flags (bool, False): read flags
@@ -887,7 +887,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
         verbose: print some progress messages.
 
     Returns:
-        rv: dict with keys 'info' and optionally 'data', 'flags', and 'nsamples', 
+        rv: dict with keys 'info' and optionally 'data', 'flags', and 'nsamples',
             based on whether read_data, read_flags, and read_nsamples are true.
         rv['info']: metadata dict with keys 'freqs' (1D array), 'times' (1D array),
                     'pols' (list), 'ants' (1D array), 'antpos' (dict of antenna: 3D position),
@@ -1388,6 +1388,8 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         ant_keys = sorted(list(fc_meta['dlys'].keys()))
         fc_grp['dlys'] = np.array([fc_meta['dlys'][ant] for ant in ant_keys])
         fc_grp['dlys'].attrs['ants'] = np.string_(ant_keys)
+        fc_grp['offests'] = np.array([fc_meta['offsets'][ant] for ant in ant_keys])
+        fc_grp['offsets'].attrs['ants'] = np.string_(ant_keys)
         fc_grp['polarity_flips'] = np.array([fc_meta['polarity_flips'][ant] for ant in ant_keys])
         fc_grp['polarity_flips'].attrs['ants'] = np.string_(ant_keys)
 
@@ -1432,7 +1434,7 @@ def read_redcal_meta(meta_filename):
                 for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
         fc_meta['dlys'] = {ant: dly for ant, dly in zip(ants, infile['fc_meta']['dlys'][:, :])}
         fc_meta['polarity_flips'] = {ant: flips for ant, flips in zip(ants, infile['fc_meta']['polarity_flips'][:, :])}
-
+        fc_meta['offsets'] = {ant: offests for ant, offsets in zip(ants, infile['fc_meta']['offsets'][:, :])}
         # reconstruct omnical metadata
         omni_meta = {}
         pols_keys = infile['omni_meta']['chisq'].attrs['pols']
