@@ -1931,22 +1931,32 @@ def _filter_argparser():
                                                                      "then inputs. Only use it if you know what you are doing. Default is None.")
     ap.add_argument("--zeropad", default=None, type=int, help="number of bins to zeropad on both sides of FFT axis")
     ap.add_argument("--Nbls_per_load", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
-    ap.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
-    ap.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
-    ap.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
     ap.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
     ap.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
     ap.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
-    ap.add_argument("--external_flags", default=None, type=str, nargs="+", help="path(s) to external flag files that you wish to apply.")
-    ap.add_argument("--overwrite_flags", default=False, action="store_true", help="overwrite existing flags.")
-    ap.add_argument("--flag_yaml", default=None, type=str, help="path to a flagging yaml containing apriori antenna, freq, and time flags.")
     ap.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter.")
     ap.add_argument("--verbose", default=False, action="store_true", help="Lots of text.")
-    ap.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge.")
     ap.add_argument("--filter_spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections to filter independently. Two acceptable formats are "
                                                                                        "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
                                                                                        "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
-    ap.add_argument("--clean_flags_not_in_resid_flags", default=False, action="store_true", help="Do not include flags from times/channels skipped in the resid flags.")
+    
+    # Flagging options
+    flag_options = ap.add_argument_group(title="Options relating to flagging.")
+    flag_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
+    flag_options.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
+    flag_options.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
+    flag_options.add_argument("--external_flags", default=None, type=str, nargs="+", help="path(s) to external flag files that you wish to apply.")
+    flag_options.add_argument("--overwrite_flags", default=False, action="store_true", help="overwrite existing flags.")
+    flag_options.add_argument("--flag_yaml", default=None, type=str, help="path to a flagging yaml containing apriori antenna, freq, and time flags.")
+    flag_options.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge. Default 0 means do nothing.")
+    flag_options.add_argument("--dont_skip_contiguous_flags", default=False, action="store_true", help="Don't skip integrations or channels with gaps that are larger then integer specified in max_contiguous_flag")
+    flag_options.add_argument("--max_contiguous_flag", type=int, default=None, help="Used if skip_contiguous_flags is True. Gaps larger then this value will be skipped. Default None uses filter periods.")
+    flag_options.add_argument("--dont_skip_flagged_edges", default=False, action="store_true", help="Attept to filter over flagged edge times and/or channels.")
+    flag_options.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
+    flag_options.add_argument("--dont_flag_model_rms_outliers", default=False, action="store_true", help="Do not flag integrations or channels where the rms of the filter model exceeds the rms of the unflagged data.")
+    flag_options.add_argument("--model_rms_threshold", type=float, default=1.1, help="Factor that rms of model in a channel or integration needs to exceed the rms of unflagged data to be flagged.")
+    flag_options.add_argument("--clean_flags_not_in_resid_flags", default=False, action="store_true", help="Do not include flags from times/channels skipped in the resid flags.")
+    
     # Arguments for CLEAN. Not used in linear filtering methods.
     clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
@@ -1956,14 +1966,13 @@ def _filter_argparser():
     clean_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
     clean_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     clean_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
+    
     # Options for caching for linear filtering.
     cache_options = ap.add_argument_group(title='Options for caching (arguments only used if mode!="clean")')
     cache_options.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
     cache_options.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
     cache_options.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
-    # Options that are only used for linear filters like dayenu and dpss_leastsq.
-    linear_options = ap.add_argument_group(title="Options for linear filtering (dayenu and dpss_leastsq)")
-    linear_options.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
+
     return ap
 
 
