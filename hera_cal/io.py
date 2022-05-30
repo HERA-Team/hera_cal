@@ -884,7 +884,8 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
             based on whether read_data, read_flags, and read_nsamples are true.
         rv['info']: metadata dict with keys 'freqs' (1D array), 'times' (1D array),
                     'pols' (list), 'ants' (1D array), 'antpos' (dict of antenna: 3D position),
-                    'bls' (list of all (ant_1, ant_2) baselines in the file).
+                    'bls' (list of all (ant_1, ant_2) baselines in the file), 'data_ants' (1D array)
+                    'latitude' (float in degrees), longitude (float in degrees), altitude (float in m)
         rv['data']: dict of 2D data with (i, j, pol) keys.
         rv['flags']: dict of 2D flags with (i, j, pol) keys.
         rv['nsamples']: dict of 2D nsamples with (i, j, pol) keys.
@@ -911,6 +912,8 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 info['pols'] = list(pol_indices.keys())
                 info['ants'] = antenna_numbers = h['antenna_numbers'][()]
                 info['antpos'] = dict(zip(antenna_numbers, h['antenna_positions'][()]))
+                for coord in ['latitude', 'longitude', 'altitude']:
+                    info[coord] = h[coord][()]
             elif check:
                 # Check that all files have the same number of frequencies
                 assert int(h['Nfreqs'][()]) == nfreqs
@@ -919,6 +922,8 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
             ntimes = int(h['Ntimes'][()])
             ant1_array = h['ant_1_array'][::ntimes]
             ant2_array = h['ant_2_array'][::ntimes]
+            data_ants = set(ant1_array)
+            data_ants.update(set(ant2_array))
             _hash = hash((ant1_array.tobytes(), ant2_array.tobytes()))
             # map baselines to array indices for each unique antenna order
             if _hash not in inds:
@@ -933,8 +938,10 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                         assert bl[:2] in inds[_hash]
                 if 'bls' not in info:
                     info['bls'] = set(inds[_hash].keys())
+                    info['data_ants'] = data_ants
                 else:
                     info['bls'].intersection_update(set(inds[_hash].keys()))
+                    info['data_ants'].intersection_update(data_ants)
             bl2ind[filename] = inds[_hash]
 
     if bls is None:
@@ -1016,6 +1023,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
     # Quick renaming of data key for niceness
     if 'visdata' in rv:
         rv['data'] = rv.pop('visdata', [])
+    info['data_ants'] = np.array(sorted(info['data_ants']))
     rv['info'] = info
     return rv
 
