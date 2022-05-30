@@ -20,7 +20,7 @@ import sys
 from .. import io
 from ..io import HERACal, HERAData
 from ..datacontainer import DataContainer
-from ..utils import polnum2str, polstr2num, jnum2str, jstr2num
+from ..utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, split_bl
 from ..data import DATA_PATH
 from hera_qm.data import DATA_PATH as QM_DATA_PATH
 
@@ -740,6 +740,63 @@ class Test_ReadHeraHdf5(object):
         rv = io.read_hera_hdf5([self.uvh5_1], bls=[bl])
         assert len(rv['data']) == 1
         assert bl in rv['data']
+
+
+class Test_HERADataFastReader(object):
+    def setup_method(self):
+        self.uvh5_1 = os.path.join(DATA_PATH, "test_input", "zen.2458042.60288.HH.uvRXLS.uvh5_downselected")
+        self.uvh5_2 = os.path.join(DATA_PATH, "test_input", "zen.2458042.61034.HH.uvRXLS.uvh5_downselected")
+
+    def test_init(self):
+        hd = io.HERADataFastReader(self.uvh5_1)
+        assert hd.filepaths == [self.uvh5_1]
+        assert hd.antpos is None
+        assert hd.times_by_bl is None
+
+    def test_read_data(self):
+        rv = io.read_hera_hdf5([self.uvh5_1])
+        hd = io.HERADataFastReader(self.uvh5_1)
+        d, f, n = hd.read(read_flags=False, read_nsamples=False)
+        assert f is None
+        assert n is None
+        for bl in d:
+            np.testing.assert_array_equal(d[bl], rv['data'][bl])
+            if split_bl(bl)[0] != split_bl(bl)[1]:
+                np.testing.assert_array_equal(d[bl], np.conj(d[reverse_bl(bl)]))
+
+    def test_comp_to_HERAData(self):
+        hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
+        d, f, n = hd.read()
+        hd2 = io.HERAData([self.uvh5_1, self.uvh5_2])
+        d2, f2, n2 = hd.read()
+        # compare all data and metadata
+        for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
+            for bl in dc1:
+                np.testing.assert_array_equal(dc1[bl], dc2[bl])
+            np.testing.assert_array_equal(dc1.freqs, dc2.freqs)
+            np.testing.assert_array_equal(dc1.times, dc2.times)
+            np.testing.assert_array_equal(dc1.lsts, dc2.lsts)
+            np.testing.assert_array_equal(dc1.ants, dc2.ants)
+            np.testing.assert_array_equal(dc1.data_ants, dc2.data_ants)
+            np.testing.assert_array_equal(dc1.pols, dc2.pols)
+            np.testing.assert_array_equal(dc1.antpairs, dc2.antpairs)
+            np.testing.assert_array_equal(dc1.bls, dc2.bls)    
+            for ant in dc1.antpos:
+                np.testing.assert_array_equal(dc1.antpos[ant], dc2.antpos[ant])
+            for ant in dc1.data_antpos:
+                np.testing.assert_array_equal(dc1.antpos[ant], dc2.antpos[ant])
+            for ap in dc1.times_by_bl:
+                np.testing.assert_array_equal(dc1.times_by_bl[ap], dc2.times_by_bl[ap])
+            for ap in dc1.lsts_by_bl:
+                np.testing.assert_array_equal(dc1.lsts_by_bl[ap], dc2.lsts_by_bl[ap])
+
+    def test_errors(self):
+        hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
+        with pytest.raises(NotImplementedError):
+            hd.write_uvh5()
+        with pytest.raises(NotImplementedError):
+            hd.iterate_over_bls('stuff', fake_kwarg=False)
+
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
