@@ -1692,3 +1692,18 @@ class TestRunMethods(object):
         assert a.ex_ants == [5, 6]
         assert a.gain == 0.4
         assert a.verbose is True
+
+    def test_nighly_median_argparser(self):
+        sys.argv = [sys.argv[0], 'file1.hdf5', 'file2.hdf5', 'file3.hdf5']
+        args = om.nightly_median_firstcal_delays_argparser().parse_args()
+        assert args.redcal_meta_file_list == ['file1.hdf5', 'file2.hdf5', 'file3.hdf5']
+        assert args.output_ext == '.redcal_meta.median_delay.hdf5'
+        assert args.output_replace == ".redcal_meta.hdf5"
+
+    def test_update_redcal_phase_degeneracy_argparser(self):
+        sys.argv = [sys.argv[0], 'redcal_solution.calfits', 'redcal_meta_file.hdf5', 'output.calfits', 'old_meta_file.hdf5']
+        args = om.update_redcal_phase_degeneracy_argparser().parse_args()
+        assert args.redcal_file == 'redcal_solution.calfits'
+        assert args.redcal_meta_file == 'redcal_meta_file.hdf5'
+        assert args.output_file == 'output.calfits'
+        assert args.old_redcal_meta_file == 'old_meta_file.hdf5'
