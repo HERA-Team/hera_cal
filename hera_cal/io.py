@@ -914,8 +914,9 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
             elif check:
                 # Check that all files have the same number of frequencies
                 assert int(h['Nfreqs'][()]) == nfreqs
+            nbls = int(h['Nbls'][()])
+            times.append((h['time_array'][::nbls], filename))
             ntimes = int(h['Ntimes'][()])
-            times.append((h['time_array'][:ntimes], filename))
             ant1_array = h['ant_1_array'][::ntimes]
             ant2_array = h['ant_2_array'][::ntimes]
             _hash = hash((ant1_array.tobytes(), ant2_array.tobytes()))
