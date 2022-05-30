@@ -1028,6 +1028,92 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
     return rv
 
 
+class HERADataFastReader():
+    '''Wrapper class around read_hera_hdf5 meant to mimic the functionality of HERAData for drop-in replacement.'''
+    
+    def __init__(self, input_data):
+        '''Instantiates a HERADataFastReader object. Only supports reading uvh5 files, not writing them. 
+        Does not support BDA and only supports patial i/o along baselines and polarization axes. 
+        
+        Arguments:
+            input_data: path or list of paths to uvh5 files.
+        '''
+        # parse input_data as filepath(s)
+        self.filepaths = _parse_input_files(input_data, name='input_data')
+
+        # initialize metatadata to None to match HERAData
+        for meta in HERAData.HERAData_metas:
+            setattr(self, meta, None)
+        
+        # create functions that error informatively when trying to use standard HERAData/UVData methods
+        for funcname in list(dir(HERAData)):
+            if funcname.startswith('__') and funcname.endswith('__'):
+                continue  # don't overwrite things like __class__ and __init__
+            if funcname in ['read', '_make_datacontainer', '_HERAData_error']:
+                continue  # don't overwrite functions with errors that we actually use
+            setattr(self, funcname, self._HERAData_error)
+
+    def _HERAData_error(self, *args, **kwargs):
+        raise NotImplementedError('HERADataFastReader does not support this method. Try HERAData instead.')
+
+    def read(self, bls=None, pols=None, full_read_thresh=0.002, read_data=True, read_flags=True, 
+             read_nsamples=True, check=False, dtype=np.complex128, verbose=False, skip_lsts=False):
+        '''A faster read that only concatenates along the time axis. Puts times in ascending order, but does not 
+        check that files are contiguous. Currently not BDA compatible.
+        
+        Arguments:
+            bls: list of (ant_1, ant_2, [polstr]) tuples to read out of files. Default: all bls common to all files.
+            pols: list of pol strings to read out of files. Default: all, but is superceded by any polstrs listed in bls.
+            full_read_thresh (0.002): fractional threshold for reading whole file instead of baseline by baseline.
+            read_data (bool, True): read data
+            read_flags (bool, True): read flags
+            read_nsamples (bool, True): read nsamples
+            check (bool, False): run sanity checks to make sure files match.
+            dtype (np.complex128): numpy datatype for output complex-valued arrays
+            verbose: print some progress messages.
+            skip_lsts (bool, False): save time by not computing LSTs from JDs
+        
+        Returns:
+            data: DataContainer mapping baseline keys to complex visibility waterfalls (if read_data is True, else None)
+            flags: DataContainer mapping baseline keys to boolean flag waterfalls (if read_flags is True, else None)
+            nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls (if read_nsamples is True, else None)
+        '''                
+        rv = read_hera_hdf5(self.filepaths, bls=bls, pols=pols, full_read_thresh=full_read_thresh,
+                            read_data=read_data, read_flags=read_flags, read_nsamples=read_nsamples,
+                            check=check, dtype=dtype, verbose=verbose)
+        
+        # extra metadata calculations
+        rv['info']['antpairs'] = rv['info']['bls']
+        rv['info']['bls'] = set(bl for key in ['data', 'flags', 'nsamples'] for bl in rv.get(key, {}).keys())
+        rv['info']['data_antpos'] = {ant: rv['info']['antpos'][ant] for ant in rv['info']['data_ants']}
+        rv['info']['times'] = np.unique(rv['info']['times'])
+        rv['info']['times_by_bl'] = {ap: rv['info']['times'] for ap in rv['info']['antpairs']}
+        if not skip_lsts:
+            rv['info']['lsts'] = JD2LST(rv['info']['times'], rv['info']['latitude'], rv['info']['longitude'], rv['info']['altitude'])
+            rv['info']['lsts_by_bl'] = {ap: rv['info']['lsts'] for ap in rv['info']['antpairs']}
+
+        # update metadata here
+        for meta in HERAData.HERAData_metas:
+            if meta in rv['info']:
+                setattr(self, meta, rv['info'][meta])
+
+        # construct datacontainers from result
+        return self._make_datacontainer(rv, 'data'), self._make_datacontainer(rv, 'flags'), self._make_datacontainer(rv, 'nsamples')
+
+    def _make_datacontainer(self, rv, key='data'):
+        '''Converts outputs from read_hera_hdf5 to a more standard HERAData output.'''
+        if key not in rv:
+            return None
+        
+        # construct datacontainer with whatever metadata is available
+        dc = DataContainer(rv[key])
+        for meta in HERAData.HERAData_metas:
+            if meta in rv['info']:
+                setattr(dc, meta, rv['info'][meta])
+
+        return dc
+
+
 def read_filter_cache_scratch(cache_dir):
     """
     Load files from a cache specified by cache_dir.
