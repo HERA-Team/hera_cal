@@ -677,6 +677,7 @@ class Test_ReadHeraHdf5(object):
         assert 'flags' not in rv
         assert 'nsamples' not in rv
         assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
+        assert rv['info']['times'].size == np.unique(rv['info']['times']).size
         for bl, data in rv['data'].items():
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
             assert data.dtype == np.complex128
