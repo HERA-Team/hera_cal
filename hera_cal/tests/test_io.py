@@ -780,7 +780,7 @@ class Test_HERADataFastReader(object):
             np.testing.assert_array_equal(dc1.data_ants, dc2.data_ants)
             np.testing.assert_array_equal(dc1.pols, dc2.pols)
             np.testing.assert_array_equal(dc1.antpairs, dc2.antpairs)
-            np.testing.assert_array_equal(dc1.bls, dc2.bls)    
+            np.testing.assert_array_equal(dc1.bls, dc2.bls)
             for ant in dc1.antpos:
                 np.testing.assert_array_equal(dc1.antpos[ant], dc2.antpos[ant])
             for ant in dc1.data_antpos:
@@ -796,7 +796,6 @@ class Test_HERADataFastReader(object):
             hd.write_uvh5()
         with pytest.raises(NotImplementedError):
             hd.iterate_over_bls('stuff', fake_kwarg=False)
-
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
