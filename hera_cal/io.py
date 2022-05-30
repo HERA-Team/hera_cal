@@ -24,7 +24,6 @@ import argparse
 from . import version
 from uvtools.dspec import place_data_on_uniform_grid
 
-
 try:
     import aipy
     AIPY = True
@@ -33,7 +32,23 @@ except ImportError:
 
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
-from .utils import split_pol, conj_pol, LST2JD, HERA_TELESCOPE_LOCATION
+from .utils import split_pol, conj_pol, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
+
+
+def _parse_input_files(inputs, name='input_data'):
+    if isinstance(inputs, str):
+        filepaths = [inputs]
+    elif isinstance(inputs, Iterable):  # List loading
+        if np.all([isinstance(i, str) for i in inputs]):  # List of visibility data paths
+            filepaths = list(inputs)
+        else:
+            raise TypeError(f'If {name} is a list, it must be a list of strings.')
+    else:
+        raise ValueError(f'{name} must be a string or a list of strings.')
+    for f in filepaths:
+        if not os.path.exists(f):
+            raise IOError('Cannot find file ' + f)
+    return filepaths
 
 
 class HERACal(UVCal):
@@ -55,18 +70,7 @@ class HERACal(UVCal):
         super().__init__()
 
         # parse input_data as filepath(s)
-        if isinstance(input_cal, str):
-            assert os.path.exists(input_cal), '{} does not exist.'.format(input_cal)
-            self.filepaths = [input_cal]
-        elif isinstance(input_cal, Iterable):  # List loading
-            if np.all([isinstance(i, str) for i in input_cal]):  # List of visibility data paths
-                for ic in input_cal:
-                    assert os.path.exists(ic), '{} does not exist.'.format(ic)
-                self.filepaths = list(input_cal)
-            else:
-                raise TypeError('If input_cal is a list, it must be a list of strings.')
-        else:
-            raise ValueError('input_cal must be a string or a list of strings.')
+        self.filepaths = _parse_input_files(input_cal, name='input_cal')
 
     def _extract_metadata(self):
         '''Extract and store useful metadata and array indexing dictionaries.'''
@@ -317,18 +321,7 @@ class HERAData(UVData):
         super().__init__()
 
         # parse input_data as filepath(s)
-        if isinstance(input_data, str):
-            self.filepaths = [input_data]
-        elif isinstance(input_data, Iterable):  # List loading
-            if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
-                self.filepaths = list(input_data)
-            else:
-                raise TypeError('If input_data is a list, it must be a list of strings.')
-        else:
-            raise ValueError('input_data must be a string or a list of strings.')
-        for f in self.filepaths:
-            if not os.path.exists(f):
-                raise IOError('Cannot find file ' + f)
+        self.filepaths = _parse_input_files(input_data, name='input_data')
 
         # parse arguments into object
         self.upsample = upsample
