@@ -917,19 +917,35 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
             elif check:
                 # Check that all files have the same number of frequencies
                 assert int(h['Nfreqs'][()]) == nfreqs
-            nbls = int(h['Nbls'][()])
-            times.append((h['time_array'][::nbls], filename))
+            # Determine blt ordering (baselines then times, or times then baselines)
             ntimes = int(h['Ntimes'][()])
-            ant1_array = h['ant_1_array'][::ntimes]
-            ant2_array = h['ant_2_array'][::ntimes]
+            _times = h['time_array'][:ntimes]
+            time_first = (np.unique(_times).size == ntimes)
+            nbls = int(h['Nblts'][()]) // ntimes
+            if time_first:
+                # time-baseline ordering
+                ant1_array = h['ant_1_array'][::ntimes]
+                ant2_array = h['ant_2_array'][::ntimes]
+            else:
+                # baseline-time ordering
+                _times = h['time_array'][::nbls]
+                ant1_array = h['ant_1_array'][:nbls]
+                ant2_array = h['ant_2_array'][:nbls]
+            _info = {'time_first': time_first, 'ntimes': ntimes, 'nbls': nbls}
+            times.append((_times, filename, _info))
             data_ants = set(ant1_array)
             data_ants.update(set(ant2_array))
-            _hash = hash((ant1_array.tobytes(), ant2_array.tobytes()))
+            _hash = hash((ant1_array.tobytes(), ant2_array.tobytes(), time_first, ntimes))
             # map baselines to array indices for each unique antenna order
             if _hash not in inds:
-                inds[_hash] = {(i, j): slice(n * ntimes, (n + 1) * ntimes)
-                               for n, (i, j) in enumerate(zip(ant1_array,
-                                                              ant2_array))}
+                if time_first:
+                    inds[_hash] = {(i, j): slice(n * ntimes, (n + 1) * ntimes)
+                                   for n, (i, j) in enumerate(zip(ant1_array,
+                                                                  ant2_array))}
+                else:
+                    inds[_hash] = {(i, j): slice(n, None, nbls)
+                                   for n, (i, j) in enumerate(zip(ant1_array,
+                                                                  ant2_array))}
                 if bls is not None:
                     # Make sure our baselines of interest are in this file
                     if not all([bl[:2] in inds[_hash] for bl in bls]):
@@ -962,34 +978,38 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
         pols = set(bl[2] for bl in bls)
     # sort files by time of first integration
     times.sort(key=lambda x: x[0][0])
-    filenames = (v[1] for v in times)
-    times = np.concatenate([t[0] for t in times], axis=0)
-    info['times'] = times
+    info['times'] = np.concatenate([t[0] for t in times], axis=0)
+    tot_times = info['times'].size
 
     # preallocate buffers
     rv = {}
     if read_data:
-        rv['visdata'] = {bl: np.empty((times.size, nfreqs), dtype=dtype) for bl in bls}
+        rv['visdata'] = {bl: np.empty((tot_times, nfreqs), dtype=dtype) for bl in bls}
     if read_flags:
-        rv['flags'] = {bl: np.empty((times.size, nfreqs), dtype=bool) for bl in bls}
+        rv['flags'] = {bl: np.empty((tot_times, nfreqs), dtype=bool) for bl in bls}
     if read_nsamples:
-        rv['nsamples'] = {bl: np.empty((times.size, nfreqs), dtype=np.float32) for bl in bls}
+        rv['nsamples'] = {bl: np.empty((tot_times, nfreqs), dtype=np.float32) for bl in bls}
     # bail here if all we wanted was the info
     if len(rv) == 0:
         return {'info': info}
 
     t = 0
-    for filename in filenames:
+    for _times, filename, _info in times:
         inds = bl2ind[filename]
+        ntimes = _info['ntimes']
+        nbls = _info['nbls']
         if verbose:
             print(f'Reading data from {filename}')
         with h5py.File(filename, 'r') as f:
-            h = f['/Header']
-            ntimes = int(h['Ntimes'][()])
-            nbls = int(h['Nblts'][()]) // ntimes
             if check:
+                h = f['/Header']
+                assert ntimes == int(h['Ntimes'][()])
+                assert nbls == int(h['Nblts'][()]) // ntimes
                 # Check that files sorted correctly into time order
-                assert np.allclose(h['time_array'][:ntimes], times[t:t + ntimes])
+                if info['time_first']:
+                    assert np.allclose(h['time_array'][:ntimes], _times)
+                else:
+                    assert np.allclose(h['time_array'][::nbls], _times)
             # decide whether to read all the data in, or use partial I/O
             full_read = (len(bls) > full_read_thresh * nbls * npols)
             if full_read and verbose:
