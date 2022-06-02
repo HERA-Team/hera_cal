@@ -755,6 +755,7 @@ class Test_HERADataFastReader(object):
     def setup_method(self):
         self.uvh5_1 = os.path.join(DATA_PATH, "test_input", "zen.2458042.60288.HH.uvRXLS.uvh5_downselected")
         self.uvh5_2 = os.path.join(DATA_PATH, "test_input", "zen.2458042.61034.HH.uvRXLS.uvh5_downselected")
+        self.uvh5_h4c = os.path.join(DATA_PATH, "zen.2459122.30030.sum.single_time.uvh5")
 
     def test_init(self):
         hd = io.HERADataFastReader(self.uvh5_1)
@@ -774,30 +775,31 @@ class Test_HERADataFastReader(object):
                 np.testing.assert_array_equal(d[bl], np.conj(d[reverse_bl(bl)]))
 
     def test_comp_to_HERAData(self):
-        hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
-        d, f, n = hd.read(check=True)
-        hd2 = io.HERAData([self.uvh5_1, self.uvh5_2])
-        d2, f2, n2 = hd2.read()
-        # compare all data and metadata
-        for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
-            for bl in dc1:
-                np.testing.assert_array_equal(dc1[bl], dc2[bl])
-            np.testing.assert_array_equal(dc1.freqs, dc2.freqs)
-            np.testing.assert_array_equal(dc1.times, dc2.times)
-            np.testing.assert_array_equal(dc1.lsts, dc2.lsts)
-            np.testing.assert_array_equal(dc1.ants, dc2.ants)
-            np.testing.assert_array_equal(dc1.data_ants, dc2.data_ants)
-            np.testing.assert_array_equal(dc1.pols, dc2.pols)
-            np.testing.assert_array_equal(dc1.antpairs, dc2.antpairs)
-            np.testing.assert_array_equal(dc1.bls, dc2.bls)
-            for ant in dc1.antpos:
-                np.testing.assert_array_equal(dc1.antpos[ant], dc2.antpos[ant])
-            for ant in dc1.data_antpos:
-                np.testing.assert_array_equal(dc1.antpos[ant], dc2.antpos[ant])
-            for ap in dc1.times_by_bl:
-                np.testing.assert_array_equal(dc1.times_by_bl[ap], dc2.times_by_bl[ap])
-            for ap in dc1.lsts_by_bl:
-                np.testing.assert_array_equal(dc1.lsts_by_bl[ap], dc2.lsts_by_bl[ap])
+        for infile in ([self.uvh5_1], [self.uvh5_1, self.uvh5_2], self.uvh5_h4c):
+            hd = io.HERADataFastReader(infile)
+            d, f, n = hd.read(check=True)
+            hd2 = io.HERAData(infile)
+            d2, f2, n2 = hd2.read()
+            # compare all data and metadata
+            for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
+                for bl in dc1:
+                    np.testing.assert_array_equal(dc1[bl], dc2[bl])
+                np.testing.assert_array_equal(dc1.freqs, dc2.freqs)
+                np.testing.assert_array_equal(dc1.times, dc2.times)
+                np.testing.assert_array_equal(dc1.lsts, dc2.lsts)
+                np.testing.assert_array_equal(dc1.ants, dc2.ants)
+                np.testing.assert_array_equal(dc1.data_ants, dc2.data_ants)
+                np.testing.assert_array_equal(dc1.pols, dc2.pols)
+                np.testing.assert_array_equal(dc1.antpairs, dc2.antpairs)
+                np.testing.assert_array_equal(dc1.bls, dc2.bls)
+                for ant in dc1.antpos:
+                    np.testing.assert_array_equal(dc1.antpos[ant], dc2.antpos[ant])
+                for ant in dc1.data_antpos:
+                    np.testing.assert_array_equal(dc1.antpos[ant], dc2.antpos[ant])
+                for ap in dc1.times_by_bl:
+                    np.testing.assert_array_equal(dc1.times_by_bl[ap], dc2.times_by_bl[ap])
+                for ap in dc1.lsts_by_bl:
+                    np.testing.assert_array_equal(dc1.lsts_by_bl[ap], dc2.lsts_by_bl[ap])
 
     def test_errors(self):
         hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
