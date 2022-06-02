@@ -672,7 +672,7 @@ class Test_ReadHeraHdf5(object):
     def test_basic_read(self):
         rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2],
                                read_flags=False, read_nsamples=False, verbose=True,
-                               dtype=np.complex128)
+                               dtype=np.complex128, check=True)
         assert 'info' in rv
         assert 'data' in rv
         assert 'flags' not in rv
@@ -687,10 +687,10 @@ class Test_ReadHeraHdf5(object):
         with pytest.raises(ValueError):
             rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], bls=[(999, 999, 'xx')],
                                    read_flags=False, read_nsamples=False, verbose=True,
-                                   dtype=np.complex128)
+                                   dtype=np.complex128, check=True)
 
     def test_info_only(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True,
+        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True, check=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         assert 'info' in rv
         assert 'data' not in rv
@@ -698,7 +698,7 @@ class Test_ReadHeraHdf5(object):
         assert 'nsamples' not in rv
 
     def test_read_all(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True,
+        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True, check=True,
                                read_flags=True, read_nsamples=True)
         assert 'info' in rv
         assert 'data' in rv
@@ -715,7 +715,7 @@ class Test_ReadHeraHdf5(object):
             assert data.dtype == np.float32
 
     def test_read_allbls_poltranspose(self):
-        rv = io.read_hera_hdf5([self.uvh5_pol], dtype=np.complex128, verbose=True,)
+        rv = io.read_hera_hdf5([self.uvh5_pol], dtype=np.complex128, verbose=True, check=True)
         assert 'info' in rv
         assert 'data' in rv
         assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
@@ -723,7 +723,7 @@ class Test_ReadHeraHdf5(object):
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
     
     def test_read_one_bl(self):
-        rv = io.read_hera_hdf5([self.uvh5_1], verbose=True,
+        rv = io.read_hera_hdf5([self.uvh5_1], verbose=True, check=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         bl = list(rv['info']['bls'])[0]
         pol = rv['info']['pols'][0]
@@ -733,7 +733,7 @@ class Test_ReadHeraHdf5(object):
         assert bl in rv['data']
 
     def test_read_one_bl_poltranpose(self):
-        rv = io.read_hera_hdf5(self.uvh5_pol, verbose=True,
+        rv = io.read_hera_hdf5(self.uvh5_pol, verbose=True, check=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         bl = list(rv['info']['bls'])[0]
         pol = rv['info']['pols'][0]
@@ -743,7 +743,7 @@ class Test_ReadHeraHdf5(object):
         assert bl in rv['data']
 
     def test_read_bl_then_time_poltranpose(self):
-        rv = io.read_hera_hdf5([self.uvh5_blt], verbose=True, bls=[(24, 26)],
+        rv = io.read_hera_hdf5([self.uvh5_blt], verbose=True, bls=[(24, 26)], check=True,
                                read_data=True, read_flags=True, read_nsamples=True)
         assert len(rv['data']) == 4
         assert (24, 26, 'xx') in rv['data']
@@ -765,7 +765,7 @@ class Test_HERADataFastReader(object):
     def test_read_data(self):
         rv = io.read_hera_hdf5([self.uvh5_1])
         hd = io.HERADataFastReader(self.uvh5_1)
-        d, f, n = hd.read(read_flags=False, read_nsamples=False)
+        d, f, n = hd.read(read_flags=False, read_nsamples=False, check=True)
         assert f is None
         assert n is None
         for bl in d:
@@ -775,7 +775,7 @@ class Test_HERADataFastReader(object):
 
     def test_comp_to_HERAData(self):
         hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
-        d, f, n = hd.read()
+        d, f, n = hd.read(check=True)
         hd2 = io.HERAData([self.uvh5_1, self.uvh5_2])
         d2, f2, n2 = hd.read()
         # compare all data and metadata
