@@ -1115,6 +1115,7 @@ class HERADataFastReader():
             rv['info']['lsts_by_bl'] = {ap: rv['info']['lsts'] for ap in rv['info']['antpairs']}
 
         # update metadata here
+        self.info = rv['info']
         for meta in HERAData.HERAData_metas:
             if meta in rv['info']:
                 setattr(self, meta, rv['info'][meta])
