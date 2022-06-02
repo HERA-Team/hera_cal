@@ -895,6 +895,8 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
     bl2ind = {}
     inds = {}
     # Read file metadata to size up arrays and sort times
+    if type(filenames) is str:
+        filenames = [filenames]
     for filename in filenames:
         if verbose:
             print(f'Reading header of {filename}')

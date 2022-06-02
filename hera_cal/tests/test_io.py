@@ -733,7 +733,7 @@ class Test_ReadHeraHdf5(object):
         assert bl in rv['data']
 
     def test_read_one_bl_poltranpose(self):
-        rv = io.read_hera_hdf5([self.uvh5_pol], verbose=True,
+        rv = io.read_hera_hdf5(self.uvh5_pol, verbose=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         bl = list(rv['info']['bls'])[0]
         pol = rv['info']['pols'][0]
