@@ -18,7 +18,7 @@ import scipy
 import pickle
 import random
 import glob
-from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT
+from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
 from . import redcal
 import argparse
 from . import version
@@ -1110,6 +1110,10 @@ class HERADataFastReader():
         # extra metadata calculations
         rv['info']['antpairs'] = rv['info']['bls']
         rv['info']['bls'] = set(bl for key in ['data', 'flags', 'nsamples'] for bl in rv.get(key, {}).keys())
+        XYZ =  XYZ_from_LatLonAlt(rv['info']['latitude'] * np.pi / 180, rv['info']['longitude'] * np.pi / 180, rv['info']['altitude'])
+        enu_antpos = ENU_from_ECEF(np.array([antpos for ant, antpos in rv['info']['antpos'].items()]) + XYZ, 
+                                   rv['info']['latitude'] * np.pi / 180, rv['info']['longitude'] * np.pi / 180, rv['info']['altitude'])
+        rv['info']['antpos'] = {ant: enu for enu, ant in zip(enu_antpos, rv['info']['antpos'])}
         rv['info']['data_antpos'] = {ant: rv['info']['antpos'][ant] for ant in rv['info']['data_ants']}
         rv['info']['times'] = np.unique(rv['info']['times'])
         rv['info']['times_by_bl'] = {ap: rv['info']['times'] for ap in rv['info']['antpairs']}
