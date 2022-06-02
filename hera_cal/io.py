@@ -1008,7 +1008,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 assert ntimes == int(h['Ntimes'][()])
                 assert nbls == int(h['Nblts'][()]) // ntimes
                 # Check that files sorted correctly into time order
-                if info['time_first']:
+                if _info['time_first']:
                     assert np.allclose(h['time_array'][:ntimes], _times)
                 else:
                     assert np.allclose(h['time_array'][::nbls], _times)
