@@ -816,6 +816,77 @@ class Test_HERADataFastReader(object):
             hd.iterate_over_bls('stuff', fake_kwarg=False)
 
 
+class Test_ReadHeraCalfits(object):
+    def setup_method(self):
+        self.fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
+        self.fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
+        self.fname_both = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
+        self.fname_t0 = os.path.join(DATA_PATH, 'test_input/zen.2458101.44615.xx.HH.uv.abs.calfits_54x_only')
+        self.fname_t1 = os.path.join(DATA_PATH, 'test_input/zen.2458101.45361.xx.HH.uv.abs.calfits_54x_only')
+        self.fname_t2 = os.path.join(DATA_PATH, 'test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only')
+
+    def test_read_info(self):
+        rv = io.read_hera_calfits(self.fname_xx, read_gains=False, read_flags=False,
+                               read_quality=False, read_tot_quality=False, check=True,
+                               verbose=True)
+        assert 'info' in rv
+        assert len(rv) == 0
+        for key in ('ants', 'antpos', 'pols', 'freqs', 'times'):
+            assert key in rv['info']
+    def test_read(self):
+        # test one file with both polarizations and a non-None total quality array
+        rv = io.read_hera_calfits(self.fname_both, read_gains=True, read_flags=True,
+                               read_quality=True, read_tot_quality=True,
+                               dtype=np.complex128, check=True, verbose=True)
+        for key in ('info', 'gains', 'flags', 'quality', 'tot_quality'):
+            assert key in rv
+        shape = (rv['info']['times'].size, rv['info']['freqs'].size)
+        assert rv['info']['freqs'].size == 1024
+        assert rv['info']['times'].size == 3
+        for key, gain in rv['gains'].items():
+            assert len(key) == 2
+            assert gain.dtype == np.complex128
+            assert gain.shape == shape
+        for key, flag in rv['flags'].items():
+            assert len(key) == 2
+            assert flag.dtype == bool
+            assert flag.shape == shape
+        for key, qual in rv['quality'].items():
+            assert len(key) == 2
+            assert qual.dtype == np.float32
+            assert qual.shape == shape
+        assert rv['total_quality'].dtype == np.float32
+        assert rv['total_quality'].shape == shape
+        assert rv['pols'] == [parse_jpolstr('jxx', x_orientation=hc.x_orientation), parse_jpolstr('jyy', x_orientation=hc.x_orientation)]
+        assert set([ant[0] for ant in hc.ants]) == set(uvc.ant_array)
+
+        # test list loading
+        rv = hera_read_calfits([self.fname_xx, self.fname_yy], read_gains=True, read_flags=True,
+                               read_quality=True, read_tot_quality=True,
+                               check=True, verbose=True)
+        for key in ('gains', 'flags', 'quality'):
+            assert len(rv[key].keys()) == 36
+
+    def test_read_select(self):
+        # test read multiple files and select ants
+        ants = [(54, 'Jee')]
+        rv = io.read_hera_calfits([self.fname_t0, self.fname_t1, self.fname_t2], ants=ants)
+        assert len(rv['gains']) == 1
+        assert ants[0] in rv['gains']
+        
+        # test select on antenna numbers
+        rv1 = io.read_hera_calfits([self.fname_xx, self.fname_yy], ants=(9, 10))
+        rv2 = io.read_hera_calfits(self.fname_both, ants=(9, 10))
+        for k in rv2['gains'].keys():
+            assert k[0] in (9, 10)
+            np.testing.assert_array_equal(rv1['gains'][k], rv2['gains'][k])
+
+        # test select on pols
+        rv = io.read_hera_calfits(self.fname_xx, pols=['Jee'])
+        for k in rv['gains'].keys():
+            assert k[1] == 'Jee'
+
+
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class Test_Visibility_IO_Legacy(object):
     def test_load_vis(self):
