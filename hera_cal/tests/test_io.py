@@ -746,8 +746,8 @@ class Test_ReadHeraHdf5(object):
         rv = io.read_hera_hdf5([self.uvh5_blt], verbose=True, bls=[(24, 26)], check=True,
                                read_data=True, read_flags=True, read_nsamples=True)
         assert len(rv['data']) == 4
-        assert (24, 26, 'xx') in rv['data']
-        assert rv['data'][(24, 26, 'xx')].shape == (2, 1536)
+        assert (24, 26, 'ee') in rv['data']
+        assert rv['data'][(24, 26, 'ee')].shape == (2, 1536)
         assert len(rv['info']['times']) == 2
 
 

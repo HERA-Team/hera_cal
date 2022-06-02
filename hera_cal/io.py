@@ -910,7 +910,10 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 nfreqs = info['freqs'].size
                 pol_array = h['polarization_array'][()]
                 npols = pol_array.size
-                pol_indices = {POL_NUM2STR_DICT[n]: cnt for cnt, n in enumerate(pol_array)}
+                # the following errors if x_orientation not set in this hdf5
+                x_orient = str(h['x_orientation'][()], encoding='utf-8')
+                pol_indices = {uvutils.parse_polstr(POL_NUM2STR_DICT[n], x_orientation=x_orient): cnt
+                               for cnt, n in enumerate(pol_array)}
                 info['pols'] = list(pol_indices.keys())
                 info['ants'] = antenna_numbers = h['antenna_numbers'][()]
                 info['antpos'] = dict(zip(antenna_numbers, h['antenna_positions'][()]))
