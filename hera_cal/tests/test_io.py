@@ -784,9 +784,9 @@ class Test_HERADataFastReader(object):
             for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
                 for bl in dc1:
                     if split_bl(bl)[0] == split_bl(bl)[1]:
-                        np.testing.assert_allclose(np.abs(dc1[bl]), np.abs(dc2[bl]))
+                        np.testing.assert_allclose(np.abs(dc1[bl]), np.abs(dc2[bl]), rtol=1e-7)
                     else:
-                        np.testing.assert_allclose(dc1[bl], dc2[bl])
+                        np.testing.assert_allclose(dc1[bl], dc2[bl], rtol=1e-7)
                 np.testing.assert_array_equal(dc1.freqs, dc2.freqs)
                 np.testing.assert_array_equal(dc1.times, dc2.times)
                 np.testing.assert_allclose(dc1.lsts, dc2.lsts)
@@ -796,9 +796,9 @@ class Test_HERADataFastReader(object):
                 np.testing.assert_array_equal(sorted(dc1.antpairs()), sorted(dc2.antpairs()))
                 np.testing.assert_array_equal(sorted(dc1.bls()), sorted(dc2.bls()))
                 for ant in dc1.antpos:
-                    np.testing.assert_array_equal(dc1.antpos[ant], dc2.antpos[ant])
+                    np.testing.assert_array_almost_equal(dc1.antpos[ant] - dc2.antpos[ant], 0)
                 for ant in dc1.data_antpos:
-                    np.testing.assert_array_equal(dc1.antpos[ant], dc2.antpos[ant])
+                    np.testing.assert_array_almost_equal(dc1.antpos[ant] - dc2.antpos[ant], 0)
                 for ap in dc1.times_by_bl:
                     np.testing.assert_array_equal(dc1.times_by_bl[ap], dc2.times_by_bl[ap])
                 for ap in dc1.lsts_by_bl:
