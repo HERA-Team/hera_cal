@@ -667,6 +667,7 @@ class Test_ReadHeraHdf5(object):
         self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5")
         self.uvh5_2 = os.path.join(DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5")
         self.uvh5_pol = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5_poltranspose")
+        self.uvh5_blt = os.path.join(DATA_PATH, "zen.2459114.60020.sum.downsample_transpose.uvh5")
 
     def test_basic_read(self):
         rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2],
@@ -740,6 +741,14 @@ class Test_ReadHeraHdf5(object):
         rv = io.read_hera_hdf5([self.uvh5_1], bls=[bl])
         assert len(rv['data']) == 1
         assert bl in rv['data']
+
+    def test_read_bl_then_time_poltranpose(self):
+        rv = io.read_hera_hdf5([self.uvh5_blt], verbose=True, bls=[(24, 26)],
+                               read_data=True, read_flags=True, read_nsamples=True)
+        assert len(rv['data']) == 4
+        assert (24, 26, 'xx') in rv['data']
+        assert rv['data'][(24, 26, 'xx')].shape == (2, 1536)
+        assert len(rv['info']['times']) == 2
 
 
 class Test_HERADataFastReader(object):
