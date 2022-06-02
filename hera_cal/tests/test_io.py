@@ -749,8 +749,8 @@ class Test_ReadHeraCalfits(object):
                                read_quality=False, read_tot_quality=False, check=True,
                                verbose=True)
         assert 'info' in rv
-        assert len(rv) == 0
-        for key in ('ants', 'antpos', 'pols', 'freqs', 'times'):
+        assert len(rv) == 1
+        for key in ('ants', 'pols', 'freqs', 'times'):
             assert key in rv['info']
     def test_read(self):
         # test one file with both polarizations and a non-None total quality array

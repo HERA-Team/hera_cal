@@ -13,6 +13,7 @@ from collections.abc import Iterable
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 from astropy import units
+from astropy.io import fits
 import h5py
 import scipy
 import pickle
@@ -1044,7 +1045,8 @@ def read_hera_calfits(filenames, ants=None, pols=None,
                 anthdu = fname[hdunames["ANTENNAS"]]
                 antdata = anthdu.data
                 info['ants'] = antdata["ANTARR"].astype(int)
-                info['antpos'] = antdata["ANTXYZ"]
+                if 'ANTXYZ' in antdata.names:
+                    info['antpos'] = antdata["ANTXYZ"]
                 jones_array = uvutils._fits_gethduaxis(fname[0], 2)
                 info['pols'] = [uvutils.JONES_NUM2STR_DICT[num] for num in jones_array]
                 info['freqs'] = uvutils._fits_gethduaxis(fname[0], 4)
