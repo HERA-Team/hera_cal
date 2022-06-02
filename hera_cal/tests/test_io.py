@@ -783,15 +783,18 @@ class Test_HERADataFastReader(object):
             # compare all data and metadata
             for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
                 for bl in dc1:
-                    np.testing.assert_array_equal(dc1[bl], dc2[bl])
+                    if split_bl(bl)[0] == split_bl(bl)[1]:
+                        np.testing.assert_allclose(np.abs(dc1[bl]), np.abs(dc2[bl]))
+                    else:
+                        np.testing.assert_allclose(dc1[bl], dc2[bl])
                 np.testing.assert_array_equal(dc1.freqs, dc2.freqs)
                 np.testing.assert_array_equal(dc1.times, dc2.times)
-                np.testing.assert_array_equal(dc1.lsts, dc2.lsts)
+                np.testing.assert_allclose(dc1.lsts, dc2.lsts)
                 np.testing.assert_array_equal(dc1.ants, dc2.ants)
                 np.testing.assert_array_equal(dc1.data_ants, dc2.data_ants)
-                np.testing.assert_array_equal(dc1.pols, dc2.pols)
-                np.testing.assert_array_equal(dc1.antpairs, dc2.antpairs)
-                np.testing.assert_array_equal(dc1.bls, dc2.bls)
+                np.testing.assert_array_equal(sorted(dc1.pols()), sorted(dc2.pols()))
+                np.testing.assert_array_equal(sorted(dc1.antpairs()), sorted(dc2.antpairs()))
+                np.testing.assert_array_equal(sorted(dc1.bls()), sorted(dc2.bls()))
                 for ant in dc1.antpos:
                     np.testing.assert_array_equal(dc1.antpos[ant], dc2.antpos[ant])
                 for ant in dc1.data_antpos:
@@ -799,7 +802,7 @@ class Test_HERADataFastReader(object):
                 for ap in dc1.times_by_bl:
                     np.testing.assert_array_equal(dc1.times_by_bl[ap], dc2.times_by_bl[ap])
                 for ap in dc1.lsts_by_bl:
-                    np.testing.assert_array_equal(dc1.lsts_by_bl[ap], dc2.lsts_by_bl[ap])
+                    np.testing.assert_allclose(dc1.lsts_by_bl[ap], dc2.lsts_by_bl[ap])
 
     def test_errors(self):
         hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
