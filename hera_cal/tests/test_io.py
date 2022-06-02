@@ -777,7 +777,7 @@ class Test_HERADataFastReader(object):
         hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
         d, f, n = hd.read(check=True)
         hd2 = io.HERAData([self.uvh5_1, self.uvh5_2])
-        d2, f2, n2 = hd.read()
+        d2, f2, n2 = hd2.read()
         # compare all data and metadata
         for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
             for bl in dc1:
