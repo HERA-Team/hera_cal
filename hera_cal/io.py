@@ -32,7 +32,7 @@ except ImportError:
 
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
-from .utils import split_pol, conj_pol, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
+from .utils import split_pol, conj_pol, split_bl, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
 
 
 def _parse_input_files(inputs, name='input_data'):
@@ -1126,6 +1126,12 @@ class HERADataFastReader():
         for meta in HERAData.HERAData_metas:
             if meta in rv['info']:
                 setattr(self, meta, rv['info'][meta])
+
+        # make autocorrleations real by taking the abs, matches UVData._fix_autos()
+        if 'data' in rv:
+            for bl in rv['data']:
+                if split_bl(bl)[0] == split_bl(bl)[1]:
+                    rv['data'][bl] = np.abs(rv['data'][bl])
 
         # construct datacontainers from result
         return self._make_datacontainer(rv, 'data'), self._make_datacontainer(rv, 'flags'), self._make_datacontainer(rv, 'nsamples')

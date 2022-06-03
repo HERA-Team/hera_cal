@@ -770,9 +770,11 @@ class Test_HERADataFastReader(object):
         assert f is None
         assert n is None
         for bl in d:
-            np.testing.assert_array_equal(d[bl], rv['data'][bl])
             if split_bl(bl)[0] != split_bl(bl)[1]:
+                np.testing.assert_array_equal(d[bl], rv['data'][bl])
                 np.testing.assert_array_equal(d[bl], np.conj(d[reverse_bl(bl)]))
+            else:
+                np.testing.assert_array_equal(d[bl], np.abs(rv['data'][bl]))
 
     def test_comp_to_HERAData(self):
         for infile in ([self.uvh5_1], [self.uvh5_1, self.uvh5_2], self.uvh5_h4c):
@@ -783,10 +785,7 @@ class Test_HERADataFastReader(object):
             # compare all data and metadata
             for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
                 for bl in dc1:
-                    if split_bl(bl)[0] == split_bl(bl)[1]:
-                        np.testing.assert_allclose(np.abs(dc1[bl]), np.abs(dc2[bl]), rtol=1e-7)
-                    else:
-                        np.testing.assert_allclose(dc1[bl], dc2[bl], rtol=1e-7)
+                    np.testing.assert_allclose(dc1[bl], dc2[bl], rtol=1e-7)
                 np.testing.assert_array_equal(dc1.freqs, dc2.freqs)
                 np.testing.assert_array_equal(dc1.times, dc2.times)
                 np.testing.assert_allclose(dc1.lsts, dc2.lsts)
