@@ -1032,23 +1032,47 @@ def read_hera_calfits(filenames, ants=None, pols=None,
     '''
 
     info = {}
-    times = []
+    times = {}
+    inds = {}
     # grab header information from all cal files
     if type(filenames) == str:
         filenames = [filenames]
     for cnt, filename in enumerate(filenames):
         with fits.open(filename) as fname:
             hdr = fname[0].header
-            times.append((uvutils._fits_gethduaxis(fname[0], 3), filename))
+            _times = uvutils._fits_gethduaxis(fname[0], 3)
+            _thash = hash(_times.tobytes())
+            if _thash not in times:
+                times[_thash] = (_times, [filename])
+            else:
+                times[_thash][1].append(filename)
+            hdunames = uvutils._fits_indexhdus(fname)
+            nants = hdr['NAXIS6']
+            anthdu = fname[hdunames["ANTENNAS"]]
+            antdata = anthdu.data
+            ants = antdata["ANTARR"][:nants].astype(int)
+            _ahash = hash(ants.tobytes())
+            if _ahash not in inds:
+                inds[_ahash] = {ant: idx for idx, ant in enumerate(ants)}
+                if 'ants' in info:
+                    info['ants'].intersection_update(set(inds[_ahash].keys()))
+                else:
+                    info['ants'] = set(inds[_ahash].keys())
+            jones_array = uvutils._fits_gethduaxis(fname[0], 2)
+            _jhash = hash(jones_array.tobytes())
+            if _jhash not in inds:
+                x_orient = hdr['XORIENT']
+                pols = [uvutils.parse_jpolstr(uvutils.JONES_NUM2STR_DICT[num], x_orientation=x_orient)
+                        for num in jones_array]
+                if 'pols' in info:
+                    info['pols'] = info['pols'].union(set(pols))
+                else:
+                    info['pols'] = set(pols)
+                inds[_jhash] = {pol: idx for idx, pol in enumerate(pols)}
+            inds[filename] = (inds[_ahash], inds[_jhash])
             if cnt == 0:
-                hdunames = uvutils._fits_indexhdus(fname)
-                anthdu = fname[hdunames["ANTENNAS"]]
-                antdata = anthdu.data
-                info['ants'] = antdata["ANTARR"].astype(int)
                 if 'ANTXYZ' in antdata.names:
                     info['antpos'] = antdata["ANTXYZ"]
-                jones_array = uvutils._fits_gethduaxis(fname[0], 2)
-                info['pols'] = [uvutils.JONES_NUM2STR_DICT[num] for num in jones_array]
                 info['freqs'] = uvutils._fits_gethduaxis(fname[0], 4)
             if check:
                 gain_convention = hdr.pop("GNCONVEN")
@@ -1056,8 +1080,6 @@ def read_hera_calfits(filenames, ants=None, pols=None,
                 cal_type = hdr.pop("CALTYPE")
                 assert cal_type == 'gain'  # delay-style calibration currently unsupported
                 assert np.all(info['freqs'] == uvutils._fits_gethduaxis(fname[0], 4))
-                assert np.all(info['ants'] == antdata["ANTARR"].astype(int))
-                assert np.all(jones_array == uvutils._fits_gethduaxis(fname[0], 2))
 
     if ants is None:
         # generate a set of ants if we didn't have one passed in
@@ -1066,7 +1088,7 @@ def read_hera_calfits(filenames, ants=None, pols=None,
         ants = set((ant,) for ant in info['ants'])
         ants = set(ant + (p,) for ant in ants for p in pols)
     else:
-        ants = set((ant,) if type(ant) == int else ant for ant in ants)
+        ants = set((ant,) if type(ant) in (int, np.int, np.int64) else ant for ant in ants)
         # if length 1 ants are passed in, add on polarizations
         ants_len1 = set(ant for ant in ants if len(ant) == 1)
         if len(ants_len1) > 0:
@@ -1076,50 +1098,60 @@ def read_hera_calfits(filenames, ants=None, pols=None,
             ants = ants.union([ant + (p,) for ant in ants_len1 for p in pols])
         # record polarizations as total of ones indexed in bls
         pols = set(ant[1] for ant in ants)
+    times = list(times.values())
     times.sort(key=lambda x: x[0][0])
     filenames = (v[1] for v in times)
     times = np.concatenate([t[0] for t in times], axis=0)
     info['times'] = times
+    tot_times = times.size
     nfreqs = info['freqs'].size
-    antind = {ant: idx for idx, ant in enumerate(info['ants'])}
-    polind = {pol: idx for idx, pol in enumerate(info['pols'])}
 
     # preallocate buffers
     rv = {}
     if read_gains:
-        rv['gains'] = {ant: np.empty((times.size, nfreqs), dtype=dtype) for ant in ants}
+        rv['gains'] = {ant: np.empty((tot_times, nfreqs), dtype=dtype) for ant in ants}
     if read_flags:
-        rv['flags'] = {ant: np.empty((times.size, nfreqs), dtype=bool) for ant in ants}
+        rv['flags'] = {ant: np.empty((tot_times, nfreqs), dtype=bool) for ant in ants}
     if read_quality:
-        rv['quality'] = {ant: np.empty((times.size, nfreqs), dtype=np.float32) for ant in ants}
+        rv['quality'] = {ant: np.empty((tot_times, nfreqs), dtype=np.float32) for ant in ants}
     if read_tot_quality:
-        rv['total_quality'] = {p: np.empty((times.size, nfreqs), dtype=np.float32) for p in info['pols']}
+        rv['total_quality'] = {p: np.empty((tot_times, nfreqs), dtype=np.float32) for p in info['pols']}
     # bail here if all we wanted was the info
     if len(rv) == 0:
         return {'info': info}
     
     # loop through files and read data
     t = 0
-    for cnt, filename in enumerate(filenames):
-        with fits.open(filename) as fname:
-            hdr = fname[0].header
-            ntimes = hdr.pop("NAXIS3")
-            if read_gains:
-                data = fname[0].data
-                for (a, p) in rv['gains'].keys():
-                    rv['gains'][a, p][t:t + ntimes].real = fname[0].data[antind[a], 0, :, :, polind[p], 0].T
-                    rv['gains'][a, p][t:t + ntimes].imag = fname[0].data[antind[a], 0, :, :, polind[p], 1].T
-            if read_flags:
-                for (a, p) in rv['flags'].keys():
-                    rv['flags'][a, p][t:t + ntimes] = fname[0].data[antind[a], 0, :, :, polind[p], 2].T
-            if read_quality:
-                for (a, p) in rv['quality'].keys():
-                    rv['quality'][a, p][t:t + ntimes] = fname[0].data[antind[a], 0, :, :, polind[p], 3].T
-            if read_tot_quality:
-                tq_hdu = fname[hdunames["TOTQLTY"]]
-                for p in rv['total_quality'].keys():
-                    rv['total_quality'][p][t:t + ntimes] = tq_hdu.data[0, :, :, polind[p]].T
-            t += ntimes    
+    for cnt, _filenames in enumerate(filenames):
+        for filename in _filenames:
+            antind, polind = inds[filename]
+            with fits.open(filename) as fname:
+                hdr = fname[0].header
+                ntimes = hdr.pop("NAXIS3")
+                if read_gains:
+                    data = fname[0].data
+                    for (a, p) in rv['gains'].keys():
+                        if a not in antind or p not in polind:
+                            continue
+                        rv['gains'][a, p][t:t + ntimes].real = fname[0].data[antind[a], 0, :, :, polind[p], 0].T
+                        rv['gains'][a, p][t:t + ntimes].imag = fname[0].data[antind[a], 0, :, :, polind[p], 1].T
+                if read_flags:
+                    for (a, p) in rv['flags'].keys():
+                        if a not in antind or p not in polind:
+                            continue
+                        rv['flags'][a, p][t:t + ntimes] = fname[0].data[antind[a], 0, :, :, polind[p], 2].T
+                if read_quality:
+                    for (a, p) in rv['quality'].keys():
+                        if a not in antind or p not in polind:
+                            continue
+                        rv['quality'][a, p][t:t + ntimes] = fname[0].data[antind[a], 0, :, :, polind[p], 3].T
+                if read_tot_quality:
+                    tq_hdu = fname[hdunames["TOTQLTY"]]
+                    for p in rv['total_quality'].keys():
+                        if p not in polind:
+                            continue
+                        rv['total_quality'][p][t:t + ntimes] = tq_hdu.data[0, :, :, polind[p]].T
+        t += ntimes    
     rv['info'] = info
     return rv
 
