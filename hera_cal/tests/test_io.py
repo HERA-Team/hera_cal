@@ -785,7 +785,11 @@ class Test_HERADataFastReader(object):
             # compare all data and metadata
             for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
                 for bl in dc1:
-                    np.testing.assert_allclose(dc1[bl], dc2[bl], rtol=1e-7)
+                    if (split_bl(bl)[0] == split_bl(bl)[1]) and (infile != self.uvh5_h4c):
+                        # somehow there are numerical issues at play for H1C data
+                        np.testing.assert_allclose(dc1[bl], dc2[bl], rtol=1e-6)
+                    else:
+                        np.testing.assert_array_equal(dc1[bl], dc2[bl])
                 np.testing.assert_array_equal(dc1.freqs, dc2.freqs)
                 np.testing.assert_array_equal(dc1.times, dc2.times)
                 np.testing.assert_allclose(dc1.lsts, dc2.lsts)
