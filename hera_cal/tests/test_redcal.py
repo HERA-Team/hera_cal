@@ -1499,7 +1499,8 @@ class TestRunMethods(object):
             assert not np.all(rv['chisq_per_ant'][ant] == 0.0)
             np.testing.assert_array_equal(rv['gf_omnical'][ant], True)
 
-    def test_nightly_median_firstcal_delays(self, tmpdir):
+    @pytest.mark.parametrize("offsets_in_firstcal", [True, False])
+    def test_nightly_median_firstcal_delays(self, tmpdir, offsets_in_firstcal):
         # split up data into multiple time slices
         # run redcal to produce metadatae
         input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5')
@@ -1510,6 +1511,7 @@ class TestRunMethods(object):
         data_files = []
         meta_files = []
         times = np.unique(uvd.time_array)
+        firstcal_list = []
         for tnum in range(6):
             uvd_slice = uvd.select(times=times[tnum * 10: (tnum + 1) * 10],
                                    inplace=False)
@@ -1523,10 +1525,13 @@ class TestRunMethods(object):
             cal = om.redcal_run(dfile, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
                                 a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
                                 iter0_prefix='.iter0', metrics_files=ant_metrics_file, clobber=True, ex_ants=[11, 50])
+            firstcal_list.append(dfile.replace('.uvh5', '.first.calfits'))
             hd = io.HERAData(input_data)
             meta_files.append(dfile.replace('.uvh5', '.redcal_meta.hdf5'))
+        if not offsets_in_firstcal:
+            firstcal_list = None
         # now run median
-        om.nightly_median_firstcal_delays(meta_files)
+        om.nightly_median_firstcal_delays(meta_files, offsets_in_firstcal=offsets_in_firstcal, firstcal_file_list=firstcal_list)
         # now make sure all delays and polarity flips are equal to the median.
         meta_files_median = [meta_file.replace('redcal_meta', 'redcal_meta.median_phases') for meta_file in meta_files]
         for fnum, metafile in enumerate(meta_files_median):

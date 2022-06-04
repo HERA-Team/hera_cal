@@ -1964,7 +1964,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
 
 
 def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_meta.median_phases.hdf5',
-                                   output_replace='.redcal_meta.hdf5'):
+                                   output_replace='.redcal_meta.hdf5', offsets_in_firstcal=False, firstcal_file_list=None,
+                                   clobber=False):
     """
     Find the median delay and polarity for list of firstcal meta files.
     and write them out with that median.
@@ -1990,7 +1991,16 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
             tslice = slice(nt, nt + len(times))
             delays[ant][tslice] = fc_meta['dlys'][ant]
             polarity_flips[ant][tslice] = fc_meta['polarity_flips'][ant]
-            offsets[ant][tslice] = fc_meta['offsets'][ant]
+            if not offsets_in_firstcal:
+                offsets[ant][tslice] = fc_meta['offsets'][ant]
+            else:
+                firstcal_file = firstcal_file_list[filenum]
+                hc = HERACal(firstcal_file)
+                gains_fc = hc.read()[0]
+                for ant in gains_fc:
+                    # solve for offsets from gains if they are not in the fc_meta file.
+                    dly_factor = np.exp(2j * np.pi * np.outer(fc_meta['dlys'][ant], freqs))
+                    offsets[ant][tslice] = np.median(np.angle(gains_fc[ant] / dly_factor), axis=1)
         nt += len(times)
     # compute medians.
     for ant in delays:
@@ -2063,6 +2073,8 @@ def nightly_median_firstcal_delays_argparser():
     ap.add_argument("redcal_meta_file_list", type=str, nargs="+", help="List of reccal meta file names.")
     ap.add_argument("--output_ext", type=str, default='.redcal_meta.median_delay.hdf5', help="File extensionf of output files. This will overwrite output_replace in original file names to drive output filenames.")
     ap.add_argument("--output_replace", type=str, default=".redcal_meta.hdf5", help="File extension in non median files to replace in each file name with output_ext.")
+    ap.add_argument("--offsets_in_firstcal", default=False, action="store_true", help="Get offsets for list of firstcal files specified in firstcal_file_list. This is should be used when dealing with meta files from older versions of redcal which do not include offsets.")
+    ap.add_argument("--firstcal_file_list", type=str, default=None, nargs="+", help="List of firstcal files for night to use for computing the phase offset if we desire.")
     return ap
 
 
