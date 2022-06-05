@@ -18,12 +18,11 @@ import scipy
 import pickle
 import random
 import glob
-from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT
+from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
 from . import redcal
 import argparse
 from . import version
 from uvtools.dspec import place_data_on_uniform_grid
-
 
 try:
     import aipy
@@ -33,7 +32,23 @@ except ImportError:
 
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
-from .utils import split_pol, conj_pol, LST2JD, HERA_TELESCOPE_LOCATION
+from .utils import split_pol, conj_pol, split_bl, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
+
+
+def _parse_input_files(inputs, name='input_data'):
+    if isinstance(inputs, str):
+        filepaths = [inputs]
+    elif isinstance(inputs, Iterable):  # List loading
+        if np.all([isinstance(i, str) for i in inputs]):  # List of visibility data paths
+            filepaths = list(inputs)
+        else:
+            raise TypeError(f'If {name} is a list, it must be a list of strings.')
+    else:
+        raise ValueError(f'{name} must be a string or a list of strings.')
+    for f in filepaths:
+        if not os.path.exists(f):
+            raise IOError('Cannot find file ' + f)
+    return filepaths
 
 
 class HERACal(UVCal):
@@ -55,18 +70,7 @@ class HERACal(UVCal):
         super().__init__()
 
         # parse input_data as filepath(s)
-        if isinstance(input_cal, str):
-            assert os.path.exists(input_cal), '{} does not exist.'.format(input_cal)
-            self.filepaths = [input_cal]
-        elif isinstance(input_cal, Iterable):  # List loading
-            if np.all([isinstance(i, str) for i in input_cal]):  # List of visibility data paths
-                for ic in input_cal:
-                    assert os.path.exists(ic), '{} does not exist.'.format(ic)
-                self.filepaths = list(input_cal)
-            else:
-                raise TypeError('If input_cal is a list, it must be a list of strings.')
-        else:
-            raise ValueError('input_cal must be a string or a list of strings.')
+        self.filepaths = _parse_input_files(input_cal, name='input_cal')
 
     def _extract_metadata(self):
         '''Extract and store useful metadata and array indexing dictionaries.'''
@@ -317,18 +321,7 @@ class HERAData(UVData):
         super().__init__()
 
         # parse input_data as filepath(s)
-        if isinstance(input_data, str):
-            self.filepaths = [input_data]
-        elif isinstance(input_data, Iterable):  # List loading
-            if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
-                self.filepaths = list(input_data)
-            else:
-                raise TypeError('If input_data is a list, it must be a list of strings.')
-        else:
-            raise ValueError('input_data must be a string or a list of strings.')
-        for f in self.filepaths:
-            if not os.path.exists(f):
-                raise IOError('Cannot find file ' + f)
+        self.filepaths = _parse_input_files(input_data, name='input_data')
 
         # parse arguments into object
         self.upsample = upsample
@@ -891,7 +884,8 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
             based on whether read_data, read_flags, and read_nsamples are true.
         rv['info']: metadata dict with keys 'freqs' (1D array), 'times' (1D array),
                     'pols' (list), 'ants' (1D array), 'antpos' (dict of antenna: 3D position),
-                    'bls' (list of all (ant_1, ant_2) baselines in the file).
+                    'bls' (list of all (ant_1, ant_2) baselines in the file), 'data_ants' (1D array)
+                    'latitude' (float in degrees), longitude (float in degrees), altitude (float in m)
         rv['data']: dict of 2D data with (i, j, pol) keys.
         rv['flags']: dict of 2D flags with (i, j, pol) keys.
         rv['nsamples']: dict of 2D nsamples with (i, j, pol) keys.
@@ -901,6 +895,8 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
     bl2ind = {}
     inds = {}
     # Read file metadata to size up arrays and sort times
+    if type(filenames) is str:
+        filenames = [filenames]
     for filename in filenames:
         if verbose:
             print(f'Reading header of {filename}')
@@ -914,23 +910,47 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 nfreqs = info['freqs'].size
                 pol_array = h['polarization_array'][()]
                 npols = pol_array.size
-                pol_indices = {POL_NUM2STR_DICT[n]: cnt for cnt, n in enumerate(pol_array)}
+                # the following errors if x_orientation not set in this hdf5
+                x_orient = str(h['x_orientation'][()], encoding='utf-8')
+                pol_indices = {uvutils.parse_polstr(POL_NUM2STR_DICT[n], x_orientation=x_orient): cnt
+                               for cnt, n in enumerate(pol_array)}
                 info['pols'] = list(pol_indices.keys())
                 info['ants'] = antenna_numbers = h['antenna_numbers'][()]
                 info['antpos'] = dict(zip(antenna_numbers, h['antenna_positions'][()]))
+                for coord in ['latitude', 'longitude', 'altitude']:
+                    info[coord] = h[coord][()]
             elif check:
                 # Check that all files have the same number of frequencies
                 assert int(h['Nfreqs'][()]) == nfreqs
+            # Determine blt ordering (baselines then times, or times then baselines)
             ntimes = int(h['Ntimes'][()])
-            times.append((h['time_array'][:ntimes], filename))
-            ant1_array = h['ant_1_array'][::ntimes]
-            ant2_array = h['ant_2_array'][::ntimes]
-            _hash = hash((ant1_array.tobytes(), ant2_array.tobytes()))
+            _times = h['time_array'][:ntimes]
+            time_first = (np.unique(_times).size == ntimes)
+            nbls = int(h['Nblts'][()]) // ntimes
+            if time_first:
+                # time-baseline ordering
+                ant1_array = h['ant_1_array'][::ntimes]
+                ant2_array = h['ant_2_array'][::ntimes]
+            else:
+                # baseline-time ordering
+                _times = h['time_array'][::nbls]
+                ant1_array = h['ant_1_array'][:nbls]
+                ant2_array = h['ant_2_array'][:nbls]
+            _info = {'time_first': time_first, 'ntimes': ntimes, 'nbls': nbls}
+            times.append((_times, filename, _info))
+            data_ants = set(ant1_array)
+            data_ants.update(set(ant2_array))
+            _hash = hash((ant1_array.tobytes(), ant2_array.tobytes(), time_first, ntimes))
             # map baselines to array indices for each unique antenna order
             if _hash not in inds:
-                inds[_hash] = {(i, j): slice(n * ntimes, (n + 1) * ntimes)
-                               for n, (i, j) in enumerate(zip(ant1_array,
-                                                              ant2_array))}
+                if time_first:
+                    inds[_hash] = {(i, j): slice(n * ntimes, (n + 1) * ntimes)
+                                   for n, (i, j) in enumerate(zip(ant1_array,
+                                                                  ant2_array))}
+                else:
+                    inds[_hash] = {(i, j): slice(n, None, nbls)
+                                   for n, (i, j) in enumerate(zip(ant1_array,
+                                                                  ant2_array))}
                 if bls is not None:
                     # Make sure our baselines of interest are in this file
                     if not all([bl[:2] in inds[_hash] for bl in bls]):
@@ -939,8 +959,10 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                         assert bl[:2] in inds[_hash]
                 if 'bls' not in info:
                     info['bls'] = set(inds[_hash].keys())
+                    info['data_ants'] = data_ants
                 else:
                     info['bls'].intersection_update(set(inds[_hash].keys()))
+                    info['data_ants'].intersection_update(data_ants)
             bl2ind[filename] = inds[_hash]
 
     if bls is None:
@@ -961,34 +983,38 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
         pols = set(bl[2] for bl in bls)
     # sort files by time of first integration
     times.sort(key=lambda x: x[0][0])
-    filenames = (v[1] for v in times)
-    times = np.concatenate([t[0] for t in times], axis=0)
-    info['times'] = times
+    info['times'] = np.concatenate([t[0] for t in times], axis=0)
+    tot_times = info['times'].size
 
     # preallocate buffers
     rv = {}
     if read_data:
-        rv['visdata'] = {bl: np.empty((times.size, nfreqs), dtype=dtype) for bl in bls}
+        rv['visdata'] = {bl: np.empty((tot_times, nfreqs), dtype=dtype) for bl in bls}
     if read_flags:
-        rv['flags'] = {bl: np.empty((times.size, nfreqs), dtype=bool) for bl in bls}
+        rv['flags'] = {bl: np.empty((tot_times, nfreqs), dtype=bool) for bl in bls}
     if read_nsamples:
-        rv['nsamples'] = {bl: np.empty((times.size, nfreqs), dtype=np.float32) for bl in bls}
+        rv['nsamples'] = {bl: np.empty((tot_times, nfreqs), dtype=np.float32) for bl in bls}
     # bail here if all we wanted was the info
     if len(rv) == 0:
         return {'info': info}
 
     t = 0
-    for filename in filenames:
+    for _times, filename, _info in times:
         inds = bl2ind[filename]
+        ntimes = _info['ntimes']
+        nbls = _info['nbls']
         if verbose:
             print(f'Reading data from {filename}')
         with h5py.File(filename, 'r') as f:
-            h = f['/Header']
-            ntimes = int(h['Ntimes'][()])
-            nbls = int(h['Nblts'][()]) // ntimes
             if check:
+                h = f['/Header']
+                assert ntimes == int(h['Ntimes'][()])
+                assert nbls == int(h['Nblts'][()]) // ntimes
                 # Check that files sorted correctly into time order
-                assert np.allclose(h['time_array'][:ntimes], times[t:t + ntimes])
+                if _info['time_first']:
+                    assert np.allclose(h['time_array'][:ntimes], _times)
+                else:
+                    assert np.allclose(h['time_array'][::nbls], _times)
             # decide whether to read all the data in, or use partial I/O
             full_read = (len(bls) > full_read_thresh * nbls * npols)
             if full_read and verbose:
@@ -1022,8 +1048,106 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
     # Quick renaming of data key for niceness
     if 'visdata' in rv:
         rv['data'] = rv.pop('visdata', [])
+    info['data_ants'] = np.array(sorted(info['data_ants']))
     rv['info'] = info
     return rv
+
+
+class HERADataFastReader():
+    '''Wrapper class around read_hera_hdf5 meant to mimic the functionality of HERAData for drop-in replacement.'''
+    
+    def __init__(self, input_data):
+        '''Instantiates a HERADataFastReader object. Only supports reading uvh5 files, not writing them. 
+        Does not support BDA and only supports patial i/o along baselines and polarization axes. 
+        
+        Arguments:
+            input_data: path or list of paths to uvh5 files.
+        '''
+        # parse input_data as filepath(s)
+        self.filepaths = _parse_input_files(input_data, name='input_data')
+
+        # initialize metatadata to None to match HERAData
+        for meta in HERAData.HERAData_metas:
+            setattr(self, meta, None)
+        
+        # create functions that error informatively when trying to use standard HERAData/UVData methods
+        for funcname in list(dir(HERAData)):
+            if funcname.startswith('__') and funcname.endswith('__'):
+                continue  # don't overwrite things like __class__ and __init__
+            if funcname in ['read', '_make_datacontainer', '_HERAData_error']:
+                continue  # don't overwrite functions with errors that we actually use
+            setattr(self, funcname, self._HERAData_error)
+
+    def _HERAData_error(self, *args, **kwargs):
+        raise NotImplementedError('HERADataFastReader does not support this method. Try HERAData instead.')
+
+    def read(self, bls=None, pols=None, full_read_thresh=0.002, read_data=True, read_flags=True, 
+             read_nsamples=True, check=False, dtype=np.complex128, verbose=False, skip_lsts=False):
+        '''A faster read that only concatenates along the time axis. Puts times in ascending order, but does not 
+        check that files are contiguous. Currently not BDA compatible.
+        
+        Arguments:
+            bls: list of (ant_1, ant_2, [polstr]) tuples to read out of files. Default: all bls common to all files.
+            pols: list of pol strings to read out of files. Default: all, but is superceded by any polstrs listed in bls.
+            full_read_thresh (0.002): fractional threshold for reading whole file instead of baseline by baseline.
+            read_data (bool, True): read data
+            read_flags (bool, True): read flags
+            read_nsamples (bool, True): read nsamples
+            check (bool, False): run sanity checks to make sure files match.
+            dtype (np.complex128): numpy datatype for output complex-valued arrays
+            verbose: print some progress messages.
+            skip_lsts (bool, False): save time by not computing LSTs from JDs
+        
+        Returns:
+            data: DataContainer mapping baseline keys to complex visibility waterfalls (if read_data is True, else None)
+            flags: DataContainer mapping baseline keys to boolean flag waterfalls (if read_flags is True, else None)
+            nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls (if read_nsamples is True, else None)
+        '''                
+        rv = read_hera_hdf5(self.filepaths, bls=bls, pols=pols, full_read_thresh=full_read_thresh,
+                            read_data=read_data, read_flags=read_flags, read_nsamples=read_nsamples,
+                            check=check, dtype=dtype, verbose=verbose)
+        
+        # extra metadata calculations
+        rv['info']['antpairs'] = rv['info']['bls']
+        rv['info']['bls'] = set(bl for key in ['data', 'flags', 'nsamples'] for bl in rv.get(key, {}).keys())
+        XYZ = XYZ_from_LatLonAlt(rv['info']['latitude'] * np.pi / 180, rv['info']['longitude'] * np.pi / 180, rv['info']['altitude'])
+        enu_antpos = ENU_from_ECEF(np.array([antpos for ant, antpos in rv['info']['antpos'].items()]) + XYZ, 
+                                   rv['info']['latitude'] * np.pi / 180, rv['info']['longitude'] * np.pi / 180, rv['info']['altitude'])
+        rv['info']['antpos'] = {ant: enu for enu, ant in zip(enu_antpos, rv['info']['antpos'])}
+        rv['info']['data_antpos'] = {ant: rv['info']['antpos'][ant] for ant in rv['info']['data_ants']}
+        rv['info']['times'] = np.unique(rv['info']['times'])
+        rv['info']['times_by_bl'] = {ap: rv['info']['times'] for ap in rv['info']['antpairs']}
+        if not skip_lsts:
+            rv['info']['lsts'] = JD2LST(rv['info']['times'], rv['info']['latitude'], rv['info']['longitude'], rv['info']['altitude'])
+            rv['info']['lsts_by_bl'] = {ap: rv['info']['lsts'] for ap in rv['info']['antpairs']}
+
+        # update metadata here
+        self.info = rv['info']
+        for meta in HERAData.HERAData_metas:
+            if meta in rv['info']:
+                setattr(self, meta, rv['info'][meta])
+
+        # make autocorrleations real by taking the abs, matches UVData._fix_autos()
+        if 'data' in rv:
+            for bl in rv['data']:
+                if split_bl(bl)[0] == split_bl(bl)[1]:
+                    rv['data'][bl] = np.abs(rv['data'][bl])
+
+        # construct datacontainers from result
+        return self._make_datacontainer(rv, 'data'), self._make_datacontainer(rv, 'flags'), self._make_datacontainer(rv, 'nsamples')
+
+    def _make_datacontainer(self, rv, key='data'):
+        '''Converts outputs from read_hera_hdf5 to a more standard HERAData output.'''
+        if key not in rv:
+            return None
+        
+        # construct datacontainer with whatever metadata is available
+        dc = DataContainer(rv[key])
+        for meta in HERAData.HERAData_metas:
+            if meta in rv['info'] and meta not in ['pols', 'antpairs', 'bls']:  # these are functions on datacontainers
+                setattr(dc, meta, rv['info'][meta])
+
+        return dc
 
 
 def read_filter_cache_scratch(cache_dir):

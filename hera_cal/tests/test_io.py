@@ -20,7 +20,7 @@ import sys
 from .. import io
 from ..io import HERACal, HERAData
 from ..datacontainer import DataContainer
-from ..utils import polnum2str, polstr2num, jnum2str, jstr2num
+from ..utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, split_bl
 from ..data import DATA_PATH
 from hera_qm.data import DATA_PATH as QM_DATA_PATH
 
@@ -667,16 +667,18 @@ class Test_ReadHeraHdf5(object):
         self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5")
         self.uvh5_2 = os.path.join(DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5")
         self.uvh5_pol = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5_poltranspose")
+        self.uvh5_blt = os.path.join(DATA_PATH, "zen.2459114.60020.sum.downsample_transpose.uvh5")
 
     def test_basic_read(self):
         rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2],
                                read_flags=False, read_nsamples=False, verbose=True,
-                               dtype=np.complex128)
+                               dtype=np.complex128, check=True)
         assert 'info' in rv
         assert 'data' in rv
         assert 'flags' not in rv
         assert 'nsamples' not in rv
         assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
+        assert rv['info']['times'].size == np.unique(rv['info']['times']).size
         for bl, data in rv['data'].items():
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
             assert data.dtype == np.complex128
@@ -685,10 +687,10 @@ class Test_ReadHeraHdf5(object):
         with pytest.raises(ValueError):
             rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], bls=[(999, 999, 'xx')],
                                    read_flags=False, read_nsamples=False, verbose=True,
-                                   dtype=np.complex128)
+                                   dtype=np.complex128, check=True)
 
     def test_info_only(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True,
+        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True, check=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         assert 'info' in rv
         assert 'data' not in rv
@@ -696,7 +698,7 @@ class Test_ReadHeraHdf5(object):
         assert 'nsamples' not in rv
 
     def test_read_all(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True,
+        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True, check=True,
                                read_flags=True, read_nsamples=True)
         assert 'info' in rv
         assert 'data' in rv
@@ -713,7 +715,7 @@ class Test_ReadHeraHdf5(object):
             assert data.dtype == np.float32
 
     def test_read_allbls_poltranspose(self):
-        rv = io.read_hera_hdf5([self.uvh5_pol], dtype=np.complex128, verbose=True,)
+        rv = io.read_hera_hdf5([self.uvh5_pol], dtype=np.complex128, verbose=True, check=True)
         assert 'info' in rv
         assert 'data' in rv
         assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
@@ -721,7 +723,7 @@ class Test_ReadHeraHdf5(object):
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
     
     def test_read_one_bl(self):
-        rv = io.read_hera_hdf5([self.uvh5_1], verbose=True,
+        rv = io.read_hera_hdf5([self.uvh5_1], verbose=True, check=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         bl = list(rv['info']['bls'])[0]
         pol = rv['info']['pols'][0]
@@ -731,7 +733,7 @@ class Test_ReadHeraHdf5(object):
         assert bl in rv['data']
 
     def test_read_one_bl_poltranpose(self):
-        rv = io.read_hera_hdf5([self.uvh5_pol], verbose=True,
+        rv = io.read_hera_hdf5(self.uvh5_pol, verbose=True, check=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         bl = list(rv['info']['bls'])[0]
         pol = rv['info']['pols'][0]
@@ -739,6 +741,78 @@ class Test_ReadHeraHdf5(object):
         rv = io.read_hera_hdf5([self.uvh5_1], bls=[bl])
         assert len(rv['data']) == 1
         assert bl in rv['data']
+
+    def test_read_bl_then_time_poltranpose(self):
+        rv = io.read_hera_hdf5([self.uvh5_blt], verbose=True, bls=[(24, 26)], check=True,
+                               read_data=True, read_flags=True, read_nsamples=True)
+        assert len(rv['data']) == 4
+        assert (24, 26, 'ee') in rv['data']
+        assert rv['data'][(24, 26, 'ee')].shape == (2, 1536)
+        assert len(rv['info']['times']) == 2
+
+
+class Test_HERADataFastReader(object):
+    def setup_method(self):
+        self.uvh5_1 = os.path.join(DATA_PATH, "test_input", "zen.2458042.60288.HH.uvRXLS.uvh5_downselected")
+        self.uvh5_2 = os.path.join(DATA_PATH, "test_input", "zen.2458042.61034.HH.uvRXLS.uvh5_downselected")
+        self.uvh5_h4c = os.path.join(DATA_PATH, "zen.2459122.30030.sum.single_time.uvh5")
+
+    def test_init(self):
+        hd = io.HERADataFastReader(self.uvh5_1)
+        assert hd.filepaths == [self.uvh5_1]
+        assert hd.antpos is None
+        assert hd.times_by_bl is None
+
+    def test_read_data(self):
+        rv = io.read_hera_hdf5([self.uvh5_1])
+        hd = io.HERADataFastReader(self.uvh5_1)
+        d, f, n = hd.read(read_flags=False, read_nsamples=False, check=True)
+        assert f is None
+        assert n is None
+        for bl in d:
+            if split_bl(bl)[0] != split_bl(bl)[1]:
+                np.testing.assert_array_equal(d[bl], rv['data'][bl])
+                np.testing.assert_array_equal(d[bl], np.conj(d[reverse_bl(bl)]))
+            else:
+                np.testing.assert_array_equal(d[bl], np.abs(rv['data'][bl]))
+
+    def test_comp_to_HERAData(self):
+        for infile in ([self.uvh5_1], [self.uvh5_1, self.uvh5_2], self.uvh5_h4c):
+            hd = io.HERADataFastReader(infile)
+            d, f, n = hd.read(check=True)
+            hd2 = io.HERAData(infile)
+            d2, f2, n2 = hd2.read()
+            # compare all data and metadata
+            for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
+                for bl in dc1:
+                    if (split_bl(bl)[0] == split_bl(bl)[1]) and (infile != self.uvh5_h4c):
+                        # somehow there are numerical issues at play for H1C data
+                        np.testing.assert_allclose(dc1[bl], dc2[bl], rtol=1e-6)
+                    else:
+                        np.testing.assert_array_equal(dc1[bl], dc2[bl])
+                np.testing.assert_array_equal(dc1.freqs, dc2.freqs)
+                np.testing.assert_array_equal(dc1.times, dc2.times)
+                np.testing.assert_allclose(dc1.lsts, dc2.lsts)
+                np.testing.assert_array_equal(dc1.ants, dc2.ants)
+                np.testing.assert_array_equal(dc1.data_ants, dc2.data_ants)
+                np.testing.assert_array_equal(sorted(dc1.pols()), sorted(dc2.pols()))
+                np.testing.assert_array_equal(sorted(dc1.antpairs()), sorted(dc2.antpairs()))
+                np.testing.assert_array_equal(sorted(dc1.bls()), sorted(dc2.bls()))
+                for ant in dc1.antpos:
+                    np.testing.assert_array_almost_equal(dc1.antpos[ant] - dc2.antpos[ant], 0)
+                for ant in dc1.data_antpos:
+                    np.testing.assert_array_almost_equal(dc1.antpos[ant] - dc2.antpos[ant], 0)
+                for ap in dc1.times_by_bl:
+                    np.testing.assert_array_equal(dc1.times_by_bl[ap], dc2.times_by_bl[ap])
+                for ap in dc1.lsts_by_bl:
+                    np.testing.assert_allclose(dc1.lsts_by_bl[ap], dc2.lsts_by_bl[ap])
+
+    def test_errors(self):
+        hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
+        with pytest.raises(NotImplementedError):
+            hd.write_uvh5()
+        with pytest.raises(NotImplementedError):
+            hd.iterate_over_bls('stuff', fake_kwarg=False)
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
