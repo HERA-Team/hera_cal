@@ -1983,7 +1983,7 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
     nfiles = len(redcal_meta_file_list)
     ntimes = [len(rcm[4]) for rcm in redcal_metas]
     delays = {ant: np.zeros(np.sum(ntimes)) for ant in redcal_metas[0][1]['dlys']}
-    offsets = {ant: np.zeros(np.sum(ntimes)) for ant in redcal_metas[0][1]['offsets']}
+    offsets = {ant: np.zeros(np.sum(ntimes)) for ant in redcal_metas[0][1]['dlys']}
     polarity_flips = {ant: copy.deepcopy(delays[ant]).astype(bool) for ant in delays}
     nt = 0
     for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(redcal_metas):
