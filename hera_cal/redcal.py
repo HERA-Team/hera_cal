@@ -1994,6 +1994,7 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
             if not offsets_in_firstcal:
                 offsets[ant][tslice] = fc_meta['offsets'][ant]
             else:
+                fc_meta['offsets'] = copy.deepcopy(offsets)
                 firstcal_file = firstcal_file_list[filenum]
                 hc = HERACal(firstcal_file)
                 gains_fc = hc.read()[0]
