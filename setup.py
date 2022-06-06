@@ -27,7 +27,7 @@ def package_files(package_dir, subdirectory):
 data_files = package_files('hera_cal', 'data') + package_files('hera_cal', 'calibrations')
 
 setup_args = {
-    'name': 'hera_cal',
+    'name': 'hera-calibration',
     'author': 'HERA Team',
     'url': 'https://github.com/HERA-Team/hera_cal',
     'license': 'BSD',
