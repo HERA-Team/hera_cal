@@ -29,7 +29,8 @@ class Test_HERACal(object):
     def setup_method(self):
         self.fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
         self.fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
-        self.fname_both = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
+        self.fname_2pol = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.omni.calfits")
+        self.fname = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
         self.fname_t0 = os.path.join(DATA_PATH, 'test_input/zen.2458101.44615.xx.HH.uv.abs.calfits_54x_only')
         self.fname_t1 = os.path.join(DATA_PATH, 'test_input/zen.2458101.45361.xx.HH.uv.abs.calfits_54x_only')
         self.fname_t2 = os.path.join(DATA_PATH, 'test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only')
@@ -48,10 +49,10 @@ class Test_HERACal(object):
 
     def test_read(self):
         # test one file with both polarizations and a non-None total quality array
-        hc = HERACal(self.fname_both)
+        hc = HERACal(self.fname)
         gains, flags, quals, total_qual = hc.read()
         uvc = UVCal()
-        uvc.read_calfits(self.fname_both)
+        uvc.read_calfits(self.fname)
         np.testing.assert_array_equal(uvc.gain_array[0, 0, :, :, 0].T, gains[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
         np.testing.assert_array_equal(uvc.flag_array[0, 0, :, :, 0].T, flags[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
         np.testing.assert_array_equal(uvc.quality_array[0, 0, :, :, 0].T, quals[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
@@ -89,8 +90,8 @@ class Test_HERACal(object):
         # test select on antenna numbers
         hc = io.HERACal([self.fname_xx, self.fname_yy])
         g, _, _, _ = hc.read(antenna_nums=[9, 10])
-        hc2 = io.HERACal(self.fname_both)
-        g2, _, _, _ = hc.read(antenna_nums=[9, 10])
+        hc2 = io.HERACal(self.fname_2pol)
+        g2, _, _, _ = hc2.read(antenna_nums=[9, 10])
         for k in g2:
             assert k[0] in [9, 10]
             np.testing.assert_array_equal(g[k], g2[k])
@@ -98,13 +99,13 @@ class Test_HERACal(object):
         # test select on pols
         hc = io.HERACal(self.fname_xx)
         g, _, _, _ = hc.read()
-        hc2 = io.HERACal(self.fname_both)
-        g2, _, _, _ = hc.read(pols=['Jee'])
+        hc2 = io.HERACal(self.fname_2pol)
+        g2, _, _, _ = hc2.read(pols=['Jee'])
         for k in g2:
             np.testing.assert_array_equal(g[k], g2[k])
 
     def test_write(self):
-        hc = HERACal(self.fname_both)
+        hc = HERACal(self.fname)
         gains, flags, quals, total_qual = hc.read()
         for key in gains.keys():
             gains[key] *= 2.0 + 1.0j
