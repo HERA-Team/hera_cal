@@ -1208,7 +1208,7 @@ def read_hera_calfits(filenames, ants=None, pols=None,
             if _jhash not in inds:
                 x_orient = hdr['XORIENT']
                 _pols = [uvutils.parse_jpolstr(uvutils.JONES_NUM2STR_DICT[num], x_orientation=x_orient)
-                        for num in jones_array]
+                         for num in jones_array]
                 if 'pols' in info:
                     info['pols'] = info['pols'].union(set(_pols))
                 else:

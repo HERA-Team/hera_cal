@@ -865,8 +865,8 @@ class Test_ReadHeraCalfits(object):
 
         # test list loading
         rv = io.read_hera_calfits([self.fname_xx, self.fname_yy], read_gains=True, read_flags=True,
-                               read_quality=True, read_tot_quality=False,
-                               check=True, verbose=True)
+                                  read_quality=True, read_tot_quality=False,
+                                  check=True, verbose=True)
         for key in ('gains', 'flags', 'quality'):
             assert len(rv[key].keys()) == 36
 
@@ -905,22 +905,22 @@ class Test_ReadHeraCalfits(object):
 
     def test_read_info(self):
         rv = io.read_hera_calfits(self.fname_xx, read_gains=False, read_flags=False,
-                               read_quality=False, read_tot_quality=False, check=True,
-                               verbose=True)
+                                  read_quality=False, read_tot_quality=False, check=True,
+                                  verbose=True)
         assert 'info' in rv
         assert len(rv) == 1
         for key in ('ants', 'pols', 'freqs', 'times'):
             assert key in rv['info']
+
     def test_read(self):
         # test one file with both polarizations and a non-None total quality array
         rv = io.read_hera_calfits(self.fname, read_gains=True, read_flags=True,
-                               read_quality=True, read_tot_quality=True,
-                               dtype=np.complex128, check=True, verbose=True)
+                                  read_quality=True, read_tot_quality=True,
+                                  dtype=np.complex128, check=True, verbose=True)
         for key in ('info', 'gains', 'flags', 'quality', 'total_quality'):
             assert key in rv
         shape = (rv['info']['times'].size, rv['info']['freqs'].size)
         assert rv['info']['freqs'].size == 1024
-        #assert rv['info']['times'].size == 3 # XXX
         for key, gain in rv['gains'].items():
             assert len(key) == 2
             assert gain.dtype == np.complex128
@@ -941,8 +941,8 @@ class Test_ReadHeraCalfits(object):
 
         # test list loading
         rv = io.read_hera_calfits([self.fname_xx, self.fname_yy], read_gains=True, read_flags=True,
-                               read_quality=True, read_tot_quality=False,
-                               check=True, verbose=True)
+                                  read_quality=True, read_tot_quality=False,
+                                  check=True, verbose=True)
         for key in ('gains', 'flags', 'quality'):
             assert len(rv[key].keys()) == 36
 
