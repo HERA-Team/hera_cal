@@ -53,14 +53,14 @@ setup_args = {
         'astropy',
         'astropy-healpix',
         'pyuvdata',
-        'linsolve @ git+http://github.com/HERA-Team/linsolve',
-        'hera_qm @ git+http://github.com/HERA-Team/hera_qm',
+        'linsolve',
+        'hera_qm',
         'scikit-learn'
     ],
     'extras_require': {
         "all": [
             'aipy>=3.0',
-            'uvtools @ git+http://github.com/HERA-Team/uvtools',
+            'uvtools',
         ]
     },
     'zip_safe': False,
