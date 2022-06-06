@@ -1195,10 +1195,10 @@ def read_hera_calfits(filenames, ants=None, pols=None,
             nants = hdr['NAXIS6']
             anthdu = fname[hdunames["ANTENNAS"]]
             antdata = anthdu.data
-            ants = antdata["ANTARR"][:nants].astype(int)
-            _ahash = hash(ants.tobytes())
+            _ants = antdata["ANTARR"][:nants].astype(int)
+            _ahash = hash(_ants.tobytes())
             if _ahash not in inds:
-                inds[_ahash] = {ant: idx for idx, ant in enumerate(ants)}
+                inds[_ahash] = {ant: idx for idx, ant in enumerate(_ants)}
                 if 'ants' in info:
                     info['ants'].intersection_update(set(inds[_ahash].keys()))
                 else:
@@ -1207,13 +1207,13 @@ def read_hera_calfits(filenames, ants=None, pols=None,
             _jhash = hash(jones_array.tobytes())
             if _jhash not in inds:
                 x_orient = hdr['XORIENT']
-                pols = [uvutils.parse_jpolstr(uvutils.JONES_NUM2STR_DICT[num], x_orientation=x_orient)
+                _pols = [uvutils.parse_jpolstr(uvutils.JONES_NUM2STR_DICT[num], x_orientation=x_orient)
                         for num in jones_array]
                 if 'pols' in info:
-                    info['pols'] = info['pols'].union(set(pols))
+                    info['pols'] = info['pols'].union(set(_pols))
                 else:
-                    info['pols'] = set(pols)
-                inds[_jhash] = {pol: idx for idx, pol in enumerate(pols)}
+                    info['pols'] = set(_pols)
+                inds[_jhash] = {pol: idx for idx, pol in enumerate(_pols)}
             inds[filename] = (inds[_ahash], inds[_jhash])
             if cnt == 0:
                 if 'ANTXYZ' in antdata.names:

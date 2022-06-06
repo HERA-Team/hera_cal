@@ -820,7 +820,8 @@ class Test_ReadHeraCalfits(object):
     def setup_method(self):
         self.fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
         self.fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
-        self.fname_both = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
+        self.fname_2pol = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.omni.calfits")
+        self.fname = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
         self.fname_t0 = os.path.join(DATA_PATH, 'test_input/zen.2458101.44615.xx.HH.uv.abs.calfits_54x_only')
         self.fname_t1 = os.path.join(DATA_PATH, 'test_input/zen.2458101.45361.xx.HH.uv.abs.calfits_54x_only')
         self.fname_t2 = os.path.join(DATA_PATH, 'test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only')
@@ -835,7 +836,7 @@ class Test_ReadHeraCalfits(object):
             assert key in rv['info']
     def test_read(self):
         # test one file with both polarizations and a non-None total quality array
-        rv = io.read_hera_calfits(self.fname_both, read_gains=True, read_flags=True,
+        rv = io.read_hera_calfits(self.fname, read_gains=True, read_flags=True,
                                read_quality=True, read_tot_quality=True,
                                dtype=np.complex128, check=True, verbose=True)
         for key in ('info', 'gains', 'flags', 'quality', 'total_quality'):
@@ -877,15 +878,18 @@ class Test_ReadHeraCalfits(object):
         
         # test select on antenna numbers
         rv1 = io.read_hera_calfits([self.fname_xx, self.fname_yy], ants=(9, 10))
-        rv2 = io.read_hera_calfits(self.fname_both, ants=(9, 10))
+        rv2 = io.read_hera_calfits(self.fname_2pol, ants=(9, 10))
         for k in rv2['gains'].keys():
-            assert k[0] in (9, 10)
+            assert k[0] in [9, 10]
             np.testing.assert_array_equal(rv1['gains'][k], rv2['gains'][k])
 
         # test select on pols
-        rv = io.read_hera_calfits(self.fname_xx, pols=['Jee'])
-        for k in rv['gains'].keys():
+        rv1 = io.read_hera_calfits(self.fname_xx)
+        rv2 = io.read_hera_calfits(self.fname_2pol, pols=['Jee'])
+        for k in rv2['gains'].keys():
             assert k[1] == 'Jee'
+            assert k in rv1['gains']
+            np.testing.assert_array_equal(rv1['gains'][k], rv2['gains'][k])
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
