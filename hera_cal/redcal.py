@@ -1987,21 +1987,21 @@ def nightly_median_firstcal_delays(redcal_meta_file_list, output_ext='.redcal_me
     polarity_flips = {ant: copy.deepcopy(delays[ant]).astype(bool) for ant in delays}
     nt = 0
     for filenum, (meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history) in enumerate(redcal_metas):
+        tslice = slice(nt, nt + len(times))
         for ant in fc_meta['dlys']:
-            tslice = slice(nt, nt + len(times))
             delays[ant][tslice] = fc_meta['dlys'][ant]
             polarity_flips[ant][tslice] = fc_meta['polarity_flips'][ant]
             if not offsets_in_firstcal:
                 offsets[ant][tslice] = fc_meta['offsets'][ant]
             else:
-                fc_meta['offsets'] = copy.deepcopy(offsets)
+                fc_meta['offsets'] = copy.deepcopy(fc_meta['dlys'])
                 firstcal_file = firstcal_file_list[filenum]
                 hc = HERACal(firstcal_file)
                 gains_fc = hc.read()[0]
                 for ant in gains_fc:
                     # solve for offsets from gains if they are not in the fc_meta file.
                     dly_factor = np.exp(2j * np.pi * np.outer(fc_meta['dlys'][ant], freqs))
-                    offsets[ant][tslice] = np.median(np.angle(gains_fc[ant] / dly_factor), axis=1)
+                    offsets[ant][tslice] = np.nanmedian(np.angle(gains_fc[ant] / dly_factor), axis=1)
         nt += len(times)
     # compute medians.
     for ant in delays:
