@@ -137,6 +137,7 @@ class TestFilterBls(object):
         with pytest.raises(AssertionError):
             utils.filter_bls(bls, min_bl_cut=1.5)
 
+
 class TestHistoryVersion(object):
 
     def test_history_string(self):
