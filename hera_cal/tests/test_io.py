@@ -865,7 +865,7 @@ class Test_ReadHeraCalfits(object):
             assert key in rv
         shape = (rv['info']['times'].size, rv['info']['freqs'].size)
         assert rv['info']['freqs'].size == 1024
-        assert rv['info']['times'].size == 3
+        assert rv['info']['times'].size == 1
         for key, gain in rv['gains'].items():
             assert len(key) == 2
             assert gain.dtype == np.complex128
