@@ -137,6 +137,16 @@ class TestFilterBls(object):
         with pytest.raises(AssertionError):
             utils.filter_bls(bls, min_bl_cut=1.5)
 
+class TestHistoryVersion(object):
+
+    def test_history_string(self):
+        hs = utils.history_string()
+        assert 'function test_history_string() in' in hs
+        assert 'test_utils.py' in hs
+        hs = utils.history_string('stuff')
+        assert 'stuff' in hs
+        assert 'Notes' in hs
+
 
 class TestFftDly(object):
 

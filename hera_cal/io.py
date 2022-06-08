@@ -19,9 +19,7 @@ import pickle
 import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
-from . import redcal
 import argparse
-from . import version
 from uvtools.dspec import place_data_on_uniform_grid
 
 try:
@@ -30,6 +28,8 @@ try:
 except ImportError:
     AIPY = False
 
+from . import utils
+from . import redcal
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
 from .utils import split_pol, conj_pol, split_bl, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
@@ -2337,7 +2337,7 @@ def throw_away_flagged_ants(infilename, outfilename, yaml_file=None, throw_away_
     # wite to history.
     history_string = f"Threw away flagged antennas from yaml_file={yaml_file} using throw_away_flagged_ants.\n"
     history_string += f"Also threw out {antpairs_not_to_keep} because data was fully flagged.\n"
-    hd.history += version.history_string(notes=history_string)
+    hd.history += utils.history_string(notes=history_string)
     hd.write_uvh5(outfilename, clobber=clobber)
     return hd
 

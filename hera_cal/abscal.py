@@ -35,7 +35,6 @@ from pyuvdata import UVCal, UVData
 import linsolve
 import warnings
 
-from . import version
 from .apply_cal import calibrate_in_place
 from .smooth_cal import pick_reference_antenna, rephase_to_refant
 from .flag_utils import synthesize_ant_flags
@@ -3691,7 +3690,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     hc.update(gains=abscal_gains, flags=abscal_flags, quals=abscal_chisq_per_ant, total_qual=abscal_chisq)
     hc.quality_array[np.isnan(hc.quality_array)] = 0
     hc.total_quality_array[np.isnan(hc.total_quality_array)] = 0
-    hc.history += version.history_string(add_to_history)
+    hc.history += utils.history_string(add_to_history)
     hc.write_calfits(output_file, clobber=clobber)
     if write_delta_gains:
         hcdelta = copy.deepcopy(hc)

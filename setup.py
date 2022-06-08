@@ -5,12 +5,6 @@ import sys
 import json
 
 sys.path.append("hera_cal")
-import version  # noqa
-
-data = [version.git_origin, version.git_hash, version.git_description, version.git_branch]
-with open(os.path.join('hera_cal', 'GIT_INFO'), 'w') as outfile:
-    json.dump(data, outfile)
-
 
 def package_files(package_dir, subdirectory):
     # walk the input package_dir/subdirectory
@@ -45,7 +39,6 @@ setup_args = {
                 'scripts/time_chunk_from_baseline_chunks_run.py', 'scripts/chunk_files.py', 'scripts/transfer_flags.py',
                 'scripts/flag_all.py', 'scripts/throw_away_flagged_antennas.py', 'scripts/select_spw_ranges.py',
                 'scripts/multiply_gains.py'],
-    'version': version.version,
     'package_data': {'hera_cal': data_files},
     'install_requires': [
         'numpy>=1.10',
