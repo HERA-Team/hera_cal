@@ -138,7 +138,7 @@ class TestFilterBls(object):
             utils.filter_bls(bls, min_bl_cut=1.5)
 
 
-class TestHistoryVersion(object):
+class TestHistoryVersion():
 
     def test_history_string(self):
         hs = utils.history_string()
