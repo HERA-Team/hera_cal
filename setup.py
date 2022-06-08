@@ -27,7 +27,7 @@ def package_files(package_dir, subdirectory):
 data_files = package_files('hera_cal', 'data') + package_files('hera_cal', 'calibrations')
 
 setup_args = {
-    'name': 'hera_cal',
+    'name': 'hera-calibration',
     'author': 'HERA Team',
     'url': 'https://github.com/HERA-Team/hera_cal',
     'license': 'BSD',
@@ -53,14 +53,14 @@ setup_args = {
         'astropy',
         'astropy-healpix',
         'pyuvdata',
-        'linsolve @ git+http://github.com/HERA-Team/linsolve',
-        'hera_qm @ git+http://github.com/HERA-Team/hera_qm',
+        'linsolve',
+        'hera_qm',
         'scikit-learn'
     ],
     'extras_require': {
         "all": [
             'aipy>=3.0',
-            'uvtools @ git+http://github.com/HERA-Team/uvtools',
+            'uvtools',
         ]
     },
     'zip_safe': False,
