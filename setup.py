@@ -6,6 +6,7 @@ import json
 
 sys.path.append("hera_cal")
 
+
 def package_files(package_dir, subdirectory):
     # walk the input package_dir/subdirectory
     # return a package_data list
