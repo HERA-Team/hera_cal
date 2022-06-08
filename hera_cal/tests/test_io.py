@@ -826,7 +826,6 @@ class Test_ReadHeraCalfits(object):
         self.fname_t1 = os.path.join(DATA_PATH, 'test_input/zen.2458101.45361.xx.HH.uv.abs.calfits_54x_only')
         self.fname_t2 = os.path.join(DATA_PATH, 'test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only')
 
-
     def test_read_info(self):
         rv = io.read_hera_calfits(self.fname_xx, read_gains=False, read_flags=False,
                                   read_quality=False, read_tot_quality=False, check=True,
