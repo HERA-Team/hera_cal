@@ -31,7 +31,7 @@ jobs:
 
       - name: Build a binary wheel and a source tarball
         run: |
-          python -m build --source --out-dir dist/ .
+          python -m build
       - name: Publish to PyPI
         if: startsWith(github.event.ref, 'refs/tags')
         uses: pypa/gh-action-pypi-publish@master
