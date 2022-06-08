@@ -3,6 +3,7 @@ from setuptools import setup
 import os
 import sys
 import json
+from pathlib import Path
 
 sys.path.append("hera_cal")
 
@@ -20,6 +21,8 @@ def package_files(package_dir, subdirectory):
 
 
 data_files = package_files('hera_cal', 'data') + package_files('hera_cal', 'calibrations')
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
 
 setup_args = {
     'name': 'hera-calibration',
@@ -27,6 +30,8 @@ setup_args = {
     'url': 'https://github.com/HERA-Team/hera_cal',
     'license': 'BSD',
     'description': 'collection of calibration routines to run on the HERA instrument.',
+    'long_description': long_description,
+    'long_description_content_type': 'text/markdown',
     'package_dir': {'hera_cal': 'hera_cal'},
     'packages': ['hera_cal'],
     'include_package_data': True,
