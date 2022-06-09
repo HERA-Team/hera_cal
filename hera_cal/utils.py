@@ -17,6 +17,8 @@ from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_D
 import sklearn.gaussian_process as gp
 import warnings
 import argparse
+import inspect
+from . import __version__
 
 try:
     AIPY = True
@@ -203,6 +205,23 @@ def filter_bls(bls, ants=None, ex_ants=None, pols=None, antpos=None, min_bl_cut=
         filtered_bls.append(bl)
 
     return filtered_bls
+
+
+def history_string(notes=""):
+    """
+    Creates a standardized history string that all functions that write to
+    disk can use. Optionally add notes.
+    """
+    notes = f"""\n\nNotes:\n{notes}""" if notes else ""
+
+    stack = inspect.stack()[1]
+    history = f"""
+    ------------
+    This file was produced by the function {stack[3]}() in {stack[1]} using version {__version__}
+    {notes}
+    ------------
+    """
+    return history
 
 
 def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0):

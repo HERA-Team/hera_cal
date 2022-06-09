@@ -3,13 +3,9 @@ from setuptools import setup
 import os
 import sys
 import json
+from pathlib import Path
 
 sys.path.append("hera_cal")
-import version  # noqa
-
-data = [version.git_origin, version.git_hash, version.git_description, version.git_branch]
-with open(os.path.join('hera_cal', 'GIT_INFO'), 'w') as outfile:
-    json.dump(data, outfile)
 
 
 def package_files(package_dir, subdirectory):
@@ -25,13 +21,17 @@ def package_files(package_dir, subdirectory):
 
 
 data_files = package_files('hera_cal', 'data') + package_files('hera_cal', 'calibrations')
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
 
 setup_args = {
-    'name': 'hera_cal',
+    'name': 'hera-calibration',
     'author': 'HERA Team',
     'url': 'https://github.com/HERA-Team/hera_cal',
     'license': 'BSD',
     'description': 'collection of calibration routines to run on the HERA instrument.',
+    'long_description': long_description,
+    'long_description_content_type': 'text/markdown',
     'package_dir': {'hera_cal': 'hera_cal'},
     'packages': ['hera_cal'],
     'include_package_data': True,
@@ -45,7 +45,6 @@ setup_args = {
                 'scripts/time_chunk_from_baseline_chunks_run.py', 'scripts/chunk_files.py', 'scripts/transfer_flags.py',
                 'scripts/flag_all.py', 'scripts/throw_away_flagged_antennas.py', 'scripts/select_spw_ranges.py',
                 'scripts/multiply_gains.py'],
-    'version': version.version,
     'package_data': {'hera_cal': data_files},
     'install_requires': [
         'numpy>=1.10',
@@ -53,14 +52,14 @@ setup_args = {
         'astropy',
         'astropy-healpix',
         'pyuvdata',
-        'linsolve @ git+http://github.com/HERA-Team/linsolve',
-        'hera_qm @ git+http://github.com/HERA-Team/hera_qm',
+        'linsolve',
+        'hera_qm',
         'scikit-learn'
     ],
     'extras_require': {
         "all": [
             'aipy>=3.0',
-            'uvtools @ git+http://github.com/HERA-Team/uvtools',
+            'uvtools',
         ]
     },
     'zip_safe': False,

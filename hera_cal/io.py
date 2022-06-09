@@ -13,15 +13,14 @@ from collections.abc import Iterable
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 from astropy import units
+from astropy.io import fits
 import h5py
 import scipy
 import pickle
 import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
-from . import redcal
 import argparse
-from . import version
 from uvtools.dspec import place_data_on_uniform_grid
 
 try:
@@ -30,6 +29,8 @@ try:
 except ImportError:
     AIPY = False
 
+from . import utils
+from . import redcal
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
 from .utils import split_pol, conj_pol, split_bl, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
@@ -233,6 +234,164 @@ class HERACal(UVCal):
             writer.write_calfits(filename, **write_kwargs)
         else:
             self.write_calfits(filename, **write_kwargs)
+
+
+def read_hera_calfits(filenames, ants=None, pols=None,
+                      read_gains=True, read_flags=False, read_quality=False, read_tot_quality=False,
+                      check=False, dtype=np.complex128, verbose=False):
+    '''A faster interface to getting data out of HERA calfits files. Only concatenates
+    along time axis. Puts times in ascending order,
+    but does not check that files are contiguous.
+
+    Arguments:
+        filenames: list of files to read
+        ants: list of ants or (ant, [polstr]) tuples to read out of files.
+              Default (None) is to use the intersection of all antennas
+              across files.
+        pols: list of pol strings to read out of files
+        read_gains: (bool, True): read gains
+        read_flags (bool, False): read flags
+        read_quality (bool, False): read quality array
+        read_tot_quality (bool, False): read total quality array
+        check (bool, False): run sanity checks to make sure files match.
+        dtype (np.complex128): numpy datatype for output complex-valued arrays
+        verbose: print some progress messages.
+
+    Returns:
+        rv: dictionary with keys 'info' (metadata), 'gains' (dictionary of waterfalls
+            with (ant,pol) keys), 'flags', 'quality', and 'total_quality'. Will omit
+            keys according to read_gains, read_flags, and read_quality.
+    '''
+
+    info = {}
+    times = {}
+    inds = {}
+    # grab header information from all cal files
+    filenames = _parse_input_files(filenames, name='input_cal')
+    for cnt, filename in enumerate(filenames):
+        with fits.open(filename) as fname:
+            hdr = fname[0].header
+            _times = uvutils._fits_gethduaxis(fname[0], 3)
+            _thash = hash(_times.tobytes())
+            if _thash not in times:
+                times[_thash] = (_times, [filename])
+            else:
+                times[_thash][1].append(filename)
+            hdunames = uvutils._fits_indexhdus(fname)
+            nants = hdr['NAXIS6']
+            anthdu = fname[hdunames["ANTENNAS"]]
+            antdata = anthdu.data
+            _ants = antdata["ANTARR"][:nants].astype(int)
+            _ahash = hash(_ants.tobytes())
+            if _ahash not in inds:
+                inds[_ahash] = {ant: idx for idx, ant in enumerate(_ants)}
+                if 'ants' in info:
+                    info['ants'].intersection_update(set(inds[_ahash].keys()))
+                else:
+                    info['ants'] = set(inds[_ahash].keys())
+            jones_array = uvutils._fits_gethduaxis(fname[0], 2)
+            _jhash = hash(jones_array.tobytes())
+            if _jhash not in inds:
+                info['x_orientation'] = x_orient = hdr['XORIENT']
+                _pols = [uvutils.parse_jpolstr(uvutils.JONES_NUM2STR_DICT[num], x_orientation=x_orient)
+                         for num in jones_array]
+                if 'pols' in info:
+                    info['pols'] = info['pols'].union(set(_pols))
+                else:
+                    info['pols'] = set(_pols)
+                inds[_jhash] = {pol: idx for idx, pol in enumerate(_pols)}
+            inds[filename] = (inds[_ahash], inds[_jhash])
+            if cnt == 0:
+                if 'ANTXYZ' in antdata.names:
+                    info['antpos'] = antdata["ANTXYZ"]
+                info['freqs'] = uvutils._fits_gethduaxis(fname[0], 4)
+                info['gain_convention'] = gain_convention = hdr.pop("GNCONVEN")
+                info['cal_type'] = cal_type = hdr.pop("CALTYPE")
+            if check:
+                assert gain_convention == 'divide'  # HERA standard
+                assert cal_type == 'gain'  # delay-style calibration currently unsupported
+                assert np.all(info['freqs'] == uvutils._fits_gethduaxis(fname[0], 4))
+
+    if ants is None:
+        # generate a set of ants if we didn't have one passed in
+        if pols is None:
+            pols = info['pols']
+        ants = set((ant,) for ant in info['ants'])
+        ants = set(ant + (p,) for ant in ants for p in pols)
+    else:
+        ants = set((ant,) if type(ant) in (int, np.int, np.int64) else ant for ant in ants)
+        # if length 1 ants are passed in, add on polarizations
+        ants_len1 = set(ant for ant in ants if len(ant) == 1)
+        if len(ants_len1) > 0:
+            if pols is None:
+                pols = info['pols']
+            ants = set(ant for ant in ants if len(ant) == 2)
+            ants = ants.union([ant + (p,) for ant in ants_len1 for p in pols])
+        # record polarizations as total of ones indexed in bls
+        pols = set(ant[1] for ant in ants)
+    times = list(times.values())
+    times.sort(key=lambda x: x[0][0])
+    filenames = (v[1] for v in times)
+    times = np.concatenate([t[0] for t in times], axis=0)
+    info['times'] = times
+    tot_times = times.size
+    nfreqs = info['freqs'].size
+
+    # preallocate buffers
+    def nan_empty(shape, dtype):
+        '''Allocate nan-filled buffers, in case file time/pol
+        misalignments lead to uninitialized data buffer slots.'''
+        buf = np.empty(shape, dtype=dtype)
+        buf.fill(np.nan)
+        return buf
+
+    rv = {}
+    if read_gains:
+        rv['gains'] = {ant: nan_empty((tot_times, nfreqs), dtype) for ant in ants}
+    if read_flags:
+        rv['flags'] = {ant: nan_empty((tot_times, nfreqs), bool) for ant in ants}
+    if read_quality:
+        rv['quality'] = {ant: nan_empty((tot_times, nfreqs), np.float32) for ant in ants}
+    if read_tot_quality:
+        rv['total_quality'] = {p: nan_empty((tot_times, nfreqs), np.float32) for p in info['pols']}
+    # bail here if all we wanted was the info
+    if len(rv) == 0:
+        return {'info': info}
+    
+    # loop through files and read data
+    t = 0
+    for cnt, _filenames in enumerate(filenames):
+        for filename in _filenames:
+            antind, polind = inds[filename]
+            with fits.open(filename) as fname:
+                hdr = fname[0].header
+                ntimes = hdr.pop("NAXIS3")
+                if read_gains:
+                    data = fname[0].data
+                    for (a, p) in rv['gains'].keys():
+                        if a not in antind or p not in polind:
+                            continue
+                        rv['gains'][a, p][t:t + ntimes].real = fname[0].data[antind[a], 0, :, :, polind[p], 0].T
+                        rv['gains'][a, p][t:t + ntimes].imag = fname[0].data[antind[a], 0, :, :, polind[p], 1].T
+                if read_flags:
+                    for (a, p) in rv['flags'].keys():
+                        if a not in antind or p not in polind:
+                            continue
+                        rv['flags'][a, p][t:t + ntimes] = fname[0].data[antind[a], 0, :, :, polind[p], 2].T
+                if read_quality:
+                    for (a, p) in rv['quality'].keys():
+                        if a not in antind or p not in polind:
+                            continue
+                        rv['quality'][a, p][t:t + ntimes] = fname[0].data[antind[a], 0, :, :, polind[p], 3].T
+                if read_tot_quality:
+                    tq_hdu = fname[hdunames["TOTQLTY"]]
+                    for p in rv['total_quality'].keys():
+                        if p not in polind:
+                            continue
+                        rv['total_quality'][p][t:t + ntimes] = tq_hdu.data[0, :, :, polind[p]].T
+        t += ntimes    
+    rv['info'] = info
+    return rv
 
 
 def get_blt_slices(uvo, tried_to_reorder=False):
@@ -895,8 +1054,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
     bl2ind = {}
     inds = {}
     # Read file metadata to size up arrays and sort times
-    if type(filenames) is str:
-        filenames = [filenames]
+    filenames = _parse_input_files(filenames, name='input_data')
     for filename in filenames:
         if verbose:
             print(f'Reading header of {filename}')
@@ -2337,7 +2495,7 @@ def throw_away_flagged_ants(infilename, outfilename, yaml_file=None, throw_away_
     # wite to history.
     history_string = f"Threw away flagged antennas from yaml_file={yaml_file} using throw_away_flagged_ants.\n"
     history_string += f"Also threw out {antpairs_not_to_keep} because data was fully flagged.\n"
-    hd.history += version.history_string(notes=history_string)
+    hd.history += utils.history_string(notes=history_string)
     hd.write_uvh5(outfilename, clobber=clobber)
     return hd
 
