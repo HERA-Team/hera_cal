@@ -2044,7 +2044,7 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, old_redcal_met
     hc = HERACal(redcal_file)
     # get redundant calibrator.
     # get reds
-    gains, _, _, _ = hc.read()
+    gains, gain_flags, _, _ = hc.read()
     fc_meta, omni_meta, freqs, times, lsts, antpos, history = read_redcal_meta(redcal_meta_file)
     fc_meta_old = read_redcal_meta(old_redcal_meta_file)[0]
     reds = get_reds(antpos, pols=[pol.replace('J', '').replace('j', '') for pol in hc.pols])
@@ -2060,6 +2060,11 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, old_redcal_met
             dly_factor = np.exp(2j * np.pi * freqs[None, :] * fc_meta['dlys'][ant][:, None]) * np.exp(1j * fc_meta['offsets'][ant][:, None])
             firstcal_gains[ant] = dly_factor
         gains = rc.remove_degen_gains(gains, degen_gains=firstcal_gains, mode='complex')
+    # fix any nans introduced by overflagged data and set flagged gains equal to unity.
+    for k in gains:
+        gain_flags[k] = gain_flags[k] | ~np.isfinite(gain_flags[k])
+        gains[gain_flags[k]] = 1.0 + 0.0j
+        
 
     hc.update(gains=gains)
     if output_file is not None:
