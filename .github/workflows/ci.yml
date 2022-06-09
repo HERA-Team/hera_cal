@@ -63,4 +63,4 @@ jobs:
 
       - name: Python Style Checker
         run: |
-          pycodestyle . --ignore=E501,W291,W293,W503,W601
+          pycodestyle . --ignore=E402,E501,W291,W293,W503,W601
