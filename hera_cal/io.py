@@ -357,7 +357,7 @@ def read_hera_calfits(filenames, ants=None, pols=None,
     # bail here if all we wanted was the info
     if len(rv) == 0:
         return {'info': info}
-    
+
     # loop through files and read data
     t = 0
     for cnt, _filenames in enumerate(filenames):
@@ -389,7 +389,7 @@ def read_hera_calfits(filenames, ants=None, pols=None,
                         if p not in polind:
                             continue
                         rv['total_quality'][p][t:t + ntimes] = tq_hdu.data[0, :, :, polind[p]].T
-        t += ntimes    
+        t += ntimes
     rv['info'] = info
     return rv
 
@@ -724,11 +724,11 @@ class HERAData(UVData):
             try:
                 if self.filetype in ['uvh5', 'uvfits']:
                     super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
-                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies, 
+                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
                     if self.filetype == 'uvfits':
-                        self.unphase_to_drift() 
+                        self.unphase_to_drift()
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
@@ -1020,7 +1020,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                    read_data=True, read_flags=False, read_nsamples=False,
                    check=False, dtype=np.complex128, verbose=False):
     '''A potentially faster interface for reading HERA HDF5 files. Only concatenates
-    along time axis. Puts times in ascending order, but does not check that 
+    along time axis. Puts times in ascending order, but does not check that
     files are contiguous. Currently not BDA compatible.
 
     Arguments:
@@ -1029,7 +1029,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
              Default: all bls common to all files.
         pols: list of pol strings to read out of files. Default: all, but is
               superceded by any polstrs listed in bls.
-        full_read_thresh (0.002): fractional threshold for reading whole file 
+        full_read_thresh (0.002): fractional threshold for reading whole file
                                   instead of baseline by baseline.
         read_data (bool, True): read data
         read_flags (bool, False): read flags
@@ -1039,7 +1039,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
         verbose: print some progress messages.
 
     Returns:
-        rv: dict with keys 'info' and optionally 'data', 'flags', and 'nsamples', 
+        rv: dict with keys 'info' and optionally 'data', 'flags', and 'nsamples',
             based on whether read_data, read_flags, and read_nsamples are true.
         rv['info']: metadata dict with keys 'freqs' (1D array), 'times' (1D array),
                     'pols' (list), 'ants' (1D array), 'antpos' (dict of antenna: 3D position),
@@ -1213,11 +1213,11 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
 
 class HERADataFastReader():
     '''Wrapper class around read_hera_hdf5 meant to mimic the functionality of HERAData for drop-in replacement.'''
-    
+
     def __init__(self, input_data):
-        '''Instantiates a HERADataFastReader object. Only supports reading uvh5 files, not writing them. 
-        Does not support BDA and only supports patial i/o along baselines and polarization axes. 
-        
+        '''Instantiates a HERADataFastReader object. Only supports reading uvh5 files, not writing them.
+        Does not support BDA and only supports patial i/o along baselines and polarization axes.
+
         Arguments:
             input_data: path or list of paths to uvh5 files.
         '''
@@ -1227,7 +1227,7 @@ class HERADataFastReader():
         # initialize metatadata to None to match HERAData
         for meta in HERAData.HERAData_metas:
             setattr(self, meta, None)
-        
+
         # create functions that error informatively when trying to use standard HERAData/UVData methods
         for funcname in list(dir(HERAData)):
             if funcname.startswith('__') and funcname.endswith('__'):
@@ -1239,11 +1239,11 @@ class HERADataFastReader():
     def _HERAData_error(self, *args, **kwargs):
         raise NotImplementedError('HERADataFastReader does not support this method. Try HERAData instead.')
 
-    def read(self, bls=None, pols=None, full_read_thresh=0.002, read_data=True, read_flags=True, 
+    def read(self, bls=None, pols=None, full_read_thresh=0.002, read_data=True, read_flags=True,
              read_nsamples=True, check=False, dtype=np.complex128, verbose=False, skip_lsts=False):
-        '''A faster read that only concatenates along the time axis. Puts times in ascending order, but does not 
+        '''A faster read that only concatenates along the time axis. Puts times in ascending order, but does not
         check that files are contiguous. Currently not BDA compatible.
-        
+
         Arguments:
             bls: list of (ant_1, ant_2, [polstr]) tuples to read out of files. Default: all bls common to all files.
             pols: list of pol strings to read out of files. Default: all, but is superceded by any polstrs listed in bls.
@@ -1255,21 +1255,21 @@ class HERADataFastReader():
             dtype (np.complex128): numpy datatype for output complex-valued arrays
             verbose: print some progress messages.
             skip_lsts (bool, False): save time by not computing LSTs from JDs
-        
+
         Returns:
             data: DataContainer mapping baseline keys to complex visibility waterfalls (if read_data is True, else None)
             flags: DataContainer mapping baseline keys to boolean flag waterfalls (if read_flags is True, else None)
             nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls (if read_nsamples is True, else None)
-        '''                
+        '''
         rv = read_hera_hdf5(self.filepaths, bls=bls, pols=pols, full_read_thresh=full_read_thresh,
                             read_data=read_data, read_flags=read_flags, read_nsamples=read_nsamples,
                             check=check, dtype=dtype, verbose=verbose)
-        
+
         # extra metadata calculations
         rv['info']['antpairs'] = rv['info']['bls']
         rv['info']['bls'] = set(bl for key in ['data', 'flags', 'nsamples'] for bl in rv.get(key, {}).keys())
         XYZ = XYZ_from_LatLonAlt(rv['info']['latitude'] * np.pi / 180, rv['info']['longitude'] * np.pi / 180, rv['info']['altitude'])
-        enu_antpos = ENU_from_ECEF(np.array([antpos for ant, antpos in rv['info']['antpos'].items()]) + XYZ, 
+        enu_antpos = ENU_from_ECEF(np.array([antpos for ant, antpos in rv['info']['antpos'].items()]) + XYZ,
                                    rv['info']['latitude'] * np.pi / 180, rv['info']['longitude'] * np.pi / 180, rv['info']['altitude'])
         rv['info']['antpos'] = {ant: enu for enu, ant in zip(enu_antpos, rv['info']['antpos'])}
         rv['info']['data_antpos'] = {ant: rv['info']['antpos'][ant] for ant in rv['info']['data_ants']}
@@ -1298,7 +1298,7 @@ class HERADataFastReader():
         '''Converts outputs from read_hera_hdf5 to a more standard HERAData output.'''
         if key not in rv:
             return None
-        
+
         # construct datacontainer with whatever metadata is available
         dc = DataContainer(rv[key])
         for meta in HERAData.HERAData_metas:

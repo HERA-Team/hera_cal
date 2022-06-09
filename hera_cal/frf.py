@@ -1294,7 +1294,7 @@ def tophat_frfilter_argparser(mode='clean'):
 
 def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calfile_list=None,
                                    Nbls_per_load=None, spw_range=None, external_flags=None,
-                                   factorize_flags=False, time_thresh=0.05, wgt_by_nsample=False, 
+                                   factorize_flags=False, time_thresh=0.05, wgt_by_nsample=False,
                                    lst_blacklists=None, blacklist_wgt=0.0,
                                    res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                    clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
@@ -1339,7 +1339,7 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             List of LST ranges (in hours, inclusive) to assign zero weight (by default) when performing FRF (regardless
             of whether or not they are flagged). Ranges crossing the 24h brach cut, e.g. [(23, 1)], are allowed.
         blacklist_wgt : float, optional
-            Relative weight to assign to blacklisted lsts compared to 1.0. Default 0.0 means no weight. 
+            Relative weight to assign to blacklisted lsts compared to 1.0. Default 0.0 means no weight.
             Note that 0.0 will create problems for DPSS at edge times and frequencies.
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
