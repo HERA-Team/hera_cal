@@ -3,13 +3,9 @@ from setuptools import setup
 import os
 import sys
 import json
+from pathlib import Path
 
 sys.path.append("hera_cal")
-import version  # noqa
-
-data = [version.git_origin, version.git_hash, version.git_description, version.git_branch]
-with open(os.path.join('hera_cal', 'GIT_INFO'), 'w') as outfile:
-    json.dump(data, outfile)
 
 
 def package_files(package_dir, subdirectory):
@@ -25,6 +21,8 @@ def package_files(package_dir, subdirectory):
 
 
 data_files = package_files('hera_cal', 'data') + package_files('hera_cal', 'calibrations')
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
 
 setup_args = {
     'name': 'hera-calibration',
@@ -32,6 +30,8 @@ setup_args = {
     'url': 'https://github.com/HERA-Team/hera_cal',
     'license': 'BSD',
     'description': 'collection of calibration routines to run on the HERA instrument.',
+    'long_description': long_description,
+    'long_description_content_type': 'text/markdown',
     'package_dir': {'hera_cal': 'hera_cal'},
     'packages': ['hera_cal'],
     'include_package_data': True,
@@ -46,8 +46,6 @@ setup_args = {
                 'scripts/flag_all.py', 'scripts/throw_away_flagged_antennas.py',
                 'scripts/select_spw_ranges.py', 'scripts/run_median_nightly_firstcal_delays.py',
                 'scripts/multiply_gains.py', 'scripts/run_update_redcal_phase_degeneracy.py'],
-
-    'version': version.version,
     'package_data': {'hera_cal': data_files},
     'install_requires': [
         'numpy>=1.10',
