@@ -32,7 +32,7 @@ class Test_tempcal():
         assert gain[gkey].shape == (self.hd.Ntimes, self.hd.Nfreqs)
 
         # assert gains are constant across freq
-        assert np.isclose(gain[gkey][0], gain[gkey][0, 0]).all() 
+        assert np.isclose(gain[gkey][0], gain[gkey][0, 0]).all()
 
         # assert residual std below a value that is set by-hand when it works properly
         assert np.std((self.data[key] - smooth[key])[:, 10:-10][~self.flags[key][:, 10:-10]]) < 20

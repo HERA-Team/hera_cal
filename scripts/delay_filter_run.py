@@ -11,8 +11,6 @@ import sys
 parser = delay_filter.delay_filter_argparser()
 ap = parser.parse_args()
 
-
-
 # set kwargs
 if ap.mode == 'clean':
     filter_kwargs = {'window': ap.window,
@@ -23,7 +21,7 @@ if ap.mode == 'clean':
     avg_red_bllens = False
 elif ap.mode in ['dayenu', 'dpss_leastsq']:
     filter_kwargs = {'max_contiguous_edge_flags': ap.max_contiguous_edge_flags}
-    avg_red_bllens=True
+    avg_red_bllens = True
 else:
     raise ValueError(f"mode {mode} not supported.")
 

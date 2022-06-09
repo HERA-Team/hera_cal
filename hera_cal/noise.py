@@ -19,7 +19,7 @@ from .datacontainer import DataContainer
 def interleaved_noise_variance_estimate(vis, kernel=[[1, -2, 1], [-2, 4, -2], [1, -2, 1]]):
     '''Estimate the noise on a visibility per frequency and time using weighted differecing of
     neighboring frequency and time samples.
-    
+
     Arguments:
         vis: complex visibility waterfall, usually a numpy array of size (Ntimes, Nfreqs)
         kernel: differencing kernel for how to weight each visibility relative to its neighbors
@@ -36,29 +36,29 @@ def interleaved_noise_variance_estimate(vis, kernel=[[1, -2, 1], [-2, 4, -2], [1
 
 
 def infer_dt(times_by_bl, bl, default_dt=None):
-    '''Attemps to infer the length of each integration (i.e. Delta t) for a baseline from times by bl. 
+    '''Attemps to infer the length of each integration (i.e. Delta t) for a baseline from times by bl.
     If len(times_by_bl[bl]) is 1, this is inferred from Delta t of another baseline where len(times_by_bl[bl]) > 1.
-    
+
     Arguments:
         times_by_bl: dictionary mapping antenna pair tuples to 1D time arrays (usually in JD)
         bl: antpair tuple e.g. (0, 1) or basebline tuple e.g. (0, 1, 'ee'). Polarization ignored.
         default_dt: default value to return if times cannot be infered. Default None raises ValueError.
             Units should match those in times_by_bl (typically in JD).
-        
+
     Returns:
         dt: float. Delta time in units of times_by_bl
     '''
     # normal operation
     if len(times_by_bl[bl[:2]]) > 1:
         return np.median(np.ediff1d(times_by_bl[bl[0:2]]))
-    
+
     # try to infer dt from other baselines
     elif len(times_by_bl[bl[:2]]) == 1:
         for bl2 in times_by_bl:
             if len(times_by_bl[bl2]) > 1:
                 # this assumes that all baselines have the same total time
                 return np.median(np.ediff1d(times_by_bl[bl2])) * len(times_by_bl[bl2])
-    
+
     # if dt cannot be inferred
     if default_dt is not None:
         return default_dt
@@ -79,7 +79,7 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None)
             from the times stored in the DataContainer.
         df: channel width in Hz. If None, will try to infer this from
             from the frequencies stored in the DataContainer
-        nsamples: DataContainer mapping bl tuples to numpy arrays of the number 
+        nsamples: DataContainer mapping bl tuples to numpy arrays of the number
             integrations for that given baseline. Must include nsamples[bl].
 
     Returns:
@@ -102,7 +102,7 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None)
 def per_antenna_noise_std(autos, dt=None, df=None):
     '''Predicts per-antenna noise using autocorrelation data. The result is a noise standard deviation. To predict
     the noise variance on e.g. (1, 2, 'ne'), one would use noise[1, 1, 'nn'] * noise[2, 2, 'ee'].
-    
+
     Arguments:
         autos: DataContainer containing autocorrelation data
         dt: integration time in seconds. If None, will try infer this from the times stored in the DataContainer

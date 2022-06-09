@@ -722,7 +722,7 @@ class Test_ReadHeraHdf5(object):
         assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
         for bl, data in rv['data'].items():
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
-    
+
     def test_read_one_bl(self):
         rv = io.read_hera_hdf5([self.uvh5_1], verbose=True, check=True,
                                read_data=False, read_flags=False, read_nsamples=False)
@@ -896,7 +896,7 @@ class Test_ReadHeraCalfits(object):
         rv = io.read_hera_calfits([self.fname_t0, self.fname_t1, self.fname_t2], ants=ants)
         assert len(rv['gains']) == 1
         assert ants[0] in rv['gains']
-        
+
         # test select on antenna numbers
         rv1 = io.read_hera_calfits([self.fname_xx, self.fname_yy], ants=(9, 10))
         rv2 = io.read_hera_calfits(self.fname_2pol, ants=(9, 10))
