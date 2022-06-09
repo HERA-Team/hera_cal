@@ -115,6 +115,10 @@ a fresh `conda` environment. These steps will get you up and running::
 This installs extra packages than those required to use `hera_cal`, including `hera_sim`
 and `pytest`.
 
+If you are developing `hera_cal` please install pre-commit: `pip install pre-commit` and
+then `pre-commit install` in the top-level directory. This will check your style before
+you make commits.
+
 ### Running tests
 Tests use the `pytest` framework. To run all tests, call `pytest` or
 `python -m pytest` from the base directory of the repo.
