@@ -615,7 +615,8 @@ class OmnicalSolver(linsolve.LinProductSolver):
         _sol.update(sol)
         return {k: eval(k, _sol) for k in keys}
 
-    def solve_iteratively(self, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, verbose=False):
+    def solve_iteratively(self, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1,
+                          wgt_func=lambda x: 1., verbose=False):
         """Repeatedly solves and updates solution until convergence or maxiter is reached.
         Returns a meta-data about the solution and the solution itself.
 
@@ -638,7 +639,8 @@ class OmnicalSolver(linsolve.LinProductSolver):
         terms = [(linsolve.get_name(gi), linsolve.get_name(gj), linsolve.get_name(uij))
                  for term in self.all_terms for (gi, gj, uij) in term]
         dmdl_u = self._get_ans0(sol)
-        chisq = sum([np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys])
+        abs2_u = {k: np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys()}
+        chisq = sum(abs2_u.values())
         update = np.where(chisq > 0)
         # variables with '_u' are flattened and only include pixels that need updating
         dmdl_u = {k: v[update].flatten() for k, v in dmdl_u.items()}
@@ -653,7 +655,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
             if (i % check_every) == 1:
                 # compute data wgts: dwgts = sum(V_mdl^2 / n^2) = sum(V_mdl^2 * wgts)
                 # don't need to update data weighting with every iteration
-                dwgts_u = {k: dmdl_u[k] * dmdl_u[k].conj() * wgts_u[k] for k in self.keys}
+                dwgts_u = {k: dmdl_u[k] * dmdl_u[k].conj() * wgt_func(abs2_u[k]) * wgts_u[k] for k in self.keys}
                 sol_wgt_u = {k: 0 for k in sol.keys()}
                 for k, (gi, gj, uij) in zip(self.keys, terms):
                     w = dwgts_u[k]
@@ -677,7 +679,8 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 sol_u = new_sol_u
             else:
                 # Slow branch when we compute convergence/chisq
-                new_chisq_u = sum([np.abs(v[update] - dmdl_u[k])**2 * wgts_u[k] for k, v in self.data.items()])
+                abs2_u = {k: np.abs(v[update] - dmdl_u[k])**2 * wgts_u[k] for k, v in self.data.items()}
+                new_chisq_u = sum(abs2_u.values())
                 chisq_u = chisq[update]
                 gotbetter_u = (chisq_u > new_chisq_u)
                 where_gotbetter_u = np.where(gotbetter_u)
