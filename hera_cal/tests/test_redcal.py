@@ -454,10 +454,13 @@ class TestRedundantCalibrator(object):
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
+
         def wgt_func1(abs2):
             return 1.
+
         def wgt_func2(abs2):
             return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
+
         for wgt_func in [wgt_func1, wgt_func2]:
             meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
             for i in range(NANTS):
@@ -482,10 +485,13 @@ class TestRedundantCalibrator(object):
         sol0.update(info.compute_ubls(d, sol0))
         d = {k: v.astype(np.complex64) for k, v in d.items()}
         sol0 = {k: v.astype(np.complex64) for k, v in sol0.items()}
+
         def wgt_func1(abs2):
             return 1.
+
         def wgt_func2(abs2):
             return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
+
         for wgt_func in [wgt_func1, wgt_func2]:
             meta, sol = info.omnical(d, sol0, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
             for bls in reds:
@@ -507,10 +513,13 @@ class TestRedundantCalibrator(object):
         sol0.update(info.compute_ubls(d, sol0))
         d = {k: v.astype(np.complex128) for k, v in d.items()}
         sol0 = {k: v.astype(np.complex128) for k, v in sol0.items()}
+
         def wgt_func1(abs2):
             return 1.
+
         def wgt_func2(abs2):
             return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
+
         for wgt_func in [wgt_func1, wgt_func2]:
             meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
             for bls in reds:
@@ -533,9 +542,11 @@ class TestRedundantCalibrator(object):
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
+
         def wgt_func(abs2, thresh=3):
-            #return 1.  # this fails the test, proving the below is effective
+            # return 1.  # this fails the test, proving the below is effective
             return np.where(abs2 > 0, thresh * np.tanh(abs2 / thresh) / abs2, 1)
+
         meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
         for i in range(NANTS):
             assert sol[(i, 'Jxx')].shape == (10, 10)
