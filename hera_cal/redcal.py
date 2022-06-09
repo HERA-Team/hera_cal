@@ -639,9 +639,10 @@ class OmnicalSolver(linsolve.LinProductSolver):
         terms = [(linsolve.get_name(gi), linsolve.get_name(gj), linsolve.get_name(uij))
                  for term in self.all_terms for (gi, gj, uij) in term]
         dmdl_u = self._get_ans0(sol)
-        abs2_u = {k: np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys()}
+        abs2_u = {k: np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys}
         chisq = sum(abs2_u.values())
         update = np.where(chisq > 0)
+        abs2_u = {k: v[update] for k, v in abs2_u.items()}
         # variables with '_u' are flattened and only include pixels that need updating
         dmdl_u = {k: v[update].flatten() for k, v in dmdl_u.items()}
         # wgts_u hold the wgts the user provides.  dwgts_u is what is actually used to wgt the data
@@ -701,6 +702,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 dmdl_u = {k: v[update_u] for k, v in dmdl_u.items()}
                 wgts_u = {k: v[update_u] for k, v in wgts_u.items()}
                 sol_u = {k: v[update_u] for k, v in new_sol_u.items()}
+                abs2_u = {k: v[update_u] for k, v in abs2_u.items()}
                 update = tuple(u[update_u] for u in update)
             if verbose:
                 print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
@@ -1011,7 +1013,7 @@ class RedundantCalibrator:
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         return meta, sol
 
-    def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1):
+    def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, wgt_func=lambda x: 1.):
         """Use the Liu et al 2010 Omnical algorithm to linearize equations and iteratively minimize chi^2.
 
         Args:
@@ -1035,7 +1037,7 @@ class RedundantCalibrator:
 
         sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0.keys()}
         ls = self._solver(OmnicalSolver, data, sol0=sol0, wgts=wgts, gain=gain)
-        meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after)
+        meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after, wgt_func=wgt_func)
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         return meta, sol
 
