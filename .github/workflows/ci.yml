@@ -60,7 +60,3 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && success()
         run: |
           bash <(curl -s https://codecov.io/bash) -t ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Python Style Checker
-        run: |
-          pycodestyle . --ignore=E402,E501,W291,W293,W503,W601
