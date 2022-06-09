@@ -96,7 +96,7 @@ def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
     length_scale = 1.0 / (smooth_frate * 1e-3) / (24.0 * 3600.0)
 
     # smooth
-    data_shape = data.shape 
+    data_shape = data.shape
     smooth = utils.gp_interp1d(times, data, flags=flags, length_scale=length_scale, nl=nl,
                                Nmirror=Nmirror, xthin=xthin)
 
@@ -128,7 +128,7 @@ def gains_from_tempdata(tempdata, times, temp_coeff):
             Times of data in JD
         temp_coeff : float
             Temperature coefficient converting dTemp to dGain
-            in units [dGain / dTemp] 
+            in units [dGain / dTemp]
 
     Returns:
         ndarray or dictionary

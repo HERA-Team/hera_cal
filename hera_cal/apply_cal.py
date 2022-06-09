@@ -123,12 +123,12 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
 
     Returns:
         gains_by_Nt: dictionary mapping numbers of integration to gain dictionaries
-        cal_flags_by_Nt: dictionary mapping numbers of integration to flag/weight dictionaries. 
+        cal_flags_by_Nt: dictionary mapping numbers of integration to flag/weight dictionaries.
             If cal_flags is None, this will be None as well.
     '''
     # get all cadences (unique shapes of the time dimension in the data)
     data_Nts = sorted(list(set([wf.shape[0] for wf in data.values()])))
-    
+
     # Warn the user if the data doesn't conform to the expectation that all BDA is by a power of 2
     for Nt in data_Nts:
         power_of_2 = np.log(Nt / np.min(data_Nts)) / np.log(2)
@@ -168,7 +168,7 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
         max_gain_Nt = np.max(list(gains_by_Nt.keys()))
         if max_gain_Nt >= np.max(list(data_Nts)):
             break
-        gains_by_Nt[max_gain_Nt * 2] = {ant: gains_by_Nt[max_gain_Nt][ant].repeat(2, axis=0) 
+        gains_by_Nt[max_gain_Nt * 2] = {ant: gains_by_Nt[max_gain_Nt][ant].repeat(2, axis=0)
                                         for ant in gains_by_Nt[max_gain_Nt]}
         if cal_flags_by_Nt is not None:
             cal_flags_by_Nt[max_gain_Nt * 2] = {ant: cal_flags_by_Nt[max_gain_Nt][ant].repeat(2, axis=0)

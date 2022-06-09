@@ -16,8 +16,7 @@ if args.cornerturnfile is not None:
 else:
     baseline_list = None
 
-frf.time_avg_data_and_write(
-                            flag_output=args.flag_output,
+frf.time_avg_data_and_write(flag_output=args.flag_output,
                             input_data_list=args.input_data_list,
                             baseline_list=baseline_list,
                             output_data=args.output_data,

@@ -1577,7 +1577,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         times_by_bl = data.times_by_bl
 
     # perform firstcal
-    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit, 
+    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit,
                                                   fc_min_vis_per_ant=fc_min_vis_per_ant)
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
@@ -1735,7 +1735,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter,
                                             oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
-                                            check_every=check_every, check_after=check_after, 
+                                            check_every=check_every, check_after=check_after,
                                             max_dims=max_dims, gain=gain, fc_min_vis_per_ant=fc_min_vis_per_ant)
                 expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
 

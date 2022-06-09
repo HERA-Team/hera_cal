@@ -1,0 +1,14 @@
+[flake8]
+ignore =
+    E402
+    E501
+    W291
+    W293
+    W503
+    W601
+max-line-length = 88
+exclude =
+    development/*
+select =
+    E
+    W

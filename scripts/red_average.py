@@ -11,7 +11,7 @@ from hera_cal import io, utils, redcal
 
 # Parse arguments
 ap = argparse.ArgumentParser(description="Redundantly average a data file that's already been calibrated.")
-ap.add_argument("infilename", type=str, help="path to visibility data file to redundantly average") 
+ap.add_argument("infilename", type=str, help="path to visibility data file to redundantly average")
 ap.add_argument("outfilename", type=str, help="path to new visibility results file")
 ap.add_argument("--bl_error_tol", type=float, default=1.0, help="Baseline redundancy tolerance in meters.")
 ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')

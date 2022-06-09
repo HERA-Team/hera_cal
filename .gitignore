@@ -20,3 +20,4 @@ hera_cal/data/test_output/*
 hera_cal/notebooks
 *.ipynb_checkpoints*
 .pytest_cache*
+.vscode/
