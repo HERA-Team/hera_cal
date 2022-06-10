@@ -2061,8 +2061,8 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, old_redcal_met
         gains = rc.remove_degen_gains(gains, degen_gains=firstcal_gains, mode='complex')
     # fix any nans introduced by overflagged data and set flagged gains equal to unity.
     for k in gains:
-        gain_flags[k] = gain_flags[k] | ~np.isfinite(gain_flags[k])
-        gains[k][gain_flags[k]] = 1.0 + 0.0j     
+        gain_flags[k] = gain_flags[k] | ~np.isfinite(gains[k])
+        gains[k][gain_flags[k]] = 1.0 + 0.0j
 
     hc.update(gains=gains)
     if output_file is not None:
