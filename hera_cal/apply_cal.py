@@ -9,7 +9,6 @@ import argparse
 import copy
 import warnings
 from . import io
-from . import version
 from . import utils
 from . import redcal
 import pyuvdata.utils as uvutils
@@ -471,7 +470,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             old_hc.select(frequencies=calfreqsold)
             old_gains, old_flags, _, _ = old_hc.build_calcontainers()
 
-    add_to_history = version.history_string(add_to_history)
+    add_to_history = utils.history_string(add_to_history)
     no_red_weights = redundant_weights is None
     if nbl_per_load is not None:
         if not ((filetype_in == 'uvh5') and (filetype_out == 'uvh5')):
