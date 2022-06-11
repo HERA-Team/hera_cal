@@ -16,8 +16,8 @@ ap = parser.parse_args()
 # set kwargs
 if ap.mode == 'clean':
     filter_kwargs = {'window': ap.window,
-                    'maxiter': ap.maxiter, 'edgecut_hi': ap.edgecut_hi,
-                    'edgecut_low': ap.edgecut_low, 'gain': ap.gain}
+                     'maxiter': ap.maxiter, 'edgecut_hi': ap.edgecut_hi,
+                     'edgecut_low': ap.edgecut_low, 'gain': ap.gain}
     if ap.window == 'tukey':
         filter_kwargs['alpha'] = ap.alpha
     filter_kwargs['flag_model_rms_outliers'] = ap.flag_model_rms_outliers
@@ -54,6 +54,6 @@ frf.load_tophat_frfilter_and_write(ap.datafilelist, calfile_list=ap.calfilelist,
                                    skip_contiguous_flags=not(ap.dont_skip_contiguous_flags), max_contiguous_flag=ap.max_contiguous_flag,
                                    skip_flagged_edges=not(ap.dont_skip_flagged_edges),
                                    flag_model_rms_outliers=not(ap.dont_flag_model_rms_outliers), model_rms_threshold=ap.model_rms_threshold,
-                                   clean_flags_in_resid_flags=not(ap.clean_flags_not_in_resid_flags), 
+                                   clean_flags_in_resid_flags=not(ap.clean_flags_not_in_resid_flags),
                                    pre_filter_modes_between_lobe_minimum_and_zero=ap.pre_filter_modes_between_lobe_minimum_and_zero,
                                    **filter_kwargs)
