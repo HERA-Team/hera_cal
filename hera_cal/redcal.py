@@ -2064,7 +2064,7 @@ def update_redcal_phase_degeneracy(redcal_file, redcal_meta_file, old_redcal_met
         gain_flags[k] = gain_flags[k] | ~np.isfinite(gains[k])
         gains[k][gain_flags[k]] = 1.0 + 0.0j
 
-    hc.update(gains=gains)
+    hc.update(gains=gains, flags=gain_flags)
     if output_file is not None:
         hc.write_calfits(output_file, clobber=clobber)
     return hc
