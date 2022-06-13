@@ -234,7 +234,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
                 np.testing.assert_array_almost_equal(ff[i, :], gains[i, :])
             else:
                 info['status']['axis_1'][i] == 'success'
-                np.testing.assert_array_almost_equal(ff[i, :3], 0.)
+                np.testing.assert_array_almost_equal(ff[i, :3], 1.)
                 np.testing.assert_array_almost_equal(ff[i, 3:], gains[i, 3:], decimal=4)
 
     def test_time_freq_2D_filter(self):
