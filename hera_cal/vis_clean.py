@@ -159,7 +159,7 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
     return xout, dout, wout, edges, chunks
 
 
-def restore_flagged_edges(x, data, edges, ax='freq'):
+def restore_flagged_edges(x, data, edges, ax='freq', fill_value=0.0):
     """
     fill in flagged regions of data array produced
     by truncate_flagged_edges with zeros.
@@ -199,7 +199,8 @@ def restore_flagged_edges(x, data, edges, ax='freq'):
         else:
             chunks = find_discontinuity_edges(x)
             zgen = zip(chunks, edges)
-        data_restored = [np.pad(data[:, chunk[0]: chunk[1]], [(0, 0), edge]) for chunk, edge in zgen]
+        data_restored = [np.pad(data[:, chunk[0]: chunk[1]], [(0, 0), edge],
+                         constant_values=[(fill_value, fill_value), (fill_value, fill_value)]) for chunk, edge in zgen]
         if len(data_restored) > 1:
             data_restored = np.hstack(data_restored)
         else:

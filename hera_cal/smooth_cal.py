@@ -232,7 +232,7 @@ def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
     # put back in unfilted values if skip_wgt is triggered
     filtered /= rephasor
     if skip_flagged_edges:
-        filtered = restore_flagged_edges(xin, filtered, edges, ax=ax)
+        filtered = restore_flagged_edges(xin, filtered, edges, ax=ax, fill_value=1.0 + 0.0j)
 
     if ax == 'freq':
         for i in info['status']['axis_1']:
