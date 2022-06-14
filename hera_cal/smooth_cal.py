@@ -390,7 +390,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                 mask = np.ones(gains.shape, dtype=bool)
                 mask[tstart:gains.shape[0] - tend, fstart:gains.shape[1] - fend] = False
                 # Restore flagged region with zeros and fill-in with original data
-                filtered = restore_flagged_edges(xout, filtered, edges, ax='both')
+                filtered = restore_flagged_edges(xout, filtered, edges, ax='both', fill_value=1.0 + 0.0j)
                 filtered[mask] = gains[mask]
 
             # Store design matrices and XTXinv for computational speed-up
@@ -542,7 +542,7 @@ def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
             is not flagged, a ValueError will be raised.
     '''
     for pol, ref in (refant.items() if not isinstance(refant, tuple) else [(None, refant)]):
-        refant_phasor = gains[ref] / np.abs(gains[ref])
+        refant_phasor = np.exp(1j * np.angle(gains[ref])) # doing things this way avoids nans from zero gains.
         for ant in gains.keys():
             if ((pol is None) or (ant[1] == pol)):
                 if flags is not None:
