@@ -21,7 +21,8 @@ import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
 import argparse
-from uvtools.dspec import place_data_on_uniform_grid
+from hera_filters.dspec import place_data_on_uniform_grid
+
 
 try:
     import aipy

@@ -13,7 +13,7 @@ from pyuvdata import UVCal, UVData
 from hera_sim.interpolators import Beam
 from hera_sim import DATA_PATH as HS_DATA_PATH
 from hera_sim import noise
-from uvtools import dspec
+from hera_filters import dspec
 
 from hera_cal import io, datacontainer
 from hera_cal import vis_clean
@@ -867,7 +867,7 @@ class Test_VisClean(object):
         V.read()
 
         # just need to make sure various kwargs run through
-        # actual code unit-testing coverage has been done in uvtools.dspec
+        # actual code unit-testing coverage has been done in hera_filters.dspec
 
         # basic freq clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True)

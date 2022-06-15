@@ -70,10 +70,10 @@ from scipy.optimize import minimize
 from scipy import sparse
 from sklearn import gaussian_process as gp
 try:
-    from uvtools import dspec
-    HAVE_UVTOOLS = True
+    from hera_filters import dspec
+    HAVE_HERA_FILTERS = True
 except ImportError:
-    HAVE_UVTOOLS = False
+    HAVE_HERA_FILTERS = False
 import argparse
 import ast
 from astropy import constants
@@ -757,8 +757,8 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid : DataContainer, ant-pair-pol keys and ndarray values
                 Holds the residual between input data and pcomp_model_fft.
         """
-        if not HAVE_UVTOOLS:
-            raise ImportError("uvtools required, install hera_cal[all]")
+        if not HAVE_HERA_FILTERS:
+            raise ImportError("hera_filters required, install hera_cal[all]")
 
         # get keys
         if keys is None:

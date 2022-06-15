@@ -60,7 +60,7 @@ setup_args = {
     'extras_require': {
         "all": [
             'aipy>=3.0',
-            'uvtools',
+            'hera_filters @ git+http://github.com/HERA-Team/hera_filters',
         ]
     },
     'zip_safe': False,

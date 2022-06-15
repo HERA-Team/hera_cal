@@ -35,7 +35,7 @@ class DelayFilter(VisClean):
                          skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False, write_cache=False,
                          skip_flagged_edges=False, **filter_kwargs):
         '''
-        Run uvtools.dspec.vis_filter on data.
+        Run hera_filters.dspec.vis_filter on data.
 
         Run a delay-filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
@@ -45,18 +45,18 @@ class DelayFilter(VisClean):
                 If None (the default), all visibilities are filtered.
             weight_dict: dictionary or DataContainer with all the same keys as self.data.
                 Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
-                of self.flags. uvtools.dspec.delay_filter will renormalize to compensate.
+                of self.flags. hera_filters.dspec.delay_filter will renormalize to compensate.
             horizon: coefficient to bl_len where 1 is the horizon [freq filtering]
             standoff: fixed additional delay beyond the horizon (in nanosec) to filter [freq filtering]
             min_dly: max delay (in nanosec) used for freq filter is never below this.
-            mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
+            mode: string specifying filtering mode. See fourier_filter or hera_filters.dspec.fourier_filter for supported modes.
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
                 time. Skipped channels are then flagged in self.flags.
                 Only works properly when all weights are all between 0 and 1.
             tol : float, optional. To what level are foregrounds subtracted.
             cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-                see uvtools.dspec.dayenu_filter for key formats.
+                see hera_filters.dspec.dayenu_filter for key formats.
             read_cache: bool, If true, read existing cache files in cache_dir before running.
             write_cache: bool. If true, create new cache file with precomputed matrices
                 that were not in previously loaded cache files.
@@ -67,7 +67,7 @@ class DelayFilter(VisClean):
         Results are stored in:
             self.clean_resid: DataContainer formatted like self.data with only high-delay components
             self.clean_model: DataContainer formatted like self.data with only low-delay components
-            self.clean_info: Dictionary of info from uvtools.dspec.delay_filter with the same keys as self.data
+            self.clean_info: Dictionary of info from hera_filters.dspec.delay_filter with the same keys as self.data
         '''
         # read in cache
         if not mode == 'clean':
@@ -111,7 +111,7 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         calfile_list: optional list of calibration files to apply to data before xtalk filtering
         spw_range: 2-tuple or 2-list, spw_range of data to filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-            see uvtools.dspec.dayenu_filter for key formats.
+            see hera_filters.dspec.dayenu_filter for key formats.
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
             that were not in previously loaded cache files.
