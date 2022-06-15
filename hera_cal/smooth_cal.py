@@ -27,6 +27,9 @@ from . import utils
 from . import flag_utils
 from .vis_clean import truncate_flagged_edges, restore_flagged_edges
 from .noise import interleaved_noise_variance_estimate
+from astropy import units
+SDAY = units.sday.to("s")
+
 
 
 def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
@@ -874,7 +877,7 @@ class CalibrationSmoother():
             if ax == 'freq':
                 xaxis = self.freqs
             else:
-                xaxis = self.time_grid
+                xaxis = self.time_grid * SDAY
             self.gain_grids[ant], info = filter_1d(gain_grid, wgts_grid, xaxis, ax=ax,
                                                    filter_scale=filter_scale, tol=tol, mode=mode,
                                                    skip_wgt=skip_wgt, cache=cache, **filter_kwargs)
