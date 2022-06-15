@@ -542,7 +542,7 @@ def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
             is not flagged, a ValueError will be raised.
     '''
     for pol, ref in (refant.items() if not isinstance(refant, tuple) else [(None, refant)]):
-        refant_phasor = np.exp(1j * np.angle(gains[ref])) # doing things this way avoids nans from zero gains.
+        refant_phasor = np.exp(1j * np.angle(gains[ref]))  # doing things this way avoids nans from zero gains.
         for ant in gains.keys():
             if ((pol is None) or (ant[1] == pol)):
                 if flags is not None:
