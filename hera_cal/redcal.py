@@ -793,7 +793,7 @@ class RedundantCalibrator:
             ubl_num = [cnt for cnt, blgrp in enumerate(self.reds) if blgrp[0] == k][0]
             return 'u_%d_%s' % (ubl_num, k[-1])
 
-    def compute_ubls(self, data, gain_sols):
+    def compute_ubls(self, data):
         """Given a set of guess gain solutions, return a dictionary of calibrated visbilities
         averged over a redundant group. Not strictly necessary for typical operation."""
 
