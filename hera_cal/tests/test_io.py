@@ -20,7 +20,7 @@ import sys
 from .. import io
 from ..io import HERACal, HERAData
 from ..datacontainer import DataContainer
-from ..utils import polnum2str, polstr2num, jnum2str, jstr2num
+from ..utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, split_bl
 from ..data import DATA_PATH
 from hera_qm.data import DATA_PATH as QM_DATA_PATH
 
@@ -29,7 +29,8 @@ class Test_HERACal(object):
     def setup_method(self):
         self.fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
         self.fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
-        self.fname_both = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
+        self.fname_2pol = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.omni.calfits")
+        self.fname = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
         self.fname_t0 = os.path.join(DATA_PATH, 'test_input/zen.2458101.44615.xx.HH.uv.abs.calfits_54x_only')
         self.fname_t1 = os.path.join(DATA_PATH, 'test_input/zen.2458101.45361.xx.HH.uv.abs.calfits_54x_only')
         self.fname_t2 = os.path.join(DATA_PATH, 'test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only')
@@ -48,10 +49,10 @@ class Test_HERACal(object):
 
     def test_read(self):
         # test one file with both polarizations and a non-None total quality array
-        hc = HERACal(self.fname_both)
+        hc = HERACal(self.fname)
         gains, flags, quals, total_qual = hc.read()
         uvc = UVCal()
-        uvc.read_calfits(self.fname_both)
+        uvc.read_calfits(self.fname)
         np.testing.assert_array_equal(uvc.gain_array[0, 0, :, :, 0].T, gains[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
         np.testing.assert_array_equal(uvc.flag_array[0, 0, :, :, 0].T, flags[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
         np.testing.assert_array_equal(uvc.quality_array[0, 0, :, :, 0].T, quals[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
@@ -89,8 +90,8 @@ class Test_HERACal(object):
         # test select on antenna numbers
         hc = io.HERACal([self.fname_xx, self.fname_yy])
         g, _, _, _ = hc.read(antenna_nums=[9, 10])
-        hc2 = io.HERACal(self.fname_both)
-        g2, _, _, _ = hc.read(antenna_nums=[9, 10])
+        hc2 = io.HERACal(self.fname_2pol)
+        g2, _, _, _ = hc2.read(antenna_nums=[9, 10])
         for k in g2:
             assert k[0] in [9, 10]
             np.testing.assert_array_equal(g[k], g2[k])
@@ -98,13 +99,13 @@ class Test_HERACal(object):
         # test select on pols
         hc = io.HERACal(self.fname_xx)
         g, _, _, _ = hc.read()
-        hc2 = io.HERACal(self.fname_both)
-        g2, _, _, _ = hc.read(pols=['Jee'])
+        hc2 = io.HERACal(self.fname_2pol)
+        g2, _, _, _ = hc2.read(pols=['Jee'])
         for k in g2:
             np.testing.assert_array_equal(g[k], g2[k])
 
     def test_write(self):
-        hc = HERACal(self.fname_both)
+        hc = HERACal(self.fname)
         gains, flags, quals, total_qual = hc.read()
         for key in gains.keys():
             gains[key] *= 2.0 + 1.0j
@@ -667,16 +668,18 @@ class Test_ReadHeraHdf5(object):
         self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5")
         self.uvh5_2 = os.path.join(DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5")
         self.uvh5_pol = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5_poltranspose")
+        self.uvh5_blt = os.path.join(DATA_PATH, "zen.2459114.60020.sum.downsample_transpose.uvh5")
 
     def test_basic_read(self):
         rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2],
                                read_flags=False, read_nsamples=False, verbose=True,
-                               dtype=np.complex128)
+                               dtype=np.complex128, check=True)
         assert 'info' in rv
         assert 'data' in rv
         assert 'flags' not in rv
         assert 'nsamples' not in rv
         assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
+        assert rv['info']['times'].size == np.unique(rv['info']['times']).size
         for bl, data in rv['data'].items():
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
             assert data.dtype == np.complex128
@@ -685,10 +688,10 @@ class Test_ReadHeraHdf5(object):
         with pytest.raises(ValueError):
             rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], bls=[(999, 999, 'xx')],
                                    read_flags=False, read_nsamples=False, verbose=True,
-                                   dtype=np.complex128)
+                                   dtype=np.complex128, check=True)
 
     def test_info_only(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True,
+        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True, check=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         assert 'info' in rv
         assert 'data' not in rv
@@ -696,7 +699,7 @@ class Test_ReadHeraHdf5(object):
         assert 'nsamples' not in rv
 
     def test_read_all(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True,
+        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2], verbose=True, check=True,
                                read_flags=True, read_nsamples=True)
         assert 'info' in rv
         assert 'data' in rv
@@ -713,15 +716,15 @@ class Test_ReadHeraHdf5(object):
             assert data.dtype == np.float32
 
     def test_read_allbls_poltranspose(self):
-        rv = io.read_hera_hdf5([self.uvh5_pol], dtype=np.complex128, verbose=True,)
+        rv = io.read_hera_hdf5([self.uvh5_pol], dtype=np.complex128, verbose=True, check=True)
         assert 'info' in rv
         assert 'data' in rv
         assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
         for bl, data in rv['data'].items():
             assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
-    
+
     def test_read_one_bl(self):
-        rv = io.read_hera_hdf5([self.uvh5_1], verbose=True,
+        rv = io.read_hera_hdf5([self.uvh5_1], verbose=True, check=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         bl = list(rv['info']['bls'])[0]
         pol = rv['info']['pols'][0]
@@ -731,7 +734,7 @@ class Test_ReadHeraHdf5(object):
         assert bl in rv['data']
 
     def test_read_one_bl_poltranpose(self):
-        rv = io.read_hera_hdf5([self.uvh5_pol], verbose=True,
+        rv = io.read_hera_hdf5(self.uvh5_pol, verbose=True, check=True,
                                read_data=False, read_flags=False, read_nsamples=False)
         bl = list(rv['info']['bls'])[0]
         pol = rv['info']['pols'][0]
@@ -739,6 +742,175 @@ class Test_ReadHeraHdf5(object):
         rv = io.read_hera_hdf5([self.uvh5_1], bls=[bl])
         assert len(rv['data']) == 1
         assert bl in rv['data']
+
+    def test_read_bl_then_time_poltranpose(self):
+        rv = io.read_hera_hdf5([self.uvh5_blt], verbose=True, bls=[(24, 26)], check=True,
+                               read_data=True, read_flags=True, read_nsamples=True)
+        assert len(rv['data']) == 4
+        assert (24, 26, 'ee') in rv['data']
+        assert rv['data'][(24, 26, 'ee')].shape == (2, 1536)
+        assert len(rv['info']['times']) == 2
+
+
+class Test_HERADataFastReader(object):
+    def setup_method(self):
+        self.uvh5_1 = os.path.join(DATA_PATH, "test_input", "zen.2458042.60288.HH.uvRXLS.uvh5_downselected")
+        self.uvh5_2 = os.path.join(DATA_PATH, "test_input", "zen.2458042.61034.HH.uvRXLS.uvh5_downselected")
+        self.uvh5_h4c = os.path.join(DATA_PATH, "zen.2459122.30030.sum.single_time.uvh5")
+
+    def test_init(self):
+        hd = io.HERADataFastReader(self.uvh5_1)
+        assert hd.filepaths == [self.uvh5_1]
+        assert hd.antpos is None
+        assert hd.times_by_bl is None
+
+    def test_read_data(self):
+        rv = io.read_hera_hdf5([self.uvh5_1])
+        hd = io.HERADataFastReader(self.uvh5_1)
+        d, f, n = hd.read(read_flags=False, read_nsamples=False, check=True)
+        assert f is None
+        assert n is None
+        for bl in d:
+            if split_bl(bl)[0] != split_bl(bl)[1]:
+                np.testing.assert_array_equal(d[bl], rv['data'][bl])
+                np.testing.assert_array_equal(d[bl], np.conj(d[reverse_bl(bl)]))
+            else:
+                np.testing.assert_array_equal(d[bl], np.abs(rv['data'][bl]))
+
+    def test_comp_to_HERAData(self):
+        for infile in ([self.uvh5_1], [self.uvh5_1, self.uvh5_2], self.uvh5_h4c):
+            hd = io.HERADataFastReader(infile)
+            d, f, n = hd.read(check=True)
+            hd2 = io.HERAData(infile)
+            d2, f2, n2 = hd2.read()
+            # compare all data and metadata
+            for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
+                for bl in dc1:
+                    if (split_bl(bl)[0] == split_bl(bl)[1]) and (infile != self.uvh5_h4c):
+                        # somehow there are numerical issues at play for H1C data
+                        np.testing.assert_allclose(dc1[bl], dc2[bl], rtol=1e-6)
+                    else:
+                        np.testing.assert_array_equal(dc1[bl], dc2[bl])
+                np.testing.assert_array_equal(dc1.freqs, dc2.freqs)
+                np.testing.assert_array_equal(dc1.times, dc2.times)
+                np.testing.assert_allclose(dc1.lsts, dc2.lsts)
+                np.testing.assert_array_equal(dc1.ants, dc2.ants)
+                np.testing.assert_array_equal(dc1.data_ants, dc2.data_ants)
+                np.testing.assert_array_equal(sorted(dc1.pols()), sorted(dc2.pols()))
+                np.testing.assert_array_equal(sorted(dc1.antpairs()), sorted(dc2.antpairs()))
+                np.testing.assert_array_equal(sorted(dc1.bls()), sorted(dc2.bls()))
+                for ant in dc1.antpos:
+                    np.testing.assert_array_almost_equal(dc1.antpos[ant] - dc2.antpos[ant], 0)
+                for ant in dc1.data_antpos:
+                    np.testing.assert_array_almost_equal(dc1.antpos[ant] - dc2.antpos[ant], 0)
+                for ap in dc1.times_by_bl:
+                    np.testing.assert_array_equal(dc1.times_by_bl[ap], dc2.times_by_bl[ap])
+                for ap in dc1.lsts_by_bl:
+                    np.testing.assert_allclose(dc1.lsts_by_bl[ap], dc2.lsts_by_bl[ap])
+
+    def test_errors(self):
+        hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
+        with pytest.raises(NotImplementedError):
+            hd.write_uvh5()
+        with pytest.raises(NotImplementedError):
+            hd.iterate_over_bls('stuff', fake_kwarg=False)
+
+
+class Test_ReadHeraCalfits(object):
+    def setup_method(self):
+        self.fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
+        self.fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
+        self.fname_2pol = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.omni.calfits")
+        self.fname = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
+        self.fname_t0 = os.path.join(DATA_PATH, 'test_input/zen.2458101.44615.xx.HH.uv.abs.calfits_54x_only')
+        self.fname_t1 = os.path.join(DATA_PATH, 'test_input/zen.2458101.45361.xx.HH.uv.abs.calfits_54x_only')
+        self.fname_t2 = os.path.join(DATA_PATH, 'test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only')
+
+    def test_read_info(self):
+        rv = io.read_hera_calfits(self.fname_xx, read_gains=False, read_flags=False,
+                                  read_quality=False, read_tot_quality=False, check=True,
+                                  verbose=True)
+        assert 'info' in rv
+        assert len(rv) == 1
+        for key in ('ants', 'pols', 'freqs', 'times'):
+            assert key in rv['info']
+
+    def test_vs_heracal(self):
+        hc = io.HERACal(self.fname_t0)
+        g, f, q, tq = hc.read()
+        rv = io.read_hera_calfits(self.fname_t0,
+                                  read_gains=True, read_flags=True,
+                                  read_quality=True, read_tot_quality=True, check=True,
+                                  verbose=True)
+        assert np.allclose(hc.times, rv['info']['times'])
+        assert np.allclose(hc.freqs, rv['info']['freqs'])
+        assert hc.x_orientation == rv['info']['x_orientation']
+        assert hc.gain_convention == rv['info']['gain_convention']
+        for key, gain in g.items():
+            assert np.allclose(gain, rv['gains'][key])
+        for key, flag in f.items():
+            assert np.allclose(flag, rv['flags'][key])
+        for key, qual in q.items():
+            assert np.allclose(qual, rv['quality'][key])
+        for key, total_qual in tq.items():
+            assert np.allclose(total_qual, rv['total_quality'][key])
+
+    def test_read(self):
+        # test one file with both polarizations and a non-None total quality array
+        rv = io.read_hera_calfits(self.fname, read_gains=True, read_flags=True,
+                                  read_quality=True, read_tot_quality=True,
+                                  dtype=np.complex128, check=True, verbose=True)
+        for key in ('info', 'gains', 'flags', 'quality', 'total_quality'):
+            assert key in rv
+        shape = (rv['info']['times'].size, rv['info']['freqs'].size)
+        assert rv['info']['freqs'].size == 1024
+        assert rv['info']['times'].size == 1
+        for key, gain in rv['gains'].items():
+            assert len(key) == 2
+            assert gain.dtype == np.complex128
+            assert gain.shape == shape
+        for key, flag in rv['flags'].items():
+            assert len(key) == 2
+            assert flag.dtype == bool
+            assert flag.shape == shape
+        for key, qual in rv['quality'].items():
+            assert len(key) == 2
+            assert qual.dtype == np.float32
+            assert qual.shape == shape
+        for key, qual in rv['total_quality'].items():
+            assert type(key) == str
+            assert qual.dtype == np.float32
+            assert qual.shape == shape
+        assert rv['info']['pols'] == set(['Jnn', 'Jee'])
+
+        # test list loading
+        rv = io.read_hera_calfits([self.fname_xx, self.fname_yy], read_gains=True, read_flags=True,
+                                  read_quality=True, read_tot_quality=False,
+                                  check=True, verbose=True)
+        for key in ('gains', 'flags', 'quality'):
+            assert len(rv[key].keys()) == 36
+
+    def test_read_select(self):
+        # test read multiple files and select ants
+        ants = [(54, 'Jee')]
+        rv = io.read_hera_calfits([self.fname_t0, self.fname_t1, self.fname_t2], ants=ants)
+        assert len(rv['gains']) == 1
+        assert ants[0] in rv['gains']
+
+        # test select on antenna numbers
+        rv1 = io.read_hera_calfits([self.fname_xx, self.fname_yy], ants=(9, 10))
+        rv2 = io.read_hera_calfits(self.fname_2pol, ants=(9, 10))
+        for k in rv2['gains'].keys():
+            assert k[0] in [9, 10]
+            np.testing.assert_array_equal(rv1['gains'][k], rv2['gains'][k])
+
+        # test select on pols
+        rv1 = io.read_hera_calfits(self.fname_xx)
+        rv2 = io.read_hera_calfits(self.fname_2pol, pols=['Jee'])
+        for k in rv2['gains'].keys():
+            assert k[1] == 'Jee'
+            assert k in rv1['gains']
+            np.testing.assert_array_equal(rv1['gains'][k], rv2['gains'][k])
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")

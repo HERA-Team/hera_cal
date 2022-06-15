@@ -14,7 +14,6 @@ import datetime
 import warnings
 
 from . import utils
-from . import version
 from . import abscal
 from . import io
 from . import redcal
@@ -896,7 +895,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
 
         # update history
         file_history = history + " Input files: " + "-".join(list(map(lambda ff: os.path.basename(ff), file_list)))
-        kwargs['history'] = file_history + version.history_string()
+        kwargs['history'] = file_history + utils.history_string()
 
         # form integration time array
         _Nbls = len(set([bl[:2] for bl in list(bin_data.keys())]))

@@ -17,6 +17,8 @@ from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_D
 import sklearn.gaussian_process as gp
 import warnings
 import argparse
+import inspect
+from . import __version__
 
 try:
     AIPY = True
@@ -203,6 +205,23 @@ def filter_bls(bls, ants=None, ex_ants=None, pols=None, antpos=None, min_bl_cut=
         filtered_bls.append(bl)
 
     return filtered_bls
+
+
+def history_string(notes=""):
+    """
+    Creates a standardized history string that all functions that write to
+    disk can use. Optionally add notes.
+    """
+    notes = f"""\n\nNotes:\n{notes}""" if notes else ""
+
+    stack = inspect.stack()[1]
+    history = f"""
+    ------------
+    This file was produced by the function {stack[3]}() in {stack[1]} using version {__version__}
+    {notes}
+    ------------
+    """
+    return history
 
 
 def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0):
@@ -523,14 +542,14 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
     LST : type=float or array-like, local apparent sidereal time [radians]
 
     start_jd : type=int, integer julian day to use as starting point for LST2JD conversion
-    
-    allow_other_jd : type=bool, ensure that the lst_branch_cut falls on start_jd but allow 
+
+    allow_other_jd : type=bool, ensure that the lst_branch_cut falls on start_jd but allow
                      LSTs to correspond to previous or subsequent days if necessary
-        
-    lst_branch_cut : type=float, LST that must fall during start_jd even when allow_other_jd 
+
+    lst_branch_cut : type=float, LST that must fall during start_jd even when allow_other_jd
                      is True. Used as the starting point starting point where LSTs below this
                      value map to later JDs than this LST [radians]
-    
+
     latitude : type=float, degrees North of observer, default=HERA latitude
 
     longitude : type=float, degrees East of observer, default=HERA longitude
@@ -551,7 +570,7 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
 
     # increase LSTs so no values fall below the branch cut (avoiding wraps in interpolation)
     while np.any(LST < lst_branch_cut):
-        LST[LST < lst_branch_cut] += 2 * np.pi  
+        LST[LST < lst_branch_cut] += 2 * np.pi
 
     # create interpolator for a given start date that puts the lst_branch_cut on start_jd
     jd_grid = start_jd + np.linspace(-1, 2, 31)  # include previous and next days
@@ -566,10 +585,10 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
             jd_grid += unt.sday.to(unt.day)
         else:
             break
-        
+
     # interpolate
     jd_array = interpolator(LST)
-    
+
     # Enforce single JD if desired
     if not allow_other_jd:
         while True:

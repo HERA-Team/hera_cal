@@ -55,7 +55,7 @@ class Test_Update_Cal(object):
             assert cal_flags_by_Nt[Nt][(0, 'Jnn')].shape[0] == Nt
             np.testing.assert_array_equal(gains_by_Nt[Nt][(0, 'Jnn')], np.outer(np.ones(Nt), np.arange(10).astype(complex)))
             assert not np.any(cal_flags_by_Nt[Nt][(0, 'Jnn')])
-            
+
         # test downsampling without flags
         data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex)}
         gains = {(0, 'Jnn'): np.outer(np.arange(4), np.ones(3)).astype(complex)}

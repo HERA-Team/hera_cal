@@ -20,8 +20,8 @@ of the real time calibration system. For more on HERA, visit http://reionization
 Package Details
 ===============
 hera_cal aims to have a well supported and tested scripts to run calibration analysis.
-All new functions, classes, modules, and scripts shall be well tested. Test coverage 
-should be > 95%. 
+All new functions, classes, modules, and scripts shall be well tested. Test coverage
+should be > 95%.
 
 Installation Instructions
 ============
@@ -41,7 +41,7 @@ First Install all dependencies.
 
 Installing hera_cal
 ---------------
-To get the latest version of hera_cal, clone the repository with 
+To get the latest version of hera_cal, clone the repository with
 ``git clone https://github.com/HERA-Team/hera_cal.git``
 
 Navigate to into the hera_cal directory and run ``python setup.py install``.
@@ -51,7 +51,7 @@ To install without dependencies, run
 
 Tests
 -----
-Requires installation of ``nose`` package. From the source hera_cal 
+Requires installation of ``nose`` package. From the source hera_cal
 directory run ``nosetests hera_cal``.
 
 
@@ -60,7 +60,7 @@ Further Documentation
 
 .. toctree::
    :maxdepth: 1
-    
+
    scripts_overview
    modules
 
@@ -72,4 +72,3 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-

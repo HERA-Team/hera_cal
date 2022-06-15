@@ -7,7 +7,6 @@
 import numpy as np
 
 from . import io
-from . import version
 from .vis_clean import VisClean
 from . import vis_clean
 import pickle

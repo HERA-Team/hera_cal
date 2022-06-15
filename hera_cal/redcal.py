@@ -9,7 +9,6 @@ import os
 import linsolve
 
 from . import utils
-from . import version
 from .noise import predict_noise_variance_from_autos, infer_dt
 from .datacontainer import DataContainer
 from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores
@@ -1578,7 +1577,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         times_by_bl = data.times_by_bl
 
     # perform firstcal
-    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit, 
+    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit,
                                                   fc_min_vis_per_ant=fc_min_vis_per_ant)
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
@@ -1736,7 +1735,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter,
                                             oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
-                                            check_every=check_every, check_after=check_after, 
+                                            check_every=check_every, check_after=check_after,
                                             max_dims=max_dims, gain=gain, fc_min_vis_per_ant=fc_min_vis_per_ant)
                 expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
 
@@ -1784,7 +1783,7 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
               flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber,
               x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
               antenna_positions=antenna_positions, lst_array=lst_array,
-              history=version.history_string(add_to_history), antnums2antnames=antnums2antnames)
+              history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
 
     if verbose:
         print('Now saving omnical gains to', os.path.join(outdir, omnical_filename))
@@ -1792,20 +1791,20 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
               quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
               x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
               antenna_positions=antenna_positions, lst_array=lst_array,
-              history=version.history_string(add_to_history), antnums2antnames=antnums2antnames)
+              history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
 
     if verbose:
         print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
     hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
     hd_out.read(bls=list(cal['v_omnical'].keys()))
     hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
-    hd_out.history += version.history_string(add_to_history)
+    hd_out.history += utils.history_string(add_to_history)
     hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
 
     if verbose:
         print('Now saving redcal metadata to ', os.path.join(outdir, meta_filename))
     save_redcal_meta(os.path.join(outdir, meta_filename), cal['fc_meta'], cal['omni_meta'], hd.freqs,
-                     hd.times, hd.lsts, hd.antpos, hd.history + version.history_string(add_to_history))
+                     hd.times, hd.lsts, hd.antpos, hd.history + utils.history_string(add_to_history))
 
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',

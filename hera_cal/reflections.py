@@ -79,7 +79,7 @@ import ast
 from astropy import constants
 
 from . import io
-from . import version
+from . import utils
 from .abscal import merge_gains
 from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
@@ -458,7 +458,7 @@ class ReflectionFitter(FRFilter):
                 np.savez(output_npz, delay=self.ref_dly, phase=self.ref_phs, amp=self.ref_amp,
                          significance=self.ref_significance, times=time_array, freqs=freq_array,
                          lsts=self.lsts, antpos=self.antpos, flags=rflags,
-                         history=version.history_string(add_to_history))
+                         history=utils.history_string(add_to_history))
 
         # return None if we don't want to write a calfits file
         if not write_calfits:
@@ -489,7 +489,7 @@ class ReflectionFitter(FRFilter):
         echo("...writing {}".format(output_calfits), verbose=verbose)
         uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=rflags,
                            quality=quals, total_qual=tquals, zero_check=False,
-                           overwrite=overwrite, history=version.history_string(add_to_history),
+                           overwrite=overwrite, history=utils.history_string(add_to_history),
                            antnums2antnames=antnums2antnames, **kwargs)
 
         return uvc
