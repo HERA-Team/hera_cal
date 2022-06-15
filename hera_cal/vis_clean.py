@@ -191,7 +191,7 @@ def restore_flagged_edges(x, data, edges, ax='freq', fill_value=0.0):
     if ax == 'time':
         # if axis is time, process everything like its the time axis with 0 <-> 1 reversed.
         # switch everything back later.
-        data_restored = restore_flagged_edges(x, data.T, edges).T
+        data_restored = restore_flagged_edges(x, data.T, edges, fill_value=fill_value).T
     else:
         if ax == 'both':
             chunks = find_discontinuity_edges(x[1])
@@ -207,7 +207,7 @@ def restore_flagged_edges(x, data, edges, ax='freq', fill_value=0.0):
             data_restored = data_restored[0]
         if ax == 'both':
             # if axis is both, then process time-axis after freq axis.
-            data_restored = restore_flagged_edges(x[0], data_restored, edges[0], ax='time')
+            data_restored = restore_flagged_edges(x[0], data_restored, edges[0], ax='time', fill_value=fill_value)
     return data_restored
 
 
