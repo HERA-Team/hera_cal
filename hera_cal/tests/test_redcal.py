@@ -454,17 +454,25 @@ class TestRedundantCalibrator(object):
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
-        meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6)
-        for i in range(NANTS):
-            assert sol[(i, 'Jxx')].shape == (10, 10)
-        for bls in reds:
-            ubl = sol[bls[0]]
-            assert ubl.shape == (10, 10)
-            for bl in bls:
-                d_bl = d[bl]
-                mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
-                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
+
+        def wgt_func1(abs2):
+            return 1.
+
+        def wgt_func2(abs2):
+            return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
+
+        for wgt_func in [wgt_func1, wgt_func2]:
+            meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
+            for i in range(NANTS):
+                assert sol[(i, 'Jxx')].shape == (10, 10)
+            for bls in reds:
+                ubl = sol[bls[0]]
+                assert ubl.shape == (10, 10)
+                for bl in bls:
+                    d_bl = d[bl]
+                    mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
+                    np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
+                    np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
     def test_omnical64(self):
         NANTS = 18
@@ -477,15 +485,22 @@ class TestRedundantCalibrator(object):
         sol0.update(info.compute_ubls(d, sol0))
         d = {k: v.astype(np.complex64) for k, v in d.items()}
         sol0 = {k: v.astype(np.complex64) for k, v in sol0.items()}
-        meta, sol = info.omnical(d, sol0, gain=.5, maxiter=500, check_after=30, check_every=6)
-        for bls in reds:
-            ubl = sol[bls[0]]
-            assert ubl.dtype == np.complex64
-            for bl in bls:
-                d_bl = d[bl]
-                mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
-                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=6)
-                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=6)
+
+        def wgt_func1(abs2):
+            return 1.
+
+        def wgt_func2(abs2):
+            return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
+
+        for wgt_func in [wgt_func1, wgt_func2]:
+            meta, sol = info.omnical(d, sol0, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
+            for bls in reds:
+                ubl = sol[bls[0]]
+                assert ubl.dtype == np.complex64
+                for bl in bls:
+                    d_bl = d[bl]
+                    mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
+                    np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=6)
 
     def test_omnical128(self):
         NANTS = 18
@@ -498,15 +513,53 @@ class TestRedundantCalibrator(object):
         sol0.update(info.compute_ubls(d, sol0))
         d = {k: v.astype(np.complex128) for k, v in d.items()}
         sol0 = {k: v.astype(np.complex128) for k, v in sol0.items()}
-        meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6)
+
+        def wgt_func1(abs2):
+            return 1.
+
+        def wgt_func2(abs2):
+            return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
+
+        for wgt_func in [wgt_func1, wgt_func2]:
+            meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
+            for bls in reds:
+                ubl = sol[bls[0]]
+                assert ubl.dtype == np.complex128
+                for bl in bls:
+                    d_bl = d[bl]
+                    mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
+                    np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
+                    np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
+
+    def test_omnical_outliers(self):
+        NANTS = 18 * 5  # need a largish array to retain 2 dec accuracy
+        antpos = linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.0099999)
+        bad_bl = (4, 5, 'xx')
+        d[bad_bl] *= 30  # corrupt a measurement
+        w = dict([(k, 1.) for k in d.keys()])
+        sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
+        sol0.update(info.compute_ubls(d, sol0))
+
+        def wgt_func(abs2, thresh=3):
+            # return 1.  # this fails the test, proving the below is effective
+            return np.where(abs2 > 0, thresh * np.tanh(abs2 / thresh) / abs2, 1)
+
+        meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
+        for i in range(NANTS):
+            assert sol[(i, 'Jxx')].shape == (10, 10)
         for bls in reds:
             ubl = sol[bls[0]]
-            assert ubl.dtype == np.complex128
+            assert ubl.shape == (10, 10)
             for bl in bls:
+                if bl == bad_bl:
+                    continue
                 d_bl = d[bl]
                 mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
-                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
+                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=2)
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=2)
 
     def test_lincal(self):
         NANTS = 18

@@ -29,7 +29,7 @@ def _check_polarization_consistency(data, gains):
 
 def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds,
                                  old_gains=None, old_flags=None, gain_convention='divide'):
-    '''Update the calibrtion of a redundant visibility solution (or redundantly averaged visibilities).
+    '''Update the calibration of a redundant visibility solution (or redundantly averaged visibilities).
     This function averages together all gain ratios (old/new) within a redundant group (which should
     ideally all be the same) to figure out the proper gain to apply/unapply to the visibilities. If all
     gain ratios are flagged for a given time/frequency within a redundant group, the data_flags are
