@@ -31,7 +31,6 @@ from astropy import units
 SDAY = units.sday.to("s")
 
 
-
 def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     '''Iteratively find a single best-fit delay for a given gain waterfall for all times.
 
