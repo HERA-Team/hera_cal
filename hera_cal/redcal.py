@@ -216,7 +216,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
         bls = set(key for gp in reds for key in gp)
     if ex_bls:
         ex_bls = expand_bls(ex_bls)
-        ex_bls.union(set(reverse_bl(k) for k in ex_bls))  # put in reverse baselines, just in case
+        ex_bls |= set(reverse_bl(k) for k in ex_bls)  # put in reverse baselines
         bls = set(k for k in bls if k not in ex_bls)
     if ants:
         ants = expand_ants(ants)
@@ -224,7 +224,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     if ex_ants:
         ex_ants = expand_ants(ex_ants)
         bls = set(join_bl(i, j) for i, j in split_bls(bls) if i not in ex_ants and j not in ex_ants)
-    bls.union(set(reverse_bl(k) for k in bls))  # put in reverse baselines, just in case
+    bls |= set(reverse_bl(k) for k in bls)  # put in reverse baselines
     reds = [[key for key in gp if key in bls] for gp in reds]
     reds = [gp for gp in reds if len(gp) > 0]
 
