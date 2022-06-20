@@ -185,15 +185,15 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
 
     def expand_bls(gp):
         gp3 = [(g[0], g[1], p) for g in gp if len(g) == 2 for p in pols]
-        return gp3 + [g for g in gp if len(g) == 3]
+        return set(gp3 + [g for g in gp if len(g) == 3])
     antpols = set(sum([list(split_pol(p)) for p in pols], []))
 
     def expand_ants(gp):
         gp2 = [(g, p) for g in gp if not hasattr(g, '__len__') for p in antpols]
-        return gp2 + [g for g in gp if hasattr(g, '__len__')]
+        return set(gp2 + [g for g in gp if hasattr(g, '__len__')])
 
     def split_bls(bls):
-        return [split_bl(bl) for bl in bls]
+        return set(split_bl(bl) for bl in bls)
     if ubls or ex_ubls:
         bl2gp = {}
         for i, gp in enumerate(reds):
@@ -211,12 +211,13 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             ex_ubls = set()
         reds = [gp for i, gp in enumerate(reds) if i in ubls and i not in ex_ubls]
     if bls:
-        bls = set(expand_bls(bls))
+        bls = expand_bls(bls)
     else:  # default to set of all baselines
         bls = set(key for gp in reds for key in gp)
     if ex_bls:
         ex_bls = expand_bls(ex_bls)
-        bls = set(k for k in bls if k not in ex_bls and reverse_bl(k) not in ex_bls)
+        ex_bls.union(set(reverse_bl(k) for k in ex_bls))  # put in reverse baselines, just in case
+        bls = set(k for k in bls if k not in ex_bls)
     if ants:
         ants = expand_ants(ants)
         bls = set(join_bl(i, j) for i, j in split_bls(bls) if i in ants and j in ants)
@@ -224,7 +225,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
         ex_ants = expand_ants(ex_ants)
         bls = set(join_bl(i, j) for i, j in split_bls(bls) if i not in ex_ants and j not in ex_ants)
     bls.union(set(reverse_bl(k) for k in bls))  # put in reverse baselines, just in case
-    reds = [[key for key in gp if key in bls or reverse_bl(key) in bls] for gp in reds]
+    reds = [[key for key in gp if key in bls] for gp in reds]
     reds = [gp for gp in reds if len(gp) > 0]
 
     if min_bl_cut is not None or max_bl_cut is not None:
