@@ -3,28 +3,26 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - pip
   - aipy>=3.0.0rc2
   - astropy>=5.0.4
-  - h5py
-  - numpy>=1.20
-  - pytest
-  - scipy
-  - scikit-learn
-  - mpi4py
-  - pyyaml
-  - pycodestyle
-  - psutil
   - astropy-healpix
-  - future
-  - pytest-cov
   - coveralls
-  #- pyuvdata<2.2.0
-
+  - future
+  - h5py
+  - mpi4py
+  - numpy>=1.20
+  - pip
+  - psutil
+  - pycodestyle
+  - pyuvdata
+  - pyuvsim
+  - pytest
+  - pytest-cov
+  - pyyaml
+  - scikit-learn
+  - scipy
   - pip:
-    - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
-    - git+https://github.com/HERA-Team/uvtools
-    - git+https://github.com/HERA-Team/linsolve
-    - git+https://github.com/HERA-Team/hera_qm
-    - git+https://github.com/RadioAstronomySoftwareGroup/pyuvsim
-    - git+https://github.com/HERA-Team/hera_sim
+    - linsolve
+    - uvtools
+    - hera-qm
+    - hera-sim
