@@ -15,14 +15,14 @@ dependencies:
   - psutil
   - pycodestyle
   - pyuvdata
-  - pyuvsim
   - pytest
   - pytest-cov
   - pyyaml
   - scikit-learn
   - scipy
   - pip:
-    - linsolve
-    - uvtools
     - hera-qm
     - hera-sim
+    - linsolve
+    - pyuvsim
+    - uvtools
