@@ -185,15 +185,15 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
 
     def expand_bls(gp):
         gp3 = [(g[0], g[1], p) for g in gp if len(g) == 2 for p in pols]
-        return gp3 + [g for g in gp if len(g) == 3]
+        return set(gp3 + [g for g in gp if len(g) == 3])
     antpols = set(sum([list(split_pol(p)) for p in pols], []))
 
     def expand_ants(gp):
         gp2 = [(g, p) for g in gp if not hasattr(g, '__len__') for p in antpols]
-        return gp2 + [g for g in gp if hasattr(g, '__len__')]
+        return set(gp2 + [g for g in gp if hasattr(g, '__len__')])
 
     def split_bls(bls):
-        return [split_bl(bl) for bl in bls]
+        return set(split_bl(bl) for bl in bls)
     if ubls or ex_ubls:
         bl2gp = {}
         for i, gp in enumerate(reds):
@@ -211,20 +211,21 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             ex_ubls = set()
         reds = [gp for i, gp in enumerate(reds) if i in ubls and i not in ex_ubls]
     if bls:
-        bls = set(expand_bls(bls))
+        bls = expand_bls(bls)
     else:  # default to set of all baselines
         bls = set(key for gp in reds for key in gp)
     if ex_bls:
         ex_bls = expand_bls(ex_bls)
-        bls = set(k for k in bls if k not in ex_bls and reverse_bl(k) not in ex_bls)
+        ex_bls |= set(reverse_bl(k) for k in ex_bls)  # put in reverse baselines
+        bls = set(k for k in bls if k not in ex_bls)
     if ants:
         ants = expand_ants(ants)
         bls = set(join_bl(i, j) for i, j in split_bls(bls) if i in ants and j in ants)
     if ex_ants:
         ex_ants = expand_ants(ex_ants)
         bls = set(join_bl(i, j) for i, j in split_bls(bls) if i not in ex_ants and j not in ex_ants)
-    bls.union(set(reverse_bl(k) for k in bls))  # put in reverse baselines, just in case
-    reds = [[key for key in gp if key in bls or reverse_bl(key) in bls] for gp in reds]
+    bls |= set(reverse_bl(k) for k in bls)  # put in reverse baselines
+    reds = [[key for key in gp if key in bls] for gp in reds]
     reds = [gp for gp in reds if len(gp) > 0]
 
     if min_bl_cut is not None or max_bl_cut is not None:
@@ -614,7 +615,8 @@ class OmnicalSolver(linsolve.LinProductSolver):
         _sol.update(sol)
         return {k: eval(k, _sol) for k in keys}
 
-    def solve_iteratively(self, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, verbose=False):
+    def solve_iteratively(self, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1,
+                          wgt_func=lambda x: 1., verbose=False):
         """Repeatedly solves and updates solution until convergence or maxiter is reached.
         Returns a meta-data about the solution and the solution itself.
 
@@ -625,6 +627,10 @@ class OmnicalSolver(linsolve.LinProductSolver):
             maxiter: An integer maximum number of iterations to perform before quitting. Default 50.
             check_every: Compute convergence and updates weights every Nth iteration (saves computation). Default 4.
             check_after: Start computing convergence and updating weights after the first N iterations.  Default 1.
+            wgt_func: a function f(abs^2 * wgt) operating on weighted absolute differences between
+                data and model that returns an additional data weighting to apply to when calculating
+                chisq and updating parameters. Example: lambda x: np.where(x>0, 5*np.tanh(x/5)/x, 1)
+                clamps deviations to 5 sigma. Default is no additional weighting (lambda x: 1.).
 
         Returns: meta, sol
             meta: a dictionary with metadata about the solution, including
@@ -637,12 +643,19 @@ class OmnicalSolver(linsolve.LinProductSolver):
         terms = [(linsolve.get_name(gi), linsolve.get_name(gj), linsolve.get_name(uij))
                  for term in self.all_terms for (gi, gj, uij) in term]
         dmdl_u = self._get_ans0(sol)
-        chisq = sum([np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys])
+        abs2_u = {k: np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys}
+        chisq = sum([v * wgt_func(v) for v in abs2_u.values()])
         update = np.where(chisq > 0)
+        abs2_u = {k: v[update] for k, v in abs2_u.items()}
         # variables with '_u' are flattened and only include pixels that need updating
         dmdl_u = {k: v[update].flatten() for k, v in dmdl_u.items()}
-        # wgts_u hold the wgts the user provides.  dwgts_u is what is actually used to wgt the data
-        wgts_u = {k: (v * np.ones(chisq.shape, dtype=np.float32))[update].flatten() for k, v in self.wgts.items()}
+        # wgts_u hold the wgts the user provides
+        wgts_u = {k: (v * np.ones(chisq.shape, dtype=np.float32))[update].flatten()
+                  for k, v in self.wgts.items()}
+        # clamp_wgts_u adds additional sigma clamping done by wgt_func.
+        # abs2_u holds abs(data - mdl)**2 * wgt (i.e. noise-weighted deviations), which is
+        # passed to wgt_func to determine any additional weighting (to, e.g., clamp outliers).
+        clamp_wgts_u = {k: v * wgt_func(abs2_u[k]) for k, v in wgts_u.items()}
         sol_u = {k: v[update].flatten() for k, v in sol.items()}
         iters = np.zeros(chisq.shape, dtype=int)
         conv = np.ones_like(chisq)
@@ -652,7 +665,8 @@ class OmnicalSolver(linsolve.LinProductSolver):
             if (i % check_every) == 1:
                 # compute data wgts: dwgts = sum(V_mdl^2 / n^2) = sum(V_mdl^2 * wgts)
                 # don't need to update data weighting with every iteration
-                dwgts_u = {k: dmdl_u[k] * dmdl_u[k].conj() * wgts_u[k] for k in self.keys}
+                # clamped weighting is passed to dwgts_u, which is used to update parameters
+                dwgts_u = {k: dmdl_u[k] * dmdl_u[k].conj() * clamp_wgts_u[k] for k in self.keys}
                 sol_wgt_u = {k: 0 for k in sol.keys()}
                 for k, (gi, gj, uij) in zip(self.keys, terms):
                     w = dwgts_u[k]
@@ -676,7 +690,8 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 sol_u = new_sol_u
             else:
                 # Slow branch when we compute convergence/chisq
-                new_chisq_u = sum([np.abs(v[update] - dmdl_u[k])**2 * wgts_u[k] for k, v in self.data.items()])
+                abs2_u = {k: np.abs(v[update] - dmdl_u[k])**2 * wgts_u[k] for k, v in self.data.items()}
+                new_chisq_u = sum([v * wgt_func(v) for v in abs2_u.values()])
                 chisq_u = chisq[update]
                 gotbetter_u = (chisq_u > new_chisq_u)
                 where_gotbetter_u = np.where(gotbetter_u)
@@ -697,6 +712,8 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 dmdl_u = {k: v[update_u] for k, v in dmdl_u.items()}
                 wgts_u = {k: v[update_u] for k, v in wgts_u.items()}
                 sol_u = {k: v[update_u] for k, v in new_sol_u.items()}
+                abs2_u = {k: v[update_u] for k, v in abs2_u.items()}
+                clamp_wgts_u = {k: v * wgt_func(abs2_u[k]) for k, v in wgts_u.items()}
                 update = tuple(u[update_u] for u in update)
             if verbose:
                 print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
@@ -788,11 +805,12 @@ class RedundantCalibrator:
             ubl_num = [cnt for cnt, blgrp in enumerate(self.reds) if blgrp[0] == k][0]
             return 'u_%d_%s' % (ubl_num, k[-1])
 
-    def compute_ubls(self, data, gain_sols):
+    def compute_ubls(self, data, gains):
         """Given a set of guess gain solutions, return a dictionary of calibrated visbilities
         averged over a redundant group. Not strictly necessary for typical operation."""
 
-        dc = DataContainer(data)
+        dc = DataContainer(deepcopy(data))
+        calibrate_in_place(dc, gains, gain_convention='divide')
         ubl_sols = {}
         for ubl, blgrp in enumerate(self.reds):
             d_gp = [dc[bl] for bl in blgrp]
@@ -1007,7 +1025,7 @@ class RedundantCalibrator:
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         return meta, sol
 
-    def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1):
+    def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, wgt_func=lambda x: 1.):
         """Use the Liu et al 2010 Omnical algorithm to linearize equations and iteratively minimize chi^2.
 
         Args:
@@ -1022,6 +1040,10 @@ class RedundantCalibrator:
             gain: The fractional step made toward the new solution each iteration.  Default is 0.3.
                 Values in the range 0.1 to 0.5 are generally safe.  Increasing values trade speed
                 for stability.
+            wgt_func: a function f(abs^2 * wgt) operating on weighted absolute differences between
+                data and model that returns an additional data weighting to apply to when calculating
+                chisq and updating parameters. Example: lambda x: np.where(x>0, 5*np.tanh(x/5)/x, 1)
+                clamps deviations to 5 sigma. Default is no additional weighting (lambda x: 1.).
 
         Returns:
             meta: dictionary of information about the convergence and chi^2 of the solution
@@ -1031,7 +1053,7 @@ class RedundantCalibrator:
 
         sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0.keys()}
         ls = self._solver(OmnicalSolver, data, sol0=sol0, wgts=wgts, gain=gain)
-        meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after)
+        meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after, wgt_func=wgt_func)
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         return meta, sol
 
