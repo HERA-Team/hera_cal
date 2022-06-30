@@ -69,11 +69,8 @@ import copy
 from scipy.optimize import minimize
 from scipy import sparse
 from sklearn import gaussian_process as gp
-try:
-    from hera_filters import dspec
-    HAVE_HERA_FILTERS = True
-except ImportError:
-    HAVE_HERA_FILTERS = False
+from hera_filters import dspec
+
 import argparse
 import ast
 from astropy import constants
@@ -757,9 +754,6 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid : DataContainer, ant-pair-pol keys and ndarray values
                 Holds the residual between input data and pcomp_model_fft.
         """
-        if not HAVE_HERA_FILTERS:
-            raise ImportError("hera_filters required, install hera_cal[all]")
-
         # get keys
         if keys is None:
             keys = list(self.pcomp_model.keys())

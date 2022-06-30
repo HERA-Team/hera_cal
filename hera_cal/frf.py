@@ -3,11 +3,7 @@
 # Licensed under the MIT License
 
 import numpy as np
-try:
-    from hera_filters import dspec
-    HAVE_HERA_FILTERS = True
-except ImportError:
-    HAVE_HERA_FILTERS = False
+from hera_filters import dspec
 
 from . import utils
 from scipy.interpolate import interp1d
@@ -983,8 +979,6 @@ class FRFilter(VisClean):
             edgecut_low : int, number of bins to flag on low side of axis
             edgecut_hi : int, number of bins to flag on high side of axis
         """
-        if not HAVE_HERA_FILTERS:
-            raise ImportError("FRFilter.filter_data requires hera_filters to be installed. Install hera_cal[all]")
         # setup containers
         for n in ['data', 'flags', 'nsamples']:
             name = "{}_{}".format(output_prefix, n)

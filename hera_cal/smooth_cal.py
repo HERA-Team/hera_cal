@@ -9,12 +9,7 @@ import warnings
 import argparse
 import pyuvdata
 from collections.abc import Iterable
-
-try:
-    import hera_filters
-    HAVE_HERA_FILTERS = True
-except ImportError:
-    HAVE_HERA_FILTERS = False
+import hera_filters
 
 try:
     import aipy
@@ -196,8 +191,6 @@ def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
             filter_scale = 1800.
         else:
             filter_scale = 10.
-    if not HAVE_HERA_FILTERS:
-        raise ImportError("hera_filters required, install hera_cal[all]")
     if ax == 'freq':
         filter_size = (filter_scale * 1e6) ** -1  # Puts it in MHz
         dly = single_iterative_fft_dly(gains, wgts, xvals)  # dly in s

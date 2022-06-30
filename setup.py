@@ -54,12 +54,12 @@ setup_args = {
         'pyuvdata',
         'linsolve',
         'hera_qm',
-        'scikit-learn'
+        'scikit-learn',
+        'hera_filters @ git+https://github.com/HERA-Team/hera_filters'
     ],
     'extras_require': {
         "all": [
-            'aipy>=3.0',
-            'hera_filters @ git+http://github.com/HERA-Team/hera_filters',
+            'aipy>=3.0'
         ]
     },
     'zip_safe': False,
