@@ -5,7 +5,7 @@
 import numpy as np
 from collections import OrderedDict as odict
 import datetime
-from uvtools import dspec
+from hera_filters import dspec
 import argparse
 from astropy import constants
 import copy
@@ -746,7 +746,7 @@ class VisClean(object):
         cache: dictionary containing pre-computed filter products.
         mode: string specifying filtering mode. See fourier_filter for supported modes.
         min_dly: max delay (in nanosec) used for freq filter is never below this.
-        max_frate : max fringe rate (in milli-Hz) used for time filtering. See uvtools.dspec.fourier_filter for options.
+        max_frate : max fringe rate (in milli-Hz) used for time filtering. See hera_filters.dspec.fourier_filter for options.
         output_prefix : str, attach output model, resid, etc, to self as output_prefix + '_model' etc.
         cache: dict, optional
             dictionary for caching fitting matrices.
@@ -813,7 +813,7 @@ class VisClean(object):
                        flag_model_rms_outliers=False, model_rms_threshold=1.1,
                        **filter_kwargs):
         """
-        Generalized fourier filtering wrapper for uvtools.dspec.fourier_filter.
+        Generalized fourier filtering wrapper for hera_filters.dspec.fourier_filter.
         It can filter 1d or 2d data with x-axis(es) x and wgts in fourier domain
         rectangular windows centered at filter_centers or filter_half_widths
         perform filtering along any of 2 dimensions in 2d or 1d!
@@ -924,7 +924,7 @@ class VisClean(object):
             if filter2d is true, this should be a 2-tuple or 2-list
             of dictionaries. The dictionary for each dimension must
             specify the following for each fitting method.
-            Also see uvtools.dspec.fourier_filter where these kwargs are listed.
+            Also see hera_filters.dspec.fourier_filter where these kwargs are listed.
                 * 'dft':
                     'fundamental_period': float or 2-tuple
                         the fundamental_period of dft modes to fit. The number of
@@ -1789,7 +1789,7 @@ def gen_filter_properties(ax='freq', horizon=1, standoff=0, min_dly=0, bl_len=No
                           max_frate=0):
     """
     Convert standard delay and fringe-rate filtering parameters
-    into uvtools.dspec.fourier_filter parameters.
+    into hera_filters.dspec.fourier_filter parameters.
     If ax == 'both', filter properties are returned as (time, freq)
 
     Args:
@@ -1960,7 +1960,7 @@ def _filter_argparser():
     # Arguments for CLEAN. Not used in linear filtering methods.
     clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
-                              see uvtools.dspec.gen_window for options')
+                              see hera_filters.dspec.gen_window for options')
     clean_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
     clean_options.add_argument("--edgecut_low", default=0, type=int, help="Number of channels to flag on lower band edge and exclude from window function.")
     clean_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")

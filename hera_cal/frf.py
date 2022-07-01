@@ -3,11 +3,7 @@
 # Licensed under the MIT License
 
 import numpy as np
-try:
-    from uvtools import dspec
-    HAVE_UVTOOLS = True
-except ImportError:
-    HAVE_UVTOOLS = False
+from hera_filters import dspec
 
 from . import utils
 from scipy.interpolate import interp1d
@@ -301,9 +297,9 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         default is None -> set to uvd.Ntimes.
     taper: str, optional
         taper expected for power spectrum calculations. Fringe-rates from different frequencies
-        Valid taper options can be found in uvtools.dspec.gen_window
+        Valid taper options can be found in hera_filters.dspec.gen_window
         Located here
-        https://github.com/HERA-Team/uvtools/blob/b1bbe5fd8cff06354bed6ca4ab195bf82b8db976/uvtools/dspec.py#L1155
+        https://github.com/HERA-Team/hera_filters/blob/3601a6a707ee0b10c6219f9a82f0f90dbab1f15c/hera_filters/dspec.py#L1155
     fr_freq_skip: int, optional
         bin fringe rates from every freq_skip channels.
         default is 1 -> takes a long time. We recommend setting this to be larger.
@@ -471,9 +467,9 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
     taper: str, optional
         taper expected for power spectrum calculations. Fringe-rate profiles from different frequencies
         will be summed into the total fringe-rate profile with the weight of this taper.
-        Valid taper options can be found in uvtools.dspec.gen_window
+        Valid taper options can be found in hera_filters.dspec.gen_window
         Located here
-        https://github.com/HERA-Team/uvtools/blob/b1bbe5fd8cff06354bed6ca4ab195bf82b8db976/uvtools/dspec.py#L1155
+        https://github.com/HERA-Team/hera_filters/blob/3601a6a707ee0b10c6219f9a82f0f90dbab1f15c/hera_filters/dspec.py#L1155
     frate_standoff: float, optional
         Additional fringe-rate standoff in mHz to add to Omega_E b_{EW} nu/c to add
         to limits computed from beam-squared histogram.
@@ -983,8 +979,6 @@ class FRFilter(VisClean):
             edgecut_low : int, number of bins to flag on low side of axis
             edgecut_hi : int, number of bins to flag on high side of axis
         """
-        if not HAVE_UVTOOLS:
-            raise ImportError("FRFilter.filter_data requires uvtools to be installed. Install hera_cal[all]")
         # setup containers
         for n in ['data', 'flags', 'nsamples']:
             name = "{}_{}".format(output_prefix, n)
@@ -1054,8 +1048,8 @@ class FRFilter(VisClean):
           If None (the default), all visibilities are filtered.
         wgts: dictionary or DataContainer with all the same keys as self.data.
             Linear multiplicative weights to use for the fr filter. Default, use np.logical_not
-            of self.flags. uvtools.dspec.fourier_filter will renormalize to compensate.
-        mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
+            of self.flags. hera_filters.dspec.fourier_filter will renormalize to compensate.
+        mode: string specifying filtering mode. See fourier_filter or hera_filters.dspec.fourier_filter for supported modes.
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
             Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
             time. Skipped channels are then flagged in self.flags.
@@ -1063,7 +1057,7 @@ class FRFilter(VisClean):
         tol : float, optional. To what level are foregrounds subtracted.
         verbose: If True print feedback to stdout
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-         see uvtools.dspec.dayenu_filter for key formats.
+         see hera_filters.dspec.dayenu_filter for key formats.
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
             that were not in previously loaded cache files.
@@ -1083,7 +1077,7 @@ class FRFilter(VisClean):
         Results are stored in:
           self.clean_resid: DataContainer formatted like self.data with only high-fringe-rate components
           self.clean_model: DataContainer formatted like self.data with only low-fringe-rate components
-          self.clean_info: Dictionary of info from uvtools.dspec.fourier_filter with the same keys as self.data
+          self.clean_info: Dictionary of info from hera_filters.dspec.fourier_filter with the same keys as self.data
         '''
         if keys is None:
             keys = list(self.data.keys())

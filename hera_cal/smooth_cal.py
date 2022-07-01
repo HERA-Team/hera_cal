@@ -9,12 +9,7 @@ import warnings
 import argparse
 import pyuvdata
 from collections.abc import Iterable
-
-try:
-    import uvtools
-    HAVE_UVTOOLS = True
-except ImportError:
-    HAVE_UVTOOLS = False
+import hera_filters
 
 try:
     import aipy
@@ -102,7 +97,7 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
         Nw = 2 * W + 2 / np.pi ** 2 * np.log(4 * nf) * np.log(4 / (eigenval_cutoff * (1 - eigenval_cutoff)))
 
         # Generate DPSS vectors and keep vectors with eigenvalues greater than eigenval_cutoff
-        windows, eigvals = uvtools.dspec.windows.dpss(nf, W, int(min(Nw, nf)), return_ratios=True)
+        windows, eigvals = hera_filters.dspec.windows.dpss(nf, W, int(min(Nw, nf)), return_ratios=True)
         windows = windows[eigvals > eigenval_cutoff].T
         dpss_windows.append(windows)
 
@@ -167,7 +162,7 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
 
 def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
               mode='clean', tol=1e-6, skip_flagged_edges=False, cache=None, **filter_kwargs):
-    '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
+    '''Frequency-filter calibration solutions on a given scale in MHz using hera_filters.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
 
     Arguments:
@@ -181,23 +176,21 @@ def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
             filtered is left unchanged and info is {'skipped': True} for that time.
             Only works properly when all weights are all between 0 and 1.
         ax: str either 'freq' or 'time' specifying which axis to filter.
-        mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
+        mode: deconvolution method to use. See hera_filters.dspec.fourier_filter for full list of supported modes.
               examples include 'dpss_leastsq', 'clean'.
         skip_flagged_edges: bool, optional
             if True, truncate flagged edges before filtering.
         filter_kwargs : any keyword arguments for the filtering mode being used.
-        See vis_clean.fourier_filter or uvtools.dspec.fourier_filter for a full description.
+        See vis_clean.fourier_filter or hera_filters.dspec.fourier_filter for a full description.
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
-        info: info object from uvtools.dspec.high_pass_fourier_filter
+        info: info object from hera_filters.dspec.high_pass_fourier_filter
     '''
     if filter_scale is None:
         if ax == 'time':
             filter_scale = 1800.
         else:
             filter_scale = 10.
-    if not HAVE_UVTOOLS:
-        raise ImportError("uvtools required, instsall hera_cal[all]")
     if ax == 'freq':
         filter_size = (filter_scale * 1e6) ** -1  # Puts it in MHz
         dly = single_iterative_fft_dly(gains, wgts, xvals)  # dly in s
@@ -225,10 +218,10 @@ def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
         rephasor = 1.
     din = din * rephasor
     fdim = {'freq': 1, 'time': 0}[ax]
-    filtered, res, info = uvtools.dspec.fourier_filter(x=xin, data=din, wgts=win, mode=mode, filter_centers=[0.],
-                                                       skip_wgt=skip_wgt, filter_half_widths=[filter_size],
-                                                       filter_dims=fdim, cache=cache,
-                                                       **filter_kwargs)
+    filtered, res, info = hera_filters.dspec.fourier_filter(x=xin, data=din, wgts=win, mode=mode, filter_centers=[0.],
+                                                            skip_wgt=skip_wgt, filter_half_widths=[filter_size],
+                                                            filter_dims=fdim, cache=cache,
+                                                            **filter_kwargs)
     # put back in unfilted values if skip_wgt is triggered
     filtered /= rephasor
     if skip_flagged_edges:
@@ -424,7 +417,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         # perform deconvolution
         CLEAN, info = aipy.deconv.clean(image, kernel, tol=tol, area=area, stop_if_div=False, maxiter=maxiter)
         filtered = np.fft.fft2(CLEAN + info['res'] * area)
-        del info['res']  # this matches the convention in uvtools.dspec.high_pass_fourier_filter
+        del info['res']  # this matches the convention in hera_filters.dspec.high_pass_fourier_filter
 
     else:
         raise ValueError("Filter method {} not recognized. Must be 'CLEAN' or 'DPSS'".format(method))
@@ -864,7 +857,7 @@ class CalibrationSmoother():
                 specify whether to use 'clean' or 'dpss_leastsq' filtering of gains.
             ax: str, optional
                 specify axis to perform 1d smoothing over. Options are 'time' and 'freq'. default is 'freq'.
-            filter_kwargs : any keyword arguments for uvtools.dspec.fourier_filter.
+            filter_kwargs : any keyword arguments for hera_filters.dspec.fourier_filter.
         '''
         # Loop over all antennas and perform a low-pass delay filter on gains
         cache = {}
