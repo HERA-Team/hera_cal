@@ -56,7 +56,7 @@ setup_args = {
         'linsolve',
         'hera_qm',
         'scikit-learn',
-        'hera_filters @ git+https://github.com/HERA-Team/hera_filters'
+        'hera_filters'
     ],
     'extras_require': {
         "all": [
