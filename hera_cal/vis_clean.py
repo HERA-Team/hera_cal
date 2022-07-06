@@ -142,8 +142,10 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
                 # truncate data to be filtered where appropriate.
                 ind_left = np.min(unflagged_chans)
                 ind_right = np.max(unflagged_chans) + 1
-            inds_left.append(ind_left)
-            inds_right.append(ind_right)
+                # only append indices if there are some unflagged channels in the chunk.
+                # otherwise we should completely discard the chunk.
+                inds_left.append(ind_left)
+                inds_right.append(ind_right)
 
         dout = np.hstack([data_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
         wout = np.hstack([weights_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
