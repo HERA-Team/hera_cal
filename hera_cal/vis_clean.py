@@ -62,18 +62,21 @@ def find_discontinuity_edges(x, xtol=1e-3):
             x = [0, 1, 4, 9] -> [(0, 2) (2, 3), (3, 4)]
             x = [0, 1, 2, 4, 5, 6, 7, 11, 12] -> [(0, 3), (3, 7), (7, 9)]
     """
-    xdiff = np.diff(x)
-    discontinuities = np.where(~np.isclose(xdiff, np.min(np.abs(xdiff)) * np.sign(xdiff[0]),
-                               rtol=0.0, atol=np.abs(np.min(xdiff)) * xtol))[0]
-    if len(discontinuities) == 0:
-        edges = [(0, len(x))]
-    elif len(discontinuities) == 1:
-        edges = [(0, discontinuities[0] + 1), (discontinuities[0] + 1, len(x))]
+    if len(x) > 0:
+        xdiff = np.diff(x)
+        discontinuities = np.where(~np.isclose(xdiff, np.min(np.abs(xdiff)) * np.sign(xdiff[0]),
+                                   rtol=0.0, atol=np.abs(np.min(xdiff)) * xtol))[0]
+        if len(discontinuities) == 0:
+            edges = [(0, len(x))]
+        elif len(discontinuities) == 1:
+            edges = [(0, discontinuities[0] + 1), (discontinuities[0] + 1, len(x))]
+        else:
+            edges = [(0, discontinuities[0] + 1)]
+            for i in range(len(discontinuities) - 1):
+                edges.append((discontinuities[i] + 1, discontinuities[i + 1] + 1))
+            edges.append((discontinuities[-1] + 1, len(x)))
     else:
-        edges = [(0, discontinuities[0] + 1)]
-        for i in range(len(discontinuities) - 1):
-            edges.append((discontinuities[i] + 1, discontinuities[i + 1] + 1))
-        edges.append((discontinuities[-1] + 1, len(x)))
+        edges = [(0, 0)]
     return edges
 
 
@@ -1132,33 +1135,42 @@ class VisClean(object):
                     win = flag_rows_with_flags_within_edge_distance(xp, win, skip_if_flag_within_edge_distance, ax=ax)
 
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
-                mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
-                                                      filter_half_widths=filter_half_widths,
-                                                      mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
-                                                      **filter_kwargs)
-                # insert back the filtered model if we are skipping flagged edgs.
-                if skip_flagged_edges:
-                    mdl = restore_flagged_edges(xp, mdl, edges, ax=ax)
-                    res = restore_flagged_edges(xp, res, edges, ax=ax)
-                # unzeropad array and put in skip flags.
-                if ax == 'freq':
-                    if zeropad > 0:
-                        mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
-                        res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
-                elif ax == 'time':
-                    if zeropad > 0:
-                        mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
-                        res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
-                elif ax == 'both':
-                    for i in range(2):
-                        if zeropad[i] > 0:
-                            mdl, _ = zeropad_array(mdl, zeropad=zeropad[i], axis=i, undo=True)
-                            res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
-                        _trim_status(info, i, zeropad[i - 1])
-                    # need to adjust info based on edges and chunks!
-                    # restore indices in info necessary if ax=='both'.
+                if 0 not in din.shape:
+                    mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                                          filter_half_widths=filter_half_widths,
+                                                          mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                                          **filter_kwargs)
                     if skip_flagged_edges:
-                        _adjust_info_indices(xp, info, edges, spw_range[0])
+                        mdl = restore_flagged_edges(xp, mdl, edges, ax=ax)
+                        res = restore_flagged_edges(xp, res, edges, ax=ax)
+                    # insert back the filtered model if we are skipping flagged edgs.
+
+
+                    # unzeropad array and put in skip flags.
+                    if ax == 'freq':
+                        if zeropad > 0:
+                            mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
+                            res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
+                    elif ax == 'time':
+                        if zeropad > 0:
+                            mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
+                            res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
+                    elif ax == 'both':
+                        for i in range(2):
+                            if zeropad[i] > 0:
+                                mdl, _ = zeropad_array(mdl, zeropad=zeropad[i], axis=i, undo=True)
+                                res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
+                            _trim_status(info, i, zeropad[i - 1])
+                        # need to adjust info based on edges and chunks!
+                        # restore indices in info necessary if ax=='both'.
+                        if skip_flagged_edges:
+                            _adjust_info_indices(xp, info, edges, spw_range[0])
+                else:
+                    info = {'status': {'axis_0': {}, 'axis_1': {}}}
+                    if ax == 'freq' or ax == 'both':
+                        info['status']['axis_1'] = {i: 'skipped' for i in range(self.Ntimes)}
+                    if ax == 'time' or ax == 'both':
+                        info['status']['axis_0'] = {i: 'skipped' for i in range(spw_range[1] - spw_range[0])}
                 # flag integrations and channels that were skipped.
                 skipped = np.zeros_like(mdl, dtype=bool)
                 # this is not the correct thing to do for 2d filtering.
