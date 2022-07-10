@@ -62,21 +62,18 @@ def find_discontinuity_edges(x, xtol=1e-3):
             x = [0, 1, 4, 9] -> [(0, 2) (2, 3), (3, 4)]
             x = [0, 1, 2, 4, 5, 6, 7, 11, 12] -> [(0, 3), (3, 7), (7, 9)]
     """
-    if len(x) > 0:
-        xdiff = np.diff(x)
-        discontinuities = np.where(~np.isclose(xdiff, np.min(np.abs(xdiff)) * np.sign(xdiff[0]),
-                                   rtol=0.0, atol=np.abs(np.min(xdiff)) * xtol))[0]
-        if len(discontinuities) == 0:
-            edges = [(0, len(x))]
-        elif len(discontinuities) == 1:
-            edges = [(0, discontinuities[0] + 1), (discontinuities[0] + 1, len(x))]
-        else:
-            edges = [(0, discontinuities[0] + 1)]
-            for i in range(len(discontinuities) - 1):
-                edges.append((discontinuities[i] + 1, discontinuities[i + 1] + 1))
-            edges.append((discontinuities[-1] + 1, len(x)))
+    xdiff = np.diff(x)
+    discontinuities = np.where(~np.isclose(xdiff, np.min(np.abs(xdiff)) * np.sign(xdiff[0]),
+                               rtol=0.0, atol=np.abs(np.min(xdiff)) * xtol))[0]
+    if len(discontinuities) == 0:
+        edges = [(0, len(x))]
+    elif len(discontinuities) == 1:
+        edges = [(0, discontinuities[0] + 1), (discontinuities[0] + 1, len(x))]
     else:
-        edges = [(0, 0)]
+        edges = [(0, discontinuities[0] + 1)]
+        for i in range(len(discontinuities) - 1):
+            edges.append((discontinuities[i] + 1, discontinuities[i + 1] + 1))
+        edges.append((discontinuities[-1] + 1, len(x)))
     return edges
 
 
