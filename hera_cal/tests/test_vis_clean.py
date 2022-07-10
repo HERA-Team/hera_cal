@@ -584,6 +584,10 @@ class Test_VisClean(object):
                     skip_contiguous_flags=True, max_frate=0.025)
         for k in V.clean_flags:
             assert np.all(V.clean_flags[k])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_flagged_edges=True, max_frate=0.025)
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k])
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
                     skip_contiguous_flags=True, max_frate=0.025)
         for k in V.clean_flags:
