@@ -134,7 +134,7 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
         inds_right = []
         # Identify edge channels that are flagged.
         for chunk in chunks:
-            ind_left = 0 # If there are no unflagged channels, then the chunk should have zero width.
+            ind_left = 0  # If there are no unflagged channels, then the chunk should have zero width.
             ind_right = 0
             chunkslice = slice(chunk[0], chunk[1])
             unflagged_chans = np.where(~np.all(np.isclose(weights_in[:, chunkslice], 0.0), axis=0))[0]
@@ -160,26 +160,23 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
     return xout, dout, wout, edges, chunks
 
 
-def restore_flagged_edges(x, data, edges, ax='freq', fill_value=0.0):
+def restore_flagged_edges(data, chunks, edges, ax='freq'):
     """
     fill in flagged regions of data array produced
     by truncate_flagged_edges with zeros.
 
     Parameters
     ----------
-    x: array-like or 2-list/tuple of arrays
-        1d array of x-values of data with removed edges.
-        if ax=='both', must be 2-list of arrays.
     data: array-like
         2d array containing data that has been trimmed with
         trunate_flagged_edges (dout or wout)
         dimensions (nf_trimmed, nt_trimmed)
-    edges : list of 2-tuples or 2-list of lists of 2-tuples.
-        the width of the edges trimmed.
-        must be 2-list of lists if ax=='both'
     chunks : list of 2-tuples or 2-list of lists of 2-tuples.
         indices indicating the chunk edges that edge widths are reference too.
         first list is time dim, second list is freq dim.
+    edges : list of 2-tuples or 2-list of lists of 2-tuples.
+        the width of the edges trimmed.
+        must be 2-list of lists if ax=='both'
     ax : str, optional
         axis to restore gaps on.
         default is 'freq'
@@ -192,23 +189,25 @@ def restore_flagged_edges(x, data, edges, ax='freq', fill_value=0.0):
     if ax == 'time':
         # if axis is time, process everything like its the time axis with 0 <-> 1 reversed.
         # switch everything back later.
-        data_restored = restore_flagged_edges(x, data.T, edges, fill_value=fill_value).T
+        data_restored = restore_flagged_edges(data.T, chunks, edges).T
     else:
         if ax == 'both':
-            chunks = find_discontinuity_edges(x[1])
-            zgen = zip(chunks, edges[1])
+            zgen = zip(chunks[1], edges[1])
         else:
-            chunks = find_discontinuity_edges(x)
             zgen = zip(chunks, edges)
-        data_restored = [np.pad(data[:, chunk[0]: chunk[1]], [(0, 0), edge],
-                         constant_values=[(fill_value, fill_value), (fill_value, fill_value)]) for chunk, edge in zgen]
+        data_restored = []
+        start_ind = 0
+        for chunk, edge in zgen:
+            stop_ind = start_ind + chunk[1] - chunk[0] - edge[1] - edge[0]
+            data_restored.append(np.pad(data[:, start_ind: stop_ind], [(0, 0), edge]))
+            start_ind = stop_ind
         if len(data_restored) > 1:
             data_restored = np.hstack(data_restored)
         else:
             data_restored = data_restored[0]
         if ax == 'both':
             # if axis is both, then process time-axis after freq axis.
-            data_restored = restore_flagged_edges(x[0], data_restored, edges[0], ax='time', fill_value=fill_value)
+            data_restored = restore_flagged_edges(data_restored, chunks[0], edges[0], ax='time')
     return data_restored
 
 
@@ -1138,12 +1137,10 @@ class VisClean(object):
                                                           filter_half_widths=filter_half_widths,
                                                           mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
                                                           **filter_kwargs)
-                    if skip_flagged_edges:
-                        mdl = restore_flagged_edges(xp, mdl, edges, ax=ax)
-                        res = restore_flagged_edges(xp, res, edges, ax=ax)
                     # insert back the filtered model if we are skipping flagged edgs.
-
-
+                    if skip_flagged_edges:
+                        mdl = restore_flagged_edges(mdl, chunks, edges, ax=ax)
+                        res = restore_flagged_edges(res, chunks, edges, ax=ax)
                     # unzeropad array and put in skip flags.
                     if ax == 'freq':
                         if zeropad > 0:
