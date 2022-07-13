@@ -225,7 +225,7 @@ def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
     # put back in unfilted values if skip_wgt is triggered
     filtered /= rephasor
     if skip_flagged_edges:
-        filtered = restore_flagged_edges(xin, filtered, edges, ax=ax)
+        filtered = restore_flagged_edges(filtered, chunks, edges, ax=ax)
 
     if ax == 'freq':
         for i in info['status']['axis_1']:
@@ -383,7 +383,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                 mask = np.ones(gains.shape, dtype=bool)
                 mask[tstart:gains.shape[0] - tend, fstart:gains.shape[1] - fend] = False
                 # Restore flagged region with zeros and fill-in with original data
-                filtered = restore_flagged_edges(xout, filtered, edges, ax='both')
+                filtered = restore_flagged_edges(filtered, chunks, edges, ax='both')
                 filtered[mask] = gains[mask]
 
             # Store design matrices and XTXinv for computational speed-up

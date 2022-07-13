@@ -75,16 +75,16 @@ def test_restore_flagged_edges():
     times = np.arange(60) * 10.
     freqs = np.arange(64) * 100e3
     # test freq truncation
-    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
-    wrest = vis_clean.restore_flagged_edges(xout, wout, edges)
+    xout, dout, wout, edges, chunks = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
+    wrest = vis_clean.restore_flagged_edges(wout, chunks, edges)
     assert np.allclose(weights_in[:, :-1], wrest[:, :-1])
     assert np.allclose(wrest[:, -1], 0.0)
-    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
-    wrest = vis_clean.restore_flagged_edges(xout, wout, edges, ax='time')
+    xout, dout, wout, edges, chunks = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
+    wrest = vis_clean.restore_flagged_edges(wout, chunks, edges, ax='time')
     assert np.allclose(wout, wrest[:-2, :])
     assert np.allclose(wrest[-2:, :], 0.0)
-    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
-    wrest = vis_clean.restore_flagged_edges(xout, wout, edges, ax='both')
+    xout, dout, wout, edges, chunks = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
+    wrest = vis_clean.restore_flagged_edges(wout, chunks, edges, ax='both')
     assert np.allclose(wrest[-2:, :], 0.0)
     assert np.allclose(wrest[:, -1], 0.0)
     assert np.allclose(wout, wrest[:-2, :-1])
