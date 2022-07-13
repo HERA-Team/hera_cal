@@ -22,6 +22,8 @@ from . import utils
 from . import flag_utils
 from .vis_clean import truncate_flagged_edges, restore_flagged_edges
 from .noise import interleaved_noise_variance_estimate
+from astropy import units
+SDAY = units.sday.to("s")
 
 
 def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
@@ -191,6 +193,7 @@ def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
             filter_scale = 1800.
         else:
             filter_scale = 10.
+
     if ax == 'freq':
         filter_size = (filter_scale * 1e6) ** -1  # Puts it in MHz
         dly = single_iterative_fft_dly(gains, wgts, xvals)  # dly in s
@@ -225,7 +228,7 @@ def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
     # put back in unfilted values if skip_wgt is triggered
     filtered /= rephasor
     if skip_flagged_edges:
-        filtered = restore_flagged_edges(xin, filtered, edges, ax=ax)
+        filtered = restore_flagged_edges(filtered, chunks, edges, ax=ax)
 
     if ax == 'freq':
         for i in info['status']['axis_1']:
@@ -383,7 +386,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                 mask = np.ones(gains.shape, dtype=bool)
                 mask[tstart:gains.shape[0] - tend, fstart:gains.shape[1] - fend] = False
                 # Restore flagged region with zeros and fill-in with original data
-                filtered = restore_flagged_edges(xout, filtered, edges, ax='both')
+                filtered = restore_flagged_edges(filtered, chunks, edges, ax='both')
                 filtered[mask] = gains[mask]
 
             # Store design matrices and XTXinv for computational speed-up
@@ -535,7 +538,7 @@ def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
             is not flagged, a ValueError will be raised.
     '''
     for pol, ref in (refant.items() if not isinstance(refant, tuple) else [(None, refant)]):
-        refant_phasor = gains[ref] / np.abs(gains[ref])
+        refant_phasor = np.exp(1j * np.angle(gains[ref]))  # doing things this way avoids nans from zero gains.
         for ant in gains.keys():
             if ((pol is None) or (ant[1] == pol)):
                 if flags is not None:
@@ -867,7 +870,7 @@ class CalibrationSmoother():
             if ax == 'freq':
                 xaxis = self.freqs
             else:
-                xaxis = self.time_grid
+                xaxis = self.time_grid * SDAY
             self.gain_grids[ant], info = filter_1d(gain_grid, wgts_grid, xaxis, ax=ax,
                                                    filter_scale=filter_scale, tol=tol, mode=mode,
                                                    skip_wgt=skip_wgt, cache=cache, **filter_kwargs)

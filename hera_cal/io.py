@@ -1671,6 +1671,8 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         ant_keys = sorted(list(fc_meta['dlys'].keys()))
         fc_grp['dlys'] = np.array([fc_meta['dlys'][ant] for ant in ant_keys])
         fc_grp['dlys'].attrs['ants'] = np.string_(ant_keys)
+        fc_grp['offsets'] = np.array([fc_meta['offsets'][ant] for ant in ant_keys])
+        fc_grp['offsets'].attrs['ants'] = np.string_(ant_keys)
         fc_grp['polarity_flips'] = np.array([fc_meta['polarity_flips'][ant] for ant in ant_keys])
         fc_grp['polarity_flips'].attrs['ants'] = np.string_(ant_keys)
 
@@ -1715,7 +1717,8 @@ def read_redcal_meta(meta_filename):
                 for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
         fc_meta['dlys'] = {ant: dly for ant, dly in zip(ants, infile['fc_meta']['dlys'][:, :])}
         fc_meta['polarity_flips'] = {ant: flips for ant, flips in zip(ants, infile['fc_meta']['polarity_flips'][:, :])}
-
+        if 'offsets' in infile['fc_meta']:
+            fc_meta['offsets'] = {ant: offsets for ant, offsets in zip(ants, infile['fc_meta']['offsets'][:, :])}
         # reconstruct omnical metadata
         omni_meta = {}
         pols_keys = infile['omni_meta']['chisq'].attrs['pols']

@@ -3,6 +3,7 @@
 # Licensed under the MIT License
 
 import numpy as np
+
 from hera_filters import dspec
 
 from . import utils

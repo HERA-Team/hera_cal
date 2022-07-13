@@ -560,7 +560,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 hd_red.vis_units = hc.gain_scale
             if vis_units is not None:
                 hd_red.vis_units = vis_units
-            hd_red.write_uvh5(data_outfilename, clobber=clobber)
+            hd_red.write_uvh5(data_outfilename, clobber=clobber, fix_autos=True)
     # full data loading and writing
     else:
         data, data_flags, data_nsamples = hd.read(frequencies=freqs_to_load)
@@ -649,7 +649,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                             hd_red.vis_units = hc.gain_scale
                         if vis_units is not None:
                             hd_red.vis_units = vis_units
-                        hd_red.write_uvh5(outfile, clobber=clobber)
+                        hd_red.write_uvh5(outfile, clobber=clobber, fix_autos=True)
                     else:
                         raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
                 else:

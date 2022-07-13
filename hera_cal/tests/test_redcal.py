@@ -1552,6 +1552,60 @@ class TestRunMethods(object):
             assert not np.all(rv['chisq_per_ant'][ant] == 0.0)
             np.testing.assert_array_equal(rv['gf_omnical'][ant], True)
 
+    @pytest.mark.parametrize("offsets_in_firstcal", [True, False])
+    def test_nightly_median_firstcal_delays(self, tmpdir, offsets_in_firstcal):
+        # split up data into multiple time slices
+        # run redcal to produce metadatae
+        input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5')
+        uvd = io.HERAData(input_data)
+        uvd.read()
+        tmppath = tmpdir.strpath
+        # split into six different ten integration files
+        data_files = []
+        meta_files = []
+        times = np.unique(uvd.time_array)
+        firstcal_list = []
+        for tnum in range(6):
+            uvd_slice = uvd.select(times=times[tnum * 10: (tnum + 1) * 10],
+                                   inplace=False)
+            t0 = times[tnum * 10]
+            output_file = os.path.join(tmppath, f'zen.{t0:.5f}.subband.uvh5')
+            uvd_slice.write_uvh5(output_file)
+            data_files.append(output_file)
+        # now run redcal on each
+        ant_metrics_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.43124.HH.uv.ant_metrics.json')
+        for dfile in data_files:
+            cal = om.redcal_run(dfile, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
+                                a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
+                                iter0_prefix='.iter0', metrics_files=ant_metrics_file, clobber=True, ex_ants=[11, 50])
+            firstcal_list.append(dfile.replace('.uvh5', '.first.calfits'))
+            hd = io.HERAData(input_data)
+            meta_files.append(dfile.replace('.uvh5', '.redcal_meta.hdf5'))
+        if not offsets_in_firstcal:
+            firstcal_list = None
+        # now run median
+        om.nightly_median_firstcal_delays(meta_files, offsets_in_firstcal=offsets_in_firstcal, firstcal_file_list=firstcal_list)
+        # now make sure all delays and polarity flips are equal to the median.
+        meta_files_median = [meta_file.replace('redcal_meta', 'redcal_meta.median_phases') for meta_file in meta_files]
+        for fnum, metafile in enumerate(meta_files_median):
+            fc_meta = io.read_redcal_meta(metafile)[0]
+            if fnum == 0:
+                median_dlys = {ant: fc_meta['dlys'][ant][0] for ant in fc_meta['dlys']}
+                median_polarity = {ant: fc_meta['polarity_flips'][ant][0] for ant in fc_meta['polarity_flips']}
+            else:
+                assert np.all([np.all(fc_meta['dlys'][ant] == median_dlys[ant]) for ant in fc_meta['dlys'] if np.isfinite(median_dlys[ant])])
+                assert np.all([np.all(fc_meta['polarity_flips'][ant] == median_polarity[ant]) for ant in fc_meta['polarity_flips'] if np.isfinite(median_polarity[ant])])
+
+        # now replace the redcal degeneracies.
+        omnifiles = [dfile.replace('.uvh5', '.omni.calfits') for dfile in data_files]
+        for omni_file, meta_file, meta_file_old in zip(omnifiles, meta_files_median, meta_files):
+            om.update_redcal_phase_degeneracy(omni_file, meta_file, meta_file_old,
+                                              output_file=omni_file.replace('.calfits', '.medphase.calfits'), clobber=True)
+
+        # check that files have been created
+        for ofile in omnifiles:
+            assert os.path.exists(omni_file.replace('.calfits', '.medphase.calfits'))
+
     def test_redcal_run(self):
         input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
         ant_metrics_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.43124.HH.uv.ant_metrics.json')
@@ -1696,3 +1750,18 @@ class TestRunMethods(object):
         assert a.ex_ants == [5, 6]
         assert a.gain == 0.4
         assert a.verbose is True
+
+    def test_nighly_median_argparser(self):
+        sys.argv = [sys.argv[0], 'file1.hdf5', 'file2.hdf5', 'file3.hdf5']
+        args = om.nightly_median_firstcal_delays_argparser().parse_args()
+        assert args.redcal_meta_file_list == ['file1.hdf5', 'file2.hdf5', 'file3.hdf5']
+        assert args.output_ext == '.redcal_meta.median_delay.hdf5'
+        assert args.output_replace == ".redcal_meta.hdf5"
+
+    def test_update_redcal_phase_degeneracy_argparser(self):
+        sys.argv = [sys.argv[0], 'redcal_solution.calfits', 'redcal_meta_file.hdf5', 'output.calfits', 'old_meta_file.hdf5']
+        args = om.update_redcal_phase_degeneracy_argparser().parse_args()
+        assert args.redcal_file == 'redcal_solution.calfits'
+        assert args.redcal_meta_file == 'redcal_meta_file.hdf5'
+        assert args.output_file == 'output.calfits'
+        assert args.old_redcal_meta_file == 'old_meta_file.hdf5'

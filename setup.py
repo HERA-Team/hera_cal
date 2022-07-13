@@ -43,8 +43,9 @@ setup_args = {
                 'scripts/query_ex_ants.py', 'scripts/red_average.py',
                 'scripts/time_average.py', 'scripts/tophat_frfilter_run.py', 'scripts/model_calibration_run.py',
                 'scripts/time_chunk_from_baseline_chunks_run.py', 'scripts/chunk_files.py', 'scripts/transfer_flags.py',
-                'scripts/flag_all.py', 'scripts/throw_away_flagged_antennas.py', 'scripts/select_spw_ranges.py',
-                'scripts/multiply_gains.py'],
+                'scripts/flag_all.py', 'scripts/throw_away_flagged_antennas.py',
+                'scripts/select_spw_ranges.py', 'scripts/run_median_nightly_firstcal_delays.py',
+                'scripts/multiply_gains.py', 'scripts/run_update_redcal_phase_degeneracy.py'],
     'package_data': {'hera_cal': data_files},
     'install_requires': [
         'numpy>=1.10',
