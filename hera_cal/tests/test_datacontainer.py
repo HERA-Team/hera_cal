@@ -451,13 +451,19 @@ def test_RedDataContainer():
 
     # make sure that the data for a redundant group are being accessed from the same place in memory
     for i, rdata in enumerate([rdata1, rdata2, rdata3, rdata4, rdata5]):
-        assert len(rdata.keys()) == len([bl for red in rdata.reds for bl in red])
         for red in rdata.reds:
             for bl in red:
                 if i < 4:
                     assert id(rdata[bl]) == id(rdata[red[0]])
                 else:
                     assert id(rdata[reverse_bl(bl)]) == id(rdata[reverse_bl(red[0])])
+                assert(rdata.get_ubl_key(bl) in red)
+                assert(rdata.has_key(rdata.get_ubl_key(bl)))
+                assert set(rdata.get_red(bl)) == set(red)
+            val_here = deepcopy(rdata[red[0]])
+            rdata[red[0]] *= 2
+            for bl in red:
+                np.testing.assert_array_equal(val_here * 2, rdata[bl])
 
     # test no redundancy information error
     with pytest.raises(ValueError):
