@@ -501,10 +501,11 @@ class DataContainer:
 
 
 class RedDataContainer(DataContainer):
+    '''Structure for containing redundant visibilities that can be accessed by any
+        one of the redundant baseline keys (or their conjugate).'''
 
     def __init__(self, data, reds=None, antpos=None, bl_error_tol=1.0):
-        '''Structure for containing redundant visibilities that can be accessed by any
-        one of the redundant baseline keys (or their conjugate).
+        '''Creates a RedDataContainer.
 
         Arguments:
             data: DataContainer or dictionary of visibilities, just as one would pass into DataContainer().
@@ -535,16 +536,34 @@ class RedDataContainer(DataContainer):
                 raise ValueError('Must provide reds, antpos, or have antpos available at data.antpos')
 
         # Map all redundant keys to the same underlying data
+        self._bl_to_red_key = {}
+        self._red_key_to_bls = {}
         for red in self.reds:
             bls_in_data = [bl for bl in red if self.has_key(bl)]
             if len(bls_in_data) > 1:
                 raise ValueError(f'RedDataContainer can only be constructed with (at most) one baseline per group, \
                                  but this data has the following redundant baselines: {bls_in_data}')
             if len(bls_in_data) > 0:
-                # check if baseline is in self._data reversed; if so avoid making many copies by conjugating
-                if bls_in_data[0] in self._data:
-                    for bl in red:
-                        self._data[bl] = self._data[bls_in_data[0]]
-                elif reverse_bl(bls_in_data[0]) in self._data:
-                    for bl in red:
-                        self._data[reverse_bl(bl)] = self._data[reverse_bl(bls_in_data[0])]
+                self._red_key_to_bls[bls_in_data[0]] = []
+                self._red_key_to_bls[reverse_bl(bls_in_data[0])] = []
+                for bl in red:
+                    self._bl_to_red_key[bl] = bls_in_data[0]
+                    self._bl_to_red_key[reverse_bl(bl)] = reverse_bl(bls_in_data[0])
+                    self._red_key_to_bls[bls_in_data[0]].append(bl)
+                    self._red_key_to_bls[reverse_bl(bls_in_data[0])].append(reverse_bl(bl))
+
+    def get_ubl_key(self, key):
+        '''Returns the key used interally denote the data stored. Useful for del'''
+        return self._bl_to_red_key[key]
+
+    def get_red(self, key):
+        '''Returns the list of baselines redundant with this key.'''
+        return self._red_key_to_bls[self._bl_to_red_key[key]]
+
+    def __getitem__(self, key):
+        '''Returns data corresponding to the unique baseline that key is a member of.'''
+        return super().__getitem__(self._bl_to_red_key[key])
+
+    def __setitem__(self, key, value):
+        '''Sets data for to unique baseline that the key is a member of.'''
+        return super().__setitem__(self._bl_to_red_key[key], value)
