@@ -498,3 +498,51 @@ class DataContainer:
 
         if not in_place:
             return dc
+
+
+class RedDataContainer(DataContainer):
+
+    def __init__(self, data, reds=None, antpos=None, bl_error_tol=1.0):
+        '''Structure for containing redundant visibilities that can be accessed by any
+        one of the redundant baseline keys (or their conjugate).
+
+        Arguments:
+            data: DataContainer or dictionary of visibilities, just as one would pass into DataContainer().
+                Will error if multiple baselines are part of the same redundant group.
+            reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol)
+            antpos: dictionary of antenna positions in the form {ant_index: np.array([x, y, z])}.
+                Will error if one tries to provide both reds and antpos. If neither is provided,
+                will try to to use data.antpos (which it might have if its is a DataContainer).
+            bl_error_tol: the largest allowable difference between baselines in a redundant group
+                (in the same units as antpos). Normally, this is up to 4x the largest antenna position
+                error. Will only be used if reds is inferred from antpos.
+        '''
+        if reds is not None and antpos is not None:
+            raise ValueError('Can only provide reds or antpos, not both.')
+
+        super().__init__(data)
+
+        # Figure out reds
+        if reds is not None:
+            self.reds = reds
+        elif antpos is not None:
+            self.reds = get_reds(antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
+        elif hasattr(self, 'antpos') and self.antpos is not None:
+            self.reds = get_reds(self.antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
+        else:
+            raise ValueError('Must provide reds, antpos, or have antpos available at data.antpos')
+
+        # Map all redundant keys to the same underlying data
+        for red in self.reds:
+            bls_in_data = [bl for bl in red if self.has_key(bl)]
+            if len(bls_in_data) > 1:
+                raise ValueError(f'RedDataContainer can only be constructed with (at most) one baseline per group, \
+                                 but this data has the following redundant baselines: {bls_in_data}')
+            if len(bls_in_data) > 0:
+                # check if baseline is in self._data reversed; if so avoid making many copies by conjugating
+                if bls_in_data[0] in self._data:
+                    for bl in red:
+                        self._data[bl] = self._data[bls_in_data[0]]
+                elif reverse_bl(bls_in_data[0]) in self._data:
+                    for bl in red:
+                        self._data[reverse_bl(bl)] = self._data[reverse_bl(bls_in_data[0])]
