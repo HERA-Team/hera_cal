@@ -5,9 +5,12 @@
 import pytest
 import numpy as np
 import os
+from copy import deepcopy
+from hera_sim.antpos import hex_array
 
-from .. import abscal, datacontainer, io
+from .. import abscal, datacontainer, io, redcal
 from ..data import DATA_PATH
+from ..utils import reverse_bl
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -433,38 +436,40 @@ class TestDataContainerWithRealData(object):
 def test_RedDataContainer():
     # build hexagonal array and data which tells us which baseline it comes from
     antpos = hex_array(4, split_core=False, outriggers=0)
-    reds = get_reds(antpos, pols=['nn', 'ee', 'ne', 'en'])
-    data = DataContainer({red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reds})
+    reds = redcal.get_reds(antpos, pols=['nn', 'ee', 'ne', 'en'])
+    data = datacontainer.DataContainer({red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reds})
 
     # try the several ways of constructing RedDataContainer
-    rdata1 = RedDataContainer(deepcopy(data), reds)
-    rdata2 = RedDataContainer(deepcopy(data), antpos=antpos)
+    rdata1 = datacontainer.RedDataContainer(deepcopy(data), reds)
+    rdata2 = datacontainer.RedDataContainer(deepcopy(data), antpos=antpos)
     data.antpos = antpos
-    rdata3 = RedDataContainer(deepcopy(data))
+    rdata3 = datacontainer.RedDataContainer(deepcopy(data))
     reverse_reds = [[reverse_bl(bl) for bl in red] for red in reds]
-    reverse_data = DataContainer({red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reverse_reds})
-    rdata4 = RedDataContainer(deepcopy(reverse_data), reds)
-    rdata5 = RedDataContainer(deepcopy(reverse_data), reverse_reds)
+    reverse_data = datacontainer.DataContainer({red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reverse_reds})
+    rdata4 = datacontainer.RedDataContainer(deepcopy(reverse_data), reverse_reds)
+    rdata5 = datacontainer.RedDataContainer(deepcopy(reverse_data), reds)
 
     # make sure that the data for a redundant group are being accessed from the same place in memory
-    for rdata in [rdata1, rdata2, rdata3, rdata4, rdata5]:
+    for i, rdata in enumerate([rdata1, rdata2, rdata3, rdata4, rdata5]):
         assert len(rdata.keys()) == len([bl for red in rdata.reds for bl in red])
         for red in rdata.reds:
             for bl in red:
-                assert id(rdata[bl]) == id(rdata[red[0]])
-                assert id(rdata[reverse_bl(bl)]) == id(rdata[reverse_bl(red[0])])
+                if i < 4:
+                    assert id(rdata[bl]) == id(rdata[red[0]])
+                else:
+                    assert id(rdata[reverse_bl(bl)]) == id(rdata[reverse_bl(red[0])])
 
     # test no redundancy information error
     with pytest.raises(ValueError):
-        data = DataContainer({red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reds})
-        rdata = RedDataContainer(data)
+        data = datacontainer.DataContainer({red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reds})
+        rdata = datacontainer.RedDataContainer(data)
 
     # test too much redundancy information error
     with pytest.raises(ValueError):
-        data = DataContainer({red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reds})
-        rdata = RedDataContainer(data, reds=reds, antpos=antpos)
+        data = datacontainer.DataContainer({red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reds})
+        rdata = datacontainer.RedDataContainer(data, reds=reds, antpos=antpos)
 
     # test error where the the data has multiple redundant baselines per group
     with pytest.raises(ValueError):
-        data = DataContainer({bl: np.ones((10, 10)) * (bl[0] + 1.0j * bl[1]) for red in reds for bl in red})
-        rdata = RedDataContainer(data, reds)
+        data = datacontainer.DataContainer({bl: np.ones((10, 10)) * (bl[0] + 1.0j * bl[1]) for red in reds for bl in red})
+        rdata = datacontainer.RedDataContainer(data, reds)

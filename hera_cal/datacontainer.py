@@ -525,12 +525,14 @@ class RedDataContainer(DataContainer):
         # Figure out reds
         if reds is not None:
             self.reds = reds
-        elif antpos is not None:
-            self.reds = get_reds(antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
-        elif hasattr(self, 'antpos') and self.antpos is not None:
-            self.reds = get_reds(self.antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
         else:
-            raise ValueError('Must provide reds, antpos, or have antpos available at data.antpos')
+            from .redcal import get_reds
+            if antpos is not None:
+                self.reds = get_reds(antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
+            elif hasattr(self, 'antpos') and self.antpos is not None:
+                self.reds = get_reds(self.antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
+            else:
+                raise ValueError('Must provide reds, antpos, or have antpos available at data.antpos')
 
         # Map all redundant keys to the same underlying data
         for red in self.reds:
