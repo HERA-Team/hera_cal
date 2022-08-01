@@ -4005,7 +4005,7 @@ def post_redcal_abscal_argparser():
     a.add_argument("--phs_conv_crit", default=1e-6, type=float, help="convergence criterion for updates to iterative phase calibration that compares them to all 1.0s.")
     a.add_argument("--clobber", default=False, action="store_true", help="overwrites existing abscal calfits file at the output path")
     a.add_argument("--verbose", default=False, action="store_true", help="print calibration progress updates")
-    a.add_argument("--skip_abs_amp_lincal", defualt=False, action="store_true", help="finish calibration with an unbiased amplitude lincal step")
+    a.add_argument("--skip_abs_amp_lincal", default=False, action="store_true", help="finish calibration with an unbiased amplitude lincal step")
     a.add_argument("--write_delta_gains", default=False, action="store_true", help="Write degenerate abscal component of gains separately.")
     a.add_argument("--output_file_delta", type=str, default=None, help="Filename to write delta gains too.")
     args = a.parse_args()
