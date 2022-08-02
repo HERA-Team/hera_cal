@@ -761,8 +761,11 @@ class Test_HERADataFastReader(object):
     def test_init(self):
         hd = io.HERADataFastReader(self.uvh5_1)
         assert hd.filepaths == [self.uvh5_1]
+        assert hd.antpos is not None
+
+        hd = io.HERADataFastReader(self.uvh5_1, read_metadata=False)
+        assert hd.filepaths == [self.uvh5_1]
         assert hd.antpos is None
-        assert hd.times_by_bl is None
 
     def test_read_data(self):
         rv = io.read_hera_hdf5([self.uvh5_1])
@@ -779,7 +782,7 @@ class Test_HERADataFastReader(object):
 
     def test_comp_to_HERAData(self):
         for infile in ([self.uvh5_1], [self.uvh5_1, self.uvh5_2], self.uvh5_h4c):
-            hd = io.HERADataFastReader(infile)
+            hd = io.HERADataFastReader(infile, read_metadata=False)
             d, f, n = hd.read(check=True)
             hd2 = io.HERAData(infile)
             d2, f2, n2 = hd2.read()
@@ -807,6 +810,29 @@ class Test_HERADataFastReader(object):
                     np.testing.assert_array_equal(dc1.times_by_bl[ap], dc2.times_by_bl[ap])
                 for ap in dc1.lsts_by_bl:
                     np.testing.assert_allclose(dc1.lsts_by_bl[ap], dc2.lsts_by_bl[ap])
+
+        # compare metadata stored in hd object
+        for infile in ([self.uvh5_1], self.uvh5_h4c):
+            hd1 = io.HERADataFastReader(infile)
+            d, f, n = hd.read(check=True)
+            hd2 = io.HERAData(infile)
+            d2, f2, n2 = hd2.read()
+            np.testing.assert_array_equal(hd1.freqs, hd2.freqs)
+            np.testing.assert_array_equal(hd1.times, hd2.times)
+            np.testing.assert_allclose(hd1.lsts, hd2.lsts)
+            np.testing.assert_array_equal(hd1.ants, hd2.ants)
+            np.testing.assert_array_equal(hd1.data_ants, hd2.data_ants)
+            np.testing.assert_array_equal(hd1.pols, hd2.pols)
+            np.testing.assert_array_equal(hd1.antpairs, hd2.antpairs)
+            np.testing.assert_array_equal(hd1.bls, hd2.bls)
+            for ant in hd1.antpos:
+                np.testing.assert_array_almost_equal(hd1.antpos[ant] - hd2.antpos[ant], 0)
+            for ant in hd1.data_antpos:
+                np.testing.assert_array_almost_equal(hd1.antpos[ant] - hd2.antpos[ant], 0)
+            for ap in hd1.times_by_bl:
+                np.testing.assert_array_equal(hd1.times_by_bl[ap], hd2.times_by_bl[ap])
+            for ap in hd1.lsts_by_bl:
+                np.testing.assert_allclose(hd1.lsts_by_bl[ap], hd2.lsts_by_bl[ap])
 
     def test_errors(self):
         hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
