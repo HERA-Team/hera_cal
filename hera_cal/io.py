@@ -1215,19 +1215,32 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
 class HERADataFastReader():
     '''Wrapper class around read_hera_hdf5 meant to mimic the functionality of HERAData for drop-in replacement.'''
 
-    def __init__(self, input_data):
+    def __init__(self, input_data, read_metadata=True, check=False, skip_lsts=False):
         '''Instantiates a HERADataFastReader object. Only supports reading uvh5 files, not writing them.
         Does not support BDA and only supports patial i/o along baselines and polarization axes.
 
         Arguments:
             input_data: path or list of paths to uvh5 files.
+            read_metadata (bool, True): reads metadata from file and stores it internally to try to match HERAData
+            check (bool, False): run sanity checks to make sure files match.
+            skip_lsts (bool, False): save time by not computing LSTs from JDs
         '''
         # parse input_data as filepath(s)
         self.filepaths = _parse_input_files(input_data, name='input_data')
 
-        # initialize metatadata to None to match HERAData
+        # load metadata only
+        rv = {'info': {}}
+        if read_metadata:
+            rv = read_hera_hdf5(self.filepaths, read_data=False, read_flags=False, read_nsamples=False, check=False)
+            self._adapt_metadata(rv['info'], skip_lsts=skip_lsts)
+
+        # update metadata internally
+        self.info = rv['info']
         for meta in HERAData.HERAData_metas:
-            setattr(self, meta, None)
+            if meta in rv['info']:
+                setattr(self, meta, rv['info'][meta])
+            else:
+                setattr(self, meta, None)
 
         # create functions that error informatively when trying to use standard HERAData/UVData methods
         for funcname in list(dir(HERAData)):
@@ -1236,6 +1249,22 @@ class HERADataFastReader():
             if funcname in ['read', '_make_datacontainer', '_HERAData_error']:
                 continue  # don't overwrite functions with errors that we actually use
             setattr(self, funcname, self._HERAData_error)
+
+    def _adapt_metadata(self, info_dict, skip_lsts=False):
+        '''Updates metadata from read_hera_hdf5 to better match HERAData. Updates info_dict in place.'''
+        info_dict['data_ants'] = sorted(info_dict['data_ants'])
+        info_dict['antpairs'] = sorted(info_dict['bls'])
+        info_dict['bls'] = sorted(set([ap + (pol, ) for ap in info_dict['antpairs'] for pol in info_dict['pols']]))
+        XYZ = XYZ_from_LatLonAlt(info_dict['latitude'] * np.pi / 180, info_dict['longitude'] * np.pi / 180, info_dict['altitude'])
+        enu_antpos = ENU_from_ECEF(np.array([antpos for ant, antpos in info_dict['antpos'].items()]) + XYZ,
+                                   info_dict['latitude'] * np.pi / 180, info_dict['longitude'] * np.pi / 180, info_dict['altitude'])
+        info_dict['antpos'] = {ant: enu for enu, ant in zip(enu_antpos, info_dict['antpos'])}
+        info_dict['data_antpos'] = {ant: info_dict['antpos'][ant] for ant in info_dict['data_ants']}
+        info_dict['times'] = np.unique(info_dict['times'])
+        info_dict['times_by_bl'] = {ap: info_dict['times'] for ap in info_dict['antpairs']}
+        if not skip_lsts:
+            info_dict['lsts'] = JD2LST(info_dict['times'], info_dict['latitude'], info_dict['longitude'], info_dict['altitude'])
+            info_dict['lsts_by_bl'] = {ap: info_dict['lsts'] for ap in info_dict['antpairs']}
 
     def _HERAData_error(self, *args, **kwargs):
         raise NotImplementedError('HERADataFastReader does not support this method. Try HERAData instead.')
@@ -1265,26 +1294,7 @@ class HERADataFastReader():
         rv = read_hera_hdf5(self.filepaths, bls=bls, pols=pols, full_read_thresh=full_read_thresh,
                             read_data=read_data, read_flags=read_flags, read_nsamples=read_nsamples,
                             check=check, dtype=dtype, verbose=verbose)
-
-        # extra metadata calculations
-        rv['info']['antpairs'] = rv['info']['bls']
-        rv['info']['bls'] = set(bl for key in ['data', 'flags', 'nsamples'] for bl in rv.get(key, {}).keys())
-        XYZ = XYZ_from_LatLonAlt(rv['info']['latitude'] * np.pi / 180, rv['info']['longitude'] * np.pi / 180, rv['info']['altitude'])
-        enu_antpos = ENU_from_ECEF(np.array([antpos for ant, antpos in rv['info']['antpos'].items()]) + XYZ,
-                                   rv['info']['latitude'] * np.pi / 180, rv['info']['longitude'] * np.pi / 180, rv['info']['altitude'])
-        rv['info']['antpos'] = {ant: enu for enu, ant in zip(enu_antpos, rv['info']['antpos'])}
-        rv['info']['data_antpos'] = {ant: rv['info']['antpos'][ant] for ant in rv['info']['data_ants']}
-        rv['info']['times'] = np.unique(rv['info']['times'])
-        rv['info']['times_by_bl'] = {ap: rv['info']['times'] for ap in rv['info']['antpairs']}
-        if not skip_lsts:
-            rv['info']['lsts'] = JD2LST(rv['info']['times'], rv['info']['latitude'], rv['info']['longitude'], rv['info']['altitude'])
-            rv['info']['lsts_by_bl'] = {ap: rv['info']['lsts'] for ap in rv['info']['antpairs']}
-
-        # update metadata here
-        self.info = rv['info']
-        for meta in HERAData.HERAData_metas:
-            if meta in rv['info']:
-                setattr(self, meta, rv['info'][meta])
+        self._adapt_metadata(rv['info'], skip_lsts=skip_lsts)
 
         # make autocorrleations real by taking the abs, matches UVData._fix_autos()
         if 'data' in rv:
