@@ -15,6 +15,7 @@ from pyuvdata import utils as uvutils
 from astropy import units
 from astropy.io import fits
 import h5py
+import hdf5plugin
 import scipy
 import pickle
 import random
