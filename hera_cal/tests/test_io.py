@@ -671,18 +671,19 @@ class Test_ReadHeraHdf5(object):
         self.uvh5_blt = os.path.join(DATA_PATH, "zen.2459114.60020.sum.downsample_transpose.uvh5")
 
     def test_basic_read(self):
-        rv = io.read_hera_hdf5([self.uvh5_1, self.uvh5_2],
-                               read_flags=False, read_nsamples=False, verbose=True,
-                               dtype=np.complex128, check=True)
-        assert 'info' in rv
-        assert 'data' in rv
-        assert 'flags' not in rv
-        assert 'nsamples' not in rv
-        assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
-        assert rv['info']['times'].size == np.unique(rv['info']['times']).size
-        for bl, data in rv['data'].items():
-            assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
-            assert data.dtype == np.complex128
+        for replace in ['.uvh5', '.new_shape.uvh5']:
+            rv = io.read_hera_hdf5([self.uvh5_1.replace('.uvh5', replace), self.uvh5_2.replace('.uvh5', replace)],
+                                   read_flags=False, read_nsamples=False, verbose=True,
+                                   dtype=np.complex128, check=True)
+            assert 'info' in rv
+            assert 'data' in rv
+            assert 'flags' not in rv
+            assert 'nsamples' not in rv
+            assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
+            assert rv['info']['times'].size == np.unique(rv['info']['times']).size
+            for bl, data in rv['data'].items():
+                assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
+                assert data.dtype == np.complex128
 
     def test_broken_read(self):
         with pytest.raises(ValueError):
@@ -716,12 +717,13 @@ class Test_ReadHeraHdf5(object):
             assert data.dtype == np.float32
 
     def test_read_allbls_poltranspose(self):
-        rv = io.read_hera_hdf5([self.uvh5_pol], dtype=np.complex128, verbose=True, check=True)
-        assert 'info' in rv
-        assert 'data' in rv
-        assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
-        for bl, data in rv['data'].items():
-            assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
+        for replace in ['.uvh5', '.new_shape.uvh5']:
+            rv = io.read_hera_hdf5([self.uvh5_pol.replace('.uvh5', replace)], dtype=np.complex128, verbose=True, check=True)
+            assert 'info' in rv
+            assert 'data' in rv
+            assert len(rv['info']['bls']) * len(rv['info']['pols']) == len(rv['data'])
+            for bl, data in rv['data'].items():
+                assert data.shape == (rv['info']['times'].size, rv['info']['freqs'].size)
 
     def test_read_one_bl(self):
         rv = io.read_hera_hdf5([self.uvh5_1], verbose=True, check=True,
@@ -744,12 +746,13 @@ class Test_ReadHeraHdf5(object):
         assert bl in rv['data']
 
     def test_read_bl_then_time_poltranpose(self):
-        rv = io.read_hera_hdf5([self.uvh5_blt], verbose=True, bls=[(24, 26)], check=True,
-                               read_data=True, read_flags=True, read_nsamples=True)
-        assert len(rv['data']) == 4
-        assert (24, 26, 'ee') in rv['data']
-        assert rv['data'][(24, 26, 'ee')].shape == (2, 1536)
-        assert len(rv['info']['times']) == 2
+        for replace in ['.uvh5', '.new_shape.uvh5']:
+            rv = io.read_hera_hdf5([self.uvh5_blt.replace('.uvh5', replace)], verbose=True, bls=[(24, 26)], check=True,
+                                   read_data=True, read_flags=True, read_nsamples=True)
+            assert len(rv['data']) == 4
+            assert (24, 26, 'ee') in rv['data']
+            assert rv['data'][(24, 26, 'ee')].shape == (2, 1536)
+            assert len(rv['info']['times']) == 2
 
 
 class Test_HERADataFastReader(object):
