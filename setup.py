@@ -49,6 +49,8 @@ setup_args = {
     'install_requires': [
         'numpy>=1.10',
         'scipy',
+        'h5py',
+        'hdf5plugin',
         'astropy',
         'astropy-healpix',
         'pyuvdata',
