@@ -1069,7 +1069,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 if len(h['freq_array'].shape) == 2:  # old pyuvdata shapes with spectral windows
                     info['freqs'] = h['freq_array'][0]  # make 1D instead of 2D
                 else:
-                    info['freqs'] = h['freq_array']  # make 1D instead of 2D
+                    info['freqs'] = h['freq_array'][()]  # make 1D instead of 2D
                 nfreqs = info['freqs'].size
                 pol_array = h['polarization_array'][()]
                 npols = pol_array.size
