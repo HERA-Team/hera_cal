@@ -410,9 +410,9 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
 
         # fill nans
         d_nan = np.isnan(d_avg)
-        d_avg[d_nan] = 1.0
+        d_avg[d_nan] = 0.0 + 0.0j
         f_min[d_nan] = True
-        d_std[d_nan] = 1.0
+        d_std[d_nan] = 0.0 + 0.0j
         d_num[d_nan] = 0.0
 
         # insert into dictionaries
