@@ -624,7 +624,7 @@ def test_red_average():
     davg = np.sum(d * w, axis=0) / np.sum(w, axis=0).clip(1e-10, np.inf)
     # set flagged data to 1.0+0.0j
     flagged_f = np.all(w == 0, axis=0)
-    davg[flagged_f] = 1.0
+    davg[flagged_f] = 0.0
     assert np.isclose(hda.get_data(blkey), davg).all()
 
     # try where all weights are unity but user provided flags are preserved.
