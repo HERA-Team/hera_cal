@@ -1275,6 +1275,7 @@ class HERADataFastReader():
         info_dict['data_antpos'] = {ant: info_dict['antpos'][ant] for ant in info_dict['data_ants']}
         info_dict['times'] = np.unique(info_dict['times'])
         info_dict['times_by_bl'] = {ap: info_dict['times'] for ap in info_dict['antpairs']}
+        info_dict['times_by_bl'].update({(a2, a1): info_dict['times'] for (a1, a2) in info_dict['antpairs']})
         if not skip_lsts:
             info_dict['lsts'] = JD2LST(info_dict['times'], info_dict['latitude'], info_dict['longitude'], info_dict['altitude'])
             info_dict['lsts_by_bl'] = {ap: info_dict['lsts'] for ap in info_dict['antpairs']}
