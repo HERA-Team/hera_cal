@@ -37,6 +37,8 @@ _KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').v
 # Define characters that appear in all Jones polarization strings. Nominally {'j'}.
 _KEY_JONES_CHARS = set([c.lower() for val in JONES_NUM2STR_DICT.values() for c in val
                        if np.all([c in v for v in JONES_NUM2STR_DICT.values()])])
+# set of characters that appear in either _KEY_CARDINAL_CHARS or _KEY_JONES_CHARS
+_KEY_POL_CHARS = _KEY_CARDINAL_CHARS | _KEY_JONES_CHARS
 
 # Get set of standard visibility polarization strings. Nominally {'rr', 'xy', 'ne', 'nn', 'lr', 'en', 'yx', 'xx', 'ee', 'rl', 'll', 'yy'}
 _VISPOLS = set([pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0 and pol == polnum2str(polstr2num(pol))])
@@ -59,7 +61,7 @@ for antpol in copy.deepcopy(_ANTPOLS):
 
 def _is_cardinal(polstr):
     '''Returns true if all characters in polstr match those in _KEY_CARDINAL_CHARS or _KEY_JONES_CHARS.'''
-    return np.all([(c.lower() in _KEY_CARDINAL_CHARS) or (c.lower() in _KEY_JONES_CHARS) for c in polstr])
+    return set(polstr.lower()).issubset(_KEY_POL_CHARS)
 
 
 def _comply_antpol(antpol):
