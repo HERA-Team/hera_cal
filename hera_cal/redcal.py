@@ -1542,7 +1542,8 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6,
                           fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
-                          check_after=50, gain=.4, max_dims=2, fc_min_vis_per_ant=None):
+                          check_after=50, gain=.4, max_dims=2, fc_min_vis_per_ant=None,
+                          prior_firstcal=None, prior_sol=None):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -1570,6 +1571,10 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
             redundant baselines. Antennas will be excluded from reds to satisfy this.
         fc_min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
             delay and phase offsets in firstcal. If None, all visibilities will be included.
+        prior_firstcal: Optional dictionary of gains keyed by ant-pol tuples. If not default None,
+            skips performing firstcal and substitutes this for 'g_firstcal' in the returned dictionary.
+        prior_sol: Optional dictionary of both gain keys and redundant visibility solutions. If not
+            default None, this will be used to skip logcal and go straight into omnical.
 
     Returns a dictionary of results with the following keywords:
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
@@ -1597,18 +1602,25 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         freqs = data.freqs
     if times_by_bl is None:
         times_by_bl = data.times_by_bl
+    red_bls = [bl for red in reds for bl in red if bl in data]
 
-    # perform firstcal
-    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit,
-                                                  fc_min_vis_per_ant=fc_min_vis_per_ant)
+    # perform firstcal if it hasn't already been done
+    if prior_firstcal is None:
+        rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit,
+                                                      fc_min_vis_per_ant=fc_min_vis_per_ant)
+    else:
+        rv['fc_meta'], rv['g_firstcal'] = None, prior_firstcal
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
-    # perform logcal and omnical
-    _, log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
-    make_sol_finite(log_sol)
-    dts_by_bl = {bl: infer_dt(times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in data.keys()}
-    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in data.keys()}
-    rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
+    # perform logcal
+    if prior_sol is None:
+        _, prior_sol = rc.logcal(data, sol0=rv['g_firstcal'])
+        make_sol_finite(prior_sol)
+
+    # perform omnical
+    dts_by_bl = {bl: infer_dt(times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in red_bls}
+    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in red_bls}
+    rv['omni_meta'], omni_sol = rc.omnical(data, prior_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
                                            check_every=check_every, check_after=check_after, gain=gain)
 
     # update omnical flags and then remove degeneracies
