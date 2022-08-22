@@ -1459,6 +1459,31 @@ class TestRunMethods(object):
             for val in rv['chisq'].values():
                 assert val.shape == (nTimes, nFreqs)
 
+    def test_redundantly_calibrate_with_priors(self):
+        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
+        data, flags, nsamples = hd.read()
+        nTimes, nFreqs = len(hd.times), len(hd.freqs)
+        pol_load_list = om._get_pol_load_list(hd.pols, pol_mode='2pol')
+        ant_nums = np.unique(np.append(hd.ant_1_array, hd.ant_2_array))
+        all_reds = om.get_reds({ant: hd.antpos[ant] for ant in ant_nums}, pol_mode='2pol',
+                               pols=set([pol for pols in pol_load_list for pol in pols]))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            rv = om.redundantly_calibrate(data, all_reds)
+            rv2 = om.redundantly_calibrate(data, all_reds, prior_firstcal=deepcopy(rv['g_firstcal']))
+            rv3 = om.redundantly_calibrate(data, all_reds, prior_firstcal=deepcopy(rv['g_firstcal']),
+                                           prior_sol={**deepcopy(rv['g_omnical']), **deepcopy(rv['v_omnical'])})
+
+        for ant in rv['g_omnical']:
+            flags = rv['gf_omnical'][ant]
+            np.testing.assert_array_equal(rv['g_omnical'][ant][~flags], rv2['g_omnical'][ant][~flags])
+            assert np.allclose(rv['g_omnical'][ant][~flags], rv3['g_omnical'][ant][~flags], atol=np.inf, rtol=1e-8)
+
+        for bl in rv['v_omnical']:
+            flags = rv['vf_omnical'][bl]
+            np.testing.assert_array_equal(rv['v_omnical'][bl][~flags], rv2['v_omnical'][bl][~flags])
+            assert np.allclose(rv['v_omnical'][bl], rv3['v_omnical'][bl], atol=np.inf, rtol=1e-8)
+
     def test_expand_omni_sol(self):
         # noise free test of dead antenna resurrection
         ex_ants = [0, 13, 2, 18]
