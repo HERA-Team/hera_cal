@@ -11,7 +11,7 @@ from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
 
 class DataContainer:
     """Dictionary-like object that abstracts away the pol/ant pair ordering of data
-    dictionaries and the the polarization case (i.e. 'nn' vs. 'NN'). Keys are in
+    dictionaries and the polarization case (i.e. 'nn' vs. 'NN'). Keys are in
     the form (0,1,'nn'). Does not know about x_orientation, which means that
     'xx' and 'nn' are always treated as different polarizations.
 
@@ -60,6 +60,7 @@ class DataContainer:
             self._antpairs = set([k[:2] for k in self._data.keys()])
             self._pols = set([k[-1] for k in self._data.keys()])
 
+            # XXX is DataContainer the right home for this metadata?
             # placeholders for metadata (or get them from data, if possible)
             for attr in ['ants', 'data_ants', 'antpos', 'data_antpos',
                          'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
@@ -103,6 +104,7 @@ class DataContainer:
         return len(self._data)
 
     def __getitem__(self, key):
+        # XXX propose this only return data or {(i,j,pol): data} dicts, not {(i,j): data} or {pol: data}
         '''Returns the data corresponding to the key. If the key is just a polarization,
         returns all baselines for that polarization. If the key is just a baseline,
         returns all polarizations for that baseline. If the key is of the form (0,1,'nn'),
@@ -200,6 +202,7 @@ class DataContainer:
         return DataContainer(newD)
 
     def __add__(self, D):
+        # XXX are add, sub, mult, etc. actually useful?
         '''
         Addition operator overload.
 

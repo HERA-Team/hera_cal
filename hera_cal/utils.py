@@ -226,6 +226,7 @@ def history_string(notes=""):
     return history
 
 
+# XXX this is a different animal than, e.g., comply_bl. separate file for analytic utilities?
 def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0):
     """Get delay of visibility across band using FFT and Quinn's Second Method to fit the delay and phase offset.
     Arguments:
@@ -280,6 +281,7 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     return dlys, offset
 
 
+# XXX this is a different animal than, e.g., comply_bl. separate file for analytic utilities?
 def interp_peak(data, method='quinn', reject_edges=False):
     """
     Spectral interpolation for finding peak and amplitude of data along last axis.
@@ -371,6 +373,7 @@ def echo(message, type=0, verbose=True):
             print("-" * 40)
 
 
+# XXX deprecated or move to another file.
 if AIPY:
     class AntennaArray(aipy.pol.AntennaArray):
         def __init__(self, *args, **kwargs):
@@ -418,6 +421,7 @@ if AIPY:
             return changed
 
 
+# XXX deprecated or move to another file.
 def get_aa_from_uv(uvd, freqs=[0.15]):
     '''
     Generate an AntennaArray object from a pyuvdata UVData object.
@@ -496,6 +500,7 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     return aa
 
 
+# XXX constants for default HERA lat, lon, alt
 def JD2LST(JD, latitude=-30.721526120689507, longitude=21.428303826863015, altitude=1051.690000018105):
     """
     Input:
@@ -533,6 +538,7 @@ def JD2LST(JD, latitude=-30.721526120689507, longitude=21.428303826863015, altit
         return LST[0]
 
 
+# XXX constants for default HERA lat, lon, alt
 def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30.721526120689507,
            longitude=21.428303826863015, altitude=1051.690000018105):
     """
@@ -613,6 +619,7 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
         return jd_array[0]
 
 
+# XXX constants for default HERA lat, lon, alt
 def JD2RA(JD, latitude=-30.721526120689507, longitude=21.428303826863015, epoch='current'):
     """
     Convert from Julian date to Equatorial Right Ascension at zenith
@@ -673,6 +680,7 @@ def JD2RA(JD, latitude=-30.721526120689507, longitude=21.428303826863015, epoch=
         return RA[0]
 
 
+# XXX constants for default HERA lat, lon, alt
 def get_sun_alt(jds, latitude=-30.721526120689507, longitude=21.428303826863015):
     """
     Given longitude and latitude, get the Solar alittude at a given time.
@@ -771,6 +779,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
     uvc.write_calfits(output_fname, clobber=True)
 
 
+# XXX constants for default HERA lat, lon, alt
 def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, array=False):
     """
     Shift phase center of each integration in data by amount dlst [radians] along right ascension axis.
@@ -868,6 +877,10 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, a
         return data
 
 
+# XXX model, gains, and reds should be bundled as Solution
+# XXX are chisq, chisq_per_ant necessary?
+# XXX do we need an object that holds nObs & nObs_per_ant?
+# XXX add ability to restrict blp keys used, and whether chisq_per_ant is built
 def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_antpol=False,
           reds=None, chisq=None, nObs=None, chisq_per_ant=None, nObs_per_ant=None):
     """Computes chi^2 defined as:
@@ -943,6 +956,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
         data_wgts = {bl: np.ones_like(data[bl], dtype=float) for bl in data.keys()}
 
     # Expand model to include all bl in reds, assuming that model has the first bl in the redundant group
+    # XXX use Solution to avoid data copying
     if reds is not None:
         model = copy.deepcopy(model)
         for red in reds:
@@ -951,6 +965,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
                     model[bl] = model[red[0]]
 
     for bl in data.keys():
+        # XXX generally restructure to use Solutions
         ap1, ap2 = split_pol(bl[2])
         # make that if split_by_antpol is true, the baseline is not cross-polarized
         if bl in model and bl in data_wgts and (not split_by_antpol or ap1 == ap2):
@@ -960,6 +975,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
             if gains is not None:
                 model_here = model[bl] * gains[ant1] * np.conj(gains[ant2])
             else:
+                # XXX why copy?
                 model_here = copy.deepcopy(model[bl])
 
             # include gain flags in data weights
@@ -967,6 +983,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
             if gain_flags is not None:
                 wgts = data_wgts[bl] * ~(gain_flags[ant1]) * ~(gain_flags[ant2])
             else:
+                # XXX why copy?
                 wgts = copy.deepcopy(data_wgts[bl])
 
             # calculate chi^2
@@ -998,6 +1015,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     return chisq, nObs, chisq_per_ant, nObs_per_ant
 
 
+# XXX is this used? does it belong in hera_qm?
 def per_antenna_modified_z_scores(metric):
     """Compute modified Z-Score over antennas for each antenna polarization.
     This function computes the per-pol modified z-score of the given metric
@@ -1028,6 +1046,7 @@ def per_antenna_modified_z_scores(metric):
     return zscores
 
 
+# XXX again might belong elsewhere
 def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
                 kernel=None, Nmirror=0, optimizer=None, xthin=None):
     """
@@ -1164,8 +1183,9 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
     return ypredict
 
 
+# XXX if needed, should become a method of Solutions
 def gain_relative_difference(old_gains, new_gains, flags, denom=None):
-    """Compuate relative gain differences between two sets of calibration solutions
+    """Compute relative gain differences between two sets of calibration solutions
     (e.g. abscal and smooth_cal), as well as antenna-averaged relative gain differences.
 
     Arguments:
@@ -1206,6 +1226,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     return relative_diff, avg_relative_diff
 
 
+# XXX why here and not in redcal?
 def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 wgts=None, flags=None, nsamples=None,
                 red_bl_keys=None,
@@ -1417,6 +1438,7 @@ def top2eq_m(ha, dec):
     return mat
 
 
+# XXX move to redcal
 def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
     """Chunk list of baselines by redundant group constrained by number of baselines.
 
@@ -1464,6 +1486,7 @@ def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
     return baseline_chunks
 
 
+# XXX necessary?
 def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=False):
     """Utility function for selecting spw_ranges and writing out
 
@@ -1487,6 +1510,7 @@ def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=Fa
     hd.write_uvh5(outputfilename, clobber=clobber)
 
 
+# XXX necessary?
 def select_spw_ranges_argparser():
     '''Arg parser for commandline operation of select_spw_ranges.'''
     def list_of_int_tuples(v):
