@@ -11,7 +11,7 @@ from itertools import chain
 
 from . import utils
 from .noise import predict_noise_variance_from_autos, infer_dt
-from .datacontainer import DataContainer
+from .datacontainer import DataContainer, RedDataContainer
 from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores, red_average
 from .io import HERAData, HERACal, write_cal, save_redcal_meta
 from .apply_cal import calibrate_in_place
