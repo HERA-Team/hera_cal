@@ -324,7 +324,6 @@ def reds_to_antpos(reds, tol=1e-10):
 def get_gains_and_vis_from_sol(sol):
     """Splits a sol dictionary into len(key)==2 entries, taken to be gains,
     and len(key)==3 entries, taken to be model visibrilities."""
-
     g = {key: val for key, val in sol.items() if len(key) == 2}
     v = {key: val for key, val in sol.items() if len(key) == 3}
     return g, v
@@ -344,7 +343,7 @@ def make_sol_finite(sol):
 class RedSol():
     '''Object for containing solutions to redundant calibraton, namely gains and
     unique-baseline visibilities, along with a variety of convenience methods.'''
-    def __init__(self, reds, gains=None, vis=None, sol_dict=None):
+    def __init__(self, reds, gains={}, vis={}, sol_dict={}):
         '''Initializes RedSol object.
 
         Arguments:
@@ -355,11 +354,11 @@ class RedSol():
                 to complex numpy arrays of visibilities of size (Ntimes, Nfreqs).
                 May only contain at most one visibility per unique baseline group.
             sol_dict: optional dictionary. Maps both gain keys and visibilitity keys
-                to numpy arrays. Cannot be provided if gains or vis is provided.
+                to numpy arrays. Must be empty if gains or vis is not.
         '''
-        if sol_dict is not None:
-            if gains is not None or vis is not None:
-                raise ValueError('If sol_dict is specified, neither gains nor vis can be.')
+        if len(sol_dict) > 0:
+            if (len(gains) > 0) or (len(vis) > 0):
+                raise ValueError('If sol_dict is not empty, both gains and vis must be.')
             self.gains, self.vis = get_gains_and_vis_from_sol(sol_dict)
         else:
             self.gains = gains
