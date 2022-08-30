@@ -7,11 +7,12 @@ from copy import deepcopy
 import argparse
 import os
 import linsolve
+from itertools import chain
 
 from . import utils
 from .noise import predict_noise_variance_from_autos, infer_dt
 from .datacontainer import DataContainer
-from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores
+from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores, red_average
 from .io import HERAData, HERACal, write_cal, save_redcal_meta
 from .apply_cal import calibrate_in_place
 
@@ -338,6 +339,101 @@ def make_sol_finite(sol):
             sol[k][~np.isfinite(sol[k])] = np.zeros_like(sol[k][~np.isfinite(sol[k])])
         elif len(k) == 2:  # gains
             sol[k][~np.isfinite(sol[k])] = np.ones_like(sol[k][~np.isfinite(sol[k])])
+
+
+class RedSol():
+    '''Object for containing solutions to redundant calibraton, namely gains and
+    unique-baseline visibilities, along with a variety of convenience methods.'''
+    def __init__(self, reds, gains=None, vis=None, sol_dict=None):
+        '''Initializes RedSol object.
+
+        Arguments:
+            reds: list of lists of redundant baseline tuples, e.g. (0, 1, 'ee')
+            gains: optional dictionary. Maps keys like (1, 'Jee') to complex
+                numpy arrays of gains of size (Ntimes, Nfreqs).
+            vis: optional dictionary or DataContainer. Maps keys like (0, 1, 'ee')
+                to complex numpy arrays of visibilities of size (Ntimes, Nfreqs).
+                May only contain at most one visibility per unique baseline group.
+            sol_dict: optional dictionary. Maps both gain keys and visibilitity keys
+                to numpy arrays. Cannot be provided if gains or vis is provided.
+        '''
+        if sol_dict is not None:
+            if gains is not None or vis is not None:
+                raise ValueError('If sol_dict is specified, neither gains nor vis can be.')
+            self.gains, self.vis = get_gains_and_vis_from_sol(sol_dict)
+        else:
+            self.gains = gains
+            self.vis = vis
+        self.reds = reds
+        self.vis = RedDataContainer(self.vis, reds=self.reds)
+
+    def clear(self):
+        '''Resets self.reds, self.gains, and self.vis to None.'''
+        self.reds = None
+        self.gains = None
+        self.vis = None
+
+    def __getitem__(self, key):
+        '''Get underlying gain or visibility, depending on the length of the key.'''
+        if len(key) == 3:  # visibility key
+            return self.vis[key]
+        if len(key) == 2:  # antenna-pol key
+            return self.gains[key]
+        else:
+            raise KeyError('RedSol keys should be length-2 (for gains) or length-3 (for visibilities).')
+
+    def __setitem__(self, key, value):
+        '''Set underlying gain or visibility, depending on the length of the key.'''
+        if len(key) == 3:  # visibility key
+            self.vis[key] = value
+        if len(key) == 2:  # antenna-pol key
+            self.gains[key] = value
+        else:
+            raise KeyError('RedSol keys should be length-2 (for gains) or length-3 (for visibilities).')
+
+    def __contains__(self, key):
+        '''Returns True if key is a gain key or a redundant visbility key, False otherwise.'''
+        return (key in self.gains) or (key in self.vis)
+
+    def __iter__(self):
+        '''Iterate over gain keys, then iterate over visibility keys.'''
+        return chain(self.gains, self.vis)
+
+    def make_sol_finite(self):
+        '''Replaces nans and infs in this object, see redcal.make_sol_finite() for details.'''
+        make_sol_finite(self)
+
+    def red_average(self, data, flags=None, nsamples=None, gain_flags=None, skip_calibration=False):
+        '''Performs redundant averaging of data using reds and gains stored in this RedSol object.
+
+        Arguments:
+            data: DataContainer containing visibilities to redundantly average.
+            flags: optional DataContainer marking visibilities as flagged and therefore excluded from averaging.
+            nsamples: optional DataContainer containing the number of samples in each visibility. Used for
+                weighting data when averaging and for figuring out the number of samples in each baseline group.
+            gain_flags: optional dictionary used for per-antenna, per-time-and-frequency flagging when calibrating.
+            skip_calibration: Do not calibrate data with self.gains and gain_flags, go right to redundant averaging.
+
+        Returns:
+            red_data:
+            red_flags: If flags is provided, a  final flagging pattern after redundant
+            red_nsamples:
+
+        '''
+        # make copies of data, flags, and nsamples, which are then modified and downselected in place
+        red_data = deepcopy(data)
+        red_flags = deepcopy(flags)
+        red_nsamples = deepcopy(nsamples)
+
+        # perform calibration unless otherwise specified
+        if (self.gains is not None) and not skip_calibration:
+            calibrate_in_place(red_data, self.gains, data_flags=red_flags, cal_flags=gain_flags)
+
+        # perform redundant averaging and downselecgiton in place and return result as RedDataContainer
+        red_average(red_data, self.reds, bl_tol=bl_tol, flags=red_flags, nsamples=red_nsamples, inplace=True)
+        return (RedDataContainer(red_data, reds=self.reds),
+                RedDataContainer(red_flags, reds=self.reds),
+                RedDataContainer(red_nsamples, reds=self.reds))
 
 
 def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8)):
