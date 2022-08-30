@@ -460,6 +460,7 @@ def test_RedDataContainer():
                 assert(rdata.get_ubl_key(bl) in red)
                 assert(rdata.has_key(rdata.get_ubl_key(bl)))
                 assert set(rdata.get_red(bl)) == set(red)
+                assert bl in rdata
             val_here = deepcopy(rdata[red[0]])
             rdata[red[0]] *= 2
             for bl in red:
