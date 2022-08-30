@@ -320,6 +320,26 @@ def reds_to_antpos(reds, tol=1e-10):
     return antpos
 
 
+def get_gains_and_vis_from_sol(sol):
+    """Splits a sol dictionary into len(key)==2 entries, taken to be gains,
+    and len(key)==3 entries, taken to be model visibrilities."""
+
+    g = {key: val for key, val in sol.items() if len(key) == 2}
+    v = {key: val for key, val in sol.items() if len(key) == 3}
+    return g, v
+
+
+def make_sol_finite(sol):
+    '''Replaces nans and infs in solutions, which are usually the result of visibilities that are
+    identically equal to 0. Modifies sol (which is a dictionary with gains and visibilities) in place,
+    replacing visibilities with 0.0s and gains with 1.0s'''
+    for k in sol.keys():
+        if len(k) == 3:  # visibilities
+            sol[k][~np.isfinite(sol[k])] = np.zeros_like(sol[k][~np.isfinite(sol[k])])
+        elif len(k) == 2:  # gains
+            sol[k][~np.isfinite(sol[k])] = np.ones_like(sol[k][~np.isfinite(sol[k])])
+
+
 def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8)):
     '''This function looks at all redundant baselines and sees whether they mostly agree with the median
     baseline or whether they look closer to being off by pi radians. The ones close to the median are the
@@ -582,26 +602,6 @@ def parse_pol_mode(reds):
             return 'unrecognized_pol_mode'
     else:
         return 'unrecognized_pol_mode'
-
-
-def get_gains_and_vis_from_sol(sol):
-    """Splits a sol dictionary into len(key)==2 entries, taken to be gains,
-    and len(key)==3 entries, taken to be model visibrilities."""
-
-    g = {key: val for key, val in sol.items() if len(key) == 2}
-    v = {key: val for key, val in sol.items() if len(key) == 3}
-    return g, v
-
-
-def make_sol_finite(sol):
-    '''Replaces nans and infs in solutions, which are usually the result of visibilities that are
-    identically equal to 0. Modifies sol (which is a dictionary with gains and visibilities) in place,
-    replacing visibilities with 0.0s and gains with 1.0s'''
-    for k in sol.keys():
-        if len(k) == 3:  # visibilities
-            sol[k][~np.isfinite(sol[k])] = np.zeros_like(sol[k][~np.isfinite(sol[k])])
-        elif len(k) == 2:  # gains
-            sol[k][~np.isfinite(sol[k])] = np.ones_like(sol[k][~np.isfinite(sol[k])])
 
 
 class OmnicalSolver(linsolve.LinProductSolver):
