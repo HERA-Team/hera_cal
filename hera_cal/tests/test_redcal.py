@@ -293,6 +293,45 @@ class TestMethods(object):
             om._build_polarity_baseline_groups(data, reds, max_rel_angle=np.pi)
 
 
+class TestRedSol(object):
+
+    def test_init(self):
+        NANTS = 18
+        antpos = linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
+        w = dict([(k, 1.) for k in d.keys()])
+        meta, sol = info.logcal(d)
+
+        # construct from sol_dict
+        rs1 = om.RedSol(reds, sol_dict=sol)
+
+        # construct from gains and vis
+        g, v = om.get_gains_and_vis_from_sol(sol)
+        rs2 = om.RedSol(reds, gains=g, vis=v)
+
+        # test that gains and vis are properly separated, also tests getitem and contains
+        for rs in [rs1, rs2]:
+            assert rs.reds == reds
+            for ant in gains:
+                assert ant in rs
+                assert ant in rs.gains
+                np.testing.assert_array_equal(rs[ant], rs.gains[ant])
+                np.testing.assert_array_equal(rs[ant], sol[ant])
+            for bl in true_vis:
+                assert bl in rs
+                assert bl in rs.vis
+                np.testing.assert_array_equal(rs[bl], rs.vis[bl])
+                np.testing.assert_array_equal(rs[bl], sol[bl])
+            for red in rs.reds:
+                for bl in red:
+                    assert bl in rs
+                    assert bl in rs.vis
+                    np.testing.assert_array_equal(rs[bl], rs.vis[bl])
+                    np.testing.assert_array_equal(rs[bl], sol[red[0]])
+
+
 class TestRedundantCalibrator(object):
 
     def test_init(self):
