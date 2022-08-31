@@ -388,6 +388,40 @@ class TestRedSol(object):
                 np.testing.assert_array_equal(False, red_f[bl])
                 np.testing.assert_array_equal(len(red), red_ns[bl])
 
+    def test_len(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): np.ones((1, 1))}, vis={(0, 1, 'ee'): np.ones((1, 1))})
+        assert len(rs) == 3
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): np.ones((1, 1))})
+        assert len(rs) == 2
+        rs = om.RedSol(reds, vis={(0, 1, 'ee'): np.ones((1, 1))})
+        assert len(rs) == 1
+
+    def test_keys(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): np.ones((1, 1))}, vis={(0, 1, 'ee'): np.ones((1, 1))})
+        assert list(rs.keys()) == [(0, 'Jee'), (1, 'Jee'), (0, 1, 'ee')]
+
+    def test_values(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): 2 * np.ones((1, 1))}, vis={(0, 1, 'ee'): 3 * np.ones((1, 1))})
+        np.testing.assert_array_equal(list(rs.values())[0], np.ones((1, 1)))
+        np.testing.assert_array_equal(list(rs.values())[1], 2 * np.ones((1, 1)))
+        np.testing.assert_array_equal(list(rs.values())[2], 3 * np.ones((1, 1)))
+
+    def test_items(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): 2 * np.ones((1, 1))}, vis={(0, 1, 'ee'): 3 * np.ones((1, 1))})
+        items = list(rs.items())
+        assert items[0][0] == (0, 'Jee')
+        np.testing.assert_array_equal(items[0][1], np.ones((1, 1)))
+        assert items[2][0] == (0, 1, 'ee')
+        np.testing.assert_array_equal(items[2][1], 3 * np.ones((1, 1)))
+
 
 class TestRedundantCalibrator(object):
 
