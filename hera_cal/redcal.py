@@ -366,12 +366,6 @@ class RedSol():
         self.reds = reds
         self.vis = RedDataContainer(self.vis, reds=self.reds)
 
-    def clear(self):
-        '''Resets self.reds, self.gains, and self.vis to None.'''
-        self.reds = None
-        self.gains = None
-        self.vis = None
-
     def __getitem__(self, key):
         '''Get underlying gain or visibility, depending on the length of the key.'''
         if len(key) == 3:  # visibility key
