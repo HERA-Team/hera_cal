@@ -1790,12 +1790,14 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
                                            check_every=check_every, check_after=check_after, gain=gain)
 
     # update omnical flags and then remove degeneracies
-    rv['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in omni_sol.gains.items()}
-    rv['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in omni_sol.vis.items()})
-    omni_sol.remove_degen(degen_sol=rv['g_firstcal'], inplace=True)
-    omni_sol.make_sol_finite()
-    rv['v_omnical'] = omni_sol.vis
-    rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in omni_sol.gains.items()}
+    rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(omni_sol)
+    rv['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in rv['g_omnical'].items()}
+    rv['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in rv['v_omnical'].items()})
+    rd_sol = rc.remove_degen(omni_sol, degen_sol=rv['g_firstcal'])
+    make_sol_finite(rd_sol)
+    rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(rd_sol)
+    rv['v_omnical'] = DataContainer(rv['v_omnical'])
+    rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
     rv['chisq'], rv['chisq_per_ant'] = normalized_chisq(data, data_wgts, filtered_reds, rv['v_omnical'], rv['g_omnical'])
