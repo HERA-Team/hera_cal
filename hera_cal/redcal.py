@@ -1287,7 +1287,7 @@ class RedundantCalibrator:
         return complex solutions for antennas and visibilities.
 
         Args:
-            sol: dictionary that contains both visibility and gain solutions in the
+            sol: dictionary (or RedSol) that contains both visibility and gain solutions in the
                 {(ind1,ind2,pol): np.array} and {(index,antpol): np.array} formats respectively
             degen_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
@@ -1295,17 +1295,16 @@ class RedundantCalibrator:
                 Visibilties in degen_sol are ignored.  For logcal/lincal/omnical, putting firstcal
                 solutions in here can help avoid structure associated with phase-wrapping issues.
         Returns:
-            new_sol: sol with degeneracy removal/replacement performed
+            new_sol: RedSol with degeneracy removal/replacement performed
         """
 
         gains, vis = get_gains_and_vis_from_sol(sol)
         if degen_sol is None:
             degen_sol = {key: np.ones_like(val) for key, val in gains.items()}
         new_gains = self.remove_degen_gains(gains, degen_gains=degen_sol, mode='complex')
-        new_sol = deepcopy(vis)
-        calibrate_in_place(new_sol, new_gains, old_gains=gains)
-        new_sol.update(new_gains)
-        return new_sol
+        new_vis = deepcopy(vis)
+        calibrate_in_place(new_vis, new_gains, old_gains=gains)
+        return RedSol(self.reds, gains=new_gains, vis=new_vis)
 
     def count_degens(self, assume_redundant=True):
         """Count the number of degeneracies in this redundant calibrator, given the redundancies and the pol_mode.
