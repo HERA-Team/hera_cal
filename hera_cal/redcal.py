@@ -402,28 +402,37 @@ class RedSol():
         Arguments:
             data: DataContainer containing visibilities to redundantly average.
             flags: optional DataContainer marking visibilities as flagged and therefore excluded from averaging.
+                If not provided, it is assumed that all data are unflagged.
             nsamples: optional DataContainer containing the number of samples in each visibility. Used for
                 weighting data when averaging and for figuring out the number of samples in each baseline group.
+                If not provided, it is assumed that nsamples is uniformly 1.
             gain_flags: optional dictionary used for per-antenna, per-time-and-frequency flagging when calibrating.
             skip_calibration: Do not calibrate data with self.gains and gain_flags, go right to redundant averaging.
 
         Returns:
-            red_data:
-            red_flags: If flags is provided, a  final flagging pattern after redundant
-            red_nsamples:
-
+            red_data: RedDataContainer of redundantly averaged data.
+            red_flags: RedDataContainer of flags on redundantly averaged data.
+            red_nsamples: RedDataContainer of nsamples of that went into each redundantly averaged visibility
         '''
         # make copies of data, flags, and nsamples, which are then modified and downselected in place
+        # if flags and/or nsamples, is not provided, create zeros or ones as appropriate
         red_data = deepcopy(data)
         red_flags = deepcopy(flags)
+        if red_flags is None:
+            red_flags = DataContainer({bl: np.zeros_like(data[bl], bool) for bl in data})
         red_nsamples = deepcopy(nsamples)
+        if red_nsamples is None:
+            red_nsamples = DataContainer({bl: np.ones_like(data[bl], float) for bl in data})
+        if gain_flags is None:
+            gain_flags = {ant: np.zeros_like(self.gains[ant], bool) for ant in self.gains}
 
         # perform calibration unless otherwise specified
         if (self.gains is not None) and not skip_calibration:
             calibrate_in_place(red_data, self.gains, data_flags=red_flags, cal_flags=gain_flags)
 
         # perform redundant averaging and downselecgiton in place and return result as RedDataContainer
-        red_average(red_data, self.reds, bl_tol=bl_tol, flags=red_flags, nsamples=red_nsamples, inplace=True)
+        pos_reds = [list(red_tuple) for red_tuple in set(tuple(bl[0:2] for bl in red) for red in self.reds)]
+        red_average(red_data, pos_reds, flags=red_flags, nsamples=red_nsamples, inplace=True)
         return (RedDataContainer(red_data, reds=self.reds),
                 RedDataContainer(red_flags, reds=self.reds),
                 RedDataContainer(red_nsamples, reds=self.reds))
