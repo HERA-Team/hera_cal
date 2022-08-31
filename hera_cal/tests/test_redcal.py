@@ -319,17 +319,24 @@ class TestRedSol(object):
                 assert ant in rs.gains
                 np.testing.assert_array_equal(rs[ant], rs.gains[ant])
                 np.testing.assert_array_equal(rs[ant], sol[ant])
+                np.testing.assert_array_equal(rs[ant], rs.get(ant))
             for bl in true_vis:
                 assert bl in rs
                 assert bl in rs.vis
                 np.testing.assert_array_equal(rs[bl], rs.vis[bl])
                 np.testing.assert_array_equal(rs[bl], sol[bl])
+                np.testing.assert_array_equal(rs[bl], rs.get(bl))
             for red in rs.reds:
                 for bl in red:
                     assert bl in rs
                     assert bl in rs.vis
                     np.testing.assert_array_equal(rs[bl], rs.vis[bl])
                     np.testing.assert_array_equal(rs[bl], sol[red[0]])
+                    np.testing.assert_array_equal(rs[bl], rs.get(bl))
+
+            # test default get
+            assert rs.get('fake_key') is None
+            assert rs.get('fake_key', 0) == 0
 
             # test iterator
             done_with_gains = False
