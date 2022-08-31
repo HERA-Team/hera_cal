@@ -360,6 +360,18 @@ class TestRedSol(object):
         assert rs[1, 2, 'ee'][0, 0] == 2
         assert rs.vis[1, 2, 'ee'][0, 0] == 2
 
+    def test_make_sol_finite(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): np.ones((1, 1))}, vis={(0, 1, 'ee'): np.ones((1, 1))})
+        rs[0, 'Jee'] *= np.inf
+        rs[1, 'Jee'] *= np.nan
+        rs[0, 1, 'ee'] *= np.nan
+        rs.make_sol_finite()
+        assert rs[0, 'Jee'][0, 0] == 1
+        assert rs[1, 'Jee'][0, 0] == 1
+        assert rs[0, 1, 'ee'][0, 0] == 0
+
 
 class TestRedundantCalibrator(object):
 
