@@ -332,6 +332,10 @@ class TestRedSol(object):
         # test errors
         with pytest.raises(ValueError):
             om.RedSol(reds, gains=g, vis=v, sol_dict=sol)
+        with pytest.raises(KeyError):
+            rs1['stuff']
+        with pytest.raises(KeyError):
+            rs1[1, 2, 'ee', 'Jee']
 
     def test_setitem(self):
         antpos = linear_array(3)
@@ -343,6 +347,10 @@ class TestRedSol(object):
         assert rs.gains[2, 'Jee'][0, 0] == 2
         assert rs[1, 2, 'ee'][0, 0] == 2
         assert rs.vis[1, 2, 'ee'][0, 0] == 2
+        with pytest.raises(KeyError):
+            rs['stuff'] = 2
+        with pytest.raises(KeyError):
+            rs[1, 2, 'ee', 'Jee'] = 2
 
     def test_make_sol_finite(self):
         antpos = linear_array(3)
