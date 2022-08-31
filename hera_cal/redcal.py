@@ -392,6 +392,29 @@ class RedSol():
         '''Iterate over gain keys, then iterate over visibility keys.'''
         return chain(self.gains, self.vis)
 
+    def __len__(self):
+        '''Returns the total number of entries in self.gains or self.vis.'''
+        return len(self.gains) + len(self.vis)
+
+    def keys(self):
+        '''Iterate over gain keys, then iterate over visibility keys.'''
+        return self.__iter__()
+
+    def values(self):
+        '''Iterate over gain values, then iterate over visibility values.'''
+        return chain(self.gains.values(), self.vis.values())
+
+    def items(self):
+        '''Returns the keys and values of the gains, then over those of the visibilities.'''
+        return chain(self.gains.items(), self.vis.items())
+
+    def get(self, key, default=None):
+        '''Returns value associated with key, but default if key is not found.'''
+        if key in self:
+            return self[key]
+        else:
+            return default
+
     def make_sol_finite(self):
         '''Replaces nans and infs in this object, see redcal.make_sol_finite() for details.'''
         make_sol_finite(self)
