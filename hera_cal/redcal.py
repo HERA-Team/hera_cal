@@ -419,6 +419,27 @@ class RedSol():
         '''Replaces nans and infs in this object, see redcal.make_sol_finite() for details.'''
         make_sol_finite(self)
 
+    def remove_degen(self, degen_sol=None, inplace=True):
+        """ Removes degeneracies from solutions (or replaces them with those in degen_sol).
+
+        Arguments:
+            sol: dictionary (or RedSol) that contains both visibility and gain solutions in the
+                {(ind1,ind2,pol): np.array} and {(index,antpol): np.array} formats respectively
+            degen_sol: Optional dictionary or RedSol, formatted like sol. Gain amplitudes and phases
+                in degen_sol replace the values of sol in the degenerate subspace of redcal. If
+                left as None, average gain amplitudes will be 1 and average phase terms will be 0.
+                Visibilties in degen_sol are ignored, so this can also be a dictionary of gains.
+            inplace: If True, replaces self.vis and self.gains. If False, returns a new RedSol object.
+        Returns:
+            new_sol: if not inplace, RedSol with degeneracy removal/replacement performed
+        """
+        rc = RedundantCalibrator(self.reds)
+        new_sol = rc.remove_degen(self, degen_sol=degen_sol)
+        if inplace:
+            self.__init__(self.reds, gains=new_sol.gains, vis=new_sol.vis)
+        else:
+            return new_sol
+
     def red_average(self, data, flags=None, nsamples=None, gain_flags=None, skip_calibration=False):
         '''Performs redundant averaging of data using reds and gains stored in this RedSol object.
 
