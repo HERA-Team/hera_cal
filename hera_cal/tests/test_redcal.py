@@ -331,6 +331,24 @@ class TestRedSol(object):
                     np.testing.assert_array_equal(rs[bl], rs.vis[bl])
                     np.testing.assert_array_equal(rs[bl], sol[red[0]])
 
+            # test iterator
+            done_with_gains = False
+            for key in rs:
+                if not done_with_gains:
+                    if len(key) == 3:
+                        done_with_gains = True
+                        assert key in rs.vis
+                    else:
+                        assert len(key) == 2
+                        assert key in rs.gains
+                else:
+                    assert len(key) == 3
+                    assert key in rs.vis
+
+        # test errors
+        with pytest.raises(ValueError):
+            om.RedSol(reds, gains=g, vis=v, sol_dict=sol)
+
 
 class TestRedundantCalibrator(object):
 
