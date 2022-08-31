@@ -1158,11 +1158,12 @@ class RedundantCalibrator:
         calibrate_in_place(fc_data, sol0)
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve(mode=mode)
-        sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
-        for ubl_key in [k for k in sol.keys() if len(k) == 3]:
-            sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
-        sol_with_fc = {key: (sol[key] * sol0[key] if (key in sol0 and len(key) == 2) else sol[key]) for key in sol.keys()}
-        return {}, sol_with_fc
+        sol = RedSol(self.reds, sol_dict={self.unpack_sol_key(k): sol[k] for k in sol.keys()})
+        for ubl_key in sol.vis:
+            sol[ubl_key] *= self.phs_avg[ubl_key].conj()
+        for ant in sol.gains:
+            sol[ant] *= sol0.get(ant, 1.0)
+        return {}, sol
 
     def lincal(self, data, sol0, wgts={}, sparse=False, mode='default', conv_crit=1e-10, maxiter=50, verbose=False):
         """Taylor expands to linearize redcal equations and iteratively minimizes chi^2.
@@ -1185,11 +1186,10 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-
-        sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0.keys()}
+        sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0}
         ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0, wgts=wgts, sparse=sparse)
         meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, verbose=verbose, mode=mode)
-        sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
+        sol = RedSol(self.reds, sol_dict={self.unpack_sol_key(k): sol[k] for k in sol.keys()})
         return meta, sol
 
     def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, wgt_func=lambda x: 1.):
@@ -1218,10 +1218,10 @@ class RedundantCalibrator:
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
 
-        sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0.keys()}
+        sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0}
         ls = self._solver(OmnicalSolver, data, sol0=sol0, wgts=wgts, gain=gain)
         meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after, wgt_func=wgt_func)
-        sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
+        sol = RedSol(self.reds, sol_dict={self.unpack_sol_key(k): sol[k] for k in sol.keys()})
         return meta, sol
 
     def remove_degen_gains(self, gains, degen_gains=None, mode='phase'):
