@@ -333,7 +333,7 @@ def make_sol_finite(sol):
     '''Replaces nans and infs in solutions, which are usually the result of visibilities that are
     identically equal to 0. Modifies sol (which is a dictionary with gains and visibilities) in place,
     replacing visibilities with 0.0s and gains with 1.0s'''
-    for k in sol.keys():
+    for k in sol:
         if len(k) == 3:  # visibilities
             sol[k][~np.isfinite(sol[k])] = np.zeros_like(sol[k][~np.isfinite(sol[k])])
         elif len(k) == 2:  # gains
