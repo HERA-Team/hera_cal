@@ -333,6 +333,17 @@ class TestRedSol(object):
         with pytest.raises(ValueError):
             om.RedSol(reds, gains=g, vis=v, sol_dict=sol)
 
+    def test_setitem(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): np.ones((1, 1))}, vis={(0, 1, 'ee'): np.ones((1, 1))})
+        rs[2, 'Jee'] = 2 * np.ones((1, 1))
+        rs[1, 2, 'ee'] = 2 * np.ones((1, 1))
+        assert rs[2, 'Jee'][0, 0] == 2
+        assert rs.gains[2, 'Jee'][0, 0] == 2
+        assert rs[1, 2, 'ee'][0, 0] == 2
+        assert rs.vis[1, 2, 'ee'][0, 0] == 2
+
 
 class TestRedundantCalibrator(object):
 
