@@ -352,7 +352,7 @@ class RedSol():
         '''Get underlying gain or visibility, depending on the length of the key.'''
         if len(key) == 3:  # visibility key
             return self.vis[key]
-        if len(key) == 2:  # antenna-pol key
+        elif len(key) == 2:  # antenna-pol key
             return self.gains[key]
         else:
             raise KeyError('RedSol keys should be length-2 (for gains) or length-3 (for visibilities).')
@@ -361,7 +361,7 @@ class RedSol():
         '''Set underlying gain or visibility, depending on the length of the key.'''
         if len(key) == 3:  # visibility key
             self.vis[key] = value
-        if len(key) == 2:  # antenna-pol key
+        elif len(key) == 2:  # antenna-pol key
             self.gains[key] = value
         else:
             raise KeyError('RedSol keys should be length-2 (for gains) or length-3 (for visibilities).')
