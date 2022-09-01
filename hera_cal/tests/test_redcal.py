@@ -452,6 +452,27 @@ class TestRedSol(object):
         assert items[2][0] == (0, 1, 'ee')
         np.testing.assert_array_equal(items[2][1], 3 * np.ones((1, 1)))
 
+    def test_chisq(self):
+        NANTS = 18
+        antpos = linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
+        w = dict([(k, 1.) for k in d.keys()])
+        meta, sol = info.logcal(d)
+        data_wgts = {bl: np.ones_like(d[bl], dtype=np.float64) for bl in d}
+
+        ucs, ucspa = sol.chisq(d, data_wgts)
+        ncs, ncspa = sol.normalized_chisq(d, data_wgts)
+        for cs, cspa in zip([ucs, ncs], [ucspa, ncspa]):
+            assert 'Jee' in cs
+            assert d[list(d.keys())[0]].shape == cs['Jee'].shape
+            assert cs['Jee'].dtype == np.float64
+            for ant in gains.keys():
+                assert ant in cspa
+                assert cspa[ant].shape == cs['Jee'].shape
+                assert cspa[ant].dtype == np.float64
+
 
 class TestRedundantCalibrator(object):
 
