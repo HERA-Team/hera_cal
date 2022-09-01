@@ -480,6 +480,50 @@ class RedSol():
                 RedDataContainer(red_flags, reds=self.reds),
                 RedDataContainer(red_nsamples, reds=self.reds))
 
+    def chisq(self, data, data_wgts, gain_flags=None):
+        """Computes chi^2 defined as: chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)|^2 * wgts_ij)
+        and also a chisq_per_antenna which is the same sum but with fixed i.
+
+        Arguments:
+            data: DataContainer mapping baseline-pol tuples like (0,1,'nn') to complex data of shape (Nt, Nf).
+            data_wgts: multiplicative weights with which to combine chisq per visibility. Usually
+                equal to (visibility noise variance)**-1.
+            gain_flags: optional dictionary mapping ant-pol keys like (1,'Jnn') to a boolean flags waterfall
+                with the same shape as the data. Default: None, which means no per-antenna flagging.
+
+        Returns:
+            chisq: numpy array with the same shape each visibility of chi^2 calculated as above. If the
+                inferred pol_mode from reds (see redcal.parse_pol_mode) is '1pol' or '2pol', this is a
+                dictionary mapping antenna polarization (e.g. 'Jnn') to chi^2. Otherwise, there is a single
+                chisq (because polarizations mix) and this is a numpy array.
+            chisq_per_ant: dictionary mapping ant-pol keys like (1,'Jnn') to chisq per antenna, computed as
+                above but keeping i fixed and varying only j.
+        """
+        split_by_antpol = parse_pol_mode(self.reds) in ['1pol', '2pol']
+        chisq, _, chisq_per_ant, _ = utils.chisq(data, self.vis, data_wgts=data_wgts,
+                                                 gains=self.gains, gain_flags=gain_flags,
+                                                 reds=self.reds, split_by_antpol=split_by_antpol)
+        return chisq, chisq_per_ant
+
+    def normalized_chisq(self, data, data_wgts):
+        '''Computes chi^2 and chi^2 per antenna with proper normalization per DoF.
+
+        Arguments:
+            data: DataContainer mapping baseline-pol tuples like (0,1,'nn') to complex data of shape (Nt, Nf).
+            data_wgts: multiplicative weights with which to combine chisq per visibility. Usually
+                equal to (visibility noise variance)**-1.
+
+        Returns:
+            chisq: chi^2 per degree of freedom for the calibration solution. If the inferred pol_mode from
+                reds (see redcal.parse_pol_mode) is '1pol' or '2pol', this is a dictionary mapping antenna
+                polarization (e.g. 'Jnn') to chi^2. Otherwise, there is a single chisq (because polarizations
+                mix) and this is a numpy array.
+            chisq_per_ant: dictionary mapping ant-pol tuples like (1,'Jnn') to the sum of all chisqs for
+                visibilities that an antenna participates in, DoF normalized using predict_chisq_per_ant
+    '''
+        chisq, chisq_per_ant = normalized_chisq(data, data_wgts, self.reds, self.vis, self.gains)
+        return chisq, chisq_per_ant
+
 
 def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8)):
     '''This function looks at all redundant baselines and sees whether they mostly agree with the median
