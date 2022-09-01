@@ -441,23 +441,31 @@ class RedSol():
         '''
         # make copies of data, flags, and nsamples, which are then modified and downselected in place
         # if flags and/or nsamples, is not provided, create zeros or ones as appropriate
-        red_data = deepcopy(data)
-        red_flags = deepcopy(flags)
-        if red_flags is None:
-            red_flags = DataContainer({bl: np.zeros_like(data[bl], bool) for bl in data})
-        red_nsamples = deepcopy(nsamples)
-        if red_nsamples is None:
-            red_nsamples = DataContainer({bl: np.ones_like(data[bl], float) for bl in data})
+        red_data, red_flags, red_nsamples = {}, {}, {}
         if gain_flags is None:
             gain_flags = {ant: np.zeros_like(self.gains[ant], bool) for ant in self.gains}
 
-        # perform calibration unless otherwise specified
-        if self.gains is not None:
-            calibrate_in_place(red_data, self.gains, data_flags=red_flags, cal_flags=gain_flags)
+        for red in self.reds:
+            # extract and copy this redundant group
+            data_here = DataContainer({bl: np.array(data[bl]) for bl in red})
+            flags_here = DataContainer({bl: (np.zeros_like(data[bl], bool) if flags is None
+                                             else np.array(flags[bl])) for bl in red})
+            nsamples_here = DataContainer({bl: (np.ones_like(data[bl], float) if nsamples is None
+                                                else np.array(nsamples[bl])) for bl in red})
 
-        # perform redundant averaging and downselecgiton in place and return result as RedDataContainer
-        pos_reds = [list(red_tuple) for red_tuple in set(tuple(bl[0:2] for bl in red) for red in self.reds)]
-        red_average(red_data, pos_reds, flags=red_flags, nsamples=red_nsamples, inplace=True)
+            # perform calibration if necessary
+            if self.gains is not None:
+                calibrate_in_place(data_here, self.gains, data_flags=flags_here, cal_flags=gain_flags)
+
+            # redundantly average and store in dictionary
+            pos_red = list(set(bl[0:2] for bl in red))
+            red_average(data_here, [pos_red], flags=flags_here, nsamples=nsamples_here, inplace=True)
+            for bl in data_here:
+                red_data[bl] = data_here[bl]
+                red_flags[bl] = flags_here[bl]
+                red_nsamples[bl] = nsamples_here[bl]
+
+        # convert dicts to RedDataContainer and return
         return (RedDataContainer(red_data, reds=self.reds),
                 RedDataContainer(red_flags, reds=self.reds),
                 RedDataContainer(red_nsamples, reds=self.reds))
