@@ -396,13 +396,27 @@ class TestRedSol(object):
         w = dict([(k, 1.) for k in d.keys()])
         meta, sol = info.logcal(d)
         sol = info.remove_degen(sol, degen_sol=dict(list(gains.items()) + list(true_vis.items())))
-        rs = om.RedSol(reds, sol_dict=sol)
-        red_d, red_f, red_ns = rs.red_average(DataContainer(d))
+        red_d, red_f, red_ns = sol.red_average(DataContainer(d))
         for red in reds:
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], red_d[bl])
                 np.testing.assert_array_equal(False, red_f[bl])
                 np.testing.assert_array_equal(len(red), red_ns[bl])
+
+    def test_remove_degen(self):
+        NANTS = 18
+        antpos = linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
+        w = dict([(k, 1.) for k in d.keys()])
+        meta, sol = info.logcal(d)
+        sol.remove_degen(degen_sol=dict(list(gains.items()) + list(true_vis.items())), inplace=True)
+        sol2 = sol.remove_degen(degen_sol=dict(list(gains.items()) + list(true_vis.items())), inplace=False)
+        for red in reds:
+            for bl in red:
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol[bl])
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol2[bl])
 
     def test_len(self):
         antpos = linear_array(3)
