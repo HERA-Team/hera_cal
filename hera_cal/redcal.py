@@ -422,7 +422,7 @@ class RedSol():
         else:
             return new_sol
 
-    def red_average(self, data, flags=None, nsamples=None, gain_flags=None, skip_calibration=False):
+    def red_average(self, data, flags=None, nsamples=None, gain_flags=None):
         '''Performs redundant averaging of data using reds and gains stored in this RedSol object.
 
         Arguments:
@@ -433,7 +433,6 @@ class RedSol():
                 weighting data when averaging and for figuring out the number of samples in each baseline group.
                 If not provided, it is assumed that nsamples is uniformly 1.
             gain_flags: optional dictionary used for per-antenna, per-time-and-frequency flagging when calibrating.
-            skip_calibration: Do not calibrate data with self.gains and gain_flags, go right to redundant averaging.
 
         Returns:
             red_data: RedDataContainer of redundantly averaged data.
@@ -453,7 +452,7 @@ class RedSol():
             gain_flags = {ant: np.zeros_like(self.gains[ant], bool) for ant in self.gains}
 
         # perform calibration unless otherwise specified
-        if (self.gains is not None) and not skip_calibration:
+        if self.gains is not None:
             calibrate_in_place(red_data, self.gains, data_flags=red_flags, cal_flags=gain_flags)
 
         # perform redundant averaging and downselecgiton in place and return result as RedDataContainer
