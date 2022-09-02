@@ -249,7 +249,7 @@ class TestMethods(object):
     def test_find_polarity_flipped_ants(self):
         # test normal operation
         antpos = hex_array(3, split_core=False, outriggers=0)
-        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        reds = om.get_reds(antpos, pols=['ee', 'nn'], pol_mode='2pol')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(.1, .2, 100)
         ants = [(ant, 'Jee') for ant in antpos]
@@ -268,7 +268,8 @@ class TestMethods(object):
         data[(0, 1, 'ee')] *= -1
         meta, g_fc = rc.firstcal(data, freqs)
         for ant in meta['polarity_flips']:
-            assert np.all([m is None for m in meta['polarity_flips'][ant]])
+            if ant[1] == 'Jee':
+                assert np.all([m is None for m in meta['polarity_flips'][ant]])
 
         # test errors
         with pytest.raises(ValueError):
