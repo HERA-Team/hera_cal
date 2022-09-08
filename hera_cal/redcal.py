@@ -705,19 +705,26 @@ def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np
             of this scales exponentially as 2^max_recursion_depth.
 
     Returns:
-        is_flipped: dictionary mapping antenna tuple e.g. (0, 'Jee') to Booleans.
+        polarity_flips: dictionary mapping antenna tuple e.g. (0, 'Jee') to Booleans.
             If no solution is found returns a dictionary mapping antennas to None.
     '''
-
     ants = set([ant for red in reds for bl in red for ant in utils.split_bl(bl)])
-    polarity_groups = _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=edge_cut, max_rel_angle=np.pi / 8)
+    antpols = set([ant[1] for ant in ants])
+    polarity_flips = {ant: None for ant in ants}
 
-    try:
-        is_flipped, even_vs_odd_IDs = _recursive_try_assumptions(polarity_groups, ants, {}, {}, 1, max_recursion_depth=5)
-    except AssertionError:  # No solution is found.
-        is_flipped = {ant: None for ant in ants}
+    # find polarity flips, one antpol at a time
+    for ap in antpols:
+        reds_here = filter_reds(reds, pols=[join_pol(ap, ap)])
+        ants_here = [ant for ant in ants if ant[1] == ap]
+        polarity_groups = _build_polarity_baseline_groups(dly_cal_data, reds_here, edge_cut=edge_cut, max_rel_angle=np.pi / 8)
+        try:
+            is_flipped, even_vs_odd_IDs = _recursive_try_assumptions(polarity_groups, ants_here, {}, {}, 1, max_recursion_depth=max_recursion_depth)
+            for ant in ants_here:
+                polarity_flips[ant] = is_flipped[ant]
+        except AssertionError:
+            pass  # No solution is found, so leave fips as None
 
-    return is_flipped
+    return polarity_flips
 
 
 def _check_polLists_minV(polLists):
