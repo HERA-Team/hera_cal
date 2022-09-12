@@ -139,7 +139,8 @@ def get_reds(antpos, pols=['nn'], pol_mode='1pol', bl_error_tol=1.0, include_aut
 
 
 def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None,
-                pols=None, ex_pols=None, antpos=None, min_bl_cut=None, max_bl_cut=None, max_dims=None):
+                pols=None, ex_pols=None, antpos=None, min_bl_cut=None, max_bl_cut=None,
+                max_dims=None, min_dim_size=1):
     '''
     Filter redundancies to include/exclude the specified bls, antennas, unique bl groups and polarizations.
     Also allows filtering reds by removing antennas so that the number of generalized tip/tilt degeneracies
@@ -172,6 +173,9 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             This is equivalent to the number of generalized tip/tilt phase degeneracies of redcal that are fixed
             with remove_degen() and must be later abscaled. 2 is a classically "redundantly calibratable" planar
             array. More than 2 usually arises with subarrays of redundant baselines. None means no filtering.
+        min_dim_size: minimum number of atennnas allowed with non-zero positions in a given dimension. This
+            allows filtering out of antennas where only a few are responsible for adding a dimension. Ignored
+            if max_dims is None. Default 1 means no further filtering based on the number of anntenas in that dim.
 
     Return:
         reds: list of lists of redundant baselines in the same form as input reds.
@@ -245,8 +249,15 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             # using the redundancies. The number of dimensions is equivalent to the number of generalized
             # tip/tilt degeneracies of redundant calibration.
             idealized_antpos = reds_to_antpos(reds, tol=IDEALIZED_BL_TOL)
-            if len(list(idealized_antpos.values())[0]) <= max_dims:
+            ia_array = np.array(list(idealized_antpos.values()))
+
+            # if we've removed all antennas, break
+            if len(ia_array) == 0:
                 break
+            # if we're down to 1 dimension, the mode finding below won't work. Just check Nants >= min_dim_size.
+            if len(ia_array[0]) <= 1:
+                if len(ia_array) >= min_dim_size:
+                    break
 
             # Find dimension with the most common mode idealized coordinate value. This is supposed to look
             # for outlier antennas off the redundant grid small sub-arrays that cannot be redundantly
@@ -263,6 +274,13 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             # Cut all antennas not part of that mode to reduce the dimensionality of idealized_antpos
             new_ex_ants = [ant for ant in idealized_antpos if
                            np.abs(idealized_antpos[ant][mode_dim] - mode_value) > IDEALIZED_BL_TOL]
+
+            # If we're down to the reqested number of dimensions and if the next filtering would
+            # eliminate more antennas than min_dim_size, then break instead of filtering.
+            if len(ia_array[0]) <= max_dims:
+                if (len(new_ex_ants) >= min_dim_size):
+                    break
+
             reds = filter_reds(reds, ex_ants=new_ex_ants)
 
     return reds

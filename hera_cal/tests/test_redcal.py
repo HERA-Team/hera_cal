@@ -173,6 +173,21 @@ class TestMethods(object):
         ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
         assert ant_inds == (set(range(0, 9)) | set(range(33, 37)))
 
+        # Remove dimenions of size less than 5, which should kill everything except 4, 5, 6, 7, 8
+        new_reds = om.filter_reds(reds, max_dims=3, min_dim_size=5)
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
+        assert ant_inds == set(range(4, 9))
+
+        # remove dimenions of size less than 2, which should eliminate 37
+        new_reds = om.filter_reds(reds, max_dims=4, min_dim_size=2)
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
+        assert ant_inds == (set(range(0, 9)) | set(range(33, 37)))
+
+        # remove dimensions of size less than 10, which should remove everything
+        new_reds = om.filter_reds(reds, max_dims=4, min_dim_size=10)
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
+        assert ant_inds == set([])
+
     def test_add_pol_reds(self):
         reds = [[(1, 2)]]
         polReds = om.add_pol_reds(reds, pols=['xx'], pol_mode='1pol')
