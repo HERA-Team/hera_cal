@@ -898,8 +898,36 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
 def RFI_delay_slope_cal(reds, antpos, red_data, freqs, rfi_chans, rfi_headings, rfi_wgts=None,
                         min_tau=-500e-9, max_tau=500e-9, delta_tau=0.1e-9, return_gains=False, gain_ants=None):
-    '''TODO: document'''
+    '''Finds a per-unique baseline delay relative to a set of RFI transmitters with known frequency and heading,
+    and then fits that slope across the array for each degeneracy dimension. Namely, we fit a set of T_{pol}_{dim}
+    such that:
 
+    V_ij * e^(-2i π b_ij.rhat(ν) ν / c) = Σ_dims[T_{pol}_{dim}]
+
+    where b is the baseline vector and rhat is transmitter unit vector.
+
+    Arguments:
+        reds: list of list of baseline-pol tuples, e.g. (0, 1, 'ee'), considered redundant
+        antpos: dictionary mapping antenna index to length-3 vector of antenna position in meters in ENU coordinates
+        red_data: DataContainer with redundantly averaged visibility solutions.
+        freqs: array of frequencies in Hz with length equal to that of the second dimension of the data
+        rfi_chans: length Nrfi list of channel indices with RFI with known heading
+        rfi_headings: (3, Nrfi) numpy array of direciton unit vectors pointed toward stable transmitters.
+        rfi_wgts: length Nrfi list of linear multiplicative weights representating the relative confidence
+            in the delay expected in a particular channel
+        min_tau: Smallest delay for brute-force search in s (default -500 ns)
+        max_tau: Largest delay for brute-force search in s (default 500 ns)
+        delta_tau: Brute force delay search resolution (default 0.1 ns)
+        return_gains: Bool. If True, convert delay slope into gains. Otherwise, return delay slopes.
+        gain_ants: If return_gains is True, these are the keys. Ignored otherwise.
+
+    Returns:
+        if return_gains:
+            Returns a dictionary with gain_ants as keys mapping to complex gains, each the shape of the data.
+        else:
+            Returns a dictionary of delay slopes for each integration in the data, keyed by 'T_{pol}_{dim_index}'
+            where dimensions are computed using abstracted antenna positions with redcal.reds_to_antpos(reds).
+    '''
     # check that reds are 1pol or 2pol
     if redcal.parse_pol_mode(reds) not in ['1pol', '2pol']:
         raise NotImplementedError('RFI_delay_slope_cal cannot currently handle 4pol calibration.')
