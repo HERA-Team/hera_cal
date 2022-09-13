@@ -537,6 +537,10 @@ class Test_Abscal_Solvers(object):
         for bl in red_data:
             np.testing.assert_almost_equal(red_data[bl][:, not_rfi_chans], 1.0, decimal=10)
 
+        with pytest.raises(NotImplementedError):
+            reds = redcal.get_reds(antpos, pols=['ee', 'nn', 'en', 'ne'])
+            solved_dly_slopes = abscal.RFI_delay_slope_cal(reds, antpos, red_data, freqs, rfi_chans, rfi_headings, rfi_wgts=rfi_wgts)
+
     def test_ndim_fft_phase_slope_solver_1D_ideal_antpos(self):
         antpos = linear_array(50)
         reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
