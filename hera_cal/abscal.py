@@ -29,7 +29,7 @@ import argparse
 import numpy as np
 import operator
 from functools import reduce
-from scipy import signal, interpolate, spatial
+from scipy import signal, interpolate, spatial, constants
 from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
 import linsolve
