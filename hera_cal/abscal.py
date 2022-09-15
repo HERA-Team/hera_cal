@@ -29,7 +29,7 @@ import argparse
 import numpy as np
 import operator
 from functools import reduce
-from scipy import signal, interpolate, spatial
+from scipy import signal, interpolate, spatial, constants
 from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
 import linsolve
@@ -894,6 +894,80 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
             freqs = f0 + np.arange(list(data.values())[0].shape[1]) * df
             gains[ant] = np.exp(2.0j * np.pi * np.outer(delays, freqs))
         return gains
+
+
+def RFI_delay_slope_cal(reds, antpos, red_data, freqs, rfi_chans, rfi_headings, rfi_wgts=None,
+                        min_tau=-500e-9, max_tau=500e-9, delta_tau=0.1e-9, return_gains=False, gain_ants=None):
+    '''Finds a per-unique baseline delay relative to a set of RFI transmitters with known frequency and heading,
+    and then fits that slope across the array for each degeneracy dimension. Namely, we fit a set of T_{pol}_{dim}
+    such that:
+
+    V_ij * e^(-2i π b_ij.rhat(ν) ν / c) = Σ_dims[T_{pol}_{dim}]
+
+    where b is the baseline vector and rhat is transmitter unit vector.
+
+    Arguments:
+        reds: list of list of baseline-pol tuples, e.g. (0, 1, 'ee'), considered redundant
+        antpos: dictionary mapping antenna index to length-3 vector of antenna position in meters in ENU coordinates
+        red_data: DataContainer with redundantly averaged visibility solutions.
+        freqs: array of frequencies in Hz with length equal to that of the second dimension of the data
+        rfi_chans: length Nrfi list of channel indices with RFI with known heading
+        rfi_headings: (3, Nrfi) numpy array of direciton unit vectors pointed toward stable transmitters.
+        rfi_wgts: length Nrfi list of linear multiplicative weights representating the relative confidence
+            in the delay expected in a particular channel
+        min_tau: Smallest delay for brute-force search in s (default -500 ns)
+        max_tau: Largest delay for brute-force search in s (default 500 ns)
+        delta_tau: Brute force delay search resolution (default 0.1 ns)
+        return_gains: Bool. If True, convert delay slope into gains. Otherwise, return delay slopes.
+        gain_ants: If return_gains is True, these are the keys. Ignored otherwise.
+
+    Returns:
+        if return_gains:
+            Returns a dictionary with gain_ants as keys mapping to complex gains, each the shape of the data.
+        else:
+            Returns a dictionary of delay slopes for each integration in the data, keyed by 'T_{pol}_{dim_index}'
+            where dimensions are computed using abstracted antenna positions with redcal.reds_to_antpos(reds).
+    '''
+    # check that reds are 1pol or 2pol
+    if redcal.parse_pol_mode(reds) not in ['1pol', '2pol']:
+        raise NotImplementedError('RFI_delay_slope_cal cannot currently handle 4pol calibration.')
+
+    # compute unique baseline vectors and idealized baseline vectors if desired
+    unique_blvecs = {red[0]: np.mean([antpos[bl[1]] - antpos[bl[0]] for bl in red], axis=0) for red in reds}
+    idealized_antpos = redcal.reds_to_antpos(reds)
+    idealized_blvecs = {red[0]: idealized_antpos[red[0][1]] - idealized_antpos[red[0][0]] for red in reds}
+
+    # brute-force find per-unique baseline delays that make the per-UBL visibilities, dotted into the rfi_phase, closest to real
+    vis = np.array([red_data[red[0]][:, rfi_chans] for red in reds])
+    vis /= np.abs(vis)
+    rfi_phs = np.array([np.exp(-2j * np.pi * np.dot(unique_blvecs[red[0]], rfi_headings) * freqs[rfi_chans] / constants.c) for red in reds])
+    dlys_to_check = np.arange(min_tau, max_tau, delta_tau)
+    dly_terms = np.exp(2j * np.pi * np.outer(freqs[rfi_chans], dlys_to_check))
+    # dimensions: i = Nubls, j = Ntimes, k = Nrfi_chans, l = Ndlys
+    to_minimize = np.einsum('ijk,ik,kl->ijkl', vis, rfi_phs, dly_terms) - 1
+    to_minimize = np.einsum('ijkl,k->ijl', np.abs(to_minimize), np.array(rfi_wgts if rfi_wgts is not None else np.ones_like(rfi_chans)))
+    dly_sol_args = np.argmin(to_minimize, axis=-1)
+    delay_sols = {red[0]: dlys_to_check[dly_sol_args[i]] for i, red in enumerate(reds)}
+
+    # Use per-baseline delays to solve for the DoF, which is one phase slope per polarization per dimension of the idealized antpos
+    ls_data, ls_wgts = {}, {}
+    for red in reds:
+        eq_str = ' + '.join([f'T_{red[0][2]}_{dim} * {ibl_comp}' for dim, ibl_comp in enumerate(idealized_blvecs[red[0]])])
+        ls_data[eq_str] = delay_sols[red[0]]
+        ls_wgts[eq_str] = len(red) * np.ones_like(delay_sols[red[0]])  # weight by number of baselines in group
+    dly_slope_sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts).solve()
+
+    if not return_gains:
+        return dly_slope_sol
+
+    # compute gains from DoF for antennas provided
+    gains = {}
+    for ant in gain_ants:
+        pol = join_pol(ant[1], ant[1])
+        ipos = idealized_antpos[ant[0]]
+        dlys = np.dot(ipos, [dly_slope_sol[f'T_{pol}_{dim}'] for dim in range(len(ipos))])
+        gains[ant] = np.exp(2j * np.pi * np.outer(dlys, freqs))
+    return gains
 
 
 def dft_phase_slope_solver(xs, ys, data, flags=None):
