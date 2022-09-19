@@ -549,7 +549,7 @@ class HERAData(UVData):
         data_antpos = {ant: antpos[ant] for ant in data_ants}
 
         # get times using the most commonly appearing baseline, presumably the one without BDA
-        most_common_bl_num = scipy.stats.mode(self.baseline_array)[0][0]
+        most_common_bl_num = scipy.stats.mode(self.baseline_array, keepdims=True)[0][0]
         times = self.time_array[self.baseline_array == most_common_bl_num]
         lsts = self.lst_array[self.baseline_array == most_common_bl_num]
 
