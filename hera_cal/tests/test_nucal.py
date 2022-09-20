@@ -46,8 +46,7 @@ def test_get_unique_orientations():
 
     # Check to see if function identifies flipped orientations
     reds[1] = [utils.reverse_bl(bls) for bls in reds[1]]
-    print(reds)
-    radial_groups = nucal.get_unique_orientations(antpos, reds, pols=["nn", "ee"])
+    radial_groups = nucal.get_unique_orientations(antpos, reds)
     assert len(radial_groups) == 1
 
     # If multiple polarizations are requested, list should be size 2
