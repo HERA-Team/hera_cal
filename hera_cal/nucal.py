@@ -371,6 +371,7 @@ class FrequencyRedundancy:
         ----------
         key: tuple
             Baseline key with of type (ant1, ant2, pol)
+
         Returns:
         -------
         group: list of tuples
