@@ -109,7 +109,9 @@ class TestRadialRedundantGroup:
         for bls in self.reds[0]:
             ant1, ant2, pol = bls
             umodes.append(
-                freqs * np.linalg.norm(self.antpos[ant2] - self.antpos[ant1]) / 2.998e8
+                freqs
+                * np.linalg.norm(self.antpos[ant2] - self.antpos[ant1])
+                / nucal.SPEED_OF_LIGHT
             )
 
         umin, umax = np.min(umodes), np.max(umodes)
@@ -119,7 +121,9 @@ class TestRadialRedundantGroup:
         assert np.isclose(umax, _umax)
 
     def test_filter_groups(self):
-        radial_group = nucal.RadialRedundantGroup(self.reds[0], self.antpos)
+        radial_group = nucal.RadialRedundantGroup(
+            [red[0] for red in self.reds], self.antpos
+        )
 
         # Minimum baseline length cut
         rg = deepcopy(radial_group)
@@ -181,6 +185,13 @@ class TestFrequencyRedundancy:
             for bls in group:
                 assert 0 not in bls
 
+    def test_get_item(self):
+        """ """
+        # Check indexing
+        groups = [self.freq_reds[i] for i in range(len(self.freq_reds))]
+        for gi, grp in enumerate(self.freq_reds):
+            assert groups[gi] == grp
+
     def test_get_pol(self):
         freq_reds = nucal.FrequencyRedundancy(self.antpos, pols=["nn", "ee"])
         for group in self.freq_reds.get_pol("nn"):
@@ -202,3 +213,8 @@ class TestFrequencyRedundancy:
 
         # Make sure KeyError is raised if incorrect key not given
         pytest.raises(KeyError, self.freq_reds.get_redundant_group, (-1, -1, "nn"))
+
+        # Check flipped baseline
+        bls = (1, 0, "nn")
+        group = self.freq_reds.get_redundant_group(bls)
+        assert bls in group

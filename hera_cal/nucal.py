@@ -459,6 +459,14 @@ class FrequencyRedundancy:
         for _bad_group in sorted(_bad_groups, reverse=True):
             self._radial_groups.pop(_bad_group)
 
+    def __len__(self):
+        """Get number of frequency redundant groups"""
+        return len(self._radial_groups)
+
+    def __getitem__(self, index):
+        """Get RadialRedundantGroup object from list of unique orientations"""
+        return self._radial_groups[index]
+
     def __iter__(self):
         """Iterates through the list of redundant groups"""
         return iter(self._radial_groups)
