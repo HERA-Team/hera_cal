@@ -7,11 +7,12 @@ from copy import deepcopy
 import argparse
 import os
 import linsolve
+from itertools import chain
 
 from . import utils
 from .noise import predict_noise_variance_from_autos, infer_dt
-from .datacontainer import DataContainer
-from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores
+from .datacontainer import DataContainer, RedDataContainer
+from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores, red_average
 from .io import HERAData, HERACal, write_cal, save_redcal_meta
 from .apply_cal import calibrate_in_place
 
@@ -320,6 +321,218 @@ def reds_to_antpos(reds, tol=1e-10):
     return antpos
 
 
+def get_gains_and_vis_from_sol(sol):
+    """Splits a sol dictionary into len(key)==2 entries, taken to be gains,
+    and len(key)==3 entries, taken to be model visibrilities."""
+    g = {key: val for key, val in sol.items() if len(key) == 2}
+    v = {key: val for key, val in sol.items() if len(key) == 3}
+    return g, v
+
+
+def make_sol_finite(sol):
+    '''Replaces nans and infs in solutions, which are usually the result of visibilities that are
+    identically equal to 0. Modifies sol (which is a dictionary with gains and visibilities) in place,
+    replacing visibilities with 0.0s and gains with 1.0s'''
+    for k in sol:
+        if len(k) == 3:  # visibilities
+            sol[k][~np.isfinite(sol[k])] = np.zeros_like(sol[k][~np.isfinite(sol[k])])
+        elif len(k) == 2:  # gains
+            sol[k][~np.isfinite(sol[k])] = np.ones_like(sol[k][~np.isfinite(sol[k])])
+
+
+class RedSol():
+    '''Object for containing solutions to redundant calibraton, namely gains and
+    unique-baseline visibilities, along with a variety of convenience methods.'''
+    def __init__(self, reds, gains={}, vis={}, sol_dict={}):
+        '''Initializes RedSol object.
+
+        Arguments:
+            reds: list of lists of redundant baseline tuples, e.g. (0, 1, 'ee')
+            gains: optional dictionary. Maps keys like (1, 'Jee') to complex
+                numpy arrays of gains of size (Ntimes, Nfreqs).
+            vis: optional dictionary or DataContainer. Maps keys like (0, 1, 'ee')
+                to complex numpy arrays of visibilities of size (Ntimes, Nfreqs).
+                May only contain at most one visibility per unique baseline group.
+            sol_dict: optional dictionary. Maps both gain keys and visibilitity keys
+                to numpy arrays. Must be empty if gains or vis is not.
+        '''
+        if len(sol_dict) > 0:
+            if (len(gains) > 0) or (len(vis) > 0):
+                raise ValueError('If sol_dict is not empty, both gains and vis must be.')
+            self.gains, self.vis = get_gains_and_vis_from_sol(sol_dict)
+        else:
+            self.gains = gains
+            self.vis = vis
+        self.reds = reds
+        self.vis = RedDataContainer(self.vis, reds=self.reds)
+
+    def __getitem__(self, key):
+        '''Get underlying gain or visibility, depending on the length of the key.'''
+        if len(key) == 3:  # visibility key
+            return self.vis[key]
+        elif len(key) == 2:  # antenna-pol key
+            return self.gains[key]
+        else:
+            raise KeyError('RedSol keys should be length-2 (for gains) or length-3 (for visibilities).')
+
+    def __setitem__(self, key, value):
+        '''Set underlying gain or visibility, depending on the length of the key.'''
+        if len(key) == 3:  # visibility key
+            self.vis[key] = value
+        elif len(key) == 2:  # antenna-pol key
+            self.gains[key] = value
+        else:
+            raise KeyError('RedSol keys should be length-2 (for gains) or length-3 (for visibilities).')
+
+    def __contains__(self, key):
+        '''Returns True if key is a gain key or a redundant visbility key, False otherwise.'''
+        return (key in self.gains) or (key in self.vis)
+
+    def __iter__(self):
+        '''Iterate over gain keys, then iterate over visibility keys.'''
+        return chain(self.gains, self.vis)
+
+    def __len__(self):
+        '''Returns the total number of entries in self.gains or self.vis.'''
+        return len(self.gains) + len(self.vis)
+
+    def keys(self):
+        '''Iterate over gain keys, then iterate over visibility keys.'''
+        return self.__iter__()
+
+    def values(self):
+        '''Iterate over gain values, then iterate over visibility values.'''
+        return chain(self.gains.values(), self.vis.values())
+
+    def items(self):
+        '''Returns the keys and values of the gains, then over those of the visibilities.'''
+        return chain(self.gains.items(), self.vis.items())
+
+    def get(self, key, default=None):
+        '''Returns value associated with key, but default if key is not found.'''
+        if key in self:
+            return self[key]
+        else:
+            return default
+
+    def make_sol_finite(self):
+        '''Replaces nans and infs in this object, see redcal.make_sol_finite() for details.'''
+        make_sol_finite(self)
+
+    def remove_degen(self, degen_sol=None, inplace=True):
+        """ Removes degeneracies from solutions (or replaces them with those in degen_sol).
+
+        Arguments:
+            sol: dictionary (or RedSol) that contains both visibility and gain solutions in the
+                {(ind1,ind2,pol): np.array} and {(index,antpol): np.array} formats respectively
+            degen_sol: Optional dictionary or RedSol, formatted like sol. Gain amplitudes and phases
+                in degen_sol replace the values of sol in the degenerate subspace of redcal. If
+                left as None, average gain amplitudes will be 1 and average phase terms will be 0.
+                Visibilties in degen_sol are ignored, so this can also be a dictionary of gains.
+            inplace: If True, replaces self.vis and self.gains. If False, returns a new RedSol object.
+        Returns:
+            new_sol: if not inplace, RedSol with degeneracy removal/replacement performed
+        """
+        rc = RedundantCalibrator(self.reds)
+        new_sol = rc.remove_degen(self, degen_sol=degen_sol)
+        if inplace:
+            self.__init__(self.reds, gains=new_sol.gains, vis=new_sol.vis)
+        else:
+            return new_sol
+
+    def red_average(self, data, flags=None, nsamples=None, gain_flags=None):
+        '''Performs redundant averaging of data using reds and gains stored in this RedSol object.
+
+        Arguments:
+            data: DataContainer containing visibilities to redundantly average.
+            flags: optional DataContainer marking visibilities as flagged and therefore excluded from averaging.
+                If not provided, it is assumed that all data are unflagged.
+            nsamples: optional DataContainer containing the number of samples in each visibility. Used for
+                weighting data when averaging and for figuring out the number of samples in each baseline group.
+                If not provided, it is assumed that nsamples is uniformly 1.
+            gain_flags: optional dictionary used for per-antenna, per-time-and-frequency flagging when calibrating.
+
+        Returns:
+            red_data: RedDataContainer of redundantly averaged data.
+            red_flags: RedDataContainer of flags on redundantly averaged data.
+            red_nsamples: RedDataContainer of nsamples of that went into each redundantly averaged visibility
+        '''
+        # make copies of data, flags, and nsamples, which are then modified and downselected in place
+        # if flags and/or nsamples, is not provided, create zeros or ones as appropriate
+        red_data, red_flags, red_nsamples = {}, {}, {}
+        if gain_flags is None:
+            gain_flags = {ant: np.zeros_like(self.gains[ant], bool) for ant in self.gains}
+
+        for red in self.reds:
+            # extract and copy this redundant group
+            data_here = DataContainer({bl: np.array(data[bl]) for bl in red})
+            flags_here = DataContainer({bl: (np.zeros_like(data[bl], bool) if flags is None
+                                             else np.array(flags[bl])) for bl in red})
+            nsamples_here = DataContainer({bl: (np.ones_like(data[bl], float) if nsamples is None
+                                                else np.array(nsamples[bl])) for bl in red})
+
+            # perform calibration if necessary
+            if self.gains is not None:
+                calibrate_in_place(data_here, self.gains, data_flags=flags_here, cal_flags=gain_flags)
+
+            # redundantly average and store in dictionary
+            pos_red = list(set(bl[0:2] for bl in red))
+            red_average(data_here, [pos_red], flags=flags_here, nsamples=nsamples_here, inplace=True)
+            for bl in data_here:
+                red_data[bl] = data_here[bl]
+                red_flags[bl] = flags_here[bl]
+                red_nsamples[bl] = nsamples_here[bl]
+
+        # convert dicts to RedDataContainer and return
+        return (RedDataContainer(red_data, reds=self.reds),
+                RedDataContainer(red_flags, reds=self.reds),
+                RedDataContainer(red_nsamples, reds=self.reds))
+
+    def chisq(self, data, data_wgts, gain_flags=None):
+        """Computes chi^2 defined as: chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)|^2 * wgts_ij)
+        and also a chisq_per_antenna which is the same sum but with fixed i.
+
+        Arguments:
+            data: DataContainer mapping baseline-pol tuples like (0,1,'nn') to complex data of shape (Nt, Nf).
+            data_wgts: multiplicative weights with which to combine chisq per visibility. Usually
+                equal to (visibility noise variance)**-1.
+            gain_flags: optional dictionary mapping ant-pol keys like (1,'Jnn') to a boolean flags waterfall
+                with the same shape as the data. Default: None, which means no per-antenna flagging.
+
+        Returns:
+            chisq: numpy array with the same shape each visibility of chi^2 calculated as above. If the
+                inferred pol_mode from reds (see redcal.parse_pol_mode) is '1pol' or '2pol', this is a
+                dictionary mapping antenna polarization (e.g. 'Jnn') to chi^2. Otherwise, there is a single
+                chisq (because polarizations mix) and this is a numpy array.
+            chisq_per_ant: dictionary mapping ant-pol keys like (1,'Jnn') to chisq per antenna, computed as
+                above but keeping i fixed and varying only j.
+        """
+        split_by_antpol = parse_pol_mode(self.reds) in ['1pol', '2pol']
+        chisq, _, chisq_per_ant, _ = utils.chisq(data, self.vis, data_wgts=data_wgts,
+                                                 gains=self.gains, gain_flags=gain_flags,
+                                                 reds=self.reds, split_by_antpol=split_by_antpol)
+        return chisq, chisq_per_ant
+
+    def normalized_chisq(self, data, data_wgts):
+        '''Computes chi^2 and chi^2 per antenna with proper normalization per DoF.
+
+        Arguments:
+            data: DataContainer mapping baseline-pol tuples like (0,1,'nn') to complex data of shape (Nt, Nf).
+            data_wgts: multiplicative weights with which to combine chisq per visibility. Usually
+                equal to (visibility noise variance)**-1.
+
+        Returns:
+            chisq: chi^2 per degree of freedom for the calibration solution. If the inferred pol_mode from
+                reds (see redcal.parse_pol_mode) is '1pol' or '2pol', this is a dictionary mapping antenna
+                polarization (e.g. 'Jnn') to chi^2. Otherwise, there is a single chisq (because polarizations
+                mix) and this is a numpy array.
+            chisq_per_ant: dictionary mapping ant-pol tuples like (1,'Jnn') to the sum of all chisqs for
+                visibilities that an antenna participates in, DoF normalized using predict_chisq_per_ant
+    '''
+        chisq, chisq_per_ant = normalized_chisq(data, data_wgts, self.reds, self.vis, self.gains)
+        return chisq, chisq_per_ant
+
+
 def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8)):
     '''This function looks at all redundant baselines and sees whether they mostly agree with the median
     baseline or whether they look closer to being off by pi radians. The ones close to the median are the
@@ -582,26 +795,6 @@ def parse_pol_mode(reds):
             return 'unrecognized_pol_mode'
     else:
         return 'unrecognized_pol_mode'
-
-
-def get_gains_and_vis_from_sol(sol):
-    """Splits a sol dictionary into len(key)==2 entries, taken to be gains,
-    and len(key)==3 entries, taken to be model visibrilities."""
-
-    g = {key: val for key, val in sol.items() if len(key) == 2}
-    v = {key: val for key, val in sol.items() if len(key) == 3}
-    return g, v
-
-
-def make_sol_finite(sol):
-    '''Replaces nans and infs in solutions, which are usually the result of visibilities that are
-    identically equal to 0. Modifies sol (which is a dictionary with gains and visibilities) in place,
-    replacing visibilities with 0.0s and gains with 1.0s'''
-    for k in sol.keys():
-        if len(k) == 3:  # visibilities
-            sol[k][~np.isfinite(sol[k])] = np.zeros_like(sol[k][~np.isfinite(sol[k])])
-        elif len(k) == 2:  # gains
-            sol[k][~np.isfinite(sol[k])] = np.ones_like(sol[k][~np.isfinite(sol[k])])
 
 
 class OmnicalSolver(linsolve.LinProductSolver):
@@ -1016,11 +1209,12 @@ class RedundantCalibrator:
         calibrate_in_place(fc_data, sol0)
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve(mode=mode)
-        sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
-        for ubl_key in [k for k in sol.keys() if len(k) == 3]:
-            sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
-        sol_with_fc = {key: (sol[key] * sol0[key] if (key in sol0 and len(key) == 2) else sol[key]) for key in sol.keys()}
-        return {}, sol_with_fc
+        sol = RedSol(self.reds, sol_dict={self.unpack_sol_key(k): sol[k] for k in sol.keys()})
+        for ubl_key in sol.vis:
+            sol[ubl_key] *= self.phs_avg[ubl_key].conj()
+        for ant in sol.gains:
+            sol[ant] *= sol0.get(ant, 1.0)
+        return {}, sol
 
     def lincal(self, data, sol0, wgts={}, sparse=False, mode='default', conv_crit=1e-10, maxiter=50, verbose=False):
         """Taylor expands to linearize redcal equations and iteratively minimizes chi^2.
@@ -1043,11 +1237,10 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-
-        sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0.keys()}
+        sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0}
         ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0, wgts=wgts, sparse=sparse)
         meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, verbose=verbose, mode=mode)
-        sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
+        sol = RedSol(self.reds, sol_dict={self.unpack_sol_key(k): sol[k] for k in sol.keys()})
         return meta, sol
 
     def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, wgt_func=lambda x: 1.):
@@ -1076,10 +1269,10 @@ class RedundantCalibrator:
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
 
-        sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0.keys()}
+        sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0}
         ls = self._solver(OmnicalSolver, data, sol0=sol0, wgts=wgts, gain=gain)
         meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after, wgt_func=wgt_func)
-        sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
+        sol = RedSol(self.reds, sol_dict={self.unpack_sol_key(k): sol[k] for k in sol.keys()})
         return meta, sol
 
     def remove_degen_gains(self, gains, degen_gains=None, mode='phase'):
@@ -1170,7 +1363,7 @@ class RedundantCalibrator:
         return complex solutions for antennas and visibilities.
 
         Args:
-            sol: dictionary that contains both visibility and gain solutions in the
+            sol: dictionary (or RedSol) that contains both visibility and gain solutions in the
                 {(ind1,ind2,pol): np.array} and {(index,antpol): np.array} formats respectively
             degen_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
@@ -1178,17 +1371,16 @@ class RedundantCalibrator:
                 Visibilties in degen_sol are ignored.  For logcal/lincal/omnical, putting firstcal
                 solutions in here can help avoid structure associated with phase-wrapping issues.
         Returns:
-            new_sol: sol with degeneracy removal/replacement performed
+            new_sol: RedSol with degeneracy removal/replacement performed
         """
 
         gains, vis = get_gains_and_vis_from_sol(sol)
         if degen_sol is None:
             degen_sol = {key: np.ones_like(val) for key, val in gains.items()}
         new_gains = self.remove_degen_gains(gains, degen_gains=degen_sol, mode='complex')
-        new_sol = deepcopy(vis)
-        calibrate_in_place(new_sol, new_gains, old_gains=gains)
-        new_sol.update(new_gains)
-        return new_sol
+        new_vis = deepcopy(vis)
+        calibrate_in_place(new_vis, new_gains, old_gains=gains)
+        return RedSol(self.reds, gains=new_gains, vis=new_vis)
 
     def count_degens(self, assume_redundant=True):
         """Count the number of degeneracies in this redundant calibrator, given the redundancies and the pol_mode.
@@ -1259,8 +1451,8 @@ def predict_chisq_per_bl(reds):
 
     A = solver.ls_amp.get_A()[:, :, 0]
     B = solver.ls_phs.get_A()[:, :, 0]
-    A_data_resolution = A.dot(np.linalg.pinv(A.T.dot(A)).dot(A.T))
-    B_data_resolution = B.dot(np.linalg.pinv(B.T.dot(B)).dot(B.T))
+    A_data_resolution = A.dot(np.linalg.pinv(A.T.dot(A), hermitian=True).dot(A.T))
+    B_data_resolution = B.dot(np.linalg.pinv(B.T.dot(B), hermitian=True).dot(B.T))
 
     predicted_chisq_per_bl = 1.0 - np.diag(A_data_resolution + B_data_resolution) / 2.0
     return {bl: dof for bl, dof in zip(bls, predicted_chisq_per_bl)}
@@ -1640,7 +1832,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     # perform logcal
     if prior_sol is None:
         _, prior_sol = rc.logcal(data, sol0=rv['g_firstcal'])
-        make_sol_finite(prior_sol)
+        prior_sol.make_sol_finite()
 
     # perform omnical
     dts_by_bl = DataContainer({bl: infer_dt(times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in red_bls})

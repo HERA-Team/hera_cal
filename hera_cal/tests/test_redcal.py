@@ -293,6 +293,187 @@ class TestMethods(object):
             om._build_polarity_baseline_groups(data, reds, max_rel_angle=np.pi)
 
 
+class TestRedSol(object):
+
+    def test_init(self):
+        NANTS = 18
+        antpos = linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
+        w = dict([(k, 1.) for k in d.keys()])
+        meta, sol = info.logcal(d)
+
+        # construct from sol_dict
+        rs1 = om.RedSol(reds, sol_dict=sol)
+
+        # construct from gains and vis
+        g, v = om.get_gains_and_vis_from_sol(sol)
+        rs2 = om.RedSol(reds, gains=g, vis=v)
+
+        # test that gains and vis are properly separated, also tests getitem and contains
+        for rs in [rs1, rs2]:
+            assert rs.reds == reds
+            for ant in gains:
+                assert ant in rs
+                assert ant in rs.gains
+                np.testing.assert_array_equal(rs[ant], rs.gains[ant])
+                np.testing.assert_array_equal(rs[ant], sol[ant])
+                np.testing.assert_array_equal(rs[ant], rs.get(ant))
+            for bl in true_vis:
+                assert bl in rs
+                assert bl in rs.vis
+                np.testing.assert_array_equal(rs[bl], rs.vis[bl])
+                np.testing.assert_array_equal(rs[bl], sol[bl])
+                np.testing.assert_array_equal(rs[bl], rs.get(bl))
+            for red in rs.reds:
+                for bl in red:
+                    assert bl in rs
+                    assert bl in rs.vis
+                    np.testing.assert_array_equal(rs[bl], rs.vis[bl])
+                    np.testing.assert_array_equal(rs[bl], sol[red[0]])
+                    np.testing.assert_array_equal(rs[bl], rs.get(bl))
+
+            # test default get
+            assert rs.get('fake_key') is None
+            assert rs.get('fake_key', 0) == 0
+
+            # test iterator
+            done_with_gains = False
+            for key in rs:
+                if not done_with_gains:
+                    if len(key) == 3:
+                        done_with_gains = True
+                        assert key in rs.vis
+                    else:
+                        assert len(key) == 2
+                        assert key in rs.gains
+                else:
+                    assert len(key) == 3
+                    assert key in rs.vis
+
+        # test errors
+        with pytest.raises(ValueError):
+            om.RedSol(reds, gains=g, vis=v, sol_dict=sol)
+        with pytest.raises(KeyError):
+            rs1['stuff']
+        with pytest.raises(KeyError):
+            rs1[1, 2, 'ee', 'Jee']
+
+    def test_setitem(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): np.ones((1, 1))}, vis={(0, 1, 'ee'): np.ones((1, 1))})
+        rs[2, 'Jee'] = 2 * np.ones((1, 1))
+        rs[1, 2, 'ee'] = 2 * np.ones((1, 1))
+        assert rs[2, 'Jee'][0, 0] == 2
+        assert rs.gains[2, 'Jee'][0, 0] == 2
+        assert rs[1, 2, 'ee'][0, 0] == 2
+        assert rs.vis[1, 2, 'ee'][0, 0] == 2
+        with pytest.raises(KeyError):
+            rs['stuff'] = 2
+        with pytest.raises(KeyError):
+            rs[1, 2, 'ee', 'Jee'] = 2
+
+    def test_make_sol_finite(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): np.ones((1, 1))}, vis={(0, 1, 'ee'): np.ones((1, 1))})
+        rs[0, 'Jee'] *= np.inf
+        rs[1, 'Jee'] *= np.nan
+        rs[0, 1, 'ee'] *= np.nan
+        rs.make_sol_finite()
+        assert rs[0, 'Jee'][0, 0] == 1
+        assert rs[1, 'Jee'][0, 0] == 1
+        assert rs[0, 1, 'ee'][0, 0] == 0
+
+    def test_red_average(self):
+        NANTS = 18
+        antpos = linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
+        w = dict([(k, 1.) for k in d.keys()])
+        meta, sol = info.logcal(d)
+        sol = info.remove_degen(sol, degen_sol=dict(list(gains.items()) + list(true_vis.items())))
+        red_d, red_f, red_ns = sol.red_average(DataContainer(d))
+        for red in reds:
+            for bl in red:
+                np.testing.assert_array_almost_equal(true_vis[red[0]], red_d[bl])
+                np.testing.assert_array_equal(False, red_f[bl])
+                np.testing.assert_array_equal(len(red), red_ns[bl])
+
+    def test_remove_degen(self):
+        NANTS = 18
+        antpos = linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
+        w = dict([(k, 1.) for k in d.keys()])
+        meta, sol = info.logcal(d)
+        sol.remove_degen(degen_sol=dict(list(gains.items()) + list(true_vis.items())), inplace=True)
+        sol2 = sol.remove_degen(degen_sol=dict(list(gains.items()) + list(true_vis.items())), inplace=False)
+        for red in reds:
+            for bl in red:
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol[bl])
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol2[bl])
+
+    def test_len(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): np.ones((1, 1))}, vis={(0, 1, 'ee'): np.ones((1, 1))})
+        assert len(rs) == 3
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): np.ones((1, 1))})
+        assert len(rs) == 2
+        rs = om.RedSol(reds, vis={(0, 1, 'ee'): np.ones((1, 1))})
+        assert len(rs) == 1
+
+    def test_keys(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): np.ones((1, 1))}, vis={(0, 1, 'ee'): np.ones((1, 1))})
+        assert list(rs.keys()) == [(0, 'Jee'), (1, 'Jee'), (0, 1, 'ee')]
+
+    def test_values(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): 2 * np.ones((1, 1))}, vis={(0, 1, 'ee'): 3 * np.ones((1, 1))})
+        np.testing.assert_array_equal(list(rs.values())[0], np.ones((1, 1)))
+        np.testing.assert_array_equal(list(rs.values())[1], 2 * np.ones((1, 1)))
+        np.testing.assert_array_equal(list(rs.values())[2], 3 * np.ones((1, 1)))
+
+    def test_items(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): 2 * np.ones((1, 1))}, vis={(0, 1, 'ee'): 3 * np.ones((1, 1))})
+        items = list(rs.items())
+        assert items[0][0] == (0, 'Jee')
+        np.testing.assert_array_equal(items[0][1], np.ones((1, 1)))
+        assert items[2][0] == (0, 1, 'ee')
+        np.testing.assert_array_equal(items[2][1], 3 * np.ones((1, 1)))
+
+    def test_chisq(self):
+        NANTS = 18
+        antpos = linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
+        w = dict([(k, 1.) for k in d.keys()])
+        meta, sol = info.logcal(d)
+        data_wgts = {bl: np.ones_like(d[bl], dtype=np.float64) for bl in d}
+
+        ucs, ucspa = sol.chisq(d, data_wgts)
+        ncs, ncspa = sol.normalized_chisq(d, data_wgts)
+        for cs, cspa in zip([ucs, ncs], [ucspa, ncspa]):
+            assert 'Jee' in cs
+            assert d[list(d.keys())[0]].shape == cs['Jee'].shape
+            assert cs['Jee'].dtype == np.float64
+            for ant in gains.keys():
+                assert ant in cspa
+                assert cspa[ant].shape == cs['Jee'].shape
+                assert cspa[ant].dtype == np.float64
+
+
 class TestRedundantCalibrator(object):
 
     def test_init(self):

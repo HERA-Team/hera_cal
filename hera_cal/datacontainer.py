@@ -57,8 +57,8 @@ class DataContainer:
                 self._data = odict([(comply_bl(k), data[k]) for k in sorted(data.keys())])
             else:
                 raise KeyError('Unrecognized key type or mix of key types in data dictionary.')
-            self._antpairs = set([k[:2] for k in self._data.keys()])
-            self._pols = set([k[-1] for k in self._data.keys()])
+            self._antpairs = set([k[:2] for k in self._data])
+            self._pols = set([k[-1] for k in self._data])
 
             # placeholders for metadata (or get them from data, if possible)
             for attr in ['ants', 'data_ants', 'antpos', 'data_antpos',
@@ -567,3 +567,7 @@ class RedDataContainer(DataContainer):
     def __setitem__(self, key, value):
         '''Sets data for to unique baseline that the key is a member of.'''
         return super().__setitem__(self._bl_to_red_key[key], value)
+
+    def __contains__(self, key):
+        '''Returns true if the baseline redundant with the key is in the data.'''
+        return key in self._bl_to_red_key
