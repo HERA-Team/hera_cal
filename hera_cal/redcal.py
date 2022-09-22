@@ -1674,18 +1674,19 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
     good_ants_reds = filter_reds(all_reds, ants=list(cal['g_omnical'].keys()))
     good_ants_bls = [bl for red in good_ants_reds for bl in red]
     reds_to_solve_for = [red for red in good_ants_reds if not np.any([bl in cal['v_omnical'] for bl in red])]
-    for red in reds_to_solve_for:
-        new_vis = linear_cal_update(red, cal, data, [red], weight_by_flags=True)
-        for ubl, vis in new_vis.items():
-            cal['v_omnical'][ubl] = vis
-            cal['vf_omnical'][ubl] = ~np.isfinite(vis)
-    make_sol_finite(cal['v_omnical'])
+    if len(reds_to_solve_for) > 0:
+        for red in reds_to_solve_for:
+            new_vis = linear_cal_update(red, cal, data, [red], weight_by_flags=True)
+            for ubl, vis in new_vis.items():
+                cal['v_omnical'][ubl] = vis
+                cal['vf_omnical'][ubl] = ~np.isfinite(vis)
+        make_sol_finite(cal['v_omnical'])
 
-    # Update chisq and chisq per ant to include all baselines between working antennas
-    rekey_vis_sols(cal, good_ants_reds)
-    dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in good_ants_bls})
-    data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in good_ants_bls})
-    cal['chisq'], cal['chisq_per_ant'] = normalized_chisq(data, data_wgts, good_ants_reds, cal['v_omnical'], cal['g_omnical'])
+        # Update chisq and chisq per ant to include all baselines between working antennas
+        rekey_vis_sols(cal, good_ants_reds)
+        dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in good_ants_bls})
+        data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in good_ants_bls})
+        cal['chisq'], cal['chisq_per_ant'] = normalized_chisq(data, data_wgts, good_ants_reds, cal['v_omnical'], cal['g_omnical'])
 
     # Reassign omnical visibility solutions to the first entry in each group in all_reds
     rekey_vis_sols(cal, all_reds)
