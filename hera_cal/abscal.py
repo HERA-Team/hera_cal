@@ -3405,7 +3405,7 @@ def _get_idealized_antpos(cal_flags, antpos, pols, tol=1.0, keep_flagged_ants=Tr
 
 
 def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, kernel=(1, 15),
-                       phs_max_iter=100, phs_conv_crit=1e-6, verbose=True, use_abs_amp_lincal=True):
+                       phs_max_iter=100, phs_conv_crit=1e-6, verbose=True, autos_only_abs_amp_logcal=False, use_abs_amp_lincal=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
@@ -3436,10 +3436,21 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
                                              data_wgts=data_wgts, tol=tol, keep_flagged_ants=True)
     reds = redcal.get_reds(idealized_antpos, pols=data.pols(), bl_error_tol=redcal.IDEALIZED_BL_TOL)
 
+    #get autos only data, wgts, and model:
+    autos = [antpol for antpol in data.keys() if antpol[0] == antpol[1]]
+    autos_data = DataContainer({antpol:data[antpol] for antpol in autos})
+    autos_data_wgts = DataContainer({antpol:data_wgts[antpol] for antpol in autos})
+    autos_model = DataContainer({antpol:model[antpol] for antpol in autos})
+
     # Abscal Step 1: Per-Channel Logarithmic Absolute Amplitude Calibration
-    gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+    if autos_only_abs_amp_logcal:
+        gains_here = abs_amp_logcal(autos_model, autos_data, wgts=autos_data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+    else:
+        gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+        
     abscal_delta_gains = {ant: gains_here[ant] for ant in ants}
     apply_cal.calibrate_in_place(data, gains_here)
+
 
     # Abscal Step 2: Global Delay Slope Calibration
     binary_wgts = DataContainer({bl: (data_wgts[bl] > 0).astype(float) for bl in data_wgts})
