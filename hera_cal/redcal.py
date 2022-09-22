@@ -1451,10 +1451,10 @@ def predict_chisq_per_bl(reds):
 
     A = solver.ls_amp.get_A()[:, :, 0]
     B = solver.ls_phs.get_A()[:, :, 0]
-    A_data_resolution = A.dot(np.linalg.pinv(A.T.dot(A), hermitian=True).dot(A.T))
-    B_data_resolution = B.dot(np.linalg.pinv(B.T.dot(B), hermitian=True).dot(B.T))
+    A_data_resolution = (A.T * np.linalg.pinv(A.T.dot(A), hermitian=True).dot(A.T)).sum(0)
+    B_data_resolution = (B.T * np.linalg.pinv(B.T.dot(B), hermitian=True).dot(B.T)).sum(0)
 
-    predicted_chisq_per_bl = 1.0 - np.diag(A_data_resolution + B_data_resolution) / 2.0
+    predicted_chisq_per_bl = 1.0 - (A_data_resolution + B_data_resolution) / 2.0
     return {bl: dof for bl, dof in zip(bls, predicted_chisq_per_bl)}
 
 
