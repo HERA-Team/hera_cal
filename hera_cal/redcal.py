@@ -950,7 +950,7 @@ class RedundantCalibrator:
                 even when allowing for an arbitrary number of phase slope degeneracies.
         """
 
-        self.reds = reds
+        self._set_reds(reds)
         self.pol_mode = parse_pol_mode(self.reds)
 
         if check_redundancy:
@@ -960,6 +960,11 @@ class RedundantCalibrator:
                 nPhaseSlopes = len(list(reds_to_antpos(self.reds).values())[0])
                 raise ValueError('{} degeneracies found, but {} '.format(nDegens, nDegensExpected)
                                  + 'degeneracies expected (assuming {} phase slopes).'.format(nPhaseSlopes))
+
+    def _set_reds(self, reds):
+        '''Sets reds interally, updating self._ubl_to_reds_index.'''
+        self.reds = reds
+        self._ubl_to_reds_index = {red[0]: i for i, red in enumerate(self.reds)}
 
     def build_eqs(self, dc=None):
         """Function for generating linsolve equation strings. Optionally takes in a DataContainer to check
@@ -1020,8 +1025,7 @@ class RedundantCalibrator:
         if len(k) == 2:  # 'g' = gain solution
             return 'g_%d_%s' % k
         else:  # 'u' = unique baseline solution
-            ubl_num = [cnt for cnt, blgrp in enumerate(self.reds) if blgrp[0] == k][0]
-            return 'u_%d_%s' % (ubl_num, k[-1])
+            return 'u_%d_%s' % (self._ubl_to_reds_index[k], k[-1])
 
     def compute_ubls(self, data, gains):
         """Given a set of guess gain solutions, return a dictionary of calibrated visbilities
