@@ -131,7 +131,7 @@ def get_u_bounds(radial_reds, antpos, freqs):
             
 
 def get_unique_orientations(
-    antpos, reds=None, pols=["nn"], min_ubl_per_orient=1, blvec_error_tol=1e-3, bl_error_tol=1.0,
+    antpos, reds, min_ubl_per_orient=1, blvec_error_tol=1e-3, bl_error_tol=1.0,
 ):
     """
     Sort baselines into groups with the same radial heading. These groups of baselines are potentially
@@ -143,8 +143,6 @@ def get_unique_orientations(
         Antenna positions in the form {ant_index: np.array([x,y,z])}.
     reds : list of lists
         List of lists of spatially redundant baselines in the array. Can be found using redcal.get_reds
-    pols : list, default=['nn']
-        A list of polarizations e.g. ['nn', 'ne', 'en', 'ee']
     min_ubl_per_orient : int, default=1
         Minimum number of baselines per unique orientation
     blvec_error_tol : float, default=1e-3
@@ -159,8 +157,8 @@ def get_unique_orientations(
     uors : list of lists of tuples
         List of list of tuples that are considered to be radially redundant
     """
-    if reds is None:
-        reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol)
+    # Get polarizations from reds
+    pols = list(set([rdgrp[0][-1] for rdgrp in reds]))
 
     _uors = {}
     for pol in pols:
