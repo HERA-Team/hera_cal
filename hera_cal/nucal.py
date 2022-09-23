@@ -43,10 +43,7 @@ def is_same_orientation(bl1, bl2, antpos, blvec_error_tol=1e-3):
     norm_vec1 = blvec1 / np.linalg.norm(blvec1)
     norm_vec2 = blvec2 / np.linalg.norm(blvec2)
 
-    if np.isclose(np.linalg.norm(norm_vec1 - norm_vec2), 0, rtol=blvec_error_tol):
-        return True
-    else:
-        return False
+    return np.isclose(np.linalg.norm(norm_vec1 - norm_vec2), 0, rtol=blvec_error_tol)
 
 def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-3):
     """
