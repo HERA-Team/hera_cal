@@ -131,12 +131,7 @@ def get_u_bounds(radial_reds, antpos, freqs):
             
 
 def get_unique_orientations(
-    antpos,
-    reds=None,
-    pols=["nn"],
-    min_ubl_per_orient=1,
-    blvec_error_tol=1e-3,
-    bl_error_tol=1.0,
+    antpos, reds=None, pols=["nn"], min_ubl_per_orient=1, blvec_error_tol=1e-3, bl_error_tol=1.0,
 ):
     """
     Sort baselines into groups with the same radial heading. These groups of baselines are potentially
@@ -166,8 +161,6 @@ def get_unique_orientations(
     """
     if reds is None:
         reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol)
-    else:
-        reds = deepcopy(reds)
 
     _uors = {}
     for pol in pols:
