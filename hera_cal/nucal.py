@@ -32,8 +32,8 @@ def is_same_orientation(bl1, bl2, antpos, blvec_error_tol=1e-3):
         redundant
     """
     # Split baselines in component antennas
-    ant1, ant2, pol1 = bl1
-    ant3, ant4, pol2 = bl2
+    ant1, ant2, _ = bl1
+    ant3, ant4, _ = bl2
 
     # Get baseline vectors
     blvec1 = antpos[ant1] - antpos[ant2]
@@ -43,7 +43,7 @@ def is_same_orientation(bl1, bl2, antpos, blvec_error_tol=1e-3):
     norm_vec1 = blvec1 / np.linalg.norm(blvec1)
     norm_vec2 = blvec2 / np.linalg.norm(blvec2)
 
-    if np.isclose(np.linalg.norm(norm_vec1 - norm_vec2), blvec_error_tol):
+    if np.isclose(np.linalg.norm(norm_vec1 - norm_vec2), 0, rtol=blvec_error_tol):
         return True
     else:
         return False
@@ -98,6 +98,7 @@ def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-3):
     if not (cond1 or cond2):
         return False
 
+    # Last step - return whether or not baselines are in the same orientation
     return is_same_orientation(bl1, bl2, antpos, blvec_error_tol=blvec_error_tol)
 
 def get_u_bounds(radial_reds, antpos, freqs):
