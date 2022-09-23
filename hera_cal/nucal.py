@@ -255,25 +255,6 @@ class RadialRedundantGroup:
             ant1, ant2, pol = baseline
             baseline_lengths.append(np.linalg.norm(antpos[ant2] - antpos[ant1]))
 
-    def get_u_bounds(self, freqs):
-        """
-        Calculates the magnitude of the minimum and maximum u-modes values of the radial redundant group
-        given an array of frequency values
-
-        Parameters:
-        ----------
-        freqs: np.ndarray
-            Array of frequencies found in the data in units of Hz
-
-        Returns:
-        -------
-        ubounds: tuple
-            Tuple of the magnitude minimum and maximum u-modes sampled by this baseline group
-        """
-        umin = freqs.min() / SPEED_OF_LIGHT * np.min(self.baseline_lengths)
-        umax = freqs.max() / SPEED_OF_LIGHT * np.max(self.baseline_lengths)
-        return (umin, umax)
-
     def filter_group(
         self,
         bls=None,
@@ -384,6 +365,14 @@ class FrequencyRedundancy:
             antpos, reds=reds, pols=pols, blvec_error_tol=blvec_error_tol
         )
 
+        # Map baseline key to baseline length
+        self.baseline_lengths = {}
+        for group in self._radial_groups:
+            for bl in group:
+                ant1, ant2, _ = bl
+                blmag = np.linalg.norm(self.antpos[ant2] - self.antpos[ant1])
+                self.baseline_lengths[bl] = blmag
+
     def get_radial_group(self, key):
         """
         Get baselines with the same radial heading as a given baseline
@@ -447,10 +436,6 @@ class FrequencyRedundancy:
     def filter_radial_groups(
         self,
         min_nbls=1,
-        bls=None,
-        ex_bls=None,
-        ants=None,
-        ex_ants=None,
         pols=None,
         ex_pols=None,
         min_bl_cut=None,
@@ -465,17 +450,6 @@ class FrequencyRedundancy:
         ----------
         min_nbls : int, default=1
             Minimum number of baselines allowed in a radially redundant group
-        bls : list of tuples, default=None
-            baselines to include. Baselines of the form (i,j,pol) include that specific
-            visibility.  Baselines of the form (i,j) are broadcast across all polarizations present in reds.
-        ex_bls : list of tuples, default=None
-            same as bls, but excludes baselines.
-        ants : list of tuples, default=None
-            antennas to include. Only baselines where both antenna indices are in ants
-            are included.  Antennas of the form (i,pol) include that antenna/pol. Antennas of the form i are
-            broadcast across all polarizations present in reds.
-        ex_ants : list of tuples, default=None
-            same as ants, but excludes antennas.
         pols : list of strings
             polarizations to include in reds. e.g. ['nn','ee','ne','en']
         ex_pols : list of strings
@@ -485,14 +459,13 @@ class FrequencyRedundancy:
         max_bl_cut:
             Cut baselines in the radially redundant group with lengths less than min_bl_cut
         """
-        _bad_groups = []
-        for gi, group in enumerate(self._radial_groups):
-            # Filter radially redundant group
+        # Filter radially redundant group
+        radial_reds = []
+
+        for gi, group in enumerate(radial_reds):
+            
+            
             group.filter_group(
-                bls=bls,
-                ex_bls=ex_bls,
-                ants=ants,
-                ex_ants=ex_ants,
                 pols=pols,
                 ex_pols=ex_pols,
                 min_bl_cut=min_bl_cut,
@@ -500,8 +473,7 @@ class FrequencyRedundancy:
             )
             # Identify groups with fewer than min_nbls baselines
             if len(group) < min_nbls:
-                _bad_groups.append(gi)
-
+                pass
         # Remove antennas with fewer than min_nbls
         for _bad_group in sorted(_bad_groups, reverse=True):
             self._radial_groups.pop(_bad_group)
