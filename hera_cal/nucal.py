@@ -9,8 +9,46 @@ from scipy.cluster.hierarchy import fclusterdata
 
 SPEED_OF_LIGHT = const.c.si.value
 
+def is_same_orientation(bl1, bl2, antpos, blvec_error_tol=1e-3):
+    """
+    Determine whether or not two baselines have the same orientation
 
-def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-9):
+    Parameters:
+    ----------
+    bl1 : tuple
+        Tuple of antenna indices and polarizations of the first baseline
+    bl2 : tuple
+        Tuple of antenna indices and polarizations of the second baseline
+    freqs : np.ndarray
+        Array of frequencies found in the data in units of Hz
+    antpos : dict
+        Antenna positions in the form {ant_index: np.array([x,y,z])}.
+    blvec_error_tol : float, default=1e-3
+        Largest allowable euclidean distance the first unit baseline vector can be away from
+        the second
+
+    Returns:
+        Boolean value determining whether or not the baselines are frequency
+        redundant
+    """
+    # Split baselines in component antennas
+    ant1, ant2, pol1 = bl1
+    ant3, ant4, pol2 = bl2
+
+    # Get baseline vectors
+    blvec1 = antpos[ant1] - antpos[ant2]
+    blvec2 = antpos[ant3] - antpos[ant4]
+
+    # Check headings
+    norm_vec1 = blvec1 / np.linalg.norm(blvec1)
+    norm_vec2 = blvec2 / np.linalg.norm(blvec2)
+
+    if np.isclose(np.linalg.norm(norm_vec1 - norm_vec2), blvec_error_tol):
+        return True
+    else:
+        return False
+
+def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-3):
     """
     Determine whether or not two baselines are frequency redundant. Checks that
     both baselines have the same heading, polarization, and have overlapping uv-modes
@@ -25,9 +63,9 @@ def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-9):
         Array of frequencies found in the data in units of Hz
     antpos : dict
         Antenna positions in the form {ant_index: np.array([x,y,z])}.
-    blvec_error_tol : float, default=1e-9
-        Largest allowable euclidean distance a unit baseline vector can be away from an existing
-        cluster to be considered a unique orientation. See "fclusterdata" for more details.
+    blvec_error_tol : float, default=1e-3
+        Largest allowable euclidean distance the first unit baseline vector can be away from
+        the second
 
     Returns:
         Boolean value determining whether or not the baselines are frequency
@@ -35,12 +73,16 @@ def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-9):
 
     """
     # Split baselines in component antennas
-    _ant1, _ant2, _pol = bl1
-    ant1, ant2, pol = bl2
+    ant1, ant2, pol1 = bl1
+    ant3, ant4, pol2 = bl2
+
+    # Check polarization match
+    if pol1 != pol2:
+        return False
 
     # Get baseline vectors
-    blvec1 = antpos[_ant2] - antpos[_ant1]
-    blvec2 = antpos[ant2] - antpos[ant1]
+    blvec1 = antpos[ant1] - antpos[ant2]
+    blvec2 = antpos[ant3] - antpos[ant4]
 
     # Check umode overlap
     blmag1 = np.linalg.norm(blvec1)
@@ -53,27 +95,46 @@ def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-9):
         blmag1 * freqs.min() <= blmag2 * freqs.min()
         and blmag1 * freqs.max() >= blmag2 * freqs.min()
     )
+    if not (cond1 or cond2):
+        return False
 
-    # Check polarization match
-    cond3 = _pol == pol
+    return is_same_orientation(bl1, bl2, antpos, blvec_error_tol=blvec_error_tol)
 
-    # Check headings
-    norm_vec1 = blvec1 / np.linalg.norm(blvec1)
-    norm_vec2 = blvec2 / np.linalg.norm(blvec2)
-    clusters = fclusterdata(
-        np.array([norm_vec1, norm_vec2]), blvec_error_tol, criterion="distance"
-    )
-    cond4 = clusters[0] == clusters[1]
+def get_u_bounds(radial_reds, antpos, freqs):
+    """
+    Calculates the magnitude of the minimum and maximum u-modes values of the radial redundant group
+    given an array of frequency values
 
-    return (cond1 or cond2) and cond3 and cond4
+    Parameters:
+    ----------
+    radial_reds: list of lists of baseline tuples (or FrequencyRedundancy)
+        List of lists of radially redundant groups of baselines
+    antpos: dict
+        Antenna positions in the form {ant_index: np.array([x,y,z])}.
+    freqs: np.ndarray
+        Array of frequencies found in the data in units of Hz
 
+    Returns:
+    -------
+    ubounds: tuple
+        Tuple of the magnitude minimum and maximum u-modes sampled by this baseline group
+    """
+    ubounds = []
+    for group in radial_reds:
+        umodes = [np.linalg.norm(antpos[ant1] - antpos[ant2]) for (ant1, ant2, pol) in group]
+        umin = np.min(umodes) * freqs.min() / SPEED_OF_LIGHT
+        umax = np.max(umodes) * freqs.max() / SPEED_OF_LIGHT
+        ubounds.append((umin, umax))
+
+    return ubounds
+            
 
 def get_unique_orientations(
     antpos,
     reds=None,
     pols=["nn"],
     min_ubl_per_orient=1,
-    blvec_error_tol=1e-9,
+    blvec_error_tol=1e-3,
     bl_error_tol=1.0,
 ):
     """
@@ -90,7 +151,7 @@ def get_unique_orientations(
         A list of polarizations e.g. ['nn', 'ne', 'en', 'ee']
     min_ubl_per_orient : int, default=1
         Minimum number of baselines per unique orientation
-    blvec_error_tol : float, default=1e-9
+    blvec_error_tol : float, default=1e-3
         Largest allowable euclidean distance a unit baseline vector can be away from an existing
         cluster to be considered a unique orientation. See "fclusterdata" for more details.
     bl_error_tol: float, default=1.0
@@ -113,8 +174,7 @@ def get_unique_orientations(
 
         # Compute normalized baseline vectors
         normalized_vecs = []
-        for bls in ubl_pairs:
-            ant1, ant2, pol = bls
+        for (ant1, ant2, pol) in ubl_pairs:
             normalized_vecs.append(
                 (antpos[ant2] - antpos[ant1])
                 / np.linalg.norm(antpos[ant2] - antpos[ant1])
@@ -158,7 +218,7 @@ class RadialRedundantGroup:
     of the radially redundant group and filter the group based on a number of factors.
     """
 
-    def __init__(self, baselines, antpos, blvec=None, pol=None):
+    def __init__(self, baselines, antpos, bl_unit_vec=None, pol=None):
         """
         Create a RadialRedundantGroup object from a list baselines assumed
         to be radially redundant
@@ -166,10 +226,10 @@ class RadialRedundantGroup:
         Parameters:
         ----------
         baselines : list of tuples
-            List
+            List of baseline tuples
         antpos : dict
             Antenna positions in the form {ant_index: np.array([x,y,z])}.
-        blvec : np.ndarray
+        bl_unit_vec : np.ndarray
             Normalized baseline vector for the radially redundant group. If one is not
             provided, it will be estimated from the antenna positions
         pol : str
@@ -189,25 +249,19 @@ class RadialRedundantGroup:
         else:
             self.pol = pol
 
-        if blvec is None:
+        if bl_unit_vec is None:
             ant1, ant2, pol = baselines[0]
             self.blvec = (antpos[ant2] - antpos[ant1]) / np.linalg.norm(
                 antpos[ant2] - antpos[ant1]
             )
         else:
-            self.blvec = blvec
+            self.bl_unit_vec = bl_unit_vec
 
         # Store baseline lengths
         baseline_lengths = []
         for baseline in baselines:
             ant1, ant2, pol = baseline
             baseline_lengths.append(np.linalg.norm(antpos[ant2] - antpos[ant1]))
-
-        # Sort baselines list by baseline length
-        self._baselines = [_baselines[idx] for idx in np.argsort(baseline_lengths)]
-        self.baseline_lengths = [
-            baseline_lengths[idx] for idx in np.argsort(baseline_lengths)
-        ]
 
     def get_u_bounds(self, freqs):
         """
@@ -234,8 +288,6 @@ class RadialRedundantGroup:
         ex_bls=None,
         ants=None,
         ex_ants=None,
-        pols=None,
-        ex_pols=None,
         min_bl_cut=None,
         max_bl_cut=None,
     ):
@@ -257,10 +309,6 @@ class RadialRedundantGroup:
             broadcast across all polarizations present in reds.
         ex_ants : list of tuples, default=None
             same as ants, but excludes antennas.
-        pols : list of strings
-            polarizations to include in reds. e.g. ['nn','ee','ne','en']
-        ex_pols : list of strings
-            same as pols, but excludes polarizations.
         min_bl_cut:
             Cut baselines in the radially redundant group with lengths less than min_bl_cut
         max_bl_cut:
@@ -272,8 +320,6 @@ class RadialRedundantGroup:
             ex_bls=ex_bls,
             ants=ants,
             ex_ants=ex_ants,
-            pols=pols,
-            ex_pols=ex_pols,
         )
         if len(_baselines) == 0:
             self._baselines = []
@@ -281,13 +327,13 @@ class RadialRedundantGroup:
         else:
             new_bls = []
             new_bls_lengths = []
-            for bls in _baselines[0]:
-                index = self._baselines.index(bls)
+            for bl in _baselines[0]:
+                index = self._baselines.index(bl)
                 if min_bl_cut is not None and self.baseline_lengths[index] < min_bl_cut:
                     continue
                 if max_bl_cut is not None and self.baseline_lengths[index] > max_bl_cut:
                     continue
-                new_bls.append(bls)
+                new_bls.append(bl)
                 new_bls_lengths.append(self.baseline_lengths[index])
 
             self._baselines = new_bls
@@ -305,6 +351,14 @@ class RadialRedundantGroup:
         """Get the baseline at the chosen index"""
         return self._baselines[index]
 
+    def sort(self):
+        """Sort baselines list by baseline length
+        """
+        self._baselines = [self._baselines[idx] for idx in np.argsort(self.baseline_lengths)]
+        self.baseline_lengths = [
+            self.baseline_lengths[idx] for idx in np.argsort(self.baseline_lengths)
+        ]
+
 
 class FrequencyRedundancy:
     """List-like object that contains groups RadialRedundantGroup objects.
@@ -315,7 +369,7 @@ class FrequencyRedundancy:
     """
 
     def __init__(
-        self, antpos, reds=None, blvec_error_tol=1e-9, pols=["nn"], bl_error_tol=1.0
+        self, antpos, reds=None, blvec_error_tol=1e-3, pols=["nn"], bl_error_tol=1.0
     ):
         """
         Parameters:
@@ -340,7 +394,7 @@ class FrequencyRedundancy:
 
     def get_radial_group(self, key):
         """
-        Get baselines with the same radal heading as a given baseline
+        Get baselines with the same radial heading as a given baseline
 
         Parameters:
         ----------
@@ -396,13 +450,11 @@ class FrequencyRedundancy:
 
     def get_pol(self, pol):
         """Get all radially redundant groups with a given polarization"""
-        for group in self:
-            if group.pol == pol:
-                yield group
+        return [group for group in self if group.pol == pol]
 
     def filter_radial_groups(
         self,
-        min_nbls=4,
+        min_nbls=1,
         bls=None,
         ex_bls=None,
         ants=None,
@@ -419,6 +471,8 @@ class FrequencyRedundancy:
 
         Parameters:
         ----------
+        min_nbls : int, default=1
+            Minimum number of baselines allowed in a radially redundant group
         bls : list of tuples, default=None
             baselines to include. Baselines of the form (i,j,pol) include that specific
             visibility.  Baselines of the form (i,j) are broadcast across all polarizations present in reds.
