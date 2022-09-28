@@ -191,11 +191,7 @@ def get_unique_orientations(
                 _uors[tuple(vec) + (pol,)] = group
 
     # Convert lists to RadialRedundantGroup objects
-    uors = [
-        RadialRedundantGroup(_uors[key], antpos)
-        for key in _uors
-        if len(_uors[key]) >= min_ubl_per_orient
-    ]
+    uors = [_uors[key] for key in _uors if len(_uors[key]) >= min_ubl_per_orient]
     uors = sorted(uors, key=len, reverse=True)
     return uors
 
