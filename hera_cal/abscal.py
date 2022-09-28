@@ -3217,6 +3217,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
         autos_data = [bl for bl in data_bls if bl[0]==bl[1] and bl[2] in pols]
         autos_model = [bl for bl in model_bls if bl[0]==bl[1] and bl[2] in pols]
         data_bl_to_load = set(list(data_bl_to_load) + autos_data)
+        model_bl_to_load = set(list(model_bl_to_load) + autos_model)
 
     # If we're working with full data sets, only pick out matching keys (or ones that work reversably)
     if not data_is_redsol and not model_is_redundant:
