@@ -454,22 +454,20 @@ class FrequencyRedundancy:
         """
         # Filter radially redundant group
         radial_reds = []
+        for group in self._radial_groups:
+            filtered_group = []
+            for bl in group:
+                if (max_bl_cut is None or self.baseline_lengths[bl] < max_bl_cut) and (min_bl_cut is None or self._baseline_lengths[bl] > min_bl_cut):
+                    filtered_group.append(bl)
+                else:
+                    self.baseline_lengths.pop(bl)
 
-        for gi, group in enumerate(radial_reds):
-            
-            
-            group.filter_group(
-                pols=pols,
-                ex_pols=ex_pols,
-                min_bl_cut=min_bl_cut,
-                max_bl_cut=max_bl_cut,
-            )
             # Identify groups with fewer than min_nbls baselines
-            if len(group) < min_nbls:
-                pass
-        # Remove antennas with fewer than min_nbls
-        for _bad_group in sorted(_bad_groups, reverse=True):
-            self._radial_groups.pop(_bad_group)
+            if len(filtered_group) > min_nbls:
+                radial_reds.append(filtered_group)
+
+        # Remove filtered groups from baseline lengths and reds dictionaries
+        self._radial_groups = radial_reds
 
     def __len__(self):
         """Get number of frequency redundant groups"""
@@ -479,6 +477,12 @@ class FrequencyRedundancy:
         """Get RadialRedundantGroup object from list of unique orientations"""
         return self._radial_groups[index]
 
+    def __setitem__(self, index, value):
+        """Set value of index in _radial_groups"""
+        self._radial_groups[index] = value
+    
     def __iter__(self):
         """Iterates through the list of redundant groups"""
         return iter(self._radial_groups)
+
+    
