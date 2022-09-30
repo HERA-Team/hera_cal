@@ -1264,7 +1264,7 @@ def tophat_frfilter_argparser(mode='clean'):
     filt_options.add_argument("--fr_freq_skip", default=1, type=int, help="fr_freq_skip: int, optional "
                                                                           "bin fringe rates from every freq_skip channels. "
                                                                           "default is 1 -> takes a long time. We recommend setting this to be larger.")
-    filt_options.add_argument("--pre_filter_modes_between_lobe_minimum_and_zero", type=bool, default=False, help="Subtract emission between the main-lobe fringe-rate region and zero "
+    filt_options.add_argument("--pre_filter_modes_between_lobe_minimum_and_zero", action="store_true", default=False, help="Subtract emission between the main-lobe fringe-rate region and zero "
                                                                                                                  "before applying main-lobe fringe rate filter. This is to prevent "
                                                                                                                  "the main-lobe filter to responding to overwhelmingly bright emission "
                                                                                                                  "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
