@@ -2033,34 +2033,38 @@ def _redcal_run_write_results(cal, hd, firstcal_filename, omnical_filename, omni
     antenna_positions = np.array([hd.antenna_positions[hd.antenna_numbers == antnum].flatten() for antnum in cal_antnums])
     lst_array = np.unique(hd.lsts)
 
-    if verbose:
-        print('\nNow saving firstcal gains to', os.path.join(outdir, firstcal_filename))
-    write_cal(firstcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
-              flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber,
-              x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
-              antenna_positions=antenna_positions, lst_array=lst_array,
-              history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
+    if firstcal_filename is not None:
+        if verbose:
+            print('\nNow saving firstcal gains to', os.path.join(outdir, firstcal_filename))
+        write_cal(firstcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
+                  flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber,
+                  x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
+                  antenna_positions=antenna_positions, lst_array=lst_array,
+                  history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
 
-    if verbose:
-        print('Now saving omnical gains to', os.path.join(outdir, omnical_filename))
-    write_cal(omnical_filename, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
-              quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
-              x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
-              antenna_positions=antenna_positions, lst_array=lst_array,
-              history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
+    if omnical_filename is not None:
+        if verbose:
+            print('Now saving omnical gains to', os.path.join(outdir, omnical_filename))
+        write_cal(omnical_filename, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
+                  quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
+                  x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
+                  antenna_positions=antenna_positions, lst_array=lst_array,
+                  history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
 
-    if verbose:
-        print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
-    hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
-    hd_out.read(bls=list(cal['v_omnical'].keys()))
-    hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
-    hd_out.history += utils.history_string(add_to_history)
-    hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
+    if omnivis_filename is not None:
+        if verbose:
+            print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
+        hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
+        hd_out.read(bls=list(cal['v_omnical'].keys()))
+        hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
+        hd_out.history += utils.history_string(add_to_history)
+        hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
 
-    if verbose:
-        print('Now saving redcal metadata to', os.path.join(outdir, meta_filename))
-    save_redcal_meta(os.path.join(outdir, meta_filename), cal['fc_meta'], cal['omni_meta'], hd.freqs,
-                     hd.times, hd.lsts, hd.antpos, hd.history + utils.history_string(add_to_history))
+    if meta_filename is not None:
+        if verbose:
+            print('Now saving redcal metadata to', os.path.join(outdir, meta_filename))
+        save_redcal_meta(os.path.join(outdir, meta_filename), cal['fc_meta'], cal['omni_meta'], hd.freqs,
+                         hd.times, hd.lsts, hd.antpos, hd.history + utils.history_string(add_to_history))
 
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
