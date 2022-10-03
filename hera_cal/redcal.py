@@ -2022,7 +2022,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     return rv
 
 
-def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omnivis_filename,
+def _redcal_run_write_results(cal, hd, firstcal_filename, omnical_filename, omnivis_filename,
                               meta_filename, outdir, clobber=False, verbose=False, add_to_history=''):
     '''Helper function for writing the results of redcal_run.'''
     # get antnums2antnames dictionary
@@ -2034,8 +2034,8 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
     lst_array = np.unique(hd.lsts)
 
     if verbose:
-        print('\nNow saving firstcal gains to', os.path.join(outdir, fistcal_filename))
-    write_cal(fistcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
+        print('\nNow saving firstcal gains to', os.path.join(outdir, firstcal_filename))
+    write_cal(firstcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
               flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber,
               x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
               antenna_positions=antenna_positions, lst_array=lst_array,
@@ -2058,7 +2058,7 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
     hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
 
     if verbose:
-        print('Now saving redcal metadata to ', os.path.join(outdir, meta_filename))
+        print('Now saving redcal metadata to', os.path.join(outdir, meta_filename))
     save_redcal_meta(os.path.join(outdir, meta_filename), cal['fc_meta'], cal['omni_meta'], hd.freqs,
                      hd.times, hd.lsts, hd.antpos, hd.history + utils.history_string(add_to_history))
 
