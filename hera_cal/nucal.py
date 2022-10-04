@@ -223,11 +223,8 @@ class FrequencyRedundancy:
         self.antpos = antpos
         self.blvec_error_tol = blvec_error_tol
 
-        # 
-        full_reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol)
-
         if reds is None:
-            reds = full_reds
+            reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol)
 
         # Get unique orientations
         self._radial_groups = get_unique_orientations(antpos, reds=reds, blvec_error_tol=blvec_error_tol)
@@ -398,6 +395,12 @@ class FrequencyRedundancy:
         else:
             self._radial_groups.append(group)
 
+        # Add baseline lengths to length dictionary
+        for bl in group:
+            ant1, ant2, _ = bl
+            blmag = np.linalg.norm(self.antpos[ant2] - self.antpos[ant1])
+            self.baseline_lengths[bl] = blmag
+
         # Reset the group now that radially redundant groups have changed
         self._reset_mapping_dictionaries()
 
@@ -424,6 +427,12 @@ class FrequencyRedundancy:
         # Add group at index
         self._radial_groups[index] = value
 
+        # Add baseline lengths to length dictionary
+        for bl in value:
+            ant1, ant2, _ = bl
+            blmag = np.linalg.norm(self.antpos[ant2] - self.antpos[ant1])
+            self.baseline_lengths[bl] = blmag
+
         # Reset baseline mapping to spectrally redundant groups
         self._reset_mapping_dictionaries()
 
@@ -441,6 +450,12 @@ class FrequencyRedundancy:
 
         # Append new group
         self._radial_groups.append(value)
+
+        # Add baseline lengths to length dictionary
+        for bl in value:
+            ant1, ant2, _ = bl
+            blmag = np.linalg.norm(self.antpos[ant2] - self.antpos[ant1])
+            self.baseline_lengths[bl] = blmag
 
         # Reset baseline mapping to spectrally redundant groups
         self._reset_mapping_dictionaries()
