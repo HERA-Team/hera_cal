@@ -4,7 +4,6 @@ from . import redcal
 import numpy as np
 from copy import deepcopy
 import astropy.constants as const
-from collections import defaultdict
 from scipy.cluster.hierarchy import fclusterdata
 
 SPEED_OF_LIGHT = const.c.si.value
@@ -359,7 +358,7 @@ class FrequencyRedundancy:
         for group in self._radial_groups:
             filtered_group = []
             for bl in group:
-                if (max_bl_cut is None or self.baseline_lengths[bl] < max_bl_cut) and (min_bl_cut is None or self._baseline_lengths[bl] > min_bl_cut):
+                if (max_bl_cut is None or self.baseline_lengths[bl] < max_bl_cut) and (min_bl_cut is None or self.baseline_lengths[bl] > min_bl_cut):
                     filtered_group.append(bl)
                 
             # Identify groups with fewer than min_nbls baselines
