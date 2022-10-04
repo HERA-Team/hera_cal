@@ -434,8 +434,6 @@ class FrequencyRedundancy:
     def filter_radial_groups(
         self,
         min_nbls=1,
-        pols=None,
-        ex_pols=None,
         min_bl_cut=None,
         max_bl_cut=None,
     ):
