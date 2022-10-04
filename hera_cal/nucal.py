@@ -352,8 +352,6 @@ class FrequencyRedundancy:
         if reds is None:
             reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol)
 
-        self._mapped_reds = {red[0]: red for red in reds}
-
         self._radial_groups = get_unique_orientations(
             antpos, reds=reds, pols=pols, blvec_error_tol=blvec_error_tol
         )
@@ -365,6 +363,16 @@ class FrequencyRedundancy:
                 ant1, ant2, _ = bl
                 blmag = np.linalg.norm(self.antpos[ant2] - self.antpos[ant1])
                 self.baseline_lengths[bl] = blmag
+
+        # Spatial reds
+        self._mapped_reds = {red[0]: red for red in reds}
+        self._baseline_to_red_key = {}
+        for red in reds:
+            for bl in red:
+                self._baseline_to_red_key[bl] = red[0]
+
+        # Spectral reds
+        
 
     def get_radial_group(self, key):
         """
@@ -405,26 +413,23 @@ class FrequencyRedundancy:
         group: list of tuples
             Return baseline tuples that are spatially redundant
         """
-        for group_key in self._mapped_reds:
-            if key == group_key or key in self._mapped_reds[group_key]:
-                key = group_key
-                break
-
-        if utils.reverse_bl(key) in self._mapped_reds:
-            return [
-                utils.reverse_bl(bls)
-                for bls in self._mapped_reds.get(utils.reverse_bl(key))
-            ]
-        elif key in self._mapped_reds:
-            return self._mapped_reds.get(key)
+        if key in self._baseline_to_red_key:
+            group_key = self._baseline_to_red_key[key]
+        elif utils.reverse_bl(key) in self._baseline_to_red_key:
+            group_key = utils.reverse_bl(self._baseline_to_red_key[utils.reverse_bl(key)])
         else:
             raise KeyError(
                 f"Baseline {key} is not in the group of spatial redundancies"
             )
 
+        if group_key in self._mapped_reds:
+            return self._mapped_reds[group_key]
+        else:
+            return [utils.reverse_bl(bl) for bl in self._mapped_reds[utils.reverse_bl(group_key)]]
+
     def get_pol(self, pol):
         """Get all radially redundant groups with a given polarization"""
-        return [group for group in self if group.pol == pol]
+        return [group for group in self if group[0][-1] == pol]
 
     def filter_radial_groups(
         self,
