@@ -218,12 +218,13 @@ class FrequencyRedundancy:
             List of polarization strings to be used in the frequency redundant group
         """
         self.antpos = antpos
+        self.blvec_error_tol = blvec_error_tol
 
         if reds is None:
             reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol)
 
         self._radial_groups = get_unique_orientations(
-            antpos, reds=reds, pols=pols, blvec_error_tol=blvec_error_tol
+            antpos, reds=reds, blvec_error_tol=blvec_error_tol
         )
 
         # Map baseline key to baseline length
@@ -258,7 +259,7 @@ class FrequencyRedundancy:
 
         """
         # Identify headings
-        group_key = self.get_radial_group(key)
+        group_key = self._baseline_to_red_key[key]
 
         for group in self._radial_groups:
             if group_key in group:
@@ -303,9 +304,9 @@ class FrequencyRedundancy:
         max_bl_cut=None,
     ):
         """
-        Filter each radially redundant group to include/exclude the specified bls, antennas. and polarizations.
-        Arguments are evaluated, in order of increasing precedence: (pols, ex_pols, bls, ex_bls, ants, ex_ants,
-        min_bl_cut, max_bl_cut, min_nbls).
+        Filter each radially redundant group to include/exclude the baselines based on baseline length.
+        Radially redundant groups can also be completely filtered based on the number of baselines in 
+        the group.
 
         Parameters:
         ----------
@@ -346,11 +347,35 @@ class FrequencyRedundancy:
         return self._radial_groups[index]
 
     def __setitem__(self, index, value):
-        """Set value of index in _radial_groups"""
+        """Set value at index in _radial_groups"""
+        if not isinstance(value, list) and not isinstance(value[0], tuple):
+            raise ValueError("Input value not list of tuples")
+
+        for bi in range(1, len(value)):
+            if not is_same_orientation(value[0], value[bi], self.antpos, blvec_error_tol=self.blvec_error_tol):
+                raise ValueError(f'Baselines {value[0]} and {value[bi]} are not in the same orientation')
+            if value[0][-1] != value[bi][-1]:
+                raise ValueError(f'Baselines {value[0]} and {value[bi]} do not have the same polarization')
+        
         self._radial_groups[index] = value
+
+    def __append__(self, value):
+        """Append value to the end of _radial_groups"""
+        if not isinstance(value, list) and not isinstance(value[0], tuple):
+            raise ValueError("Input value not list of tuples")
+
+        for bi in range(1, len(value)):
+            if not is_same_orientation(value[0], value[bi], self.antpos, blvec_error_tol=self.blvec_error_tol):
+                raise ValueError(f'Baselines {value[0]} and {value[bi]} are not in the same orientation')
+            if value[0][-1] != value[bi][-1]:
+                raise ValueError(f'Baselines {value[0]} and {value[bi]} do not have the same polarization')
+        
+        self._radial_groups.append(value)
     
     def __iter__(self):
         """Iterates through the list of redundant groups"""
         return iter(self._radial_groups)
 
-    
+    def sort(self, key=None, reverse=True):
+        """Sorts list by length of the radial groups"""
+        self._radial_groups.sort(key=len, reverse=reverse)
