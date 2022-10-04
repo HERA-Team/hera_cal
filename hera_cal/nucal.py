@@ -196,136 +196,6 @@ def get_unique_orientations(
     return uors
 
 
-class RadialRedundantGroup:
-    """List-like object that holds tuples of baselines that are assumed to be
-    radially redundant (have the same heading). In addition to supporting list
-    like behavior, this object also gets the minimum and maximum u-mode magnitude
-    of the radially redundant group and filter the group based on a number of factors.
-    """
-
-    def __init__(self, baselines, antpos, bl_unit_vec=None, pol=None):
-        """
-        Create a RadialRedundantGroup object from a list baselines assumed
-        to be radially redundant
-
-        Parameters:
-        ----------
-        baselines : list of tuples
-            List of baseline tuples
-        antpos : dict
-            Antenna positions in the form {ant_index: np.array([x,y,z])}.
-        bl_unit_vec : np.ndarray
-            Normalized baseline vector for the radially redundant group. If one is not
-            provided, it will be estimated from the antenna positions
-        pol : str
-            Polarization of the baseline group
-        """
-        _baselines = deepcopy(baselines)
-
-        # Attach polarization and normalized vector to radial redundant group
-        if pol is None:
-            pols = list(set([bl[2] for bl in baselines]))
-            if len(pols) > 1:
-                raise ValueError(
-                    f"Multiple polarizations are in your radially redundant group: {pols}"
-                )
-            else:
-                self.pol = pols[0]
-        else:
-            self.pol = pol
-
-        if bl_unit_vec is None:
-            ant1, ant2, pol = baselines[0]
-            self.blvec = (antpos[ant2] - antpos[ant1]) / np.linalg.norm(
-                antpos[ant2] - antpos[ant1]
-            )
-        else:
-            self.bl_unit_vec = bl_unit_vec
-
-        # Store baseline lengths
-        baseline_lengths = []
-        for baseline in baselines:
-            ant1, ant2, pol = baseline
-            baseline_lengths.append(np.linalg.norm(antpos[ant2] - antpos[ant1]))
-
-    def filter_group(
-        self,
-        bls=None,
-        ex_bls=None,
-        ants=None,
-        ex_ants=None,
-        min_bl_cut=None,
-        max_bl_cut=None,
-    ):
-        """
-        Filter radially redundant group to include/exclude the specified bls, antennas. and polarizations.
-        Arguments are evaluated, in order of increasing precedence: (pols, ex_pols, bls, ex_bls, ants, ex_ants,
-        min_bl_cut, max_bl_cut).
-
-        Parameters:
-        ----------
-        bls : list of tuples, default=None
-            baselines to include. Baselines of the form (i,j,pol) include that specific
-            visibility.  Baselines of the form (i,j) are broadcast across all polarizations present in reds.
-        ex_bls : list of tuples, default=None
-            same as bls, but excludes baselines.
-        ants : list of tuples, default=None
-            antennas to include. Only baselines where both antenna indices are in ants
-            are included.  Antennas of the form (i,pol) include that antenna/pol. Antennas of the form i are
-            broadcast across all polarizations present in reds.
-        ex_ants : list of tuples, default=None
-            same as ants, but excludes antennas.
-        min_bl_cut:
-            Cut baselines in the radially redundant group with lengths less than min_bl_cut
-        max_bl_cut:
-            Cut baselines in the radially redundant group with lengths less than min_bl_cut
-        """
-        _baselines = redcal.filter_reds(
-            [self._baselines],
-            bls=bls,
-            ex_bls=ex_bls,
-            ants=ants,
-            ex_ants=ex_ants,
-        )
-        if len(_baselines) == 0:
-            self._baselines = []
-            self.baseline_lengths = []
-        else:
-            new_bls = []
-            new_bls_lengths = []
-            for bl in _baselines[0]:
-                index = self._baselines.index(bl)
-                if min_bl_cut is not None and self.baseline_lengths[index] < min_bl_cut:
-                    continue
-                if max_bl_cut is not None and self.baseline_lengths[index] > max_bl_cut:
-                    continue
-                new_bls.append(bl)
-                new_bls_lengths.append(self.baseline_lengths[index])
-
-            self._baselines = new_bls
-            self.baseline_lengths = new_bls_lengths
-
-    def __iter__(self):
-        """Iterate through baselines in the radially redundant group"""
-        return iter(self._baselines)
-
-    def __len__(self):
-        """Return the length of the baselines list"""
-        return len(self._baselines)
-
-    def __getitem__(self, index):
-        """Get the baseline at the chosen index"""
-        return self._baselines[index]
-
-    def sort(self):
-        """Sort baselines list by baseline length
-        """
-        self._baselines = [self._baselines[idx] for idx in np.argsort(self.baseline_lengths)]
-        self.baseline_lengths = [
-            self.baseline_lengths[idx] for idx in np.argsort(self.baseline_lengths)
-        ]
-
-
 class FrequencyRedundancy:
     """List-like object that contains groups RadialRedundantGroup objects.
     Functions similarly to the output of redcal.get_reds for frequency redundant
@@ -370,8 +240,6 @@ class FrequencyRedundancy:
         for red in reds:
             for bl in red:
                 self._baseline_to_red_key[bl] = red[0]
-
-        # Spectral reds
         
 
     def get_radial_group(self, key):
@@ -390,13 +258,10 @@ class FrequencyRedundancy:
 
         """
         # Identify headings
-        for group_key in self._mapped_reds:
-            if key == group_key or key in self._mapped_reds[group_key]:
-                key = group_key
-                break
+        group_key = self.get_radial_group(key)
 
         for group in self._radial_groups:
-            if key in group:
+            if group_key in group:
                 return group
 
     def get_redundant_group(self, key):
