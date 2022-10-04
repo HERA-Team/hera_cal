@@ -127,9 +127,7 @@ def get_u_bounds(radial_reds, antpos, freqs):
     return ubounds
             
 
-def get_unique_orientations(
-    antpos, reds, min_ubl_per_orient=1, blvec_error_tol=1e-3, bl_error_tol=1.0,
-):
+def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=1e-3):
     """
     Sort baselines into groups with the same radial heading. These groups of baselines are potentially
     frequency redundant in a similar way to redcal.get_reds does. Returns a list of RadialRedundantGroup objects
@@ -200,10 +198,9 @@ class FrequencyRedundancy:
     """List-like object that contains groups RadialRedundantGroup objects.
     Functions similarly to the output of redcal.get_reds for frequency redundant
     calibration. In addition to mimicking list functionality, this object also filters
-    radially redundant groups based on a number of factors, can get specific polarizations, and
-    radially redundant and spatially redundant groups by baseline key.
+    radially redundant groups by baseline length and number of baselines in a radially redundant
+    group radially redundant and spatially redundant groups by baseline key.
     """
-
     def __init__(
         self, antpos, reds=None, blvec_error_tol=1e-3, pols=["nn"], bl_error_tol=1.0
     ):
@@ -214,18 +211,26 @@ class FrequencyRedundancy:
             Antenna positions in the form {ant_index: np.array([x,y,z])}.
         reds : list of list
             List of lists of baseline keys. Can be determined using redcal.get_reds
-        pols : list of strs
-            List of polarization strings to be used in the frequency redundant group
+        blvec_error_tol : float, default=1e-3
+            Largest allowable euclidean distance a unit baseline vector can be away from an existing
+            cluster to be considered a unique orientation. See "fclusterdata" for more details.
+        pols : list, default=['nn']
+            A list of polarizations e.g. ['nn', 'ne', 'en', 'ee']
+        bl_error_tol : float, default=1.0
+            The largest allowable difference between baselines in a redundant group
+            (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
         """
         self.antpos = antpos
         self.blvec_error_tol = blvec_error_tol
 
-        if reds is None:
-            reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol)
+        # 
+        full_reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol)
 
-        self._radial_groups = get_unique_orientations(
-            antpos, reds=reds, blvec_error_tol=blvec_error_tol
-        )
+        if reds is None:
+            reds = full_reds
+
+        # Get unique orientations
+        self._radial_groups = get_unique_orientations(antpos, reds=reds, blvec_error_tol=blvec_error_tol)
 
         # Map baseline key to baseline length
         self.baseline_lengths = {}
@@ -235,14 +240,37 @@ class FrequencyRedundancy:
                 blmag = np.linalg.norm(self.antpos[ant2] - self.antpos[ant1])
                 self.baseline_lengths[bl] = blmag
 
-        # Spatial reds
+        # Map baselines to spatially redundant groups
         self._mapped_reds = {red[0]: red for red in reds}
-        self._baseline_to_red_key = {}
+        self._bl_to_red_key = {}
         for red in reds:
             for bl in red:
-                self._baseline_to_red_key[bl] = red[0]
-        
+                self._bl_to_red_key[bl] = red[0]
 
+        # Map baselines to spectrally redundant groups
+        self._reset_mapping_dictionaries()
+
+    def _reset_mapping_dictionaries(self):
+        """Map baselines to spectrally redundant groups"""
+        self._mapped_spectral_reds = {group[0]: group for group in self._radial_groups}
+        self._bl_to_spec_red_key = {}
+        for group in self._radial_groups:
+            for bl in group:
+                self._bl_to_spec_red_key[bl] = group[0]
+
+    def _check_new_group(self, group):
+        """Check to make sure a list of baseline tuples is actually radially redundant"""
+        if not isinstance(group, list) and not isinstance(group[0], tuple):
+            raise TypeError("Input value not list of tuples")
+
+        # Check to see if baselines are in the same orientation and have the same polarization
+        if len(group) > 1:
+            for bi in range(1, len(group)):
+                if not is_same_orientation(group[0], group[bi], self.antpos, blvec_error_tol=self.blvec_error_tol):
+                    raise ValueError(f'Baselines {group[0]} and {group[bi]} are not in the same orientation')
+                if group[0][-1] != group[bi][-1]:
+                    raise ValueError(f'Baselines {group[0]} and {group[bi]} do not have the same polarization')
+                
     def get_radial_group(self, key):
         """
         Get baselines with the same radial heading as a given baseline
@@ -258,12 +286,25 @@ class FrequencyRedundancy:
             List of baseline tuples that have the same radial headings
 
         """
-        # Identify headings
-        group_key = self._baseline_to_red_key[key]
+        if key in self._bl_to_red_key:
+            group_key = self._bl_to_red_key[key]
+        elif utils.reverse_bl(key) in self._bl_to_red_key:
+            group_key = utils.reverse_bl(self._bl_to_red_key[utils.reverse_bl(key)])
+        else:
+            raise KeyError(
+                f"Baseline {key} is not in the group of spatial redundancies"
+            )
 
-        for group in self._radial_groups:
-            if group_key in group:
-                return group
+        if group_key in self._bl_to_spec_red_key:
+            group_key = self._bl_to_spec_red_key[group_key]
+        else:
+            group_key = utils.reverse_bl(self._bl_to_spec_red_key[utils.reverse_bl(group_key)])
+        
+        if group_key in self._mapped_spectral_reds:
+            return self._mapped_spectral_reds[group_key]
+        else:
+            return [utils.reverse_bl(bl) for bl in self._mapped_spectral_reds[utils.reverse_bl(group_key)]]
+
 
     def get_redundant_group(self, key):
         """
@@ -279,10 +320,10 @@ class FrequencyRedundancy:
         group: list of tuples
             Return baseline tuples that are spatially redundant
         """
-        if key in self._baseline_to_red_key:
-            group_key = self._baseline_to_red_key[key]
-        elif utils.reverse_bl(key) in self._baseline_to_red_key:
-            group_key = utils.reverse_bl(self._baseline_to_red_key[utils.reverse_bl(key)])
+        if key in self._bl_to_red_key:
+            group_key = self._bl_to_red_key[key]
+        elif utils.reverse_bl(key) in self._bl_to_red_key:
+            group_key = utils.reverse_bl(self._bl_to_red_key[utils.reverse_bl(key)])
         else:
             raise KeyError(
                 f"Baseline {key} is not in the group of spatial redundancies"
@@ -297,12 +338,7 @@ class FrequencyRedundancy:
         """Get all radially redundant groups with a given polarization"""
         return [group for group in self if group[0][-1] == pol]
 
-    def filter_radial_groups(
-        self,
-        min_nbls=1,
-        min_bl_cut=None,
-        max_bl_cut=None,
-    ):
+    def filter_radial_groups(self, min_nbls=1, min_bl_cut=None, max_bl_cut=None):
         """
         Filter each radially redundant group to include/exclude the baselines based on baseline length.
         Radially redundant groups can also be completely filtered based on the number of baselines in 
@@ -328,15 +364,42 @@ class FrequencyRedundancy:
             for bl in group:
                 if (max_bl_cut is None or self.baseline_lengths[bl] < max_bl_cut) and (min_bl_cut is None or self._baseline_lengths[bl] > min_bl_cut):
                     filtered_group.append(bl)
-                else:
-                    self.baseline_lengths.pop(bl)
-
+                
             # Identify groups with fewer than min_nbls baselines
             if len(filtered_group) > min_nbls:
                 radial_reds.append(filtered_group)
 
         # Remove filtered groups from baseline lengths and reds dictionaries
         self._radial_groups = radial_reds
+
+        # Reset baseline mapping to spectrally redundant groups
+        self._reset_mapping_dictionaries()
+
+    def add_radial_group(self, group):
+        """Adds a radially redundant group to the list of radially redundant groups stored in this object.
+        First checks to if the group is radially redundant, then adds the group to an existing group if a
+        group with the same heading already exists or appends the group if the heading is new.
+
+        Parameters:
+        ----------
+        group : list
+            List of baseline tuples to be added to the list of radially redundant groups
+        """
+        # Check to make sure the new group is radially redundant
+        self._check_new_group(group)
+            
+        # If group with same heading already exists, add it to that group. Otherwise, append the group to the list
+        for bl in self._mapped_spectral_reds:
+            if is_same_orientation(group[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol) and bl[-1] == group[0][-1]:
+                index = self._radial_groups.index(self._mapped_spectral_reds[bl])
+                self._radial_groups[index] += group
+                self._radial_groups[index] = list(set(self._radial_groups[index]))
+                break
+        else:
+            self._radial_groups.append(group)
+
+        # Reset the group now that radially redundant groups have changed
+        self._reset_mapping_dictionaries()
 
     def __len__(self):
         """Get number of frequency redundant groups"""
@@ -347,30 +410,40 @@ class FrequencyRedundancy:
         return self._radial_groups[index]
 
     def __setitem__(self, index, value):
-        """Set value at index in _radial_groups"""
-        if not isinstance(value, list) and not isinstance(value[0], tuple):
-            raise ValueError("Input value not list of tuples")
-
-        for bi in range(1, len(value)):
-            if not is_same_orientation(value[0], value[bi], self.antpos, blvec_error_tol=self.blvec_error_tol):
-                raise ValueError(f'Baselines {value[0]} and {value[bi]} are not in the same orientation')
-            if value[0][-1] != value[bi][-1]:
-                raise ValueError(f'Baselines {value[0]} and {value[bi]} do not have the same polarization')
-        
+        """
+        Set value at index in _radial_groups. Also raises an error if a baseline with the same
+        heading is already in the list of radially redundant groups
+        """
+        # Check to make sure the new group is radially redundant
+        self._check_new_group(value)
+            
+        for bl in self._mapped_spectral_reds:
+            if is_same_orientation(value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol) and bl[-1] == value[0][-1]:
+                raise ValueError('Radially redundant group with same orientation and polarization already exists in the data')
+                
+        # Add group at index
         self._radial_groups[index] = value
 
-    def __append__(self, value):
-        """Append value to the end of _radial_groups"""
-        if not isinstance(value, list) and not isinstance(value[0], tuple):
-            raise ValueError("Input value not list of tuples")
+        # Reset baseline mapping to spectrally redundant groups
+        self._reset_mapping_dictionaries()
 
-        for bi in range(1, len(value)):
-            if not is_same_orientation(value[0], value[bi], self.antpos, blvec_error_tol=self.blvec_error_tol):
-                raise ValueError(f'Baselines {value[0]} and {value[bi]} are not in the same orientation')
-            if value[0][-1] != value[bi][-1]:
-                raise ValueError(f'Baselines {value[0]} and {value[bi]} do not have the same polarization')
+    def append(self, value):
+        """
+        Append value to the end of _radial_groups. Also raises an error if a baseline with the same
+        heading is already in the list of radially redundant groups
+        """
+        # Check to make sure the new group is radially redundant
+        self._check_new_group(value)
         
+        for bl in self._mapped_spectral_reds:
+            if is_same_orientation(value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol) and bl[-1] == value[0][-1]:
+                raise ValueError('Radially redundant group with same orientation and polarization already exists in the data')
+
+        # Append new group
         self._radial_groups.append(value)
+
+        # Reset baseline mapping to spectrally redundant groups
+        self._reset_mapping_dictionaries()
     
     def __iter__(self):
         """Iterates through the list of redundant groups"""
