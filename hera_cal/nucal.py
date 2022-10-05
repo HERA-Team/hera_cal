@@ -8,7 +8,7 @@ from scipy.cluster.hierarchy import fclusterdata
 
 SPEED_OF_LIGHT = const.c.si.value
 
-def is_same_orientation(bl1, bl2, antpos, blvec_error_tol=1e-3):
+def is_same_orientation(bl1, bl2, antpos, blvec_error_tol=1e-4):
     """
     Determine whether or not two baselines have the same orientation
 
@@ -22,7 +22,7 @@ def is_same_orientation(bl1, bl2, antpos, blvec_error_tol=1e-3):
         Array of frequencies found in the data in units of Hz
     antpos : dict
         Antenna positions in the form {ant_index: np.array([x,y,z])}.
-    blvec_error_tol : float, default=1e-3
+    blvec_error_tol : float, default=1e-4
         Largest allowable euclidean distance the first unit baseline vector can be away from
         the second
 
@@ -44,7 +44,7 @@ def is_same_orientation(bl1, bl2, antpos, blvec_error_tol=1e-3):
 
     return np.isclose(np.linalg.norm(norm_vec1 - norm_vec2), 0, rtol=blvec_error_tol)
 
-def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-3):
+def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-4):
     """
     Determine whether or not two baselines are frequency redundant. Checks that
     both baselines have the same heading, polarization, and have overlapping uv-modes
@@ -59,7 +59,7 @@ def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-3):
         Array of frequencies found in the data in units of Hz
     antpos : dict
         Antenna positions in the form {ant_index: np.array([x,y,z])}.
-    blvec_error_tol : float, default=1e-3
+    blvec_error_tol : float, default=1e-4
         Largest allowable euclidean distance the first unit baseline vector can be away from
         the second
 
@@ -126,7 +126,7 @@ def get_u_bounds(radial_reds, antpos, freqs):
     return ubounds
             
 
-def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=1e-3):
+def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=1e-4):
     """
     Sort baselines into groups with the same radial heading. These groups of baselines are potentially
     frequency redundant in a similar way to redcal.get_reds does. Returns a list of RadialRedundantGroup objects
@@ -139,7 +139,7 @@ def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=
         List of lists of spatially redundant baselines in the array. Can be found using redcal.get_reds
     min_ubl_per_orient : int, default=1
         Minimum number of baselines per unique orientation
-    blvec_error_tol : float, default=1e-3
+    blvec_error_tol : float, default=1e-4
         Largest allowable euclidean distance a unit baseline vector can be away from an existing
         cluster to be considered a unique orientation. See "fclusterdata" for more details.
     bl_error_tol: float, default=1.0
@@ -201,7 +201,7 @@ class FrequencyRedundancy:
     group radially redundant and spatially redundant groups by baseline key.
     """
     def __init__(
-        self, antpos, reds=None, blvec_error_tol=1e-3, pols=["nn"], bl_error_tol=1.0
+        self, antpos, reds=None, blvec_error_tol=1e-4, pols=["nn"], bl_error_tol=1.0
     ):
         """
         Parameters:
@@ -210,7 +210,7 @@ class FrequencyRedundancy:
             Antenna positions in the form {ant_index: np.array([x,y,z])}.
         reds : list of list
             List of lists of baseline keys. Can be determined using redcal.get_reds
-        blvec_error_tol : float, default=1e-3
+        blvec_error_tol : float, default=1e-4
             Largest allowable euclidean distance a unit baseline vector can be away from an existing
             cluster to be considered a unique orientation. See "fclusterdata" for more details.
         pols : list, default=['nn']
