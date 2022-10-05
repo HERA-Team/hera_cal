@@ -156,15 +156,23 @@ def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=
 
     _uors = {}
     for pol in pols:
-        ubl_pairs = [red[0] for red in reds if red[0][-1] == pol]
+        ubl_pairs = []
 
         # Compute normalized baseline vectors
         normalized_vecs = []
-        for (ant1, ant2, pol) in ubl_pairs:
-            normalized_vecs.append(
-                (antpos[ant2] - antpos[ant1])
-                / np.linalg.norm(antpos[ant2] - antpos[ant1])
-            )
+        ubl_pairs = []
+        for red in reds:
+            ant1, ant2, antpol = red[0]
+            if antpol == pol:
+                vector = (antpos[ant2] - antpos[ant1]) / np.linalg.norm(antpos[ant2] - antpos[ant1])
+                # If vector has an EW component less than 0, flip it
+                if vector[0] <= 0:
+                    normalized_vecs.append(-vector)
+                    ubl_pairs.append((ant2, ant1, antpol))
+
+                else:
+                    normalized_vecs.append(vector)
+                    ubl_pairs.append((ant1, ant2, antpol))
 
         # Cluster orientations
         clusters = fclusterdata(normalized_vecs, blvec_error_tol, criterion="distance")
@@ -173,24 +181,12 @@ def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=
         for cluster, bl in zip(clusters, ubl_pairs):
             uors[cluster - 1].append(bl)
 
-        uors = sorted(uors, key=len, reverse=True)
-
-        # Find clusters with headings anti-parallel to others
         for group in uors:
-            ant1, ant2, pol = group[0]
-            vec = (antpos[ant2] - antpos[ant1]) / np.linalg.norm(
-                antpos[ant2] - antpos[ant1]
-            )
-            vec = np.array(vec / blvec_error_tol, dtype=int)
-            if tuple(-vec) + (pol,) in _uors:
-                _uors[tuple(-vec) + (pol,)] += [utils.reverse_bl(bls) for bls in group]
-            else:
-                _uors[tuple(vec) + (pol,)] = group
+            _uors[group[0]] = group
 
     # Convert lists to RadialRedundantGroup objects
     uors = [_uors[key] for key in _uors if len(_uors[key]) >= min_ubl_per_orient]
-    uors = sorted(uors, key=len, reverse=True)
-    return uors
+    return sorted(uors, key=len, reverse=True)
 
 
 class FrequencyRedundancy:
