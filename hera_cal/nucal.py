@@ -467,4 +467,4 @@ class FrequencyRedundancy:
 
     def sort(self, key=None, reverse=True):
         """Sorts list by length of the radial groups"""
-        self._radial_groups.sort(key=len, reverse=reverse)
+        self._radial_groups.sort(key=(len if key is None else key), reverse=reverse)
