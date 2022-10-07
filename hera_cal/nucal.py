@@ -340,10 +340,6 @@ class FrequencyRedundancy:
         ----------
         min_nbls : int, default=1
             Minimum number of baselines allowed in a radially redundant group
-        pols : list of strings
-            polarizations to include in reds. e.g. ['nn','ee','ne','en']
-        ex_pols : list of strings
-            same as pols, but excludes polarizations.
         min_bl_cut:
             Cut baselines in the radially redundant group with lengths less than min_bl_cut
         max_bl_cut:
