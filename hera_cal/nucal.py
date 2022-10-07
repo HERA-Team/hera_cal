@@ -348,23 +348,13 @@ class FrequencyRedundancy:
             Cut baselines in the radially redundant group with lengths less than min_bl_cut
         max_bl_cut:
             Cut baselines in the radially redundant group with lengths less than min_bl_cut
-        min_u_cut:
-            Cut baselines in the radially redundant group with all u-modes less than min_u_cut.
-            Note baselines with some modes less than min_u_cut will not be cut
-        max_u_cut:
-            Cut baselines in the radially redundant group with all u-modes greater than max_u_cut
-            Note baselines with some modes greater than min_u_cut will not be cut
         """
         # Filter radially redundant group
         radial_reds = []
         for group in self._radial_groups:
             filtered_group = []
             for bl in group:
-                cond1 = (max_bl_cut is None or self.baseline_lengths[bl] < max_bl_cut)
-                cond2 = (min_bl_cut is None or self.baseline_lengths[bl] > min_bl_cut)
-                cond3 = (max_u_cut is None or self.baseline_lengths[bl] / SPEED_OF_LIGHT * self.freqs.min() < max_u_cut)
-                cond4 = (min_bl_cut is None or self.baseline_lengths[bl] / SPEED_OF_LIGHT * self.freqs.max() > min_u_cut)
-                if np.all([cond1, cond2, cond3, cond4]):
+                if (max_bl_cut is None or self.baseline_lengths[bl] < max_bl_cut) and (min_bl_cut is None or self.baseline_lengths[bl] > min_bl_cut):
                     filtered_group.append(bl)
                 
             # Identify groups with fewer than min_nbls baselines
