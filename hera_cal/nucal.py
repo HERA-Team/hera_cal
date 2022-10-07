@@ -330,7 +330,7 @@ class FrequencyRedundancy:
         """Get all radially redundant groups with a given polarization"""
         return [group for group in self if group[0][-1] == pol]
 
-    def filter_radial_groups(self, min_nbls=1, min_bl_cut=None, max_bl_cut=None, min_u_cut=None, max_u_cut=None):
+    def filter_radial_groups(self, min_nbls=1, min_bl_cut=None, max_bl_cut=None):
         """
         Filter each radially redundant group to include/exclude the baselines based on baseline length.
         Radially redundant groups can also be completely filtered based on the number of baselines in 
