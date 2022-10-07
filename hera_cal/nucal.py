@@ -439,8 +439,10 @@ class FrequencyRedundancy:
             blmag = np.linalg.norm(self.antpos[ant2] - self.antpos[ant1])
             self.baseline_lengths[bl] = blmag
 
-        # Reset baseline mapping to spectrally redundant groups
-        self._reset_mapping_dictionaries()
+        # Add baseline group to mapped spectrally redundant groups
+        self._mapped_spectral_reds[value[0]] = value
+        for bl in value:
+            self._bl_to_spec_red_key[bl] = value[0]
 
     def append(self, value):
         """
@@ -464,8 +466,10 @@ class FrequencyRedundancy:
             blmag = np.linalg.norm(self.antpos[ant2] - self.antpos[ant1])
             self.baseline_lengths[bl] = blmag
 
-        # Reset baseline mapping to spectrally redundant groups
-        self._reset_mapping_dictionaries()
+        # Add baseline group to mapped spectrally redundant groups
+        self._mapped_spectral_reds[value[0]] = value
+        for bl in value:
+            self._bl_to_spec_red_key[bl] = value[0]
     
     def __iter__(self):
         """Iterates through the list of redundant groups"""
