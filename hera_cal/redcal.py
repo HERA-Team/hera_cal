@@ -950,7 +950,7 @@ class RedundantCalibrator:
                 even when allowing for an arbitrary number of phase slope degeneracies.
         """
 
-        self.reds = reds
+        self._set_reds(reds)
         self.pol_mode = parse_pol_mode(self.reds)
 
         if check_redundancy:
@@ -960,6 +960,11 @@ class RedundantCalibrator:
                 nPhaseSlopes = len(list(reds_to_antpos(self.reds).values())[0])
                 raise ValueError('{} degeneracies found, but {} '.format(nDegens, nDegensExpected)
                                  + 'degeneracies expected (assuming {} phase slopes).'.format(nPhaseSlopes))
+
+    def _set_reds(self, reds):
+        '''Sets reds interally, updating self._ubl_to_reds_index.'''
+        self.reds = reds
+        self._ubl_to_reds_index = {red[0]: i for i, red in enumerate(self.reds)}
 
     def build_eqs(self, dc=None):
         """Function for generating linsolve equation strings. Optionally takes in a DataContainer to check
@@ -1020,8 +1025,7 @@ class RedundantCalibrator:
         if len(k) == 2:  # 'g' = gain solution
             return 'g_%d_%s' % k
         else:  # 'u' = unique baseline solution
-            ubl_num = [cnt for cnt, blgrp in enumerate(self.reds) if blgrp[0] == k][0]
-            return 'u_%d_%s' % (ubl_num, k[-1])
+            return 'u_%d_%s' % (self._ubl_to_reds_index[k], k[-1])
 
     def compute_ubls(self, data, gains):
         """Given a set of guess gain solutions, return a dictionary of calibrated visbilities
@@ -1451,10 +1455,10 @@ def predict_chisq_per_bl(reds):
 
     A = solver.ls_amp.get_A()[:, :, 0]
     B = solver.ls_phs.get_A()[:, :, 0]
-    A_data_resolution = A.dot(np.linalg.pinv(A.T.dot(A), hermitian=True).dot(A.T))
-    B_data_resolution = B.dot(np.linalg.pinv(B.T.dot(B), hermitian=True).dot(B.T))
+    A_data_resolution_diag_sum = (A.T * np.linalg.pinv(A.T.dot(A), hermitian=True).dot(A.T)).sum(axis=0)
+    B_data_resolution_diag_sum = (B.T * np.linalg.pinv(B.T.dot(B), hermitian=True).dot(B.T)).sum(axis=0)
 
-    predicted_chisq_per_bl = 1.0 - np.diag(A_data_resolution + B_data_resolution) / 2.0
+    predicted_chisq_per_bl = 1.0 - (A_data_resolution_diag_sum + B_data_resolution_diag_sum) / 2.0
     return {bl: dof for bl, dof in zip(bls, predicted_chisq_per_bl)}
 
 
@@ -1674,18 +1678,19 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
     good_ants_reds = filter_reds(all_reds, ants=list(cal['g_omnical'].keys()))
     good_ants_bls = [bl for red in good_ants_reds for bl in red]
     reds_to_solve_for = [red for red in good_ants_reds if not np.any([bl in cal['v_omnical'] for bl in red])]
-    for red in reds_to_solve_for:
-        new_vis = linear_cal_update(red, cal, data, [red], weight_by_flags=True)
-        for ubl, vis in new_vis.items():
-            cal['v_omnical'][ubl] = vis
-            cal['vf_omnical'][ubl] = ~np.isfinite(vis)
-    make_sol_finite(cal['v_omnical'])
+    if len(reds_to_solve_for) > 0:
+        for red in reds_to_solve_for:
+            new_vis = linear_cal_update(red, cal, data, [red], weight_by_flags=True)
+            for ubl, vis in new_vis.items():
+                cal['v_omnical'][ubl] = vis
+                cal['vf_omnical'][ubl] = ~np.isfinite(vis)
+        make_sol_finite(cal['v_omnical'])
 
-    # Update chisq and chisq per ant to include all baselines between working antennas
-    rekey_vis_sols(cal, good_ants_reds)
-    dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in good_ants_bls})
-    data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in good_ants_bls})
-    cal['chisq'], cal['chisq_per_ant'] = normalized_chisq(data, data_wgts, good_ants_reds, cal['v_omnical'], cal['g_omnical'])
+        # Update chisq and chisq per ant to include all baselines between working antennas
+        rekey_vis_sols(cal, good_ants_reds)
+        dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in good_ants_bls})
+        data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in good_ants_bls})
+        cal['chisq'], cal['chisq_per_ant'] = normalized_chisq(data, data_wgts, good_ants_reds, cal['v_omnical'], cal['g_omnical'])
 
     # Reassign omnical visibility solutions to the first entry in each group in all_reds
     rekey_vis_sols(cal, all_reds)
@@ -2017,7 +2022,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     return rv
 
 
-def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omnivis_filename,
+def _redcal_run_write_results(cal, hd, firstcal_filename, omnical_filename, omnivis_filename,
                               meta_filename, outdir, clobber=False, verbose=False, add_to_history=''):
     '''Helper function for writing the results of redcal_run.'''
     # get antnums2antnames dictionary
@@ -2028,34 +2033,38 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
     antenna_positions = np.array([hd.antenna_positions[hd.antenna_numbers == antnum].flatten() for antnum in cal_antnums])
     lst_array = np.unique(hd.lsts)
 
-    if verbose:
-        print('\nNow saving firstcal gains to', os.path.join(outdir, fistcal_filename))
-    write_cal(fistcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
-              flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber,
-              x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
-              antenna_positions=antenna_positions, lst_array=lst_array,
-              history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
+    if firstcal_filename is not None:
+        if verbose:
+            print('\nNow saving firstcal gains to', os.path.join(outdir, firstcal_filename))
+        write_cal(firstcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
+                  flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber,
+                  x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
+                  antenna_positions=antenna_positions, lst_array=lst_array,
+                  history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
 
-    if verbose:
-        print('Now saving omnical gains to', os.path.join(outdir, omnical_filename))
-    write_cal(omnical_filename, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
-              quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
-              x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
-              antenna_positions=antenna_positions, lst_array=lst_array,
-              history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
+    if omnical_filename is not None:
+        if verbose:
+            print('Now saving omnical gains to', os.path.join(outdir, omnical_filename))
+        write_cal(omnical_filename, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
+                  quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
+                  x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
+                  antenna_positions=antenna_positions, lst_array=lst_array,
+                  history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
 
-    if verbose:
-        print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
-    hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
-    hd_out.read(bls=list(cal['v_omnical'].keys()))
-    hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
-    hd_out.history += utils.history_string(add_to_history)
-    hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
+    if omnivis_filename is not None:
+        if verbose:
+            print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
+        hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
+        hd_out.read(bls=list(cal['v_omnical'].keys()))
+        hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
+        hd_out.history += utils.history_string(add_to_history)
+        hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
 
-    if verbose:
-        print('Now saving redcal metadata to ', os.path.join(outdir, meta_filename))
-    save_redcal_meta(os.path.join(outdir, meta_filename), cal['fc_meta'], cal['omni_meta'], hd.freqs,
-                     hd.times, hd.lsts, hd.antpos, hd.history + utils.history_string(add_to_history))
+    if meta_filename is not None:
+        if verbose:
+            print('Now saving redcal metadata to', os.path.join(outdir, meta_filename))
+        save_redcal_meta(os.path.join(outdir, meta_filename), cal['fc_meta'], cal['omni_meta'], hd.freqs,
+                         hd.times, hd.lsts, hd.antpos, hd.history + utils.history_string(add_to_history))
 
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
