@@ -475,8 +475,9 @@ class RedSol():
             if self.gains is not None:
                 calibrate_in_place(data_here, self.gains, data_flags=flags_here, cal_flags=gain_flags)
 
-            # redundantly average and store in dictionary
-            pos_red = list(set(bl[0:2] for bl in red))
+            # redundantly average and store in dictionary, handling potential 4-pol case with repeats
+            seen = set()
+            pos_red = [bl[0:2] for bl in red if bl[0:2] not in seen and not seen.add(bl[0:2])]
             red_average(data_here, [pos_red], flags=flags_here, nsamples=nsamples_here, inplace=True)
             for bl in data_here:
                 red_data[bl] = data_here[bl]
