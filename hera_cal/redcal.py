@@ -937,6 +937,50 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
 
 
+def _firstcal_align_bls(bls, freqs, data, wgts={}, norm=True, medfilt=False,
+                        kernel=(1, 11), edge_cut=0):
+    # XXX propose changing fft_dly to take freqs
+    df = np.median(np.ediff1d(freqs))
+    f0 = freqs[0]
+    grps = [(bl,) for bl in bls]  # start with each bl in its own group
+    _data = {bl: data[bl[0]] for bl in grps}
+    _wgts = {bl: wgts[bl[0]] for bl in grps}  # XXX propose removing wgts
+    tau_off_gps = {}
+    def process_pair(gp1, gp2):
+        '''Phase-align two groups, recording dly/off in tau_off_gps for gp2
+        and the phase-aligned sum in _data/_wgts. Returns gp1 + gp2, which
+        keys the _data, _wgts dicts and represents group for next iteration.'''
+        d12 = _data[gp1] * np.conj(_data[gp2])
+        w12 = _wgts[gp1] * _wgts[gp2]
+        if norm:
+            ad12 = np.abs(d12)
+            d12 /= np.where(ad12 == 0, np.float32(1), ad12)
+        tau_off_gps[gp2] = dly, off = fft_dly(d12, df, f0=f0, wgts=w12, medfilt=medfilt,
+                                    kernel=kernel, edge_cut=edge_cut)
+        tau_off_gps[gp1] = np.zeros_like(dly), np.zeros_like(off)
+        # XXX check alignment before summing?
+        #_data[gp1 + gp2] = _data[gp1] + _data[gp2] * np.exp(np.complex64(2j * np.pi) * dly * freqs + np.complex64(1j) * off)
+        _data[gp1 + gp2] = _wgts[gp1] * _data[gp1] + _wgts[gp2] * _data[gp2] * np.exp(np.complex64(2j * np.pi) * dly * freqs + np.complex64(1j) * off)
+        _wgts[gp1 + gp2] = _wgts[gp1] + _wgts[gp2]
+        return gp1 + gp2
+    while len(grps) > 1:
+        new_grps = []
+        for gp1, gp2 in zip(grps[::2], grps[1::2]):
+            new_grps.append(process_pair(gp1, gp2))
+        # deal with stragglers
+        if len(grps) % 2 == 1:
+            new_grps = new_grps[:-1] + [process_pair(new_grps[-1], grps[-1])]
+        grps = new_grps
+    # XXX do a last pass to align bls to final answer or just go?
+    bl0 = bls[0]  # everything is effectively indexed off phase of first bl
+    tau_offs = {}
+    for gp, (tau, off) in tau_off_gps.items():
+        for bl in gp:
+            tau0, off0 = tau_offs.get((bl0, bl), (0, 0))
+            tau_offs[(bl0, bl)] = (tau0 + tau, off0 + off)
+    return tau_offs
+
+
 class RedundantCalibrator:
 
     def __init__(self, reds, check_redundancy=False):
@@ -1057,7 +1101,7 @@ class RedundantCalibrator:
                 format.  All delays are multiplied by 1/df, so use that to set physical scale.
             off_sol: dictionary of per antenna phase offsets (in radians) in the same format.
         '''
-        Nfreqs = data[next(iter(data))].shape[1]
+        # XXX we never supply wgts, so this is a bunch of computation for nothing
         if len(wgts) == 0:
             wgts = {k: np.ones_like(data[k], dtype=np.float32) for k in data}
         wgts = DataContainer(wgts)
@@ -1072,23 +1116,17 @@ class RedundantCalibrator:
 
         taus_offs, twgts = {}, {}
         for bls in self.reds:
-            for i, bl1 in enumerate(bls):
-                d1, w1 = data[bl1], wgts[bl1]
-                for bl2 in bls[i + 1:]:
-                    d12 = d1 * np.conj(data[bl2])
-                    if norm:
-                        ad12 = np.abs(d12)
-                        d12 /= np.where(ad12 == 0, np.float32(1), ad12)
-                    w12 = w1 * wgts[bl2]
-                    taus_offs[(bl1, bl2)] = utils.fft_dly(d12, df, f0=f0, wgts=w12, medfilt=medfilt,
-                                                          kernel=kernel, edge_cut=edge_cut)
-                    twgts[(bl1, bl2)] = np.sum(w12)
+            _tau_off, _wgts = firstcal_align_bls(bls, freqs, data, wgts,
+                                                 medfilt=medfilt, kernel=kernel,
+                                                 edge_cut=edge_cut)
+            taus_offs.update(_tau_off)
+            for bl_pair, w12 in _wgts.items():
+                twgts[bl_pair] = np.sum(w12)
+                for bl in bl_pair:
+                    for ant in utils.split_bl(bl):
+                        ants_used_count[ant] += 1
 
-                    if not np.all(twgts[(bl1, bl2)] == 0):
-                        for bl_here in [bl1, bl2]:
-                            for ant in utils.split_bl(bl_here):
-                                ants_used_count[ant] += 1
-
+            # XXX why this?
             # check to see if fc_min_vis_per_ant is satisfied without adding additional degeneracies
             if fc_min_vis_per_ant is not None:
                 reds_used.append(bls)
@@ -1153,17 +1191,18 @@ class RedundantCalibrator:
             g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the
                 {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
         """
-        df = np.median(np.ediff1d(freqs))
         dtype = np.find_common_type([d.dtype for d in data.values()], [])
 
         # iteratively solve for offsets to account for phase wrapping
         for i in range(maxiter):
-            dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, edge_cut=edge_cut,
+            dlys, delta_off = self._firstcal_iteration(data, freqs, wgts=wgts, edge_cut=edge_cut,
                                                        offsets_only=(i > 0), sparse=sparse, mode=mode,
                                                        norm=norm, medfilt=medfilt, kernel=kernel, fc_min_vis_per_ant=fc_min_vis_per_ant)
             if i == 0:  # only solve for delays on the first iteration, also apply polarity flips
+                # XXX suggest putting phase shifts back in after finding pol-flipped ants?
                 g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs)),
                                       dtype=dtype) for ant, dly in dlys.items()}
+                # XXX calibrate in place is expensive and should be avoided
                 calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
 
                 # build metadata and apply detected polarities as a firstcal starting point
@@ -1174,18 +1213,21 @@ class RedundantCalibrator:
                                           for ant in polarity_flips}
                 if np.all([flip is not None for flip in polarity_flips.values()]):
                     polarities = {ant: -1.0 if polarity_flips[ant] else 1.0 for ant in g_fc}
+                    # XXX calibrate in place is expensive and should be avoided
                     calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
                     g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
 
             else:  # on second and subsequent iterations, do phase shifts
                 delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
                                              dtype=dtype) for ant in g_fc.keys()}
+                # XXX calibrate in place is expensive and should be avoided
                 calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
                 g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
 
             if (np.linalg.norm(list(delta_off.values())) < conv_crit) and (i > 1):
                 break
 
+        # XXX calibrate in place is expensive and should be avoided
         calibrate_in_place(data, g_fc, gain_convention='multiply')  # unapply calibration
         return meta, g_fc
 
