@@ -939,6 +939,8 @@ class OmnicalSolver(linsolve.LinProductSolver):
 
 def _firstcal_align_bls(bls, freqs, data, wgts={}, norm=True, medfilt=False,
                         kernel=(1, 11), edge_cut=0):
+    '''Given a redundant group of bls, find per-baseline dly/off params that
+    bring them into phase alignment using hierarchical pairing.'''
     # XXX propose changing fft_dly to take freqs
     df = np.median(np.ediff1d(freqs))
     f0 = freqs[0]
