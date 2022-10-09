@@ -955,7 +955,7 @@ def _firstcal_align_bls(bls, freqs, data, wgts={}, norm=True, medfilt=False,
         if norm:
             ad12 = np.abs(d12)
             d12 /= np.where(ad12 == 0, np.float32(1), ad12)
-        tau_off_gps[gp2] = dly, off = fft_dly(d12, df, f0=f0, wgts=w12, medfilt=medfilt,
+        tau_off_gps[gp2] = dly, off = utils.fft_dly(d12, df, f0=f0, wgts=w12, medfilt=medfilt,
                                     kernel=kernel, edge_cut=edge_cut)
         tau_off_gps[gp1] = np.zeros_like(dly), np.zeros_like(off)
         # XXX check alignment before summing?
@@ -978,7 +978,7 @@ def _firstcal_align_bls(bls, freqs, data, wgts={}, norm=True, medfilt=False,
         for bl in gp:
             tau0, off0 = tau_offs.get((bl0, bl), (0, 0))
             tau_offs[(bl0, bl)] = (tau0 + tau, off0 + off)
-    return tau_offs
+    return tau_offs, {bl_pair: wgts[bl_pair[0]] * wgts[bl_pair[1]] for bl_pair in tau_offs.keys()}
 
 
 class RedundantCalibrator:
@@ -1083,7 +1083,7 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def _firstcal_iteration(self, data, df, f0, wgts={}, offsets_only=False, edge_cut=0,
+    def _firstcal_iteration(self, data, freqs, wgts={}, offsets_only=False, edge_cut=0,
                             sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11),
                             fc_min_vis_per_ant=None):
         '''Runs a single iteration of firstcal, which uses phase differences between nominally
@@ -1116,7 +1116,7 @@ class RedundantCalibrator:
 
         taus_offs, twgts = {}, {}
         for bls in self.reds:
-            _tau_off, _wgts = firstcal_align_bls(bls, freqs, data, wgts,
+            _tau_off, _wgts = _firstcal_align_bls(bls, freqs, data, wgts,
                                                  medfilt=medfilt, kernel=kernel,
                                                  edge_cut=edge_cut)
             taus_offs.update(_tau_off)
