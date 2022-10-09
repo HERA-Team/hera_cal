@@ -4,7 +4,7 @@ from . import redcal
 import warnings
 import numpy as np
 from copy import deepcopy
-from hera_filters import dpsec
+from hera_filters import dspec
 import astropy.constants as const
 from scipy.cluster.hierarchy import fclusterdata
 
