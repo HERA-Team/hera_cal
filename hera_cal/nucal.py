@@ -4,9 +4,11 @@ from . import redcal
 import warnings
 import numpy as np
 from copy import deepcopy
+from hera_filters import dpsec
 import astropy.constants as const
 from scipy.cluster.hierarchy import fclusterdata
 
+# Optional import of Optax and Jax libraries
 try:
     import optax
 
@@ -27,7 +29,8 @@ try:
 
 except:
     warnings.warn('Jax is not installed. Some functionality may not be available')
-
+    
+# Constants
 SPEED_OF_LIGHT = const.c.si.value
 
 def is_same_orientation(bl1, bl2, antpos, blvec_error_tol=1e-4):
@@ -488,3 +491,39 @@ class FrequencyRedundancy:
         self._radial_groups.sort(key=(len if key is None else key), reverse=reverse)
 
 
+def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutoff=1e-12):
+    """
+    Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds. Note
+    filtering radial_reds before running this function is advised to reduce the
+    size of filters generated
+
+    Parameters:
+    ----------
+    radial_reds : FrequencyRedundant object
+        pass
+    freqs : np.ndarray
+        Frequencies found in the data in units of Hz
+    ell_half_width : float, default=1
+        Filter half width used to generate PSWF filters. Default value of 1 cooresponds to
+        modeling foregrounds out to the horizon.
+    eigenval_cutoff : float, default=1e-12
+        Sinc matrix eigenvalue cutoffs to use for included PSWF modes.
+
+    Returns:
+    -------
+    spatial_modes : dictionary
+        pass
+    """
+    spatial_modes = {}
+
+    # Get the minimum and maximum u-bounds used
+    u_bounds = get_u_bounds(radial_reds, freqs)
+
+    for gi, group in radial_reds:
+        umin, umax = u_bounds[gi]
+        for bl in group:
+            umodes = radial_reds.baseline_lengths[bl] / SPEED_OF_LIGHT * freqs
+            pswf, _ = dspec.pswf_operator(umodes, [0], [ell_half_width], eigenval_cutoff=[eigenval_cutoff], xmin=umin, xmax=umax)
+            spatial_modes[bl] = pswf
+
+    return spatial_modes
