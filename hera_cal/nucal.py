@@ -1,10 +1,32 @@
 from . import utils
 from . import redcal
 
+import warnings
 import numpy as np
 from copy import deepcopy
 import astropy.constants as const
 from scipy.cluster.hierarchy import fclusterdata
+
+try:
+    import optax
+
+    # Approved Optax Optimizers
+    OPTIMIZERS = {
+        'adabelief': optax.adabelief, 'adafactor': optax.adafactor, 'adagrad': optax.adagrad, 'adam': optax.adam,
+        'adamw': optax.adamw, 'fromage': optax.fromage, 'lamb': optax.lamb, 'lars': optax.lars,
+        'noisy_sgd': optax.noisy_sgd, 'dpsgd': optax.dpsgd, 'radam': optax.radam, 'rmsprop': optax.rmsprop,
+        'sgd': optax.sgd, 'sm3': optax.sm3, 'yogi': optax.yogi
+    }
+except:
+    warnings.warn('Optax is not installed. Some functionality may not be available')
+
+try:
+    import jax
+    from jax import numpy as jnp
+    jax.config.update("jax_enable_x64", True)
+
+except:
+    warnings.warn('Jax is not installed. Some functionality may not be available')
 
 SPEED_OF_LIGHT = const.c.si.value
 
@@ -464,3 +486,5 @@ class FrequencyRedundancy:
     def sort(self, key=None, reverse=True):
         """Sorts list by length of the radial groups"""
         self._radial_groups.sort(key=(len if key is None else key), reverse=reverse)
+
+
