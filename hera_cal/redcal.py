@@ -340,6 +340,82 @@ def make_sol_finite(sol):
             sol[k][~np.isfinite(sol[k])] = np.ones_like(sol[k][~np.isfinite(sol[k])])
 
 
+def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1pol'):
+    """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
+    function in nominally intended for use with firstcal, which returns (phase/delay) solutions
+    for antennas only.
+
+    Args:
+        gains: dictionary that contains gain solutions in the {(index,antpol): np.array} format.
+        degen_gains: Optional dictionary in the same format as gains. Gain amplitudes and phases
+            in degen_sol replace the values of sol in the degenerate subspace of redcal. If
+            left as None, average gain amplitudes will be 1 and average phase terms will be 0.
+            For logcal/lincal/omnical, putting firstcal solutions in here can help avoid structure
+            associated with phase-wrapping issues.
+        mode: 'phase' or 'complex', indicating whether the gains are passed as phases (e.g. delay
+            or phi in e^(i*phi)), or as the complex number itself.  If 'phase', only phase degeneracies
+            removed.  If 'complex', both phase and amplitude degeneracies are removed.
+    Returns:
+        new_gains: gains with degeneracy removal/replacement performed
+    """
+
+    # Check supported pol modes
+    assert pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], 'Unrecognized pol_mode: %s' % pol_mode
+    assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
+    ants = gains.keys()
+    gainPols = np.array([ant[1] for ant in gains])  # gainPols is list of antpols, one per antenna
+    antpols = list(set(gainPols))
+
+    # if mode is 2pol, run as two 1pol remove degens
+    if pol_mode == '2pol':
+        pol_mode = '1pol'
+        pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
+        pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
+        new_gains = remove_degen_gains(reds, pol0_gains, degen_gains=degen_gains, mode=mode, pol_mode=pol_mode)
+        new_gains.update(remove_degen_gains(pol1_gains, degen_gains=degen_gains, mode=mode, pol_mode=pol_mode))
+        return new_gains
+
+    # Extract gain and model visibiltiy solutions
+    gainSols = np.array([gains[ant] for ant in ants])
+
+    # Build matrices for projecting gain degeneracies
+    antpos = reds_to_antpos(reds)
+    positions = np.array([antpos[ant[0]] for ant in gains])
+    if pol_mode == '1pol' or pol_mode == '4pol_minV':
+        # In 1pol and 4pol_minV, the phase degeneracies are 1 overall phase and 2 tip-tilt terms
+        # Rgains maps gain phases to degenerate parameters (either average phases or phase slopes)
+        Rgains = np.hstack((positions, np.ones((positions.shape[0], 1))))
+    else:  # pol_mode is '4pol'
+        # two columns give sums for two different polarizations
+        phasePols = np.vstack((gainPols == antpols[0], gainPols == antpols[1])).T
+        Rgains = np.hstack((positions, phasePols))
+    # Mgains is like (AtA)^-1 At in linear estimator formalism. It's a normalized estimator of degeneracies
+    Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
+
+    # degenToRemove is the amount we need to move in the degenerate subspace
+    if degen_gains is not None:
+        degenGains = np.array([degen_gains[ant] for ant in ants])
+        if mode == 'phase':
+            # Fix phase terms only
+            degenToRemove = np.einsum('ij,jkl', Mgains, gainSols - degenGains)
+            gainSols -= np.einsum('ij,jkl', Rgains, degenToRemove)
+        else:  # working on complex data
+            # Fix phase terms
+            degenToRemove = np.einsum('ij,jkl', Mgains, np.angle(gainSols * np.conj(degenGains)))
+            gainSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rgains, degenToRemove))
+            # Fix abs terms: fixes the mean abs product of gains (as they appear in visibilities)
+            for pol in antpols:
+                meanSqAmplitude = np.mean([np.abs(g1 * g2) for (a1, p1), g1 in gains.items()
+                                           for (a2, p2), g2 in gains.items()
+                                           if p1 == pol and p2 == pol and a1 != a2], axis=0)
+                degenMeanSqAmplitude = np.mean([np.abs(degen_gains[k1] * degen_gains[k2]) for k1 in gains.keys()
+                                                for k2 in gains.keys()
+                                                if k1[1] == pol and k2[1] == pol and k1[0] != k2[0]], axis=0)
+                gainSols[gainPols == pol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
+
+    # Create new solutions dictionary
+    new_gains = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
+
 class RedSol():
     '''Object for containing solutions to redundant calibraton, namely gains and
     unique-baseline visibilities, along with a variety of convenience methods.'''
@@ -433,12 +509,73 @@ class RedSol():
         Returns:
             new_sol: if not inplace, RedSol with degeneracy removal/replacement performed
         """
-        rc = RedundantCalibrator(self.reds)
-        new_sol = rc.remove_degen(self, degen_sol=degen_sol)
+        old_gains = self.gains
+        new_gains = remove_degen_gains(self.reds, old_gains, degen_gains=degen_sol, mode='complex')
         if inplace:
-            self.__init__(self.reds, gains=new_sol.gains, vis=new_sol.vis)
+            calibrate_in_place(self.vis, new_gains, old_gains=old_gains)
+            self.gains = new_gains
         else:
-            return new_sol
+            new_vis = deepcopy(vis)
+            return RedSol(self.reds, gains=new_gains, vis=new_vis)
+
+    def gain_bl(self, bl):
+        '''Return gain for baseline bl = (ai, aj).
+
+        Arguments:
+            bl: baseline to be split into antennas indexing gain.
+
+        Returns:
+            gain: gi * conj(gj)
+        '''
+        ai, aj = split_bl(bl)
+        return self.gain[ai] * np.conj(self.gain[aj])
+
+    def model(self, bl):
+        '''Return visibility model for baseline bl
+
+        Arguments:
+            bl: baseline to return model for
+
+        Returns:
+            vis: gi * conj(gj) * vis[bl]
+        '''
+        return self.gain_bl(bl) * self.vis[bl]
+
+    def calibrate(self, bl, data):
+        '''Return calibrated data for baseline bl
+
+        Arguments:
+            bl: baseline's gain to divide out
+            data: data to calibrate
+
+        Returns:
+            vis: data / (gi * conj(gj))
+        '''
+        gij = self.gain_bl(bl)
+        np.divide(data, gij, out=data, where=(gij != 0))
+        return data
+
+    def vis_from_data(self, data, wgts={}):
+        '''Performs redundant averaging of data using reds and gains stored in this RedSol object and
+           stores the result as the redundant solution.
+
+        Arguments:
+            data: DataContainer containing visibilities to redundantly average.
+            wgts: optional DataContainer weighting visibilities in averaging.
+                If not provided, it is assumed that all data are uniformly weighted.
+
+        Returns:
+            None
+        '''
+        vis = {}
+        for grp in self.reds:
+            if len(wgts) != 0:
+                vis[grp[0]] = sum([wgts.get(bl, 1) * self.calibrate(bl, data[bl]) for bl in grp])
+                wgt_sum = sum([wgts.get(bl, 1) for bl in grp])
+                np.divide(vis[grp[0]], wgt_sum, out=vis[grp[0]], where=(wgt_sum != 0))
+            else:
+                vis[grp[0]] = sum([self.calibrate(bl, data[bl]) for bl in grp])
+        self.vis = RedDataContainer(vis, reds=self.reds)
 
     def red_average(self, data, flags=None, nsamples=None, gain_flags=None):
         '''Performs redundant averaging of data using reds and gains stored in this RedSol object.
@@ -457,6 +594,7 @@ class RedSol():
             red_flags: RedDataContainer of flags on redundantly averaged data.
             red_nsamples: RedDataContainer of nsamples of that went into each redundantly averaged visibility
         '''
+        # XXX deprecate this function?
         # make copies of data, flags, and nsamples, which are then modified and downselected in place
         # if flags and/or nsamples, is not provided, create zeros or ones as appropriate
         red_data, red_flags, red_nsamples = {}, {}, {}
@@ -476,6 +614,7 @@ class RedSol():
                 calibrate_in_place(data_here, self.gains, data_flags=flags_here, cal_flags=gain_flags)
 
             # redundantly average and store in dictionary
+            # XXX does this average polarizations together?
             pos_red = list(set(bl[0:2] for bl in red))
             red_average(data_here, [pos_red], flags=flags_here, nsamples=nsamples_here, inplace=True)
             for bl in data_here:
@@ -1221,6 +1360,7 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
+        # XXX only copy data that will be used in solver
         fc_data = deepcopy(data)
         calibrate_in_place(fc_data, sol0)
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
@@ -1310,6 +1450,7 @@ class RedundantCalibrator:
             new_gains: gains with degeneracy removal/replacement performed
         """
 
+        # XXX use RedSol version, perhaps remove?
         # Check supported pol modes
         assert self.pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], 'Unrecognized pol_mode: %s' % self.pol_mode
         assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
@@ -1390,6 +1531,7 @@ class RedundantCalibrator:
             new_sol: RedSol with degeneracy removal/replacement performed
         """
 
+        # XXX use RedSol version
         gains, vis = get_gains_and_vis_from_sol(sol)
         if degen_sol is None:
             degen_sol = {key: np.ones_like(val) for key, val in gains.items()}
@@ -1421,6 +1563,7 @@ class RedundantCalibrator:
             else:  # '4pol_minV'
                 return 2 + 1 + nPhaseSlopes  # 4pol_minV ties overall phase together, so just 1 overall phase
         else:
+            # XXX use reds_to_antpos
             dummy_data = DataContainer({bl: np.ones((1, 1), dtype=complex) for red in self.reds for bl in red})
             solver = self._solver(linsolve.LogProductSolver, dummy_data)
             return np.sum([A.shape[1] - np.linalg.matrix_rank(np.dot(np.squeeze(A).T, np.squeeze(A)))
