@@ -967,7 +967,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
             if gain_flags is not None:
                 wgts = data_wgts[bl] * ~(gain_flags[ant1]) * ~(gain_flags[ant2])
             else:
-                wgts = copy.deepcopy(data_wgts[bl])
+                wgts = data_wgts[bl]
 
             # calculate chi^2
             chisq_here = np.asarray(np.abs(model_here - data[bl]) ** 2 * wgts, dtype=np.float64)
