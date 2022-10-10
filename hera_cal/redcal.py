@@ -1039,7 +1039,6 @@ class RedundantCalibrator:
             check_redundancy: if True, raise an error if the array is not redundantly calibratable,
                 even when allowing for an arbitrary number of phase slope degeneracies.
         """
-
         self._set_reds(reds)
         self.pol_mode = parse_pol_mode(self.reds)
 
@@ -1299,8 +1298,7 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-        # XXX only copy data that will be used in solver
-        fc_data = deepcopy(data)
+        fc_data = {bl: np.array(data[bl]) for red in self.reds for bl in red}
         calibrate_in_place(fc_data, sol0)
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve(mode=mode)
