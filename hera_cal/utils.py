@@ -938,9 +938,9 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     elif (chisq_per_ant is None) ^ (nObs_per_ant is None):
         raise ValueError('Both chisq_per_ant and nObs_per_ant must be specified or nor neither can be.')
 
-    # if data_wgts is unspecified, make it all 1.0s.
+    # if data_wgts is unspecified, make it 1.0
     if data_wgts is None:
-        data_wgts = {bl: np.ones_like(data[bl], dtype=float) for bl in data.keys()}
+        data_wgts = {bl: 1.0 for bl in data.keys()}
 
     # Expand model to include all bl in reds, assuming that model has the first bl in the redundant group
     if reds is not None:
@@ -969,17 +969,22 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
             else:
                 wgts = data_wgts[bl]
 
+            # convert wgts into nObs, handling the case where wgts is a scaler because data_wgts is None
+            if np.isscalar(wgts):
+                wgts = wgts * np.ones(data[bl].shape, dtype=float)
+            nObs_from_wgts = np.array(wgts > 0, dtype=int)
+
             # calculate chi^2
             chisq_here = np.asarray(np.abs(model_here - data[bl]) ** 2 * wgts, dtype=np.float64)
             if split_by_antpol:
                 if ap1 in chisq:
                     assert ap1 in nObs
                     chisq[ap1] = chisq[ap1] + chisq_here
-                    nObs[ap1] = nObs[ap1] + (wgts > 0)
+                    nObs[ap1] += nObs[ap1] + nObs_from_wgts
                 else:
                     assert ap1 not in nObs
                     chisq[ap1] = copy.deepcopy(chisq_here)
-                    nObs[ap1] = np.array(wgts > 0, dtype=int)
+                    nObs[ap1] = nObs_from_wgts
             else:
                 chisq += chisq_here
                 nObs += (wgts > 0)
@@ -989,11 +994,11 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
                 if ant in chisq_per_ant:
                     assert ant in nObs_per_ant
                     chisq_per_ant[ant] = chisq_per_ant[ant] + chisq_here
-                    nObs_per_ant[ant] = nObs_per_ant[ant] + (wgts > 0)
+                    nObs_per_ant[ant] = nObs_per_ant[ant] + nObs_from_wgts
                 else:
                     assert ant not in nObs_per_ant
                     chisq_per_ant[ant] = copy.deepcopy(chisq_here)
-                    nObs_per_ant[ant] = np.array(wgts > 0, dtype=int)
+                    nObs_per_ant[ant] = nObs_from_wgts
 
     return chisq, nObs, chisq_per_ant, nObs_per_ant
 
