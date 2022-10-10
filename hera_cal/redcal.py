@@ -12,7 +12,7 @@ from itertools import chain
 from . import utils
 from .noise import predict_noise_variance_from_autos, infer_dt
 from .datacontainer import DataContainer, RedDataContainer
-from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores, red_average
+from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores
 from .io import HERAData, HERACal, write_cal, save_redcal_meta
 from .apply_cal import calibrate_in_place
 
@@ -577,56 +577,6 @@ class RedSol():
             else:
                 vis[grp[0]] = sum([self.calibrate_bl(bl, data[bl]) for bl in grp])
         self.vis = RedDataContainer(vis, reds=self.reds)
-
-    def red_average(self, data, flags=None, nsamples=None, gain_flags=None):
-        '''Performs redundant averaging of data using reds and gains stored in this RedSol object.
-
-        Arguments:
-            data: DataContainer containing visibilities to redundantly average.
-            flags: optional DataContainer marking visibilities as flagged and therefore excluded from averaging.
-                If not provided, it is assumed that all data are unflagged.
-            nsamples: optional DataContainer containing the number of samples in each visibility. Used for
-                weighting data when averaging and for figuring out the number of samples in each baseline group.
-                If not provided, it is assumed that nsamples is uniformly 1.
-            gain_flags: optional dictionary used for per-antenna, per-time-and-frequency flagging when calibrating.
-
-        Returns:
-            red_data: RedDataContainer of redundantly averaged data.
-            red_flags: RedDataContainer of flags on redundantly averaged data.
-            red_nsamples: RedDataContainer of nsamples of that went into each redundantly averaged visibility
-        '''
-        # XXX deprecate this function?
-        # make copies of data, flags, and nsamples, which are then modified and downselected in place
-        # if flags and/or nsamples, is not provided, create zeros or ones as appropriate
-        red_data, red_flags, red_nsamples = {}, {}, {}
-        if gain_flags is None:
-            gain_flags = {ant: np.zeros_like(self.gains[ant], bool) for ant in self.gains}
-
-        for red in self.reds:
-            # extract and copy this redundant group
-            data_here = DataContainer({bl: np.array(data[bl]) for bl in red})
-            flags_here = DataContainer({bl: (np.zeros_like(data[bl], bool) if flags is None
-                                             else np.array(flags[bl])) for bl in red})
-            nsamples_here = DataContainer({bl: (np.ones_like(data[bl], float) if nsamples is None
-                                                else np.array(nsamples[bl])) for bl in red})
-
-            # perform calibration if necessary
-            if self.gains is not None:
-                calibrate_in_place(data_here, self.gains, data_flags=flags_here, cal_flags=gain_flags)
-
-            # redundantly average and store in dictionary
-            # XXX does this average polarizations together?
-            pos_red = list(set(bl[0:2] for bl in red))
-            red_average(data_here, [pos_red], flags=flags_here, nsamples=nsamples_here, inplace=True)
-            for bl in data_here:
-                red_data[bl] = data_here[bl]
-                red_flags[bl] = flags_here[bl]
-                red_nsamples[bl] = nsamples_here[bl]
-
-        # convert dicts to RedDataContainer and return
-        return (RedDataContainer(red_data, reds=self.reds),
-                RedDataContainer(red_flags, reds=self.reds),
-                RedDataContainer(red_nsamples, reds=self.reds))
 
     def chisq(self, data, data_wgts, gain_flags=None):
         """Computes chi^2 defined as: chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)|^2 * wgts_ij)
