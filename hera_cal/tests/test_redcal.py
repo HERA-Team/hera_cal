@@ -288,8 +288,6 @@ class TestMethods(object):
 
         # test errors
         with pytest.raises(ValueError):
-            om._build_polarity_baseline_groups(data, reds, edge_cut=100)
-        with pytest.raises(ValueError):
             om._build_polarity_baseline_groups(data, reds, max_rel_angle=np.pi)
 
 
@@ -569,7 +567,7 @@ class TestRedundantCalibrator(object):
         gains = {k: v.astype(np.complex64) for k, v in gains.items()}
         calibrate_in_place(d, gains, old_gains=g, gain_convention='multiply')
         d = {k: v.astype(np.complex64) for k, v in d.items()}
-        dly_sol, off_sol = info._firstcal_iteration(d, fqs, medfilt=False)
+        dly_sol, off_sol = info._firstcal_iteration(d, fqs)
         sol_degen = info.remove_degen_gains(dly_sol, degen_gains=delays, mode='phase')
         for i in range(NANTS):
             assert dly_sol[(i, 'Jxx')].dtype == np.float64
@@ -1550,8 +1548,7 @@ class TestRedundantCalibrator(object):
 
 class TestRedcalAndAbscal(object):
 
-    @pytest.mark.parametrize("fc_min_vis_per_ant", [16, None])
-    def test_post_redcal_abscal(self, fc_min_vis_per_ant):
+    def test_post_redcal_abscal(self):
         '''This test shows that performing a combination of redcal and abscal recovers the exact input gains
         up to an overall phase (which is handled by using a reference antenna).'''
         # Simulate Redundant Data
@@ -1579,7 +1576,7 @@ class TestRedcalAndAbscal(object):
         d.antpos = antpos
 
         # run redcal
-        cal = om.redundantly_calibrate(d, reds, fc_min_vis_per_ant=fc_min_vis_per_ant, oc_conv_crit=1e-13, oc_maxiter=5000)
+        cal = om.redundantly_calibrate(d, reds, oc_conv_crit=1e-13, oc_maxiter=5000)
 
         # set up abscal
         d_omnicaled = deepcopy(d)
