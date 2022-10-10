@@ -416,6 +416,7 @@ def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1p
     # Create new solutions dictionary
     new_gains = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
 
+
 class RedSol():
     '''Object for containing solutions to redundant calibraton, namely gains and
     unique-baseline visibilities, along with a variety of convenience methods.'''
@@ -530,8 +531,8 @@ class RedSol():
         ai, aj = split_bl(bl)
         return self.gain[ai] * np.conj(self.gain[aj])
 
-    def model(self, bl):
-        '''Return visibility model for baseline bl
+    def model_bl(self, bl):
+        '''Return visibility data model (gain * vissol) for baseline bl
 
         Arguments:
             bl: baseline to return model for
@@ -541,7 +542,7 @@ class RedSol():
         '''
         return self.gain_bl(bl) * self.vis[bl]
 
-    def calibrate(self, bl, data):
+    def calibrate_bl(self, bl, data):
         '''Return calibrated data for baseline bl
 
         Arguments:
@@ -555,7 +556,7 @@ class RedSol():
         np.divide(data, gij, out=data, where=(gij != 0))
         return data
 
-    def vis_from_data(self, data, wgts={}):
+    def get_vis_from_data(self, data, wgts={}):
         '''Performs redundant averaging of data using reds and gains stored in this RedSol object and
            stores the result as the redundant solution.
 
@@ -570,11 +571,11 @@ class RedSol():
         vis = {}
         for grp in self.reds:
             if len(wgts) != 0:
-                vis[grp[0]] = sum([wgts.get(bl, 1) * self.calibrate(bl, data[bl]) for bl in grp])
+                vis[grp[0]] = sum([wgts.get(bl, 1) * self.calibrate_bl(bl, data[bl]) for bl in grp])
                 wgt_sum = sum([wgts.get(bl, 1) for bl in grp])
                 np.divide(vis[grp[0]], wgt_sum, out=vis[grp[0]], where=(wgt_sum != 0))
             else:
-                vis[grp[0]] = sum([self.calibrate(bl, data[bl]) for bl in grp])
+                vis[grp[0]] = sum([self.calibrate_bl(bl, data[bl]) for bl in grp])
         self.vis = RedDataContainer(vis, reds=self.reds)
 
     def red_average(self, data, flags=None, nsamples=None, gain_flags=None):
