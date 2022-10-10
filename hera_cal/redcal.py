@@ -1394,8 +1394,7 @@ class RedundantCalibrator:
         return complex solutions for antennas and visibilities.
 
         Args:
-            sol: dictionary (or RedSol) that contains both visibility and gain solutions in the
-                {(ind1,ind2,pol): np.array} and {(index,antpol): np.array} formats respectively
+            sol: RedSol object that contains both redundant visibilities and gain solutions
             degen_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
                 left as None, average gain amplitudes will be 1 and average phase terms will be 0.
@@ -1404,15 +1403,7 @@ class RedundantCalibrator:
         Returns:
             new_sol: RedSol with degeneracy removal/replacement performed
         """
-
-        # XXX use RedSol version
-        gains, vis = get_gains_and_vis_from_sol(sol)
-        if degen_sol is None:
-            degen_sol = {key: np.ones_like(val) for key, val in gains.items()}
-        new_gains = self.remove_degen_gains(gains, degen_gains=degen_sol, mode='complex')
-        new_vis = deepcopy(vis)
-        calibrate_in_place(new_vis, new_gains, old_gains=gains)
-        return RedSol(self.reds, gains=new_gains, vis=new_vis)
+        return sol.remove_degen(degen_sol=degen_sol, inplace=False)
 
     def count_degens(self, assume_redundant=True):
         """Count the number of degeneracies in this redundant calibrator, given the redundancies and the pol_mode.
@@ -1437,7 +1428,6 @@ class RedundantCalibrator:
             else:  # '4pol_minV'
                 return 2 + 1 + nPhaseSlopes  # 4pol_minV ties overall phase together, so just 1 overall phase
         else:
-            # XXX use reds_to_antpos
             dummy_data = DataContainer({bl: np.ones((1, 1), dtype=complex) for red in self.reds for bl in red})
             solver = self._solver(linsolve.LogProductSolver, dummy_data)
             return np.sum([A.shape[1] - np.linalg.matrix_rank(np.dot(np.squeeze(A).T, np.squeeze(A)))
