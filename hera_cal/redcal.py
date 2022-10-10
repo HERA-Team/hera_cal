@@ -1169,39 +1169,36 @@ class RedundantCalibrator:
         dtype = np.find_common_type([d.dtype for d in data.values()], [])
 
         # iteratively solve for offsets to account for phase wrapping
-        for i in range(maxiter):
-            dlys, delta_off = self._firstcal_iteration(data, freqs, sparse=sparse, mode=mode)
-            if i == 0:  # only solve for delays on the first iteration, also apply polarity flips
-                # XXX suggest putting phase shifts back in after finding pol-flipped ants?
-                g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs)),
-                                      dtype=dtype) for ant, dly in dlys.items()}
-                # XXX calibrate in place is expensive and should be avoided
-                calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
+        dlys, offs = self._firstcal_iteration(data, freqs, sparse=sparse, mode=mode)
+        meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()}}
+        meta['offs'] = {ant: off.flatten() for ant, off in offs.items()}
+        g_fc = {ant: np.exp(2j * np.pi * dly * freqs + 1j * offs[ant]).astype(dtype) for ant, dly in dlys.items()}
+        #        # XXX calibrate in place is expensive and should be avoided
+        #        calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
 
-                # build metadata and apply detected polarities as a firstcal starting point
-                meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()}}
-                polarity_flips = find_polarity_flipped_ants(data, self.reds, max_rel_angle=max_rel_angle,
-                                                            max_recursion_depth=max_recursion_depth)
-                meta['polarity_flips'] = {ant: np.array([polarity_flips[ant] for i in range(len(dlys[ant]))])
-                                          for ant in polarity_flips}
-                if np.all([flip is not None for flip in polarity_flips.values()]):
-                    polarities = {ant: -1.0 if polarity_flips[ant] else 1.0 for ant in g_fc}
-                    # XXX calibrate in place is expensive and should be avoided
-                    calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
-                    g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
+        #        # build metadata and apply detected polarities as a firstcal starting point
+        #        polarity_flips = find_polarity_flipped_ants(data, self.reds, max_rel_angle=max_rel_angle,
+        #                                                    max_recursion_depth=max_recursion_depth)
+        #        meta['polarity_flips'] = {ant: np.array([polarity_flips[ant] for i in range(len(dlys[ant]))])
+        #                                  for ant in polarity_flips}
+        #        if np.all([flip is not None for flip in polarity_flips.values()]):
+        #            polarities = {ant: -1.0 if polarity_flips[ant] else 1.0 for ant in g_fc}
+        #            # XXX calibrate in place is expensive and should be avoided
+        #            calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
+        #            g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
 
-            else:  # on second and subsequent iterations, do phase shifts
-                delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
-                                             dtype=dtype) for ant in g_fc.keys()}
-                # XXX calibrate in place is expensive and should be avoided
-                calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
-                g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
+        #    else:  # on second and subsequent iterations, do phase shifts
+        #        delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
+        #                                     dtype=dtype) for ant in g_fc.keys()}
+        #        # XXX calibrate in place is expensive and should be avoided
+        #        calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
+        #        g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
 
-            if (np.linalg.norm(list(delta_off.values())) < conv_crit) and (i > 1):
-                break
+        #    if (np.linalg.norm(list(delta_off.values())) < conv_crit) and (i > 1):
+        #        break
 
-        # XXX calibrate in place is expensive and should be avoided
-        calibrate_in_place(data, g_fc, gain_convention='multiply')  # unapply calibration
+        ## XXX calibrate in place is expensive and should be avoided
+        #calibrate_in_place(data, g_fc, gain_convention='multiply')  # unapply calibration
         return meta, g_fc
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
