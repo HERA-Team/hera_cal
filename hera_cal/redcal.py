@@ -1386,70 +1386,7 @@ class RedundantCalibrator:
         Returns:
             new_gains: gains with degeneracy removal/replacement performed
         """
-
-        # XXX use RedSol version, perhaps remove?
-        # Check supported pol modes
-        assert self.pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], 'Unrecognized pol_mode: %s' % self.pol_mode
-        assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
-        if degen_gains is None:
-            if mode == 'phase':
-                degen_gains = {key: np.zeros_like(val) for key, val in gains.items()}
-            else:  # complex
-                degen_gains = {key: np.ones_like(val) for key, val in gains.items()}
-        ants = gains.keys()
-        gainPols = np.array([ant[1] for ant in gains])  # gainPols is list of antpols, one per antenna
-        antpols = list(set(gainPols))
-
-        # if mode is 2pol, run as two 1pol remove degens
-        if self.pol_mode == '2pol':
-            self.pol_mode = '1pol'
-            pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
-            pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
-            new_gains = self.remove_degen_gains(pol0_gains, degen_gains=degen_gains, mode=mode)
-            new_gains.update(self.remove_degen_gains(pol1_gains, degen_gains=degen_gains, mode=mode))
-            self.pol_mode = '2pol'
-            return new_gains
-
-        # Extract gain and model visibiltiy solutions
-        gainSols = np.array([gains[ant] for ant in ants])
-        degenGains = np.array([degen_gains[ant] for ant in ants])
-
-        # Build matrices for projecting gain degeneracies
-        antpos = reds_to_antpos(self.reds)
-        positions = np.array([antpos[ant[0]] for ant in gains])
-        if self.pol_mode == '1pol' or self.pol_mode == '4pol_minV':
-            # In 1pol and 4pol_minV, the phase degeneracies are 1 overall phase and 2 tip-tilt terms
-            # Rgains maps gain phases to degenerate parameters (either average phases or phase slopes)
-            Rgains = np.hstack((positions, np.ones((positions.shape[0], 1))))
-        else:  # pol_mode is '4pol'
-            # two columns give sums for two different polarizations
-            phasePols = np.vstack((gainPols == antpols[0], gainPols == antpols[1])).T
-            Rgains = np.hstack((positions, phasePols))
-        # Mgains is like (AtA)^-1 At in linear estimator formalism. It's a normalized estimator of degeneracies
-        Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
-
-        # degenToRemove is the amount we need to move in the degenerate subspace
-        if mode == 'phase':
-            # Fix phase terms only
-            degenToRemove = np.einsum('ij,jkl', Mgains, gainSols - degenGains)
-            gainSols -= np.einsum('ij,jkl', Rgains, degenToRemove)
-        else:  # working on complex data
-            # Fix phase terms
-            degenToRemove = np.einsum('ij,jkl', Mgains, np.angle(gainSols * np.conj(degenGains)))
-            gainSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rgains, degenToRemove))
-            # Fix abs terms: fixes the mean abs product of gains (as they appear in visibilities)
-            for pol in antpols:
-                meanSqAmplitude = np.mean([np.abs(g1 * g2) for (a1, p1), g1 in gains.items()
-                                           for (a2, p2), g2 in gains.items()
-                                           if p1 == pol and p2 == pol and a1 != a2], axis=0)
-                degenMeanSqAmplitude = np.mean([np.abs(degen_gains[k1] * degen_gains[k2]) for k1 in gains.keys()
-                                                for k2 in gains.keys()
-                                                if k1[1] == pol and k2[1] == pol and k1[0] != k2[0]], axis=0)
-                gainSols[gainPols == pol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
-
-        # Create new solutions dictionary
-        new_gains = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
-        return new_gains
+        return remove_degen_gains(self.reds, gains, degen_gains=degen_gains, mode=mode, pol_mode=self.pol_mode)
 
     def remove_degen(self, sol, degen_sol=None):
         """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
