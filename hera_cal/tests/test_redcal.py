@@ -452,6 +452,14 @@ class TestRedSol(object):
         assert items[2][0] == (0, 1, 'ee')
         np.testing.assert_array_equal(items[2][1], 3 * np.ones((1, 1)))
 
+    def test_gain_model_calibrate_bl(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): 2j * np.ones((1, 1))}, vis={(0, 1, 'ee'): 3 * np.ones((1, 1))})
+        assert rs.gain_bl((0, 1, 'ee'))[0, 0] == -2.0j
+        assert rs.model_bl((0, 1, 'ee'))[0, 0] == -6.0j
+        assert rs.calibrate_bl((0, 1, 'ee'), 10j * np.ones((1, 1)))[0, 0] == -5
+
     def test_chisq(self):
         NANTS = 18
         antpos = linear_array(NANTS)
