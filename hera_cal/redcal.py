@@ -362,11 +362,6 @@ def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1p
     # Check supported pol modes
     assert pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], f'Unrecognized pol_mode: {pol_mode}'
     assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
-    if degen_gains is None:
-        if mode == 'phase':
-            degen_gains = {key: np.zeros_like(val) for key, val in gains.items()}
-        else:  # complex
-            degen_gains = {key: np.ones_like(val) for key, val in gains.items()}
     ants = gains.keys()
     gainPols = np.array([ant[1] for ant in gains])  # gainPols is list of antpols, one per antenna
     antpols = list(set(gainPols))
@@ -379,9 +374,15 @@ def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1p
         new_gains.update(remove_degen_gains(reds, pol1_gains, degen_gains=degen_gains, mode=mode, pol_mode='1pol'))
         return new_gains
 
-    # Extract gain and model visibiltiy solutions
+    # Extract gains and degenerate gains and put into numpy arrays
     gainSols = np.array([gains[ant] for ant in ants])
-    degenGains = np.array([degen_gains[ant] for ant in ants])
+    if degen_gains is None:
+        if mode == 'phase':
+            degenGains = np.array([np.zeros_like(gains[ant]) for ant in ants])
+        else:  # complex
+            degenGains = np.array([np.ones_like(gains[ant]) for ant in ants])
+    else:
+        degenGains = np.array([degen_gains[ant] for ant in ants])
 
     # Build matrices for projecting gain degeneracies
     antpos = reds_to_antpos(reds)
