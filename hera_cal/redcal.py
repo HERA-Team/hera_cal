@@ -561,8 +561,7 @@ class RedSol():
             vis: data / (gi * conj(gj))
         '''
         gij = self.gain_bl(bl)
-        np.divide(data, gij, out=data, where=(gij != 0))
-        return data
+        return np.where((gij != 0), data / gij, data)
 
     def get_vis_from_data(self, data, wgts={}):
         '''Performs redundant averaging of data using reds and gains stored in this RedSol object and
