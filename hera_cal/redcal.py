@@ -412,8 +412,9 @@ def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1p
             meanSqAmplitude = np.mean([np.abs(g1 * g2) for (a1, p1), g1 in gains.items()
                                        for (a2, p2), g2 in gains.items()
                                        if p1 == pol and p2 == pol and a1 != a2], axis=0)
-            degenMeanSqAmplitude = np.mean([np.abs(degen_gains[k1] * degen_gains[k2]) for k1 in gains.keys()
-                                            for k2 in gains.keys()
+            degenMeanSqAmplitude = np.mean([(np.ones_like(gains[k1]) if degen_gains is None
+                                             else np.abs(degen_gains[k1] * degen_gains[k2]))
+                                            for k1 in gains.keys() for k2 in gains.keys()
                                             if k1[1] == pol and k2[1] == pol and k1[0] != k2[0]], axis=0)
             gainSols[gainPols == pol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
 
