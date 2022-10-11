@@ -387,7 +387,7 @@ class TestRedSol(object):
         assert rs[1, 'Jee'][0, 0] == 1
         assert rs[0, 1, 'ee'][0, 0] == 0
 
-    def test_red_average(self):
+    def test_get_vis_from_data(self):
         NANTS = 18
         antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
@@ -396,12 +396,12 @@ class TestRedSol(object):
         w = dict([(k, 1.) for k in d.keys()])
         meta, sol = info.logcal(d)
         sol = info.remove_degen(sol, degen_sol=dict(list(gains.items()) + list(true_vis.items())))
-        red_d, red_f, red_ns = sol.red_average(DataContainer(d))
+        for ant in gains:
+            np.testing.assert_array_almost_equal(gains[ant], sol.gains[ant])
+        sol.get_vis_from_data(DataContainer(d))
         for red in reds:
             for bl in red:
-                np.testing.assert_array_almost_equal(true_vis[red[0]], red_d[bl])
-                np.testing.assert_array_equal(False, red_f[bl])
-                np.testing.assert_array_equal(len(red), red_ns[bl])
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
 
     def test_remove_degen(self):
         NANTS = 18
