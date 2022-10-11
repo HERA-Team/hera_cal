@@ -279,13 +279,6 @@ class TestMethods(object):
             else:
                 assert not np.any(meta['polarity_flips'][ant, 'Jee'])
 
-        # test operation where no good answer is possible, so we expect it to fail
-        #data[(0, 1, 'ee')] *= -1
-        #meta, g_fc = rc.firstcal(data, freqs)
-        #for ant in meta['polarity_flips']:
-        #    if ant[1] == 'Jee':
-        #        assert np.all([m is None for m in meta['polarity_flips'][ant]])
-
         # test errors
         with pytest.raises(ValueError):
             om._build_polarity_baseline_groups(data, reds, max_rel_angle=np.pi)
