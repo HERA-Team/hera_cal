@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 from . import utils
 from . import redcal
 from . import abscal
@@ -760,9 +761,9 @@ class NuCalibrator:
         
         return min_loss
     
-    def calibrate(self, data, wgts, eta_half_width=20e-9, ell_half_width=1, eigenval_cutoff=1e-12, 
-                  learning_rate=1e-3, maxiter=100, optimizer='adabelief', return_min_loss=False, 
-                  **opt_kwargs):
+    def calibrate(self, data, wgts, freqs=None, pols=["nn"], eta_half_width=20e-9, ell_half_width=1, 
+                  eigenval_cutoff=1e-12, learning_rate=1e-3, maxiter=100, optimizer='adabelief', 
+                  return_min_loss=False, **opt_kwargs):
         """
         Parameters:
         ----------
@@ -795,8 +796,17 @@ class NuCalibrator:
         # If there's a baseline type missing because if there is a baseline that happens to not be in
         # the data, then arrays will different sizes. I could just hope it mostly works out but I don't
         # know if that's necessarily the best thing to do
-        
-        
+        if freqs is None:
+            if hasattr(data, "freqs"):
+                freqs = data.freqs
+            else:
+                raise ValueError("Frequency array not provided and not found in the data.")
+
+        if hasattr(data, 'times'):
+            ntimes = data.times.shape[0]
+        else:
+            ntimes = 1
+
         # Choose optimizer
         assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
         opt = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
@@ -806,7 +816,8 @@ class NuCalibrator:
             degen_guess = ...
         
         # Compute spatial filters used for calibration
-        spec = compute_spatial_filters(self.radial_reds, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
+        spat = compute_spatial_filters(self.radial_reds, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
+        spec = dspec.dpss_operator(freqs)
 
         # Set initial loss
         min_loss = np.inf
@@ -817,6 +828,8 @@ class NuCalibrator:
         # Amplitude should be NPOLS, NTIMES, NFREQS
         
         solution, info = {}, {}
-        
+        for pol in pols:
+            for tind in range(ntimes):
+                pass
             
-        return losses, gradient
+        return solution, info
