@@ -622,6 +622,79 @@ def build_nucal_wgts(radial_reds, freqs, data_flags, data_nsamples, autocorrs, a
     # TODO: unpack into np.ndarrays for each group
     return weights
 
+def estimate_phase_post_redcal(data, radial_reds, wgts=None, freqs=None, cache={}):
+    """
+    Function for estimating the gain phase using PSWF vectors
+    """
+    if not hasattr(data, "freqs") and freqs == None:
+        raise ValueError("Frequencies not found in data or provided")
+    elif freqs is None:
+        freqs = data.freqs
+    if wgts is None:
+        wgts = {k: np.ones_like(data[k], dtype=float) for k in data}
+        
+    eigenvals = {}
+    eigenvec = {}
+    u_bounds = get_u_bounds(radial_reds, freqs)
+    
+    for (umin, umax), rdgrp in zip(u_bounds, radial_reds):
+        _data = []
+        for bl in rdgrp:
+            umodes = freqs * radial_reds.baseline_lengths[bl] / 2.998e8
+            # TODO: Only compute these if they haven't already been computed
+            vector = dspec.pswf_operator(
+                umodes, [0], [1], eigenval_cutoff=[1e-12], xmin=umin, xmax=umax, cache=cache
+            )[0].real
+            # TODO: figure out the properly normalize the data
+            _data.append(data[bl] / np.abs(data[bl]))
+            eigenvec[rdgrp[0]].append(vector)
+
+        XTX = jnp.einsum('afm,afn->mn', eigenvec[rdgrp[0]], eigenvec[rdgrp[0]])
+        Xy = jnp.einsum('afm,atf->tm', eigenvec[rdgrp[0]], np.array(_data))
+        eigenvals[rdgrp[0]] = jnp.linalg.solve(XTX, Xy.T).T
+
+    return eigenvals, eigenvec
+
+def estimate_gain_amp_post_redcal(data, radial_reds, wgts=None, freqs=None, cache={}, gains={}):
+    """
+    Function for estimating gain amplitude
+
+    # TODO: This is a copy of the above function.
+    """
+    if not hasattr(data, "freqs") and freqs == None:
+        raise ValueError("Frequencies not found in data or provided")
+    elif freqs is None:
+        freqs = data.freqs
+    if wgts is None:
+        wgts = {k: np.ones_like(data[k], dtype=float) for k in data}
+        
+    eigenvals = {}
+    eigenvec = {}
+    u_bounds = get_u_bounds(radial_reds, freqs)
+    
+    for (umin, umax), rdgrp in zip(u_bounds, radial_reds):
+        _data = []
+        for bl in rdgrp:
+            umodes = freqs * radial_reds.baseline_lengths[bl] / 2.998e8
+            # TODO: Only compute these if they haven't already been computed
+            vector = dspec.pswf_operator(
+                umodes, [0], [1], eigenval_cutoff=[1e-12], xmin=umin, xmax=umax, cache=cache
+            )[0].real
+            # TODO: figure out the properly normalize the data
+            _data.append(data[bl] / np.abs(data[bl]))
+            eigenvec[rdgrp[0]].append(vector)
+
+        XTX = jnp.einsum('afm,afn->mn', eigenvec[rdgrp[0]], eigenvec[rdgrp[0]])
+        Xy = jnp.einsum('afm,atf->tm', eigenvec[rdgrp[0]], np.array(_data))
+        eigenvals[rdgrp[0]] = jnp.linalg.solve(XTX, Xy.T).T
+
+    return eigenvals, eigenvec
+
+def estimate_degenerate_gains(radial_reds, reds, freqs):
+    """
+    """
+    pass
+
 class NuCalibrator:
     """
     Class for performing frequency redundant calibration of previously redundantly
@@ -669,7 +742,7 @@ class NuCalibrator:
         return model_r, model_i
     
     @partial(jax.jit, static_argnums=(0,))
-    def loss_function(self, params, data, wgts, spec, spat):
+    def loss_function(self, params, data_r, data_i, wgts, spec, spat):
         """
         Loss function used for solving for redcal degenerate parameters and a model of the sky
         
@@ -690,16 +763,18 @@ class NuCalibrator:
             pass
         """
         # Dot tip-tilt parameters into baseline vector
-        phase = ...
-        
-        # Multiply in amplitude estimate
-        gain = ...
-        
+        phase = jnp.einsum('nf,nb->bf', params['phi'], blvec)
+                
         # Compute foreground model from beta estimates
-        model_r, model_i = self.foreground_model(params['fg_r'], params['fg_i'], spec, spat)
+        fg_r, fg_i = self.foreground_model(params['fg_r'], params['fg_i'], spec, spat)
+
+        # Compute model from foreground estimates and amplitude
+        model_r = params['amp'] * (fg_r * jnp.cos(phase) - fg_i * jnp.sin(phase))
+        model_i = params['amp'] * (fg_i * jnp.cos(phase) + fg_r * jnp.sin(phase))
         
         # Compute loss using weights and foreground model
-        pass
+        return jnp.sum((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
+        
     
     def _iterate_through_groups(self, params, data, wgts, spec, spat):
         """
@@ -755,7 +830,6 @@ class NuCalibrator:
         params = deepcopy(initial_params)
 
         # Initialize variables used in calibration loop
-        info = {}
         losses = []
     
         # Start gradient descent
@@ -770,16 +844,13 @@ class NuCalibrator:
 
             # Stop if losses converge
             if step >= 1 and np.abs(losses[-1] - losses[-2]) < tol:
-                info["loss"] = losses[-1]
-                info["niter"] = step + 1
                 break
-                
-            
-        return params, info
+             
+        return params, {"loss": losses[-1], "niter": step + 1}
     
-    def calibrate(self, data, wgts, freqs=None, pols=["nn"], eta_half_width=20e-9, ell_half_width=1, 
+    def fit_degenerate_parameters(self, data, wgts, freqs=None, pols=["nn"], eta_half_width=20e-9, ell_half_width=1, 
                   eigenval_cutoff=1e-12, learning_rate=1e-3, maxiter=100, optimizer='adabelief', 
-                  return_min_loss=False, **opt_kwargs):
+                  **opt_kwargs):
         """
         Parameters:
         ----------
@@ -806,31 +877,27 @@ class NuCalibrator:
             Additional keyword arguments to be passed to the optimizer chosen. See optax documentation
             for additional details.
         """
-        # Think about number of polarizations. I don't think I can necessarily do them at the same time
-        # If there's a baseline type missing because if there is a baseline that happens to not be in
-        # the data, then arrays will different sizes. I could just hope it mostly works out but I don't
-        # know if that's necessarily the best thing to do
+        # Get frequency array
         if freqs is None:
             if hasattr(data, "freqs"):
                 freqs = data.freqs
             else:
                 raise ValueError("Frequency array not provided and not found in the data.")
 
+        # Get number of times in the data or infer it
         if hasattr(data, 'times'):
-            # Get number of times in the data
             ntimes = data.times.shape[0]
         else:
-            # Infer number of times from the data
             key = list(data.keys())[0]
             ntimes = data[key].shape[0]
 
         # Choose optimizer
         assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
-        opt = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
+        optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
                 
         # Compute spatial filters used for calibration
-        spat = compute_spatial_filters(self.radial_reds, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
-        spec, _ = dspec.dpss_operator(freqs, [0], [eta_half_width], eigenval_cutoff=eigenval_cutoff)
+        spatial_filters = compute_spatial_filters(self.radial_reds, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
+        spectral_filters, _ = dspec.dpss_operator(freqs, [0], [eta_half_width], eigenval_cutoff=eigenval_cutoff)
 
         # TODO: compute estimate of the degenerate parameters from spatial filters
         degen_guess = ...
