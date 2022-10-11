@@ -747,13 +747,33 @@ class NuCalibrator:
     def _calibrate_single_integration(self, data, wgts, spec, spat, maxiter=100, return_min_loss=False):
         """
         Function for calibrating a single polarization/time integration
+
+        Parameters:
+        ----------
+        data : list of jnp.ndarrays
+            pass
+        wgts : list of jnp.ndarrays
+            pass
+        spec : jnp.ndarray
+            pass
+        spat : list of jnp.ndarrays
+            pass
+        return_min_loss : 
+
+        Return:
+        ------
+        solution : dict
+            pass
+        info : dict
+            pass
         """
-        solution = []
+        solution = {}
+        info = {"loss": 0, "niter": 0}
         min_loss = 0
         # Start gradient descent
         for i in range(maxiter):
             # Loss function
-            loss, gradient = self.loss(self.X)
+            loss, gradient = self.loss(data, wgts, spec, spat)
             if loss < min_loss:
                 min_loss = loss
                 if return_min_loss:
@@ -781,8 +801,6 @@ class NuCalibrator:
             Effective learning rate of chosen optimizer
         maxiter : int, default=100
             Maximum number of iterations to perform
-        degen_guess: dictionary, default=None
-            pass
         optimizer : str, default='adabelief'
             Optimizer used when performing gradient descent
         return_min_loss : bool, default=False
@@ -802,6 +820,7 @@ class NuCalibrator:
             else:
                 raise ValueError("Frequency array not provided and not found in the data.")
 
+        # Get number of times in the data
         if hasattr(data, 'times'):
             ntimes = data.times.shape[0]
         else:
@@ -810,26 +829,29 @@ class NuCalibrator:
         # Choose optimizer
         assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
         opt = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
-        
-        if degen_guess is None:
-            # Get estimate of gains from amplitude guess
-            degen_guess = ...
-        
+                
         # Compute spatial filters used for calibration
         spat = compute_spatial_filters(self.radial_reds, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
         spec = dspec.dpss_operator(freqs)
 
-        # Set initial loss
-        min_loss = np.inf
-        losses = []
+        # TODO: compute estimate of the degenerate parameters from spatial filters
+        degen_guess = ...
         
         # Sky Model Parameters should eventually be NPOLS, Ntimes, Ncomps
         # Tip-tilts should be NPOLS, NTIMES, NFREQS, NDIMS
         # Amplitude should be NPOLS, NTIMES, NFREQS
-        
+
+        # For each time and each polarization in the data calibrate
         solution, info = {}, {}
         for pol in pols:
             for tind in range(ntimes):
+                # TODO: form data and wgts arrays for this calibration cycle
                 pass
-            
+
+                # TODO: pass data array and filters to calibration code
+                pass
+
+                # TODO: unpack solution and organize it in a sensible way
+                pass
+
         return solution, info
