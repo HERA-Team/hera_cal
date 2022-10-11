@@ -851,6 +851,10 @@ class TestRedundantCalibrator(object):
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], true_dlys[k], decimal=10)
 
+        rc.pol_mode = 'unrecognized_pol_mode'
+        with pytest.raises(AssertionError):
+            rc.remove_degen_gains(dlys)
+
     def test_remove_degen_firstcal_2D(self):
         pol = 'xx'
         xhat = np.array([1., 0, 0])
@@ -930,10 +934,6 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(val, gains[key], decimal=10)
             if len(key) == 3:
                 np.testing.assert_almost_equal(val, true_vis[key], decimal=10)
-
-        rc.pol_mode = 'unrecognized_pol_mode'
-        with pytest.raises(AssertionError):
-            sol_rd = rc.remove_degen(sol)
 
     def test_lincal_hex_end_to_end_4pol_with_remove_degen_and_firstcal(self):
         antpos = hex_array(3, split_core=False, outriggers=0)
