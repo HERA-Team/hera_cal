@@ -528,7 +528,7 @@ class RedSol():
             gain: gi * conj(gj)
         '''
         ai, aj = split_bl(bl)
-        return self.gain[ai] * np.conj(self.gain[aj])
+        return self.gains[ai] * np.conj(self.gains[aj])
 
     def model(self, bl):
         '''Return visibility model for baseline bl
@@ -541,19 +541,23 @@ class RedSol():
         '''
         return self.gain_bl(bl) * self.vis[bl]
 
-    def calibrate(self, bl, data):
+    def calibrate(self, bl, data, copy=True):
         '''Return calibrated data for baseline bl
 
         Arguments:
             bl: baseline's gain to divide out
             data: data to calibrate
+            copy: if False, apply calibration to data in place
 
         Returns:
             vis: data / (gi * conj(gj))
         '''
         gij = self.gain_bl(bl)
-        np.divide(data, gij, out=data, where=(gij != 0))
-        return data
+        if copy:
+            return np.divide(data, gij, where=(gij != 0))
+        else:
+            np.divide(data, gij, out=data, where=(gij != 0))
+            return data
 
     def vis_from_data(self, data, wgts={}):
         '''Performs redundant averaging of data using reds and gains stored in this RedSol object and
@@ -1071,11 +1075,46 @@ class OmnicalSolver(linsolve.LinProductSolver):
             if verbose:
                 print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
 
+def _wrap_phs(phs, wrap_pnt=np.pi/2):
+    '''Adjust phase wrap point to be [-wrap_pnt, 2pi-wrap_pnt)'''
+    return (phs + wrap_pnt) % (2 * np.pi) - wrap_pnt
 
-def _firstcal_align_bls(bls, freqs, data, norm=True):
+def _flip_frac(offsets, flipped=set(), flip_pnt=np.pi/2):
+    '''Calculate the fraction of (bl1, bl2) pairings an antenna is involved
+    in which have large phase offsets.'''
+    cnt = {}
+    tot = {}
+    for (bl1, bl2), off in offsets.items():
+        ijmn = split_bl(bl1) + split_bl(bl2)
+        num_in_flipped = sum([int(ant in flipped) for ant in ijmn])
+        for ant in ijmn:
+            tot[ant] = tot.get(ant, 0) + 1
+            if off > flip_pnt and num_in_flipped % 2 == 0:
+                cnt[ant] = cnt.get(ant, 0) + 1
+    flip_frac = [(k, v / tot[k]) for k, v in cnt.items()]
+    return flip_frac
+
+def _find_flipped(offsets, flip_pnt=np.pi/2, maxiter=10):
+    '''Given a dict of (bl1, bl2) keys and phase offset vals, identify
+    antennas which are likely to have a np.pi phase offset.'''
+    flipped = set()
+    for i in range(maxiter):
+        flip_frac = _flip_frac(offsets, flipped=flipped, flip_pnt=flip_pnt)
+        changed = 0
+        for (ant, frac) in flip_frac:
+            if frac > 0.5:
+                changed = 1
+                if ant in flipped:
+                    flipped.remove(ant)
+                else:
+                    flipped.add(ant)
+        if not changed:
+            break
+    return flipped
+
+def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=np.pi/2):
     '''Given a redundant group of bls, find per-baseline dly/off params that
     bring them into phase alignment using hierarchical pairing.'''
-    # XXX propose changing fft_dly to take freqs
     fftfreqs = np.fft.fftfreq(freqs.shape[-1], np.median(np.diff(freqs)))
     dtau = fftfreqs[1] - fftfreqs[0]
     grps = [(bl,) for bl in bls]  # start with each bl in its own group
@@ -1109,10 +1148,10 @@ def _firstcal_align_bls(bls, freqs, data, norm=True):
         bin_shifts = (delta1 + delta2) / 2 + utils.quinn_tau(delta1 ** 2) - utils.quinn_tau(delta2 ** 2)
 
         dly = (fftfreqs[inds] + bin_shifts * dtau).reshape(-1, 1)
-
-        # Now that we know the slope, estimate the remaining phase offset
         phasor = np.exp(np.complex64(2j * np.pi) * dly * freqs)
         off = np.angle(np.sum(d12 / phasor, axis=1, keepdims=True))
+
+        # Now that we know the slope, estimate the remaining phase offset
         tau_off_gps[gp2] = dly, off
         _data[gp1 + gp2] = _data[gp1] + _data[gp2] * phasor * np.exp(np.complex64(1j) * off)
         return gp1 + gp2
@@ -1132,6 +1171,9 @@ def _firstcal_align_bls(bls, freqs, data, norm=True):
         for bl in gp:
             tau0, off0 = tau_offs.get((bl0, bl), (0, 0))
             tau_offs[(bl0, bl)] = (tau0 + tau, off0 + off)
+    tau_offs = {k: (v[0], _wrap_phs(v[1], wrap_pnt=wrap_pnt)) for k, v in tau_offs.items()}
+    mean_off = np.mean([v[1] for v in tau_offs.values()])
+    medi_off = np.median([v[1] for v in tau_offs.values()])
     return tau_offs
 
 
@@ -1237,25 +1279,35 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def _firstcal_iteration(self, data, freqs, sparse=False, mode='default'):
-        '''Runs a single iteration of firstcal, which uses phase differences between nominally
-        redundant meausrements to solve for delays and phase offsets that produce gains of the
-        form: np.exp(2j * np.pi * delay * freqs + 1j * offset).
+    def firstcal(self, data, freqs, maxiter=25, sparse=False, mode='default', flip_pnt=np.pi/2):
+        """Solve for a calibration solution parameterized by a single delay and phase offset
+        per antenna using the phase difference between nominally redundant measurements.
+        Delays are solved in a single iteration, but phase offsets are solved for
+        iteratively to account for phase wraps.
 
-        Arguments:
-            df: frequency change between data bins, scales returned delays by 1/df.
-            f0: frequency of the first channel in the data
-            offsets_only: only solve for phase offsets, dly_sol will be {}
-            For all other arguments, see RedundantCalibrator.firstcal()
+        Args:
+            data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
+            freqs: numpy array of frequencies in the data
+            maxiter: maximum number of phase offset solver iterations
+            conv_crit: convergence criterion for iterative offset solver, defined as the L2 norm
+                of the changes in phase (in radians) over all times and antennas
+            sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
+            mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
+                Suggest using 'default' unless solver is having stability (convergence) problems.
+                More documentation of modes in linsolve.LinearSolver.solve().
+            flip_pnt: cutoff median phase to assign baselines the "majority" polarity group.
+                (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
 
         Returns:
-            dly_sol: dictionary of per-antenna delay solutions in the {(index,antpol): np.array}
-                format.  All delays are multiplied by 1/df, so use that to set physical scale.
-            off_sol: dictionary of per antenna phase offsets (in radians) in the same format.
-        '''
+            meta: dictionary of metadata (including delays and suspected antenna flips for each integration)
+            g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the
+                {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
+        """
         taus_offs = {}
 
         for bls in self.reds:
+            if len(bls) < 2:
+                continue
             _tau_off = _firstcal_align_bls(bls, freqs, data)
             taus_offs.update(_tau_off)
 
@@ -1268,77 +1320,25 @@ class RedundantCalibrator:
             d_ls[eq_key] = np.array(tau_off_ij)
         ls = linsolve.LinearSolver(d_ls, sparse=sparse)
         sol = ls.solve(mode=mode)
-        dly_sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
-        off_sol = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
-        # add back in antennas in reds but not in the system of equations
         ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
-        dly_sol = {ant: dly_sol.get(ant, (np.zeros_like(list(dly_sol.values())[0]))) for ant in ants}
-        off_sol = {ant: off_sol.get(ant, (np.zeros_like(list(off_sol.values())[0]))) for ant in ants}
-        return dly_sol, off_sol
+        dlys = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
+        offs = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
+        # add back in antennas in reds but not in the system of equations
+        dlys = {ant: dlys.get(ant, (np.zeros_like(list(dlys.values())[0]))) for ant in ants}
+        offs = {ant: offs.get(ant, (np.zeros_like(list(offs.values())[0]))) for ant in ants}
+        # offsets have phase wraps and so need some finess around np.pi offsets
+        avg_offsets = {k: np.mean(v[1]) for k, v in taus_offs.items()}
+        flipped = _find_flipped(avg_offsets, flip_pnt=flip_pnt, maxiter=maxiter)
+        for ant in flipped:
+            offs[ant] = _wrap_phs(offs[ant] + np.pi)
 
-    def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-6,
-                 sparse=False, mode='default', max_rel_angle=(np.pi / 8),
-                 max_recursion_depth=6):
-        """Solve for a calibration solution parameterized by a single delay and phase offset
-        per antenna using the phase difference between nominally redundant measurements.
-        Delays are solved in a single iteration, but phase offsets are solved for
-        iteratively to account for phase wraps.
-
-        Args:
-            data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
-            freqs: numpy array of frequencies in the data
-            wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
-            maxiter: maximum number of phase offset solver iterations
-            conv_crit: convergence criterion for iterative offset solver, defined as the L2 norm
-                of the changes in phase (in radians) over all times and antennas
-            sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
-            mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
-                Suggest using 'default' unless solver is having stability (convergence) problems.
-                More documentation of modes in linsolve.LinearSolver.solve().
-            max_rel_angle: cutoff median phase to assign baselines the "majority" polarity group.
-                (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
-            max_recursion_depth: maximum number of assumptions to try before giving up.
-                Warning: the maximum complexity of this scales exponentially as 2^max_recursion_depth.
-
-        Returns:
-            meta: dictionary of metadata (including delays and suspected antenna flips for each integration)
-            g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the
-                {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
-        """
         dtype = np.find_common_type([d.dtype for d in data.values()], [])
-
-        # iteratively solve for offsets to account for phase wrapping
-        dlys, offs = self._firstcal_iteration(data, freqs, sparse=sparse, mode=mode)
-        meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()}}
-        meta['offs'] = {ant: off.flatten() for ant, off in offs.items()}
-        g_fc = {ant: np.exp(2j * np.pi * dly * freqs + 1j * offs[ant]).astype(dtype) for ant, dly in dlys.items()}
-        #        # XXX calibrate in place is expensive and should be avoided
-        #        calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
-
-        #        # build metadata and apply detected polarities as a firstcal starting point
-        #        polarity_flips = find_polarity_flipped_ants(data, self.reds, max_rel_angle=max_rel_angle,
-        #                                                    max_recursion_depth=max_recursion_depth)
-        #        meta['polarity_flips'] = {ant: np.array([polarity_flips[ant] for i in range(len(dlys[ant]))])
-        #                                  for ant in polarity_flips}
-        #        if np.all([flip is not None for flip in polarity_flips.values()]):
-        #            polarities = {ant: -1.0 if polarity_flips[ant] else 1.0 for ant in g_fc}
-        #            # XXX calibrate in place is expensive and should be avoided
-        #            calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
-        #            g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
-
-        #    else:  # on second and subsequent iterations, do phase shifts
-        #        delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
-        #                                     dtype=dtype) for ant in g_fc.keys()}
-        #        # XXX calibrate in place is expensive and should be avoided
-        #        calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
-        #        g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
-
-        #    if (np.linalg.norm(list(delta_off.values())) < conv_crit) and (i > 1):
-        #        break
-
-        ## XXX calibrate in place is expensive and should be avoided
-        #calibrate_in_place(data, g_fc, gain_convention='multiply')  # unapply calibration
-        return meta, g_fc
+        meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()},
+                'offs': {ant: off.flatten() for ant, off in offs.items()}}
+        gains = {ant: np.exp(2j * np.pi * dly * freqs + 1j * offs[ant]).astype(dtype) for ant, dly in dlys.items()}
+        sol = RedSol(self.reds, gains=gains)
+        sol.vis_from_data(data)  # not strictly necessary now, but probably should be done
+        return meta, sol
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
