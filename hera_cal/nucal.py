@@ -649,25 +649,6 @@ class NuCalibrator:
         # Build function that will be used to calculate loss
         # TODO: Isolate confirm correct parameter is being used to 
         self.loss = jax.value_and_grad(self._iterate_through_groups)
-
-        # Placeholder variable
-        self.X = np.random.uniform(0, 1, size=(2, 1536))
-    
-    @partial(jax.jit, static_argnums=(0,))
-    def test_function(self, X):
-        """
-        Placeholder for foreground model function. This might be a different function
-        
-        Parameters:
-        ----------
-        spec : jnp.ndarray
-            pass
-        spat : jnp.ndarray
-            pass
-        beta : jnp.ndarray
-            pass
-        """
-        return jnp.dot(X.T, X).sum()
     
     @partial(jax.jit, static_argnums=(0,))
     def foreground_model(self, skymodes_r, skymodes_i, spec, spat):
@@ -744,7 +725,8 @@ class NuCalibrator:
             
         return loss
 
-    def _calibrate_single_integration(self, data, wgts, spec, spat, maxiter=100, return_min_loss=False):
+    def _calibrate_single_integration(self, initial_params, optimizer, data, wgts, spec, spat, 
+                                      maxiter=100, tol=1e-10):
         """
         Function for calibrating a single polarization/time integration
 
@@ -758,7 +740,8 @@ class NuCalibrator:
             pass
         spat : list of jnp.ndarrays
             pass
-        return_min_loss : 
+        tol : float, default=1e-10
+            pass
 
         Return:
         ------
@@ -767,19 +750,32 @@ class NuCalibrator:
         info : dict
             pass
         """
-        solution = {}
-        info = {"loss": 0, "niter": 0}
-        min_loss = 0
+        # Initialize optimizer state using parameter guess
+        opt_state = optimizer.init(initial_params)
+        params = deepcopy(initial_params)
+
+        # Initialize variables used in calibration loop
+        info = {}
+        losses = []
+    
         # Start gradient descent
-        for i in range(maxiter):
-            # Loss function
+        for step in range(maxiter):
+            # Compute loss and gradient
             loss, gradient = self.loss(data, wgts, spec, spat)
-            if loss < min_loss:
-                min_loss = loss
-                if return_min_loss:
-                    pass
-        
-        return min_loss
+            updates, opt_state = optimizer.update(gradient, opt_state, params)
+            params = optax.apply_updates(params, updates)
+            
+            # Store loss values
+            losses.append(loss)
+
+            # Stop if losses converge
+            if step >= 1 and np.abs(losses[-1] - losses[-2]) < tol:
+                info["loss"] = losses[-1]
+                info["niter"] = step + 1
+                break
+                
+            
+        return params, info
     
     def calibrate(self, data, wgts, freqs=None, pols=["nn"], eta_half_width=20e-9, ell_half_width=1, 
                   eigenval_cutoff=1e-12, learning_rate=1e-3, maxiter=100, optimizer='adabelief', 
@@ -820,11 +816,13 @@ class NuCalibrator:
             else:
                 raise ValueError("Frequency array not provided and not found in the data.")
 
-        # Get number of times in the data
         if hasattr(data, 'times'):
+            # Get number of times in the data
             ntimes = data.times.shape[0]
         else:
-            ntimes = 1
+            # Infer number of times from the data
+            key = list(data.keys())[0]
+            ntimes = data[key].shape[0]
 
         # Choose optimizer
         assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
@@ -832,7 +830,7 @@ class NuCalibrator:
                 
         # Compute spatial filters used for calibration
         spat = compute_spatial_filters(self.radial_reds, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
-        spec = dspec.dpss_operator(freqs)
+        spec, _ = dspec.dpss_operator(freqs, [0], [eta_half_width], eigenval_cutoff=eigenval_cutoff)
 
         # TODO: compute estimate of the degenerate parameters from spatial filters
         degen_guess = ...
