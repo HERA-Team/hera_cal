@@ -535,7 +535,7 @@ class RedSol():
             gain: gi * conj(gj)
         '''
         ai, aj = split_bl(bl)
-        return self.gain[ai] * np.conj(self.gain[aj])
+        return self.gains[ai] * np.conj(self.gains[aj])
 
     def model_bl(self, bl):
         '''Return visibility data model (gain * vissol) for baseline bl
