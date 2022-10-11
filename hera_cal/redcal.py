@@ -529,7 +529,7 @@ class RedSol():
         '''Return gain for baseline bl = (ai, aj).
 
         Arguments:
-            bl: baseline to be split into antennas indexing gain.
+            bl: tuple, baseline to be split into antennas indexing gain.
 
         Returns:
             gain: gi * conj(gj)
@@ -541,7 +541,7 @@ class RedSol():
         '''Return visibility data model (gain * vissol) for baseline bl
 
         Arguments:
-            bl: baseline to return model for
+            bl: tuple, baseline to return model for
 
         Returns:
             vis: gi * conj(gj) * vis[bl]
@@ -552,8 +552,8 @@ class RedSol():
         '''Return calibrated data for baseline bl
 
         Arguments:
-            bl: baseline's gain to divide out
-            data: data to calibrate
+            bl: tuple, baseline from which to divide out gains
+            data: numpy array of data to calibrate
 
         Returns:
             vis: data / (gi * conj(gj))
