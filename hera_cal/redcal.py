@@ -577,12 +577,8 @@ class RedSol():
         '''
         vis = {}
         for grp in self.reds:
-            if len(wgts) != 0:
-                vis[grp[0]] = sum([wgts.get(bl, 1) * self.calibrate_bl(bl, data[bl]) for bl in grp])
-                wgt_sum = sum([wgts.get(bl, 1) for bl in grp])
-                np.divide(vis[grp[0]], wgt_sum, out=vis[grp[0]], where=(wgt_sum != 0))
-            else:
-                vis[grp[0]] = np.mean([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0)
+            vis[grp[0]] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
+                                     weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
         self.vis = RedDataContainer(vis, reds=self.reds)
 
     def chisq(self, data, data_wgts, gain_flags=None):
