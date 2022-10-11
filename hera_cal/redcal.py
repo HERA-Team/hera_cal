@@ -415,6 +415,7 @@ def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1p
 
     # Create new solutions dictionary
     new_gains = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
+    return new_gains
 
 class RedSol():
     '''Object for containing solutions to redundant calibraton, namely gains and
@@ -515,7 +516,7 @@ class RedSol():
             calibrate_in_place(self.vis, new_gains, old_gains=old_gains)
             self.gains = new_gains
         else:
-            new_vis = deepcopy(vis)
+            new_vis = deepcopy(self.vis)
             return RedSol(self.reds, gains=new_gains, vis=new_vis)
 
     def gain_bl(self, bl):
@@ -1121,10 +1122,10 @@ def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=np.pi/2):
     _data = {bl: data[bl[0]] for bl in grps}
     Ntimes, Nfreqs = data[bls[0]].shape
     times = np.arange(Ntimes)
-    tau_off_gps = {}
+    dly_off_gps = {}
 
     def process_pair(gp1, gp2):
-        '''Phase-align two groups, recording dly/off in tau_off_gps for gp2
+        '''Phase-align two groups, recording dly/off in dly_off_gps for gp2
         and the phase-aligned sum in _data/_wgts. Returns gp1 + gp2, which
         keys the _data, _wgts dicts and represents group for next iteration.'''
         d12 = _data[gp1] * np.conj(_data[gp2])
@@ -1152,7 +1153,7 @@ def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=np.pi/2):
         off = np.angle(np.sum(d12 / phasor, axis=1, keepdims=True))
 
         # Now that we know the slope, estimate the remaining phase offset
-        tau_off_gps[gp2] = dly, off
+        dly_off_gps[gp2] = dly, off
         _data[gp1 + gp2] = _data[gp1] + _data[gp2] * phasor * np.exp(np.complex64(1j) * off)
         return gp1 + gp2
 
@@ -1166,15 +1167,13 @@ def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=np.pi/2):
             new_grps = new_grps[:-1] + [process_pair(new_grps[-1], grps[-1])]
         grps = new_grps
     bl0 = bls[0]  # everything is effectively phase referenced off first bl
-    tau_offs = {}
-    for gp, (tau, off) in tau_off_gps.items():
+    dly_offs = {}
+    for gp, (dly, off) in dly_off_gps.items():
         for bl in gp:
-            tau0, off0 = tau_offs.get((bl0, bl), (0, 0))
-            tau_offs[(bl0, bl)] = (tau0 + tau, off0 + off)
-    tau_offs = {k: (v[0], _wrap_phs(v[1], wrap_pnt=wrap_pnt)) for k, v in tau_offs.items()}
-    mean_off = np.mean([v[1] for v in tau_offs.values()])
-    medi_off = np.median([v[1] for v in tau_offs.values()])
-    return tau_offs
+            dly0, off0 = dly_offs.get((bl0, bl), (0, 0))
+            dly_offs[(bl0, bl)] = (dly0 + dly, off0 + off)
+    dly_offs = {k: (v[0], _wrap_phs(v[1], wrap_pnt=wrap_pnt)) for k, v in dly_offs.items()}
+    return dly_offs
 
 
 class RedundantCalibrator:
@@ -1303,38 +1302,46 @@ class RedundantCalibrator:
             g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the
                 {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
         """
-        taus_offs = {}
+        Ntimes, Nfreqs = data[self.reds[0][0]].shape
+        dlys_offs = {}
 
         for bls in self.reds:
             if len(bls) < 2:
                 continue
-            _tau_off = _firstcal_align_bls(bls, freqs, data)
-            taus_offs.update(_tau_off)
+            _dly_off = _firstcal_align_bls(bls, freqs, data)
+            dlys_offs.update(_dly_off)
 
-        d_ls, w_ls = {}, {}
-        for (bl1, bl2), tau_off_ij in taus_offs.items():
+        # offsets often have phase wraps and need some finesse around np.pi
+        avg_offsets = {k: np.mean(v[1]) for k, v in dlys_offs.items()}  # XXX maybe do per-integration
+        flipped = _find_flipped(avg_offsets, flip_pnt=flip_pnt, maxiter=maxiter)
+
+        d_ls = {}
+        for (bl1, bl2), (dly, off) in dlys_offs.items():
             ai, aj = split_bl(bl1)
             am, an = split_bl(bl2)
             i, j, m, n = (self.pack_sol_key(k) for k in (ai, aj, am, an))
             eq_key = '%s-%s-%s+%s' % (i, j, m, n)
-            d_ls[eq_key] = np.array(tau_off_ij)
+            n_flipped = sum([int(ant in flipped) for ant in (ai, aj, am, an)])
+            if n_flipped % 2 == 0:
+                d_ls[eq_key] = np.array((dly, off))
+            else:
+                d_ls[eq_key] = np.array((dly, _wrap_phs(off + np.pi)))
         ls = linsolve.LinearSolver(d_ls, sparse=sparse)
         sol = ls.solve(mode=mode)
-        ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
         dlys = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
         offs = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
         # add back in antennas in reds but not in the system of equations
+        ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
         dlys = {ant: dlys.get(ant, (np.zeros_like(list(dlys.values())[0]))) for ant in ants}
         offs = {ant: offs.get(ant, (np.zeros_like(list(offs.values())[0]))) for ant in ants}
-        # offsets have phase wraps and so need some finess around np.pi offsets
-        avg_offsets = {k: np.mean(v[1]) for k, v in taus_offs.items()}
-        flipped = _find_flipped(avg_offsets, flip_pnt=flip_pnt, maxiter=maxiter)
+
         for ant in flipped:
             offs[ant] = _wrap_phs(offs[ant] + np.pi)
 
         dtype = np.find_common_type([d.dtype for d in data.values()], [])
         meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()},
-                'offs': {ant: off.flatten() for ant, off in offs.items()}}
+                'offs': {ant: off.flatten() for ant, off in offs.items()},
+                'polarity_flips': {ant: np.ones(Ntimes) * int(ant in flipped) for ant in ants}}
         gains = {ant: np.exp(2j * np.pi * dly * freqs + 1j * offs[ant]).astype(dtype) for ant, dly in dlys.items()}
         sol = RedSol(self.reds, gains=gains)
         sol.vis_from_data(data)  # not strictly necessary now, but probably should be done
@@ -1917,7 +1924,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             cal['vns_omnical'][bl] = np.zeros_like(vis, dtype=np.float32)
 
 
-def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6,
+def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
                           fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
                           check_after=50, gain=.4, max_dims=2,
                           prior_firstcal=None, prior_sol=None):
@@ -1934,7 +1941,6 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         times_by_bl: dictionary mapping antenna pairs like (0,1) to float Julian Date. Optional if
             inferable from data DataContainer, but must be provided if data is a dictionary,
             if it doesn't have .times_by_bl, or if the length of any list of times is 1.
-        fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
@@ -1981,7 +1987,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
 
     # perform firstcal if it hasn't already been done
     if prior_firstcal is None:
-        rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit)
+        rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter)
+        rv['g_firstcal'] = rv['g_firstcal'].gains
     else:
         rv['fc_meta'], rv['g_firstcal'] = None, prior_firstcal
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
@@ -2013,7 +2020,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
 
 
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
-                     solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6,
+                     solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
                      fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
                      gain=.4, max_dims=2, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
@@ -2034,7 +2041,6 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             this altitude, calibration is skipped and the integrations are flagged.
         flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
-        fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
@@ -2139,7 +2145,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 else:  # perform partial i/o
                     data, _, nsamples = hd.read(time_range=(hd.times[tinds][0], hd.times[tinds][-1]), frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
-                                            fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter,
+                                            fc_maxiter=fc_maxiter,
                                             oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
                                             check_every=check_every, check_after=check_after,
                                             max_dims=max_dims, gain=gain)
@@ -2222,7 +2228,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None,
                upsample=False, downsample=False, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
                ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
-               fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
+               fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
                check_after=50, gain=.4, max_dims=2, add_to_history='',
                verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
@@ -2266,7 +2272,6 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             this altitude, calibration is skipped and the integrations are flagged.
         flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
-        fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
@@ -2332,7 +2337,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             print('\nNow running redundant calibration without antennas', list(ex_ants), '...')
         cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol, ex_ants=ex_ants,
                                solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high,
-                               fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
+                               fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
                                check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain,
                                verbose=verbose, **filter_reds_kwargs)
 
@@ -2401,7 +2406,6 @@ def redcal_argparser():
                                                                         "redundantly calibratable" planar array. Antennas may be flagged to satisfy this criterion. See redcal.filter_reds() for details.')
 
     omni_opts = a.add_argument_group(title='Firstcal and Omnical-Specific Options')
-    omni_opts.add_argument("--fc_conv_crit", type=float, default=1e-6, help="maximum allowed changed in firstcal phases for convergence")
     omni_opts.add_argument("--fc_maxiter", type=int, default=50, help="maximum number of firstcal iterations allowed for finding per-antenna phases")
     omni_opts.add_argument("--oc_conv_crit", type=float, default=1e-10, help="maximum allowed relative change in omnical solutions for convergence")
     omni_opts.add_argument("--oc_maxiter", type=int, default=500, help="maximum number of omnical iterations allowed before it gives up")
