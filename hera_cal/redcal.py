@@ -563,7 +563,7 @@ class RedSol():
         gij = self.gain_bl(bl)
         return np.where((gij != 0), data / gij, data)
 
-    def get_vis_from_data(self, data, wgts={}):
+    def set_vis_from_data(self, data, wgts={}):
         '''Performs redundant averaging of data using reds and gains stored in this RedSol object and
            stores the result as the redundant solution.
 

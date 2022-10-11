@@ -387,7 +387,7 @@ class TestRedSol(object):
         assert rs[1, 'Jee'][0, 0] == 1
         assert rs[0, 1, 'ee'][0, 0] == 0
 
-    def test_get_vis_from_data(self):
+    def test_set_vis_from_data(self):
         NANTS = 18
         antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
@@ -399,12 +399,12 @@ class TestRedSol(object):
         for ant in gains:
             np.testing.assert_array_almost_equal(gains[ant], sol.gains[ant])
         # try without weights
-        sol.get_vis_from_data(DataContainer(d))
+        sol.set_vis_from_data(DataContainer(d))
         for red in reds:
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
         # try with weights
-        sol.get_vis_from_data(DataContainer(d), wgts={bl: 1.0 + i for i, bl in enumerate(d)})
+        sol.set_vis_from_data(DataContainer(d), wgts={bl: 1.0 + i for i, bl in enumerate(d)})
         for red in reds:
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
