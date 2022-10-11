@@ -841,7 +841,7 @@ def _flip_frac(offsets, flipped=set(), flip_pnt=np.pi/2):
     flip_frac = [(k, v / tot[k]) for k, v in cnt.items()]
     return flip_frac
 
-def _find_flipped(offsets, flip_pnt=np.pi/2, maxiter=10):
+def _find_flipped(offsets, flip_pnt=np.pi/2, maxiter=100):
     '''Given a dict of (bl1, bl2) keys and phase offset vals, identify
     antennas which are likely to have a np.pi phase offset.'''
     flipped = set()
@@ -1023,7 +1023,7 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def firstcal(self, data, freqs, maxiter=25, sparse=False, mode='default', flip_pnt=np.pi/2):
+    def firstcal(self, data, freqs, maxiter=100, sparse=False, mode='default', flip_pnt=np.pi/2):
         """Solve for a calibration solution parameterized by a single delay and phase offset
         per antenna using the phase difference between nominally redundant measurements.
         Delays are solved in a single iteration, but phase offsets are solved for
@@ -1032,7 +1032,7 @@ class RedundantCalibrator:
         Args:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
             freqs: numpy array of frequencies in the data
-            maxiter: maximum number of phase offset solver iterations
+            maxiter: maximum number of iterations for finding flipped antennas
             conv_crit: convergence criterion for iterative offset solver, defined as the L2 norm
                 of the changes in phase (in radians) over all times and antennas
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
@@ -1596,7 +1596,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
 
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
-                          fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
+                          oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
                           check_after=50, gain=.4, max_dims=2,
                           prior_firstcal=None, prior_sol=None, use_gpu=False):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
@@ -1612,7 +1612,6 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
         times_by_bl: dictionary mapping antenna pairs like (0,1) to float Julian Date. Optional if
             inferable from data DataContainer, but must be provided if data is a dictionary,
             if it doesn't have .times_by_bl, or if the length of any list of times is 1.
-        fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
@@ -1663,7 +1662,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
 
     # perform firstcal if it hasn't already been done
     if prior_firstcal is None:
-        rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter)
+        rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs)
         rv['g_firstcal'] = rv['g_firstcal'].gains
     else:
         rv['fc_meta'], rv['g_firstcal'] = None, prior_firstcal
@@ -1697,7 +1696,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
 
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
                      solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
-                     fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
+                     oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
                      gain=.4, max_dims=2, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
@@ -1717,7 +1716,6 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             this altitude, calibration is skipped and the integrations are flagged.
         flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
-        fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
@@ -1821,7 +1819,6 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 else:  # perform partial i/o
                     data, _, nsamples = hd.read(time_range=(hd.times[tinds][0], hd.times[tinds][-1]), frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
-                                            fc_maxiter=fc_maxiter,
                                             oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
                                             check_every=check_every, check_after=check_after,
                                             max_dims=max_dims, gain=gain)
@@ -1904,7 +1901,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None,
                upsample=False, downsample=False, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
                ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
-               fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
+               oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
                check_after=50, gain=.4, max_dims=2, add_to_history='',
                verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
@@ -1948,7 +1945,6 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             this altitude, calibration is skipped and the integrations are flagged.
         flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
-        fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
@@ -2013,7 +2009,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             print('\nNow running redundant calibration without antennas', list(ex_ants), '...')
         cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol, ex_ants=ex_ants,
                                solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high,
-                               fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
+                               oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
                                check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain,
                                verbose=verbose, **filter_reds_kwargs)
 
@@ -2082,7 +2078,6 @@ def redcal_argparser():
                                                                         "redundantly calibratable" planar array. Antennas may be flagged to satisfy this criterion. See redcal.filter_reds() for details.')
 
     omni_opts = a.add_argument_group(title='Firstcal and Omnical-Specific Options')
-    omni_opts.add_argument("--fc_maxiter", type=int, default=50, help="maximum number of firstcal iterations allowed for finding per-antenna phases")
     omni_opts.add_argument("--oc_conv_crit", type=float, default=1e-10, help="maximum allowed relative change in omnical solutions for convergence")
     omni_opts.add_argument("--oc_maxiter", type=int, default=500, help="maximum number of omnical iterations allowed before it gives up")
     omni_opts.add_argument("--check_every", type=int, default=10, help="compute omnical convergence every Nth iteration (saves computation).")

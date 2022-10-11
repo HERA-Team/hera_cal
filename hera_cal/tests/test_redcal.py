@@ -1561,7 +1561,6 @@ class TestRedcalAndAbscal(object):
 
         # run redcal
         cal = om.redundantly_calibrate(d, reds, oc_conv_crit=1e-13, oc_maxiter=5000)
-        #cal = om.redundantly_calibrate(d, reds, oc_conv_crit=1e-13, oc_maxiter=5000, prior_firstcal=fc_gains)
 
         # set up abscal
         d_omnicaled = deepcopy(d)
