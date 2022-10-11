@@ -1790,7 +1790,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6,
                           fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
                           check_after=50, gain=.4, max_dims=2, fc_min_vis_per_ant=None,
-                          prior_firstcal=None, prior_sol=None):
+                          prior_firstcal=None, prior_sol=None, use_gpu=False):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -1822,6 +1822,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
             skips performing firstcal and substitutes this for 'g_firstcal' in the returned dictionary.
         prior_sol: Optional dictionary of both gain keys and redundant visibility solutions. If not
             default None, this will be used to skip logcal and go straight into omnical.
+        use_gpu: Bool default False. If True, use GPU to run omnical. Requires hera_gpu.
 
     Returns a dictionary of results with the following keywords:
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
@@ -1844,7 +1845,11 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     '''
     rv = {}  # dictionary of return values
     filtered_reds = filter_reds(reds, max_dims=max_dims)
-    rc = RedundantCalibrator(filtered_reds)
+    if use_gpu:
+        from hera_gpu.redcal import RedundantCalibratorGPU
+        rc = RedundantCalibratorGPU(filtered_reds)
+    else:
+        rc = RedundantCalibrator(filtered_reds)
     if freqs is None:
         freqs = data.freqs
     if times_by_bl is None:
