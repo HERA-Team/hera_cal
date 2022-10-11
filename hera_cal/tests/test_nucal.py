@@ -256,3 +256,9 @@ class TestFrequencyRedundancy:
         assert len(radial_reds[0]) < len(radial_reds[-1])
         radial_reds.sort(reverse=True)
         assert len(radial_reds[0]) > len(radial_reds[-1])
+
+def test_compute_spatial_filters():
+    pass
+
+def test_build_nucal_wgts():
+    pass

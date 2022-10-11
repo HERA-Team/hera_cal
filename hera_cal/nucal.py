@@ -1,9 +1,11 @@
 from . import utils
 from . import redcal
+from . import abscal
 
 import warnings
 import numpy as np
 from copy import deepcopy
+from functools import partial
 from hera_filters import dspec
 import astropy.constants as const
 from scipy.cluster.hierarchy import fclusterdata
@@ -527,3 +529,294 @@ def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutof
             spatial_modes[bl] = pswf
 
     return spatial_modes
+
+def build_nucal_wgts(radial_reds, freqs, data_flags, data_nsamples, autocorrs, auto_flags, times_by_bl=None,
+                     df=None, data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None, 
+                     min_u_cut=None, max_u_cut=None, min_freq_cut=None, max_freq_cut=None):
+    """
+    Build linear weights for data in nucal (or calculating loss) defined as
+    wgts = (noise variance * nsamples)^-1 * (0 if data or model is flagged). Light wrapper
+    over abscal.build_data_wgts with more stricts requirements. Adds additional flagging based 
+    on u-cuts and frequency cuts.
+
+    Parameters:
+    ----------
+        radial_reds : FrequencyRedundant object
+            FrequencyRedundant object containing a list of list baseline tuples of radially redundant
+            groups
+        freqs : np.ndarray
+            Frequency values present in the data in units of Hz     
+        data_flags : DataContainer
+            Contains flags on data
+        data_nsamples : DataContainer
+            Contains the number of samples in each data point
+        autocorrs : DataContainer
+             DataContainer with autocorrelation visibilities
+        auto_flags : DataContainer
+            DataContainer containing flags for autocorrelation visibilities
+        times_by_bl : dictionary
+            Maps antenna pairs like (0,1) to float Julian Date. Optional if
+            inferable from data_flags and all times have length > 1.
+        df : float, default=None
+            If None, inferred from data_flags.freqs
+        data_is_redsol : bool, default=False
+            If True, data_file only contains unique visibilities for each baseline group.
+            In this case, gain_flags and tol are required and antpos is required if not derivable
+            from data_flags. In this case, the noise variance is inferred from autocorrelations from
+            all baselines in the represented unique baseline group.
+        gain_flags : dictionary, default=None
+            Used to exclude ants from the noise variance calculation from the autocorrelations
+            Ignored if data_is_redsol is False.
+        tol : float, 
+            Distance for baseline match tolerance in units of baseline vectors (e.g. meters).
+            Ignored if data_is_redsol is False.
+        antpos : dictionary
+            Maps antenna number to ENU position in meters for antennas in the data.
+            Ignored if data_is_redsol is False. If left as None, can be inferred from data_flags.data_antpos.
+        min_u_cut : float
+            Minimum u-magnitude value to include in calbration. All u-modes with magnitudes less than
+            min_u_cut will have their weights set to 0.
+        max_u_cut : float
+            Maximum u-magnitude value to include in calbration. All u-modes with magnitudes greater than
+            max_u_cut will have their weights set to 0.
+        min_freq_cut : float
+            Minimum frequency value to include in calibration in units of Hz. All frequency channels less than
+            this value will be set to 0.
+        max_u_cut : float
+            Maximum frequency value to include in calibration in units of Hz. All frequency channels greater than
+            this value will be set to 0.
+                 
+    Returns:
+    -------
+        wgts: Datacontainer
+            Maps data_flags baseline to weights
+    """
+    # Build model flags from 
+    model_flags = {}
+    for group in radial_reds:
+        for key in group:
+            umag = radial_reds.baseline_lengths[key] * freqs / SPEED_OF_LIGHT
+            _wgts = np.zeros_like(data_flags[key], dtype=bool)
+
+            if min_u_cut is not None:
+                _wgts[:, umag < min_u_cut] = True
+
+            if max_u_cut is not None:
+                _wgts[:, umag > max_u_cut] = True
+
+            if min_freq_cut is not None:
+                _wgts[:, freqs < min_freq_cut] = True
+
+            if max_freq_cut is not None:
+                _wgts[:, freqs > max_freq_cut] = True
+                
+            model_flags[key] = _wgts
+    
+    weights = abscal.build_data_wgts(
+        data_flags, data_nsamples, model_flags, autocorrs, auto_flags, 
+        times_by_bl=times_by_bl, df=df, data_is_redsol=data_is_redsol, 
+        gain_flags=gain_flags, tol=tol, antpos=antpos
+    )
+
+    # TODO: unpack into np.ndarrays for each group
+    return weights
+
+class NuCalibrator:
+    """
+    Class for performing frequency redundant calibration of previously redundantly
+    calibrated data. This class handles the calibration and degeneracy correction of
+    frequency redundantly calibrated gains.
+    """
+    def __init__(self, reds, radial_reds):
+        """
+        Parameters:
+        ----------
+        reds : list of lists
+            pass
+        radial_reds : FrequencyRedundancy
+            pass
+        """
+        # Store radial reds
+        self.radial_reds = radial_reds
+        
+        # Get idealized antenna positions
+        self.idealized_antpos = redcal.reds_to_antpos(reds)
+        
+        # Get number of tip-tilt dimensions from 
+        self.ndims = self.idealized_antpos[list(self.idealized_antpos.keys())[0]].shape[0]
+            
+        # Build function that will be used to calculate loss
+        # TODO: Isolate confirm correct parameter is being used to 
+        self.loss = jax.value_and_grad(self._iterate_through_groups)
+
+        # Placeholder variable
+        self.X = np.random.uniform(0, 1, size=(2, 1536))
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def test_function(self, X):
+        """
+        Placeholder for foreground model function. This might be a different function
+        
+        Parameters:
+        ----------
+        spec : jnp.ndarray
+            pass
+        spat : jnp.ndarray
+            pass
+        beta : jnp.ndarray
+            pass
+        """
+        return jnp.dot(X.T, X).sum()
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def foreground_model(self, skymodes_r, skymodes_i, spec, spat):
+        """
+        Function for computing foreground models from 
+        
+        Parameters:
+        ----------
+        spec : jnp.ndarray
+            pass
+        spat : jnp.ndarray
+            pass
+        beta : jnp.ndarray
+            pass
+        """
+        model_r = jnp.einsum('fm,afn,mn->af', spec, spat, skymodes_r, optimize=True)
+        model_i = jnp.einsum('fm,afn,mn->af', spec, spat, skymodes_i, optimize=True)
+        return model_r, model_i
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def loss_function(self, params, data, wgts, spec, spat):
+        """
+        Loss function used for solving for redcal degenerate parameters and a model of the sky
+        
+        Parameters:
+        ----------
+        data : jnp.ndarray
+            pass
+        wgts : jnp.ndarray
+            pass
+        spec : jnp.ndarray
+            pass
+        spat : jnp.ndarray
+            pass
+        
+        Returns:
+        -------
+        loss : float
+            pass
+        """
+        # Dot tip-tilt parameters into baseline vector
+        phase = ...
+        
+        # Multiply in amplitude estimate
+        gain = ...
+        
+        # Compute foreground model from beta estimates
+        model_r, model_i = self.foreground_model(params['fg_r'], params['fg_i'], spec, spat)
+        
+        # Compute loss using weights and foreground model
+        pass
+    
+    def _iterate_through_groups(self, params, data, wgts, spec, spat):
+        """
+        Function for iterating through groups of radially redundant baselines
+        to compute the loss function
+
+        Parameters: 
+        ----------
+        params : dictionary
+            pass
+        data : list of jnp.ndarrays
+            pass
+        wgts : list of jnp.ndarrays
+            pass
+        spec : jnp.ndarray
+            pass
+        spat : list of jnp.ndarrays
+            pass
+        """
+        loss = 0
+        for _d, _w, _spat in zip(data, wgts, spat):
+            loss += self.loss_function(params, _d, _w, spec, _spat)
+            
+        return loss
+
+    def _calibrate_single_integration(self, data, wgts, spec, spat, maxiter=100, return_min_loss=False):
+        """
+        Function for calibrating a single polarization/time integration
+        """
+        solution = []
+        min_loss = 0
+        # Start gradient descent
+        for i in range(maxiter):
+            # Loss function
+            loss, gradient = self.loss(self.X)
+            if loss < min_loss:
+                min_loss = loss
+                if return_min_loss:
+                    pass
+        
+        return min_loss
+    
+    def calibrate(self, data, wgts, eta_half_width=20e-9, ell_half_width=1, eigenval_cutoff=1e-12, 
+                  learning_rate=1e-3, maxiter=100, optimizer='adabelief', return_min_loss=False, 
+                  **opt_kwargs):
+        """
+        Parameters:
+        ----------
+        data : DataContainer, RedSol
+            pass
+        wgts : DataContainer
+            pass
+        eta_half_width : float, default=20e-9
+            Filter half width along the spectral axis
+        ell_half_width : float, default=1
+            Filter half width along the spatial axis
+        eigenval_cutoff : float, default=1e-12
+            Cutoff value for eigenvalues of a given size
+        learning_rate : float, default=1e-3
+            Effective learning rate of chosen optimizer
+        maxiter : int, default=100
+            Maximum number of iterations to perform
+        degen_guess: dictionary, default=None
+            pass
+        optimizer : str, default='adabelief'
+            Optimizer used when performing gradient descent
+        return_min_loss : bool, default=False
+            Return solution with the minimum loss found. If False, solution found on the last iteration 
+            will be returned.
+        opt_kwargs :
+            Additional keyword arguments to be passed to the optimizer chosen. See optax documentation
+            for additional details.
+        """
+        # Think about number of polarizations. I don't think I can necessarily do them at the same time
+        # If there's a baseline type missing because if there is a baseline that happens to not be in
+        # the data, then arrays will different sizes. I could just hope it mostly works out but I don't
+        # know if that's necessarily the best thing to do
+        
+        
+        # Choose optimizer
+        assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
+        opt = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
+        
+        if degen_guess is None:
+            # Get estimate of gains from amplitude guess
+            degen_guess = ...
+        
+        # Compute spatial filters used for calibration
+        spec = compute_spatial_filters(self.radial_reds, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
+
+        # Set initial loss
+        min_loss = np.inf
+        losses = []
+        
+        # Sky Model Parameters should eventually be NPOLS, Ntimes, Ncomps
+        # Tip-tilts should be NPOLS, NTIMES, NFREQS, NDIMS
+        # Amplitude should be NPOLS, NTIMES, NFREQS
+        
+        solution, info = {}, {}
+        
+            
+        return losses, gradient
