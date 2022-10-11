@@ -12,7 +12,7 @@ from itertools import chain
 from . import utils
 from .noise import predict_noise_variance_from_autos, infer_dt
 from .datacontainer import DataContainer, RedDataContainer
-from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores, red_average
+from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores
 from .io import HERAData, HERACal, write_cal, save_redcal_meta
 from .apply_cal import calibrate_in_place
 
@@ -340,6 +340,89 @@ def make_sol_finite(sol):
             sol[k][~np.isfinite(sol[k])] = np.ones_like(sol[k][~np.isfinite(sol[k])])
 
 
+def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1pol'):
+    """ Removes degeneracies from gains (or replaces them with those in gains).  This
+    function is nominally intended for use with firstcal, which returns (phase/delay) solutions
+    for antennas only.
+
+    Args:
+        gains: dictionary that contains gain solutions in the {(index,antpol): np.array} format.
+        degen_gains: Optional dictionary in the same format as gains. Gain amplitudes and phases
+            in degen_sol replace the values of sol in the degenerate subspace of redcal. If
+            left as None, average gain amplitudes will be 1 and average phase terms will be 0.
+            For logcal/lincal/omnical, putting firstcal solutions in here can help avoid structure
+            associated with phase-wrapping issues.
+        mode: 'phase' or 'complex', indicating whether the gains are passed as phases (e.g. delay
+            or phi in e^(i*phi)), or as the complex number itself.  If 'phase', only phase degeneracies
+            removed.  If 'complex', both phase and amplitude degeneracies are removed.
+        pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
+    Returns:
+        new_gains: gains with degeneracy removal/replacement performed
+    """
+    # Check supported pol modes
+    assert pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], f'Unrecognized pol_mode: {pol_mode}'
+    assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
+    ants = gains.keys()
+    gainPols = np.array([ant[1] for ant in gains])  # gainPols is list of antpols, one per antenna
+    antpols = list(set(gainPols))
+
+    # if mode is 2pol, run as two 1pol remove degens
+    if pol_mode == '2pol':
+        pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
+        pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
+        new_gains = remove_degen_gains(reds, pol0_gains, degen_gains=degen_gains, mode=mode, pol_mode='1pol')
+        new_gains.update(remove_degen_gains(reds, pol1_gains, degen_gains=degen_gains, mode=mode, pol_mode='1pol'))
+        return new_gains
+
+    # Extract gains and degenerate gains and put into numpy arrays
+    gainSols = np.array([gains[ant] for ant in ants])
+    if degen_gains is None:
+        if mode == 'phase':
+            degenGains = np.array([np.zeros_like(gains[ant]) for ant in ants])
+        else:  # complex
+            degenGains = np.array([np.ones_like(gains[ant]) for ant in ants])
+    else:
+        degenGains = np.array([degen_gains[ant] for ant in ants])
+
+    # Build matrices for projecting gain degeneracies
+    antpos = reds_to_antpos(reds)
+    positions = np.array([antpos[ant[0]] for ant in gains])
+    if pol_mode == '1pol' or pol_mode == '4pol_minV':
+        # In 1pol and 4pol_minV, the phase degeneracies are 1 overall phase and 2 tip-tilt terms
+        # Rgains maps gain phases to degenerate parameters (either average phases or phase slopes)
+        Rgains = np.hstack((positions, np.ones((positions.shape[0], 1))))
+    else:  # pol_mode is '4pol'
+        # two columns give sums for two different polarizations
+        phasePols = np.vstack((gainPols == antpols[0], gainPols == antpols[1])).T
+        Rgains = np.hstack((positions, phasePols))
+    # Mgains is like (AtA)^-1 At in linear estimator formalism. It's a normalized estimator of degeneracies
+    Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
+
+    # degenToRemove is the amount we need to move in the degenerate subspace
+    if mode == 'phase':
+        # Fix phase terms only
+        degenToRemove = np.einsum('ij,jkl', Mgains, gainSols - degenGains)
+        gainSols -= np.einsum('ij,jkl', Rgains, degenToRemove)
+    else:  # working on complex data
+        # Fix phase terms
+        degenToRemove = np.einsum('ij,jkl', Mgains, np.angle(gainSols * np.conj(degenGains)))
+        gainSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rgains, degenToRemove))
+        # Fix abs terms: fixes the mean abs product of gains (as they appear in visibilities)
+        for pol in antpols:
+            meanSqAmplitude = np.mean([np.abs(g1 * g2) for (a1, p1), g1 in gains.items()
+                                       for (a2, p2), g2 in gains.items()
+                                       if p1 == pol and p2 == pol and a1 != a2], axis=0)
+            degenMeanSqAmplitude = np.mean([(np.ones_like(gains[k1]) if degen_gains is None
+                                             else np.abs(degen_gains[k1] * degen_gains[k2]))
+                                            for k1 in gains.keys() for k2 in gains.keys()
+                                            if k1[1] == pol and k2[1] == pol and k1[0] != k2[0]], axis=0)
+            gainSols[gainPols == pol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
+
+    # Create new solutions dictionary
+    new_gains = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
+    return new_gains
+
+
 class RedSol():
     '''Object for containing solutions to redundant calibraton, namely gains and
     unique-baseline visibilities, along with a variety of convenience methods.'''
@@ -433,60 +516,70 @@ class RedSol():
         Returns:
             new_sol: if not inplace, RedSol with degeneracy removal/replacement performed
         """
-        rc = RedundantCalibrator(self.reds)
-        new_sol = rc.remove_degen(self, degen_sol=degen_sol)
+        old_gains = self.gains
+        new_gains = remove_degen_gains(self.reds, old_gains, degen_gains=degen_sol, mode='complex',
+                                       pol_mode=parse_pol_mode(self.reds))
         if inplace:
-            self.__init__(self.reds, gains=new_sol.gains, vis=new_sol.vis)
+            calibrate_in_place(self.vis, new_gains, old_gains=old_gains)
+            self.gains = new_gains
         else:
-            return new_sol
+            new_vis = deepcopy(self.vis)
+            calibrate_in_place(new_vis, new_gains, old_gains=old_gains)
+            return RedSol(self.reds, gains=new_gains, vis=new_vis)
 
-    def red_average(self, data, flags=None, nsamples=None, gain_flags=None):
-        '''Performs redundant averaging of data using reds and gains stored in this RedSol object.
+    def gain_bl(self, bl):
+        '''Return gain for baseline bl = (ai, aj).
+
+        Arguments:
+            bl: tuple, baseline to be split into antennas indexing gain.
+
+        Returns:
+            gain: gi * conj(gj)
+        '''
+        ai, aj = split_bl(bl)
+        return self.gains[ai] * np.conj(self.gains[aj])
+
+    def model_bl(self, bl):
+        '''Return visibility data model (gain * vissol) for baseline bl
+
+        Arguments:
+            bl: tuple, baseline to return model for
+
+        Returns:
+            vis: gi * conj(gj) * vis[bl]
+        '''
+        return self.gain_bl(bl) * self.vis[bl]
+
+    def calibrate_bl(self, bl, data):
+        '''Return calibrated data for baseline bl
+
+        Arguments:
+            bl: tuple, baseline from which to divide out gains
+            data: numpy array of data to calibrate
+
+        Returns:
+            vis: data / (gi * conj(gj))
+        '''
+        gij = self.gain_bl(bl)
+        return np.where((gij != 0), data / gij, data)
+
+    def set_vis_from_data(self, data, wgts={}):
+        '''Performs redundant averaging of data using reds and gains stored in this RedSol object and
+           stores the result as the redundant solution.
 
         Arguments:
             data: DataContainer containing visibilities to redundantly average.
-            flags: optional DataContainer marking visibilities as flagged and therefore excluded from averaging.
-                If not provided, it is assumed that all data are unflagged.
-            nsamples: optional DataContainer containing the number of samples in each visibility. Used for
-                weighting data when averaging and for figuring out the number of samples in each baseline group.
-                If not provided, it is assumed that nsamples is uniformly 1.
-            gain_flags: optional dictionary used for per-antenna, per-time-and-frequency flagging when calibrating.
+            wgts: optional DataContainer weighting visibilities in averaging.
+                If not provided, it is assumed that all data are uniformly weighted.
 
         Returns:
-            red_data: RedDataContainer of redundantly averaged data.
-            red_flags: RedDataContainer of flags on redundantly averaged data.
-            red_nsamples: RedDataContainer of nsamples of that went into each redundantly averaged visibility
+            None
         '''
-        # make copies of data, flags, and nsamples, which are then modified and downselected in place
-        # if flags and/or nsamples, is not provided, create zeros or ones as appropriate
-        red_data, red_flags, red_nsamples = {}, {}, {}
-        if gain_flags is None:
-            gain_flags = {ant: np.zeros_like(self.gains[ant], bool) for ant in self.gains}
-
-        for red in self.reds:
-            # extract and copy this redundant group
-            data_here = DataContainer({bl: np.array(data[bl]) for bl in red})
-            flags_here = DataContainer({bl: (np.zeros_like(data[bl], bool) if flags is None
-                                             else np.array(flags[bl])) for bl in red})
-            nsamples_here = DataContainer({bl: (np.ones_like(data[bl], float) if nsamples is None
-                                                else np.array(nsamples[bl])) for bl in red})
-
-            # perform calibration if necessary
-            if self.gains is not None:
-                calibrate_in_place(data_here, self.gains, data_flags=flags_here, cal_flags=gain_flags)
-
-            # redundantly average and store in dictionary
-            pos_red = list(set(bl[0:2] for bl in red))
-            red_average(data_here, [pos_red], flags=flags_here, nsamples=nsamples_here, inplace=True)
-            for bl in data_here:
-                red_data[bl] = data_here[bl]
-                red_flags[bl] = flags_here[bl]
-                red_nsamples[bl] = nsamples_here[bl]
-
-        # convert dicts to RedDataContainer and return
-        return (RedDataContainer(red_data, reds=self.reds),
-                RedDataContainer(red_flags, reds=self.reds),
-                RedDataContainer(red_nsamples, reds=self.reds))
+        vis = {}
+        for grp in self.reds:
+            vis[grp[0]] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
+                                     weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
+        self.vis = RedDataContainer(vis, reds=self.reds)
 
     def chisq(self, data, data_wgts, gain_flags=None):
         """Computes chi^2 defined as: chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)|^2 * wgts_ij)
@@ -949,7 +1042,6 @@ class RedundantCalibrator:
             check_redundancy: if True, raise an error if the array is not redundantly calibratable,
                 even when allowing for an arbitrary number of phase slope degeneracies.
         """
-
         self._set_reds(reds)
         self.pol_mode = parse_pol_mode(self.reds)
 
@@ -1209,7 +1301,7 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-        fc_data = deepcopy(data)
+        fc_data = {bl: np.array(data[bl]) for red in self.reds for bl in red}
         calibrate_in_place(fc_data, sol0)
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve(mode=mode)
@@ -1297,69 +1389,7 @@ class RedundantCalibrator:
         Returns:
             new_gains: gains with degeneracy removal/replacement performed
         """
-
-        # Check supported pol modes
-        assert self.pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], 'Unrecognized pol_mode: %s' % self.pol_mode
-        assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
-        if degen_gains is None:
-            if mode == 'phase':
-                degen_gains = {key: np.zeros_like(val) for key, val in gains.items()}
-            else:  # complex
-                degen_gains = {key: np.ones_like(val) for key, val in gains.items()}
-        ants = gains.keys()
-        gainPols = np.array([ant[1] for ant in gains])  # gainPols is list of antpols, one per antenna
-        antpols = list(set(gainPols))
-
-        # if mode is 2pol, run as two 1pol remove degens
-        if self.pol_mode == '2pol':
-            self.pol_mode = '1pol'
-            pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
-            pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
-            new_gains = self.remove_degen_gains(pol0_gains, degen_gains=degen_gains, mode=mode)
-            new_gains.update(self.remove_degen_gains(pol1_gains, degen_gains=degen_gains, mode=mode))
-            self.pol_mode = '2pol'
-            return new_gains
-
-        # Extract gain and model visibiltiy solutions
-        gainSols = np.array([gains[ant] for ant in ants])
-        degenGains = np.array([degen_gains[ant] for ant in ants])
-
-        # Build matrices for projecting gain degeneracies
-        antpos = reds_to_antpos(self.reds)
-        positions = np.array([antpos[ant[0]] for ant in gains])
-        if self.pol_mode == '1pol' or self.pol_mode == '4pol_minV':
-            # In 1pol and 4pol_minV, the phase degeneracies are 1 overall phase and 2 tip-tilt terms
-            # Rgains maps gain phases to degenerate parameters (either average phases or phase slopes)
-            Rgains = np.hstack((positions, np.ones((positions.shape[0], 1))))
-        else:  # pol_mode is '4pol'
-            # two columns give sums for two different polarizations
-            phasePols = np.vstack((gainPols == antpols[0], gainPols == antpols[1])).T
-            Rgains = np.hstack((positions, phasePols))
-        # Mgains is like (AtA)^-1 At in linear estimator formalism. It's a normalized estimator of degeneracies
-        Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
-
-        # degenToRemove is the amount we need to move in the degenerate subspace
-        if mode == 'phase':
-            # Fix phase terms only
-            degenToRemove = np.einsum('ij,jkl', Mgains, gainSols - degenGains)
-            gainSols -= np.einsum('ij,jkl', Rgains, degenToRemove)
-        else:  # working on complex data
-            # Fix phase terms
-            degenToRemove = np.einsum('ij,jkl', Mgains, np.angle(gainSols * np.conj(degenGains)))
-            gainSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rgains, degenToRemove))
-            # Fix abs terms: fixes the mean abs product of gains (as they appear in visibilities)
-            for pol in antpols:
-                meanSqAmplitude = np.mean([np.abs(g1 * g2) for (a1, p1), g1 in gains.items()
-                                           for (a2, p2), g2 in gains.items()
-                                           if p1 == pol and p2 == pol and a1 != a2], axis=0)
-                degenMeanSqAmplitude = np.mean([np.abs(degen_gains[k1] * degen_gains[k2]) for k1 in gains.keys()
-                                                for k2 in gains.keys()
-                                                if k1[1] == pol and k2[1] == pol and k1[0] != k2[0]], axis=0)
-                gainSols[gainPols == pol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
-
-        # Create new solutions dictionary
-        new_gains = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
-        return new_gains
+        return remove_degen_gains(self.reds, gains, degen_gains=degen_gains, mode=mode, pol_mode=self.pol_mode)
 
     def remove_degen(self, sol, degen_sol=None):
         """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
@@ -1367,8 +1397,7 @@ class RedundantCalibrator:
         return complex solutions for antennas and visibilities.
 
         Args:
-            sol: dictionary (or RedSol) that contains both visibility and gain solutions in the
-                {(ind1,ind2,pol): np.array} and {(index,antpol): np.array} formats respectively
+            sol: RedSol object that contains both redundant visibilities and gain solutions
             degen_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
                 left as None, average gain amplitudes will be 1 and average phase terms will be 0.
@@ -1377,14 +1406,7 @@ class RedundantCalibrator:
         Returns:
             new_sol: RedSol with degeneracy removal/replacement performed
         """
-
-        gains, vis = get_gains_and_vis_from_sol(sol)
-        if degen_sol is None:
-            degen_sol = {key: np.ones_like(val) for key, val in gains.items()}
-        new_gains = self.remove_degen_gains(gains, degen_gains=degen_sol, mode='complex')
-        new_vis = deepcopy(vis)
-        calibrate_in_place(new_vis, new_gains, old_gains=gains)
-        return RedSol(self.reds, gains=new_gains, vis=new_vis)
+        return sol.remove_degen(degen_sol=degen_sol, inplace=False)
 
     def count_degens(self, assume_redundant=True):
         """Count the number of degeneracies in this redundant calibrator, given the redundancies and the pol_mode.

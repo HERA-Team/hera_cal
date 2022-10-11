@@ -387,21 +387,27 @@ class TestRedSol(object):
         assert rs[1, 'Jee'][0, 0] == 1
         assert rs[0, 1, 'ee'][0, 0] == 0
 
-    def test_red_average(self):
+    def test_set_vis_from_data(self):
         NANTS = 18
         antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
-        w = dict([(k, 1.) for k in d.keys()])
+
         meta, sol = info.logcal(d)
         sol = info.remove_degen(sol, degen_sol=dict(list(gains.items()) + list(true_vis.items())))
-        red_d, red_f, red_ns = sol.red_average(DataContainer(d))
+        for ant in gains:
+            np.testing.assert_array_almost_equal(gains[ant], sol.gains[ant])
+        # try without weights
+        sol.set_vis_from_data(DataContainer(d))
         for red in reds:
             for bl in red:
-                np.testing.assert_array_almost_equal(true_vis[red[0]], red_d[bl])
-                np.testing.assert_array_equal(False, red_f[bl])
-                np.testing.assert_array_equal(len(red), red_ns[bl])
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
+        # try with weights
+        sol.set_vis_from_data(DataContainer(d), wgts={bl: 1.0 + i for i, bl in enumerate(d)})
+        for red in reds:
+            for bl in red:
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
 
     def test_remove_degen(self):
         NANTS = 18
@@ -451,6 +457,14 @@ class TestRedSol(object):
         np.testing.assert_array_equal(items[0][1], np.ones((1, 1)))
         assert items[2][0] == (0, 1, 'ee')
         np.testing.assert_array_equal(items[2][1], 3 * np.ones((1, 1)))
+
+    def test_gain_model_calibrate_bl(self):
+        antpos = linear_array(3)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rs = om.RedSol(reds, gains={(0, 'Jee'): np.ones((1, 1)), (1, 'Jee'): 2j * np.ones((1, 1))}, vis={(0, 1, 'ee'): 3 * np.ones((1, 1))})
+        assert rs.gain_bl((0, 1, 'ee'))[0, 0] == -2.0j
+        assert rs.model_bl((0, 1, 'ee'))[0, 0] == -6.0j
+        assert rs.calibrate_bl((0, 1, 'ee'), 10j * np.ones((1, 1)))[0, 0] == -5
 
     def test_chisq(self):
         NANTS = 18
@@ -851,6 +865,10 @@ class TestRedundantCalibrator(object):
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], true_dlys[k], decimal=10)
 
+        rc.pol_mode = 'unrecognized_pol_mode'
+        with pytest.raises(AssertionError):
+            rc.remove_degen_gains(dlys)
+
     def test_remove_degen_firstcal_2D(self):
         pol = 'xx'
         xhat = np.array([1., 0, 0])
@@ -930,10 +948,6 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(val, gains[key], decimal=10)
             if len(key) == 3:
                 np.testing.assert_almost_equal(val, true_vis[key], decimal=10)
-
-        rc.pol_mode = 'unrecognized_pol_mode'
-        with pytest.raises(AssertionError):
-            sol_rd = rc.remove_degen(sol)
 
     def test_lincal_hex_end_to_end_4pol_with_remove_degen_and_firstcal(self):
         antpos = hex_array(3, split_core=False, outriggers=0)
