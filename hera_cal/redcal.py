@@ -515,7 +515,8 @@ class RedSol():
             new_sol: if not inplace, RedSol with degeneracy removal/replacement performed
         """
         old_gains = self.gains
-        new_gains = remove_degen_gains(self.reds, old_gains, degen_gains=degen_sol, mode='complex')
+        new_gains = remove_degen_gains(self.reds, old_gains, degen_gains=degen_sol, mode='complex',
+                                       pol_mode=parse_pol_mode(self.reds))
         if inplace:
             calibrate_in_place(self.vis, new_gains, old_gains=old_gains)
             self.gains = new_gains
