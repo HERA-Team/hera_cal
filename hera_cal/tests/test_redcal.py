@@ -393,12 +393,18 @@ class TestRedSol(object):
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
-        w = dict([(k, 1.) for k in d.keys()])
+
         meta, sol = info.logcal(d)
         sol = info.remove_degen(sol, degen_sol=dict(list(gains.items()) + list(true_vis.items())))
         for ant in gains:
             np.testing.assert_array_almost_equal(gains[ant], sol.gains[ant])
+        # try without weights
         sol.get_vis_from_data(DataContainer(d))
+        for red in reds:
+            for bl in red:
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
+        # try with weights
+        sol.get_vis_from_data(DataContainer(d), wgts={bl: 1.0 + i for i, bl in enumerate(d)})
         for red in reds:
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
