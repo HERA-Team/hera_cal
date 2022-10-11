@@ -1297,7 +1297,7 @@ class RedundantCalibrator:
                 'polarity_flips': {ant: np.ones(Ntimes) * int(ant in flipped) for ant in ants}}
         gains = {ant: np.exp(2j * np.pi * dly * freqs + 1j * offs[ant]).astype(dtype) for ant, dly in dlys.items()}
         sol = RedSol(self.reds, gains=gains)
-        sol.vis_from_data(data)  # not strictly necessary now, but probably should be done
+        sol.set_vis_from_data(data)  # not strictly necessary now, but probably should be done
         return meta, sol
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
