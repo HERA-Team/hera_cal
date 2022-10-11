@@ -520,7 +520,8 @@ class RedSol():
             calibrate_in_place(self.vis, new_gains, old_gains=old_gains)
             self.gains = new_gains
         else:
-            new_vis = deepcopy(vis)
+            new_vis = deepcopy(self.vis)
+            calibrate_in_place(new_vis, new_gains, old_gains=old_gains)
             return RedSol(self.reds, gains=new_gains, vis=new_vis)
 
     def gain_bl(self, bl):
