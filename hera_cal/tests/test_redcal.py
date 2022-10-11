@@ -279,10 +279,6 @@ class TestMethods(object):
             else:
                 assert not np.any(meta['polarity_flips'][ant, 'Jee'])
 
-        # test errors
-        with pytest.raises(ValueError):
-            om._build_polarity_baseline_groups(data, reds, max_rel_angle=np.pi)
-
 
 class TestRedSol(object):
 
