@@ -1816,7 +1816,7 @@ class TestRunMethods(object):
 
             hd = io.HERAData(os.path.splitext(input_data)[0] + prefix + '.omni_vis.uvh5')
             data, flags, nsamples = hd.read()
-            for bl in data.keys():
+            for bl in cal_here['v_omnical']:
                 np.testing.assert_array_almost_equal(data[bl], cal_here['v_omnical'][bl])
                 np.testing.assert_array_almost_equal(flags[bl], cal_here['vf_omnical'][bl])
                 np.testing.assert_array_almost_equal(nsamples[bl], cal_here['vns_omnical'][bl])
