@@ -847,10 +847,10 @@ def _find_flipped(offsets, flip_pnt=np.pi/2, maxiter=100):
     flipped = set()
     for i in range(maxiter):
         flip_frac = _flip_frac(offsets, flipped=flipped, flip_pnt=flip_pnt)
-        changed = 0
+        changed = False
         for (ant, frac) in flip_frac:
             if frac > 0.5:
-                changed = 1
+                changed = True
                 if ant in flipped:
                     flipped.remove(ant)
                 else:
@@ -873,7 +873,7 @@ def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=np.pi/2):
     def process_pair(gp1, gp2):
         '''Phase-align two groups, recording dly/off in dly_off_gps for gp2
         and the phase-aligned sum in _data/_wgts. Returns gp1 + gp2, which
-        keys the _data, _wgts dicts and represents group for next iteration.'''
+        keys the _data dict and represents group for next iteration.'''
         d12 = _data[gp1] * np.conj(_data[gp2])
         if norm:
             ad12 = np.abs(d12)
@@ -1033,8 +1033,6 @@ class RedundantCalibrator:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
             freqs: numpy array of frequencies in the data
             maxiter: maximum number of iterations for finding flipped antennas
-            conv_crit: convergence criterion for iterative offset solver, defined as the L2 norm
-                of the changes in phase (in radians) over all times and antennas
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
             mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
                 Suggest using 'default' unless solver is having stability (convergence) problems.
@@ -1044,8 +1042,8 @@ class RedundantCalibrator:
 
         Returns:
             meta: dictionary of metadata (including delays and suspected antenna flips for each integration)
-            g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the
-                {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
+            sol: RedSol of Ntimes x Nfreqs per-antenna gains solutions of the form
+                 np.exp(2j * np.pi * delay * freqs + 1j * offset)
         """
         Ntimes, Nfreqs = data[self.reds[0][0]].shape
         dlys_offs = {}
@@ -1086,7 +1084,7 @@ class RedundantCalibrator:
         dtype = np.find_common_type([d.dtype for d in data.values()], [])
         meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()},
                 'offs': {ant: off.flatten() for ant, off in offs.items()},
-                'polarity_flips': {ant: np.ones(Ntimes) * int(ant in flipped) for ant in ants}}
+                'polarity_flips': {ant: np.ones(Ntimes, dtype=bool) * bool(ant in flipped) for ant in ants}}
         gains = {ant: np.exp(2j * np.pi * dly * freqs + 1j * offs[ant]).astype(dtype) for ant, dly in dlys.items()}
         sol = RedSol(self.reds, gains=gains)
         sol.set_vis_from_data(data)  # not strictly necessary now, but probably should be done
@@ -1662,8 +1660,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
 
     # perform firstcal if it hasn't already been done
     if prior_firstcal is None:
-        rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs)
-        rv['g_firstcal'] = rv['g_firstcal'].gains
+        rv['fc_meta'], fc_sol = rc.firstcal(data, freqs)
+        rv['g_firstcal'] = fc_sol.gains
     else:
         rv['fc_meta'], rv['g_firstcal'] = None, prior_firstcal
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
