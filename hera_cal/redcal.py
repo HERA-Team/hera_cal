@@ -1890,9 +1890,9 @@ def _redcal_run_write_results(cal, hd, firstcal_filename, omnical_filename, omni
         d, f, n = hd_out.read(bls=list(set([k[0:2] for k in cal['v_omnical']])), polarizations=vispols)
         out_data, out_flags, out_nsamples = {}, {}, {}
         for bl in d:
-            out_data[bl] = (cal['v_omnical'][bl] if bl in cal['v_omnical'] else np.zeros_like(d[bl]))
-            out_flags[bl] = (cal['vf_omnical'][bl] if bl in cal['vf_omnical'] else np.ones_like(f[bl]))
-            out_nsamples[bl] = (cal['vns_omnical'][bl] if bl in cal['vns_omnical'] else np.zeros_like(n[bl]))
+            out_data[bl] = cal['v_omnical'][bl] if bl in cal['v_omnical'] else np.zeros_like(d[bl])
+            out_flags[bl] = cal['vf_omnical'][bl] if bl in cal['vf_omnical'] else np.ones_like(f[bl])
+            out_nsamples[bl] = cal['vns_omnical'][bl] if bl in cal['vns_omnical'] else np.zeros_like(n[bl])
         hd_out.update(data=out_data, flags=out_flags, nsamples=out_nsamples)
         hd_out.history += utils.history_string(add_to_history)
         hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
