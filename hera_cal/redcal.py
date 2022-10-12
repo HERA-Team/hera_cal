@@ -1042,8 +1042,9 @@ class RedundantCalibrator:
 
         Returns:
             meta: dictionary of metadata (including delays and suspected antenna flips for each integration)
-            sol: RedSol of Ntimes x Nfreqs per-antenna gains solutions of the form
-                 np.exp(2j * np.pi * delay * freqs + 1j * offset)
+            sol: RedSol with Ntimes x Nfreqs per-antenna gains solutions of the form
+                 np.exp(2j * np.pi * delay * freqs + 1j * offset), as well as visibility
+                 solutions formed from redundantly averaged first-caled data.
         """
         Ntimes, Nfreqs = data[self.reds[0][0]].shape
         dlys_offs = {}
