@@ -1265,7 +1265,9 @@ def is_redundantly_calibratable(antpos, bl_error_tol=1.0, require_coplanarity=Tr
         if len(list(reds_to_antpos(reds).values())[0]) > 2:  # not a monolithic, coplanar array
             return False
     return (rc.count_degens() == rc.count_degens(assume_redundant=False))
-
+from linsolve import ast_getterms, jointerms, conjterm, LinearEquation
+import ast
+from scipy.sparse import csc_matrix
 
 def predict_chisq_per_bl(reds):
     '''Predict the expected value of chi^2 for each baselines (equivalently, the
@@ -1280,16 +1282,34 @@ def predict_chisq_per_bl(reds):
             value of chi^2 = |Vij - gigj*Vi-j|^2/sigmaij^2.
     '''
     bls = [bl for red in reds for bl in red]
-    dummy_data = DataContainer({bl: np.ones((1, 1), dtype=complex) for bl in bls})
     rc = RedundantCalibrator(reds)
-    solver = rc._solver(linsolve.LogProductSolver, dummy_data)
+    # XXX little worried about implicit reliance on bl ordering in RedundantCalibrator
+    _eqs = [ast_getterms(ast.parse(k, mode='eval')) for k in rc.build_eqs()]
+    eqamp = [jointerms([conjterm([t],mode='amp') for t in eq[0]]) for eq in _eqs]
+    eqphs = [jointerms([conjterm([t],mode='phs') for t in eq[0]]) for eq in _eqs]
 
-    A = solver.ls_amp.get_A()[:, :, 0]
-    B = solver.ls_phs.get_A()[:, :, 0]
-    A_data_resolution_diag_sum = (A.T * np.linalg.pinv(A.T.dot(A), hermitian=True).dot(A.T)).sum(axis=0)
-    B_data_resolution_diag_sum = (B.T * np.linalg.pinv(B.T.dot(B), hermitian=True).dot(B.T)).sum(axis=0)
-
-    predicted_chisq_per_bl = 1.0 - (A_data_resolution_diag_sum + B_data_resolution_diag_sum) / 2.0
+    diag_sums = []
+    for eqs in (eqamp, eqphs):
+        eqs = [LinearEquation(k) for k in eqs]
+        prms = {}
+        for eq in eqs:
+            prms.update(eq.prms)
+        prm_order = {p:i for i, p in enumerate(prms)}
+        xs, ys, vals = [], [], []
+        for i, eq in enumerate(eqs):
+            x, y, val = eq.sparse_form(i, prm_order, False)
+            xs += x; ys += y; vals += val
+        xs = np.array(xs)
+        ys = np.array(ys)
+        vals = np.array(vals)[:,0]
+        A = csc_matrix((vals, (xs, ys)))
+        AtA = A.T.dot(A).toarray()
+        AtAi = np.linalg.pinv(AtA, rcond=1e-12, hermitian=True)
+        ys.shape = (-1, 3)
+        vals.shape = (-1, 3)
+        diag_sum = np.array([np.dot(val, AtAi[:,y][y].dot(val)) for val, y in zip(vals, ys)])
+        diag_sums.append(diag_sum)
+    predicted_chisq_per_bl = 1.0 - sum(diag_sums) / 2.0
     return {bl: dof for bl, dof in zip(bls, predicted_chisq_per_bl)}
 
 
