@@ -1605,8 +1605,8 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
                           oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
-                          check_after=50, gain=.4, max_dims=2,
-                          prior_firstcal=None, prior_sol=None, use_gpu=False):
+                          check_after=50, gain=.4, max_dims=2, use_gpu=False,
+                          prior_firstcal=None, prior_sol=None, run_logcal=True):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -1630,11 +1630,14 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
             with remove_degen() and must be later abscaled. None is no limit. 2 is a classically
             "redundantly calibratable" planar array.  More than 2 usually arises with subarrays of
             redundant baselines. Antennas will be excluded from reds to satisfy this.
+        use_gpu: Bool default False. If True, use GPU to run omnical. Requires hera_gpu.
         prior_firstcal: Optional dictionary of gains keyed by ant-pol tuples. If not default None,
             skips performing firstcal and substitutes this for 'g_firstcal' in the returned dictionary.
         prior_sol: Optional dictionary of both gain keys and redundant visibility solutions. If not
             default None, this will be used to skip logcal and go straight into omnical.
-        use_gpu: Bool default False. If True, use GPU to run omnical. Requires hera_gpu.
+        run_logcal: Bool default True. If False, use firstcal gains and redundantly-averaged
+            first-calibrated data as the starting point for omical. If prior_firstcal is provided
+            and prior_sol is not, this will error if False.
 
     Returns a dictionary of results with the following keywords:
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
@@ -1676,9 +1679,15 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
         rv['fc_meta'], rv['g_firstcal'] = None, prior_firstcal
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
-    # perform logcal
     if prior_sol is None:
-        _, prior_sol = rc.logcal(data, sol0=rv['g_firstcal'])
+        # perform logcal or get starting point for omnical from firstcal
+        if run_logcal:
+            _, prior_sol = rc.logcal(data, sol0=rv['g_firstcal'])
+        else:
+            if prior_firstcal is None:  # use redundantly-average solution out of firstcal
+                prior_sol = fc_sol
+            else:  # firstcal was skipped
+                raise ValueError('If prior_firstcal is provided and prior_sol is not, then use_logcal must be True.')
         prior_sol.make_sol_finite()
 
     # perform omnical
