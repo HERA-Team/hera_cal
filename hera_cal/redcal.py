@@ -568,7 +568,7 @@ class RedSol():
             np.divide(data, gij, out=data, where=(gij != 0))
             return data
 
-    def set_vis_from_data(self, data, wgts={}):
+    def set_vis_from_data(self, data, wgts={}, only_missing_vis=False):
         '''Performs redundant averaging of data using reds and gains stored in this RedSol object and
            stores the result as the redundant solution.
 
@@ -576,14 +576,18 @@ class RedSol():
             data: DataContainer containing visibilities to redundantly average.
             wgts: optional DataContainer weighting visibilities in averaging.
                 If not provided, it is assumed that all data are uniformly weighted.
+            only_missing_vis: only adds missing entries in self.vis
 
         Returns:
             None
         '''
         vis = {}
         for grp in self.reds:
-            vis[grp[0]] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
-                                     weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
+            if only_missing_vis and grp[0] in self.vis:
+                vis[grp[0]] = self.vis[grp[0]]
+            else:
+                vis[grp[0]] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
+                                         weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
         self.vis = RedDataContainer(vis, reds=self.reds)
 
     def chisq(self, data, data_wgts, gain_flags=None):
