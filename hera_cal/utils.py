@@ -287,6 +287,7 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
 
 
 def quinn_tau(x):
+    '''Quinn subgrid interpolation parameter (see https://ieeexplore.ieee.org/document/558515)'''
     t = .25 * np.log(3*x**2 + 6*x + 1) 
     t -= 6**.5 / 24 * np.log((x + 1 - (2/3)**.5) / (x + 1 + (2/3) **.5))
     return t

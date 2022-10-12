@@ -272,7 +272,7 @@ class TestMethods(object):
         for ant in [3, 10, 11]:
             gains[ant, 'Jee'] *= -1
         _, true_vis, data = sim_red_data(reds, gains=gains, shape=(2, len(freqs)))
-        meta, g_fc = rc.firstcal(data, freqs)
+        meta, sol_fc = rc.firstcal(data, freqs)
         for ant in antpos:
             if ant in [3, 10, 11]:
                 assert np.all(meta['polarity_flips'][ant, 'Jee'])
@@ -452,6 +452,9 @@ class TestRedSol(object):
         assert rs.gain_bl((0, 1, 'ee'))[0, 0] == -2.0j
         assert rs.model_bl((0, 1, 'ee'))[0, 0] == -6.0j
         assert rs.calibrate_bl((0, 1, 'ee'), 10j * np.ones((1, 1)))[0, 0] == -5
+        d = 10j * np.ones((1, 1))
+        rs.calibrate_bl((0, 1, 'ee'), d, copy=False)
+        assert d[0, 0] == -5
 
     def test_chisq(self):
         NANTS = 18
@@ -573,8 +576,8 @@ class TestRedundantCalibrator(object):
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
             gains[ant] *= fc_gains[ant]
-        meta, g_fc = rc.firstcal(d, freqs)
-        np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc.gains]), 0, decimal=3)
+        meta, sol_fc = rc.firstcal(d, freqs)
+        np.testing.assert_array_almost_equal(np.linalg.norm([sol_fc[ant] - gains[ant] for ant in sol_fc.gains]), 0, decimal=3)
 
         # test firstcal with only phases (no delays)
         gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
@@ -587,8 +590,8 @@ class TestRedundantCalibrator(object):
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
             gains[ant] *= fc_gains[ant]
-        meta, g_fc = rc.firstcal(d, freqs)
-        np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc.gains]), 0, decimal=10)  # much higher precision
+        meta, sol_fc = rc.firstcal(d, freqs)
+        np.testing.assert_array_almost_equal(np.linalg.norm([sol_fc[ant] - gains[ant] for ant in sol_fc.gains]), 0, decimal=10)  # much higher precision
 
     def test_logcal(self):
         NANTS = 18
