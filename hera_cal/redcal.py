@@ -822,11 +822,13 @@ class OmnicalSolver(linsolve.LinProductSolver):
             if verbose:
                 print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
 
-def _wrap_phs(phs, wrap_pnt=np.pi/2):
+
+def _wrap_phs(phs, wrap_pnt=(np.pi / 2)):
     '''Adjust phase wrap point to be [-wrap_pnt, 2pi-wrap_pnt)'''
     return (phs + wrap_pnt) % (2 * np.pi) - wrap_pnt
 
-def _flip_frac(offsets, flipped=set(), flip_pnt=np.pi/2):
+
+def _flip_frac(offsets, flipped=set(), flip_pnt=(np.pi / 2)):
     '''Calculate the fraction of (bl1, bl2) pairings an antenna is involved
     in which have large phase offsets.'''
     cnt = {}
@@ -841,7 +843,8 @@ def _flip_frac(offsets, flipped=set(), flip_pnt=np.pi/2):
     flip_frac = [(k, v / tot[k]) for k, v in cnt.items()]
     return flip_frac
 
-def _find_flipped(offsets, flip_pnt=np.pi/2, maxiter=100):
+
+def _find_flipped(offsets, flip_pnt=(np.pi / 2), maxiter=100):
     '''Given a dict of (bl1, bl2) keys and phase offset vals, identify
     antennas which are likely to have a np.pi phase offset.'''
     flipped = set()
@@ -859,7 +862,8 @@ def _find_flipped(offsets, flip_pnt=np.pi/2, maxiter=100):
             break
     return flipped
 
-def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=np.pi/2):
+
+def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=(np.pi / 2)):
     '''Given a redundant group of bls, find per-baseline dly/off params that
     bring them into phase alignment using hierarchical pairing.'''
     fftfreqs = np.fft.fftfreq(freqs.shape[-1], np.median(np.diff(freqs)))
@@ -1023,7 +1027,7 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def firstcal(self, data, freqs, maxiter=100, sparse=False, mode='default', flip_pnt=np.pi/2):
+    def firstcal(self, data, freqs, maxiter=100, sparse=False, mode='default', flip_pnt=(np.pi / 2)):
         """Solve for a calibration solution parameterized by a single delay and phase offset
         per antenna using the phase difference between nominally redundant measurements.
         Delays are solved in a single iteration, but phase offsets are solved for
