@@ -1673,8 +1673,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
 
     # perform firstcal if it hasn't already been done
     if prior_firstcal is None:
-        rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs)
-        rv['g_firstcal'] = rv['g_firstcal'].gains
+        rv['fc_meta'], fc_sol = rc.firstcal(data, freqs)
+        rv['g_firstcal'] = fc_sol.gains
     else:
         rv['fc_meta'], rv['g_firstcal'] = None, prior_firstcal
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
@@ -1693,18 +1693,16 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
     # perform omnical
     dts_by_bl = DataContainer({bl: infer_dt(times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in red_bls})
     data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in red_bls})
-    rv['omni_meta'], omni_sol = rc.omnical(data, prior_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
-                                           check_every=check_every, check_after=check_after, gain=gain)
+    rv['omni_meta'], rv['omni_sol'] = rc.omnical(data, prior_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
+                                                 check_every=check_every, check_after=check_after, gain=gain)
 
     # update omnical flags and then remove degeneracies
-    rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(omni_sol)
-    rv['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in rv['g_omnical'].items()}
-    rv['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in rv['v_omnical'].items()})
-    rd_sol = rc.remove_degen(omni_sol, degen_sol=rv['g_firstcal'])
-    make_sol_finite(rd_sol)
-    rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(rd_sol)
-    rv['v_omnical'] = DataContainer(rv['v_omnical'])
-    rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
+    rv['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in rv['omni_sol'].gains.items()}
+    rv['vf_omnical'] = RedDataContainer({bl: ~np.isfinite(v) for bl, v in rv['omni_sol'].vis.items()}, reds=filtered_reds)
+    rv['omni_sol'].remove_degen(degen_sol=rv['g_firstcal'], inplace=True)
+    rv['omni_sol'].make_sol_finite()
+    rv['g_omnical'] = rv['omni_sol'].gains
+    rv['v_omnical'] = rv['omni_sol'].vis
 
     # compute chisqs
     rv['chisq'], rv['chisq_per_ant'] = normalized_chisq(data, data_wgts, filtered_reds, rv['v_omnical'], rv['g_omnical'])
