@@ -226,6 +226,7 @@ def history_string(notes=""):
     return history
 
 
+# XXX change df/ f0 for freqs directly
 def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0):
     """Get delay of visibility across band using FFT and Quinn's Second Method to fit the delay and phase offset.
     Arguments:
@@ -242,10 +243,12 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     """
     # setup
     Ntimes, Nfreqs = data.shape
+    # XXX prefer saving compute by not using wgts at all
     if wgts is None:
         wgts = np.ones_like(data, dtype=np.float32)
 
     # smooth via median filter
+    # XXX is this mode ever used?
     if medfilt:
         data = copy.deepcopy(data)  # this prevents filtering of the original input data
         data.real = signal.medfilt(data.real, kernel_size=kernel)
@@ -253,6 +256,7 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
 
     # fft w/ wgts
     dw = data * wgts
+    # XXX is edge_cut ever used?
     if edge_cut > 0:
         assert 2 * edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
         dw = dw[:, edge_cut:(-edge_cut + 1)]
@@ -265,6 +269,7 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     inds, bin_shifts, peaks, interp_peaks = interp_peak(vfft)
     dlys = (fftfreqs[inds] + bin_shifts * dtau).reshape(-1, 1)
 
+    # XXX if not using phase offset, should have mode to not compute it?
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df + f0
     fSlice = slice(edge_cut, len(freqs) - edge_cut)
@@ -279,6 +284,13 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
 
     return dlys, offset
 
+
+
+def quinn_tau(x):
+    '''Quinn subgrid interpolation parameter (see https://ieeexplore.ieee.org/document/558515)'''
+    t = .25 * np.log(3*x**2 + 6*x + 1) 
+    t -= 6**.5 / 24 * np.log((x + 1 - (2/3)**.5) / (x + 1 + (2/3) **.5))
+    return t
 
 def interp_peak(data, method='quinn', reject_edges=False):
     """
@@ -321,13 +333,10 @@ def interp_peak(data, method='quinn', reject_edges=False):
                 dabs[i, ncut:] = 0.0
 
     # get argmaxes along last axis
-    if method == 'quinn':
-        indices = np.argmax(dabs, axis=-1)
-    elif method == 'quadratic':
-        indices = np.argmax(dabs, axis=-1)
-    else:
+    if method not in ('quinn', 'quadratic'):
         raise ValueError("'{}' is not a recognized peak interpolation method.".format(method))
 
+    indices = np.argmax(dabs, axis=-1)
     peaks = data[range(N1), indices]
 
     # calculate shifted peak for sub-bin resolution
@@ -336,19 +345,15 @@ def interp_peak(data, method='quinn', reject_edges=False):
     k2 = data[range(N1), (indices + 1) % N2]
 
     if method == 'quinn':
-        def tau(x):
-            t = .25 * np.log(3 * x ** 2 + 6 * x + 1)
-            t -= 6 ** .5 / 24 * np.log((x + 1 - (2. / 3.) ** .5) / (x + 1 + (2. / 3.) ** .5))
-            return t
-
         alpha1 = (k0 / k1).real
         alpha2 = (k2 / k1).real
         delta1 = alpha1 / (1 - alpha1)
         delta2 = -alpha2 / (1 - alpha2)
-        d = (delta1 + delta2) / 2 + tau(delta1 ** 2) - tau(delta2 ** 2)
+        d = (delta1 + delta2) / 2 + quinn_tau(delta1 ** 2) - quinn_tau(delta2 ** 2)
         d[~np.isfinite(d)] = 0.
 
-        ck = np.array([np.true_divide(np.exp(2.0j * np.pi * d) - 1, 2.0j * np.pi * (d - k),
+        numerator_ck = np.exp(2.0j * np.pi * d) - 1
+        ck = np.array([np.true_divide(numerator_ck, 2.0j * np.pi * (d - k),
                                       where=~(d == 0)) for k in [-1, 0, 1]])
         rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck ** 2))
         rho[d == 0] = np.abs(k1[d == 0])
