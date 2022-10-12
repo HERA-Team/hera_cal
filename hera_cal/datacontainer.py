@@ -571,3 +571,14 @@ class RedDataContainer(DataContainer):
     def __contains__(self, key):
         '''Returns true if the baseline redundant with the key is in the data.'''
         return key in self._bl_to_red_key
+
+    def rekey(self, new_reds):
+        '''Re-key this RedDataContainer so that the baselines iterated over are the
+        first entries in each group in new_reds. Useful for redcal.expand_omni_sol.'''
+        new_data_dict = {}
+        for red in new_reds:
+            for bl in red:
+                if bl in self:
+                    new_data_dict[red[0]] = self[bl]
+                    break
+        self.__init__(new_data_dict, reds=new_reds)
