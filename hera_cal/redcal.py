@@ -872,7 +872,7 @@ def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=np.pi/2):
 
     def process_pair(gp1, gp2):
         '''Phase-align two groups, recording dly/off in dly_off_gps for gp2
-        and the phase-aligned sum in _data/_wgts. Returns gp1 + gp2, which
+        and the phase-aligned sum in _data. Returns gp1 + gp2, which
         keys the _data dict and represents group for next iteration.'''
         d12 = _data[gp1] * np.conj(_data[gp2])
         if norm:
