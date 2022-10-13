@@ -1265,6 +1265,7 @@ def is_redundantly_calibratable(antpos, bl_error_tol=1.0, require_coplanarity=Tr
         if len(list(reds_to_antpos(reds).values())[0]) > 2:  # not a monolithic, coplanar array
             return False
     return (rc.count_degens() == rc.count_degens(assume_redundant=False))
+
 from linsolve import ast_getterms, jointerms, conjterm, LinearEquation
 import ast
 from scipy.sparse import csc_matrix
@@ -1281,36 +1282,53 @@ def predict_chisq_per_bl(reds):
         predicted_chisq_per_bl: dictionary mapping baseline tuples to the expected
             value of chi^2 = |Vij - gigj*Vi-j|^2/sigmaij^2.
     '''
-    bls = [bl for red in reds for bl in red]
-    rc = RedundantCalibrator(reds)
-    # XXX little worried about implicit reliance on bl ordering in RedundantCalibrator
-    _eqs = [ast_getterms(ast.parse(k, mode='eval')) for k in rc.build_eqs()]
-    eqamp = [jointerms([conjterm([t],mode='amp') for t in eq[0]]) for eq in _eqs]
-    eqphs = [jointerms([conjterm([t],mode='phs') for t in eq[0]]) for eq in _eqs]
+    pol_gps = [set([antpol[-1] for bl in gp for antpol in split_bl(bl)]) for gp in reds]
+    pols = set()
+    for gp in pol_gps:
+        pols.update(gp)
+    npols = len(pols)
+    if npols > 1 and np.all([len(gp) == 1 for gp in pol_gps]):
+        # pols are separable and can be solved independently for significant speedup
+        reds_by_pol = {}
+        for gp in reds:
+            pol = gp[0][-1]
+            reds_by_pol[pol] = reds_by_pol.get(pol, []) + [gp]
+        predicted_chisq_per_bl = {}
+        for pol, polreds in reds_by_pol.items():
+            predicted_chisq_per_bl.update(predict_chisq_per_bl(polreds))
+        return predicted_chisq_per_bl
+    else:
+        # pols are not separable and we need to build the full equation
+        bls = [bl for red in reds for bl in red]
+        rc = RedundantCalibrator(reds)
+        # XXX little worried about implicit reliance on bl ordering in RedundantCalibrator
+        _eqs = [ast_getterms(ast.parse(k, mode='eval')) for k in rc.build_eqs()]
+        eqamp = [jointerms([conjterm([t],mode='amp') for t in eq[0]]) for eq in _eqs]
+        eqphs = [jointerms([conjterm([t],mode='phs') for t in eq[0]]) for eq in _eqs]
 
-    diag_sums = []
-    for eqs in (eqamp, eqphs):
-        eqs = [LinearEquation(k) for k in eqs]
-        prms = {}
-        for eq in eqs:
-            prms.update(eq.prms)
-        prm_order = {p:i for i, p in enumerate(prms)}
-        xs, ys, vals = [], [], []
-        for i, eq in enumerate(eqs):
-            x, y, val = eq.sparse_form(i, prm_order, False)
-            xs += x; ys += y; vals += val
-        xs = np.array(xs)
-        ys = np.array(ys)
-        vals = np.array(vals)[:,0]
-        A = csc_matrix((vals, (xs, ys)))
-        AtA = A.T.dot(A).toarray()
-        AtAi = np.linalg.pinv(AtA, rcond=1e-12, hermitian=True)
-        ys.shape = (-1, 3)
-        vals.shape = (-1, 3)
-        diag_sum = np.array([np.dot(val, AtAi[:,y][y].dot(val)) for val, y in zip(vals, ys)])
-        diag_sums.append(diag_sum)
-    predicted_chisq_per_bl = 1.0 - sum(diag_sums) / 2.0
-    return {bl: dof for bl, dof in zip(bls, predicted_chisq_per_bl)}
+        diag_sums = []
+        for eqs in (eqamp, eqphs):
+            eqs = [LinearEquation(k) for k in eqs]
+            prms = {}
+            for eq in eqs:
+                prms.update(eq.prms)
+            prm_order = {p:i for i, p in enumerate(prms)}
+            xs, ys, vals = [], [], []
+            for i, eq in enumerate(eqs):
+                x, y, val = eq.sparse_form(i, prm_order, False)
+                xs += x; ys += y; vals += val
+            xs = np.array(xs)
+            ys = np.array(ys)
+            vals = np.array(vals)[:,0]
+            A = csc_matrix((vals, (xs, ys)))
+            AtA = A.T.dot(A).toarray()
+            AtAi = np.linalg.pinv(AtA, rcond=1e-12, hermitian=True)
+            ys.shape = (-1, 3)
+            vals.shape = (-1, 3)
+            diag_sum = np.array([np.dot(val, AtAi[:,y][y].dot(val)) for val, y in zip(vals, ys)])
+            diag_sums.append(diag_sum)
+        predicted_chisq_per_bl = 1.0 - sum(diag_sums) / 2.0
+        return {bl: dof for bl, dof in zip(bls, predicted_chisq_per_bl)}
 
 
 def predict_chisq_per_red(reds):
