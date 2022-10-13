@@ -1300,32 +1300,29 @@ def predict_chisq_per_bl(reds):
     else:
         # pols are not separable and we need to build the full equation
         bls = [bl for red in reds for bl in red]
-        rc = RedundantCalibrator(reds)
-        # XXX little worried about implicit reliance on bl ordering in RedundantCalibrator
-        _eqs = [ast_getterms(ast.parse(k, mode='eval')) for k in rc.build_eqs()]
-        eqamp = [jointerms([conjterm([t],mode='amp') for t in eq[0]]) for eq in _eqs]
-        eqphs = [jointerms([conjterm([t],mode='phs') for t in eq[0]]) for eq in _eqs]
-
+        ants = {}
+        for bl in bls:
+            for ant in split_bl(bl):
+                ants[ant] = ants.get(ant, len(ants))
+        eqinds = [split_bl(bl) + (u,)
+                  for u, gp in enumerate(reds) for bl in gp]
+        eqinds = [(ants[ai], ants[aj], len(ants) + ug)
+                  for ai, aj, ug in eqinds]
+        eqinds = [(np.array([ai, ai, ai, aj, aj, aj, ug, ug, ug]),
+                   np.array([ai, aj, ug, ai, aj, ug, ai, aj, ug]))
+                  for ai, aj, ug in eqinds]
+        nprms = len(ants) + len(reds)
         diag_sums = []
-        for eqs in (eqamp, eqphs):
-            eqs = [LinearEquation(k) for k in eqs]
-            prms = {}
-            for eq in eqs:
-                prms.update(eq.prms)
-            prm_order = {p:i for i, p in enumerate(prms)}
-            xs, ys, vals = [], [], []
-            for i, eq in enumerate(eqs):
-                x, y, val = eq.sparse_form(i, prm_order, False)
-                xs += x; ys += y; vals += val
-            xs = np.array(xs)
-            ys = np.array(ys)
-            vals = np.array(vals)[:,0]
-            A = csc_matrix((vals, (xs, ys)))
-            AtA = A.T.dot(A).toarray()
+        for ci, cj, cu in ((1, 1, 1), (1, -1, 1)):
+            coeffs = np.array([ci * ci, ci * cj, ci * cu,
+                               cj * ci, cj * cj, cj * cu,
+                               cu * ci, cu * cj, cu * cu])
+            AtA = np.zeros((nprms, nprms), dtype=float)
+            for x, y in eqinds:
+                AtA[x, y] += coeffs
             AtAi = np.linalg.pinv(AtA, rcond=1e-12, hermitian=True)
-            ys.shape = (-1, 3)
-            vals.shape = (-1, 3)
-            diag_sum = np.array([np.dot(val, AtAi[:,y][y].dot(val)) for val, y in zip(vals, ys)])
+            diag_sum = np.array([np.sum(coeffs * AtAi[x, y])
+                                for x, y in eqinds])
             diag_sums.append(diag_sum)
         predicted_chisq_per_bl = 1.0 - sum(diag_sums) / 2.0
         return {bl: dof for bl, dof in zip(bls, predicted_chisq_per_bl)}
