@@ -822,11 +822,13 @@ class OmnicalSolver(linsolve.LinProductSolver):
             if verbose:
                 print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
 
-def _wrap_phs(phs, wrap_pnt=np.pi/2):
+
+def _wrap_phs(phs, wrap_pnt=(np.pi / 2)):
     '''Adjust phase wrap point to be [-wrap_pnt, 2pi-wrap_pnt)'''
     return (phs + wrap_pnt) % (2 * np.pi) - wrap_pnt
 
-def _flip_frac(offsets, flipped=set(), flip_pnt=np.pi/2):
+
+def _flip_frac(offsets, flipped=set(), flip_pnt=(np.pi / 2)):
     '''Calculate the fraction of (bl1, bl2) pairings an antenna is involved
     in which have large phase offsets.'''
     cnt = {}
@@ -841,7 +843,8 @@ def _flip_frac(offsets, flipped=set(), flip_pnt=np.pi/2):
     flip_frac = [(k, v / tot[k]) for k, v in cnt.items()]
     return flip_frac
 
-def _find_flipped(offsets, flip_pnt=np.pi/2, maxiter=100):
+
+def _find_flipped(offsets, flip_pnt=(np.pi / 2), maxiter=100):
     '''Given a dict of (bl1, bl2) keys and phase offset vals, identify
     antennas which are likely to have a np.pi phase offset.'''
     flipped = set()
@@ -859,7 +862,8 @@ def _find_flipped(offsets, flip_pnt=np.pi/2, maxiter=100):
             break
     return flipped
 
-def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=np.pi/2):
+
+def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=(np.pi / 2)):
     '''Given a redundant group of bls, find per-baseline dly/off params that
     bring them into phase alignment using hierarchical pairing.'''
     fftfreqs = np.fft.fftfreq(freqs.shape[-1], np.median(np.diff(freqs)))
@@ -872,7 +876,7 @@ def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=np.pi/2):
 
     def process_pair(gp1, gp2):
         '''Phase-align two groups, recording dly/off in dly_off_gps for gp2
-        and the phase-aligned sum in _data/_wgts. Returns gp1 + gp2, which
+        and the phase-aligned sum in _data. Returns gp1 + gp2, which
         keys the _data dict and represents group for next iteration.'''
         d12 = _data[gp1] * np.conj(_data[gp2])
         if norm:
@@ -1023,7 +1027,7 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def firstcal(self, data, freqs, maxiter=100, sparse=False, mode='default', flip_pnt=np.pi/2):
+    def firstcal(self, data, freqs, maxiter=100, sparse=False, mode='default', flip_pnt=(np.pi / 2)):
         """Solve for a calibration solution parameterized by a single delay and phase offset
         per antenna using the phase difference between nominally redundant measurements.
         Delays are solved in a single iteration, but phase offsets are solved for
@@ -1042,8 +1046,9 @@ class RedundantCalibrator:
 
         Returns:
             meta: dictionary of metadata (including delays and suspected antenna flips for each integration)
-            sol: RedSol of Ntimes x Nfreqs per-antenna gains solutions of the form
-                 np.exp(2j * np.pi * delay * freqs + 1j * offset)
+            sol: RedSol with Ntimes x Nfreqs per-antenna gains solutions of the form
+                 np.exp(2j * np.pi * delay * freqs + 1j * offset), as well as visibility
+                 solutions formed from redundantly averaged first-caled data.
         """
         Ntimes, Nfreqs = data[self.reds[0][0]].shape
         dlys_offs = {}
@@ -1885,7 +1890,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
 
 
 def _redcal_run_write_results(cal, hd, firstcal_filename, omnical_filename, omnivis_filename,
-                              meta_filename, outdir, clobber=False, verbose=False, add_to_history=''):
+                              meta_filename, outdir, vispols=None, clobber=False, verbose=False, add_to_history=''):
     '''Helper function for writing the results of redcal_run.'''
     # get antnums2antnames dictionary
     antnums2antnames = dict(zip(hd.antenna_numbers, hd.antenna_names))
@@ -1917,8 +1922,13 @@ def _redcal_run_write_results(cal, hd, firstcal_filename, omnical_filename, omni
         if verbose:
             print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
         hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
-        hd_out.read(bls=list(cal['v_omnical'].keys()))
-        hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
+        d, f, n = hd_out.read(bls=list(set([k[0:2] for k in cal['v_omnical']])), polarizations=vispols)
+        out_data, out_flags, out_nsamples = {}, {}, {}
+        for bl in d:
+            out_data[bl] = cal['v_omnical'][bl] if bl in cal['v_omnical'] else np.zeros_like(d[bl])
+            out_flags[bl] = cal['vf_omnical'][bl] if bl in cal['vf_omnical'] else np.ones_like(f[bl])
+            out_nsamples[bl] = cal['vns_omnical'][bl] if bl in cal['vns_omnical'] else np.zeros_like(n[bl])
+        hd_out.update(data=out_data, flags=out_flags, nsamples=out_nsamples)
         hd_out.history += utils.history_string(add_to_history)
         hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
 
