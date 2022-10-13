@@ -1275,24 +1275,29 @@ from linsolve import ast_getterms, jointerms, conjterm, LinearEquation
 import ast
 from scipy.sparse import csc_matrix
 
-def predict_chisq_per_bl(reds):
+def predict_chisq_per_bl(reds, just_do_it=False):
     '''Predict the expected value of chi^2 for each baselines (equivalently, the
     effective number of degrees of freedom). This is calculated from the logcal
     A and B matrices and their respective data resolution matrices.
 
     Arguments:
         reds: list of list of baselines (with polarizations) considered redundant
+        just_do_it: a recursive flag to force direct computation without checking
 
     Returns:
         predicted_chisq_per_bl: dictionary mapping baseline tuples to the expected
             value of chi^2 = |Vij - gigj*Vi-j|^2/sigmaij^2.
     '''
-    pol_gps = [set([antpol[-1] for bl in gp for antpol in split_bl(bl)]) for gp in reds]
-    pols = set()
-    for gp in pol_gps:
-        pols.update(gp)
-    npols = len(pols)
-    if npols > 1 and np.all([len(gp) == 1 for gp in pol_gps]):
+    # figure out whether different pols are ever paired within redundant groups
+    pol_separable = False
+    if not just_do_it:
+        pol_gps = [set([antpol[-1] for bl in gp for antpol in split_bl(bl)]) for gp in reds]
+        pols = set()
+        for gp in pol_gps:
+            pols.update(gp)
+        npols = len(pols)
+        pol_separable = (npols > 1 and np.all([len(gp) == 1 for gp in pol_gps]))
+    if pol_separable:
         # pols are separable and can be solved independently for significant speedup
         reds_by_pol = {}
         for gp in reds:
@@ -1300,32 +1305,43 @@ def predict_chisq_per_bl(reds):
             reds_by_pol[pol] = reds_by_pol.get(pol, []) + [gp]
         predicted_chisq_per_bl = {}
         for pol, polreds in reds_by_pol.items():
-            predicted_chisq_per_bl.update(predict_chisq_per_bl(polreds))
+            predicted_chisq_per_bl.update(predict_chisq_per_bl(polreds, just_do_it=True))
         return predicted_chisq_per_bl
     else:
-        # pols are not separable and we need to build the full equation
+        # pols are not further separable and we need to build full equations
+        # doing a quicker breakdown of logcal equations w/o linsolve to
+        # avoid spending a lot of time parsing strings
         bls = [bl for red in reds for bl in red]
         ants = {}
         for bl in bls:
             for ant in split_bl(bl):
                 ants[ant] = ants.get(ant, len(ants))
+        # eqinds = (antpol, antpol, red-group-number) for each bl
         eqinds = [split_bl(bl) + (u,)
                   for u, gp in enumerate(reds) for bl in gp]
+        # eqinds = (ant-prm-index, ant-prm-index, red-gp-prm-index) for each bl
         eqinds = [(ants[ai], ants[aj], len(ants) + ug)
                   for ai, aj, ug in eqinds]
+        # eqinds = (AtA x/y indices = outer product of prm indices) for each bl
         eqinds = [(np.array([ai, ai, ai, aj, aj, aj, ug, ug, ug]),
                    np.array([ai, aj, ug, ai, aj, ug, ai, aj, ug]))
                   for ai, aj, ug in eqinds]
         nprms = len(ants) + len(reds)
         diag_sums = []
+        # loop over amplitude and phase (respectively) "logcal" terms
         for ci, cj, cu in ((1, 1, 1), (1, -1, 1)):
+            # coeffs = (AtA x/y wgts = outer product of prm coeffs) for each bl
             coeffs = np.array([ci * ci, ci * cj, ci * cu,
                                cj * ci, cj * cj, cj * cu,
                                cu * ci, cu * cj, cu * cu])
+            # build A.T dot A from sparse representation of equations in eqinds
             AtA = np.zeros((nprms, nprms), dtype=float)
             for x, y in eqinds:
                 AtA[x, y] += coeffs
             AtAi = np.linalg.pinv(AtA, rcond=1e-12, hermitian=True)
+            # compute sum(A.T * AtA^-1 dot A.T dot A, axis=0), using that for each eq
+            # in A, eq * (AtA^-1) * eq corresponds to summing over the same x/y
+            # indices we built above
             diag_sum = np.array([np.sum(coeffs * AtAi[x, y])
                                 for x, y in eqinds])
             diag_sums.append(diag_sum)
@@ -1361,9 +1377,11 @@ def predict_chisq_per_ant(reds):
         sum(|Vij - gigj*Vi-j|^2/sigmaij^2) over all baselines including that antenna
     '''
     predicted_chisq_per_bl = predict_chisq_per_bl(reds)
-    bls = [bl for red in reds for bl in red]
-    ants = sorted(set([ant for bl in bls for ant in split_bl(bl)]))
-    return {ant: np.sum([predicted_chisq_per_bl[bl] for bl in bls if ant in split_bl(bl)]) for ant in ants}
+    predicted_chisq_per_ant = {}
+    for bl, chisq in predicted_chisq_per_bl.items():
+        for ant in split_bl(bl):
+            predicted_chisq_per_ant[ant] = predicted_chisq_per_ant.get(ant, 0) + chisq
+    return predicted_chisq_per_ant
 
 
 def normalized_chisq(data, data_wgts, reds, vis_sols, gains):
