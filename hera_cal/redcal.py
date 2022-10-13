@@ -1283,6 +1283,7 @@ def predict_chisq_per_bl(reds, just_do_it=False):
     Arguments:
         reds: list of list of baselines (with polarizations) considered redundant
         just_do_it: a recursive flag to force direct computation without checking
+            whether polarizations are separable.
 
     Returns:
         predicted_chisq_per_bl: dictionary mapping baseline tuples to the expected
