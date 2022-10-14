@@ -1225,7 +1225,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
     return rv
 
 
-class HERADataFastReader():
+class HERADataFastReader:
     '''Wrapper class around read_hera_hdf5 meant to mimic the functionality of HERAData for drop-in replacement.'''
 
     def __init__(self, input_data, read_metadata=True, check=False, skip_lsts=False):
