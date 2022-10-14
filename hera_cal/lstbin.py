@@ -816,19 +816,18 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                         continue
 
                     # load calibration
-                    if input_cals is not None:
-                        if input_cals[j][k] is not None:
-                            utils.echo("Opening and applying {}".format(input_cals[j][k]), verbose=verbose)
-                            uvc = io.to_HERACal(input_cals[j][k])
-                            gains, cal_flags, quals, totquals = uvc.read()
-                            # down select times in necessary
-                            if False in tinds and uvc.Ntimes > 1:
-                                # If uvc has Ntimes == 1, then broadcast across time will work automatically
-                                uvc.select(times=uvc.time_array[tinds])
-                                gains, cal_flags, quals, totquals = uvc.build_calcontainers()
-                            apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags,
-                                                         gain_convention=uvc.gain_convention)
-
+                    if input_cals is not None and input_cals[j][k] is not None:
+                        utils.echo(f"Opening and applying {input_cals[j][k]}", verbose=verbose)
+                        uvc = io.to_HERACal(input_cals[j][k])
+                        gains, cal_flags, quals, totquals = uvc.read()
+                        # down select times in necessary
+                        if False in tinds and uvc.Ntimes > 1:
+                            # If uvc has Ntimes == 1, then broadcast across time will work automatically
+                            uvc.select(times=uvc.time_array[tinds])
+                            gains, cal_flags, _, _ = uvc.build_calcontainers()
+                        apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags,
+                                                        gain_convention=uvc.gain_convention)
+                        utils.echo("Done with calibration.", verbose=verbose)
                     # redundantly average baselines, keying to baseline group key
                     # on earliest night.
                     if average_redundant_baselines:

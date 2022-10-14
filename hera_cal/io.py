@@ -1078,6 +1078,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 pol_indices = {uvutils.parse_polstr(POL_NUM2STR_DICT[n], x_orientation=x_orient): cnt
                                for cnt, n in enumerate(pol_array)}
                 info['pols'] = list(pol_indices.keys())
+                info['x_orientation'] = x_orient
                 info['ants'] = antenna_numbers = h['antenna_numbers'][()]
                 info['antpos'] = dict(zip(antenna_numbers, h['antenna_positions'][()]))
                 for coord in ['latitude', 'longitude', 'altitude']:
@@ -1255,6 +1256,8 @@ class HERADataFastReader:
             else:
                 setattr(self, meta, None)
 
+        self.x_orientation = rv['info']['x_orientation']
+        
         # create functions that error informatively when trying to use standard HERAData/UVData methods
         for funcname in list(dir(HERAData)):
             if funcname.startswith('__') and funcname.endswith('__'):
