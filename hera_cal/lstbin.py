@@ -19,7 +19,9 @@ from . import io
 from . import redcal
 from . import apply_cal
 from .datacontainer import DataContainer
+import logging
 
+logger = logging.getLogger(__name__)
 
 def baselines_same_across_nights(data_list):
     """
@@ -165,6 +167,8 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     pols = list(set([pol for dc in data_list for pol in dc.pols()]))
     # iterate over data_list
     for i, d in enumerate(data_list):
+        logging.info(f"Doing data {i+1}/{len(data_list)}")
+
         # get lst array
         li = copy.copy(lst_list[i])
 
@@ -199,6 +203,8 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         # iterate over keys in d
         klist = list(d.keys())
         for j, key in enumerate(klist):
+            logging.info(f"Doing key {key} [{j+1}/{len(klist)}]")
+            
             # if bl_list is not None, use it to determine conjugation:
             # this is to prevent situations where conjugation of bl in
             # data_list is different from bl in data which can cause
@@ -229,6 +235,8 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
 
             # iterate over grid_indices, and append to data if data_in_bin is True
             for k, ind in enumerate(grid_indices):
+                logger.info(f"Doing ind {ind} [{k+1} / {len(grid_indices)}]")
+
                 # ensure data_in_bin is True for this grid index
                 if data_in_bin[k]:
                     # if index not in data[key], insert it as empty list
@@ -250,6 +258,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
 
         # add in spoofed baselines to keep baselines in different LST files consistent.
         if bl_list is not None:
+            logging.info("Adding spoofed baselines")
             for antpair in bl_list:
                 for pol in pols:
                     key = antpair + (pol,)
@@ -315,7 +324,9 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     data_std = odict()
 
     # iterate over data keys (baselines) and get statistics
+    logging.info("Getting statistics")
     for i, key in enumerate(data.keys()):
+        logging.info(f"Doing key {key} [ {i+1} / {len(data)} ]")
 
         # create empty lists
         real_avg = []
@@ -326,7 +337,8 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         bin_count = []
         # iterate over sorted LST grid indices in data[key]
         for j, ind in enumerate(sorted(data[key].keys())):
-
+            logging.info(f"Doing ind {ind} [{j+1}/{len(data[key])}]")
+            
             # make data and flag arrays from lists
             d = np.array(data[key][ind])  # shape = (Ndays x Nfreqs)
             f = np.array(flags[key][ind])
