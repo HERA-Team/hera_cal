@@ -707,7 +707,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     # get metadata from the zeroth data file in the last day
     last_day_index = np.argmax([np.min([time for tarr in tarrs for time in tarr]) for tarrs in time_arrs])
     zeroth_file_on_last_day_index = np.argmin([np.min(tarr) for tarr in time_arrs[last_day_index]])
-    hd = io.HERADataFastReader(data_files[last_day_index][zeroth_file_on_last_day_index])
+    hd = io.HERAData(data_files[last_day_index][zeroth_file_on_last_day_index])
     x_orientation = hd.x_orientation
 
     # get metadata
@@ -723,7 +723,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     nightly_last_hds = []
     for dlist, tarrs in zip(data_files, time_arrs):
         last_file_index = np.argmin([np.min(tarr) for tarr in tarrs])
-        hd = io.HERADataFastReader(dlist[last_file_index])
+        hd = io.HERAData(dlist[last_file_index])
         for a in hd.antpos:
             if a not in antpos:
                 antpos[a] = hd.antpos[a]
@@ -784,7 +784,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     tinds = (larr > fmin) & (larr < fmax)
 
                     # load data: only times needed for this output LST-bin file
-                    hd = io.HERADataFastReader(data_files[j][k], filetype='uvh5')
+                    hd = io.HERAData(data_files[j][k], filetype='uvh5')
                     try:
                         bls_to_load = []
                         key_baselines = []  # map first baseline in each group to
