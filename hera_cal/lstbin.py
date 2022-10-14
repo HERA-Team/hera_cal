@@ -828,6 +828,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                         apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags,
                                                         gain_convention=uvc.gain_convention)
                         utils.echo("Done with calibration.", verbose=verbose)
+
                     # redundantly average baselines, keying to baseline group key
                     # on earliest night.
                     if average_redundant_baselines:
@@ -853,6 +854,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                 nsamples_list.extend(nightly_nsamples_list)
                 del nightly_data_list, nightly_flgs_list, nightly_lst_list, nightly_nsamples_list
 
+            utils.echo("Done reading and calibrating data.")
+
             all_blgroup_baselines = [list(bl_nightly_dict.values())[0][0] for bl_nightly_dict in blgroup]
             all_blgroup_antpairpols = []
             if len(data_list) == 0:
@@ -869,9 +872,13 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     nsamples_list = [DataContainer({bl: np.zeros((len(f_lst), hd.Nfreqs)) for bl in all_blgroup_antpairpols})]
                 else:
                     continue
+
+            utils.echo("Done spoofing empty baselines.")
+
             # pass through lst-bin function
             if ignore_flags:
                 flgs_list = None
+            utils.echo("About to run LST binning...")
             (bin_lst, bin_data, flag_data, std_data,
              num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
                                  lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamples_list=nsamples_list,
