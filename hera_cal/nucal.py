@@ -496,9 +496,8 @@ class FrequencyRedundancy:
 
 def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutoff=1e-12):
     """
-    Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds. Note
-    filtering radial_reds before running this function is advised to reduce the
-    size of filters generated
+    Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds. 
+    Note filtering radial_reds before running this function is advised to reduce the size of filters generated
 
     Parameters:
     ----------
@@ -517,7 +516,7 @@ def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutof
     spatial_modes : dictionary
         pass
     """
-    spatial_modes = {}
+    spatial_vectors = {}
 
     # Get the minimum and maximum u-bounds used
     u_bounds = get_u_bounds(radial_reds, freqs)
@@ -527,9 +526,9 @@ def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutof
         for bl in group:
             umodes = radial_reds.baseline_lengths[bl] / SPEED_OF_LIGHT * freqs
             pswf, _ = dspec.pswf_operator(umodes, [0], [ell_half_width], eigenval_cutoff=[eigenval_cutoff], xmin=umin, xmax=umax)
-            spatial_modes[bl] = pswf
+            spatial_vectors[bl] = pswf
 
-    return spatial_modes
+    return spatial_vectors
 
 def build_nucal_wgts(radial_reds, freqs, data_flags, data_nsamples, autocorrs, auto_flags, times_by_bl=None,
                      df=None, data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None, 
@@ -690,11 +689,6 @@ def estimate_gain_amp_post_redcal(data, radial_reds, wgts=None, freqs=None, cach
 
     return eigenvals, eigenvec
 
-def estimate_degenerate_gains(radial_reds, reds, freqs):
-    """
-    """
-    pass
-
 class NuCalibrator:
     """
     Class for performing frequency redundant calibration of previously redundantly
@@ -715,6 +709,7 @@ class NuCalibrator:
         
         # Get idealized antenna positions
         self.idealized_antpos = redcal.reds_to_antpos(reds)
+        self.blvec = ...
         
         # Get number of tip-tilt dimensions from 
         self.ndims = self.idealized_antpos[list(self.idealized_antpos.keys())[0]].shape[0]
@@ -742,7 +737,7 @@ class NuCalibrator:
         return model_r, model_i
     
     @partial(jax.jit, static_argnums=(0,))
-    def loss_function(self, params, data_r, data_i, wgts, spec, spat):
+    def loss_function(self, params, skymodes_r, skymodes_i, data_r, data_i, wgts, spec, spat):
         """
         Loss function used for solving for redcal degenerate parameters and a model of the sky
         
@@ -763,14 +758,14 @@ class NuCalibrator:
             pass
         """
         # Dot tip-tilt parameters into baseline vector
-        phase = jnp.einsum('nf,nb->bf', params['phi'], blvec)
+        phase = jnp.einsum('nf,nb->bf', params["phi"], self.blvec)
                 
         # Compute foreground model from beta estimates
-        fg_r, fg_i = self.foreground_model(params['fg_r'], params['fg_i'], spec, spat)
+        fg_r, fg_i = self.foreground_model(skymodes_r, skymodes_i, spec, spat)
 
         # Compute model from foreground estimates and amplitude
-        model_r = params['amp'] * (fg_r * jnp.cos(phase) - fg_i * jnp.sin(phase))
-        model_i = params['amp'] * (fg_i * jnp.cos(phase) + fg_r * jnp.sin(phase))
+        model_r = params["amp"] * (fg_r * jnp.cos(phase) - fg_i * jnp.sin(phase))
+        model_i = params["amp"] * (fg_i * jnp.cos(phase) + fg_r * jnp.sin(phase))
         
         # Compute loss using weights and foreground model
         return jnp.sum((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
@@ -796,7 +791,7 @@ class NuCalibrator:
         """
         loss = 0
         for _d, _w, _spat in zip(data, wgts, spat):
-            loss += self.loss_function(params, _d, _w, spec, _spat)
+            loss += self.loss_function(params, _d.real, _d.imag, _w, spec, _spat)
             
         return loss
 
@@ -868,6 +863,10 @@ class NuCalibrator:
             Effective learning rate of chosen optimizer
         maxiter : int, default=100
             Maximum number of iterations to perform
+        amp_estimate : dictionary, default=None
+            pass
+        tiptilt_estimate : dictionary, default=None
+            pass
         optimizer : str, default='adabelief'
             Optimizer used when performing gradient descent
         return_min_loss : bool, default=False
@@ -876,8 +875,12 @@ class NuCalibrator:
         opt_kwargs :
             Additional keyword arguments to be passed to the optimizer chosen. See optax documentation
             for additional details.
+
+        Returns:
+        -------
+        gains : 
         """
-        # Get frequency array
+        # Get frequency array data if not given
         if freqs is None:
             if hasattr(data, "freqs"):
                 freqs = data.freqs
@@ -891,7 +894,7 @@ class NuCalibrator:
             key = list(data.keys())[0]
             ntimes = data[key].shape[0]
 
-        # Choose optimizer
+        # Choose optimizer and initialize
         assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
         optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
                 
@@ -899,24 +902,39 @@ class NuCalibrator:
         spatial_filters = compute_spatial_filters(self.radial_reds, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
         spectral_filters, _ = dspec.dpss_operator(freqs, [0], [eta_half_width], eigenval_cutoff=eigenval_cutoff)
 
-        # TODO: compute estimate of the degenerate parameters from spatial filters
-        degen_guess = ...
+        # Separate spatial filters by polarization
+        spatial_dpss = {}
+        for pol in pols:
+            _ff = []
+            for group in self.radial_reds.get_pol(pol):
+                _ff.append(jnp.array([spatial_filters[bl] for bl in group]))
+
+            spatial_dpss[pol] = _ff
+            
+        # TODO: compute estimate of the degenerate parameters from spatial filters if not given.
         
         # Sky Model Parameters should eventually be NPOLS, Ntimes, Ncomps
         # Tip-tilts should be NPOLS, NTIMES, NFREQS, NDIMS
         # Amplitude should be NPOLS, NTIMES, NFREQS
+        weights_dict = build_nucal_wgts()
 
         # For each time and each polarization in the data calibrate
         solution, info = {}, {}
         for pol in pols:
+            initial_params = {
+                "amp": np.ones((ntimes, freqs.shape[0])),
+                "phi": np.ones((ntimes, freqs.shape[0], self.ndims)),
+                "fg_r": [np.ones((ntimes, 1)) for i in range(len(self.radial_reds))],
+                "fg_i": [np.ones((ntimes, 1)) for i in range(len(self.radial_reds))]
+            }
+            _data = np.array([data[bl] for group in self.radial_reds.get_pol(pol) for bl in group])
+            wgts = np.array([weights_dict[bl] for group in self.radial_reds.get_pol(pol) for bl in group])
             for tind in range(ntimes):
-                # TODO: form data and wgts arrays for this calibration cycle
-                pass
-
-                # TODO: pass data array and filters to calibration code
-                pass
+                fit_params, info = self._calibrate_single_integration(initial_params, optimizer, _data, wgts, maxiter=maxiter)
 
                 # TODO: unpack solution and organize it in a sensible way
+                # Consider nucal_sol object that gets added to. Nucal sol object could work like
+                # dictionary similarly to Redsol
                 pass
 
         return solution, info

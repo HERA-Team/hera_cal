@@ -57,7 +57,8 @@ setup_args = {
         'linsolve',
         'hera_qm',
         'scikit-learn',
-        'hera_filters'
+        'hera_filters',
+        'jax'
     ],
     'extras_require': {
         "all": [
