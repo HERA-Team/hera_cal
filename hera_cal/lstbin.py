@@ -757,12 +757,14 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             # iterate over individual nights to bin
             any_lst_overlap = False
             for j in range(len(data_files)):
+                utils.echo(f"Doing Night {j}/{len(data_files)}")
                 nightly_data_list = []
                 nightly_flgs_list = []
                 nightly_lst_list = []
                 nightly_nsamples_list = []
                 # iterate over files in each night, and open files that fall into this output file LST range
                 for k in range(len(data_files[j])):
+                    utils.echo(f"Doing File {k} / {len(data_files[j])}")
                     # unwrap la relative to itself
                     larr = lst_arrs[j][k]
                     tarr = time_arrs[j][k]
@@ -783,6 +785,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     # if overlap, get relevant time indicies
                     tinds = (larr > fmin) & (larr < fmax)
 
+                    utils.echo("Getting times required...")
                     # load data: only times needed for this output LST-bin file
                     hd = io.HERAData(data_files[j][k], filetype='uvh5')
                     try:
@@ -799,7 +802,9 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                                 reds.append(bl_nightly_dict[j])
                                 bls_to_load.extend(bl_nightly_dict[j])
 
+                        utils.echo("Reading file...")
                         data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
+                        utils.echo("... done.")
                         # if we want to throw away data associated with flagged antennas, throw it away.
                         if ex_ant_yaml_files is not None:
                             from hera_qm.utils import apply_yaml_flags
