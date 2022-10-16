@@ -693,6 +693,7 @@ class TestRedundantCalibrator(object):
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
+        sol0 = om.RedSol(reds, sol_dict=sol0)
 
         def wgt_func1(abs2):
             return 1.
@@ -724,6 +725,7 @@ class TestRedundantCalibrator(object):
         sol0.update(info.compute_ubls(d, sol0))
         d = {k: v.astype(np.complex64) for k, v in d.items()}
         sol0 = {k: v.astype(np.complex64) for k, v in sol0.items()}
+        sol0 = om.RedSol(reds, sol_dict=sol0)
 
         def wgt_func1(abs2):
             return 1.
@@ -752,6 +754,7 @@ class TestRedundantCalibrator(object):
         sol0.update(info.compute_ubls(d, sol0))
         d = {k: v.astype(np.complex128) for k, v in d.items()}
         sol0 = {k: v.astype(np.complex128) for k, v in sol0.items()}
+        sol0 = om.RedSol(reds, sol_dict=sol0)
 
         def wgt_func1(abs2):
             return 1.
@@ -781,6 +784,7 @@ class TestRedundantCalibrator(object):
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
+        sol0 = om.RedSol(reds, sol_dict=sol0)
 
         def wgt_func(abs2, thresh=3):
             # return 1.  # this fails the test, proving the below is effective
@@ -809,6 +813,7 @@ class TestRedundantCalibrator(object):
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
+        sol0 = om.RedSol(reds, sol_dict=sol0)
         meta, sol = info.lincal(d, sol0)
         for i in range(NANTS):
             assert sol[(i, 'Jxx')].shape == (10, 10)
@@ -832,6 +837,7 @@ class TestRedundantCalibrator(object):
         sol0.update(info.compute_ubls(d, sol0))
         d = {k: v.astype(np.complex64) for k, v in d.items()}
         sol0 = {k: v.astype(np.complex64) for k, v in sol0.items()}
+        sol0 = om.RedSol(reds, sol_dict=sol0)
         meta, sol = info.lincal(d, sol0, maxiter=12, conv_crit=1e-6)
         for bls in reds:
             ubl = sol[bls[0]]
@@ -853,6 +859,7 @@ class TestRedundantCalibrator(object):
         sol0.update(info.compute_ubls(d, sol0))
         d = {k: v.astype(np.complex128) for k, v in d.items()}
         sol0 = {k: v.astype(np.complex128) for k, v in sol0.items()}
+        sol0 = om.RedSol(reds, sol_dict=sol0)
         meta, sol = info.lincal(d, sol0, maxiter=12)
         for bls in reds:
             ubl = sol[bls[0]]
@@ -875,6 +882,7 @@ class TestRedundantCalibrator(object):
                 gains = {k: gk.astype(dtype) for k, gk in gains.items()}
                 sol0 = {k: np.ones_like(gk) for k, gk in gains.items()}
                 sol0.update(rc.compute_ubls(d, sol0))
+                sol0 = om.RedSol(reds, sol_dict=sol0)
                 meta, sol = rc.lincal(d, sol0)  # should not raise 'np.linalg.linalg.LinAlgError: SVD did not converge'
 
     def test_remove_degen_firstcal_1D(self):
@@ -922,6 +930,7 @@ class TestRedundantCalibrator(object):
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.1, shape=(1, len(freqs)))
         fc_delays = {ant: 100 * np.random.randn() for ant in gains.keys()}  # in ns
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
+        fc_gains = om.RedSol(reds, gains=fc_gains)
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
@@ -985,6 +994,7 @@ class TestRedundantCalibrator(object):
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.09, shape=(1, len(freqs)))
         fc_delays = {ant: 100 * np.random.randn() for ant in gains.keys()}  # in ns
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
+        fc_gains = om.RedSol(reds, gains=fc_gains)
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
@@ -1070,6 +1080,7 @@ class TestRedundantCalibrator(object):
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.1, shape=(1, len(freqs)))
         fc_delays = {ant: 100 * np.random.randn() for ant in gains.keys()}  # in ns
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
+        fc_gains = om.RedSol(reds, gains=fc_gains)
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
@@ -1168,6 +1179,7 @@ class TestRedundantCalibrator(object):
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.1, shape=(1, len(freqs)))
         fc_delays = {ant: 100 * np.random.randn() for ant in gains.keys()}  # in ns
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
+        fc_gains = om.RedSol(reds, gains=fc_gains)
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
@@ -1496,7 +1508,15 @@ class TestRedundantCalibrator(object):
             noisy_data[(antnum, antnum, 'xx')] = np.ones((len(times), len(freqs))) * np.sqrt(noise_var * dt * df)
         noisy_data.freqs = deepcopy(freqs)
         noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
-        cal = om.redundantly_calibrate(noisy_data, reds)
+        cal, sol = om.redundantly_calibrate(noisy_data, reds)
+        cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['g_firstcal'].items()}
+        cal['g_omnical'] = sol.gains
+        cal['v_omnical'] = sol.vis
+        cal['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in cal['g_omnical'].items()}
+        cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
+        cal['v_omnical'] = DataContainer(cal['v_omnical'])
+        cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
+                                         for ant, g in cal['g_omnical'].items()}
 
         # Compute various chi^2s
         chisq_per_bl = {}
@@ -1549,8 +1569,17 @@ class TestRedundantCalibrator(object):
         noisy_data.freqs = deepcopy(freqs)
         noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
         filtered_reds = om.filter_reds(reds, ex_ants=[6])
-        cal = om.redundantly_calibrate(noisy_data, filtered_reds)
+        cal, sol = om.redundantly_calibrate(noisy_data, filtered_reds)
         cal_copy = deepcopy(cal)
+        cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['g_firstcal'].items()}
+        cal['g_omnical'] = sol.gains
+        cal['v_omnical'] = sol.vis
+        cal['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in cal['g_omnical'].items()}
+        cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
+        cal['v_omnical'] = DataContainer(cal['v_omnical'])
+        cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
+                                         for ant, g in cal['g_omnical'].items()}
+
         om.expand_omni_sol(cal, reds, noisy_data, nsamples)
         # expand_omni_sol(cal_copy, reds, noisy_data, nsamples)
 
@@ -1620,7 +1649,15 @@ class TestRedcalAndAbscal(object):
         d.antpos = antpos
 
         # run redcal
-        cal = om.redundantly_calibrate(d, reds, oc_conv_crit=1e-13, oc_maxiter=5000)
+        cal, sol = om.redundantly_calibrate(d, reds, oc_conv_crit=1e-13, oc_maxiter=5000, logcal=True)
+        cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['g_firstcal'].items()}
+        cal['g_omnical'] = sol.gains
+        cal['v_omnical'] = sol.vis
+        cal['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in cal['g_omnical'].items()}
+        cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
+        cal['v_omnical'] = DataContainer(cal['v_omnical'])
+        cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
+                                         for ant, g in cal['g_omnical'].items()}
 
         # set up abscal
         d_omnicaled = deepcopy(d)
@@ -1672,23 +1709,12 @@ class TestRunMethods(object):
                                    pols=set([pol for pols in pol_load_list for pol in pols]))
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                rv = om.redundantly_calibrate(data, all_reds)
-                for r in ['v_omnical', 'chisq_per_ant', 'omni_meta', 'g_firstcal', 'chisq', 'gf_firstcal', 'g_omnical', 'gf_omnical', 'vf_omnical']:
+                rv, sol = om.redundantly_calibrate(data, all_reds)
+                for r in ['chisq_per_ant', 'omni_meta', 'g_firstcal', 'chisq']:
                     assert r in rv
-                for r in ['v_omnical', 'g_firstcal', 'gf_firstcal', 'g_omnical', 'gf_omnical', 'vf_omnical', 'chisq_per_ant']:
-                    for val in rv[r].values():
-                        assert val.shape == (nTimes, nFreqs)
-                        if r in ['v_omnical', 'g_firstcal', 'g_omnical']:
-                            assert val.dtype == np.complex64
-                        elif r in ['vf_omnical', 'gf_firstcal', 'gf_omnical']:
-                            assert val.dtype == bool
-
-                for flag in rv['gf_firstcal'].values():
-                    np.testing.assert_array_equal(flag, 0)
-                for k, flag in rv['gf_omnical'].items():
-                    np.testing.assert_array_equal(rv['g_omnical'][k][flag], 1.)
-                for k, flag in rv['vf_omnical'].items():
-                    np.testing.assert_array_equal(rv['v_omnical'][k][flag], 0)
+                for key, val in sol.items():
+                    assert val.shape == (nTimes, nFreqs)
+                    assert val.dtype == np.complex64
 
         if pol_mode == '4pol':
             assert rv['chisq'].shape == (nTimes, nFreqs)
@@ -1707,20 +1733,15 @@ class TestRunMethods(object):
                                pols=set([pol for pols in pol_load_list for pol in pols]))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            rv = om.redundantly_calibrate(data, all_reds)
-            rv2 = om.redundantly_calibrate(data, all_reds, prior_firstcal=deepcopy(rv['g_firstcal']))
-            rv3 = om.redundantly_calibrate(data, all_reds, prior_firstcal=deepcopy(rv['g_firstcal']),
-                                           prior_sol={**deepcopy(rv['g_omnical']), **deepcopy(rv['v_omnical'])})
+            rv1, sol1 = om.redundantly_calibrate(data, all_reds, logcal=False, omnical=False)
+            rv2, sol2 = om.redundantly_calibrate(data, all_reds, sol0=sol1, logcal=True, omnical=True)
+            rv3, sol3 = om.redundantly_calibrate(data, all_reds, sol0=sol2, logcal=False, omnical=True)
 
-        for ant in rv['g_omnical']:
-            flags = rv['gf_omnical'][ant]
-            np.testing.assert_array_equal(rv['g_omnical'][ant][~flags], rv2['g_omnical'][ant][~flags])
-            assert np.allclose(rv['g_omnical'][ant][~flags], rv3['g_omnical'][ant][~flags], atol=np.inf, rtol=1e-8)
+        for ant in sol1.gains.keys():
+            assert np.allclose(sol2[ant], sol3[ant], atol=np.inf, rtol=1e-8)
 
-        for bl in rv['v_omnical']:
-            flags = rv['vf_omnical'][bl]
-            np.testing.assert_array_equal(rv['v_omnical'][bl][~flags], rv2['v_omnical'][bl][~flags])
-            assert np.allclose(rv['v_omnical'][bl], rv3['v_omnical'][bl], atol=np.inf, rtol=1e-8)
+        for bl in sol1.vis.keys():
+            assert np.allclose(sol2[bl], sol3[bl], atol=np.inf, rtol=1e-8)
 
     def test_expand_omni_sol(self):
         # noise free test of dead antenna resurrection
@@ -1745,7 +1766,16 @@ class TestRunMethods(object):
         d.times_by_bl = {bl[0:2]: deepcopy(times) for bl in d.keys()}
 
         filtered_reds = om.filter_reds(reds, ex_ants=ex_ants, antpos=antpos, max_bl_cut=30)
-        cal = om.redundantly_calibrate(d, filtered_reds)
+        cal, sol = om.redundantly_calibrate(d, filtered_reds, logcal=True)
+        cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['g_firstcal'].items()}
+        cal['g_omnical'] = sol.gains
+        cal['v_omnical'] = sol.vis
+        cal['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in cal['g_omnical'].items()}
+        cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
+        cal['v_omnical'] = DataContainer(cal['v_omnical'])
+        cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
+                                         for ant, g in cal['g_omnical'].items()}
+
         om.expand_omni_sol(cal, reds, d, nsamples)
 
         # test that all chisqs are 0
