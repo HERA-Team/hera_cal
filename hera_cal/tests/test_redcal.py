@@ -261,6 +261,23 @@ class TestMethods(object):
             assert found_match
             found_match = False
 
+    def test_combine_reds(self):
+        reds = [[(1,2,'ee'), (2,3,'ee'), (3,4,'ee')],
+                [(1,3,'ee'), (2,4,'ee')]]
+        reds = sorted([sorted(gp) for gp in reds])
+        creds = om.combine_reds(reds[:1], reds[1:])
+        creds = sorted([sorted(gp) for gp in creds])
+        assert creds == reds
+        creds = om.combine_reds(reds, reds)
+        creds = sorted([sorted(gp) for gp in creds])
+        assert creds == reds
+        creds = om.combine_reds(reds, reds[:1])
+        creds = sorted([sorted(gp) for gp in creds])
+        assert creds == reds
+        creds = om.combine_reds(reds[:1], reds[:1])
+        creds = [sorted(gp) for gp in creds]
+        assert creds == reds[:1]
+
     def test_find_polarity_flipped_ants(self):
         # test normal operation
         antpos = hex_array(3, split_core=False, outriggers=0)
@@ -374,7 +391,7 @@ class TestRedSol(object):
         assert rs[1, 'Jee'][0, 0] == 1
         assert rs[0, 1, 'ee'][0, 0] == 0
 
-    def test_set_vis_from_data(self):
+    def test_update_vis_from_data(self):
         NANTS = 18
         antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
@@ -386,15 +403,59 @@ class TestRedSol(object):
         for ant in gains:
             np.testing.assert_array_almost_equal(gains[ant], sol.gains[ant])
         # try without weights
-        sol.set_vis_from_data(DataContainer(d))
+        sol.update_vis_from_data(DataContainer(d))
         for red in reds:
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
         # try with weights
-        sol.set_vis_from_data(DataContainer(d), wgts={bl: 1.0 + i for i, bl in enumerate(d)})
+        sol.update_vis_from_data(DataContainer(d), wgts={bl: 1.0 + i for i, bl in enumerate(d)})
         for red in reds:
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
+        # try incrementally with subsets of reds
+        sol = om.RedSol(reds[:-1], gains=gains)
+        sol.update_vis_from_data(DataContainer(d))
+        sol.update_vis_from_data(DataContainer(d), reds=reds[-1:])
+        for red in reds:
+            for bl in red:
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
+
+    def test_extend_ubls(self):
+        NANTS = 18
+        antpos = linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
+        sol1 = om.RedSol(reds, gains=gains)
+        sol1.extend_ubls(d)
+        sol2 = om.RedSol(reds[:-1], gains=gains)
+        sol2.extend_ubls(d, reds_to_solve=reds[-1:])
+        sol3 = om.RedSol(reds[:1], gains=gains)
+        wgts = {bl:np.ones_like(v) for bl, v in d.items()}
+        sol3.extend_ubls(d, wgts=wgts, reds_to_solve=reds[1:])
+        for sol in [sol1, sol2, sol3]:
+            for red in reds:
+                for bl in red:
+                    np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
+
+    def test_extend_ants(self):
+        NANTS = 18
+        antpos = linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
+        ex_ants = [antpol for antpol in gains.keys() if antpol[0] == 5]
+        freds = om.filter_reds(reds, ex_ants=ex_ants)
+        sol1 = om.RedSol(freds, gains=gains, vis=true_vis)
+        sol1.extend_ants(d, extended_reds=reds)
+        sol2 = om.RedSol(reds, gains=gains, vis=true_vis)
+        sol2.gains = {k:v for k,v in sol2.gains.items()
+                      if k not in ex_ants}
+        sol2.extend_ants(d)
+        sol3 = om.RedSol(freds, gains=gains, vis=true_vis)
+        wgts = {bl:np.ones_like(v) for bl, v in d.items()}
+        sol3.extend_ants(d, wgts=wgts, extended_reds=reds)
+        for sol in [sol1, sol2, sol3]:
+            for antpol, gain in gains.items():
+                    np.testing.assert_array_almost_equal(gain, sol.gains[antpol])
 
     def test_remove_degen(self):
         NANTS = 18

@@ -448,12 +448,15 @@ def test_RedDataContainer():
     reverse_data = datacontainer.DataContainer({red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reverse_reds})
     rdata4 = datacontainer.RedDataContainer(deepcopy(reverse_data), reverse_reds)
     rdata5 = datacontainer.RedDataContainer(deepcopy(reverse_data), reds)
+    # build an incomplete datacontainer, then finish it
+    rdata6 = datacontainer.RedDataContainer(deepcopy(data), reds[:-1])
+    rdata6.build_red_keys(reds)
 
     # make sure that the data for a redundant group are being accessed from the same place in memory
-    for i, rdata in enumerate([rdata1, rdata2, rdata3, rdata4, rdata5]):
+    for i, rdata in enumerate([rdata1, rdata2, rdata3, rdata6, rdata4, rdata5]):
         for red in rdata.reds:
             for bl in red:
-                if i < 4:
+                if i < 5:
                     assert id(rdata[bl]) == id(rdata[red[0]])
                 else:
                     assert id(rdata[reverse_bl(bl)]) == id(rdata[reverse_bl(red[0])])

@@ -285,6 +285,12 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
 
     return reds
 
+def combine_reds(red1, red2):
+    '''Combine the groups in two separate lists of redundancies into one which
+     does not contain repeats.'''
+    comb_reds = set(tuple(sorted(gp)) for gp in red1 + red2)
+    return [[bl for bl in gp] for gp in comb_reds]
+
 
 def reds_to_antpos(reds, tol=1e-10):
     '''Computes a set of antenna positions consistent with the given redundancies.
@@ -442,12 +448,11 @@ class RedSol():
         if len(sol_dict) > 0:
             if (len(gains) > 0) or (len(vis) > 0):
                 raise ValueError('If sol_dict is not empty, both gains and vis must be.')
-            self.gains, self.vis = get_gains_and_vis_from_sol(sol_dict)
+            self.gains, vis = get_gains_and_vis_from_sol(sol_dict)
         else:
             self.gains = gains
-            self.vis = vis
         self.reds = reds
-        self.vis = RedDataContainer(self.vis, reds=self.reds)
+        self.vis = RedDataContainer(vis, reds=self.reds)
 
     def __getitem__(self, key):
         '''Get underlying gain or visibility, depending on the length of the key.'''
@@ -568,7 +573,7 @@ class RedSol():
             np.divide(data, gij, out=data, where=(gij != 0))
             return data
 
-    def set_vis_from_data(self, data, wgts={}):
+    def update_vis_from_data(self, data, wgts={}, reds=None):
         '''Performs redundant averaging of data using reds and gains stored in this RedSol object and
            stores the result as the redundant solution.
 
@@ -576,15 +581,92 @@ class RedSol():
             data: DataContainer containing visibilities to redundantly average.
             wgts: optional DataContainer weighting visibilities in averaging.
                 If not provided, it is assumed that all data are uniformly weighted.
+            reds: subset of reds to update, otherwise update all
 
         Returns:
             None
         '''
-        vis = {}
-        for grp in self.reds:
-            vis[grp[0]] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
-                                     weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
-        self.vis = RedDataContainer(vis, reds=self.reds)
+        if reds is None:
+            new_reds = self.reds
+        else:
+            new_reds = combine_reds(self.reds, reds)  # XXX need to ensure no repeats
+        self.vis.build_red_keys(new_reds)
+        for grp in new_reds:
+            # reuse bl index for this group, if we already have one
+            ubls = [bl for bl in grp if bl in self.vis]
+            if len(ubls) == 0:
+                ubl = grp[0]
+            else:
+                ubl = ubls[0]
+            self.vis[ubl] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
+                                        weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
+
+    def extend_ubls(self, data, wgts={}, reds_to_solve=None):
+        '''Performs redundant averaging of ubls not already solved for in RedSol.vis
+        and adds them to RedSol.vis
+
+        Arguments:
+            data: DataContainer containing visibilities to redundantly average.
+            wgts: optional DataContainer weighting visibilities in averaging.
+                If not provided, it is assumed that all data are uniformly weighted.
+            reds: subset of reds to update, otherwise update all
+
+        Returns:
+            None
+        '''
+        if reds_to_solve is None:
+            unsolved_reds = [gp for gp in self.reds if not gp[0] in self.vis]
+            reds_to_solve = filter_reds(unsolved_reds, ants=self.gains.keys())  # XXX does keys need to be a list?
+        self.update_vis_from_data(data, wgts=wgts, reds=reds_to_solve)
+
+    def extend_ants(self, data, wgts={}, extended_reds=None):
+        '''Extend redundant solutions to antennas gains not already solved for
+        using redundant baseline solutions in RedSol.vis, adding them to RedSol.gains.
+
+        Arguments:
+            data: DataContainer containing visibilities to redundantly average.
+            wgts: optional DataContainer weighting visibilities in averaging.
+                If not provided, it is assumed that all data are uniformly weighted.
+            extended_reds: Broader list of reds to update, otherwise use existing reds.
+
+        Returns:
+            None
+        '''
+        if extended_reds is None:
+            extended_reds = self.reds
+        gsum = {}
+        gwgt = {}
+        for grp in extended_reds:
+            try:
+                u = self.vis[grp[0]]  # RedDataContainer will take care of mapping.
+            except(KeyError):
+                # no redundant visibility solution for this group, so skip
+                continue
+            # loop through baselines and select ones that have one solved antenna
+            # and one unsolved to solve for.
+            for bl in grp:
+                a_i, a_j = split_bl(bl)
+                if a_i not in self.gains:
+                    if a_j not in self.gains:
+                        # no solution for either antenna in this baseline, so skip
+                        continue
+                    _gsum = data[bl] * (u.conj() * self[a_j])
+                    _gwgt = np.abs(u)**2 * np.abs(self[a_j])**2
+                    if len(wgts) > 0:
+                        _gsum *= wgts[bl]
+                        _gwgt *= wgts[bl]
+                    gsum[a_i] = gsum.get(a_i, 0) + _gsum
+                    gwgt[a_i] = gwgt.get(a_i, 0) + _gwgt
+                elif a_j not in self.gains:
+                    _gsum = data[bl].conj() * (u * self[a_i])
+                    _gwgt = np.abs(u)**2 * np.abs(self[a_i])**2
+                    if len(wgts) > 0:
+                        _gsum *= wgts[bl]
+                        _gwgt *= wgts[bl]
+                    gsum[a_j] = gsum.get(a_j, 0) + _gsum
+                    gwgt[a_j] = gwgt.get(a_j, 0) + _gwgt
+        for k in gsum.keys():
+            self[k] = np.divide(gsum[k], gwgt[k], where=(gwgt[k] > 0))
 
     def chisq(self, data, data_wgts, gain_flags=None):
         """Computes chi^2 defined as: chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)|^2 * wgts_ij)
@@ -1092,7 +1174,7 @@ class RedundantCalibrator:
                 'polarity_flips': {ant: np.ones(Ntimes, dtype=bool) * bool(ant in flipped) for ant in ants}}
         gains = {ant: np.exp(2j * np.pi * dly * freqs + 1j * offs[ant]).astype(dtype) for ant, dly in dlys.items()}
         sol = RedSol(self.reds, gains=gains)
-        sol.set_vis_from_data(data)  # not strictly necessary now, but probably should be done
+        sol.update_vis_from_data(data)  # not strictly necessary now, but probably should be done
         return meta, sol
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
@@ -1271,9 +1353,6 @@ def is_redundantly_calibratable(antpos, bl_error_tol=1.0, require_coplanarity=Tr
             return False
     return (rc.count_degens() == rc.count_degens(assume_redundant=False))
 
-from linsolve import ast_getterms, jointerms, conjterm, LinearEquation
-import ast
-from scipy.sparse import csc_matrix
 
 def predict_chisq_per_bl(reds, just_do_it=False):
     '''Predict the expected value of chi^2 for each baselines (equivalently, the

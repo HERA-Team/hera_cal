@@ -504,6 +504,7 @@ class RedDataContainer(DataContainer):
     '''Structure for containing redundant visibilities that can be accessed by any
         one of the redundant baseline keys (or their conjugate).'''
 
+    # XXX remove antpos
     def __init__(self, data, reds=None, antpos=None, bl_error_tol=1.0):
         '''Creates a RedDataContainer.
 
@@ -524,33 +525,46 @@ class RedDataContainer(DataContainer):
         super().__init__(data)
 
         # Figure out reds
-        if reds is not None:
-            self.reds = reds
-        else:
+        if reds is None:
             from .redcal import get_reds
             if antpos is not None:
-                self.reds = get_reds(antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
+                reds = get_reds(antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
             elif hasattr(self, 'antpos') and self.antpos is not None:
-                self.reds = get_reds(self.antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
+                reds = get_reds(self.antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
             else:
                 raise ValueError('Must provide reds, antpos, or have antpos available at data.antpos')
+        self.build_red_keys(reds)
 
+    def build_red_keys(self, reds):
+        '''Build the dictionaries that map baselines to redundant keys.
+
+        Arguments:
+            reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol)
+        '''
         # Map all redundant keys to the same underlying data
+        self.reds = reds
         self._bl_to_red_key = {}
         self._red_key_to_bls = {}
-        for red in self.reds:
-            bls_in_data = [bl for bl in red if self.has_key(bl)]
-            if len(bls_in_data) > 1:
+        for gp in self.reds:
+            bls_in_data = [bl for bl in gp if self.has_key(bl)]
+            if len(bls_in_data) == 0:
+                # we don't have a key for this redundancy in the data
+                # so just pick one in case we want to add it later
+                ubl = gp[0]
+            elif len(bls_in_data) == 1:
+                # we have key picked for this redundancy in the data
+                # so use it
+                ubl = bls_in_data[0]
+            else:
                 raise ValueError(f'RedDataContainer can only be constructed with (at most) one baseline per group, \
                                  but this data has the following redundant baselines: {bls_in_data}')
-            if len(bls_in_data) > 0:
-                self._red_key_to_bls[bls_in_data[0]] = []
-                self._red_key_to_bls[reverse_bl(bls_in_data[0])] = []
-                for bl in red:
-                    self._bl_to_red_key[bl] = bls_in_data[0]
-                    self._bl_to_red_key[reverse_bl(bl)] = reverse_bl(bls_in_data[0])
-                    self._red_key_to_bls[bls_in_data[0]].append(bl)
-                    self._red_key_to_bls[reverse_bl(bls_in_data[0])].append(reverse_bl(bl))
+            self._red_key_to_bls[ubl] = []
+            self._red_key_to_bls[reverse_bl(ubl)] = []
+            for bl in gp:
+                self._bl_to_red_key[bl] = ubl
+                self._bl_to_red_key[reverse_bl(bl)] = reverse_bl(ubl)
+                self._red_key_to_bls[ubl].append(bl)
+                self._red_key_to_bls[reverse_bl(ubl)].append(reverse_bl(bl))
 
     def get_ubl_key(self, key):
         '''Returns the key used interally denote the data stored. Useful for del'''
