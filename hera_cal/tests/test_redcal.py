@@ -442,7 +442,7 @@ class TestRedSol(object):
         antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
-        ex_ants = [antpol for antpol in gains.keys() if antpol[0] == 5]
+        ex_ants = [antpol for antpol in gains.keys() if antpol[0] in (5, 6)]
         freds = om.filter_reds(reds, ex_ants=ex_ants)
         sol1 = om.RedSol(freds, gains=gains, vis=true_vis)
         sol1.extend_ants(d, extended_reds=reds)

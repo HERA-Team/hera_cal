@@ -327,6 +327,7 @@ def reds_to_antpos(reds, tol=1e-10):
     return antpos
 
 
+# XXX need to deprecate this function by standardizing interfaces
 def get_gains_and_vis_from_sol(sol):
     """Splits a sol dictionary into len(key)==2 entries, taken to be gains,
     and len(key)==3 entries, taken to be model visibrilities."""
@@ -335,6 +336,7 @@ def get_gains_and_vis_from_sol(sol):
     return g, v
 
 
+# XXX deprecate this function by ensuring nans/infs don't get made
 def make_sol_finite(sol):
     '''Replaces nans and infs in solutions, which are usually the result of visibilities that are
     identically equal to 0. Modifies sol (which is a dictionary with gains and visibilities) in place,
@@ -432,6 +434,7 @@ def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1p
 class RedSol():
     '''Object for containing solutions to redundant calibraton, namely gains and
     unique-baseline visibilities, along with a variety of convenience methods.'''
+    # XXX deprecate sol_dict
     def __init__(self, reds, gains={}, vis={}, sol_dict={}):
         '''Initializes RedSol object.
 
@@ -503,6 +506,7 @@ class RedSol():
         else:
             return default
 
+    # XXX deprecate make_sol_finite
     def make_sol_finite(self):
         '''Replaces nans and infs in this object, see redcal.make_sol_finite() for details.'''
         make_sol_finite(self)
@@ -589,7 +593,7 @@ class RedSol():
         if reds is None:
             new_reds = self.reds
         else:
-            new_reds = combine_reds(self.reds, reds)  # XXX need to ensure no repeats
+            new_reds = combine_reds(self.reds, reds)  # ensures no repeats
         self.vis.build_red_keys(new_reds)
         for grp in new_reds:
             # reuse bl index for this group, if we already have one
@@ -616,7 +620,7 @@ class RedSol():
         '''
         if reds_to_solve is None:
             unsolved_reds = [gp for gp in self.reds if not gp[0] in self.vis]
-            reds_to_solve = filter_reds(unsolved_reds, ants=self.gains.keys())  # XXX does keys need to be a list?
+            reds_to_solve = filter_reds(unsolved_reds, ants=self.gains.keys())
         self.update_vis_from_data(data, wgts=wgts, reds=reds_to_solve)
 
     def extend_ants(self, data, wgts={}, extended_reds=None):
@@ -719,7 +723,6 @@ def _check_polLists_minV(polLists):
     (e.g. ['ne','en']) so that the 4pol_minV can be assumed."""
 
     for polList in polLists:
-        ps = list()
         if len(polList) == 1:
             if split_pol(polList[0])[0] != split_pol(polList[0])[1]:
                 return False
@@ -1097,6 +1100,7 @@ class RedundantCalibrator:
         else:  # 'u' = unique baseline solution
             return 'u_%d_%s' % (self._ubl_to_reds_index[k], k[-1])
 
+    # XXX remove in favor of RedSol.update_vis_from_data
     def compute_ubls(self, data, gains):
         """Given a set of guess gain solutions, return a dictionary of calibrated visbilities
         averged over a redundant group. Not strictly necessary for typical operation."""
@@ -1106,7 +1110,7 @@ class RedundantCalibrator:
         ubl_sols = {}
         for ubl, blgrp in enumerate(self.reds):
             d_gp = [dc[bl] for bl in blgrp]
-            ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
+            ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)
         return ubl_sols
 
     def firstcal(self, data, freqs, maxiter=100, sparse=False, mode='default', flip_pnt=(np.pi / 2)):
@@ -1174,7 +1178,7 @@ class RedundantCalibrator:
                 'polarity_flips': {ant: np.ones(Ntimes, dtype=bool) * bool(ant in flipped) for ant in ants}}
         gains = {ant: np.exp(2j * np.pi * dly * freqs + 1j * offs[ant]).astype(dtype) for ant, dly in dlys.items()}
         sol = RedSol(self.reds, gains=gains)
-        sol.update_vis_from_data(data)  # not strictly necessary now, but probably should be done
+        sol.update_vis_from_data(data)  # not strictly necessary, but probably should be done
         return meta, sol
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
@@ -1267,6 +1271,7 @@ class RedundantCalibrator:
         sol = RedSol(self.reds, sol_dict={self.unpack_sol_key(k): sol[k] for k in sol.keys()})
         return meta, sol
 
+    # XXX remove
     def remove_degen_gains(self, gains, degen_gains=None, mode='phase'):
         """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
         function in nominally intended for use with firstcal, which returns (phase/delay) solutions
@@ -1287,6 +1292,7 @@ class RedundantCalibrator:
         """
         return remove_degen_gains(self.reds, gains, degen_gains=degen_gains, mode=mode, pol_mode=self.pol_mode)
 
+    # XXX remove
     def remove_degen(self, sol, degen_sol=None):
         """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
         function is nominally intended for use with solutions from logcal, omnical, or lincal, which
@@ -1354,29 +1360,22 @@ def is_redundantly_calibratable(antpos, bl_error_tol=1.0, require_coplanarity=Tr
     return (rc.count_degens() == rc.count_degens(assume_redundant=False))
 
 
-def predict_chisq_per_bl(reds, just_do_it=False):
+def predict_chisq_per_bl(reds, pol_separable=None):
     '''Predict the expected value of chi^2 for each baselines (equivalently, the
     effective number of degrees of freedom). This is calculated from the logcal
     A and B matrices and their respective data resolution matrices.
 
     Arguments:
         reds: list of list of baselines (with polarizations) considered redundant
-        just_do_it: a recursive flag to force direct computation without checking
-            whether polarizations are separable.
+        pol_separable: whether polarizations are separable, if known. If None, will
+            be computed.
 
     Returns:
         predicted_chisq_per_bl: dictionary mapping baseline tuples to the expected
             value of chi^2 = |Vij - gigj*Vi-j|^2/sigmaij^2.
     '''
-    # figure out whether different pols are ever paired within redundant groups
-    pol_separable = False
-    if not just_do_it:
-        pol_gps = [set([antpol[-1] for bl in gp for antpol in split_bl(bl)]) for gp in reds]
-        pols = set()
-        for gp in pol_gps:
-            pols.update(gp)
-        npols = len(pols)
-        pol_separable = (npols > 1 and np.all([len(gp) == 1 for gp in pol_gps]))
+    if pol_separable is None:
+        pol_separable = (parse_pol_mode(reds) == '2pol')
     if pol_separable:
         # pols are separable and can be solved independently for significant speedup
         reds_by_pol = {}
@@ -1385,7 +1384,7 @@ def predict_chisq_per_bl(reds, just_do_it=False):
             reds_by_pol[pol] = reds_by_pol.get(pol, []) + [gp]
         predicted_chisq_per_bl = {}
         for pol, polreds in reds_by_pol.items():
-            predicted_chisq_per_bl.update(predict_chisq_per_bl(polreds, just_do_it=True))
+            predicted_chisq_per_bl.update(predict_chisq_per_bl(polreds, pol_separable=False))
         return predicted_chisq_per_bl
     else:
         # pols are not further separable and we need to build full equations
@@ -1502,6 +1501,7 @@ def normalized_chisq(data, data_wgts, reds, vis_sols, gains):
     return chisq, chisq_per_ant
 
 
+# XXX do we need this?
 def _get_pol_load_list(pols, pol_mode='1pol'):
     '''Get a list of lists of polarizations to load simultaneously, depending on the polarizations
     in the data and the pol_mode (which can be 1pol, 2pol, 4pol, or 4pol_minV)'''
@@ -1515,6 +1515,7 @@ def _get_pol_load_list(pols, pol_mode='1pol'):
     return pol_load_list
 
 
+# XXX deprecate in favor of a clear RedSol<->cal solution
 def rekey_vis_sols(cal, reds):
     '''Rekey visibility solutions in cal['v_omnical'] and cal['vf_omnical'] using the first entry in
     each red in reds. even if they were originally keyed by a different entry.
