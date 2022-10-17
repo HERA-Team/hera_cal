@@ -371,16 +371,19 @@ def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1p
     # Check supported pol modes
     assert pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], f'Unrecognized pol_mode: {pol_mode}'
     assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
-    ants = gains.keys()
-    gainPols = np.array([ant[1] for ant in gains])  # gainPols is list of antpols, one per antenna
+    ants = list(set(ant for gp in reds for bl in gp
+                    for ant in split_bl(bl)))
+    gainPols = np.array([ant[1] for ant in ants])  # gainPols is list of antpols, one per antenna
     antpols = list(set(gainPols))
 
     # if mode is 2pol, run as two 1pol remove degens
     if pol_mode == '2pol':
         pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
         pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
-        new_gains = remove_degen_gains(reds, pol0_gains, degen_gains=degen_gains, mode=mode, pol_mode='1pol')
-        new_gains.update(remove_degen_gains(reds, pol1_gains, degen_gains=degen_gains, mode=mode, pol_mode='1pol'))
+        reds0 = [gp for gp in reds if gp[0][-1] in join_pol(antpols[0], antpols[0])]
+        reds1 = [gp for gp in reds if gp[0][-1] in join_pol(antpols[1], antpols[1])]
+        new_gains = remove_degen_gains(reds0, pol0_gains, degen_gains=degen_gains, mode=mode, pol_mode='1pol')
+        new_gains.update(remove_degen_gains(reds1, pol1_gains, degen_gains=degen_gains, mode=mode, pol_mode='1pol'))
         return new_gains
 
     # Extract gains and degenerate gains and put into numpy arrays
@@ -395,7 +398,7 @@ def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1p
 
     # Build matrices for projecting gain degeneracies
     antpos = reds_to_antpos(reds)
-    positions = np.array([antpos[ant[0]] for ant in gains])
+    positions = np.array([antpos[ant[0]] for ant in ants])
     if pol_mode == '1pol' or pol_mode == '4pol_minV':
         # In 1pol and 4pol_minV, the phase degeneracies are 1 overall phase and 2 tip-tilt terms
         # Rgains maps gain phases to degenerate parameters (either average phases or phase slopes)
@@ -975,6 +978,7 @@ def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=(np.pi / 2)):
         # calculate shifted peak for sub-bin resolution
         k0 = vfft[times, (inds - 1) % Nfreqs]
         k1 = vfft[times, inds]
+        k1 = np.where(k1 == 0, 1, k1)  # prevents nans
         k2 = vfft[times, (inds + 1) % Nfreqs]
 
         alpha1 = (k0 / k1).real
@@ -1239,8 +1243,12 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-        sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0}
-        ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0, wgts=wgts, sparse=sparse)
+        sol0pack = {self.pack_sol_key(k): v for k, v in sol0.items()
+                    if len(k) == 2}
+        for ubl in self._ubl_to_reds_index.keys():
+            sol0pack[self.pack_sol_key(ubl)] = sol0[ubl]
+        ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0pack,
+                          wgts=wgts, sparse=sparse)
         meta, prms = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, verbose=verbose, mode=mode)
         prms = {self.unpack_sol_key(k): v for k, v in prms.items()}
         make_sol_finite(prms)  # XXX necessary?
@@ -1273,8 +1281,12 @@ class RedundantCalibrator:
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
 
-        sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0}
-        ls = self._solver(OmnicalSolver, data, sol0=sol0, wgts=wgts, gain=gain)
+        sol0pack = {self.pack_sol_key(k): v for k, v in sol0.items()
+                    if len(k) == 2}
+        for ubl in self._ubl_to_reds_index.keys():
+            sol0pack[self.pack_sol_key(ubl)] = sol0[ubl]
+        ls = self._solver(OmnicalSolver, data, sol0=sol0pack,
+                          wgts=wgts, gain=gain)
         meta, prms = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after, wgt_func=wgt_func)
         prms = {self.unpack_sol_key(k): v for k, v in prms.items()}
         make_sol_finite(prms)  # XXX necessary?
