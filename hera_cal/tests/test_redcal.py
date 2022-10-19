@@ -262,21 +262,19 @@ class TestMethods(object):
             found_match = False
 
     def test_combine_reds(self):
-        reds = [[(1,2,'ee'), (2,3,'ee'), (3,4,'ee')],
-                [(1,3,'ee'), (2,4,'ee')]]
-        reds = sorted([sorted(gp) for gp in reds])
-        creds = om.combine_reds(reds[:1], reds[1:])
-        creds = sorted([sorted(gp) for gp in creds])
-        assert creds == reds
-        creds = om.combine_reds(reds, reds)
-        creds = sorted([sorted(gp) for gp in creds])
-        assert creds == reds
-        creds = om.combine_reds(reds, reds[:1])
-        creds = sorted([sorted(gp) for gp in creds])
-        assert creds == reds
-        creds = om.combine_reds(reds[:1], reds[:1])
-        creds = [sorted(gp) for gp in creds]
-        assert creds == reds[:1]
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        reds0 = om.get_reds(antpos, pols=['nn'])
+        reds1 = om.filter_reds(reds0, ex_ants=[0])
+        reds2 = om.filter_reds(reds0, ex_ants=[6])
+
+        comb1 = om.combine_reds(reds1, reds2)
+        comb2 = om.combine_reds(reds1, reds2, unfiltered_reds=reds0)
+        assert [(0, 4, 'nn')] in comb1
+        assert [(2, 6, 'nn')] in comb1
+        assert [(0, 4, 'nn'), (2, 6, 'nn')] in comb2
+        assert comb2 == om.filter_reds(reds0, ex_bls=[(0, 6, 'nn')])
+        assert len(comb1) == len(reds0) + 1
+        assert len(comb2) == len(reds0) - 1
 
     def test_find_polarity_flipped_ants(self):
         # test normal operation
@@ -430,7 +428,7 @@ class TestRedSol(object):
         sol2 = om.RedSol(reds[:-1], gains=gains)
         sol2.extend_ubls(d, reds_to_solve=reds[-1:])
         sol3 = om.RedSol(reds[:1], gains=gains)
-        wgts = {bl:np.ones_like(v) for bl, v in d.items()}
+        wgts = {bl: np.ones_like(v) for bl, v in d.items()}
         sol3.extend_ubls(d, wgts=wgts, reds_to_solve=reds[1:])
         for sol in [sol1, sol2, sol3]:
             for red in reds:
@@ -447,15 +445,15 @@ class TestRedSol(object):
         sol1 = om.RedSol(freds, gains=gains, vis=true_vis)
         sol1.extend_ants(d, extended_reds=reds)
         sol2 = om.RedSol(reds, gains=gains, vis=true_vis)
-        sol2.gains = {k:v for k,v in sol2.gains.items()
+        sol2.gains = {k: v for k, v in sol2.gains.items()
                       if k not in ex_ants}
         sol2.extend_ants(d)
         sol3 = om.RedSol(freds, gains=gains, vis=true_vis)
-        wgts = {bl:np.ones_like(v) for bl, v in d.items()}
+        wgts = {bl: np.ones_like(v) for bl, v in d.items()}
         sol3.extend_ants(d, wgts=wgts, extended_reds=reds)
         for sol in [sol1, sol2, sol3]:
             for antpol, gain in gains.items():
-                    np.testing.assert_array_almost_equal(gain, sol.gains[antpol])
+                np.testing.assert_array_almost_equal(gain, sol.gains[antpol])
 
     def test_remove_degen(self):
         NANTS = 18
@@ -1516,7 +1514,7 @@ class TestRedundantCalibrator(object):
         cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
         cal['v_omnical'] = DataContainer(cal['v_omnical'])
         cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
-                                         for ant, g in cal['g_omnical'].items()}
+                            for ant, g in cal['g_omnical'].items()}
 
         # Compute various chi^2s
         chisq_per_bl = {}
@@ -1578,7 +1576,7 @@ class TestRedundantCalibrator(object):
         cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
         cal['v_omnical'] = DataContainer(cal['v_omnical'])
         cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
-                                         for ant, g in cal['g_omnical'].items()}
+                            for ant, g in cal['g_omnical'].items()}
 
         om.expand_omni_sol(cal, reds, noisy_data, nsamples)
         # expand_omni_sol(cal_copy, reds, noisy_data, nsamples)
@@ -1657,7 +1655,7 @@ class TestRedcalAndAbscal(object):
         cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
         cal['v_omnical'] = DataContainer(cal['v_omnical'])
         cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
-                                         for ant, g in cal['g_omnical'].items()}
+                            for ant, g in cal['g_omnical'].items()}
 
         # set up abscal
         d_omnicaled = deepcopy(d)
@@ -1774,7 +1772,7 @@ class TestRunMethods(object):
         cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
         cal['v_omnical'] = DataContainer(cal['v_omnical'])
         cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
-                                         for ant, g in cal['g_omnical'].items()}
+                            for ant, g in cal['g_omnical'].items()}
 
         om.expand_omni_sol(cal, reds, d, nsamples)
 
