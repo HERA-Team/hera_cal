@@ -285,11 +285,47 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
 
     return reds
 
-def combine_reds(red1, red2):
+
+def combine_reds(reds1, reds2, unfiltered_reds=None):
     '''Combine the groups in two separate lists of redundancies into one which
-     does not contain repeats.'''
-    comb_reds = set(tuple(sorted(gp)) for gp in red1 + red2)
-    return [[bl for bl in gp] for gp in comb_reds]
+    does not contain repeats.
+
+    Arguments:
+        reds1: list of list or redundant baseline tuples to combine
+        reds2: another list of list or redundant baseline tuples to combine
+        unfiltered_reds: optional list of list of redundant baselines. Used to combine
+            non-overlapping but redundant groups to get the most accurate answers.
+
+    Returns:
+        combined_reds: list of list of redundant baselines, combining reds1 and reds2
+            as much as possible
+     '''
+    if unfiltered_reds is not None:
+        bls_to_use = set([bl for reds in [reds1, reds2] for red in reds for bl in red])
+        combined_reds = filter_reds(unfiltered_reds, bls=bls_to_use)
+    else:
+        # if unfilterd reds is not provided, try to combine the groups as much as possible.
+        # N.B. this can still give wrong answers if there are baselines redundant with each
+        # other but unique to reds1 and reds2 respectively
+        reds1_sets = [set(red) for red in reds1]
+        reds1_map = {bl: n for n, red1_set in enumerate(reds1_sets) for bl in red1_set}
+        for red2 in reds2:
+            # figure out if any baseline in this group corresponds to a baseline in reds1
+            matched_group = None
+            for bl in red2:
+                if bl in reds1_map:
+                    matched_group = reds1_map[bl]
+            if matched_group is not None:
+                # if there's a match, take the union of the two groups
+                reds1_sets[matched_group] |= set(red2)
+            else:
+                # otherwise, make a new group
+                reds1_sets.append(set(red2))
+        combined_reds = [list(red) for red in reds1_sets]
+
+    # sort result in a useful way
+    combined_reds = [sorted(red, key=lambda x: x[0]) for red in sorted(combined_reds, key=len, reverse=True)]
+    return combined_reds
 
 
 def reds_to_antpos(reds, tol=1e-10):
@@ -606,7 +642,7 @@ class RedSol():
             else:
                 ubl = ubls[0]
             self.vis[ubl] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
-                                        weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
+                                       weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
 
     def extend_ubls(self, data, wgts={}, reds_to_solve=None):
         '''Performs redundant averaging of ubls not already solved for in RedSol.vis
@@ -1986,10 +2022,10 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 else:  # perform partial i/o
                     data, _, nsamples = hd.read(time_range=(hd.times[tinds][0], hd.times[tinds][-1]), frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal, sol = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
-                                            logcal=True,
-                                            oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
-                                            check_every=check_every, check_after=check_after,
-                                            max_dims=max_dims, gain=gain)
+                                                 logcal=True,
+                                                 oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
+                                                 check_every=check_every, check_after=check_after,
+                                                 max_dims=max_dims, gain=gain)
                 # XXX pasted this stuff here to get it out of redundantly_calibrate, but I think it needs to be
                 # pushed even farther downstream
                 cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['g_firstcal'].items()}
@@ -1999,7 +2035,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
                 cal['v_omnical'] = DataContainer(cal['v_omnical'])
                 cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
-                                         for ant, g in cal['g_omnical'].items()}
+                                    for ant, g in cal['g_omnical'].items()}
 
                 expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
 
