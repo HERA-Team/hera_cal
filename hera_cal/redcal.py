@@ -363,15 +363,6 @@ def reds_to_antpos(reds, tol=1e-10):
     return antpos
 
 
-# XXX need to deprecate this function by standardizing interfaces
-def get_gains_and_vis_from_sol(sol):
-    """Splits a sol dictionary into len(key)==2 entries, taken to be gains,
-    and len(key)==3 entries, taken to be model visibrilities."""
-    g = {key: val for key, val in sol.items() if len(key) == 2}
-    v = {key: val for key, val in sol.items() if len(key) == 3}
-    return g, v
-
-
 # XXX deprecate this function by ensuring nans/infs don't get made
 def make_sol_finite(sol):
     '''Replaces nans and infs in solutions, which are usually the result of visibilities that are
@@ -490,7 +481,8 @@ class RedSol():
         if len(sol_dict) > 0:
             if (len(gains) > 0) or (len(vis) > 0):
                 raise ValueError('If sol_dict is not empty, both gains and vis must be.')
-            self.gains, vis = get_gains_and_vis_from_sol(sol_dict)
+            self.gains = {key: val for key, val in sol_dict.items() if len(key) == 2}
+            vis = {key: val for key, val in sol_dict.items() if len(key) == 3}
         else:
             self.gains = gains
         self.reds = reds
