@@ -955,7 +955,8 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = rc.remove_degen(sol)
-        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        g = {k: v for k, v in sol_rd.items() if len(k) == 2}
+        v = {k: v for k, v in sol_rd.items() if len(k) == 3}
         ants = [key for key in sol_rd.keys() if len(key) == 2]
         gainSols = np.array([sol_rd[ant] for ant in ants])
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
@@ -972,7 +973,8 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = rc.remove_degen(sol, degen_sol=gains)
-        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        g = {k: v for k, v in sol_rd.items() if len(k) == 2}
+        v = {k: v for k, v in sol_rd.items() if len(k) == 3}
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
                                    for key2 in g.keys() if key1[1] == 'Jxx' and key2[1] == 'Jxx' and key1[0] != key2[0]], axis=0)
         degenMeanSqAmplitude = np.mean([np.abs(gains[key1] * gains[key2]) for key1 in g.keys()
@@ -1027,7 +1029,8 @@ class TestRedundantCalibrator(object):
         visPols = np.array([[bl[2][0], bl[2][1]] for bl in bl_pairs])
         bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
         gainSols = np.array([sol_rd[ant] for ant in ants])
-        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        g = {k: v for k, v in sol_rd.items() if len(k) == 2}
+        v = {k: v for k, v in sol_rd.items() if len(k) == 3}
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
                                    for key2 in g.keys() if key1[1] == 'Jxx' and key2[1] == 'Jxx' and key1[0] != key2[0]], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1, decimal=10)
@@ -1045,7 +1048,8 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = rc.remove_degen(sol, degen_sol=gains)
-        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        g = {k: v for k, v in sol_rd.items() if len(k) == 2}
+        v = {k: v for k, v in sol_rd.items() if len(k) == 3}
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
                                    for key2 in g.keys() if key1[1] == 'Jxx' and key2[1] == 'Jxx' and key1[0] != key2[0]], axis=0)
         degenMeanSqAmplitude = np.mean([np.abs(gains[key1] * gains[key2]) for key1 in g.keys()
@@ -1106,7 +1110,8 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = rc.remove_degen(sol)
-        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        g = {k: v for k, v in sol_rd.items() if len(k) == 2}
+        v = {k: v for k, v in sol_rd.items() if len(k) == 3}
         ants = [key for key in sol_rd.keys() if len(key) == 2]
         gainPols = np.array([ant[1] for ant in ants])
         bl_pairs = [key for key in sol.keys() if len(key) == 3]
@@ -1131,7 +1136,8 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = rc.remove_degen(sol, degen_sol=gains)
-        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        g = {k: v for k, v in sol_rd.items() if len(k) == 2}
+        v = {k: v for k, v in sol_rd.items() if len(k) == 3}
 
         for bls in reds:
             ubl = sol_rd[bls[0]]
@@ -1212,7 +1218,8 @@ class TestRedundantCalibrator(object):
         visPols = np.array([[bl[2][0], bl[2][1]] for bl in bl_pairs])
         bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
         gainSols = np.array([sol_rd[ant] for ant in ants])
-        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        g = {k: v for k, v in sol_rd.items() if len(k) == 2}
+        v = {k: v for k, v in sol_rd.items() if len(k) == 3}
 
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
                                    for key2 in g.keys() if key1[1] == 'Jxx' and key2[1] == 'Jxx' and key1[0] != key2[0]], axis=0)
@@ -1231,7 +1238,8 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = rc.remove_degen(sol, degen_sol=gains)
-        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        g = {k: v for k, v in sol_rd.items() if len(k) == 2}
+        v = {k: v for k, v in sol_rd.items() if len(k) == 3}
         gainSols = np.array([sol_rd[ant] for ant in ants])
         degenGains = np.array([gains[ant] for ant in ants])
 
