@@ -398,8 +398,7 @@ def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1p
     # Check supported pol modes
     assert pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], f'Unrecognized pol_mode: {pol_mode}'
     assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
-    ants = list(set(ant for gp in reds for bl in gp
-                    for ant in split_bl(bl)))
+    ants = list(set(ant for gp in reds for bl in gp for ant in split_bl(bl) if ant in gains))
     gainPols = np.array([ant[1] for ant in ants])  # gainPols is list of antpols, one per antenna
     antpols = list(set(gainPols))
 
