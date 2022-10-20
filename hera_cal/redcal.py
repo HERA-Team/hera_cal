@@ -363,7 +363,6 @@ def reds_to_antpos(reds, tol=1e-10):
     return antpos
 
 
-# XXX deprecate this function by ensuring nans/infs don't get made
 def make_sol_finite(sol):
     '''Replaces nans and infs in solutions, which are usually the result of visibilities that are
     identically equal to 0. Modifies sol (which is a dictionary with gains and visibilities) in place,
@@ -536,7 +535,6 @@ class RedSol():
         else:
             return default
 
-    # XXX deprecate make_sol_finite
     def make_sol_finite(self):
         '''Replaces nans and infs in this object, see redcal.make_sol_finite() for details.'''
         make_sol_finite(self)
