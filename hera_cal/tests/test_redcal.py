@@ -310,7 +310,8 @@ class TestRedSol(object):
         rs1 = om.RedSol(reds, sol_dict=sol)
 
         # construct from gains and vis
-        g, v = om.get_gains_and_vis_from_sol(sol)
+        g = {key: val for key, val in sol.items() if len(key) == 2}
+        v = {key: val for key, val in sol.items() if len(key) == 3}
         rs2 = om.RedSol(reds, gains=g, vis=v)
 
         # test that gains and vis are properly separated, also tests getitem and contains
