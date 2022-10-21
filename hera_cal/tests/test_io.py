@@ -1066,6 +1066,7 @@ class Test_Visibility_IO_Legacy(object):
 
         # test basic execution
         uvd = io.write_vis("ex.uvh5", data, l, f, ap, start_jd=2458044, return_uvd=True, overwrite=True, verbose=True, x_orientation='east', filetype='uvh5')
+        uvd.use_future_array_shapes()
         hd = HERAData("ex.uvh5")
         hd.read()
         assert os.path.exists('ex.uvh5')
@@ -1080,6 +1081,7 @@ class Test_Visibility_IO_Legacy(object):
 
         # test with nsample and flags
         uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, flags=flgs, nsamples=nsample, x_orientation='east', return_uvd=True, overwrite=True, verbose=True)
+        uvd.use_future_array_shapes()
         assert uvd.nsample_array.shape == (1680, 64, 1)
         assert uvd.flag_array.shape == (1680, 64, 1)
         assert np.allclose(nsample[(24, 25, 'ee')][30, 32], uvd.get_nsamples(24, 25, 'ee')[30, 32])
@@ -1098,6 +1100,7 @@ class Test_Visibility_IO_Legacy(object):
         outname = os.path.join(DATA_PATH, "test_output/zen.2458043.12552.xx.HH.modified.uvORA")
         uvd = UVData()
         uvd.read_miriad(fname)
+        uvd.use_future_array_shapes()
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
 
         # make some modifications
