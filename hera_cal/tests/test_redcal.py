@@ -1955,7 +1955,7 @@ class TestRunMethods(object):
 
         hd = io.HERAData(input_data)
         hd.read()
-        hd.channel_width = np.median(np.diff(hd.freqs))
+        hd.channel_width = np.median(np.diff(hd.freqs)) * np.ones_like(hd.freq_array)
         hd.write_miriad(os.path.join(DATA_PATH, 'test_output/temp.uv'))
         hd = io.HERAData(os.path.join(DATA_PATH, 'test_output/temp.uv'), filetype='miriad')
         hd.read()

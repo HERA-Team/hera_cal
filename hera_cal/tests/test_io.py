@@ -53,10 +53,11 @@ class Test_HERACal(object):
         gains, flags, quals, total_qual = hc.read()
         uvc = UVCal()
         uvc.read_calfits(self.fname)
-        np.testing.assert_array_equal(uvc.gain_array[0, 0, :, :, 0].T, gains[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
-        np.testing.assert_array_equal(uvc.flag_array[0, 0, :, :, 0].T, flags[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
-        np.testing.assert_array_equal(uvc.quality_array[0, 0, :, :, 0].T, quals[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
-        np.testing.assert_array_equal(uvc.total_quality_array[0, :, :, 0].T, total_qual[parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
+        uvc.use_future_array_shapes()
+        np.testing.assert_array_equal(uvc.gain_array[0, :, :, 0].T, gains[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
+        np.testing.assert_array_equal(uvc.flag_array[0, :, :, 0].T, flags[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
+        np.testing.assert_array_equal(uvc.quality_array[0, :, :, 0].T, quals[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
+        np.testing.assert_array_equal(uvc.total_quality_array[:, :, 0].T, total_qual[parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
         np.testing.assert_array_equal(np.unique(uvc.freq_array), hc.freqs)
         np.testing.assert_array_equal(np.unique(uvc.time_array), hc.times)
         assert hc.pols == [parse_jpolstr('jxx', x_orientation=hc.x_orientation), parse_jpolstr('jyy', x_orientation=hc.x_orientation)]
@@ -951,6 +952,7 @@ class Test_Visibility_IO_Legacy(object):
         self.data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.uvd = UVData()
         self.uvd.read_miriad(self.data_file)
+        self.uvd.use_future_array_shapes()
         self.freq_array = np.unique(self.uvd.freq_array)
         self.antpos, self.ants = self.uvd.get_ENU_antpos(center=True, pick_data_ants=True)
         self.antpos = odict(list(zip(self.ants, self.antpos)))
@@ -971,6 +973,7 @@ class Test_Visibility_IO_Legacy(object):
         # test uvd object
         uvd = UVData()
         uvd.read_miriad(fname)
+        uvd.use_future_array_shapes()
         data, flags = io.load_vis(uvd)
         assert data[(24, 25, 'ee')].shape == (60, 64)
         data, flags = io.load_vis([uvd])
@@ -1008,8 +1011,11 @@ class Test_Visibility_IO_Legacy(object):
         filename2 = os.path.join(DATA_PATH, 'zen.2458043.13298.xx.HH.uvORA')
         uvd1 = UVData()
         uvd1.read_miriad(filename1)
+        uvd1.use_future_array_shapes()
+
         uvd2 = UVData()
         uvd2.read_miriad(filename2)
+        uvd2.use_future_array_shapes()
         if uvd1.phase_type != 'drift':
             uvd1.unphase_to_drift()
         if uvd2.phase_type != 'drift':
@@ -1022,9 +1028,9 @@ class Test_Visibility_IO_Legacy(object):
                 uvmask = np.all(
                     np.array(list(zip(uvd.ant_1_array, uvd.ant_2_array))) == [i, j], axis=1)
                 np.testing.assert_equal(d[i, j][pol], np.resize(
-                    uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
+                    uvd.data_array[uvmask][:, :, uvpol], d[i, j][pol].shape))
                 np.testing.assert_equal(f[i, j][pol], np.resize(
-                    uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
+                    uvd.flag_array[uvmask][:, :, uvpol], f[i, j][pol].shape))
 
         d, f = io.load_vis([filename1, filename2], nested_dict=True)
         for i, j in d:
@@ -1033,12 +1039,13 @@ class Test_Visibility_IO_Legacy(object):
                 uvmask = np.all(
                     np.array(list(zip(uvd.ant_1_array, uvd.ant_2_array))) == [i, j], axis=1)
                 np.testing.assert_equal(d[i, j][pol], np.resize(
-                    uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
+                    uvd.data_array[uvmask][:, :, uvpol], d[i, j][pol].shape))
                 np.testing.assert_equal(f[i, j][pol], np.resize(
-                    uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
+                    uvd.flag_array[uvmask][:, :, uvpol], f[i, j][pol].shape))
 
         uvd = UVData()
         uvd.read_miriad(filename1)
+        uvd.use_future_array_shapes()
         assert len(io.load_vis([uvd], nested_dict=True)[0]) == uvd.Nbls
         # reorder baseline array
         uvd.baseline_array = uvd.baseline_array[np.argsort(uvd.baseline_array)]
@@ -1051,6 +1058,7 @@ class Test_Visibility_IO_Legacy(object):
         # get data
         uvd = UVData()
         uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458044.41632.xx.HH.XRAA.uvh5"))
+        uvd.use_future_array_shapes()
         data, flgs, ap, a, f, t, l, p = io.load_vis(uvd, return_meta=True)
         nsample = copy.deepcopy(data)
         for k in nsample.keys():
@@ -1058,11 +1066,12 @@ class Test_Visibility_IO_Legacy(object):
 
         # test basic execution
         uvd = io.write_vis("ex.uvh5", data, l, f, ap, start_jd=2458044, return_uvd=True, overwrite=True, verbose=True, x_orientation='east', filetype='uvh5')
+        uvd.use_future_array_shapes()
         hd = HERAData("ex.uvh5")
         hd.read()
         assert os.path.exists('ex.uvh5')
-        assert uvd.data_array.shape == (1680, 1, 64, 1)
-        assert hd.data_array.shape == (1680, 1, 64, 1)
+        assert uvd.data_array.shape == (1680, 64, 1)
+        assert hd.data_array.shape == (1680, 64, 1)
         assert np.allclose(data[(24, 25, 'ee')][30, 32], uvd.get_data(24, 25, 'ee')[30, 32])
         assert np.allclose(data[(24, 25, 'ee')][30, 32], hd.get_data(24, 25, 'ee')[30, 32])
         assert hd.x_orientation.lower() == 'east'
@@ -1072,8 +1081,9 @@ class Test_Visibility_IO_Legacy(object):
 
         # test with nsample and flags
         uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, flags=flgs, nsamples=nsample, x_orientation='east', return_uvd=True, overwrite=True, verbose=True)
-        assert uvd.nsample_array.shape == (1680, 1, 64, 1)
-        assert uvd.flag_array.shape == (1680, 1, 64, 1)
+        uvd.use_future_array_shapes()
+        assert uvd.nsample_array.shape == (1680, 64, 1)
+        assert uvd.flag_array.shape == (1680, 64, 1)
         assert np.allclose(nsample[(24, 25, 'ee')][30, 32], uvd.get_nsamples(24, 25, 'ee')[30, 32])
         assert np.allclose(flgs[(24, 25, 'ee')][30, 32], uvd.get_flags(24, 25, 'ee')[30, 32])
         assert uvd.x_orientation.lower() == 'east'
@@ -1090,6 +1100,7 @@ class Test_Visibility_IO_Legacy(object):
         outname = os.path.join(DATA_PATH, "test_output/zen.2458043.12552.xx.HH.modified.uvORA")
         uvd = UVData()
         uvd.read_miriad(fname)
+        uvd.use_future_array_shapes()
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
 
         # make some modifications
@@ -1150,6 +1161,7 @@ class Test_Calibration_IO_Legacy(object):
 
         cal = UVCal()
         cal.read_calfits(fname)
+        cal.use_future_array_shapes()
         gains, flags = io.load_cal(cal)
         assert len(gains.keys()) == 18
         assert len(flags.keys()) == 18
@@ -1170,6 +1182,8 @@ class Test_Calibration_IO_Legacy(object):
         cal_xx, cal_yy = UVCal(), UVCal()
         cal_xx.read_calfits(fname_xx)
         cal_yy.read_calfits(fname_yy)
+        cal_xx.use_future_array_shapes()
+        cal_yy.use_future_array_shapes()
         gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal([cal_xx, cal_yy], return_meta=True)
         assert len(gains.keys()) == 36
         assert len(flags.keys()) == 36
@@ -1255,6 +1269,7 @@ class Test_Calibration_IO_Legacy(object):
         outname = os.path.join(DATA_PATH, "test_output/zen.2457698.40355.xx.HH.uvc.modified.calfits.")
         cal = UVCal()
         cal.read_calfits(fname)
+        cal.use_future_array_shapes()
         gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal(fname, return_meta=True)
 
         # make some modifications
