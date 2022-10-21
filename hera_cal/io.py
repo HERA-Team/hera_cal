@@ -222,10 +222,11 @@ class HERACal(UVCal):
             # This line provides freqs_filled -- frequency axis with spoofed frequencies
             # and inserted which is a boolean array that is True at frequencies that are being spoofed.
             freqs_filled, _, _, inserted = place_data_on_uniform_grid(self.freqs, np.ones_like(self.freqs), np.ones_like(self.freqs))
-            writer.freq_array = freqs_filled.reshape(self.Nspws, len(freqs_filled))
+            writer.freq_array = freqs_filled.flatten()
             writer.Nfreqs = len(freqs_filled)
+            writer.channel_width = np.median(writer.channel_width) * np.ones_like(writer.freq_array)
             # insert original flags and gains into appropriate channels.
-            new_gains = np.ones((writer.Nants_data, writer.Nspws, writer.Nfreqs, writer.Ntimes, writer.Njones), dtype=complex)
+            new_gains = np.ones((writer.Nants_data, writer.Nfreqs, writer.Ntimes, writer.Njones), dtype=complex)
             new_gains[:, ~inserted, :, :] = writer.gain_array
             new_flags = np.ones(new_gains.shape, dtype=bool)
             new_flags[:, ~inserted, :, :] = writer.flag_array
