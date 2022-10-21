@@ -27,6 +27,7 @@ def test_timeavg_waterfall():
 
     uvd = UVData()
     uvd.read_miriad(fname)
+    uvd.use_future_array_shapes()
 
     d = uvd.get_data(24, 25)
     f = uvd.get_flags(24, 25)
@@ -440,8 +441,10 @@ class Test_FRFilter(object):
         test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
         uvd = UVData()
         uvd.read_uvh5(test_data)
+        uvd.use_future_array_shapes()
         uvb = UVBeam()
         uvb.read_beamfits(test_beam)
+        uvb.use_future_array_shapes()
         fr_grid, profiles = frf.build_fringe_rate_profiles(uvd, uvb)
         assert len(fr_grid) == uvd.Ntimes
 
@@ -451,11 +454,13 @@ class Test_FRFilter(object):
         test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
         uvd = UVData()
         uvd.read_uvh5(test_data)
+        uvd.use_future_array_shapes()
         myfrf = frf.FRFilter(uvd)
         sim_c_frates = {}
         sim_w_frates = {}
         uvb = UVBeam()
         uvb.read_beamfits(test_beam)
+        uvb.use_future_array_shapes()
         c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb, percentile_low=10, percentile_high=90)
         for bl in c_frs:
             # fft data
