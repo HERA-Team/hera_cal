@@ -7,5 +7,5 @@
 
 from hera_cal import utils
 ap = utils.select_spw_ranges_argparser()
-args =ap.parse_args()
+args = ap.parse_args()
 utils.select_spw_ranges(**vars(args))

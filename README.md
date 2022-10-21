@@ -98,8 +98,9 @@ installing `hera_cal`:
 Other dependencies that will be installed from PyPI on-the-fly are:
 * [linsolve](https://github.com/HERA-Team/linsolve)
 * [hera_qm](https://github.com/HERA-Team/hera_qm)
+* [hera_filters](https://github.com/HERA-Team/hera_filters)
 
-`hera_cal` also has the _optional_ dependencies of `aipy` and `uvtools`, and some
+`hera_cal` also has the _optional_ dependency of `aipy`, and some
 functions will not work without this dependency. To install all optional dependencies, use
 `pip install .[all]` or `pip install git+git://github.com/HERA-Team/hera_cal.git[all]`.
 
@@ -114,6 +115,10 @@ a fresh `conda` environment. These steps will get you up and running::
 
 This installs extra packages than those required to use `hera_cal`, including `hera_sim`
 and `pytest`.
+
+If you are developing `hera_cal` please install pre-commit: `pip install pre-commit` and
+then `pre-commit install` in the top-level directory. This will check your style before
+you make commits.
 
 ### Running tests
 Tests use the `pytest` framework. To run all tests, call `pytest` or

@@ -17,6 +17,8 @@ from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_D
 import sklearn.gaussian_process as gp
 import warnings
 import argparse
+import inspect
+from . import __version__
 
 try:
     AIPY = True
@@ -35,6 +37,8 @@ _KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').v
 # Define characters that appear in all Jones polarization strings. Nominally {'j'}.
 _KEY_JONES_CHARS = set([c.lower() for val in JONES_NUM2STR_DICT.values() for c in val
                        if np.all([c in v for v in JONES_NUM2STR_DICT.values()])])
+# set of characters that appear in either _KEY_CARDINAL_CHARS or _KEY_JONES_CHARS
+_KEY_POL_CHARS = _KEY_CARDINAL_CHARS | _KEY_JONES_CHARS
 
 # Get set of standard visibility polarization strings. Nominally {'rr', 'xy', 'ne', 'nn', 'lr', 'en', 'yx', 'xx', 'ee', 'rl', 'll', 'yy'}
 _VISPOLS = set([pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0 and pol == polnum2str(polstr2num(pol))])
@@ -57,7 +61,7 @@ for antpol in copy.deepcopy(_ANTPOLS):
 
 def _is_cardinal(polstr):
     '''Returns true if all characters in polstr match those in _KEY_CARDINAL_CHARS or _KEY_JONES_CHARS.'''
-    return np.all([(c.lower() in _KEY_CARDINAL_CHARS) or (c.lower() in _KEY_JONES_CHARS) for c in polstr])
+    return set(polstr.lower()).issubset(_KEY_POL_CHARS)
 
 
 def _comply_antpol(antpol):
@@ -205,6 +209,24 @@ def filter_bls(bls, ants=None, ex_ants=None, pols=None, antpos=None, min_bl_cut=
     return filtered_bls
 
 
+def history_string(notes=""):
+    """
+    Creates a standardized history string that all functions that write to
+    disk can use. Optionally add notes.
+    """
+    notes = f"""\n\nNotes:\n{notes}""" if notes else ""
+
+    stack = inspect.stack()[1]
+    history = f"""
+    ------------
+    This file was produced by the function {stack[3]}() in {stack[1]} using version {__version__}
+    {notes}
+    ------------
+    """
+    return history
+
+
+# XXX change df/ f0 for freqs directly
 def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0):
     """Get delay of visibility across band using FFT and Quinn's Second Method to fit the delay and phase offset.
     Arguments:
@@ -221,10 +243,12 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     """
     # setup
     Ntimes, Nfreqs = data.shape
+    # XXX prefer saving compute by not using wgts at all
     if wgts is None:
         wgts = np.ones_like(data, dtype=np.float32)
 
     # smooth via median filter
+    # XXX is this mode ever used?
     if medfilt:
         data = copy.deepcopy(data)  # this prevents filtering of the original input data
         data.real = signal.medfilt(data.real, kernel_size=kernel)
@@ -232,6 +256,7 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
 
     # fft w/ wgts
     dw = data * wgts
+    # XXX is edge_cut ever used?
     if edge_cut > 0:
         assert 2 * edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
         dw = dw[:, edge_cut:(-edge_cut + 1)]
@@ -244,6 +269,7 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     inds, bin_shifts, peaks, interp_peaks = interp_peak(vfft)
     dlys = (fftfreqs[inds] + bin_shifts * dtau).reshape(-1, 1)
 
+    # XXX if not using phase offset, should have mode to not compute it?
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df + f0
     fSlice = slice(edge_cut, len(freqs) - edge_cut)
@@ -258,6 +284,13 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
 
     return dlys, offset
 
+
+
+def quinn_tau(x):
+    '''Quinn subgrid interpolation parameter (see https://ieeexplore.ieee.org/document/558515)'''
+    t = .25 * np.log(3*x**2 + 6*x + 1) 
+    t -= 6**.5 / 24 * np.log((x + 1 - (2/3)**.5) / (x + 1 + (2/3) **.5))
+    return t
 
 def interp_peak(data, method='quinn', reject_edges=False):
     """
@@ -300,13 +333,10 @@ def interp_peak(data, method='quinn', reject_edges=False):
                 dabs[i, ncut:] = 0.0
 
     # get argmaxes along last axis
-    if method == 'quinn':
-        indices = np.argmax(dabs, axis=-1)
-    elif method == 'quadratic':
-        indices = np.argmax(dabs, axis=-1)
-    else:
+    if method not in ('quinn', 'quadratic'):
         raise ValueError("'{}' is not a recognized peak interpolation method.".format(method))
 
+    indices = np.argmax(dabs, axis=-1)
     peaks = data[range(N1), indices]
 
     # calculate shifted peak for sub-bin resolution
@@ -315,19 +345,15 @@ def interp_peak(data, method='quinn', reject_edges=False):
     k2 = data[range(N1), (indices + 1) % N2]
 
     if method == 'quinn':
-        def tau(x):
-            t = .25 * np.log(3 * x ** 2 + 6 * x + 1)
-            t -= 6 ** .5 / 24 * np.log((x + 1 - (2. / 3.) ** .5) / (x + 1 + (2. / 3.) ** .5))
-            return t
-
         alpha1 = (k0 / k1).real
         alpha2 = (k2 / k1).real
         delta1 = alpha1 / (1 - alpha1)
         delta2 = -alpha2 / (1 - alpha2)
-        d = (delta1 + delta2) / 2 + tau(delta1 ** 2) - tau(delta2 ** 2)
+        d = (delta1 + delta2) / 2 + quinn_tau(delta1 ** 2) - quinn_tau(delta2 ** 2)
         d[~np.isfinite(d)] = 0.
 
-        ck = np.array([np.true_divide(np.exp(2.0j * np.pi * d) - 1, 2.0j * np.pi * (d - k),
+        numerator_ck = np.exp(2.0j * np.pi * d) - 1
+        ck = np.array([np.true_divide(numerator_ck, 2.0j * np.pi * (d - k),
                                       where=~(d == 0)) for k in [-1, 0, 1]])
         rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck ** 2))
         rho[d == 0] = np.abs(k1[d == 0])
@@ -523,14 +549,14 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
     LST : type=float or array-like, local apparent sidereal time [radians]
 
     start_jd : type=int, integer julian day to use as starting point for LST2JD conversion
-    
-    allow_other_jd : type=bool, ensure that the lst_branch_cut falls on start_jd but allow 
+
+    allow_other_jd : type=bool, ensure that the lst_branch_cut falls on start_jd but allow
                      LSTs to correspond to previous or subsequent days if necessary
-        
-    lst_branch_cut : type=float, LST that must fall during start_jd even when allow_other_jd 
+
+    lst_branch_cut : type=float, LST that must fall during start_jd even when allow_other_jd
                      is True. Used as the starting point starting point where LSTs below this
                      value map to later JDs than this LST [radians]
-    
+
     latitude : type=float, degrees North of observer, default=HERA latitude
 
     longitude : type=float, degrees East of observer, default=HERA longitude
@@ -551,7 +577,7 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
 
     # increase LSTs so no values fall below the branch cut (avoiding wraps in interpolation)
     while np.any(LST < lst_branch_cut):
-        LST[LST < lst_branch_cut] += 2 * np.pi  
+        LST[LST < lst_branch_cut] += 2 * np.pi
 
     # create interpolator for a given start date that puts the lst_branch_cut on start_jd
     jd_grid = start_jd + np.linspace(-1, 2, 31)  # include previous and next days
@@ -566,10 +592,10 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
             jd_grid += unt.sday.to(unt.day)
         else:
             break
-        
+
     # interpolate
     jd_array = interpolator(LST)
-    
+
     # Enforce single JD if desired
     if not allow_other_jd:
         while True:
@@ -917,9 +943,9 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     elif (chisq_per_ant is None) ^ (nObs_per_ant is None):
         raise ValueError('Both chisq_per_ant and nObs_per_ant must be specified or nor neither can be.')
 
-    # if data_wgts is unspecified, make it all 1.0s.
+    # if data_wgts is unspecified, make it 1.0
     if data_wgts is None:
-        data_wgts = {bl: np.ones_like(data[bl], dtype=float) for bl in data.keys()}
+        data_wgts = {bl: 1.0 for bl in data.keys()}
 
     # Expand model to include all bl in reds, assuming that model has the first bl in the redundant group
     if reds is not None:
@@ -946,7 +972,12 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
             if gain_flags is not None:
                 wgts = data_wgts[bl] * ~(gain_flags[ant1]) * ~(gain_flags[ant2])
             else:
-                wgts = copy.deepcopy(data_wgts[bl])
+                wgts = data_wgts[bl]
+
+            # convert wgts into nObs, handling the case where wgts is a scaler because data_wgts is None
+            if np.isscalar(wgts):
+                wgts = wgts * np.ones(data[bl].shape, dtype=float)
+            nObs_from_wgts = np.array(wgts > 0, dtype=int)
 
             # calculate chi^2
             chisq_here = np.asarray(np.abs(model_here - data[bl]) ** 2 * wgts, dtype=np.float64)
@@ -954,11 +985,11 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
                 if ap1 in chisq:
                     assert ap1 in nObs
                     chisq[ap1] = chisq[ap1] + chisq_here
-                    nObs[ap1] = nObs[ap1] + (wgts > 0)
+                    nObs[ap1] += nObs[ap1] + nObs_from_wgts
                 else:
                     assert ap1 not in nObs
                     chisq[ap1] = copy.deepcopy(chisq_here)
-                    nObs[ap1] = np.array(wgts > 0, dtype=int)
+                    nObs[ap1] = nObs_from_wgts
             else:
                 chisq += chisq_here
                 nObs += (wgts > 0)
@@ -968,11 +999,11 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
                 if ant in chisq_per_ant:
                     assert ant in nObs_per_ant
                     chisq_per_ant[ant] = chisq_per_ant[ant] + chisq_here
-                    nObs_per_ant[ant] = nObs_per_ant[ant] + (wgts > 0)
+                    nObs_per_ant[ant] = nObs_per_ant[ant] + nObs_from_wgts
                 else:
                     assert ant not in nObs_per_ant
                     chisq_per_ant[ant] = copy.deepcopy(chisq_here)
-                    nObs_per_ant[ant] = np.array(wgts > 0, dtype=int)
+                    nObs_per_ant[ant] = nObs_from_wgts
 
     return chisq, nObs, chisq_per_ant, nObs_per_ant
 

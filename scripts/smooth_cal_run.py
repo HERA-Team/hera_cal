@@ -23,7 +23,7 @@ if mode != 'clean':
     else:
         filter_kwargs['eigenval_cutoff'] = [a.eigenval_cutoff]
 else:
-    if a.window == 'tukey' :  # set window kwargs
+    if a.window == 'tukey':  # set window kwargs
         filter_kwargs['alpha'] = a.alpha
     filter_kwargs['max_iter'] = a.max_iter
 
@@ -34,8 +34,8 @@ if a.run_if_first is None or sorted(a.calfits_list)[0] == a.run_if_first:
                              chan_blacklists=a.chan_blacklists, pick_refant=a.pick_refant, freq_threshold=a.freq_threshold,
                              time_threshold=a.time_threshold, ant_threshold=a.ant_threshold, verbose=a.verbose)
     if a.axis == 'both':
-            cs.time_freq_2D_filter(freq_scale=a.freq_scale, time_scale=a.time_scale, tol=a.tol,
-                                   filter_mode=a.filter_mode, window=a.window, maxiter=a.maxiter, method=a.method, **filter_kwargs)
+        cs.time_freq_2D_filter(freq_scale=a.freq_scale, time_scale=a.time_scale, tol=a.tol,
+                               filter_mode=a.filter_mode, window=a.window, maxiter=a.maxiter, method=a.method, **filter_kwargs)
     else:
         cs.filter_1d(filter_scale=a.freq_scale, tol=a.tol, skip_wgt=a.skip_wgt, mode=a.method, ax=a.axis,
                      **filter_kwargs)

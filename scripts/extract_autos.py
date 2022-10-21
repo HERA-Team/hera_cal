@@ -11,5 +11,5 @@ import sys
 
 a = autos.extract_autos_argparser()
 args = a.parse_args()
-autos.read_and_write_autocorrelations(args.infile, args.outfile, calfile=args.calfile, gain_convention=args.gain_convention, 
+autos.read_and_write_autocorrelations(args.infile, args.outfile, calfile=args.calfile, gain_convention=args.gain_convention,
                                       add_to_history=' '.join(sys.argv), clobber=args.clobber)

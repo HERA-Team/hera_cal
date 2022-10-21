@@ -4,6 +4,7 @@
 
 import pytest
 import os
+from scipy import constants
 import numpy as np
 import sys
 from collections import OrderedDict as odict
@@ -16,7 +17,7 @@ from hera_sim.antpos import hex_array, linear_array
 from .. import io, abscal, redcal, utils
 from ..data import DATA_PATH
 from ..datacontainer import DataContainer
-from ..utils import split_pol, reverse_bl
+from ..utils import split_pol, reverse_bl, split_bl
 from ..apply_cal import calibrate_in_place
 from ..flag_utils import synthesize_ant_flags
 
@@ -493,6 +494,52 @@ class Test_Abscal_Solvers(object):
         rephased_true_gains = {ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants}
         for ant in ants:
             np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant], decimal=3)
+
+    def test_RFI_delay_slope_cal(self):
+        # build array
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        antpos[19] = np.array([101, 102, 0])
+        reds = redcal.get_reds(antpos, pols=['ee', 'nn'])
+        red_data = DataContainer({red[0]: np.ones((5, 128), dtype=complex) for red in reds})
+        freqs = np.linspace(50e6, 250e6, 128)
+        unique_blvecs = {red[0]: np.mean([antpos[bl[1]] - antpos[bl[0]] for bl in red], axis=0) for red in reds}
+        idealized_antpos = redcal.reds_to_antpos(reds)
+        idealized_blvecs = {red[0]: idealized_antpos[red[0][1]] - idealized_antpos[red[0][0]] for red in reds}
+
+        # Invent RFI stations and delay slopes
+        rfi_chans = [7, 9, 12, 13, 22, 31, 33]
+        rfi_angles = [0.7853981, 0.7853981, 0.7853981, 6.0632738, 6.0632738, 0.7853981, 6.0632738]
+        rfi_headings = np.array([np.cos(rfi_angles), np.sin(rfi_angles), np.zeros_like(rfi_angles)])
+        rfi_wgts = np.array([1, 2, 1, 3, 1, 5, 1])
+        true_delay_slopes = {'T_ee_0': 1e-9, 'T_ee_1': -2e-9, 'T_ee_2': 1.5e-9,
+                             'T_nn_0': 1.8e-9, 'T_nn_1': -5e-9, 'T_nn_2': 3.5e-9}
+
+        # Add RFI and uncalibrate
+        for bl in red_data:
+            for chan, heading in zip(rfi_chans, rfi_headings.T):
+                red_data[bl][:, chan] = 100 * np.exp(2j * np.pi * np.dot(unique_blvecs[bl], heading) * freqs[chan] / constants.c)
+            for key, slope in true_delay_slopes.items():
+                if key[2:4] == bl[2]:
+                    red_data[bl] *= np.exp(-2j * np.pi * idealized_blvecs[bl][int(key[-1])] * slope * freqs)
+
+        # Solve for delay slopes
+        solved_dly_slopes = abscal.RFI_delay_slope_cal(reds, antpos, red_data, freqs, rfi_chans, rfi_headings, rfi_wgts=rfi_wgts)
+        for key, slope in solved_dly_slopes.items():
+            assert np.all(np.abs((slope - true_delay_slopes[key]) / true_delay_slopes[key]) < 1e-10)
+
+        # test converting slopes to gains
+        ants_in_reds = set([ant for red in reds for bl in red for ant in split_bl(bl)])
+        gains = abscal.RFI_delay_slope_cal(reds, antpos, red_data, freqs, rfi_chans, rfi_headings, rfi_wgts=rfi_wgts,
+                                           return_gains=True, gain_ants=ants_in_reds)
+        # test showing that non-RFI contaminated channels have been returned to 1s
+        calibrate_in_place(red_data, gains)
+        not_rfi_chans = [i for i in range(128) if i not in rfi_chans]
+        for bl in red_data:
+            np.testing.assert_almost_equal(red_data[bl][:, not_rfi_chans], 1.0, decimal=10)
+
+        with pytest.raises(NotImplementedError):
+            reds = redcal.get_reds(antpos, pols=['ee', 'nn', 'en', 'ne'])
+            solved_dly_slopes = abscal.RFI_delay_slope_cal(reds, antpos, red_data, freqs, rfi_chans, rfi_headings, rfi_wgts=rfi_wgts)
 
     def test_ndim_fft_phase_slope_solver_1D_ideal_antpos(self):
         antpos = linear_array(50)

@@ -69,17 +69,14 @@ import copy
 from scipy.optimize import minimize
 from scipy import sparse
 from sklearn import gaussian_process as gp
-try:
-    from uvtools import dspec
-    HAVE_UVTOOLS = True
-except ImportError:
-    HAVE_UVTOOLS = False
+from hera_filters import dspec
+
 import argparse
 import ast
 from astropy import constants
 
 from . import io
-from . import version
+from . import utils
 from .abscal import merge_gains
 from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
@@ -431,7 +428,7 @@ class ReflectionFitter(FRFilter):
             overwrite : bool, if True, overwrite output file
             write_npz : bool, if True, write an NPZ file holding reflection
                 params with the same pathname as output_calfits
-            write_calfits : bool, if False, skip writing 
+            write_calfits : bool, if False, skip writing
             add_to_history: string to add to history of output calfits file
             verbose : bool, report feedback to stdout
 
@@ -458,7 +455,7 @@ class ReflectionFitter(FRFilter):
                 np.savez(output_npz, delay=self.ref_dly, phase=self.ref_phs, amp=self.ref_amp,
                          significance=self.ref_significance, times=time_array, freqs=freq_array,
                          lsts=self.lsts, antpos=self.antpos, flags=rflags,
-                         history=version.history_string(add_to_history))
+                         history=utils.history_string(add_to_history))
 
         # return None if we don't want to write a calfits file
         if not write_calfits:
@@ -489,7 +486,7 @@ class ReflectionFitter(FRFilter):
         echo("...writing {}".format(output_calfits), verbose=verbose)
         uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=rflags,
                            quality=quals, total_qual=tquals, zero_check=False,
-                           overwrite=overwrite, history=version.history_string(add_to_history),
+                           overwrite=overwrite, history=utils.history_string(add_to_history),
                            antnums2antnames=antnums2antnames, **kwargs)
 
         return uvc
@@ -757,9 +754,6 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid : DataContainer, ant-pair-pol keys and ndarray values
                 Holds the residual between input data and pcomp_model_fft.
         """
-        if not HAVE_UVTOOLS:
-            raise ImportError("uvtools required, install hera_cal[all]")
-
         # get keys
         if keys is None:
             keys = list(self.pcomp_model.keys())
@@ -803,7 +797,7 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid[k] = data[k] - model_fft
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False, Ninterp=None,
-                 gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, Nmirror=0, 
+                 gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, Nmirror=0,
                  xthin=None, verbose=True):
         """
         Interpolate u modes along time with a Gaussian Process.
@@ -1533,7 +1527,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
 
         # append gains
         gains.append(RF.ref_gains)
-    
+
     # write out combined gains as a single calfits file
     if not write_each_calfits:
         RF.ref_gains = merge_gains(gains)

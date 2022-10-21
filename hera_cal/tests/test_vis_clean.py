@@ -13,7 +13,7 @@ from pyuvdata import UVCal, UVData
 from hera_sim.interpolators import Beam
 from hera_sim import DATA_PATH as HS_DATA_PATH
 from hera_sim import noise
-from uvtools import dspec
+from hera_filters import dspec
 
 from hera_cal import io, datacontainer
 from hera_cal import vis_clean
@@ -75,16 +75,16 @@ def test_restore_flagged_edges():
     times = np.arange(60) * 10.
     freqs = np.arange(64) * 100e3
     # test freq truncation
-    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
-    wrest = vis_clean.restore_flagged_edges(xout, wout, edges)
+    xout, dout, wout, edges, chunks = vis_clean.truncate_flagged_edges(data_in, weights_in, freqs, ax='freq')
+    wrest = vis_clean.restore_flagged_edges(wout, chunks, edges)
     assert np.allclose(weights_in[:, :-1], wrest[:, :-1])
     assert np.allclose(wrest[:, -1], 0.0)
-    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
-    wrest = vis_clean.restore_flagged_edges(xout, wout, edges, ax='time')
+    xout, dout, wout, edges, chunks = vis_clean.truncate_flagged_edges(data_in, weights_in, times, ax='time')
+    wrest = vis_clean.restore_flagged_edges(wout, chunks, edges, ax='time')
     assert np.allclose(wout, wrest[:-2, :])
     assert np.allclose(wrest[-2:, :], 0.0)
-    xout, dout, wout, edges, _ = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
-    wrest = vis_clean.restore_flagged_edges(xout, wout, edges, ax='both')
+    xout, dout, wout, edges, chunks = vis_clean.truncate_flagged_edges(data_in, weights_in, (times, freqs), ax='both')
+    wrest = vis_clean.restore_flagged_edges(wout, chunks, edges, ax='both')
     assert np.allclose(wrest[-2:, :], 0.0)
     assert np.allclose(wrest[:, -1], 0.0)
     assert np.allclose(wout, wrest[:-2, :-1])
@@ -584,6 +584,10 @@ class Test_VisClean(object):
                     skip_contiguous_flags=True, max_frate=0.025)
         for k in V.clean_flags:
             assert np.all(V.clean_flags[k])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_flagged_edges=True, max_frate=0.025)
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k])
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
                     skip_contiguous_flags=True, max_frate=0.025)
         for k in V.clean_flags:
@@ -867,7 +871,7 @@ class Test_VisClean(object):
         V.read()
 
         # just need to make sure various kwargs run through
-        # actual code unit-testing coverage has been done in uvtools.dspec
+        # actual code unit-testing coverage has been done in hera_filters.dspec
 
         # basic freq clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True)

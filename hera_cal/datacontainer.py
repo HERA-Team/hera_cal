@@ -57,8 +57,8 @@ class DataContainer:
                 self._data = odict([(comply_bl(k), data[k]) for k in sorted(data.keys())])
             else:
                 raise KeyError('Unrecognized key type or mix of key types in data dictionary.')
-            self._antpairs = set([k[:2] for k in self._data.keys()])
-            self._pols = set([k[-1] for k in self._data.keys()])
+            self._antpairs = set([k[:2] for k in self._data])
+            self._pols = set([k[-1] for k in self._data])
 
             # placeholders for metadata (or get them from data, if possible)
             for attr in ['ants', 'data_ants', 'antpos', 'data_antpos',
@@ -498,3 +498,76 @@ class DataContainer:
 
         if not in_place:
             return dc
+
+
+class RedDataContainer(DataContainer):
+    '''Structure for containing redundant visibilities that can be accessed by any
+        one of the redundant baseline keys (or their conjugate).'''
+
+    def __init__(self, data, reds=None, antpos=None, bl_error_tol=1.0):
+        '''Creates a RedDataContainer.
+
+        Arguments:
+            data: DataContainer or dictionary of visibilities, just as one would pass into DataContainer().
+                Will error if multiple baselines are part of the same redundant group.
+            reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol)
+            antpos: dictionary of antenna positions in the form {ant_index: np.array([x, y, z])}.
+                Will error if one tries to provide both reds and antpos. If neither is provided,
+                will try to to use data.antpos (which it might have if its is a DataContainer).
+            bl_error_tol: the largest allowable difference between baselines in a redundant group
+                (in the same units as antpos). Normally, this is up to 4x the largest antenna position
+                error. Will only be used if reds is inferred from antpos.
+        '''
+        if reds is not None and antpos is not None:
+            raise ValueError('Can only provide reds or antpos, not both.')
+
+        super().__init__(data)
+
+        # Figure out reds
+        if reds is not None:
+            self.reds = reds
+        else:
+            from .redcal import get_reds
+            if antpos is not None:
+                self.reds = get_reds(antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
+            elif hasattr(self, 'antpos') and self.antpos is not None:
+                self.reds = get_reds(self.antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
+            else:
+                raise ValueError('Must provide reds, antpos, or have antpos available at data.antpos')
+
+        # Map all redundant keys to the same underlying data
+        self._bl_to_red_key = {}
+        self._red_key_to_bls = {}
+        for red in self.reds:
+            bls_in_data = [bl for bl in red if self.has_key(bl)]
+            if len(bls_in_data) > 1:
+                raise ValueError(f'RedDataContainer can only be constructed with (at most) one baseline per group, \
+                                 but this data has the following redundant baselines: {bls_in_data}')
+            if len(bls_in_data) > 0:
+                self._red_key_to_bls[bls_in_data[0]] = []
+                self._red_key_to_bls[reverse_bl(bls_in_data[0])] = []
+                for bl in red:
+                    self._bl_to_red_key[bl] = bls_in_data[0]
+                    self._bl_to_red_key[reverse_bl(bl)] = reverse_bl(bls_in_data[0])
+                    self._red_key_to_bls[bls_in_data[0]].append(bl)
+                    self._red_key_to_bls[reverse_bl(bls_in_data[0])].append(reverse_bl(bl))
+
+    def get_ubl_key(self, key):
+        '''Returns the key used interally denote the data stored. Useful for del'''
+        return self._bl_to_red_key[key]
+
+    def get_red(self, key):
+        '''Returns the list of baselines redundant with this key.'''
+        return self._red_key_to_bls[self._bl_to_red_key[key]]
+
+    def __getitem__(self, key):
+        '''Returns data corresponding to the unique baseline that key is a member of.'''
+        return super().__getitem__(self._bl_to_red_key[key])
+
+    def __setitem__(self, key, value):
+        '''Sets data for to unique baseline that the key is a member of.'''
+        return super().__setitem__(self._bl_to_red_key[key], value)
+
+    def __contains__(self, key):
+        '''Returns true if the baseline redundant with the key is in the data.'''
+        return key in self._bl_to_red_key

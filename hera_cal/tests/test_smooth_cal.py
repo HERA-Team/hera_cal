@@ -3,7 +3,6 @@
 # Licensed under the MIT License
 
 import pytest
-import uvtools
 import numpy as np
 from copy import deepcopy
 import os
@@ -14,6 +13,7 @@ from scipy import constants
 import warnings
 from pyuvdata import UVCal, UVData
 import pytest
+from hera_filters import dspec
 
 from .. import io, smooth_cal, utils
 from ..datacontainer import DataContainer
@@ -55,11 +55,11 @@ class Test_Smooth_Cal_Helper_Functions(object):
         assert pytest.raises(ValueError, smooth_cal.dpss_filters, times=times, freqs=freqs,
                              time_scale=1.01 / time_scale, freq_scale=0.99 / freq_scale)
 
-        v = uvtools.dspec.dpss_operator(times * 60 * 60 * 24, [0], [time_scale / 1.01], eigenval_cutoff=[1e-9])[0].real
+        v = dspec.dpss_operator(times * 60 * 60 * 24, [0], [time_scale / 1.01], eigenval_cutoff=[1e-9])[0].real
         for i in range(v.shape[1]):
             np.testing.assert_allclose(v[:, i], time_filters[:, i])
 
-        v = uvtools.dspec.dpss_operator(freqs, [0], [freq_scale / 1e6 / 1.01], eigenval_cutoff=[1e-9])[0].real
+        v = dspec.dpss_operator(freqs, [0], [freq_scale / 1e6 / 1.01], eigenval_cutoff=[1e-9])[0].real
         for i in range(v.shape[1]):
             np.testing.assert_allclose(v[:, i], freq_filters[:, i])
 
