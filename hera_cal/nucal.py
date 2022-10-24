@@ -1,3 +1,4 @@
+from math import radians
 from multiprocessing.sharedctypes import Value
 from . import utils
 from . import redcal
@@ -497,12 +498,14 @@ class FrequencyRedundancy:
 def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutoff=1e-12):
     """
     Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds. 
-    Note filtering radial_reds before running this function is advised to reduce the size of filters generated
+    Note that if you are using a large array with a large range short and long baselines in an individual radially
+    redundant group, it is advised to filter radial_reds using radial_reds.filter_reds before running this function 
+    to reduce the size of filters generated
 
     Parameters:
     ----------
     radial_reds : FrequencyRedundant object
-        pass
+        FrequencyRedundant object containing lists of radially redundant baselines. 
     freqs : np.ndarray
         Frequencies found in the data in units of Hz
     ell_half_width : float, default=1
@@ -514,13 +517,16 @@ def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutof
     Returns:
     -------
     spatial_modes : dictionary
-        pass
+        Dictionary containing baseline tuple / PSWF eigenvectors key-value pairs used for modeling 
+        foregrounds
     """
+    # Create dictionary for all uv pswf eigenvectors
     spatial_vectors = {}
 
     # Get the minimum and maximum u-bounds used
     u_bounds = get_u_bounds(radial_reds, freqs)
 
+    # Loop through each baseline in each radial group
     for gi, group in radial_reds:
         umin, umax = u_bounds[gi]
         for bl in group:
@@ -618,7 +624,6 @@ def build_nucal_wgts(radial_reds, freqs, data_flags, data_nsamples, autocorrs, a
         gain_flags=gain_flags, tol=tol, antpos=antpos
     )
 
-    # TODO: unpack into np.ndarrays for each group
     return weights
 
 def estimate_phase_post_redcal(data, radial_reds, wgts=None, freqs=None, cache={}):
@@ -700,22 +705,22 @@ class NuCalibrator:
         Parameters:
         ----------
         reds : list of lists
-            pass
+            List of groups of baselines that are considered to be spatially redundant
         radial_reds : FrequencyRedundancy
-            pass
+            FrequencyRedundancy object containing of lists of baselines that are considered to
+            be radially redundant.
         """
         # Store radial reds
         self.radial_reds = radial_reds
         
         # Get idealized antenna positions
         self.idealized_antpos = redcal.reds_to_antpos(reds)
-        self.blvec = ...
+        self.idealized_blvecs = {red[0]: self.idealized_antpos[red[0][1]] - self.idealized_antpos[red[0][0]] for red in reds}
         
         # Get number of tip-tilt dimensions from 
         self.ndims = self.idealized_antpos[list(self.idealized_antpos.keys())[0]].shape[0]
             
         # Build function that will be used to calculate loss
-        # TODO: Isolate confirm correct parameter is being used to 
         self.loss = jax.value_and_grad(self._iterate_through_groups)
     
     @partial(jax.jit, static_argnums=(0,))
@@ -725,12 +730,16 @@ class NuCalibrator:
         
         Parameters:
         ----------
+        skymodes_r : jnp.ndarray
+            Modeling components used to compute the sky model using DPSS vectors for the
+            real component of the data.
+        skymodes_i : jnp.ndarray
+            Modeling components used to compute the sky model using DPSS vectors for the
+            imaginary component of the data.
         spec : jnp.ndarray
-            pass
-        spat : jnp.ndarray
-            pass
-        beta : jnp.ndarray
-            pass
+            Array of spectrally DPSS eigenvectors used for modeling foregrounds
+        spat : list of jnp.ndarrays
+            Array of spatial PSWF eigenvectors used for modeling foregrounds
         """
         model_r = jnp.einsum('fm,afn,mn->af', spec, spat, skymodes_r, optimize=True)
         model_i = jnp.einsum('fm,afn,mn->af', spec, spat, skymodes_i, optimize=True)
@@ -748,9 +757,9 @@ class NuCalibrator:
         wgts : jnp.ndarray
             pass
         spec : jnp.ndarray
-            pass
-        spat : jnp.ndarray
-            pass
+            Array of spectrally DPSS eigenvectors used for modeling foregrounds
+        spat : list of jnp.ndarrays
+            Array of spatial PSWF eigenvectors used for modeling foregrounds
         
         Returns:
         -------
@@ -758,7 +767,7 @@ class NuCalibrator:
             pass
         """
         # Dot tip-tilt parameters into baseline vector
-        phase = jnp.einsum('nf,nb->bf', params["phi"], self.blvec)
+        phase = jnp.einsum('nf,nb->bf', params["phi"], self.idealized_blvecs)
                 
         # Compute foreground model from beta estimates
         fg_r, fg_i = self.foreground_model(skymodes_r, skymodes_i, spec, spat)
@@ -779,15 +788,15 @@ class NuCalibrator:
         Parameters: 
         ----------
         params : dictionary
-            pass
+            Parameter dictionary containing current iterations estimate of the parameter values
         data : list of jnp.ndarrays
-            pass
+            List of jnp.ndarrays of data for each radially redundant group of baselines
         wgts : list of jnp.ndarrays
-            pass
+            List of jnp.ndarrays of the data weights for each radially redundant group of baselines
         spec : jnp.ndarray
-            pass
+            Array of spectrally DPSS eigenvectors used for modeling foregrounds
         spat : list of jnp.ndarrays
-            pass
+            Array of spatial PSWF eigenvectors used for modeling foregrounds
         """
         loss = 0
         for _d, _w, _spat in zip(data, wgts, spat):
@@ -843,9 +852,9 @@ class NuCalibrator:
              
         return params, {"loss": losses[-1], "niter": step + 1}
     
-    def fit_degenerate_parameters(self, data, wgts, freqs=None, pols=["nn"], eta_half_width=20e-9, ell_half_width=1, 
-                  eigenval_cutoff=1e-12, learning_rate=1e-3, maxiter=100, optimizer='adabelief', 
-                  **opt_kwargs):
+    def fit_redcal_degens(self, data, freqs=None, pols=["nn"], eta_half_width=20e-9, ell_half_width=1, 
+                  eigenval_cutoff=1e-12, learning_rate=1e-3, maxiter=100, optimizer='adabelief', amp_estimate=None,
+                  tiptilt_estimate=None, **opt_kwargs):
         """
         Parameters:
         ----------
@@ -869,9 +878,6 @@ class NuCalibrator:
             pass
         optimizer : str, default='adabelief'
             Optimizer used when performing gradient descent
-        return_min_loss : bool, default=False
-            Return solution with the minimum loss found. If False, solution found on the last iteration 
-            will be returned.
         opt_kwargs :
             Additional keyword arguments to be passed to the optimizer chosen. See optax documentation
             for additional details.
@@ -887,6 +893,11 @@ class NuCalibrator:
             else:
                 raise ValueError("Frequency array not provided and not found in the data.")
 
+        # Check to make sure all of the baselines in the radially redundant group also exist in the data provided
+        for group in self.radial_reds:
+            for bl in group:
+                assert bl in data
+
         # Get number of times in the data or infer it
         if hasattr(data, 'times'):
             ntimes = data.times.shape[0]
@@ -898,10 +909,6 @@ class NuCalibrator:
         assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
         optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
                 
-        # Compute spatial filters used for calibration
-        spatial_filters = compute_spatial_filters(self.radial_reds, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
-        spectral_filters, _ = dspec.dpss_operator(freqs, [0], [eta_half_width], eigenval_cutoff=eigenval_cutoff)
-
         # Separate spatial filters by polarization
         spatial_dpss = {}
         for pol in pols:
@@ -919,22 +926,23 @@ class NuCalibrator:
         weights_dict = build_nucal_wgts()
 
         # For each time and each polarization in the data calibrate
-        solution, info = {}, {}
+        solution, info = {"amp": [], "phi": []}, {}
         for pol in pols:
             initial_params = {
                 "amp": np.ones((ntimes, freqs.shape[0])),
                 "phi": np.ones((ntimes, freqs.shape[0], self.ndims)),
-                "fg_r": [np.ones((ntimes, 1)) for i in range(len(self.radial_reds))],
-                "fg_i": [np.ones((ntimes, 1)) for i in range(len(self.radial_reds))]
+                "fg_r": [np.ones((ntimes, spatial_dpss[pol][i].shape[-1])) for i in range(len(self.radial_reds))],
+                "fg_i": [np.ones((ntimes, spatial_dpss[pol][i].shape[-1])) for i in range(len(self.radial_reds))]
             }
-            _data = np.array([data[bl] for group in self.radial_reds.get_pol(pol) for bl in group])
-            wgts = np.array([weights_dict[bl] for group in self.radial_reds.get_pol(pol) for bl in group])
             for tind in range(ntimes):
-                fit_params, info = self._calibrate_single_integration(initial_params, optimizer, _data, wgts, maxiter=maxiter)
+                _data = jnp.array([data[bl][tind] for group in self.radial_reds.get_pol(pol) for bl in group])
+                _wgts = jnp.array([weights_dict[bl][tind] for group in self.radial_reds.get_pol(pol) for bl in group])
+                fit_params, info = self._calibrate_single_integration(initial_params, optimizer, _data, _wgts, maxiter=maxiter)
 
                 # TODO: unpack solution and organize it in a sensible way
                 # Consider nucal_sol object that gets added to. Nucal sol object could work like
                 # dictionary similarly to Redsol
-                pass
+                solution['amp'].append(fit_params['amp'])
+                solution['phi'].append(fit_params['phi'])
 
         return solution, info

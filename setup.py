@@ -58,11 +58,11 @@ setup_args = {
         'hera_qm',
         'scikit-learn',
         'hera_filters',
-        'jax'
     ],
     'extras_require': {
         "all": [
-            'aipy>=3.0'
+            'aipy>=3.0',
+            'jax'
         ]
     },
     'zip_safe': False,
