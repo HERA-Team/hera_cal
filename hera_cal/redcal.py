@@ -1314,45 +1314,6 @@ class RedundantCalibrator:
         sol = RedSol(self.reds, sol_dict=prms)
         return meta, sol
 
-    # XXX remove functionality that lives in RedSol
-    def remove_degen_gains(self, gains, degen_gains=None, mode='phase'):
-        """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
-        function in nominally intended for use with firstcal, which returns (phase/delay) solutions
-        for antennas only.
-
-        Args:
-            gains: dictionary that contains gain solutions in the {(index,antpol): np.array} format.
-            degen_gains: Optional dictionary in the same format as gains. Gain amplitudes and phases
-                in degen_sol replace the values of sol in the degenerate subspace of redcal. If
-                left as None, average gain amplitudes will be 1 and average phase terms will be 0.
-                For logcal/lincal/omnical, putting firstcal solutions in here can help avoid structure
-                associated with phase-wrapping issues.
-            mode: 'phase' or 'complex', indicating whether the gains are passed as phases (e.g. delay
-                or phi in e^(i*phi)), or as the complex number itself.  If 'phase', only phase degeneracies
-                removed.  If 'complex', both phase and amplitude degeneracies are removed.
-        Returns:
-            new_gains: gains with degeneracy removal/replacement performed
-        """
-        return remove_degen_gains(self.reds, gains, degen_gains=degen_gains, mode=mode, pol_mode=self.pol_mode)
-
-    # XXX remove functionality that lives in RedSol
-    def remove_degen(self, sol, degen_sol=None):
-        """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
-        function is nominally intended for use with solutions from logcal, omnical, or lincal, which
-        return complex solutions for antennas and visibilities.
-
-        Args:
-            sol: RedSol object that contains both redundant visibilities and gain solutions
-            degen_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases
-                in degen_sol replace the values of sol in the degenerate subspace of redcal. If
-                left as None, average gain amplitudes will be 1 and average phase terms will be 0.
-                Visibilties in degen_sol are ignored.  For logcal/lincal/omnical, putting firstcal
-                solutions in here can help avoid structure associated with phase-wrapping issues.
-        Returns:
-            new_sol: RedSol with degeneracy removal/replacement performed
-        """
-        return sol.remove_degen(degen_sol=degen_sol, inplace=False)
-
     def count_degens(self, assume_redundant=True):
         """Count the number of degeneracies in this redundant calibrator, given the redundancies and the pol_mode.
         Does not assume coplanarity and instead introduces additional phase slope degeneracies to compensate.
