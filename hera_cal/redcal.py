@@ -1268,15 +1268,13 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-        sol0pack = {self.pack_sol_key(k): v for k, v in sol0.items()
-                    if len(k) == 2}
+        sol0pack = {self.pack_sol_key(ant): gain for ant, gain in sol0.gains.items()}
         for ubl in self._ubl_to_reds_index.keys():
             sol0pack[self.pack_sol_key(ubl)] = sol0[ubl]
-        ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0pack,
-                          wgts=wgts, sparse=sparse)
+        ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0pack, wgts=wgts, sparse=sparse)
         meta, prms = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, verbose=verbose, mode=mode)
         prms = {self.unpack_sol_key(k): v for k, v in prms.items()}
-        make_sol_finite(prms)  # XXX necessary?
+        make_sol_finite(prms)
         sol = RedSol(self.reds, sol_dict=prms)
         return meta, sol
 
@@ -1306,15 +1304,13 @@ class RedundantCalibrator:
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
 
-        sol0pack = {self.pack_sol_key(k): v for k, v in sol0.items()
-                    if len(k) == 2}
+        sol0pack = {self.pack_sol_key(ant): gain for ant, gain in sol0.gains.items()}
         for ubl in self._ubl_to_reds_index.keys():
             sol0pack[self.pack_sol_key(ubl)] = sol0[ubl]
-        ls = self._solver(OmnicalSolver, data, sol0=sol0pack,
-                          wgts=wgts, gain=gain)
+        ls = self._solver(OmnicalSolver, data, sol0=sol0pack, wgts=wgts, gain=gain)
         meta, prms = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after, wgt_func=wgt_func)
         prms = {self.unpack_sol_key(k): v for k, v in prms.items()}
-        make_sol_finite(prms)  # XXX necessary?
+        make_sol_finite(prms)
         sol = RedSol(self.reds, sol_dict=prms)
         return meta, sol
 
