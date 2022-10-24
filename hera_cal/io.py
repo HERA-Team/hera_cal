@@ -101,14 +101,14 @@ class HERACal(UVCal):
         # build dict of gains, flags, and quals
         for (ant, pol) in self.ants:
             i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-            gains[(ant, pol)] = np.array(self.gain_array[i, 0, :, :, ip].T)
-            flags[(ant, pol)] = np.array(self.flag_array[i, 0, :, :, ip].T)
-            quals[(ant, pol)] = np.array(self.quality_array[i, 0, :, :, ip].T)
+            gains[(ant, pol)] = np.array(self.gain_array[i, :, :, ip].T)
+            flags[(ant, pol)] = np.array(self.flag_array[i, :, :, ip].T)
+            quals[(ant, pol)] = np.array(self.quality_array[i, :, :, ip].T)
         # build dict of total_qual if available
         for pol in self.pols:
             ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
             if self.total_quality_array is not None:
-                total_qual[pol] = np.array(self.total_quality_array[0, :, :, ip].T)
+                total_qual[pol] = np.array(self.total_quality_array[:, :, ip].T)
             else:
                 total_qual = None
 
@@ -144,6 +144,7 @@ class HERACal(UVCal):
         if self.filepaths is not None:
             # load data
             self.read_calfits(self.filepaths[0])
+            self.use_future_array_shapes()
 
             if pols is not None:
                 pols = [jstr2num(ap, x_orientation=self.x_orientation) for ap in pols]
@@ -164,6 +165,8 @@ class HERACal(UVCal):
                 for fp in self.filepaths[1:]:
                     uvc = UVCal()
                     uvc.read_calfits(fp)
+                    uvc.use_future_array_shapes()
+
                     if np.any([s is not None for s in select_dict.values()]):
                         uvc.select(inplace=True, **select_dict)
                     self += uvc
@@ -189,15 +192,15 @@ class HERACal(UVCal):
             if to_update is not None:
                 for (ant, pol) in to_update.keys():
                     i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-                    array[i, 0, :, :, ip] = to_update[(ant, pol)].T
+                    array[i, :, :, ip] = to_update[(ant, pol)].T
 
         # update total_qual
         if total_qual is not None:
             if self.total_quality_array is None:
-                self.total_quality_array = np.zeros((1, ) + self.gain_array.shape[2:], dtype=float)
+                self.total_quality_array = np.zeros(self.gain_array.shape[1:], dtype=float)
             for pol in total_qual.keys():
                 ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-                self.total_quality_array[0, :, :, ip] = total_qual[pol].T
+                self.total_quality_array[:, :, ip] = total_qual[pol].T
 
     def write(self, filename, spoof_missing_channels=False, **write_kwargs):
         """
@@ -219,15 +222,16 @@ class HERACal(UVCal):
             # This line provides freqs_filled -- frequency axis with spoofed frequencies
             # and inserted which is a boolean array that is True at frequencies that are being spoofed.
             freqs_filled, _, _, inserted = place_data_on_uniform_grid(self.freqs, np.ones_like(self.freqs), np.ones_like(self.freqs))
-            writer.freq_array = freqs_filled.reshape(self.Nspws, len(freqs_filled))
+            writer.freq_array = freqs_filled.flatten()
             writer.Nfreqs = len(freqs_filled)
+            writer.channel_width = np.median(writer.channel_width) * np.ones_like(writer.freq_array)
             # insert original flags and gains into appropriate channels.
-            new_gains = np.ones((writer.Nants_data, writer.Nspws, writer.Nfreqs, writer.Ntimes, writer.Njones), dtype=complex)
-            new_gains[:, :, ~inserted, :, :] = writer.gain_array
+            new_gains = np.ones((writer.Nants_data, writer.Nfreqs, writer.Ntimes, writer.Njones), dtype=complex)
+            new_gains[:, ~inserted, :, :] = writer.gain_array
             new_flags = np.ones(new_gains.shape, dtype=bool)
-            new_flags[:, :, ~inserted, :, :] = writer.flag_array
+            new_flags[:, ~inserted, :, :] = writer.flag_array
             new_quality = np.zeros(new_gains.shape, dtype=float)
-            new_quality[:, :, ~inserted, :, :] = writer.quality_array
+            new_quality[:, ~inserted, :, :] = writer.quality_array
 
             writer.flag_array = new_flags
             writer.gain_array = new_gains
@@ -597,10 +601,10 @@ class HERAData(UVData):
             return {pol: self._get_slice(data_array, key + (pol,)) for pol in pols}
         elif len(key) == 3:  # asking for bl-pol
             try:
-                return np.array(data_array[self._blt_slices[tuple(key[0:2])], 0, :,
+                return np.array(data_array[self._blt_slices[tuple(key[0:2])], :,
                                            self._polnum_indices[polstr2num(key[2], x_orientation=self.x_orientation)]])
             except KeyError:
-                return np.conj(data_array[self._blt_slices[tuple(key[1::-1])], 0, :,
+                return np.conj(data_array[self._blt_slices[tuple(key[1::-1])], :,
                                           self._polnum_indices[polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)]])
         else:
             raise KeyError('Unrecognized key type for slicing data.')
@@ -625,10 +629,10 @@ class HERAData(UVData):
                 self._set_slice(data_array, (key + (pol,)), value[pol])
         elif len(key) == 3:  # providing bl-pol
             try:
-                data_array[self._blt_slices[tuple(key[0:2])], 0, :,
+                data_array[self._blt_slices[tuple(key[0:2])], :,
                            self._polnum_indices[polstr2num(key[2], x_orientation=self.x_orientation)]] = value
             except(KeyError):
-                data_array[self._blt_slices[tuple(key[1::-1])], 0, :,
+                data_array[self._blt_slices[tuple(key[1::-1])], :,
                            self._polnum_indices[polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)]] = np.conj(value)
         else:
             raise KeyError('Unrecognized key type for slicing data.')
@@ -729,6 +733,7 @@ class HERAData(UVData):
                                  times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability, **kwargs)
+                    self.use_future_array_shapes()
                     if self.filetype == 'uvfits':
                         self.unphase_to_drift()
                 else:
@@ -738,6 +743,7 @@ class HERAData(UVData):
                         super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
                                      time_range=time_range, run_check=run_check, check_extra=check_extra,
                                      run_check_acceptability=run_check_acceptability, **kwargs)
+                        self.use_future_array_shapes()
                         if any([times is not None, lsts is not None, lst_range is not None,
                                 frequencies is not None, freq_chans is not None]):
                             warnings.warn('miriad does not support partial loading for times/lsts (except time_range) and frequencies. '
