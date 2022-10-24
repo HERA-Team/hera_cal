@@ -21,6 +21,12 @@ from . import apply_cal
 from .datacontainer import DataContainer
 import logging
 
+try:
+    profile
+except NameError:
+    def profile(fnc):
+        return fnc
+
 logger = logging.getLogger(__name__)
 
 def baselines_same_across_nights(data_list):
@@ -51,7 +57,7 @@ def baselines_same_across_nights(data_list):
     same_across_nights = np.all([baseline_counts[k] == baseline_counts[bl] for bl in baseline_counts])
     return same_across_nights
 
-
+@profile
 def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None, begin_lst=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
             sig_clip=False, sigma=4.0, min_N=4, flag_below_min_N=False, return_no_avg=False, antpos=None,
@@ -203,7 +209,8 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         # iterate over keys in d
         klist = list(d.keys())
         for j, key in enumerate(klist):
-            logging.info(f"Doing key {key} [{j+1}/{len(klist)}]")
+            if j % (len(klist)//100) == 0:
+                logger.info(f"Doing key {key} [{j+1}/{len(klist)}]")
             
             # if bl_list is not None, use it to determine conjugation:
             # this is to prevent situations where conjugation of bl in
@@ -235,7 +242,6 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
 
             # iterate over grid_indices, and append to data if data_in_bin is True
             for k, ind in enumerate(grid_indices):
-                logger.info(f"Doing ind {ind} [{k+1} / {len(grid_indices)}]")
 
                 # ensure data_in_bin is True for this grid index
                 if data_in_bin[k]:
@@ -338,7 +344,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         # iterate over sorted LST grid indices in data[key]
         for j, ind in enumerate(sorted(data[key].keys())):
             logging.info(f"Doing ind {ind} [{j+1}/{len(data[key])}]")
-            
+
             # make data and flag arrays from lists
             d = np.array(data[key][ind])  # shape = (Ndays x Nfreqs)
             f = np.array(flags[key][ind])
@@ -572,7 +578,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
                  to match the range of lst_grid given lst_start
     time_arrays : list, list of time arrays for each file
     """
-
+    logger.info("Configuring lst_grid")
     # get dlst from first data file if None
     if dlst is None:
         dlst, _, _, _ = io.get_file_times(data_files[0][0], filetype='uvh5')
@@ -580,7 +586,8 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
     # get time arrays for each file
     lst_arrays = []
     time_arrays = []
-    for di, dfs in enumerate(data_files):
+    for dfs in data_files:
+        logging.info(f"Getting {dfs} times.")
         # get times
         _, _, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
         # append
@@ -615,7 +622,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
     # get output file lsts that are not empty
     all_file_lsts = [lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
     file_lsts = []
-    for i, f_lst in enumerate(all_file_lsts):
+    for f_lst in all_file_lsts:
         fmin = f_lst[0] - (dlst / 2 + atol)
         fmax = f_lst[-1] + (dlst / 2 + atol)
         for lst in flat_lsts:
@@ -759,7 +766,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         # iterate over baseline groups (for memory efficiency)
         data_conts, flag_conts, std_conts, num_conts = [], [], [], []
         for bi, blgroup in enumerate(blgroups):
-            utils.echo("starting baseline-group {} / {}: {}".format(bi + 1, len(blgroups), datetime.datetime.now()), type=0, verbose=verbose)
+            utils.echo("Starting Baseline Chunk {} / {}: {}".format(bi + 1, len(blgroups), datetime.datetime.now()), type=0, verbose=verbose)
             # create empty data lists
             data_list = []
             file_list = []
@@ -1035,33 +1042,45 @@ def sigma_clip(array, sigma=4.0, min_N=4):
     return clip_flags
 
 
-def gen_bl_nightly_dicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False, ex_ant_yaml_files=None):
+def gen_bl_nightly_dicts(
+    hds: list[io.HERAData], 
+    bl_error_tol: float=1.0, 
+    include_autos: bool=True, 
+    redundant: bool=False, 
+    ex_ant_yaml_files: list[str] | None=None
+) -> list[dict[int, list[tuple[int, int]]]]:
     """
     Helper function to generate baseline dicts to keep track of reds between nights.
 
-    Parameters:
-    -----------
-    hds : list of HERAData objects. Can have no data loaded (preferable) and should refer to single files.
-    bl_error_tol : float (meters), optional. baselines whose vector difference are within this tolerance are considered
-                   redundant. Default is 1.0 meter.
-    include_autos : bool, if True, include autos in bl_nightly_dicts.
-                    default is True.
-    redundant : optional, if True, each bl_nightly_dict stores redundant group. If False, each bl_nightly_dict will contain a length-1 group for each baseline
-                over all the nights.
-                default is False.
-    ex_ant_yaml_files : list of strings, optional
-                list of paths to yaml files with antennas to throw out on each night.
-                default is None (dont throw out any flagged antennas)
+    Parameters
+    ----------
+    hds
+        A list of HERAData objects. Can have no data loaded (preferable) and should 
+        refer to single files.
+    bl_error_tol
+        Baselines whose vector difference are within this tolerance are considered
+        redundant. In units of m.
+    include_autos
+        Whether to include autos in bl_nightly_dicts.
+    redundant
+        If True, ``bl_nightly_dict`` stores redundant group. If False, each 
+        ``bl_nightly_dict`` will contain a length-1 group for each baseline over all 
+        the nights.
+    ex_ant_yaml_files
+        A list of paths to yaml files with antennas to throw out on each night.
+        Default is to not throw out any flagged antennas.
+
     Outputs:
-    ---------
+    --------
     If redundant:
-        list of dictionaries of the form {0: [(a0, b0), (a0, c0)...], 1: [(a1, b1),.., ], ... Nnight: [(ANnight, BNnight), ...,]}.
+        list of dictionaries of the form 
+        ``{0: [(a0, b0), (a0, c0)...], 1: [(a1, b1),.., ], ... Nnight: [(ANnight, BNnight), ...,]}.
         Each dictionary represents a unique baseline length and orientation.
         where the key of each dictionary is an index for each night to be LST binned and each value
         is the antenna pair representing the unique baseline on that night.
         some baseline dicts will only have a subset of nights.
     If not redundant:
-        list of dictionaries of form {0: [(a,b)], 1:[(a, b)], 4:[(a,b)]}
+        list of dictionaries of form [{0: [(a,b)], 1:[(a, b)], 4:[(a,b)]}, {0: [(c,d)], 1:[(c, d)], 4:[(c, d)]}]
         In other words, each baseline dict corresponds to a unique baseline rather then a group
         and each value is that baseline in a length 1 list and each key is each night in which the baseline is present.
     """
