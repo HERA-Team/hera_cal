@@ -332,8 +332,9 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     # iterate over data keys (baselines) and get statistics
     logging.info("Getting statistics")
     for i, key in enumerate(data.keys()):
-        logging.info(f"Doing key {key} [ {i+1} / {len(data)} ]")
-
+        if i % (len(data) / 100) == 0:
+            logger.info(f"Doing Key {key} [{i+1}/{len(data)}]")
+            
         # create empty lists
         real_avg = []
         imag_avg = []
@@ -343,8 +344,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         bin_count = []
         # iterate over sorted LST grid indices in data[key]
         for j, ind in enumerate(sorted(data[key].keys())):
-            logging.info(f"Doing ind {ind} [{j+1}/{len(data[key])}]")
-
+            
             # make data and flag arrays from lists
             d = np.array(data[key][ind])  # shape = (Ndays x Nfreqs)
             f = np.array(flags[key][ind])
