@@ -1739,13 +1739,10 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             cal['vns_omnical'][bl] = np.zeros_like(vis, dtype=np.float32)
 
 
-def redundantly_calibrate(data, reds, sol0=None,
-                          logcal=False, omnical=True,
-                          remove_degen=True, compute_chisq=True,
-                          freqs=None, times_by_bl=None,
-                          oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
-                          check_after=50, gain=.4, max_dims=2,
-                          use_gpu=False):
+def redundantly_calibrate(data, reds, sol0=None, run_logcal=True, run_omnical=True,
+                          remove_degen=True, compute_chisq=True, freqs=None, times_by_bl=None,
+                          oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
+                          gain=.4, max_dims=2, use_gpu=False):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -1755,8 +1752,8 @@ def redundantly_calibrate(data, reds, sol0=None,
             item in each list will be treated as the key for the unique baseline.
         sol0: Optional RedSol. If not default None,
             skips performing firstcal and substitutes this for 'g_firstcal' in the returned meta dictionary.
-        logcal: Perform logcal before omnical. Default False
-        omnical: Perform omnical. Default True
+        run_logcal: Perform logcal before omnical. Default True. If False, use firstcal's sol or sol_0.
+        run_omnical: Perform omnical. Default True. If False, will return logcal or firstcal's sol.
         remove_degen: Project out degeneracies, replacing them with sol0 (or internally from firstcal)
         compute_chisq: Add normalized chisq to returned meta dictionary
         freqs: 1D numpy array frequencies in Hz. Optional if inferable from data DataContainer,
@@ -1813,21 +1810,22 @@ def redundantly_calibrate(data, reds, sol0=None,
     meta['g_firstcal'] = sol0.gains
 
     # perform logcal
-    if logcal:
+    if run_logcal:
         _, sol = rc.logcal(data, sol0=sol0)
     else:
         sol = sol0
 
     # calculate data_wgts for omnical or calculating chisq
-    if omnical or compute_chisq:
+    if run_omnical or compute_chisq:
         dts_by_bl = DataContainer({bl: infer_dt(times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in red_bls})
         data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in red_bls})
 
     # perform omnical
-    if omnical:
+    if run_omnical:
         meta['omni_meta'], sol = rc.omnical(data, sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
                                             check_every=check_every, check_after=check_after, gain=gain)
 
+    # remove degneracies using firstcal or sol0
     if remove_degen:
         sol.remove_degen(degen_sol=sol0, inplace=True)
 
