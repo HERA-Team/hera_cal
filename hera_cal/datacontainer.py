@@ -581,7 +581,11 @@ class RedDataContainer(DataContainer):
 
     def __setitem__(self, key, value):
         '''Sets data for to unique baseline that the key is a member of.'''
-        return super().__setitem__(self._bl_to_red_key[key], value)
+        ubl_key = self._bl_to_red_key.get(key, None)
+        if ubl_key is None:
+            self._add_red(key, [key])  # treat this as a new baseline not redundant with anything
+            ubl_key = key
+        super().__setitem__(ubl_key, value)
 
     def __contains__(self, key):
         '''Returns true if the baseline redundant with the key is in the data.'''
