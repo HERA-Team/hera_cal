@@ -282,8 +282,10 @@ def lst_bin_files(
         try:
             file_lsts = [file_lsts[i] for i in output_file_select]
         except IndexError:
-            print("Warning: one or more indices in output_file_select {} caused an index error with length {} "
-                  "file_lsts list, exiting...".format(output_file_select, nfiles))
+            warnings.warn(
+                f"One or more indices in output_file_select {output_file_select} "
+                f"caused an index error with length {nfiles} file_lsts list, exiting..."
+            )
             return
 
     # get outdir
@@ -419,7 +421,7 @@ def lst_bin_files(
                             gains, cal_flags, _, _ = uvc.build_calcontainers()
                         
                         apply_cal.calibrate_in_place(
-                            _data, gains, data_flags=flags, cal_flags=cal_flags,
+                            _data, gains, data_flags=_flags, cal_flags=cal_flags,
                             gain_convention=uvc.gain_convention
                         )
 
