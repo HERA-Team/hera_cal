@@ -1772,6 +1772,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
     Returns a dictionary of results with the following keywords:
+        XXX: rewrite
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
             Gains are Ntimes x Nfreqs gains but fully described by a per-antenna delay.
         'gf_firstcal': firstcal gain flags in the same format as 'g_firstcal'. Will be all False.
@@ -1808,29 +1809,16 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     ants = [(ant, antpol) for ant in ant_nums for antpol in antpols]
     pol_load_list = _get_pol_load_list(hd.pols, pol_mode=pol_mode)
 
-    # initialize gains to 1s, gain flags to True, and chisq to 0s
-    rv = {}  # dictionary of return values
-    rv['g_firstcal'] = {ant: np.ones((nTimes, nFreqs), dtype=np.complex64) for ant in ants}
-    rv['gf_firstcal'] = {ant: np.ones((nTimes, nFreqs), dtype=bool) for ant in ants}
-    rv['g_omnical'] = {ant: np.ones((nTimes, nFreqs), dtype=np.complex64) for ant in ants}
-    rv['gf_omnical'] = {ant: np.ones((nTimes, nFreqs), dtype=bool) for ant in ants}
-    rv['chisq'] = {antpol: np.zeros((nTimes, nFreqs), dtype=np.float32) for antpol in antpols}
-    rv['chisq_per_ant'] = {ant: np.zeros((nTimes, nFreqs), dtype=np.float32) for ant in ants}
-
-    # get reds and then intitialize omnical visibility solutions to all 1s and all flagged
+    # get full set of reds and filtered reds to calibrate
     all_reds = get_reds({ant: hd.antpos[ant] for ant in ant_nums}, bl_error_tol=bl_error_tol,
                         pol_mode=pol_mode, pols=set([pol for pols in pol_load_list for pol in pols]))
-    rv['v_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds})
-    rv['vf_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds})
-    rv['vns_omnical'] = DataContainer({red[0]: np.zeros((nTimes, nFreqs), dtype=np.float32) for red in all_reds})
     filtered_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
 
-    # setup metadata dictionaries
-    rv['fc_meta'] = {'dlys': {ant: np.full(nTimes, np.nan) for ant in ants}}
-    rv['fc_meta']['polarity_flips'] = {ant: np.full(nTimes, np.nan) for ant in ants}
-    rv['omni_meta'] = {'chisq': {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}}
-    rv['omni_meta']['iter'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=int) for pols in pol_load_list}
-    rv['omni_meta']['conv_crit'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
+    # initialize RedCalContainers to contain the full set of data and metadata
+    cal_first = RedCalContainer(ants, all_reds, nTimes, nFreqs, gains_only=True, skip_chisq=True)
+    cal_first._init_firstcal_meta(ants, nTimes, nFreqs)
+    cal_omni = RedCalContainer(ants, all_reds, nTimes, nFreqs, gains_only=False, skip_chisq=False)
+    cal_omni._init_omnical_meta(pol_load_list, nTimes, nFreqs)
 
     # solar flagging
     lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
@@ -1860,49 +1848,37 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                         nsamples[bl] = nsamples[bl][tinds, fSlice]
                 else:  # perform partial i/o
                     data, _, nsamples = hd.read(time_range=(hd.times[tinds][0], hd.times[tinds][-1]), frequencies=hd.freqs[fSlice], polarizations=pols)
-                cal, sol = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
-                                                 logcal=True,
-                                                 oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
-                                                 check_every=check_every, check_after=check_after,
-                                                 max_dims=max_dims, gain=gain)
-                # XXX pasted this stuff here to get it out of redundantly_calibrate, but I think it needs to be
-                # pushed even farther downstream
-                cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['g_firstcal'].items()}
-                cal['g_omnical'] = sol.gains
-                cal['v_omnical'] = sol.vis
-                cal['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in cal['g_omnical'].items()}
-                cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
-                cal['v_omnical'] = DataContainer(cal['v_omnical'])
-                cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
-                                    for ant, g in cal['g_omnical'].items()}
+                meta, sol = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
+                                                  run_logcal=True, run_omnical=True,
+                                                  oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
+                                                  check_every=check_every, check_after=check_after,
+                                                  max_dims=max_dims, gain=gain)
 
-                expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
+                # fill out relevant parts of cal_first
+                cal_first.update(tSlice=tinds, fSlice=fSlice, firstcal_meta=meta['fc_meta'], gains=meta['fc_gains'],
+                                 gain_flags={ant: np.zeros_like(g, dtype=bool) for ant, g in meta['fc_gains'].items()})
 
-                # gather results
-                for ant in cal['g_omnical'].keys():
-                    rv['g_firstcal'][ant][tinds, fSlice] = cal['g_firstcal'][ant]
-                    rv['gf_firstcal'][ant][tinds, fSlice] = cal['gf_firstcal'][ant]
-                    rv['g_omnical'][ant][tinds, fSlice] = cal['g_omnical'][ant]
-                    rv['gf_omnical'][ant][tinds, fSlice] = cal['gf_omnical'][ant]
-                    rv['chisq_per_ant'][ant][tinds, fSlice] = cal['chisq_per_ant'][ant]
-                for ant in cal['fc_meta']['dlys'].keys():
-                    rv['fc_meta']['dlys'][ant][tinds] = cal['fc_meta']['dlys'][ant]
-                    rv['fc_meta']['polarity_flips'][ant][tinds] = cal['fc_meta']['polarity_flips'][ant]
-                for bl in cal['v_omnical'].keys():
-                    rv['v_omnical'][bl][tinds, fSlice] = cal['v_omnical'][bl]
-                    rv['vf_omnical'][bl][tinds, fSlice] = cal['vf_omnical'][bl]
-                    rv['vns_omnical'][bl][tinds, fSlice] = cal['vns_omnical'][bl]
-                if pol_mode in ['1pol', '2pol']:
-                    for antpol in cal['chisq'].keys():
-                        rv['chisq'][antpol][tinds, fSlice] = cal['chisq'][antpol]
-                else:  # duplicate chi^2 into both antenna polarizations
-                    for antpol in rv['chisq'].keys():
-                        rv['chisq'][antpol][tinds, fSlice] = cal['chisq']
-                rv['omni_meta']['chisq'][str(pols)][tinds, fSlice] = cal['omni_meta']['chisq']
-                rv['omni_meta']['iter'][str(pols)][tinds, fSlice] = cal['omni_meta']['iter']
-                rv['omni_meta']['conv_crit'][str(pols)][tinds, fSlice] = cal['omni_meta']['conv_crit']
+                # expand visibility solutions to baselines previously excluded but between good antennas. Update chi^2 as appropriate.
+                expand_omni_vis(sol, filter_reds(all_reds, pols=pols), data, nsamples, chisq=meta['chisq'], chisq_per_ant=meta['chisq_per_ant'])
 
-    return rv
+                # update RedCalContainer objects
+                cal_omni.update(tSlice=tinds, fSlice=fSlice, sol=sol, meta=meta,
+                                gain_flags={ant: ~np.isfinite(g) for ant, g in sol.gains},
+                                flags={bl: ~np.isfinite(v) for bl, v in sol.vis},
+                                chisq={antpol: meta['chisq'][antpol] if pol_mode in ['1pol', '2pol'] else meta['chisq'] for antpol in cal_omni.chisq})
+                cal_omni.sol.make_sol_finite()
+
+                # expand gains using visibilitiy solutions where one antenna is flagged, then expand vis.
+                # Do not unflag and only update chisq_per_ant for new gains
+                expand_omni_gains(sol, filter_reds(all_reds, pols=pols), data, nsamples, chisq_per_ant=meta['chisq_per_ant'])
+                expand_omni_vis(sol, filter_reds(all_reds, pols=pols), data, nsamples)
+
+                # update solutions with expanded gains and vis, also perform a final accounting of nsamples
+                cal_omni.update(sol=sol, chisq_per_ant=meta['chisq_per_ant'],
+                                nsamples={red[0]: np.sum([nsamples[bl] for bl in red], axis=0) * (~cal_omni.flags[red[0]])
+                                          for red in sol.vis.reds if red[0] in sol.vis})
+
+    return cal_first, cal_omni
 
 
 # XXX if cal has become such a crucial object that it defines our output format, then we have to build
