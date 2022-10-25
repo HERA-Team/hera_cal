@@ -1688,6 +1688,19 @@ class RedCalContainer():
                     self.meta[key][pol_str][tSlice, fSlice] = omni_meta[key]
 
 
+def expand_omni_vis(sol, all_reds, data, nsamples, chisq=None, chisq_per_ant=None):
+    '''XXX: document'''
+    good_ants_reds = filter_reds(all_reds, ants=list(sol.gains.keys()))
+    good_ants_bls = [bl for red in good_ants_reds for bl in red]
+    reds_to_solve = [red for red in good_ants_reds if not np.any([bl in vis.sol for bl in red])]
+    if len(reds_to_solve) > 0:
+        dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in good_ants_bls})
+        data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 * nsamples[bl] for bl in good_ants_bls})
+        sol.extend_vis(data, wgts=data_wgts, reds_to_solve=reds_to_solve)
+        if (chisq is not None) or (chisq_per_ant is not None):
+            chisq, chisq_per_ant = normalized_chisq(data, data_wgts, good_ants_reds, sol.vis, sol.gains)
+
+
 # XXX the format of rv in this function is a tail that is wagging the dog
 # suggest decoupling the work from the reporting of the work, more in line with changes
 # to redundantly_calibrate above.
