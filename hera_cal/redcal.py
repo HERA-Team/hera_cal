@@ -1644,6 +1644,49 @@ class RedCalContainer():
         self.meta['iter'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=int) for pols in pol_load_list}
         self.meta['conv_crit'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
 
+    def update(self, tSlice=slice(None), fSlice=slice(None), gains=None, gain_flags=None, vis=None, sol=None, flags=None,
+               nsamples=None, chisq=None, chisq_per_ant=None, firstcal_meta=None, omni_meta=None, pol_str=None):
+        '''XXX: document'''
+
+        # update gains, flags, vis, etc., enabling subsets of the final solution to be updated for partial I/O
+        if gains is not None:
+            for ant in gains:
+                self.gains[ant][tSlice, fSlice] = gains[ant]
+        if gain_flags is not None:
+            for ant in gain_flags:
+                self.gain_flags[ant][tSlice, fSlice] = gain_flags[ant]
+        if vis is not None:
+            for bl in vis:
+                self.vis[bl][tSlice, fSlice] = vis[bl]
+        if sol is not None:
+            for k in sol:
+                self.sol[k][tSlice, fSlice] = sol[k]
+        if flags is not None:
+            for bl in flags:
+                self.flags[bl][tSlice, fSlice] = flags[bl]
+        if nsamples is not None:
+            for bl in nsamples:
+                self.nsamples[bl][tSlice, fSlice] = nsamples[bl]
+        if chisq is not None:
+            for pol in chisq:
+                self.chisq[pol][tSlice, fSlice] = chisq[pol]
+        if chisq_per_ant is not None:
+            for ant in chisq_per_ant:
+                self.chisq_per_ant[ant][tSlice, fSlice] = chisq_per_ant[ant]
+
+        # update firstcal metadata if desired
+        if firstcal_meta is not None:
+            for key in ['dlys', 'polarity_flips']:
+                if key in firstcal_meta:
+                    for ant in firstcal_meta[key]:
+                        self.meta[key][ant][tSlice] = firstcal_meta[key][ant]
+
+        # update omnical metadata if desired
+        if omni_meta is not None:
+            for key in ['chisq', 'iter', 'conv_crit']:
+                if key in omni_meta:
+                    self.meta[key][pol_str][tSlice, fSlice] = omni_meta[key]
+
 
 # XXX the format of rv in this function is a tail that is wagging the dog
 # suggest decoupling the work from the reporting of the work, more in line with changes
