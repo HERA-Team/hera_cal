@@ -1701,6 +1701,35 @@ def expand_omni_vis(sol, all_reds, data, nsamples, chisq=None, chisq_per_ant=Non
             chisq, chisq_per_ant = normalized_chisq(data, data_wgts, good_ants_reds, sol.vis, sol.gains)
 
 
+def expand_omni_gains(sol, all_reds, data, nsamples, chisq_per_ant=None):
+    '''XXX: document'''
+    while True:
+        bls_to_use = set([bl for red in all_reds for bl in red if ((red[0] in sol.vis)
+                          and ((split_bl(bl)[0] not in sol.gains) ^ (split_bl(bl)[1] not in sol.gains)))])
+        if len(bls_to_use) == 0:
+            break  # iterate to also solve for ants only found in bls with other ex_ants
+
+        # create data subset and get data_wgts
+        data_subset = DataContainer({bl: data[bl] for bl in bls_to_use})
+        dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in bls_to_use})
+        data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 * nsamples[bl] for bl in bls_to_use})
+
+        # expand gains
+        reds_to_use = filter_reds(all_reds, bls=bls_to_use)
+        sol.extend_ants(data_subset, wgts=data_wgts, extended_reds=reds_to_use)
+
+        if chisq_per_ant is not None:
+            bls_for_chisq = [bl for red in all_reds for bl in red if ((red[0] in sol.vis)
+                             and ((split_bl(bl)[0] in sol.gains) | (split_bl(bl)[1] in sol.gains)))]
+            reds_for_chisq = filter_reds(all_reds, bls=bls_for_chisq)
+            predicted_chisq_per_ant = predict_chisq_per_ant(reds_for_chisq)
+            _, _, cspa, _ = utils.chisq(data_subset, sol.vis, data_wgts=data_wgts, gains=sol.gains, reds=all_reds)
+            for ant, cs in cspa.items():
+                if ant not in chisq_per_ant:
+                    chisq_per_ant[ant] = cs / predicted_chisq_per_ant[ant]
+                    chisq_per_ant[ant][~np.isfinite(cs)] = np.zeros_like(cs[~np.isfinite(cs)])
+
+
 # XXX the format of rv in this function is a tail that is wagging the dog
 # suggest decoupling the work from the reporting of the work, more in line with changes
 # to redundantly_calibrate above.
