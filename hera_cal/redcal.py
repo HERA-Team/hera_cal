@@ -1633,6 +1633,17 @@ class RedCalContainer():
             self.chisq = None
             self.chisq_per_ant = None
 
+    def _init_firstcal_meta(sefl, ants, nTimes, nFreqs):
+        '''XXX: document'''
+        self.meta['dlys'] = {ant: np.full(nTimes, np.nan) for ant in ants}
+        self.meta['polarity_flips'] = {ant: np.full(nTimes, np.nan) for ant in ants}
+
+    def _init_omnical_meta(self, pol_load_list, nTimes, nFreqs):
+        '''XXX: document'''
+        self.meta['chisq'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
+        self.meta['iter'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=int) for pols in pol_load_list}
+        self.meta['conv_crit'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
+
 
 # XXX the format of rv in this function is a tail that is wagging the dog
 # suggest decoupling the work from the reporting of the work, more in line with changes
