@@ -1554,7 +1554,7 @@ def redundantly_calibrate(data, reds, sol0=None, run_logcal=True, run_omnical=Tr
         meta: a dictionary of results with the following keywords:
             'filtered_reds': the filtered redundancies (based on max_dims) used internally
             'fc_meta' : dictionary that includes delays and identifies flipped antennas
-            'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
+            'fc_gains': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
                 Gains are Ntimes x Nfreqs gains but fully described by a per-antenna delay.
             'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
             'chisq': chi^2 per degree of freedom for the omnical solution. Normalized using noise derived
@@ -1583,7 +1583,7 @@ def redundantly_calibrate(data, reds, sol0=None, run_logcal=True, run_omnical=Tr
         meta['fc_meta'], sol0 = rc.firstcal(data, freqs)
     else:
         meta['fc_meta'] = None
-    meta['g_firstcal'] = sol0.gains
+    meta['fc_gains'] = sol0.gains
 
     # perform logcal
     if run_logcal:
