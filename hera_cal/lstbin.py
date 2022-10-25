@@ -334,7 +334,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     for i, key in enumerate(data.keys()):
         if i % (len(data) / 100) == 0:
             logger.info(f"Doing Key {key} [{i+1}/{len(data)}]")
-            
+
         # create empty lists
         real_avg = []
         imag_avg = []
@@ -400,8 +400,8 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 n[~isfinite] = 0.0
 
                 norm = np.sum(n, axis=0).clip(1e-99, np.inf)
-                real_avg_t = np.nansum(d.real * n, axis=0) / norm
-                imag_avg_t = np.nansum(d.imag * n, axis=0) / norm
+                real_avg_t = np.where(norm>0, np.nansum(d.real * n, axis=0) / norm, np.nan)
+                imag_avg_t = np.where(norm>0, np.nansum(d.imag * n, axis=0) / norm, np.nan)
 
                 # add back nans as np.nansum sums nan slices to 0
                 flagged_f = np.logical_not(isfinite).all(axis=0)
@@ -412,7 +412,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 imag_avg.append(imag_avg_t)
 
             # get minimum bin flag
-            f_min.append(np.nanmin(f, axis=0))
+            f_min.append(np.any(~f, axis=0))
 
             # get other stats
             with warnings.catch_warnings():
