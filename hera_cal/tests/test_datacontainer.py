@@ -469,6 +469,11 @@ def test_RedDataContainer():
             for bl in red:
                 np.testing.assert_array_equal(val_here * 2, rdata[bl])
 
+    subset_data = {red[0]: data[red[0]] for red in reds[:-1]}
+    rdata7 = datacontainer.RedDataContainer(deepcopy(subset_data), reds)
+    assert reds[-1] not in rdata7.reds
+    assert reds[-1] in rdata7.all_reds
+
     # test no redundancy information error
     with pytest.raises(ValueError):
         data = datacontainer.DataContainer({red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reds})
