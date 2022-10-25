@@ -398,7 +398,7 @@ class TestRedSol(object):
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
 
         meta, sol = info.logcal(d)
-        sol = info.remove_degen(sol, degen_sol=dict(list(gains.items()) + list(true_vis.items())))
+        sol.remove_degen(degen_sol=dict(list(gains.items()) + list(true_vis.items())))
         for ant in gains:
             np.testing.assert_array_almost_equal(gains[ant], sol.gains[ant])
         # try without weights
@@ -419,24 +419,24 @@ class TestRedSol(object):
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
 
-    def test_extend_ubls(self):
+    def test_extend_vis(self):
         NANTS = 18
         antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
         sol1 = om.RedSol(reds, gains=gains)
-        sol1.extend_ubls(d)
+        sol1.extend_vis(d)
         sol2 = om.RedSol(reds[:-1], gains=gains)
-        sol2.extend_ubls(d, reds_to_solve=reds[-1:])
+        sol2.extend_vis(d, reds_to_solve=reds[-1:])
         sol3 = om.RedSol(reds[:1], gains=gains)
         wgts = {bl: np.ones_like(v) for bl, v in d.items()}
-        sol3.extend_ubls(d, wgts=wgts, reds_to_solve=reds[1:])
+        sol3.extend_vis(d, wgts=wgts, reds_to_solve=reds[1:])
         for sol in [sol1, sol2, sol3]:
             for red in reds:
                 for bl in red:
                     np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
 
-    def test_extend_ants(self):
+    def test_extend_gains(self):
         NANTS = 18
         antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
@@ -444,14 +444,14 @@ class TestRedSol(object):
         ex_ants = [antpol for antpol in gains.keys() if antpol[0] in (5, 6)]
         freds = om.filter_reds(reds, ex_ants=ex_ants)
         sol1 = om.RedSol(freds, gains=gains, vis=true_vis)
-        sol1.extend_ants(d, extended_reds=reds)
+        sol1.extend_gains(d, extended_reds=reds)
         sol2 = om.RedSol(reds, gains=gains, vis=true_vis)
         sol2.gains = {k: v for k, v in sol2.gains.items()
                       if k not in ex_ants}
-        sol2.extend_ants(d)
+        sol2.extend_gains(d)
         sol3 = om.RedSol(freds, gains=gains, vis=true_vis)
         wgts = {bl: np.ones_like(v) for bl, v in d.items()}
-        sol3.extend_ants(d, wgts=wgts, extended_reds=reds)
+        sol3.extend_gains(d, wgts=wgts, extended_reds=reds)
         for sol in [sol1, sol2, sol3]:
             for antpol, gain in gains.items():
                 np.testing.assert_array_almost_equal(gain, sol.gains[antpol])
