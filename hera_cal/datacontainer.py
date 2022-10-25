@@ -536,6 +536,17 @@ class RedDataContainer(DataContainer):
         super().__init__(data)
         self.build_red_keys(reds)
 
+    def _add_red(self, ubl_key, red):
+        '''Updates internal dictionaries with a new redundant group.'''
+        self.reds.append(red)
+        self._red_key_to_bls[ubl_key] = []
+        self._red_key_to_bls[reverse_bl(ubl_key)] = []
+        for bl in red:
+            self._bl_to_red_key[bl] = ubl_key
+            self._bl_to_red_key[reverse_bl(bl)] = reverse_bl(ubl_key)
+            self._red_key_to_bls[ubl_key].append(bl)
+            self._red_key_to_bls[reverse_bl(ubl_key)].append(reverse_bl(bl))
+
     def build_red_keys(self, reds):
         '''Build the dictionaries that map baselines to redundant keys.
 
@@ -551,17 +562,10 @@ class RedDataContainer(DataContainer):
         for red in reds:
             bls_in_data = [bl for bl in red if self.has_key(bl)]
             if len(bls_in_data) > 1:
-                raise ValueError(f'RedDataContainer can only be constructed with (at most) one baseline per group, \
-                                 but this data has the following redundant baselines: {bls_in_data}')
+                raise ValueError('RedDataContainer can only be constructed with (at most) one baseline per group, '
+                                 + f'but this data has the following redundant baselines: {bls_in_data}')
             if len(bls_in_data) > 0:
-                self.reds.append(red)
-                self._red_key_to_bls[bls_in_data[0]] = []
-                self._red_key_to_bls[reverse_bl(bls_in_data[0])] = []
-                for bl in red:
-                    self._bl_to_red_key[bl] = bls_in_data[0]
-                    self._bl_to_red_key[reverse_bl(bl)] = reverse_bl(bls_in_data[0])
-                    self._red_key_to_bls[bls_in_data[0]].append(bl)
-                    self._red_key_to_bls[reverse_bl(bls_in_data[0])].append(reverse_bl(bl))
+                self._add_red(bls_in_data[0], red)
 
     def get_ubl_key(self, key):
         '''Returns the key used interally denote the data stored. Useful for del'''
