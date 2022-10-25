@@ -417,8 +417,9 @@ def lst_bin_files(
                             # If uvc has Ntimes == 1, then broadcast across time will work automatically
                             uvc.select(times=uvc.time_array[tinds])
                             gains, cal_flags, _, _ = uvc.build_calcontainers()
+                        
                         apply_cal.calibrate_in_place(
-                            data, gains, data_flags=flags, cal_flags=cal_flags,
+                            _data, gains, data_flags=flags, cal_flags=cal_flags,
                             gain_convention=uvc.gain_convention
                         )
 
