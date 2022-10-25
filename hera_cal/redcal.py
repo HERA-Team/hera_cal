@@ -1236,7 +1236,6 @@ class RedundantCalibrator:
         ls = self._solver(linsolve.LogProductSolver, cal_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         prms = ls.solve(mode=mode)
         prms = {self.unpack_sol_key(k): v for k, v in prms.items()}
-        make_sol_finite(prms)
         sol = RedSol(self.reds, sol_dict=prms)
         # put back in phase trend that was taken out with detrend_phs=True
         for ubl_key in sol.vis:
@@ -1274,7 +1273,6 @@ class RedundantCalibrator:
         ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0pack, wgts=wgts, sparse=sparse)
         meta, prms = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, verbose=verbose, mode=mode)
         prms = {self.unpack_sol_key(k): v for k, v in prms.items()}
-        make_sol_finite(prms)
         sol = RedSol(self.reds, sol_dict=prms)
         return meta, sol
 
@@ -1310,7 +1308,6 @@ class RedundantCalibrator:
         ls = self._solver(OmnicalSolver, data, sol0=sol0pack, wgts=wgts, gain=gain)
         meta, prms = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after, wgt_func=wgt_func)
         prms = {self.unpack_sol_key(k): v for k, v in prms.items()}
-        make_sol_finite(prms)
         sol = RedSol(self.reds, sol_dict=prms)
         return meta, sol
 
