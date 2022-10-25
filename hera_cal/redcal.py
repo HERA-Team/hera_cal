@@ -1611,6 +1611,29 @@ def redundantly_calibrate(data, reds, sol0=None, run_logcal=True, run_omnical=Tr
     return meta, sol
 
 
+class RedCalContainer():
+
+    def __init__(self, ants, reds, nTimes, nFreqs, gains_only=False, skip_chisq=False):
+        '''XXX: document'''
+        self.gains = {ant: np.ones((nTimes, nFreqs), dtype=np.complex64) for ant in ants}
+        self.gain_flags = {ant: np.ones((nTimes, nFreqs), dtype=bool) for ant in ants}
+        self.meta = {}
+
+        if not gains_only:
+            self.vis = RedDataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in reds})
+            self.sol = RedSol(reds, gains=self.gains, vis=self.vis)
+            self.flags = RedDataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in reds})
+            self.nsamples = RedDataContainer({red[0]: np.zeros((nTimes, nFreqs), dtype=np.float32) for red in reds})
+
+        if not skip_chisq:
+            antpols = set(k[1] for k in self.gains)
+            self.chisq = {antpol: np.zeros((nTimes, nFreqs), dtype=np.float32) for antpol in antpols}
+            self.chisq_per_ant = {ant: np.zeros((nTimes, nFreqs), dtype=np.float32) for ant in ants}
+        else:
+            self.chisq = None
+            self.chisq_per_ant = None
+
+
 # XXX the format of rv in this function is a tail that is wagging the dog
 # suggest decoupling the work from the reporting of the work, more in line with changes
 # to redundantly_calibrate above.
