@@ -838,26 +838,21 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, a
         data = {'data': data}
         bls = {'data': bls}
 
+    # get new s-hat vector
+    s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
+    s_diff = (s_prime - np.array([0., 0., 1.0])) / const.c.value
+    
     # iterate over data keys
     for i, k in enumerate(data.keys()):
-
-        # get new s-hat vector
-        s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
-        s_diff = s_prime - np.array([0., 0., 1.0])
-
         # get baseline vector
         bl = bls[k]
 
         # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
-        u = np.einsum("...i,i->...", s_diff, bl)
-
-        # get delay
-        tau = u / const.c.value
+        # note that we pre-divided s_diff by c so this is in units of tau.
+        tau = np.einsum("...i,i->...", s_diff, bl)
 
         # reshape tau
-        if isinstance(tau, np.ndarray):
-            pass
-        else:
+        if not isinstance(tau, np.ndarray):            
             tau = np.array([tau])
 
         # get phasor
@@ -868,6 +863,86 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, a
 
     if array:
         data = data['data']
+
+    if not inplace:
+        return data
+
+def lst_rephase_vectorized(
+    data: np.ndarray, blvecs: np.ndarray, freqs: np.ndarray, dlst: float | np.ndarray, 
+    lat: float=-30.721526120689507, inplace: bool=True,
+):
+    """
+    Shift phase center of each integration in data by amount dlst [radians] along RA.
+
+    Parameters
+    ----------
+    data
+        The complex visibility data, with shape (ntimes, nbaselines, npols, nfreqs)
+    bls:
+        Array of baseline vectors (3D) in ENU, shape (nbalines, 3).
+    freqs
+        Frequency array of data [Hz]
+    dlst
+        Delta-LST to rephase by [radians]. If a float, shift all integrations 
+        by dlst, elif an ndarray, shift each integration by different amount w/ 
+        shape=(Ntimes)
+    lat
+        latitude of observer in degrees North
+    inplace
+        if True edit arrays in data in memory, else make a copy and return
+
+    Notes:
+    ------
+    The rephasing uses top2eq_m and eq2top_m matrices (borrowed from pyuvdata and aipy) 
+    to convert from array TOPO frame to Equatorial frame, induces time rotation, 
+    converts back to TOPO frame, calculates new pointing vector s_prime and inserts a 
+    delay plane into the data for rephasing.
+
+    This method of rephasing follows Eqn. 21 & 22 of Zhang, Y. et al. 2018 
+    "Unlocking Sensitivity..."
+    """
+    # check format of dlst
+    if isinstance(dlst, list):
+        lat = np.ones_like(dlst) * lat
+        dlst = np.array(dlst)
+        zero = np.zeros_like(dlst)
+    elif isinstance(dlst, np.ndarray):
+        lat = np.ones_like(dlst) * lat
+        zero = np.zeros_like(dlst)
+    else:
+        zero = 0
+
+    # get top2eq matrix, shape=(len(dlst), 3, 3)
+    top2eq = top2eq_m(zero, lat * np.pi / 180)
+
+    # get eq2top matrix shape=(len(dlst), 3, 3)
+    eq2top = eq2top_m(-dlst, lat * np.pi / 180)
+
+    # get full rotation matrix, shape=(len(dlst), 3, 3)
+    rot = np.einsum("...jk,...kl->...jl", eq2top, top2eq)
+
+    # make copy of data if desired
+    if not inplace:
+        data = copy.deepcopy(data)
+
+    # get new s-hat vector, shape=(len(dlst), 3)
+    s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
+    s_diff = (s_prime - np.array([0., 0., 1.0])) / const.c.value
+    
+    # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
+    # note that we pre-divided s_diff by c so this is in units of tau.
+    # output has shape (len(dlst), len(bl))
+    tau = np.einsum("...i,ki->...k", s_diff, bl)
+
+    # reshape tau
+    if not isinstance(tau, np.ndarray):            
+        tau = np.array([tau])
+
+    # get phasor
+    phs = np.exp(-2j * np.pi * freqs[None, None, None, :] * tau[:, :, None, None])
+
+    # multiply into data
+    data *= phs
 
     if not inplace:
         return data
@@ -1401,6 +1476,10 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
 def eq2top_m(ha, dec):
     """Return the 3x3 matrix converting equatorial coordinates to topocentric
     at the given hour angle (ha) and declination (dec).
+
+    Returned array has the number of ha's or dec's in the first dimension, so is 
+    shape ``(Nha, 3, 3)``.
+
     Borrowed from pyuvdata which borrowed from aipy"""
     sin_H, cos_H = np.sin(ha), np.cos(ha)
     sin_d, cos_d = np.sin(dec), np.cos(dec)
@@ -1415,6 +1494,10 @@ def eq2top_m(ha, dec):
 def top2eq_m(ha, dec):
     """Return the 3x3 matrix converting topocentric coordinates to equatorial
     at the given hour angle (ha) and declination (dec).
+
+    Returned array has the number of ha's or dec's in the first dimension, so is 
+    shape ``(Nha, 3, 3)``.
+    
     Slightly changed from aipy to simply write the matrix instead of inverting.
     Borrowed from pyuvdata."""
     sin_H, cos_H = np.sin(ha), np.cos(ha)
@@ -1513,3 +1596,10 @@ def select_spw_ranges_argparser():
                                                                                 "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
+
+def mergedicts(*dicts) -> dict:
+    """Merge any number of dictionaries, overwriting keys."""
+    output = {}
+    for d in dicts:
+        output.update(dict(d.items()))
+    return output
