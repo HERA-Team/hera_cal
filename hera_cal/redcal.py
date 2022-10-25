@@ -633,7 +633,7 @@ class RedSol():
             self.vis[ubl] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
                                        weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
 
-    def extend_ubls(self, data, wgts={}, reds_to_solve=None):
+    def extend_vis(self, data, wgts={}, reds_to_solve=None):
         '''Performs redundant averaging of ubls not already solved for in RedSol.vis
         and adds them to RedSol.vis
 
@@ -651,7 +651,7 @@ class RedSol():
             reds_to_solve = filter_reds(unsolved_reds, ants=self.gains.keys())
         self.update_vis_from_data(data, wgts=wgts, reds=reds_to_solve)
 
-    def extend_ants(self, data, wgts={}, extended_reds=None):
+    def extend_gains(self, data, wgts={}, extended_reds=None):
         '''Extend redundant solutions to antennas gains not already solved for
         using redundant baseline solutions in RedSol.vis, adding them to RedSol.gains.
 
