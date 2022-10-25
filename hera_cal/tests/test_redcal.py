@@ -627,9 +627,9 @@ class TestRedundantCalibrator(object):
         # test firstcal where the degeneracies of the phases and delays have already been removed so no abscal is necessary
         gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
         fc_delays = {ant: [[100e-9 * np.random.randn()]] for ant in gains.keys()}  # in s
-        fc_delays = rc.remove_degen_gains(fc_delays)
+        fc_delays = om.remove_degen_gains(reds, fc_delays)
         fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
-        fc_offsets = rc.remove_degen_gains(fc_offsets)
+        fc_offsets = om.remove_degen_gains(reds, fc_offsets)
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs)))
                     for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
@@ -643,7 +643,7 @@ class TestRedundantCalibrator(object):
         gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
         fc_delays = {ant: [[0 * np.random.randn()]] for ant in gains.keys()}  # in s
         fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
-        fc_offsets = rc.remove_degen_gains(fc_offsets)
+        fc_offsets = om.remove_degen_gains(reds, fc_offsets)
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs)))
                     for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
@@ -893,16 +893,12 @@ class TestRedundantCalibrator(object):
         rc = om.RedundantCalibrator(reds)
         # put in a linear slope in delays, see that it is taken out
         true_dlys = {(i, split_pol(pol)[0]): np.array([[np.dot(xhat, antpos[i]) * dtau_dx]]) for i in range(len(antpos))}
-        dlys = rc.remove_degen_gains(true_dlys, mode='phase')
+        dlys = om.remove_degen_gains(reds, true_dlys, mode='phase')
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], 0, decimal=10)
-        dlys = rc.remove_degen_gains(true_dlys, degen_gains=true_dlys, mode='phase')
+        dlys = om.remove_degen_gains(reds, true_dlys, degen_gains=true_dlys, mode='phase')
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], true_dlys[k], decimal=10)
-
-        rc.pol_mode = 'unrecognized_pol_mode'
-        with pytest.raises(AssertionError):
-            rc.remove_degen_gains(dlys)
 
     def test_remove_degen_firstcal_2D(self):
         pol = 'xx'
@@ -917,7 +913,7 @@ class TestRedundantCalibrator(object):
         true_dlys = {(i, split_pol(pol)[0]):
                      np.array([[np.dot(xhat, antpos[i]) * dtau_dx + np.dot(yhat, antpos[i]) * dtau_dy]])
                      for i in range(len(antpos))}
-        dlys = rc.remove_degen_gains(true_dlys, mode='phase')
+        dlys = om.remove_degen_gains(reds, true_dlys, mode='phase')
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], 0, decimal=10)
 
@@ -954,7 +950,7 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
-        sol_rd = rc.remove_degen(sol)
+        sol_rd = sol.remove_degen(inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
         v = {k: v for k, v in sol_rd.items() if len(k) == 3}
         ants = [key for key in sol_rd.keys() if len(key) == 2]
@@ -972,7 +968,7 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
-        sol_rd = rc.remove_degen(sol, degen_sol=gains)
+        sol_rd = sol.remove_degen(degen_sol=gains, inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
         v = {k: v for k, v in sol_rd.items() if len(k) == 3}
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
@@ -1021,7 +1017,7 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
-        sol_rd = rc.remove_degen(sol)
+        sol_rd = sol.remove_degen(inplace=False)
 
         ants = [key for key in sol_rd.keys() if len(key) == 2]
         gainPols = np.array([ant[1] for ant in ants])
@@ -1047,7 +1043,7 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
-        sol_rd = rc.remove_degen(sol, degen_sol=gains)
+        sol_rd = sol.remove_degen(degen_sol=gains, inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
         v = {k: v for k, v in sol_rd.items() if len(k) == 3}
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
@@ -1109,7 +1105,7 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
-        sol_rd = rc.remove_degen(sol)
+        sol_rd = sol.remove_degen(inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
         v = {k: v for k, v in sol_rd.items() if len(k) == 3}
         ants = [key for key in sol_rd.keys() if len(key) == 2]
@@ -1135,7 +1131,7 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
-        sol_rd = rc.remove_degen(sol, degen_sol=gains)
+        sol_rd = sol.remove_degen(degen_sol=gains, inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
         v = {k: v for k, v in sol_rd.items() if len(k) == 3}
 
@@ -1210,8 +1206,7 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
-        sol_rd = rc.remove_degen(sol)
-
+        sol_rd = sol.remove_degen(inplace=False)
         ants = [key for key in sol_rd.keys() if len(key) == 2]
         gainPols = np.array([ant[1] for ant in ants])
         bl_pairs = [key for key in sol.keys() if len(key) == 3]
@@ -1237,7 +1232,7 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
-        sol_rd = rc.remove_degen(sol, degen_sol=gains)
+        sol_rd = sol.remove_degen(degen_sol=gains, inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
         v = {k: v for k, v in sol_rd.items() if len(k) == 3}
         gainSols = np.array([sol_rd[ant] for ant in ants])
