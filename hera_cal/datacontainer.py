@@ -522,8 +522,6 @@ class RedDataContainer(DataContainer):
         if reds is not None and antpos is not None:
             raise ValueError('Can only provide reds or antpos, not both.')
 
-        super().__init__(data)
-
         # Figure out reds
         if reds is None:
             from .redcal import get_reds
@@ -533,6 +531,9 @@ class RedDataContainer(DataContainer):
                 reds = get_reds(self.antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
             else:
                 raise ValueError('Must provide reds, antpos, or have antpos available at data.antpos')
+
+        # Build the object
+        super().__init__(data)
         self.build_red_keys(reds)
 
     def build_red_keys(self, reds):
