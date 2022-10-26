@@ -1778,24 +1778,18 @@ class TestRunMethods(object):
         d.times_by_bl = {bl[0:2]: deepcopy(times) for bl in d.keys()}
 
         filtered_reds = om.filter_reds(reds, ex_ants=ex_ants, antpos=antpos, max_bl_cut=30)
-        cal, sol = om.redundantly_calibrate(d, filtered_reds, logcal=True)
-        cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['g_firstcal'].items()}
-        cal['g_omnical'] = sol.gains
-        cal['v_omnical'] = sol.vis
-        cal['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in cal['g_omnical'].items()}
-        cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
-        cal['v_omnical'] = DataContainer(cal['v_omnical'])
-        cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
-                            for ant, g in cal['g_omnical'].items()}
+        cal, sol = om.redundantly_calibrate(d, filtered_reds, run_logcal=True)
 
-        om.expand_omni_sol(cal, reds, d, nsamples)
+        om.expand_omni_vis(sol, reds, d, nsamples, chisq=cal['chisq'], chisq_per_ant=cal['chisq_per_ant'])
+        om.expand_omni_gains(sol, reds, d, nsamples, chisq_per_ant=cal['chisq_per_ant'])
+        om.expand_omni_vis(sol, reds, d, nsamples)
 
         # test that all chisqs are 0
         for red in reds:
             for bl in red:
                 ant0, ant1 = split_bl(bl)
-                np.testing.assert_array_almost_equal(d[bl], cal['g_omnical'][ant0] * np.conj(cal['g_omnical'][ant1]) * cal['v_omnical'][red[0]])
-        assert len(pols) * len(antpos) == len(cal['g_omnical'])
+                np.testing.assert_array_almost_equal(d[bl], sol.model_bl(bl))
+        assert len(pols) * len(antpos) == len(sol.gains)
         for ant in cal['chisq_per_ant']:
             np.testing.assert_array_less(cal['chisq_per_ant'][ant], 1e-10)
 
