@@ -1672,7 +1672,7 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
     return combined_hd.build_datacontainers()
 
 
-def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history):
+def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history, clobber=True):
     '''Saves redcal metadata to a hdf5 file. See also read_redcal_meta.
 
     Arguments:
@@ -1684,7 +1684,11 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         lsts: 1D numpy array of LSTs in the data
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}
         history: string describing the creation of this file
+        clobber: If False and meta_filename exists, raise OSError.
     '''
+    if os.path.exists(meta_filename) and not clobber:
+        raise OSError(f'{meta_filename} already exists but clobber=False.')
+
     with h5py.File(meta_filename, "w") as outfile:
         # save the metadata of the metadata
         header = outfile.create_group('header')
