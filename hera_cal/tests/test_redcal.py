@@ -1793,9 +1793,9 @@ class TestRunMethods(object):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            rv = om.redcal_iteration(hd, nInt_to_load=1, flag_nchan_high=40, flag_nchan_low=30)
+            cal_first, cal_omni = om.redcal_iteration(hd, nInt_to_load=1, flag_nchan_high=40, flag_nchan_low=30)
         for t in range(len(hd.times)):
-            for flag in rv['gf_omnical'].values():
+            for flag in cal_omni.flags.values():
                 assert not np.all(flag[t, :])
                 assert np.all(flag[t, 0:30])
                 assert np.all(flag[t, -40:])
@@ -1803,9 +1803,9 @@ class TestRunMethods(object):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))  # test w/o partial loading
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            rv = om.redcal_iteration(hd, flag_nchan_high=40, flag_nchan_low=30)
+            cal_first, cal_omni = om.redcal_iteration(hd, flag_nchan_high=40, flag_nchan_low=30)
         for t in range(len(hd.times)):
-            for flag in rv['gf_omnical'].values():
+            for flag in cal_omni.flags.values():
                 assert not np.all(flag[t, :])
                 assert np.all(flag[t, 0:30])
                 assert np.all(flag[t, -40:])
@@ -1813,39 +1813,39 @@ class TestRunMethods(object):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            rv = om.redcal_iteration(hd, pol_mode='4pol')
-        np.testing.assert_array_equal(rv['chisq']['Jee'], rv['chisq']['Jnn'])
+            cal_first, cal_omni = om.redcal_iteration(hd, pol_mode='4pol')
+        np.testing.assert_array_equal(cal_omni.chisq['Jee'], cal_omni.chisq['Jnn'])
 
         hd.telescope_location_lat_lon_alt_degrees = (-30.7, 121.4, 1051.7)  # move array longitude
-        rv = om.redcal_iteration(hd, solar_horizon=0.0)
-        for flag in rv['gf_firstcal'].values():
+        cal_first, cal_omni = om.redcal_iteration(hd, solar_horizon=0.0)
+        for flag in cal_first.gain_flags.values():
             np.testing.assert_array_equal(flag, True)
-        for flag in rv['gf_omnical'].values():
+        for flag in cal_omni.flags.values():
             np.testing.assert_array_equal(flag, True)
-        for flag in rv['vf_omnical'].values():
+        for flag in cal_omni.flags.values():
             np.testing.assert_array_equal(flag, True)
-        for nsamples in rv['vns_omnical'].values():
+        for nsamples in cal_omni.nsamples.values():
             np.testing.assert_array_equal(nsamples, 0)
 
         # this tests redcal.expand_omni_sol
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            rv = om.redcal_iteration(hd, pol_mode='2pol', ex_ants=[1, 27], min_bl_cut=15)
+            cal_first, cal_omni = om.redcal_iteration(hd, pol_mode='2pol', ex_ants=[1, 27], min_bl_cut=15)
         for pol in ['ee', 'nn']:
-            for key in ['v_omnical', 'vf_omnical', 'vns_omnical']:
+            for rdc in [cal_omni.vis, cal_omni.flags, cal_omni.nsamples]:
                 # test that the unique baseline is keyed by the first entry in all_reds, not filtered_reds
-                assert (1, 12, pol) in rv[key].keys()
+                assert (1, 12, pol) in rdc
                 # test that completely excluded baselines from redcal are still represented
-                assert (23, 27, pol) in rv[key].keys()
+                assert (23, 27, pol) in rdc
             # test redundant baseline counting
-            np.testing.assert_array_equal(rv['vns_omnical'][(1, 12, pol)][~rv['vf_omnical'][(1, 12, pol)]], 4.0)
-            np.testing.assert_array_equal(rv['vns_omnical'][(23, 27, pol)], 0.0)
-            np.testing.assert_array_equal(rv['vns_omnical'][(1, 27, pol)], 0.0)
+            np.testing.assert_array_equal(cal_omni.nsamples[(1, 12, pol)][~cal_omni.flags[(1, 12, pol)]], 4.0)
+            np.testing.assert_array_equal(cal_omni.nsamples[(23, 27, pol)], 0.0)
+            np.testing.assert_array_equal(cal_omni.nsamples[(1, 27, pol)], 0.0)
         for ant in [(1, 'Jee'), (1, 'Jnn'), (27, 'Jee'), (27, 'Jnn')]:
-            assert not np.all(rv['g_omnical'][ant] == 1.0)
-            assert not np.all(rv['chisq_per_ant'][ant] == 0.0)
-            np.testing.assert_array_equal(rv['gf_omnical'][ant], True)
+            assert not np.all(cal_omni.gains[ant] == 1.0)
+            assert not np.all(cal_omni.chisq_per_ant[ant] == 0.0)
+            np.testing.assert_array_equal(cal_omni.gain_flags[ant], True)
 
     def test_redcal_run(self):
         input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
