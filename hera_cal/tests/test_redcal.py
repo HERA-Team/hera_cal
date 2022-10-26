@@ -1581,19 +1581,12 @@ class TestRedundantCalibrator(object):
         noisy_data.freqs = deepcopy(freqs)
         noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
         filtered_reds = om.filter_reds(reds, ex_ants=[6])
-        cal, sol = om.redundantly_calibrate(noisy_data, filtered_reds)
-        cal_copy = deepcopy(cal)
-        cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['g_firstcal'].items()}
-        cal['g_omnical'] = sol.gains
-        cal['v_omnical'] = sol.vis
-        cal['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in cal['g_omnical'].items()}
-        cal['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in cal['v_omnical'].items()})
-        cal['v_omnical'] = DataContainer(cal['v_omnical'])
-        cal['g_omnical'] = {ant: g * ~cal['gf_omnical'][ant] + cal['gf_omnical'][ant]
-                            for ant, g in cal['g_omnical'].items()}
+        meta, sol = om.redundantly_calibrate(noisy_data, filtered_reds)
 
-        om.expand_omni_sol(cal, reds, noisy_data, nsamples)
-        # expand_omni_sol(cal_copy, reds, noisy_data, nsamples)
+        # expand omni sol
+        om.expand_omni_vis(sol, reds, noisy_data, nsamples, chisq=meta['chisq'], chisq_per_ant=meta['chisq_per_ant'])
+        om.expand_omni_gains(sol, reds, noisy_data, nsamples, chisq_per_ant=meta['chisq_per_ant'])
+        om.expand_omni_vis(sol, reds, noisy_data, nsamples)
 
         # Compute various chi^2s
         chisq_per_bl = {}
@@ -1603,15 +1596,15 @@ class TestRedundantCalibrator(object):
             for bl in red:
                 d_here = noisy_data[bl]
                 ant0, ant1 = split_bl(bl)
-                g1, g2 = cal['g_omnical'][ant0], cal['g_omnical'][ant1]
-                v_here = cal['v_omnical'][red[0]]
+                g1, g2 = sol[ant0], sol[ant1]
+                v_here = sol[red[0]]
                 chisq_per_bl[bl] = np.abs(d_here - g1 * np.conj(g2) * v_here)**2 / noise_var
                 chisq_per_red[red[0]] += chisq_per_bl[bl]
                 chisq_per_ant[ant0] += chisq_per_bl[bl]
                 chisq_per_ant[ant1] += chisq_per_bl[bl]
 
         # compare predictions at the 3% level for non-excluded antennas
-        np.testing.assert_almost_equal(np.mean(cal['chisq']['Jxx']), 1.0, -np.log10(.03))
+        np.testing.assert_almost_equal(np.mean(meta['chisq']['Jxx']), 1.0, -np.log10(.03))
 
         predicted_chisq_per_bl = om.predict_chisq_per_bl(filtered_reds)
         for bl in predicted_chisq_per_bl:
@@ -1626,9 +1619,9 @@ class TestRedundantCalibrator(object):
             np.testing.assert_almost_equal(np.mean(chisq_per_ant[ant]), predicted_chisq_per_ant[ant], -np.log10(.03))
 
         # make sure excluded antenna has the highest chi^2, but not inexplicably large
-        assert np.mean(cal['chisq_per_ant'][6, 'Jxx']) <= len(antpos)
-        for ant in cal['chisq_per_ant']:
-            assert np.mean(cal['chisq_per_ant'][ant]) <= np.mean(cal['chisq_per_ant'][6, 'Jxx'])
+        assert np.mean(meta['chisq_per_ant'][6, 'Jxx']) <= len(antpos)
+        for ant in meta['chisq_per_ant']:
+            assert np.mean(meta['chisq_per_ant'][ant]) <= np.mean(meta['chisq_per_ant'][6, 'Jxx'])
 
 
 class TestRedcalAndAbscal(object):
