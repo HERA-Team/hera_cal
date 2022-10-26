@@ -1642,31 +1642,38 @@ class RedCalContainer():
                nsamples=None, chisq=None, chisq_per_ant=None, firstcal_meta=None, omni_meta=None, pol_str=None):
         '''XXX: document'''
 
+        def _assign_slice(asignee, assignor, tSlice, fSlice):
+            '''Try to perform assignment in a way that doesn't duplicate memory, if possible.'''
+            if np.all(tSlice == slice(None)) and np.all(fSlice == slice(None)):
+                asignee = assignor
+            else:
+                asignee[tSlice, fSlice] = assignor
+
         # update gains, flags, vis, etc., enabling subsets of the final solution to be updated for partial I/O
         if gains is not None:
             for ant in gains:
-                self.gains[ant][tSlice, fSlice] = gains[ant]
+                _assign_slice(self.gains[ant], gains[ant], tSlice, fSlice)
         if gain_flags is not None:
             for ant in gain_flags:
-                self.gain_flags[ant][tSlice, fSlice] = gain_flags[ant]
+                _assign_slice(self.gain_flags[ant], gain_flags[ant], tSlice, fSlice)
         if vis is not None:
             for bl in vis:
-                self.vis[bl][tSlice, fSlice] = vis[bl]
+                _assign_slice(self.vis[bl], vis[bl], tSlice, fSlice)
         if sol is not None:
             for k in sol:
-                self.sol[k][tSlice, fSlice] = sol[k]
+                _assign_slice(self.sol[k], sol[k], tSlice, fSlice)
         if flags is not None:
             for bl in flags:
-                self.flags[bl][tSlice, fSlice] = flags[bl]
+                _assign_slice(self.flags[bl], flags[bl], tSlice, fSlice)
         if nsamples is not None:
             for bl in nsamples:
-                self.nsamples[bl][tSlice, fSlice] = nsamples[bl]
+                _assign_slice(self.nsamples[bl], nsamples[bl], tSlice, fSlice)
         if chisq is not None:
             for pol in chisq:
-                self.chisq[pol][tSlice, fSlice] = chisq[pol]
+                _assign_slice(self.chisq[pol], chisq[pol], tSlice, fSlice)
         if chisq_per_ant is not None:
             for ant in chisq_per_ant:
-                self.chisq_per_ant[ant][tSlice, fSlice] = chisq_per_ant[ant]
+                _assign_slice(self.chisq_per_ant[ant], chisq_per_ant[ant], tSlice, fSlice)
 
         # update firstcal metadata if desired
         if firstcal_meta is not None:
@@ -1679,7 +1686,7 @@ class RedCalContainer():
         if omni_meta is not None:
             for key in ['chisq', 'iter', 'conv_crit']:
                 if key in omni_meta:
-                    self.meta[key][pol_str][tSlice, fSlice] = omni_meta[key]
+                    _assign_slice(self.meta[key][pol_str], omni_meta[key], tSlice, fSlice)
 
 
 def expand_omni_vis(sol, all_reds, data, nsamples, chisq=None, chisq_per_ant=None):
