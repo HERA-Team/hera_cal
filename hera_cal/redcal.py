@@ -1718,6 +1718,47 @@ class RedCalContainer():
             # update solutions with expanded gains and vis
             self.update(tSlice=tSlice, fSlice=fSlice, sol=sol, chisq_per_ant=meta['chisq_per_ant'])
 
+    def write_cal(self, outfilename, hd, outdir='', clobber=False, verbose=False, add_to_history=''):
+        '''TODO: document'''
+        # get antnums2antnames dictionary
+        antnums2antnames = dict(zip(hd.antenna_numbers, hd.antenna_names))
+        # Build UVCal metadata that might be different from UVData metadata
+        cal_antnums = sorted(set([ant[0] for ant in self.gains]))
+        antenna_positions = np.array([hd.antenna_positions[hd.antenna_numbers == antnum].flatten() for antnum in cal_antnums])
+        lst_array = np.unique(hd.lsts)
+        if verbose:
+            print('\nNow saving gains to', os.path.join(outdir, outfilename))
+        write_cal(outfilename, self.gains, hd.freqs, hd.times,
+                  flags=self.gain_flags, quality=self.chisq_per_ant, total_qual=self.chisq,
+                  outdir=outdir, overwrite=clobber,
+                  x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
+                  antenna_positions=antenna_positions, lst_array=lst_array,
+                  history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
+
+    def write_vis(self, outfilename, hd, vispols=None, outdir='', clobber=False, verbose=False, add_to_history=''):
+        '''TODO: document'''
+        hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
+        if vispols is None:
+            vispols = list(set([bl[2] for bl in self.vis]))
+        d, f, n = hd_out.read(bls=list(set([k[0:2] for k in self.vis])), polarizations=vispols)
+        out_data, out_flags, out_nsamples = {}, {}, {}
+        for bl in d:
+            out_data[bl] = self.vis[bl] if bl in self.vis[bl] else np.zeros_like(d[bl])
+            out_flags[bl] = self.flags[bl] if bl in self.flags[bl] else np.ones_like(f[bl])
+            out_nsamples[bl] = self.nsamples[bl] if bl in self.nsamples[bl] else np.zeros_like(n[bl])
+        hd_out.update(data=out_data, flags=out_flags, nsamples=out_nsamples)
+        hd_out.history += utils.history_string(add_to_history)
+        if verbose:
+            print('Now saving redundant visibilities to', os.path.join(outdir, outfilename))
+        hd_out.write_uvh5(os.path.join(outdir, outfilename), clobber=clobber)
+
+    def write_meta(self, outfilename, hd, fc_meta, outdir='', clobber=False, verbose=False, add_to_history=''):
+        '''TODO: document'''
+        if verbose:
+            print('Now saving redcal metadata to', os.path.join(outdir, outfilename))
+        save_redcal_meta(os.path.join(outdir, outfilename), fc_meta, self.meta, hd.freqs, hd.times, hd.lsts,
+                         hd.antpos, hd.history + utils.history_string(add_to_history), clobber=clobber)
+
 
 def expand_omni_vis(sol, all_reds, data, nsamples, chisq=None, chisq_per_ant=None):
     '''XXX: document'''
