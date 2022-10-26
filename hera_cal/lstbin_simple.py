@@ -91,8 +91,11 @@ def simple_lst_bin(
     data_lsts = data_lsts[lst_mask]
     grid_indices = grid_indices[lst_mask]
 
+    logger.info(f"Data Shape: {data.shape}")
+
     # Now, rephase the data to the lst bin centres.
     if rephase:
+        logger.info("Rephasing data")
         if freq_array is None or antpos is None:
             raise ValueError("freq_array and antpos is needed for rephase")
 
@@ -111,16 +114,23 @@ def simple_lst_bin(
     std = np.ones(davg.shape, dtype=complex)
     counts = np.zeros(davg.shape, dtype=float)
     for lstbin in range(len(lst_bin_centres)):
+        logger.info(f"Computing LST bin {lstbin+1} / {len(lst_bin_centres)}")
         # TODO: check that this doesn't make yet another copy...
         # This is just the data in this particular lst-bin.
         mask = grid_indices==lstbin
-        d = data[mask]
-        n = nsamples[ mask]
-        f = flags[mask]
+        if np.any(mask):
+            d = data[mask]
+            n = nsamples[ mask]
+            f = flags[mask]
 
-        (
-            davg[lstbin], flag_min[lstbin], std[lstbin], counts[lstbin]
-        ) = lst_average(d, n ,f)
+            davg[lstbin], flag_min[lstbin], std[lstbin], counts[lstbin] = lst_average(
+                d, n, f
+            )
+        else:
+            davg[lstbin] = 1.0
+            flag_min[lstbin] = True
+            std[lstbin] = 1.0
+            counts[lstbin] = 0.0
 
     # TODO: should we put these back into datacontainers before returning?
     davg_dc = {}
@@ -154,6 +164,7 @@ def lst_average(
     data[flags] *= np.nan  # do this so that we can do nansum later. multiply to get both real/imag as nan
 
     # get other stats
+    logger.info("Calculating std")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
         std = np.nanstd(data.real, axis=0) + 1j*np.nanstd(data.imag, axis=0)
@@ -162,8 +173,10 @@ def lst_average(
     norm = np.sum(nsamples, axis=0)  # missing a "clip" between 1e-99 and inf here...
     
     if median:
+        logger.info("Calculating median")
         data = np.nanmedian(data, axis=0)
     else:
+        logger.info("Calculating mean")
         data = np.nansum(data * nsamples, axis=0)
         data[norm>0] /= norm[norm>0]
         data[norm<=0] = 1  # any value, it's flagged anyway
@@ -196,6 +209,7 @@ def lst_bin_files(
     ignore_flags: bool=False, 
     include_autos: bool=True, 
     ex_ant_yaml_files=None, 
+    ignore_ants: tuple[int]=(),
     **kwargs
 ):
     """
@@ -327,13 +341,15 @@ def lst_bin_files(
         nightly_last_hds.append(hd)
 
     logger.info("Compiling all unflagged baselines...")
-    all_baselines = list(get_all_unflagged_baselines(data_files, ex_ant_yaml_files, include_autos=include_autos))
+    all_baselines = list(
+        get_all_unflagged_baselines(
+            data_files, 
+            ex_ant_yaml_files, 
+            include_autos=include_autos, 
+            ignore_ants=ignore_ants
+        )
+    )
 
-    # generate a list of dictionaries which contain the nights occupied by each unique baseline
-    # (or unique baseline group if average_redundant_baselines is true)
-    # bl_nightly_dicts = gen_bl_nightly_dicts(nightly_last_hds, bl_error_tol=bl_error_tol,
-    #                                         include_autos=include_autos, redundant=average_redundant_baselines, ex_ant_yaml_files=ex_ant_yaml_files)
-    
     # Split up the baselines into chunks that will be LST-binned together.
     # This is just to save on RAM.
     if Nbls_to_load is None:
@@ -468,12 +484,14 @@ def lst_bin_files(
             std_conts.append(std_data)
             num_conts.append(num_data)
 
+        logger.info("Merging DataContainers")
         # join DataContainers across blgroups
         bin_data = DataContainer(mergedicts(*data_conts))
         flag_data = DataContainer(mergedicts(*flag_conts))
         std_data = DataContainer(mergedicts(*std_conts))
         num_data = DataContainer(mergedicts(*num_conts))
         
+        logger.info("Writing output files")
         # update history
         file_list_str = "-".join(os.path.basename(ff)for ff in file_list)
         file_history = f"{history} Input files: {file_list_str}"
@@ -514,6 +532,7 @@ def get_all_unflagged_baselines(
     data_files: list[list[str | Path]], 
     ex_ant_yaml_files: list[str] | None = None,
     include_autos: bool = True,
+    ignore_ants: tuple[int] = (),
 ) -> set[tuple[int, int]]:
     """Generate a set of all antpairs that have at least one un-flagged entry.
     
@@ -543,7 +562,7 @@ def get_all_unflagged_baselines(
                 flags = hfl['Data']['flags'][time0_indx]
 
             for ipair, (a1, a2) in enumerate(zip(ant1, ant2)):
-                if (a1, a2) in all_baselines:
+                if (a1, a2) in all_baselines or a1 in ignore_ants or a2 in ignore_ants:
                     # Check first if it's already in our baseline set, because this will
                     # most of the time be true after the first few files, and we don't
                     # want to always do the np.all() on the flags.
