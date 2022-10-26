@@ -1614,10 +1614,10 @@ class RedCalContainer():
         self.meta = {}
 
         if not gains_only:
-            self.vis = RedDataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in reds})
+            self.vis = RedDataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in reds}, reds=reds)
             self.sol = RedSol(reds, gains=self.gains, vis=self.vis)
-            self.flags = RedDataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in reds})
-            self.nsamples = RedDataContainer({red[0]: np.zeros((nTimes, nFreqs), dtype=np.float32) for red in reds})
+            self.flags = RedDataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in reds}, reds=reds)
+            self.nsamples = RedDataContainer({red[0]: np.zeros((nTimes, nFreqs), dtype=np.float32) for red in reds}, reds=reds)
 
         if not skip_chisq:
             antpols = set(k[1] for k in self.gains)
