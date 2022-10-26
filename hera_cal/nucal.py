@@ -713,7 +713,7 @@ class NuCalibrator:
         # Store radial reds
         self.radial_reds = radial_reds
         
-        # Get idealized antenna positions
+        # Get idealized antenna positions and baseline vectors from reds
         self.idealized_antpos = redcal.reds_to_antpos(reds)
         self.idealized_blvecs = {red[0]: self.idealized_antpos[red[0][1]] - self.idealized_antpos[red[0][0]] for red in reds}
         
@@ -812,15 +812,18 @@ class NuCalibrator:
         Parameters:
         ----------
         data : list of jnp.ndarrays
-            pass
+            List of jnp.ndarrays of data for each radially redundant group of baselines
         wgts : list of jnp.ndarrays
-            pass
+            List of jnp.ndarrays of the data weights for each radially redundant group of baselines
         spec : jnp.ndarray
-            pass
+            Array of spectrally DPSS eigenvectors used for modeling foregrounds
         spat : list of jnp.ndarrays
-            pass
+            Array of spatial PSWF eigenvectors used for modeling foregrounds
+        maxiter : int, default=100
+            Maximum number of gradient descent steps to use when finding the optimal parameter values
         tol : float, default=1e-10
-            pass
+            Parameter used to . If the absolute difference between the value of the current step's loss
+            and the previous step's loss is less than tol, 
 
         Return:
         ------
@@ -852,7 +855,7 @@ class NuCalibrator:
              
         return params, {"loss": losses[-1], "niter": step + 1}
     
-    def fit_redcal_degens(self, data, freqs=None, pols=["nn"], eta_half_width=20e-9, ell_half_width=1, 
+    def fit_redcal_degens(self, data, freqs=None, pols=None, eta_half_width=20e-9, ell_half_width=1, 
                   eigenval_cutoff=1e-12, learning_rate=1e-3, maxiter=100, optimizer='adabelief', amp_estimate=None,
                   tiptilt_estimate=None, **opt_kwargs):
         """
@@ -908,13 +911,17 @@ class NuCalibrator:
         # Choose optimizer and initialize
         assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
         optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
+
+        # If pols is None, get pols from the data
+        if pols is None:
+            pols = np.unique(list(map(lambda k: k[2], data.keys())))
                 
         # Separate spatial filters by polarization
         spatial_dpss = {}
         for pol in pols:
             _ff = []
             for group in self.radial_reds.get_pol(pol):
-                _ff.append(jnp.array([spatial_filters[bl] for bl in group]))
+                _ff.append(jnp.array([self.spatial_filters[bl] for bl in group]))
 
             spatial_dpss[pol] = _ff
             
@@ -926,8 +933,10 @@ class NuCalibrator:
         weights_dict = build_nucal_wgts()
 
         # For each time and each polarization in the data calibrate
-        solution, info = {"amp": [], "phi": []}, {}
+        solution, info = {}, {}
         for pol in pols:
+            solution[("amp", pol)] = []
+            solution[("phi", pol)] = []
             initial_params = {
                 "amp": np.ones((ntimes, freqs.shape[0])),
                 "phi": np.ones((ntimes, freqs.shape[0], self.ndims)),
@@ -942,7 +951,7 @@ class NuCalibrator:
                 # TODO: unpack solution and organize it in a sensible way
                 # Consider nucal_sol object that gets added to. Nucal sol object could work like
                 # dictionary similarly to Redsol
-                solution['amp'].append(fit_params['amp'])
-                solution['phi'].append(fit_params['phi'])
+                solution[('amp', pol)].append(fit_params['amp'])
+                solution[('phi', pol)].append(fit_params['phi'])
 
         return solution, info
