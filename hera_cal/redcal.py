@@ -1931,58 +1931,6 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     return cal_first, cal_omni
 
 
-# XXX if cal has become such a crucial object that it defines our output format, then we have to build
-# a class that encapsulates it and attach all of the keying, padding, i/o, and validating to that object.
-def _redcal_run_write_results(cal, hd, firstcal_filename, omnical_filename, omnivis_filename,
-                              meta_filename, outdir, vispols=None, clobber=False, verbose=False, add_to_history=''):
-    '''Helper function for writing the results of redcal_run.'''
-    # get antnums2antnames dictionary
-    antnums2antnames = dict(zip(hd.antenna_numbers, hd.antenna_names))
-
-    # Build UVCal metadata that might be different from UVData metadata
-    cal_antnums = sorted(set([ant[0] for ant in cal['g_omnical']]))
-    antenna_positions = np.array([hd.antenna_positions[hd.antenna_numbers == antnum].flatten() for antnum in cal_antnums])
-    lst_array = np.unique(hd.lsts)
-
-    if firstcal_filename is not None:
-        if verbose:
-            print('\nNow saving firstcal gains to', os.path.join(outdir, firstcal_filename))
-        write_cal(firstcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
-                  flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber,
-                  x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
-                  antenna_positions=antenna_positions, lst_array=lst_array,
-                  history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
-
-    if omnical_filename is not None:
-        if verbose:
-            print('Now saving omnical gains to', os.path.join(outdir, omnical_filename))
-        write_cal(omnical_filename, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
-                  quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
-                  x_orientation=hd.x_orientation, telescope_location=hd.telescope_location,
-                  antenna_positions=antenna_positions, lst_array=lst_array,
-                  history=utils.history_string(add_to_history), antnums2antnames=antnums2antnames)
-
-    if omnivis_filename is not None:
-        if verbose:
-            print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
-        hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
-        d, f, n = hd_out.read(bls=list(set([k[0:2] for k in cal['v_omnical']])), polarizations=vispols)
-        out_data, out_flags, out_nsamples = {}, {}, {}
-        for bl in d:
-            out_data[bl] = cal['v_omnical'][bl] if bl in cal['v_omnical'] else np.zeros_like(d[bl])
-            out_flags[bl] = cal['vf_omnical'][bl] if bl in cal['vf_omnical'] else np.ones_like(f[bl])
-            out_nsamples[bl] = cal['vns_omnical'][bl] if bl in cal['vns_omnical'] else np.zeros_like(n[bl])
-        hd_out.update(data=out_data, flags=out_flags, nsamples=out_nsamples)
-        hd_out.history += utils.history_string(add_to_history)
-        hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
-
-    if meta_filename is not None:
-        if verbose:
-            print('Now saving redcal metadata to', os.path.join(outdir, meta_filename))
-        save_redcal_meta(os.path.join(outdir, meta_filename), cal['fc_meta'], cal['omni_meta'], hd.freqs,
-                         hd.times, hd.lsts, hd.antpos, hd.history + utils.history_string(add_to_history))
-
-
 # XXX redcal_run has the same problems as everything above, but worse. The reporting structure and the
 # arguments box this function in, making it hard to tweak or streamline. Furthermore,
 # the looping/flagging/iteration structure of this cannot be used separately from the interface, so
