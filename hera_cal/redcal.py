@@ -605,7 +605,7 @@ class RedSol():
             np.divide(data, gij, out=data, where=(gij != 0))
             return data
 
-    def update_vis_from_data(self, data, wgts={}, reds=None):
+    def update_vis_from_data(self, data, wgts={}, reds_to_update=None):
         '''Performs redundant averaging of data using reds and gains stored in this RedSol object and
            stores the result as the redundant solution.
 
@@ -613,25 +613,19 @@ class RedSol():
             data: DataContainer containing visibilities to redundantly average.
             wgts: optional DataContainer weighting visibilities in averaging.
                 If not provided, it is assumed that all data are uniformly weighted.
-            reds: subset of reds to update, otherwise update all
+            reds_to_update: list of reds to update, otherwise update all.
 
         Returns:
             None
         '''
-        if reds is None:
-            new_reds = self.reds
+        if reds_to_update is None:
+            reds_to_update = self.reds
         else:
-            new_reds = combine_reds(self.reds, reds)  # ensures no repeats
-        self.vis.build_red_keys(new_reds)
-        for grp in new_reds:
-            # reuse bl index for this group, if we already have one
-            ubls = [bl for bl in grp if bl in self.vis]
-            if len(ubls) == 0:
-                ubl = grp[0]
-            else:
-                ubl = ubls[0]
-            self.vis[ubl] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
-                                       weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
+            self.vis.build_red_keys(combine_reds(self.reds, reds_to_update))
+            self.reds = self.vis.reds
+        for grp in reds_to_update:
+            self.vis[grp[0]] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
+                                          weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
 
     def extend_vis(self, data, wgts={}, reds_to_solve=None):
         '''Performs redundant averaging of ubls not already solved for in RedSol.vis
@@ -641,7 +635,7 @@ class RedSol():
             data: DataContainer containing visibilities to redundantly average.
             wgts: optional DataContainer weighting visibilities in averaging.
                 If not provided, it is assumed that all data are uniformly weighted.
-            reds: subset of reds to update, otherwise update all
+            reds_to_solve: subset of reds to update, otherwise update all
 
         Returns:
             None
@@ -649,7 +643,7 @@ class RedSol():
         if reds_to_solve is None:
             unsolved_reds = [gp for gp in self.reds if not gp[0] in self.vis]
             reds_to_solve = filter_reds(unsolved_reds, ants=self.gains.keys())
-        self.update_vis_from_data(data, wgts=wgts, reds=reds_to_solve)
+        self.update_vis_from_data(data, wgts=wgts, reds_to_update=reds_to_solve)
 
     def extend_gains(self, data, wgts={}, extended_reds=None):
         '''Extend redundant solutions to antennas gains not already solved for
