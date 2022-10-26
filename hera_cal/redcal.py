@@ -1693,6 +1693,7 @@ def expand_omni_vis(sol, all_reds, data, nsamples, chisq=None, chisq_per_ant=Non
         sol.extend_vis(data, wgts=data_wgts, reds_to_solve=reds_to_solve)
         if (chisq is not None) or (chisq_per_ant is not None):
             chisq, chisq_per_ant = normalized_chisq(data, data_wgts, good_ants_reds, sol.vis, sol.gains)
+    sol.vis.build_red_keys(all_reds)
 
 
 def expand_omni_gains(sol, all_reds, data, nsamples, chisq_per_ant=None):
