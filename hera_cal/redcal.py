@@ -1803,12 +1803,6 @@ def expand_omni_gains(sol, all_reds, data, nsamples, chisq_per_ant=None):
                     chisq_per_ant[ant][~np.isfinite(cs)] = np.zeros_like(cs[~np.isfinite(cs)])
 
 
-# XXX the format of rv in this function is a tail that is wagging the dog
-# suggest decoupling the work from the reporting of the work, more in line with changes
-# to redundantly_calibrate above.
-# and also building an object that more robustly defines the 'rv' interface, if it is to be preserved.
-# Too much is trying to happen here. the solar flagging functionality should be moved into a
-# stand-alone function, as should the slicing
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
                      solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
                      oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
@@ -1928,28 +1922,11 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                                                   max_dims=max_dims, gain=gain)
 
                 # fill out relevant parts of cal_first
-                cal_first.update(tSlice=tinds, fSlice=fSlice, firstcal_meta=meta['fc_meta'], gains=meta['fc_gains'],
-                                 gain_flags={ant: np.zeros_like(g, dtype=bool) for ant, g in meta['fc_gains'].items()})
+                cal_first.update_cal_first_after_redundantly_calibrate(meta, tSlice=tinds, fSlice=fSlice)
 
-                # expand visibility solutions to baselines previously excluded but between good antennas. Update chi^2 as appropriate.
-                expand_omni_vis(sol, filter_reds(all_reds, pols=pols), data, nsamples, chisq=meta['chisq'], chisq_per_ant=meta['chisq_per_ant'])
-
-                # update RedCalContainer objects
-                cal_omni.update(tSlice=tinds, fSlice=fSlice, sol=sol, meta=meta,
-                                gain_flags={ant: ~np.isfinite(g) for ant, g in sol.gains},
-                                flags={bl: ~np.isfinite(v) for bl, v in sol.vis},
-                                chisq={antpol: meta['chisq'][antpol] if pol_mode in ['1pol', '2pol'] else meta['chisq'] for antpol in cal_omni.chisq})
-                cal_omni.sol.make_sol_finite()
-
-                # expand gains using visibilitiy solutions where one antenna is flagged, then expand vis.
-                # Do not unflag and only update chisq_per_ant for new gains
-                expand_omni_gains(sol, filter_reds(all_reds, pols=pols), data, nsamples, chisq_per_ant=meta['chisq_per_ant'])
-                expand_omni_vis(sol, filter_reds(all_reds, pols=pols), data, nsamples)
-
-                # update solutions with expanded gains and vis, also perform a final accounting of nsamples
-                cal_omni.update(sol=sol, chisq_per_ant=meta['chisq_per_ant'],
-                                nsamples={red[0]: np.sum([nsamples[bl] for bl in red], axis=0) * (~cal_omni.flags[red[0]])
-                                          for red in sol.vis.reds if red[0] in sol.vis})
+                # update cal_omni and expand omni sol
+                cal_omni.update_cal_omni_after_redundantly_calibrate(meta, sol, filter_reds(all_reds, pols=pols), pols, pol_mode,
+                                                                     expand_sol=True, data=data, nsamples=nsamples, tSlice=tinds, fSlice=fSlice)
 
     return cal_first, cal_omni
 
