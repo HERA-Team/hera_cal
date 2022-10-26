@@ -489,6 +489,12 @@ def test_RedDataContainer():
 def test_RedDataContainerKeyManipulation():
     rdc = datacontainer.RedDataContainer({(0, 1, 'ee'): 10}, reds=[[(0, 1, 'ee'), (1, 2, 'ee')], [(2, 3, 'ee'), (3, 4, 'ee')]])
 
+    # test contains
+    assert (0, 1, 'ee') in rdc
+    assert (1, 2, 'ee') in rdc
+    assert (2, 1, 'ee') in rdc
+    assert (2, 3, 'ee') not in rdc
+
     # basic operation test
     rdc[1, 2, 'ee'] = 11j
     assert rdc[0, 1, 'ee'] == 11j

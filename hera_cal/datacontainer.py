@@ -555,7 +555,7 @@ class RedDataContainer(DataContainer):
         self.reds = []
         self._bl_to_red_key = {}
         self._red_key_to_bls = {}
-        for red in reds:
+        for red in copy.deepcopy(reds):
             bls_in_data = [bl for bl in red if self.has_key(bl)]
             if len(bls_in_data) > 1:
                 raise ValueError('RedDataContainer can only be constructed with (at most) one baseline per group, '
@@ -590,4 +590,4 @@ class RedDataContainer(DataContainer):
 
     def __contains__(self, key):
         '''Returns true if the baseline redundant with the key is in the data.'''
-        return key in self._bl_to_red_key
+        return (key in self._bl_to_red_key) and (super().__contains__(self._bl_to_red_key[key]))
