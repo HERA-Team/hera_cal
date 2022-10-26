@@ -271,16 +271,9 @@ class TestDataContainer(object):
 
     def test_get(self):
         dc = datacontainer.DataContainer(self.blpol)
-        assert dc.get((1, 2), 'yy') == 1j
-        assert dc.get((2, 1), 'yy') == -1j
-        dc = datacontainer.DataContainer(self.polbl)
-        assert dc.get((1, 2), 'yy') == 1j
-        assert dc.get((2, 1), 'yy') == -1j
-        dc = datacontainer.DataContainer(self.both)
-        assert dc.get((1, 2), 'yy') == 1j
-        assert dc.get((2, 1), 'yy') == -1j
-        assert dc.get((1, 2), 'YY') == 1j
-        assert dc.get((2, 1), 'YY') == -1j
+        assert dc.get((1, 2, 'yy')) == 1j
+        assert dc.get((2, 1, 'yy'), 10) == -1j
+        assert dc.get((1, 200, 'yy'), 10) == 10
 
     def test_setter(self):
         dc = datacontainer.DataContainer(self.blpol)

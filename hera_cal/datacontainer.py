@@ -449,9 +449,9 @@ class DataContainer:
         '''Returns True if polarization (with some capitalization) is in the data.'''
         return comply_pol(pol) in self._pols
 
-    def get(self, antpair, pol):
-        '''Interface to DataContainer.__getitem__(bl + (pol,)).'''
-        return self[make_bl(antpair, pol)]
+    def get(self, key, val=None):
+        '''Allows for getting values with fallback if not found. Default None.'''
+        return (self[key] if key in self else val)
 
     def select_or_expand_times(self, new_times, in_place=True):
         '''Update self.times with new times, updating data and metadata to be consistent. Data and
