@@ -1710,7 +1710,7 @@ def expand_omni_gains(sol, all_reds, data, nsamples, chisq_per_ant=None):
 
         # expand gains
         reds_to_use = filter_reds(all_reds, bls=bls_to_use)
-        sol.extend_ants(data_subset, wgts=data_wgts, extended_reds=reds_to_use)
+        sol.extend_gains(data_subset, wgts=data_wgts, extended_reds=reds_to_use)
 
         if chisq_per_ant is not None:
             bls_for_chisq = [bl for red in all_reds for bl in red if ((red[0] in sol.vis)
