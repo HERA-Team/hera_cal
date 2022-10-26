@@ -1627,7 +1627,7 @@ class RedCalContainer():
             self.chisq = None
             self.chisq_per_ant = None
 
-    def _init_firstcal_meta(sefl, ants, nTimes, nFreqs):
+    def _init_firstcal_meta(self, ants, nTimes, nFreqs):
         '''XXX: document'''
         self.meta['dlys'] = {ant: np.full(nTimes, np.nan) for ant in ants}
         self.meta['polarity_flips'] = {ant: np.full(nTimes, np.nan) for ant in ants}
