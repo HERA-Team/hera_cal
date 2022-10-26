@@ -45,7 +45,7 @@ class DataContainer:
             self.__dict__.update(data.__dict__)
         else:
             self._data = odict()
-            if np.all([isinstance(k, (str, np.str)) for k in data.keys()]):  # Nested POL:{antpairs}
+            if np.all([isinstance(k, str) for k in data.keys()]):  # Nested POL:{antpairs}
                 for pol in data.keys():
                     for antpair in data[pol]:
                         self._data[make_bl(antpair, pol)] = data[pol][antpair]
