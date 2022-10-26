@@ -10,7 +10,7 @@ import copy
 import glob
 import scipy.stats as stats
 from pyuvdata import UVCal, UVData
-from .. import io, lstbin, utils, redcal
+from .. import io, lstbin, utils, redcal, lstbin_simple
 from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 import shutil
@@ -41,8 +41,6 @@ class Test_lstbin(object):
         self.ap2, self.freqs2, self.lsts2 = list(hd2.pols.values())[0], list(hd2.freqs.values())[0], np.hstack(list(hd2.lsts.values()))
         self.data3, self.flgs3, self.nsmps3 = hd3.read()
         self.ap3, self.freqs3, self.lsts3 = list(hd3.pols.values())[0], list(hd3.freqs.values())[0], np.hstack(list(hd3.lsts.values()))
-        ap, a = hd3.get_ENU_antpos(center=True, pick_data_ants=True)
-        t = np.hstack(list(hd3.times.values()))
 
         hd1 = io.HERAData(self.data_files[0])
         hd2 = io.HERAData(self.data_files[1])
@@ -53,8 +51,6 @@ class Test_lstbin(object):
         self.ap2, self.freqs2, self.lsts2 = list(hd2.pols.values())[0], list(hd2.freqs.values())[0], np.hstack(list(hd2.lsts.values()))
         self.data3, self.flgs3, self.nsmps3 = hd3.read()
         self.ap3, self.freqs3, self.lsts3 = list(hd3.pols.values())[0], list(hd3.freqs.values())[0], np.hstack(list(hd3.lsts.values()))
-        ap, a = hd3.get_ENU_antpos(center=True, pick_data_ants=True)
-        t = np.hstack(list(hd3.times.values()))
 
         self.data_list = [self.data1, self.data2, self.data3]
         self.flgs_list = [self.flgs1, self.flgs2, self.flgs3]
@@ -364,7 +360,7 @@ class Test_lstbin(object):
         os.remove(output_lst_file)
         os.remove(output_std_file)
 
-    def test_lstbin_filess_inhomogenous_baselines(self, tmpdir):
+    def test_lstbin_files_inhomogenous_baselines(self, tmpdir):
         tmp_path = tmpdir.strpath
         # now do a test with a more complicated set of files with inhomogenous baselines.
         # between different nights.
@@ -605,6 +601,188 @@ class Test_lstbin(object):
             for bldict in nightly_bldict_list:
                 assert len(bldict) == len(self.data_files)
                 assert np.all([bldict[0] == bldict[i] for i in bldict])
+
+    @pytest.mark.filterwarnings("ignore:The expected shape of the ENU array")
+    @pytest.mark.filterwarnings("ignore:antenna_diameters is not set")
+    def test_simpler_lst_bin_files(self):
+        # basic execution
+        file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
+            file_ext=file_ext, ignore_flags=True
+        )
+        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
+        output_std_file = "./zen.ee.STD.0.20124.uvh5"
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        uv1 = UVData()
+        uv1.read(output_lst_file)
+        # assert nsample w.r.t time follows 1-2-3-2-1 pattern
+        print(uv1.get_nsamples(52, 52, 'ee').shape)
+        nsamps = np.mean(uv1.get_nsamples(52, 52, 'ee'), axis=1)
+        expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(22)]).astype(float)
+        assert np.allclose(nsamps[0:len(expectation)], expectation)
+        assert np.allclose(nsamps[len(expectation):], 0)
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+        # test with multiple blgroups
+        # There are 28 baselines in the files.
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
+            file_ext=file_ext, Nbls_to_load=10, ignore_flags=True
+        )
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        uv2 = UVData()
+        uv2.read(output_lst_file)
+        assert uv1 == uv2
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+        # test rephase
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
+            rephase=True, file_ext=file_ext
+        )
+        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
+        output_std_file = "./zen.ee.STD.0.20124.uvh5"
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+        # test data_list is empty
+        data_files = [[sorted(glob.glob(DATA_PATH + '/zen.2458043.*XRAA.uvh5'))[0]],
+                      [sorted(glob.glob(DATA_PATH + '/zen.2458045.*XRAA.uvh5'))[-1]]]
+        lstbin_simple.lst_bin_files(
+            data_files, n_lstbins_per_outfile=30, outdir="./", overwrite=True,
+            file_ext=file_ext
+        )
+        output_lst_files = ['./zen.ee.LST.0.20124.uvh5', './zen.ee.LST.0.31870.uvh5', './zen.ee.LST.0.36568.uvh5']
+        assert os.path.exists(output_lst_files[0])
+        assert os.path.exists(output_lst_files[1])
+        assert os.path.exists(output_lst_files[2])
+        output_files = np.concatenate([glob.glob("./zen.ee.LST*"),
+                                       glob.glob("./zen.ee.STD*")])
+        for of in output_files:
+            if os.path.exists(of):
+                os.remove(of)
+
+        # test smaller ntimes file output, sweeping through f_select
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True,
+            vis_units='Jy', file_ext=file_ext)
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        # load a file
+        uvd1 = UVData()
+        uvd1.read(output_files[1])
+        assert uvd1.vis_units == 'Jy'
+        assert 'Thisfilewasproducedbythefunction' in uvd1.history.replace('\n', '').replace(' ', '')
+        assert uvd1.Ntimes == 80
+        assert np.isclose(uvd1.nsample_array.max(), 3.0)
+        # remove files
+        for of in output_files:
+            if os.path.exists(of):
+                os.remove(of)
+
+        # test output_file_select
+        lstbin_simple.lst_bin_files(
+            self.data_files,n_lstbins_per_outfile=80, outdir="./", overwrite=True, 
+            output_file_select=1, vis_units='Jy', file_ext=file_ext
+        )
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        # load a file
+        uvd2 = UVData()
+        uvd2.read(output_files[0])
+        # assert equivalence with previous run
+        assert uvd1 == uvd2
+        # remove files
+        for of in output_files:
+            if os.path.exists(of):
+                os.remove(of)
+
+        # assert bad output_file_select produces no files
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        for of in output_files:
+            if os.path.exists(of):
+                os.remove(of)
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True, 
+            output_file_select=100,
+            file_ext=file_ext
+        )
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        assert len(output_files) == 0
+
+        # test fixed start
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
+            lst_start=0.18, file_ext=file_ext
+        )
+        output_lst_file = "./zen.ee.LST.0.17932.uvh5"
+        output_std_file = "./zen.ee.STD.0.17932.uvh5"
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+        extra_files = ["zen.ee.LST.0.37508.uvh5", "zen.ee.STD.0.37508.uvh5"]
+        for of in extra_files:
+            if os.path.exists(of):
+                os.remove(of)
+
+        # test input_cal
+        uvc = UVCal()
+        uvc.read_calfits(os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits'))
+        uvc.flag_array[uvc.ant_array.tolist().index(24)] = True
+        uvc.gain_array[uvc.ant_array.tolist().index(25)] = 1e10
+        input_cals = []
+        for dfiles in self.data_files:
+            input_cals.append([uvc] * len(dfiles))
+
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
+            input_cals=input_cals, file_ext=file_ext)
+
+        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
+        output_std_file = "./zen.ee.STD.0.20124.uvh5"
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+        # test input_cal with only one Ntimes
+        input_cals = []
+        for dfiles in self.data_files:
+            input_cals.append([uvc.select(times=uvc.time_array[:1], inplace=False) for df in dfiles])
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
+            input_cals=input_cals, file_ext=file_ext
+        )
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+
+        # assert gains and flags were propagated
+        lstb = UVData()
+        lstb.read(output_lst_file)
+        assert np.allclose(np.abs(lstb.get_data(25, 37)[~lstb.get_flags(25, 37)]), 0.0)
+        assert np.all(lstb.get_flags(24, 25))
+        # make sure a is in the data when we dont use the flag yaml.
+        for a in [24, 25, 37, 38]:
+            assert a in np.unique(np.hstack([lstb.ant_1_array, lstb.ant_2_array]))
+        # test removing antennas in a flag yaml
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
+            input_cals=input_cals, file_ext=file_ext,
+            ex_ant_yaml_files=self.ant_yamls
+        )
+        lstb = UVData()
+        lstb.read(output_lst_file)
+        for a in [24, 25, 37, 38]:
+            assert a not in np.unique(np.hstack([lstb.ant_1_array, lstb.ant_2_array]))
+
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
 
     def tearDown(self):
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))

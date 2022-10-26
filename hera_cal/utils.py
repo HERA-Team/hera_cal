@@ -932,7 +932,7 @@ def lst_rephase_vectorized(
     # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
     # note that we pre-divided s_diff by c so this is in units of tau.
     # output has shape (len(dlst), len(bl))
-    tau = np.einsum("...i,ki->...k", s_diff, bl)
+    tau = np.einsum("...i,ki->...k", s_diff, blvecs)
 
     # reshape tau
     if not isinstance(tau, np.ndarray):            

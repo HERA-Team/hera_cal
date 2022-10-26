@@ -20,6 +20,7 @@ from .datacontainer import DataContainer
 from .utils import mergedicts
 import gc
 from collections import OrderedDict as odict
+from typing import Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ def simple_lst_bin(
     flags = flags[lst_mask]
     nsamples = nsamples[lst_mask]
     data_lsts = data_lsts[lst_mask]
+    grid_indices = grid_indices[lst_mask]
 
     # Now, rephase the data to the lst bin centres.
     if rephase:
@@ -100,13 +102,13 @@ def simple_lst_bin(
         lst_shift = lst_bin_centres[grid_indices] - data_lsts
 
         # this makes a copy of the data in d
-        utils.lst_rephase(data, bls, freq_array, lst_shift, lat=lat, inplace=True)
+        utils.lst_rephase_vectorized(data, bls, freq_array, lst_shift, lat=lat, inplace=True)
 
     # TODO: check for baseline conjugation stuff.
 
     davg = np.zeros((len(lst_bin_centres), len(baselines), len(pols), len(freq_array)), dtype=complex)
     flag_min = np.zeros(davg.shape, dtype=bool)
-    std = np.ones(davg.shape, dtype=float)
+    std = np.ones(davg.shape, dtype=complex)
     counts = np.zeros(davg.shape, dtype=float)
     for lstbin in range(len(lst_bin_centres)):
         # TODO: check that this doesn't make yet another copy...
@@ -132,7 +134,6 @@ def simple_lst_bin(
             flags_dc[bl + (pol,)] = flag_min[:,i,j]
             counts_dc[bl + (pol,)] = counts[:,i,j]
             
-    
     return lst_bin_centres, davg_dc, flags_dc, std_dc, counts_dc
 
 def lst_average(
@@ -144,42 +145,41 @@ def lst_average(
 
     assert data.shape == nsamples.shape == flags.shape
     
-    flags[np.isnan(data) | np.isinf(data)] = True
+    flags[np.isnan(data) | np.isinf(data) | (nsamples == 0)] = True
 
     # Flag entire LST bins if there are too many flags over time
     flag_frac = np.sum(flags, axis=0) / flags.shape[0]
     flags |= flag_frac > flag_thresh
 
     data[flags] *= np.nan  # do this so that we can do nansum later. multiply to get both real/imag as nan
+
+    # get other stats
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
+        std = np.nanstd(data.real, axis=0) + 1j*np.nanstd(data.imag, axis=0)
+        
     nsamples[flags] = 0
     norm = np.sum(nsamples, axis=0)  # missing a "clip" between 1e-99 and inf here...
     
     if median:
         data = np.nanmedian(data, axis=0)
     else:
-        data[norm>0] = np.nansum(data*nsamples, axis=0)
-        new_data = np.nansum(data * nsamples, axis=0)
-        new_data[norm>0] /= norm
-        new_data[norm<=0] *= np.nan
-        data = new_data
-
+        data = np.nansum(data * nsamples, axis=0)
+        data[norm>0] /= norm[norm>0]
+        data[norm<=0] = 1  # any value, it's flagged anyway
+        
     f_min = np.all(flags, axis=0)
+    std[f_min] = 1.0
+    norm[f_min] = 0  # This is probably redundant.
 
-    # get other stats
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
-        real_std = np.nanstd(data.real, axis=0)
-        imag_std = np.nanstd(data.imag, axis=0)
-
-    
-    return data, f_min, real_std + 1j*imag_std, norm
+    return data, f_min, std, norm
 
 
 def lst_bin_files(
     data_files: list[list[str]], 
-    input_cals=list[list[str]] | None, 
+    input_cals: list[list[str]] | None = None, 
     dlst: float | None=None, 
-    ntimes_per_file: int=60,
+    n_lstbins_per_outfile: int=60,
     file_ext: str="{type}.{time:7.5f}.uvh5", 
     outdir: str | Path | None=None, 
     overwrite: bool=False, 
@@ -191,7 +191,7 @@ def lst_bin_files(
     min_N: int=5, 
     flag_below_min_N: bool=False, 
     rephase: bool=False,
-    output_file_select=None, 
+    output_file_select: int | Sequence[int] | None=None, 
     Nbls_to_load: int | None=None, 
     ignore_flags: bool=False, 
     include_autos: bool=True, 
@@ -264,7 +264,7 @@ def lst_bin_files(
         dlst=dlst, 
         atol=atol, 
         lst_start=lst_start,
-        ntimes_per_file=ntimes_per_file, 
+        ntimes_per_file=n_lstbins_per_outfile, 
         verbose=False
     )
 
@@ -327,7 +327,7 @@ def lst_bin_files(
         nightly_last_hds.append(hd)
 
     logger.info("Compiling all unflagged baselines...")
-    all_baselines = list(get_all_unflagged_baselines(data_files, ex_ant_yaml_files))
+    all_baselines = list(get_all_unflagged_baselines(data_files, ex_ant_yaml_files, include_autos=include_autos))
 
     # generate a list of dictionaries which contain the nights occupied by each unique baseline
     # (or unique baseline group if average_redundant_baselines is true)
@@ -349,49 +349,51 @@ def lst_bin_files(
         outfile_lst_min = outfile_lsts[0] - (dlst / 2 + atol)
         outfile_lst_max = outfile_lsts[-1] + (dlst / 2 + atol)
         
+        tinds = []
+        all_lsts = []
+        file_list = []
+        time_arrays = []
+        cals = []
+        # This loop just gets the number of times that we'll be reading.
+        for night, night_files in enumerate(data_files):
+            # iterate over files in each night, and open files that fall into this output file LST range
+            
+            for k_file, fl in enumerate(night_files):
+                
+                # unwrap la relative to itself
+                larr = lst_arrs[night][k_file]
+                larr[larr < larr[0]] += 2 * np.pi
+
+                # phase wrap larr to get it to fall within 2pi of file_lists
+                while larr[0] + 2 * np.pi < outfile_lst_max:
+                    larr += 2 * np.pi
+                while larr[-1] - 2 * np.pi > outfile_lst_min:
+                    larr -= 2 * np.pi
+
+                tind = (larr > outfile_lst_min) & (larr < outfile_lst_max)
+
+                if np.any(tind):
+                    tinds.append(tind)
+                    time_arrays.append(time_arrs[night][k_file][tind])
+                    all_lsts.append(larr[tind])
+                    file_list.append(fl)
+                    if input_cals is not None:
+                        cals.append(input_cals[night][k_file])
+                    else:
+                        cals.append(None)
+
+        all_lsts = np.concatenate(all_lsts)
+
+        # If we have no times at all for this bin, just continue to the next bin.
+        if len(all_lsts) == 0:
+            continue
+        
         # iterate over baseline groups (for memory efficiency)
         data_conts, flag_conts, std_conts, num_conts = [], [], [], []
         for bi, bl_chunk in enumerate(bl_chunks):
             logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
 
-            t_ind_nights = []
-            all_lsts = []
-            file_list = []
-            # This loop just gets the number of times that we'll be reading.
-            for night, night_files in enumerate(data_files):
-                # iterate over files in each night, and open files that fall into this output file LST range
-                t_ind_nights.append([])
-
-                for k_file, fl in enumerate(night_files):
-                    
-                    # unwrap la relative to itself
-                    larr = lst_arrs[night][k_file]
-                    larr[larr < larr[0]] += 2 * np.pi
-
-                    # phase wrap larr to get it to fall within 2pi of file_lists
-                    while larr[0] + 2 * np.pi < outfile_lst_max:
-                        larr += 2 * np.pi
-                    while larr[-1] - 2 * np.pi > outfile_lst_min:
-                        larr -= 2 * np.pi
-
-                    # check if this file has overlap with output file
-                    if larr[-1] < outfile_lst_min or larr[0] > outfile_lst_max:
-                        continue
-
-                    # if overlap, get relevant time indicies
-                    tinds = (larr > outfile_lst_min) & (larr < outfile_lst_max)
-                    t_ind_nights[k_file].append(tinds)
-                    all_lsts.append(larr[tinds])
-
-                    if np.any(tinds):
-                        file_list.append(fl)
-
-            all_lsts = np.concatenate(all_lsts)
-            # If we have no times at all for this bin, just continue to the next bin.
-            if len(all_lsts) == 0:
-                continue
-
-            # Now we can set up our master arrays of data.            
+            # Now we can set up our master arrays of data. 
             data = np.full((
                 len(all_lsts), len(bl_chunk), len(hd.pols), len(hd.freqs)), 
                 np.nan+np.nan*1j, dtype=complex
@@ -399,54 +401,62 @@ def lst_bin_files(
             flags = np.ones(data.shape, dtype=bool)
             nsamples = np.zeros(data.shape, dtype=float)
 
-            # This loop just gets the number of times that we'll be reading.
-            for night, night_files in enumerate(data_files):
-                # iterate over files in each night, and open files that fall into this output file LST range
-                for k_file, fl in enumerate(night_files):
-                    # load data: only times needed for this output LST-bin file
-                    tinds = t_ind_nights[night][k_file]
+            # This loop actually reads the associated data in this LST bin.
+            ntimes_so_far = 0
+            for fl, calfl, tind, tarr in zip(file_list, cals, tinds, time_arrays):
+                hd = io.HERAData(fl, filetype='uvh5')
 
-                    hd = io.HERAData(fl, filetype='uvh5')
-                    bls_to_load = [bl for bl in bl_chunk if bl in hd.antpairs]
-                    _data, _flags, _nsamples  = hd.read(
-                        bls=bls_to_load, 
-                        times=time_arrs[night][k_file][tinds]
+                bls_to_load = [bl for bl in bl_chunk if bl in hd.antpairs]
+                _data, _flags, _nsamples  = hd.read(
+                    bls=bls_to_load, 
+                    times=tarr
+                )
+
+                # load calibration
+                if calfl is not None:
+                    logger.info(f"Opening and applying {calfl}")
+                    uvc = io.to_HERACal(calfl)
+                    gains, cal_flags, _, _ = uvc.read()
+                    # down select times in necessary
+                    if False in tind and uvc.Ntimes > 1:
+                        # If uvc has Ntimes == 1, then broadcast across time will work automatically
+                        uvc.select(times=uvc.time_array[tind])
+                        gains, cal_flags, _, _ = uvc.build_calcontainers()
+                    
+                    apply_cal.calibrate_in_place(
+                        _data, gains, data_flags=_flags, cal_flags=cal_flags,
+                        gain_convention=uvc.gain_convention
                     )
 
-                    # load calibration
-                    if input_cals is not None and input_cals[night][k_file] is not None:
-                        logger.info(f"Opening and applying {input_cals[night][k_file]}")
-                        uvc = io.to_HERACal(input_cals[night][k_file])
-                        gains, cal_flags, _, _ = uvc.read()
-                        # down select times in necessary
-                        if False in tinds and uvc.Ntimes > 1:
-                            # If uvc has Ntimes == 1, then broadcast across time will work automatically
-                            uvc.select(times=uvc.time_array[tinds])
-                            gains, cal_flags, _, _ = uvc.build_calcontainers()
-                        
-                        apply_cal.calibrate_in_place(
-                            _data, gains, data_flags=_flags, cal_flags=cal_flags,
-                            gain_convention=uvc.gain_convention
-                        )
+                slc = slice(ntimes_so_far,ntimes_so_far+_data.shape[0])
+                for i, bl in enumerate(bl_chunk):
+                    for j, pol in enumerate(_data._pols):
+                        if bl + (pol,) in _data:
+                            data[slc, i, j] = _data[bl+(pol,)]
+                            flags[slc, i, j] = _flags[bl+(pol,)]
+                            nsamples[slc, i, j] = _nsamples[bl+(pol,)]
+                        else:
+                            # This baseline+pol doesn't exist in this file. That's
+                            # OK, we don't assume all baselines are in every file.
+                            data[slc, i, j] = np.nan
+                            flags[slc, i, j] = True
+                            nsamples[slc, i, j] = 0
 
-                    for i, bl in enumerate(all_baselines):
-                        for j, pol in enumerate(_data.pols):
-                            data[:, i, j] = _data[bl+(pol,)]
-                            flags[:, i, j] = _flags[bl+(pol,)]
-                            nsamples[:, i, j] = _nsamples[bl+(pol,)]
+                ntimes_so_far += _data.shape[0]
 
             logger.info("About to run LST binning...")
             # LST bin edges are the actual edges of the bins, so should have length
             # +1 of the LST centres. We use +dlst instead of +dlst/2 on the top edge
             # so that np.arange definitely gets the last edge.
+            lst_edges = np.arange(outfile_lsts[0] - dlst/2, outfile_lsts[-1] + dlst, dlst)
             bin_lst, bin_data, flag_data, std_data, num_data = simple_lst_bin(
                 data=data, 
                 flags=None if ignore_flags else flags,
                 nsamples=nsamples,
                 data_lsts=all_lsts,
-                baselines=all_baselines,
+                baselines=bl_chunk,
                 pols=hd.pols,
-                lst_bin_edges=np.arange(outfile_lsts[0] - dlst/2, outfile_lsts[1] + dlst, dlst),
+                lst_bin_edges=lst_edges,
                 freq_array = hd.freqs,
                 rephase = rephase,
                 antpos=antpos,
@@ -522,13 +532,15 @@ def get_all_unflagged_baselines(
             a_priori_antenna_flags = set()
                         
         for fl in fl_list:
-            
             # To go faster, let's JUST read the antpairs and pols from the files.
             with h5py.File(fl, 'r') as hfl:
-                ntimes = len(np.unique(hfl['Header']["time_array"][:]))
-                ant1 = hfl['Header']['ant_1_array'][::ntimes]
-                ant2 = hfl['Header']['ant_2_array'][::ntimes]
-                flags = hfl['Data']['flags'][::ntimes]
+                times = hfl['Header']["time_array"][:]
+                # This could be faster if we always knew that the order of the blt axis
+                # was (t, bl). Not sure that is guaranteed though.
+                time0_indx = np.where(times == times[0])[0]
+                ant1 = hfl['Header']['ant_1_array'][time0_indx]
+                ant2 = hfl['Header']['ant_2_array'][time0_indx]
+                flags = hfl['Data']['flags'][time0_indx]
 
             for ipair, (a1, a2) in enumerate(zip(ant1, ant2)):
                 if (a1, a2) in all_baselines:
@@ -537,7 +549,7 @@ def get_all_unflagged_baselines(
                     # want to always do the np.all() on the flags.
                     continue
                 
-                if include_autos and a1 == a2:
+                if not include_autos and a1 == a2:
                     continue
 
                 if not np.all(flags[ipair]) and a1 not in a_priori_antenna_flags and a2 not in a_priori_antenna_flags:

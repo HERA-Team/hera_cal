@@ -209,7 +209,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         # iterate over keys in d
         klist = list(d.keys())
         for j, key in enumerate(klist):
-            if j % (len(klist)//100) == 0:
+            if j % max(1, (len(klist)//100)) == 0:
                 logger.info(f"Doing key {key} [{j+1}/{len(klist)}]")
             
             # if bl_list is not None, use it to determine conjugation:
@@ -332,7 +332,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     # iterate over data keys (baselines) and get statistics
     logging.info("Getting statistics")
     for i, key in enumerate(data.keys()):
-        if i % (len(data) / 100) == 0:
+        if i % max(1, (len(data) // 100)) == 0:
             logger.info(f"Doing Key {key} [{i+1}/{len(data)}]")
 
         # create empty lists
@@ -645,7 +645,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None,
                   atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, flag_below_min_N=False, rephase=False,
                   output_file_select=None, Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
-                  bl_error_tol=1.0, include_autos=True, ex_ant_yaml_files=None, **kwargs):
+                  bl_error_tol=1.0, include_autos=True, ex_ant_yaml_files=None, Nblgroups=None, **kwargs):
     """
     LST bin a series of UVH5 files with identical frequency bins, but varying
     time bins. Output file meta data (frequency bins, antennas positions, time_array)
@@ -759,9 +759,16 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     # (or unique baseline group if average_redundant_baselines is true)
     bl_nightly_dicts = gen_bl_nightly_dicts(nightly_last_hds, bl_error_tol=bl_error_tol,
                                             include_autos=include_autos, redundant=average_redundant_baselines, ex_ant_yaml_files=ex_ant_yaml_files)
-    if Nbls_to_load in [None, 'None', 'none']:
-        Nbls_to_load = len(bl_nightly_dicts) + 1
-    Nblgroups = len(bl_nightly_dicts) // Nbls_to_load + 1
+    if Nblgroups is None:
+        if Nbls_to_load in [None, 'None', 'none']:
+            Nbls_to_load = len(bl_nightly_dicts) + 1
+        
+        Nblgroups = len(bl_nightly_dicts) // Nbls_to_load + 1
+    else:
+        Nbls_to_load = len(bl_nightly_dicts) // Nblgroups
+        if Nbls_to_load * Nblgroups < len(bl_nightly_dicts):
+            Nbls_to_load += 1
+
     blgroups = [bl_nightly_dicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
     blgroups = [blg for blg in blgroups if len(blg) > 0]
 

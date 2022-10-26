@@ -166,6 +166,10 @@ class DataContainer:
         self._antpairs = set([k[:2] for k in self._data.keys()])
         self._pols = set([k[-1] for k in self._data.keys()])
 
+    @property
+    def shape(self):
+        return self.__getitem__(list(self.keys())[0]).shape
+        
     def concatenate(self, D, axis=0):
         '''Concatenates D, a DataContainer or a list of DCs, with self along an axis'''
         # check type of D
@@ -175,13 +179,13 @@ class DataContainer:
         if axis == 0:
             # check 1 axis is identical for all D
             for d in D:
-                if d[list(d.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
+                if d.shape[1] != self.shape[1]:
                     raise ValueError("[1] axis of dictionary values aren't identical in length")
 
         if axis == 1:
             # check 0 axis is identical for all D
             for d in D:
-                if d[list(d.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
+                if d.shape[0] != self.shape[0]:
                     raise ValueError("[0] axis of dictionary values aren't identical in length")
 
         # start new object
