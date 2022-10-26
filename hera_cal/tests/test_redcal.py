@@ -1521,7 +1521,7 @@ class TestRedundantCalibrator(object):
         noisy_data.freqs = deepcopy(freqs)
         noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
         cal, sol = om.redundantly_calibrate(noisy_data, reds)
-        cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['g_firstcal'].items()}
+        cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['fc_gains'].items()}
         cal['g_omnical'] = sol.gains
         cal['v_omnical'] = sol.vis
         cal['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in cal['g_omnical'].items()}
