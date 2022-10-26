@@ -1999,6 +1999,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
     Returns:
+        TODO: update
         cal: the dictionary result of the final run of redcal_iteration (see above for details)
     '''
     if isinstance(input_data, str):
@@ -2046,14 +2047,14 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         # Run redundant calibration
         if verbose:
             print('\nNow running redundant calibration without antennas', list(ex_ants), '...')
-        cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol, ex_ants=ex_ants,
-                               solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high,
-                               oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
-                               check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain,
-                               verbose=verbose, **filter_reds_kwargs)
+        cal_first, cal_omni = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol, ex_ants=ex_ants,
+                                               solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high,
+                                               oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
+                                               check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain,
+                                               verbose=verbose, **filter_reds_kwargs)
 
         # Determine whether to add additional antennas to exclude
-        z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items()
+        z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal_omni.chisq_per_ant.items()
                                                   if (ant[0] not in ex_ants) and not np.all(cspa == 0)})
         n_ex = len(ex_ants)
         for ant, score in z_scores.items():
@@ -2067,17 +2068,22 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         if len(ex_ants) == n_ex or run_number >= max_rerun:
             break
         # If there is going to be a re-run and if iter0_prefix is not the empty string, then save the iter0 results.
+
         if run_number == 1 and len(iter0_prefix) > 0:
-            _redcal_run_write_results(cal, hd, filename_no_ext + iter0_prefix + firstcal_ext, filename_no_ext + iter0_prefix + omnical_ext,
-                                      filename_no_ext + iter0_prefix + omnivis_ext, filename_no_ext + iter0_prefix + meta_ext, outdir,
-                                      clobber=clobber, verbose=verbose, add_to_history=add_to_history + '\n' + 'Iteration 0 Results.\n')
+            write_kwargs = {'outdir': outdir, 'clobber': clobber, 'verbose': verbose, 'add_to_history': add_to_history + '\n' + 'Iteration 0 Results.\n'}
+            cal_first.write_cal(filename_no_ext + iter0_prefix + firstcal_ext, hd, **write_kwargs)
+            cal_omni.write_cal(filename_no_ext + iter0_prefix + omnical_ext, hd, **write_kwargs)
+            cal_omni.write_vis(filename_no_ext + iter0_prefix + omnivis_ext, hd, **write_kwargs)
+            cal_omni.write_meta(filename_no_ext + iter0_prefix + meta_ext, hd, cal_first.meta, **write_kwargs)
 
     # output results files
-    _redcal_run_write_results(cal, hd, filename_no_ext + firstcal_ext, filename_no_ext + omnical_ext,
-                              filename_no_ext + omnivis_ext, filename_no_ext + meta_ext, outdir, clobber=clobber,
-                              verbose=verbose, add_to_history=add_to_history + '\n' + high_z_ant_hist)
+    write_kwargs = {'outdir': outdir, 'clobber': clobber, 'verbose': verbose, 'add_to_history': add_to_history + '\n' + high_z_ant_hist}
+    cal_first.write_cal(filename_no_ext + firstcal_ext, hd, **write_kwargs)
+    cal_omni.write_cal(filename_no_ext + omnical_ext, hd, **write_kwargs)
+    cal_omni.write_vis(filename_no_ext + omnivis_ext, hd, **write_kwargs)
+    cal_omni.write_meta(filename_no_ext + meta_ext, hd, cal_first.meta, **write_kwargs)
 
-    return cal
+    return cal_first, cal_omni
 
 
 def redcal_argparser():
