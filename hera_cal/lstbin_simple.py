@@ -274,6 +274,8 @@ def lst_bin_files(
     if (lst_start is not None) and ('lst_branch_cut' not in kwargs):
         kwargs['lst_branch_cut'] = file_lsts[0][0]
 
+    logger.info("Setting output files")
+
     # select file_lsts
     if output_file_select is not None:
         if isinstance(output_file_select, (int, np.integer)):
@@ -299,7 +301,8 @@ def lst_bin_files(
     # get metadata from the zeroth data file in the last day
     last_day_index = np.argmax([np.min([time for tarr in tarrs for time in tarr]) for tarrs in time_arrs])
     zeroth_file_on_last_day_index = np.argmin([np.min(tarr) for tarr in time_arrs[last_day_index]])
-    
+
+    logger.info("Getting metadata from last data...")    
     hd = io.HERAData(data_files[last_day_index][zeroth_file_on_last_day_index])
     x_orientation = hd.x_orientation
 
@@ -312,6 +315,7 @@ def lst_bin_files(
     integration_time = np.median(hd.integration_time)
     assert np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
 
+    logger.info("Getting antenna positions from last file on each night...")
     # get antpos over all nights looking at last file on each night
     nightly_last_hds = []
     for dlist, tarrs in zip(data_files, time_arrs):
@@ -322,7 +326,7 @@ def lst_bin_files(
                 antpos[a] = hd.antpos[a]
         nightly_last_hds.append(hd)
 
-    
+    logger.info("Compiling all unflagged baselines...")
     all_baselines = list(get_all_unflagged_baselines(data_files, ex_ant_yaml_files))
 
     # generate a list of dictionaries which contain the nights occupied by each unique baseline

@@ -400,9 +400,16 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 n[~isfinite] = 0.0
 
                 norm = np.sum(n, axis=0).clip(1e-99, np.inf)
-                real_avg_t = np.where(norm>0, np.nansum(d.real * n, axis=0) / norm, np.nan)
-                imag_avg_t = np.where(norm>0, np.nansum(d.imag * n, axis=0) / norm, np.nan)
+                mask = norm > 0
+                real_avg_t = np.full(d.shape[1:], np.nan)
+                imag_avg_t = np.full(d.shape[1:], np.nan)
+                
+                sm = np.nansum(d * n, axis=0)
+                sm[mask] /= norm[mask]
 
+                real_avg_t[mask] = sm.real[mask]
+                imag_avg_t[norm>0] = sm.imag[mask]
+                
                 # add back nans as np.nansum sums nan slices to 0
                 flagged_f = np.logical_not(isfinite).all(axis=0)
                 real_avg_t[flagged_f] = np.nan
@@ -412,7 +419,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 imag_avg.append(imag_avg_t)
 
             # get minimum bin flag
-            f_min.append(np.any(~f, axis=0))
+            f_min.append(np.nanmin(f, axis=0))
 
             # get other stats
             with warnings.catch_warnings():
