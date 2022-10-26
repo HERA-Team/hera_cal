@@ -1738,9 +1738,12 @@ class TestRunMethods(object):
                                pols=set([pol for pols in pol_load_list for pol in pols]))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            rv1, sol1 = om.redundantly_calibrate(data, all_reds, logcal=False, omnical=False)
-            rv2, sol2 = om.redundantly_calibrate(data, all_reds, sol0=sol1, logcal=True, omnical=True)
-            rv3, sol3 = om.redundantly_calibrate(data, all_reds, sol0=sol2, logcal=False, omnical=True)
+            rv1, sol1 = om.redundantly_calibrate(data, all_reds, run_logcal=False, run_omnical=False)
+            rv2, sol2 = om.redundantly_calibrate(data, all_reds, sol0=sol1, run_logcal=True, run_omnical=True)
+            rv3, sol3 = om.redundantly_calibrate(data, all_reds, sol0=sol2, run_logcal=False, run_omnical=True)
+            sol1.make_sol_finite()
+            sol2.make_sol_finite()
+            sol3.make_sol_finite()
 
         for ant in sol1.gains.keys():
             assert np.allclose(sol2[ant], sol3[ant], atol=np.inf, rtol=1e-8)
