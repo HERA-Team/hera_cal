@@ -1686,7 +1686,7 @@ def expand_omni_vis(sol, all_reds, data, nsamples, chisq=None, chisq_per_ant=Non
     '''XXX: document'''
     good_ants_reds = filter_reds(all_reds, ants=list(sol.gains.keys()))
     good_ants_bls = [bl for red in good_ants_reds for bl in red]
-    reds_to_solve = [red for red in good_ants_reds if not np.any([bl in vis.sol for bl in red])]
+    reds_to_solve = [red for red in good_ants_reds if not np.any([bl in sol.vis for bl in red])]
     if len(reds_to_solve) > 0:
         dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in good_ants_bls})
         data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 * nsamples[bl] for bl in good_ants_bls})
