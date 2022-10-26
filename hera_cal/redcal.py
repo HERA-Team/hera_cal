@@ -1743,9 +1743,9 @@ class RedCalContainer():
         d, f, n = hd_out.read(bls=list(set([k[0:2] for k in self.vis])), polarizations=vispols)
         out_data, out_flags, out_nsamples = {}, {}, {}
         for bl in d:
-            out_data[bl] = self.vis[bl] if bl in self.vis[bl] else np.zeros_like(d[bl])
-            out_flags[bl] = self.flags[bl] if bl in self.flags[bl] else np.ones_like(f[bl])
-            out_nsamples[bl] = self.nsamples[bl] if bl in self.nsamples[bl] else np.zeros_like(n[bl])
+            out_data[bl] = self.vis[bl] if bl in self.vis else np.zeros_like(d[bl])
+            out_flags[bl] = self.flags[bl] if bl in self.flags else np.ones_like(f[bl])
+            out_nsamples[bl] = self.nsamples[bl] if bl in self.nsamples else np.zeros_like(n[bl])
         hd_out.update(data=out_data, flags=out_flags, nsamples=out_nsamples)
         hd_out.history += utils.history_string(add_to_history)
         if verbose:
