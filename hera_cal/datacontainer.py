@@ -510,8 +510,7 @@ class RedDataContainer(DataContainer):
         Arguments:
             data: DataContainer or dictionary of visibilities, just as one would pass into DataContainer().
                 Will error if multiple baselines are part of the same redundant group.
-            reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol). Reds without
-                corresponding data will be in self.all_reds but not self.reds.
+            reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol).
             antpos: dictionary of antenna positions in the form {ant_index: np.array([x, y, z])}.
                 Will error if one tries to provide both reds and antpos. If neither is provided,
                 will try to to use data.antpos (which it might have if its is a DataContainer).
@@ -522,6 +521,8 @@ class RedDataContainer(DataContainer):
         if reds is not None and antpos is not None:
             raise ValueError('Can only provide reds or antpos, not both.')
 
+        super().__init__(data)
+
         # Figure out reds
         if reds is None:
             from .redcal import get_reds
@@ -531,9 +532,6 @@ class RedDataContainer(DataContainer):
                 reds = get_reds(self.antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
             else:
                 raise ValueError('Must provide reds, antpos, or have antpos available at data.antpos')
-
-        # Build the object
-        super().__init__(data)
         self.build_red_keys(reds)
 
     def _add_red(self, ubl_key, red):
@@ -552,10 +550,8 @@ class RedDataContainer(DataContainer):
 
         Arguments:
             reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol).
-                Reds without corresponding data will be in self.all_reds but not self.reds.
         '''
         # Map all redundant keys to the same underlying data
-        self.all_reds = reds
         self.reds = []
         self._bl_to_red_key = {}
         self._red_key_to_bls = {}
@@ -564,7 +560,9 @@ class RedDataContainer(DataContainer):
             if len(bls_in_data) > 1:
                 raise ValueError('RedDataContainer can only be constructed with (at most) one baseline per group, '
                                  + f'but this data has the following redundant baselines: {bls_in_data}')
-            if len(bls_in_data) > 0:
+            if len(bls_in_data) == 0:
+                self._add_red(red[0], red)
+            elif len(bls_in_data) > 0:
                 self._add_red(bls_in_data[0], red)
 
     def get_ubl_key(self, key):
