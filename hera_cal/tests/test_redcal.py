@@ -1715,7 +1715,7 @@ class TestRunMethods(object):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 rv, sol = om.redundantly_calibrate(data, all_reds)
-                for r in ['chisq_per_ant', 'omni_meta', 'g_firstcal', 'chisq']:
+                for r in ['chisq_per_ant', 'omni_meta', 'fc_gains', 'chisq']:
                     assert r in rv
                 for key, val in sol.items():
                     assert val.shape == (nTimes, nFreqs)
