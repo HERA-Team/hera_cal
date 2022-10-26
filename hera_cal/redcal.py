@@ -1931,10 +1931,6 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     return cal_first, cal_omni
 
 
-# XXX redcal_run has the same problems as everything above, but worse. The reporting structure and the
-# arguments box this function in, making it hard to tweak or streamline. Furthermore,
-# the looping/flagging/iteration structure of this cannot be used separately from the interface, so
-# the certain functionality simply is not available to, e.g., notebook-level file interaction.
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
                omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None,
                metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None,
@@ -2067,8 +2063,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         run_number += 1
         if len(ex_ants) == n_ex or run_number >= max_rerun:
             break
-        # If there is going to be a re-run and if iter0_prefix is not the empty string, then save the iter0 results.
 
+        # If there is going to be a re-run and if iter0_prefix is not the empty string, then save the iter0 results.
         if run_number == 1 and len(iter0_prefix) > 0:
             write_kwargs = {'outdir': outdir, 'clobber': clobber, 'verbose': verbose, 'add_to_history': add_to_history + '\n' + 'Iteration 0 Results.\n'}
             cal_first.write_cal(filename_no_ext + iter0_prefix + firstcal_ext, hd, **write_kwargs)
