@@ -414,7 +414,7 @@ class TestRedSol(object):
         # try incrementally with subsets of reds
         sol = om.RedSol(reds[:-1], gains=gains)
         sol.update_vis_from_data(DataContainer(d))
-        sol.update_vis_from_data(DataContainer(d), reds=reds[-1:])
+        sol.update_vis_from_data(DataContainer(d), reds_to_update=reds[-1:])
         for red in reds:
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
@@ -426,15 +426,25 @@ class TestRedSol(object):
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
         sol1 = om.RedSol(reds, gains=gains)
         sol1.extend_vis(d)
+        for red in reds:
+            for bl in red:
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol1.vis[bl])
+
         sol2 = om.RedSol(reds[:-1], gains=gains)
         sol2.extend_vis(d, reds_to_solve=reds[-1:])
+        for red in reds[-1:]:
+            for bl in red:
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol2.vis[bl])
+        for red in reds[0:-1]:
+            assert red[0] not in sol2.vis
+
         sol3 = om.RedSol(reds[:1], gains=gains)
         wgts = {bl: np.ones_like(v) for bl, v in d.items()}
         sol3.extend_vis(d, wgts=wgts, reds_to_solve=reds[1:])
-        for sol in [sol1, sol2, sol3]:
-            for red in reds:
-                for bl in red:
-                    np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
+        for red in reds[1:]:
+            for bl in red:
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol3.vis[bl])
+        assert reds[0][0] not in sol3.vis
 
     def test_extend_gains(self):
         NANTS = 18
