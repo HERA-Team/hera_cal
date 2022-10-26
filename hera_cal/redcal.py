@@ -1688,6 +1688,36 @@ class RedCalContainer():
                 if key in omni_meta:
                     _assign_slice(self.meta[key][pol_str], omni_meta[key], tSlice, fSlice)
 
+    def update_cal_first_after_redundantly_calibrate(self, meta, tSlice=slice(None), fSlice=slice(None)):
+        '''TODO: document'''
+        self.update(tSlice=tSlice, fSlice=fSlice, firstcal_meta=meta['fc_meta'], gains=meta['fc_gains'],
+                    gain_flags={ant: np.zeros_like(g, dtype=bool) for ant, g in meta['fc_gains'].items()})
+
+    def update_cal_omni_after_redundantly_calibrate(self, meta, sol, reds_to_update, pols, pol_mode, expand_sol=True,
+                                                    data=None, nsamples=None, tSlice=slice(None), fSlice=slice(None)):
+        '''TODO: document'''
+        # expand visibility solutions to baselines previously excluded but between good antennas. Update chi^2 as appropriate.
+        if expand_sol:
+            expand_omni_vis(sol, reds_to_update, data, nsamples, chisq=meta['chisq'], chisq_per_ant=meta['chisq_per_ant'])
+
+        # update RedCalContainer objects
+        self.update(tSlice=tSlice, fSlice=fSlice, sol=sol, omni_meta=meta['omni_meta'], pol_str=str(pols),
+                    gain_flags={ant: ~np.isfinite(g) for ant, g in sol.gains.items()},
+                    flags={bl: ~np.isfinite(v) for bl, v in sol.vis.items()},
+                    chisq=(meta['chisq'] if pol_mode in ['1pol', '2pol'] else {antpol: meta['chisq'] for antpol in self.chisq}),
+                    chisq_per_ant=meta['chisq_per_ant'],
+                    nsamples={red[0]: np.sum([nsamples[bl] * (split_bl(bl)[0] in sol.gains) * (split_bl(bl)[1] in sol.gains)
+                                              for bl in red], axis=0) for red in sol.vis.reds if red[0] in sol.vis})
+        self.sol.make_sol_finite()
+
+        # expand gains using visibilitiy solutions where one antenna is flagged, then expand vis.
+        # Do not unflag and only update chisq_per_ant for new gains
+        if expand_sol:
+            expand_omni_gains(sol, reds_to_update, data, nsamples, chisq_per_ant=meta['chisq_per_ant'])
+            expand_omni_vis(sol, reds_to_update, data, nsamples)
+            # update solutions with expanded gains and vis
+            self.update(tSlice=tSlice, fSlice=fSlice, sol=sol, chisq_per_ant=meta['chisq_per_ant'])
+
 
 def expand_omni_vis(sol, all_reds, data, nsamples, chisq=None, chisq_per_ant=None):
     '''XXX: document'''
