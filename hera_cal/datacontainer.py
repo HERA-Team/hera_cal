@@ -565,6 +565,9 @@ class RedDataContainer(DataContainer):
             elif len(bls_in_data) > 0:
                 self._add_red(bls_in_data[0], red)
 
+        # delete unused data to avoid leaking memory
+        del self[[k for k in self._data if k not in self._bl_to_red_key]]
+
     def get_ubl_key(self, key):
         '''Returns the key used interally denote the data stored. Useful for del'''
         return self._bl_to_red_key[key]
