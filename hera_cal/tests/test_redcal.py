@@ -1661,8 +1661,8 @@ class TestRedcalAndAbscal(object):
         d.antpos = antpos
 
         # run redcal
-        cal, sol = om.redundantly_calibrate(d, reds, oc_conv_crit=1e-13, oc_maxiter=5000, logcal=True)
-        cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['g_firstcal'].items()}
+        cal, sol = om.redundantly_calibrate(d, reds, oc_conv_crit=1e-13, oc_maxiter=5000, run_logcal=True)
+        cal['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in cal['fc_gains'].items()}
         cal['g_omnical'] = sol.gains
         cal['v_omnical'] = sol.vis
         cal['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in cal['g_omnical'].items()}
