@@ -1853,16 +1853,14 @@ class TestRunMethods(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sys.stdout = open(os.devnull, 'w')
-            cal_first, cal_omni = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
+            cal_first, cal_omni = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.7, add_to_history='testing',
                                                 a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
                                                 iter0_prefix='.iter0', metrics_files=ant_metrics_file, clobber=True)
-
             hd = io.HERAData(input_data)
             cal_first0, cal_omni0 = om.redcal_iteration(hd, ex_ants=[11, 50])
-
             sys.stdout = sys.__stdout__
 
-        for prefix, cal_here, bad_ants in [('', cal_first, [11, 50]), ('.iter0', cal_first0, [11, 50])]:
+        for prefix, cal_here, bad_ants in [('', cal_first, [11, 50, 12, 24]), ('.iter0', cal_first0, [11, 50])]:
             # bad_ants is based on experiments with this particular file
             hc = io.HERACal(os.path.splitext(input_data)[0] + prefix + '.first.calfits')
             gains, flags, quals, total_qual = hc.read()
@@ -1884,7 +1882,7 @@ class TestRunMethods(object):
                 assert 'Iteration0Results.' in hc.history.replace('\n', '').replace(' ', '')
             assert 'Thisfilewasproducedbythefunction' in hc.history.replace('\n', '').replace(' ', '')
 
-        for prefix, cal_here, bad_ants in [('', cal_omni, [11, 50]), ('.iter0', cal_omni0, [11, 50])]:
+        for prefix, cal_here, bad_ants in [('', cal_omni, [11, 50, 12, 24]), ('.iter0', cal_omni0, [11, 50])]:
             hc = io.HERACal(os.path.splitext(input_data)[0] + prefix + '.omni.calfits')
             gains, flags, quals, total_qual = hc.read()
             np.testing.assert_almost_equal(np.unique(hc.lst_array), np.unique(hd.lst_array))
@@ -1924,7 +1922,7 @@ class TestRunMethods(object):
                 assert 'Iteration0Results.' in hc.history.replace('\n', '').replace(' ', '')
             assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
 
-        for prefix, omnical_here, firstcal_here, bad_ants in [('', cal_omni, cal_first, [11, 50]), ('.iter0', cal_omni0, cal_first0, [11, 50])]:
+        for prefix, omnical_here, firstcal_here, bad_ants in [('', cal_omni, cal_first, [11, 50, 12, 24]), ('.iter0', cal_omni0, cal_first0, [11, 50])]:
             meta_file = os.path.splitext(input_data)[0] + prefix + '.redcal_meta.hdf5'
             fc_meta, omni_meta, freqs, times, lsts, antpos, history = io.read_redcal_meta(meta_file)
             for key1 in fc_meta:
