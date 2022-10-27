@@ -568,8 +568,8 @@ def get_all_unflagged_baselines(
         for fl in fl_list:
             # To go faster, let's JUST read the antpairs and pols from the files.
             with h5py.File(fl, 'r') as hfl:
-                ntimes= hfl['Header']['Ntimes']
-                nblts = hfl['Header']['Nblts']
+                ntimes= int(hfl['Header']['Ntimes'][()])
+                nblts = int(hfl['Header']['Nblts'][()])
                 if nblts % ntimes:
                     raise ValueError(f'Datafile {fl} has different number of times for different baselines!')
 
