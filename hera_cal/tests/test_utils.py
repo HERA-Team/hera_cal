@@ -398,6 +398,64 @@ def test_combine_calfits():
         os.remove('ex.calfits')
 
 
+def test_lst_rephase_vectorized():
+    # load point source sim w/ array at latitude = 0
+    fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        (data, flags, antpos, ants, freqs, times, lsts, pols) = io.load_vis(fname, return_meta=True)
+
+    antpairs = list(data.antpairs())
+    pols = list(data._pols)
+
+    # The following defines which data we check (bl, time, freq, pol)
+    itime = 50  # this is the index of transit.
+    ifreq = 4
+    # get phase error on shortest EW baseline
+#    k = (0, 1, 'ee')
+    ibl = antpairs.index((0, 1))
+    ipol = pols.index('ee')
+
+    # get integration time in LST, baseline dict
+    dlst = np.median(np.diff(lsts))
+    blvec = [antpos[k[0]] - antpos[k[1]] for k in antpairs]
+
+    data_drift = np.zeros((data.shape[0], len(data.bls()), len(data._pols), data.shape[1]), dtype=complex)
+    
+    for i, antpair in enumerate(antpairs):
+        for j, pol in enumerate(pols):
+            data_drift[:, i, j] = data[antpair + (pol,)].copy()
+    
+    # basic test: single dlst for all integrations
+    _data = utils.lst_rephase_vectorized(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)    
+    
+    # check error at transit
+    phs_err = np.angle(_data[itime, ibl, ipol, ifreq] / data_drift[itime+1, ibl, ipol, ifreq])
+    assert np.isclose(phs_err, 0, atol=1e-7)
+    # check error across file
+    phs_err = np.angle(_data[:-1, ibl, ipol, ifreq] / data_drift[1:, ibl, ipol, ifreq])
+    assert np.abs(phs_err).max() < 1e-4
+
+    # multiple phase term test: dlst per integration
+    dlst = np.array([np.median(np.diff(lsts))] * data.shape[0])
+    _data = utils.lst_rephase_vectorized(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
+    # check error at transit
+    phs_err = np.angle(_data[itime, ibl, ipol, ifreq] / data_drift[itime+1, ibl, ipol, ifreq])
+    assert np.isclose(phs_err, 0, atol=1e-7)
+    # check err across file
+    phs_err = np.angle(_data[:-1, ibl, ipol, ifreq] / data_drift[1:, ibl, ipol, ifreq])
+    assert np.abs(phs_err).max() < 1e-4
+
+    # phase all integrations to a single integration
+    dlst = lsts[50] - lsts
+    _data = utils.lst_rephase_vectorized(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
+    # check error at transit
+    phs_err = np.angle(_data[itime, ibl, ipol, ifreq] / data_drift[itime, ibl, ipol, ifreq])
+    assert np.isclose(phs_err, 0, atol=1e-7)
+    # check error across file
+    phs_err = np.angle(_data[:, ibl, ipol, ifreq] / data_drift[50, ibl, ipol, ifreq])
+    assert np.abs(phs_err).max() < 1e-4
+
 def test_lst_rephase():
     # load point source sim w/ array at latitude = 0
     fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")

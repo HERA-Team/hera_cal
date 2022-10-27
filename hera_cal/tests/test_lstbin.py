@@ -604,6 +604,49 @@ class Test_lstbin(object):
 
     @pytest.mark.filterwarnings("ignore:The expected shape of the ENU array")
     @pytest.mark.filterwarnings("ignore:antenna_diameters is not set")
+    @pytest.mark.parametrize('rephase', [True, False])
+    def test_simpler_lst_bin_vs_old(self, rephase):
+        # basic execution
+        file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
+            file_ext=file_ext, ignore_flags=True, rephase=rephase
+        )
+        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
+        output_std_file = "./zen.ee.STD.0.20124.uvh5"
+        uv1 = UVData()
+        uv1.read(output_lst_file)
+        # assert nsample w.r.t time follows 1-2-3-2-1 pattern
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+        lstbin.lst_bin_files(
+            self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+            file_ext=file_ext, ignore_flags=True, rephase=rephase
+        )
+        uv2 = UVData()
+        uv2.read(output_lst_file)
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+        # We know the history will be different because they're different functions.
+        assert uv1.history != uv2.history
+        uv1.history = ""
+        uv2.history = ""        
+
+        # We also know the antenna-shaped arrays will be different, because we now only
+        # keep the antennas that we need for the baselines.
+        uv2.antenna_diameters = uv1.antenna_diameters
+        uv2.antenna_names = uv1.antenna_names
+        uv2.antenna_numbers = uv1.antenna_numbers
+        uv2.antenna_positions = uv1.antenna_positions
+        uv2.Nants_telescope = uv1.Nants_telescope
+        uv2.uvw_array = uv1.uvw_array
+
+        assert uv1 == uv2
+
+
+    @pytest.mark.filterwarnings("ignore:The expected shape of the ENU array")
+    @pytest.mark.filterwarnings("ignore:antenna_diameters is not set")
     def test_simpler_lst_bin_files(self):
         # basic execution
         file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
@@ -618,7 +661,6 @@ class Test_lstbin(object):
         uv1 = UVData()
         uv1.read(output_lst_file)
         # assert nsample w.r.t time follows 1-2-3-2-1 pattern
-        print(uv1.get_nsamples(52, 52, 'ee').shape)
         nsamps = np.mean(uv1.get_nsamples(52, 52, 'ee'), axis=1)
         expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(22)]).astype(float)
         assert np.allclose(nsamps[0:len(expectation)], expectation)

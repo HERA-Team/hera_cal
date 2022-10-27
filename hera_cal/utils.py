@@ -841,7 +841,7 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, a
     # get new s-hat vector
     s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
     s_diff = (s_prime - np.array([0., 0., 1.0])) / const.c.value
-    
+
     # iterate over data keys
     for i, k in enumerate(data.keys()):
         # get baseline vector
@@ -850,17 +850,17 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, a
         # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
         # note that we pre-divided s_diff by c so this is in units of tau.
         tau = np.einsum("...i,i->...", s_diff, bl)
-
+        #if i==0:
+        #    print("TAU OLD: ", tau)
         # reshape tau
         if not isinstance(tau, np.ndarray):            
             tau = np.array([tau])
 
         # get phasor
         phs = np.exp(-2j * np.pi * freqs[None, :] * tau[:, None])
-
+        
         # multiply into data
         data[k] *= phs
-
     if array:
         data = data['data']
 
@@ -901,6 +901,9 @@ def lst_rephase_vectorized(
     This method of rephasing follows Eqn. 21 & 22 of Zhang, Y. et al. 2018 
     "Unlocking Sensitivity..."
     """
+    blvecs = np.array(blvecs)
+    assert blvecs.shape[1] == 3
+
     # check format of dlst
     if isinstance(dlst, list):
         lat = np.ones_like(dlst) * lat
@@ -923,24 +926,25 @@ def lst_rephase_vectorized(
 
     # make copy of data if desired
     if not inplace:
-        data = copy.deepcopy(data)
+        data = data.copy()
 
     # get new s-hat vector, shape=(len(dlst), 3)
     s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
     s_diff = (s_prime - np.array([0., 0., 1.0])) / const.c.value
-    
+
     # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
     # note that we pre-divided s_diff by c so this is in units of tau.
     # output has shape (len(dlst), len(bl))
     tau = np.einsum("...i,ki->...k", s_diff, blvecs)
 
+    #print("TAU: ", tau[:, 0], blvecs[0])
     # reshape tau
-    if not isinstance(tau, np.ndarray):            
-        tau = np.array([tau])
+    if tau.ndim != 2:
+        tau = tau[None, :]
 
     # get phasor
     phs = np.exp(-2j * np.pi * freqs[None, None, None, :] * tau[:, :, None, None])
-
+    
     # multiply into data
     data *= phs
 

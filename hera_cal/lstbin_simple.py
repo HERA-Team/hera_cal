@@ -19,8 +19,8 @@ from . import apply_cal
 from .datacontainer import DataContainer
 from .utils import mergedicts
 import gc
-from collections import OrderedDict as odict
 from typing import Sequence
+from pyuvdata.utils import polnum2str
 
 try:
     profile
@@ -206,11 +206,7 @@ def lst_bin_files(
     overwrite: bool=False, 
     history: str='', 
     lst_start: float | None=None,
-    atol: float=1e-6, 
-    sig_clip: bool=True, 
-    sigma: float=5.0, 
-    min_N: int=5, 
-    flag_below_min_N: bool=False, 
+    atol: float=1e-6,  
     rephase: bool=False,
     output_file_select: int | Sequence[int] | None=None, 
     Nbls_to_load: int | None=None, 
@@ -218,7 +214,7 @@ def lst_bin_files(
     include_autos: bool=True, 
     ex_ant_yaml_files=None, 
     ignore_ants: tuple[int]=(),
-    **kwargs
+    write_kwargs: dict | None = None,
 ):
     """
     LST bin a series of UVH5 files.
@@ -292,9 +288,12 @@ def lst_bin_files(
 
     nfiles = len(file_lsts)
 
+    # If None, set to empty dict
+    write_kwargs = write_kwargs or {}
+
     # make sure the JD corresponding to file_lsts[0][0] is the lowest JD in the LST-binned data set
-    if (lst_start is not None) and ('lst_branch_cut' not in kwargs):
-        kwargs['lst_branch_cut'] = file_lsts[0][0]
+    if (lst_start is not None) and ('lst_branch_cut' not in write_kwargs):
+        write_kwargs['lst_branch_cut'] = file_lsts[0][0]
 
     logger.info("Setting output files")
 
@@ -317,8 +316,8 @@ def lst_bin_files(
         outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
 
     # update kwrgs
-    kwargs['outdir'] = outdir
-    kwargs['overwrite'] = overwrite
+    write_kwargs['outdir'] = outdir
+    write_kwargs['overwrite'] = overwrite
 
     # get metadata from the zeroth data file in the last day
     last_day_index = np.argmax([np.min([time for tarr in tarrs for time in tarr]) for tarrs in time_arrs])
@@ -333,31 +332,21 @@ def lst_bin_files(
     antpos = hd.antpos
     times = hd.times
     start_jd = np.floor(times.min())
-    kwargs['start_jd'] = start_jd
+    write_kwargs['start_jd'] = start_jd
     integration_time = np.median(hd.integration_time)
-    assert np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
-
-    logger.info("Getting antenna positions from last file on each night...")
-    # get antpos over all nights looking at last file on each night
-    nightly_last_hds = []
-    for dlist, tarrs in zip(data_files, time_arrs):
-        last_file_index = np.argmin([np.min(tarr) for tarr in tarrs])
-        hd = io.HERAData(dlist[last_file_index])
-        for a in hd.antpos:
-            if a not in antpos:
-                antpos[a] = hd.antpos[a]
-        nightly_last_hds.append(hd)
+    if not  np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6):
+        raise ValueError('All integrations must be of equal length (BDA not supported)')
 
     logger.info("Compiling all unflagged baselines...")
-    all_baselines = list(
-        get_all_unflagged_baselines(
-            data_files, 
-            ex_ant_yaml_files, 
-            include_autos=include_autos, 
-            ignore_ants=ignore_ants
-        )
+    all_baselines, all_pols, fls_with_ants = get_all_unflagged_baselines(
+        data_files, 
+        ex_ant_yaml_files, 
+        include_autos=include_autos, 
+        ignore_ants=ignore_ants
     )
+    all_baselines = list(all_baselines)
 
+    antpos = get_all_antpos_from_files(fls_with_ants, all_baselines)
     # Split up the baselines into chunks that will be LST-binned together.
     # This is just to save on RAM.
     if Nbls_to_load is None:
@@ -454,7 +443,7 @@ def lst_bin_files(
 
                 slc = slice(ntimes_so_far,ntimes_so_far+_data.shape[0])
                 for i, bl in enumerate(bl_chunk):
-                    for j, pol in enumerate(_data._pols):
+                    for j, pol in enumerate(all_pols):
                         if bl + (pol,) in _data:
                             data[slc, i, j] = _data[bl+(pol,)]
                             flags[slc, i, j] = _flags[bl+(pol,)]
@@ -479,7 +468,7 @@ def lst_bin_files(
                 nsamples=nsamples,
                 data_lsts=all_lsts,
                 baselines=bl_chunk,
-                pols=hd.pols,
+                pols=all_pols,
                 lst_bin_edges=lst_edges,
                 freq_array = hd.freqs,
                 rephase = rephase,
@@ -503,10 +492,10 @@ def lst_bin_files(
         # update history
         file_list_str = "-".join(os.path.basename(ff)for ff in file_list)
         file_history = f"{history} Input files: {file_list_str}"
-        kwargs['history'] = file_history + utils.history_string()
+        write_kwargs['history'] = file_history + utils.history_string()
 
         # form integration time array
-        kwargs['integration_time'] = integration_time*np.ones(
+        write_kwargs['integration_time'] = integration_time*np.ones(
             len(bin_lst) * len(all_baselines), 
             dtype=np.float64
         )
@@ -528,9 +517,9 @@ def lst_bin_files(
 
         # write to file
         io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data,
-                     nsamples=num_data, filetype='uvh5', x_orientation=x_orientation, **kwargs)
+                     nsamples=num_data, filetype='uvh5', x_orientation=x_orientation, **write_kwargs)
         io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, flags=flag_data,
-                     nsamples=num_data, filetype='uvh5', x_orientation=x_orientation, **kwargs)
+                     nsamples=num_data, filetype='uvh5', x_orientation=x_orientation, **write_kwargs)
 
         del bin_file, std_file, bin_data, std_data, num_data, bin_lst, flag_data
         del data_conts, flag_conts, std_conts, num_conts
@@ -542,15 +531,29 @@ def get_all_unflagged_baselines(
     ex_ant_yaml_files: list[str] | None = None,
     include_autos: bool = True,
     ignore_ants: tuple[int] = (),
-) -> set[tuple[int, int]]:
+    only_last_file_per_night: bool = False,
+) -> tuple[set[tuple[int, int]], list[str]]:
     """Generate a set of all antpairs that have at least one un-flagged entry.
     
     This is performed over a list of nights, each of which consists of a list of 
     individual uvh5 files. Each UVH5 file is *assumed* to have the same set of times
-    for each baseline.
+    for each baseline internally (difference nights obviously have different times).
+    
+    Returns
+    -------
+    all_baselines
+        The set of all antpairs in all files in the given list.
+    all_pols
+        A list of all polarizations in the files in the given list, as strings like 
+        'ee' and 'nn' (i.e. with x_orientation information).
     """
-    # Get all baselines from all files
+    all_pols = set()
+    xorient_bytes = None
+
     all_baselines = set()
+    files_with_ants = set()
+    unique_ants = set()
+
     for night, fl_list in enumerate(data_files):
         if ex_ant_yaml_files:
             a_priori_antenna_flags = read_a_priori_ant_flags(
@@ -558,7 +561,10 @@ def get_all_unflagged_baselines(
             )
         else:
             a_priori_antenna_flags = set()
-                        
+
+        if only_last_file_per_night:
+            fl_list = fl_list[-1:]
+
         for fl in fl_list:
             # To go faster, let's JUST read the antpairs and pols from the files.
             with h5py.File(fl, 'r') as hfl:
@@ -568,17 +574,55 @@ def get_all_unflagged_baselines(
                 time0_indx = np.where(times == times[0])[0]
                 ant1 = hfl['Header']['ant_1_array'][time0_indx]
                 ant2 = hfl['Header']['ant_2_array'][time0_indx]
+                all_pols.update(list(hfl['Header']["polarization_array"][:]))
+                xb = bytes(hfl['Header']["x_orientation"][()])
+                if xorient_bytes is not None and xorient_bytes != xb:
+                    raise ValueError("Not all input files have the same x_orientation!")
+                xorient_bytes = xb
 
-            for ipair, (a1, a2) in enumerate(zip(ant1, ant2)):
-                if (a1, a2) in all_baselines or a1 in ignore_ants or a2 in ignore_ants:
-                    # Check first if it's already in our baseline set, because this will
-                    # most of the time be true after the first few files
-                    continue
-                
-                if not include_autos and a1 == a2:
-                    continue
-
-                if a1 not in a_priori_antenna_flags and a2 not in a_priori_antenna_flags:
+            for a1, a2 in zip(ant1, ant2):
+                if (
+                    (a1, a2) not in all_baselines and # Do this first because after the
+                    (a2, a1) not in all_baselines and # first file it often triggers.
+                    a1 not in ignore_ants and 
+                    a2 not in ignore_ants and 
+                    (include_autos or a1 != a2) and 
+                    a1 not in a_priori_antenna_flags and 
+                    a2 not in a_priori_antenna_flags
+                ):  
                     all_baselines.add((a1, a2))
 
-    return all_baselines
+
+                    if a1 not in unique_ants:
+                        unique_ants.add(a1)
+                        files_with_ants.add(fl)
+                    if a2 not in unique_ants:
+                        unique_ants.add(a2)
+                        files_with_ants.add(fl)
+                    
+
+    return all_baselines, [polnum2str(p, x_orientation=xorient_bytes.decode("utf8")) for p in all_pols], files_with_ants
+
+
+def get_all_antpos_from_files(
+    data_files: list[str | Path], 
+    all_baselines: list[tuple[int, int]]
+) -> dict[tuple[int, int], np.ndarray]:
+
+    antpos_out = {}
+    
+    # ants will be a set of integers antenna numbers.
+    ants = set(sum(all_baselines, start=()))
+
+    for fl in data_files:
+        # unfortunately, we're reading in way more than we need to here,
+        # because the conversion from the antpos in the file to the ENU antpos is 
+        # non trivial and hard to trace in uvdata.
+        hd = io.HERAData(fl)
+
+        for ant in ants:
+            if ant in hd.antpos and ant not in antpos_out:
+                antpos_out[ant] = hd.antpos[ant]
+
+    return antpos_out
+
