@@ -739,7 +739,7 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
         return degen_params, model, model_comps
 
 @jax.jit
-def foreground_model(fg_model_comps_r, fg_model_comps_i, spectral_filters, spatial_filters):
+def foreground_model(params, spectral_filters, spatial_filters):
     """
     Function for computing foreground models from 
     
@@ -756,12 +756,15 @@ def foreground_model(fg_model_comps_r, fg_model_comps_i, spectral_filters, spati
     spat : list of jnp.ndarrays
         Array of spatial PSWF eigenvectors used for modeling foregrounds
     """
-    model_r = jnp.einsum('fm,afn,mn->af', spectral_filters, spatial_filters, fg_model_comps_r, optimize=True)
-    model_i = jnp.einsum('fm,afn,mn->af', spectral_filters, spatial_filters, fg_model_comps_i, optimize=True)
-    return model_r, model_i
+    model_r, model_i = [], []
+    for sf, fgr, fgi in zip(spatial_filters, params['fg_r'], params['fg_i']):
+        model_r.append(jnp.einsum('fm,afn,mn->af', spectral_filters, sf, fgr, optimize=True))
+        model_i.append(jnp.einsum('fm,afn,mn->af', spectral_filters, sf, fgi, optimize=True))
+
+    return jnp.vstack(model_r), jnp.vstack(model_i)
 
 @jax.jit
-def _mean_squared_error(params, fg_model_comps_r, fg_model_comps_i, data_r, data_i, wgts, spectral_filters, spatial_filters, blvecs):
+def _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
     """
     Loss function used for solving for redcal degenerate parameters and a model of the sky
     
@@ -791,9 +794,6 @@ def _mean_squared_error(params, fg_model_comps_r, fg_model_comps_i, data_r, data
     """
     # Dot baseline vector into tip-tilt parameters
     phase = jnp.einsum('bn,nf->bf', blvecs, params["Phi"])
-            
-    # Compute foreground model from beta estimates
-    fg_model_r, fg_model_i = foreground_model(fg_model_comps_r, fg_model_comps_i, spectral_filters, spatial_filters)
 
     # Compute model from foreground estimates and amplitude
     model_r = params["A"] * (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
@@ -801,8 +801,7 @@ def _mean_squared_error(params, fg_model_comps_r, fg_model_comps_i, data_r, data
     
     # Compute loss using weights and foreground model
     return jnp.sum((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
-    
-@partial(jax.value_and_grad, argnums=(0,))
+
 def _iterate_through_groups(params, data, wgts, spectral_filters, spatial_filters, idealized_blvecs):
     """
     Function for iterating through groups of radially redundant baselines
@@ -822,14 +821,11 @@ def _iterate_through_groups(params, data, wgts, spectral_filters, spatial_filter
         Array of spatial PSWF eigenvectors used for modeling foregrounds
     """
     loss = 0
-    for _d, _w, fg_model_comps_r, fg_model_comps_i, _spat, blvecs in zip(data, wgts, params["fg_r"], params["fg_i"], spatial_filters, idealized_blvecs):
-        loss += _mean_squared_error(
-            params, fg_model_comps_r, fg_model_comps_i, _d.real, _d.imag, _w, spectral_filters, _spat, blvecs
-        )
-        
+    fg_model_r, fg_model_i = foreground_model(params, spectral_filters, spatial_filters)
+    loss = _mean_squared_error(params, data.real, data.imag, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
     return loss
 
-def calibrate_single_integration(data, wgts, initial_params, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
+def calibrate_single_integration(data, wgts, params, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
                                     maxiter=100, tol=1e-10):
     """
     Function for calibrating a single polarization/time integration
@@ -862,8 +858,7 @@ def calibrate_single_integration(data, wgts, initial_params, optimizer, spectral
         pass
     """
     # Initialize optimizer state using parameter guess
-    opt_state = optimizer.init(initial_params)
-    params = deepcopy(initial_params)
+    opt_state = optimizer.init(params)
 
     # Initialize variables used in calibration loop
     losses = []
@@ -871,9 +866,9 @@ def calibrate_single_integration(data, wgts, initial_params, optimizer, spectral
     # Start gradient descent
     for step in range(maxiter):
         # Compute loss and gradient
-        loss, gradient = _iterate_through_groups(params, data, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs)
+        loss, gradient = jax.value_and_grad(_iterate_through_groups)(params, data, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs)
         updates, opt_state = optimizer.update(gradient, opt_state, params)
-        #params = optax.apply_updates(params, updates)
+        params = optax.apply_updates(params, updates)
         
         # Store loss values
         losses.append(loss)
@@ -882,7 +877,7 @@ def calibrate_single_integration(data, wgts, initial_params, optimizer, spectral
         if step >= 1 and np.abs(losses[-1] - losses[-2]) < tol:
             break
             
-    return params, {"loss": losses[-1], "niter": step + 1}
+    return params, {"loss": losses[-1], "niter": step + 1, "loss_history": losses}
 
 class NuCalibrator:
     """
@@ -1017,24 +1012,27 @@ class NuCalibrator:
 
                 idealized_blvecs.append(jnp.array(group_vecs))
 
+            # Stack baseline vectors
+            idealized_blvecs = jnp.vstack(idealized_blvecs)
+
             spatial_filters = [jnp.array([self.spatial_filters[bl] for bl in group]) for group in self.radial_reds.get_pol(pol)]
             for tind in range(ntimes):
                 # Group degenerate parameter estimates into dictionary for the current integration
                 initial_params = {
                     f"A": degens[f"A_J{pol}"][tind],
                     f"Phi": degens[f"Phi_J{pol}"][tind],
-                    f"fg_r": [np.real(model_comps[group[0]][tind]).reshape(1, -1) * const_eigvals for group in self.radial_reds.get_pol(pol)],
-                    f"fg_i": [np.imag(model_comps[group[0]][tind]).reshape(1, -1) * const_eigvals for group in self.radial_reds.get_pol(pol)]
+                    f"fg_r": [jnp.real(model_comps[group[0]][tind]).reshape(1, -1) * const_eigvals for group in self.radial_reds.get_pol(pol)],
+                    f"fg_i": [jnp.imag(model_comps[group[0]][tind]).reshape(1, -1) * const_eigvals for group in self.radial_reds.get_pol(pol)]
                 }
 
                 # Extract data/wgts into arrays for the current integration
-                _data = [jnp.array([data[bl][tind] for bl in group]) for group in self.radial_reds.get_pol(pol)]
-                _wgts = [jnp.array([data_wgts[bl][tind] for bl in group]) for group in self.radial_reds.get_pol(pol)]
+                _data = jnp.array([data[bl][tind] for group in self.radial_reds.get_pol(pol) for bl in group])
+                _wgts = jnp.array([data_wgts[bl][tind] for group in self.radial_reds.get_pol(pol) for bl in group])
                 
                 # Main optimization loop function
                 fit_params, info = calibrate_single_integration(
-                            _data, _wgts, initial_params, optimizer, spectral_filters=self.spectral_filters, 
-                            spatial_filters=spatial_filters, maxiter=maxiter, idealized_blvecs=idealized_blvecs, tol=tol
+                    _data, _wgts, initial_params, optimizer, spectral_filters=self.spectral_filters, 
+                    spatial_filters=spatial_filters, maxiter=maxiter, idealized_blvecs=idealized_blvecs, tol=tol
                 )
 
                 # TODO: unpack solution and organize it in a sensible way
