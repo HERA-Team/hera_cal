@@ -22,8 +22,15 @@ import gc
 from collections import OrderedDict as odict
 from typing import Sequence
 
+try:
+    profile
+except NameError:
+    def profile(fnc):
+        return fnc
+
 logger = logging.getLogger(__name__)
 
+@profile
 def simple_lst_bin(
     data: np.ndarray,
     data_lsts: np.ndarray,
@@ -146,6 +153,7 @@ def simple_lst_bin(
             
     return lst_bin_centres, davg_dc, flags_dc, std_dc, counts_dc
 
+@profile
 def lst_average(
     data: np.ndarray, nsamples: np.ndarray, flags: np.ndarray, 
     flag_thresh: float = 0.7, median: bool = False,
@@ -187,7 +195,7 @@ def lst_average(
 
     return data, f_min, std, norm
 
-
+@profile
 def lst_bin_files(
     data_files: list[list[str]], 
     input_cals: list[list[str]] | None = None, 
@@ -528,6 +536,7 @@ def lst_bin_files(
         del data_conts, flag_conts, std_conts, num_conts
         gc.collect()
 
+@profile
 def get_all_unflagged_baselines(
     data_files: list[list[str | Path]], 
     ex_ant_yaml_files: list[str] | None = None,
@@ -559,19 +568,17 @@ def get_all_unflagged_baselines(
                 time0_indx = np.where(times == times[0])[0]
                 ant1 = hfl['Header']['ant_1_array'][time0_indx]
                 ant2 = hfl['Header']['ant_2_array'][time0_indx]
-                flags = hfl['Data']['flags'][time0_indx]
 
             for ipair, (a1, a2) in enumerate(zip(ant1, ant2)):
                 if (a1, a2) in all_baselines or a1 in ignore_ants or a2 in ignore_ants:
                     # Check first if it's already in our baseline set, because this will
-                    # most of the time be true after the first few files, and we don't
-                    # want to always do the np.all() on the flags.
+                    # most of the time be true after the first few files
                     continue
                 
                 if not include_autos and a1 == a2:
                     continue
 
-                if not np.all(flags[ipair]) and a1 not in a_priori_antenna_flags and a2 not in a_priori_antenna_flags:
+                if a1 not in a_priori_antenna_flags and a2 not in a_priori_antenna_flags:
                     all_baselines.add((a1, a2))
 
     return all_baselines
