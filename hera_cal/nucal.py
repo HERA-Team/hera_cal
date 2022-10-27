@@ -1,5 +1,3 @@
-from math import radians
-from multiprocessing.sharedctypes import Value
 from . import utils
 from . import redcal
 from . import abscal
@@ -744,7 +742,8 @@ class NuCalibrator:
     calibrated data. This class handles the calibration and degeneracy correction of
     frequency redundantly calibrated gains.
     """
-    def __init__(self, reds, radial_reds):
+    def __init__(self, reds, radial_reds, freqs, eta_half_width=20e-9, ell_half_width=1, 
+                  eigenval_cutoff=1e-12):
         """
         Parameters:
         ----------
@@ -753,6 +752,8 @@ class NuCalibrator:
         radial_reds : FrequencyRedundancy
             FrequencyRedundancy object containing of lists of baselines that are considered to
             be radially redundant.
+        freqs : np.ndarray
+            pass
         """
         # Store radial reds
         self.radial_reds = radial_reds
@@ -764,8 +765,11 @@ class NuCalibrator:
         # Get number of tip-tilt dimensions from 
         self.ndims = self.idealized_antpos[list(self.idealized_antpos.keys())[0]].shape[0]
             
-        # Build function that will be used to calculate loss
-        self.loss = jax.value_and_grad(self._iterate_through_groups)
+        # Compute spatial filters
+        self.spatial_filters = compute_spatial_filters(self.radial_reds, freqs, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
+
+        # Compute spectral dpss filters
+        self.spectral_filters = dspec.dpss_operator(freqs, [0], [eta_half_width], eigenval_cutoff=[eigenval_cutoff])[0].real
     
     @partial(jax.jit, static_argnums=(0,))
     def foreground_model(self, fg_model_comps_r, fg_model_comps_i, spectral_filters, spatial_filters):
@@ -790,7 +794,7 @@ class NuCalibrator:
         return model_r, model_i
     
     @partial(jax.jit, static_argnums=(0,))
-    def loss_function(self, params, fg_model_comps_r, fg_model_comps_i, data_r, data_i, wgts, spectral_filters, spatial_filters):
+    def _mean_squared_error(self, params, fg_model_comps_r, fg_model_comps_i, data_r, data_i, wgts, spectral_filters, spatial_filters):
         """
         Loss function used for solving for redcal degenerate parameters and a model of the sky
         
@@ -831,10 +835,11 @@ class NuCalibrator:
         # Compute loss using weights and foreground model
         return jnp.sum((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
         
+    @partial(jax.value_and_grad, argnums=(1,))
     def _iterate_through_groups(self, params, data, wgts, spectral_filters, spatial_filters):
         """
         Function for iterating through groups of radially redundant baselines
-        to compute the loss function
+        to compute the loss value
 
         Parameters: 
         ----------
@@ -850,8 +855,8 @@ class NuCalibrator:
             Array of spatial PSWF eigenvectors used for modeling foregrounds
         """
         loss = 0
-        for _d, _w, _spat in zip(data, wgts, spatial_filters):
-            loss += self.loss_function(params, _d.real, _d.imag, _w, spectral_filters, _spat)
+        for _d, _w, fg_model_comps_r, fg_model_comps_i, _spat in zip(data, wgts, params["fg_r"], params["fg_i"], spatial_filters):
+            loss += self._mean_squared_error(params, fg_model_comps_r, fg_model_comps_i, _d.real, _d.imag, _w, spectral_filters, _spat)
             
         return loss
 
@@ -866,9 +871,13 @@ class NuCalibrator:
             List of jnp.ndarrays of data for each radially redundant group of baselines
         wgts : list of jnp.ndarrays
             List of jnp.ndarrays of the data weights for each radially redundant group of baselines
-        spec : jnp.ndarray
+        initial_params : pass
+            pass
+        optimizer : pass
+            pass
+        spectral_filters : jnp.ndarray
             Array of spectrally DPSS eigenvectors used for modeling foregrounds
-        spat : list of jnp.ndarrays
+        spatial_filters : list of jnp.ndarrays
             Array of spatial PSWF eigenvectors used for modeling foregrounds
         maxiter : int, default=100
             Maximum number of gradient descent steps to use when finding the optimal parameter values
@@ -893,7 +902,7 @@ class NuCalibrator:
         # Start gradient descent
         for step in range(maxiter):
             # Compute loss and gradient
-            loss, gradient = self.loss(data, wgts, spectral_filters, spatial_filters)
+            loss, gradient = self._iterate_through_groups(params, data, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters)
             updates, opt_state = optimizer.update(gradient, opt_state, params)
             params = optax.apply_updates(params, updates)
             
@@ -906,9 +915,8 @@ class NuCalibrator:
              
         return params, {"loss": losses[-1], "niter": step + 1}
     
-    def fit_redcal_degens(self, data, freqs=None, pols=None, eta_half_width=20e-9, ell_half_width=1, 
-                  eigenval_cutoff=1e-12, learning_rate=1e-3, maxiter=100, optimizer='adabelief',
-                  **opt_kwargs):
+    def fit_redcal_degens(self, data, rc_flags, freqs=None, pols=None, learning_rate=1e-3, maxiter=100, 
+                  optimizer='adabelief', initial_est_niter=1, **opt_kwargs):
         """
         Parameters:
         ----------
@@ -966,29 +974,14 @@ class NuCalibrator:
         # Choose optimizer and initialize
         assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
         optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
-                
-        # Compute spatial filters
-        spatial_filters = compute_spatial_filters(self.radial_reds, freqs, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
-
-        # Compute spectral dpss filters
-        spectral_filters = dspec.dpss_operator(freqs, [0], [eta_half_width], eigenval_cutoff=[eigenval_cutoff])[0].real
-
-        # Separate spatial filters by polarization
-        spatial_dpss = {}
-        for pol in pols:
-            pol_filters = []
-            for group in self.radial_reds.get_pol(pol):
-                pol_filters.append(jnp.array([spatial_filters[bl] for bl in group]))
-
-            spatial_dpss[pol] = pol_filters
-            
+                            
         # Populate with variables
-        data_wgts = build_nucal_wgts()
+        #data_wgts = build_nucal_wgts()
+        data_wgts = {bl: np.ones_like(data[bl]) for bl in data}
 
         # TODO: compute estimate of the degenerate parameters from spatial filters if not given.
         degen_params, model_comps = estimate_degenerate_parameters(
-            data, data_wgts, self.radial_reds, rc_flags, spatial_filters, 
-            niter=niter, phs_max_iter=phs_max_iter, 
+            data, data_wgts, self.radial_reds, rc_flags, self.spatial_filters, niter=initial_est_niter
         )
         degens = {**degen_params, **model_comps}
 
@@ -1000,23 +993,32 @@ class NuCalibrator:
 
 
         # For each time and each polarization in the data calibrate
-        solution, info = {}, {}
+        solution = {parameter + pol: [] for pol in pols for parameter in ["A_J", "Phi_J"]}
         for pol in pols:
+            spatial_filters = [jnp.array([self.spatial_filters[bl] for bl in group]) for group in self.radial_reds.get_pol(pol)]
             for tind in range(ntimes):
+                # Group degenerate parameter estimates into dictionary for the current integration
                 initial_params = {
                     f"A": degens[f"A_J{pol}"][tind],
                     f"Phi": degens[f"Phi_J{pol}"][tind],
-                    f"fg_r": [np.real(model_comps[group[0]]) for group in self.radial_reds.get_pol(pol)],
-                    f"fg_i": [np.imag(model_comps[group[0]]) for group in self.radial_reds.get_pol(pol)]
+                    f"fg_r": [np.real(model_comps[group[0]][tind]) for group in self.radial_reds.get_pol(pol)],
+                    f"fg_i": [np.imag(model_comps[group[0]][tind]) for group in self.radial_reds.get_pol(pol)]
                 }
-                _data = jnp.array([data[bl][tind] for group in self.radial_reds.get_pol(pol) for bl in group])
-                _wgts = jnp.array([data_wgts[bl][tind] for group in self.radial_reds.get_pol(pol) for bl in group])
-                fit_params, info = self.calibrate_single_integration(_data, _wgts, initial_params, optimizer, maxiter=maxiter)
+
+                # Extract data/wgts into arrays for the current integration
+                _data = [jnp.array([data[bl][tind] for bl in group]) for group in self.radial_reds.get_pol(pol)]
+                _wgts = [jnp.array([data_wgts[bl][tind] for bl in group]) for group in self.radial_reds.get_pol(pol)]
+                
+                # Main optimization loop function
+                fit_params, info = self.calibrate_single_integration(
+                            _data, _wgts, initial_params, optimizer, spectral_filters=self.spectral_filters, 
+                            spatial_filters=spatial_filters, maxiter=maxiter
+                )
 
                 # TODO: unpack solution and organize it in a sensible way
                 # Consider nucal_sol object that gets added to. Nucal sol object could work like
                 # dictionary similarly to Redsol
-                solution[('amp', pol)].append(fit_params['amp'])
-                solution[('phi', pol)].append(fit_params['phi'])
+                solution[f"A_J{pol}"].append(fit_params['A'])
+                solution[f"Phi_J{pol}"].append(fit_params['Phi'])
 
         return solution, info
