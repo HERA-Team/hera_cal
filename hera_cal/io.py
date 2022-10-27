@@ -2,6 +2,7 @@
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
+import profile
 import numpy as np
 from collections import OrderedDict as odict
 import operator
@@ -37,6 +38,11 @@ from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
 from .utils import split_pol, conj_pol, split_bl, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
 
+try:
+    profile
+except NameError:
+    def profile(fnc):
+        return fnc
 
 def _parse_input_files(inputs, name='input_data'):
     if isinstance(inputs, str):
@@ -1861,7 +1867,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
     else:
         return data, flags
 
-
+@profile
 def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None, nsamples=None,
               filetype='miriad', write_file=True, outdir="./", overwrite=False, verbose=True, history=" ",
               return_uvd=False, start_jd=None, lst_branch_cut=0.0, x_orientation="north", instrument="HERA",
