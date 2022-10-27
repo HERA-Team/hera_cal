@@ -419,7 +419,7 @@ def lst_bin_files(
             for fl, calfl, tind, tarr in zip(file_list, cals, tinds, time_arrays):
                 hd = io.HERAData(fl, filetype='uvh5')
 
-                bls_to_load = [bl for bl in bl_chunk if bl in hd.antpairs]
+                bls_to_load = [bl for bl in bl_chunk if bl in hd._antpairs]
                 _data, _flags, _nsamples  = hd.read(
                     bls=bls_to_load, 
                     times=tarr
@@ -568,12 +568,22 @@ def get_all_unflagged_baselines(
         for fl in fl_list:
             # To go faster, let's JUST read the antpairs and pols from the files.
             with h5py.File(fl, 'r') as hfl:
-                times = hfl['Header']["time_array"][:]
-                # This could be faster if we always knew that the order of the blt axis
-                # was (t, bl). Not sure that is guaranteed though.
-                time0_indx = np.where(times == times[0])[0]
-                ant1 = hfl['Header']['ant_1_array'][time0_indx]
-                ant2 = hfl['Header']['ant_2_array'][time0_indx]
+                ntimes= hfl['Header']['Ntimes']
+                nblts = hfl['Header']['Nblts']
+                if nblts % ntimes:
+                    raise ValueError(f'Datafile {fl} has different number of times for different baselines!')
+
+                times = hfl['Header']["time_array"][:2]
+
+                if times[0] != times[0]:
+                    # Assume time-first ordering.
+                    ant1 = hfl['Header']['ant_1_array'][::ntimes]
+                    ant2 = hfl['Header']['ant_2_array'][::ntimes]
+                else:
+                    nbls = nblts // ntimes
+                    ant1 = hfl['Header']['ant_1_array'][:nbls]
+                    ant2 = hfl['Header']['ant_2_array'][:nbls]
+
                 all_pols.update(list(hfl['Header']["polarization_array"][:]))
                 xb = bytes(hfl['Header']["x_orientation"][()])
                 if xorient_bytes is not None and xorient_bytes != xb:
