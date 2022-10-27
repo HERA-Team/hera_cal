@@ -3649,8 +3649,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
             warnings.warn(f"Warning: Overwriting redcal gain_scale of {hc.gain_scale} with model gain_scale of {hdm.vis_units}", RuntimeWarning)
         hc.gain_scale = hdm.vis_units  # set vis_units of hera_cal based on model files.
         hd_autos = io.HERAData(raw_auto_file)
-        assert hdm.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation, hdm.x_orientation)
-        assert hc.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation, hc.x_orientation)
+        assert hdm.x_orientation.lower() == hd.x_orientation.lower(), 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation.lower(), hdm.x_orientation.lower())
+        assert hc.x_orientation.lower() == hd.x_orientation.lower(), 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation.lower(), hc.x_orientation.lower())
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
 
         # get model bls and antpos to use later in baseline matching
