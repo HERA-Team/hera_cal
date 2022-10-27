@@ -603,21 +603,21 @@ def build_nucal_wgts(radial_reds, freqs, data_flags, data_nsamples, autocorrs, a
     for group in radial_reds:
         for key in group:
             umag = radial_reds.baseline_lengths[key] * freqs / SPEED_OF_LIGHT
-            _wgts = np.zeros_like(data_flags[key], dtype=bool)
+            wgts = np.zeros_like(data_flags[key], dtype=bool)
 
             if min_u_cut is not None:
-                _wgts[:, umag < min_u_cut] = True
+                wgts[:, umag < min_u_cut] = True
 
             if max_u_cut is not None:
-                _wgts[:, umag > max_u_cut] = True
+                wgts[:, umag > max_u_cut] = True
 
             if min_freq_cut is not None:
-                _wgts[:, freqs < min_freq_cut] = True
+                wgts[:, freqs < min_freq_cut] = True
 
             if max_freq_cut is not None:
-                _wgts[:, freqs > max_freq_cut] = True
+                wgts[:, freqs > max_freq_cut] = True
                 
-            model_flags[key] = _wgts
+            model_flags[key] = wgts
     
     weights = abscal.build_data_wgts(
         data_flags, data_nsamples, model_flags, autocorrs, auto_flags, 
