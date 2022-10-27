@@ -3,6 +3,7 @@ from multiprocessing.sharedctypes import Value
 from . import utils
 from . import redcal
 from . import abscal
+from .datacontainer import DataContainer
 
 import warnings
 import numpy as np
@@ -626,73 +627,118 @@ def build_nucal_wgts(radial_reds, freqs, data_flags, data_nsamples, autocorrs, a
 
     return weights
 
-def estimate_phase_post_redcal(data, radial_reds, wgts=None, freqs=None, cache={}):
+def estimate_degenerate_parameters(data, data_wgts, radial_reds, freqs, rc_flags, spatial_filters,
+                                   niter=1, phs_max_iter=10, return_gains=False):
     """
-    Function for estimating the gain phase using PSWF vectors
-    """
-    if not hasattr(data, "freqs") and freqs == None:
-        raise ValueError("Frequencies not found in data or provided")
-    elif freqs is None:
-        freqs = data.freqs
-    if wgts is None:
-        wgts = {k: np.ones_like(data[k], dtype=float) for k in data}
-        
-    eigenvals = {}
-    eigenvec = {}
-    u_bounds = get_u_bounds(radial_reds, freqs)
+    Relatively quick estimate of the redcal degenerate parameters using
+    a common u-model
     
-    for (umin, umax), rdgrp in zip(u_bounds, radial_reds):
-        _data = []
-        for bl in rdgrp:
-            umodes = freqs * radial_reds.baseline_lengths[bl] / 2.998e8
-            # TODO: Only compute these if they haven't already been computed
-            vector = dspec.pswf_operator(
-                umodes, [0], [1], eigenval_cutoff=[1e-12], xmin=umin, xmax=umax, cache=cache
-            )[0].real
-            # TODO: figure out the properly normalize the data
-            _data.append(data[bl] / np.abs(data[bl]))
-            eigenvec[rdgrp[0]].append(vector)
-
-        XTX = jnp.einsum('afm,afn->mn', eigenvec[rdgrp[0]], eigenvec[rdgrp[0]])
-        Xy = jnp.einsum('afm,atf->tm', eigenvec[rdgrp[0]], np.array(_data))
-        eigenvals[rdgrp[0]] = jnp.linalg.solve(XTX, Xy.T).T
-
-    return eigenvals, eigenvec
-
-def estimate_gain_amp_post_redcal(data, radial_reds, wgts=None, freqs=None, cache={}, gains={}):
-    """
-    Function for estimating gain amplitude
-
-    # TODO: This is a copy of the above function.
-    """
-    if not hasattr(data, "freqs") and freqs == None:
-        raise ValueError("Frequencies not found in data or provided")
-    elif freqs is None:
-        freqs = data.freqs
-    if wgts is None:
-        wgts = {k: np.ones_like(data[k], dtype=float) for k in data}
+    Parameters:
+    ----------
+    data : dictionary, DataContainer
+        DataContainer of redundantly calibrated visibilities
+    data_wgts : dictionary, DataContainer
+        Weights associated with redudantly calibrated visibilities
+    radial_reds : FrequencyRedundancy
+        FrequencyRedundancy object which contains of baseline tuple which are considered
+        to be radially redundant
+    freqs : np.ndarray
+        Frequency channels found in the data in units of Hz
+    rc_flags : dictionary, DataContainer
+        pass
+    spatial_filters : dictionary
+        pass
+    niter : int, default=1
+        Number of iterations to attempt to 
+    phs_max_iter : int, default=10
+        pass
+    return_gains : bool, default=False
+        pass
         
-    eigenvals = {}
-    eigenvec = {}
-    u_bounds = get_u_bounds(radial_reds, freqs)
+    Returns:
+    -------
+    degen_params : dictionary
+        pass
+    model : dictionary
+        pass
+    model_comps : dictionary
+        pass
+    gains : dictionary
+        pass
+    """
+    # 
+    keys = [bl for group in radial_reds for bl in group]
+    antpols = list(set([antpol for bl in keys for antpol in utils.split_bl(bl)]))
     
-    for (umin, umax), rdgrp in zip(u_bounds, radial_reds):
-        _data = []
-        for bl in rdgrp:
-            umodes = freqs * radial_reds.baseline_lengths[bl] / 2.998e8
-            # TODO: Only compute these if they haven't already been computed
-            vector = dspec.pswf_operator(
-                umodes, [0], [1], eigenval_cutoff=[1e-12], xmin=umin, xmax=umax, cache=cache
-            )[0].real
-            # TODO: figure out the properly normalize the data
-            _data.append(data[bl] / np.abs(data[bl]))
-            eigenvec[rdgrp[0]].append(vector)
+    # Keep only data found in 
+    data_here = DataContainer(deepcopy({bl: data[bl] for bl in keys}))
+    data_wgts_here = DataContainer(deepcopy({bl: data_wgts[bl] for bl in keys}))
+    
+    # Reset metadata
+    data_here.antpos = data.antpos
+    data_wgts_here.antpos = data.antpos
+    data_here.freqs = data.freqs
+    
+    
+    # Storage dictionaries
+    cache = {}
+    model_comps = {}
+    
+    # Estimate initial model of the uv-plane along radial spokes
+    for i in range(niter):
+        model = {}
+        for group in radial_reds:
+            design_matrix = jnp.array([spatial_filters[bl] for bl in group])
+            wgts_arr = jnp.array([data_wgts_here[bl] for bl in group])
+            data_arr = jnp.array([data_here[bl] for bl in group])
 
-        XTX = jnp.einsum('afm,afn->mn', eigenvec[rdgrp[0]], eigenvec[rdgrp[0]])
-        Xy = jnp.einsum('afm,atf->tm', eigenvec[rdgrp[0]], np.array(_data))
-        eigenvals[rdgrp[0]] = jnp.linalg.solve(XTX, Xy.T).T
+            # Compute XTX and inverse
+            if i == 0:
+                XTX = jnp.einsum('afm,atf,afn->tmn', design_matrix, wgts_arr, design_matrix)
+                XTXinv = jnp.linalg.pinv(XTX)
+                cache[group[0]] = XTXinv
+            else:
+                XTXinv = cache[group[0]]
+            
+            # Compute solution vector
+            Xy = jnp.einsum('afm,atf->tm', design_matrix, wgts_arr * data_arr)
+            beta = jnp.einsum('tmn,tm->tn', XTXinv, Xy)
+            model_comps[group[0]] = beta
 
-    return eigenvals, eigenvec
+            # Evaluate model with solution vector
+            for bl in group:
+                model[bl] = np.einsum('fm,tm->tf', spatial_filters[bl], beta)
+        
+        # Add model to DataContainer
+        model = DataContainer(model)
+    
+        # Estimate Degenerate Gain Parameters using abscal
+        gains_here = abscal.post_redcal_abscal(model, data_here, data_wgts_here, rc_flags, verbose=False, phs_max_iter=phs_max_iter)
+
+    
+    # Get final set of degenerate parameters
+    ants = sorted(list(rc_flags.keys()))
+    idealized_antpos = abscal._get_idealized_antpos(rc_flags, data_here.antpos, data_here.pols(),
+                                             data_wgts=data_wgts_here, keep_flagged_ants=True)
+
+    # Repack data into new datacontainers for estimate of degenerate parameters
+    data_here = DataContainer({bl: data[bl] for bl in keys})
+    data_here.antpos = data.antpos
+    data_here.freqs = data.freqs
+    data_wgts_here = DataContainer({bl: data_wgts[bl] for bl in keys})
+    
+    # Use best-fit u-model to get amplitude and tip-tilt parameters
+    amp_params = abscal.abs_amp_lincal(model, data_here, wgts=data_wgts_here, verbose=False, return_gains=False, gain_ants=ants)
+    angle_wgts = DataContainer({bl: 2 * np.abs(model[bl])**2 * data_wgts_here[bl] for bl in model})
+    phase_params = abscal.TT_phs_logcal(model, data_here, idealized_antpos, wgts=angle_wgts, verbose=False, assume_2D=False, return_gains=False, gain_ants=ants)
+    degen_params = {**amp_params, **phase_params}
+    
+    # Return degenerate parameters and model components
+    if return_gains:
+        gains = abscal.post_redcal_abscal(model, data_here, data_wgts_here, rc_flags, verbose=False, phs_max_iter=phs_max_iter)
+        return degen_params, model, model_comps, gains
+    else:
+        return degen_params, model, model_comps
 
 class NuCalibrator:
     """
