@@ -419,7 +419,7 @@ def lst_bin_files(
             for fl, calfl, tind, tarr in zip(file_list, cals, tinds, time_arrays):
                 hd = io.HERAData(fl, filetype='uvh5')
 
-                bls_to_load = [bl for bl in bl_chunk if bl in hd._antpairs]
+                bls_to_load = [bl for bl in bl_chunk if bl in hd.antpairs]
                 _data, _flags, _nsamples  = hd.read(
                     bls=bls_to_load, 
                     times=tarr
