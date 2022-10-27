@@ -9,7 +9,7 @@ import os
 import sys
 import shutil
 from scipy import constants
-from pyuvdata import UVCal, UVData, UVFlag
+from pyuvdata import UVData, UVFlag
 
 from .. import io
 from .. import delay_filter as df
@@ -71,6 +71,7 @@ class Test_DelayFilter(object):
 
         uvd = UVData()
         uvd.read_uvh5(outfilename)
+        uvd.use_future_array_shapes()
         assert 'Hello_world.' in uvd.history.replace('\n', '').replace(' ', '')
         assert 'Thisfilewasproducedbythefunction' in uvd.history.replace('\n', '').replace(' ', '')
         assert uvd.telescope_name == 'PAPER'
@@ -279,6 +280,7 @@ class Test_DelayFilter(object):
         # test apriori flags and flag_yaml
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
         uvf = UVFlag(hd, mode='flag', copy_flags=True)
+        uvf.use_future_array_shapes()
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
@@ -367,6 +369,7 @@ class Test_DelayFilter(object):
         hd.read()
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
         uvf = UVFlag(hd, mode='flag', copy_flags=True)
+        uvf.use_future_array_shapes()
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')

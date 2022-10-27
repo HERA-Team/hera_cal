@@ -285,12 +285,12 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     return dlys, offset
 
 
-
 def quinn_tau(x):
     '''Quinn subgrid interpolation parameter (see https://ieeexplore.ieee.org/document/558515)'''
-    t = .25 * np.log(3*x**2 + 6*x + 1) 
-    t -= 6**.5 / 24 * np.log((x + 1 - (2/3)**.5) / (x + 1 + (2/3) **.5))
+    t = .25 * np.log(3 * x**2 + 6 * x + 1)
+    t -= 6**.5 / 24 * np.log((x + 1 - (2 / 3)**.5) / (x + 1 + (2 / 3)**.5))
     return t
+
 
 def interp_peak(data, method='quinn', reject_edges=False):
     """
@@ -1378,9 +1378,9 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 if len(blinds) == 0:
                     blinds = data.antpair2ind(reverse_bl(blk))
                     davg = np.conj(davg)
-                data.data_array[blinds, 0, :, polind] = davg
-                data.flag_array[blinds, 0, :, polind] = favg
-                data.nsample_array[blinds, 0, :, polind] = navg
+                data.data_array[blinds, :, polind] = davg
+                data.flag_array[blinds, :, polind] = favg
+                data.nsample_array[blinds, :, polind] = navg
                 data.integration_time[blinds] = iavg
 
     # select out averaged bls
