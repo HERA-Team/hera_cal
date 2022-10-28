@@ -877,7 +877,7 @@ def lst_rephase_vectorized(
     Parameters
     ----------
     data
-        The complex visibility data, with shape (ntimes, nbaselines, npols, nfreqs)
+        The complex visibility data, with shape (ntimes, nbaselines, nfreqs, npols)
     bls:
         Array of baseline vectors (3D) in ENU, shape (nbalines, 3).
     freqs
@@ -943,7 +943,7 @@ def lst_rephase_vectorized(
         tau = tau[None, :]
 
     # get phasor
-    phs = np.exp(-2j * np.pi * freqs[None, None, None, :] * tau[:, :, None, None])
+    phs = np.exp(-2j * np.pi * freqs[None, None, :, None] * tau[:, :, None, None])
     
     # multiply into data
     data *= phs

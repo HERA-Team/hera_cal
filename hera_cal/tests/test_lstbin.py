@@ -714,7 +714,7 @@ class Test_lstbin(object):
         # test smaller ntimes file output, sweeping through f_select
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True,
-            vis_units='Jy', file_ext=file_ext)
+            write_kwargs={'vis_units': 'Jy'}, file_ext=file_ext)
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         # load a file
         uvd1 = UVData()
@@ -731,7 +731,7 @@ class Test_lstbin(object):
         # test output_file_select
         lstbin_simple.lst_bin_files(
             self.data_files,n_lstbins_per_outfile=80, outdir="./", overwrite=True, 
-            output_file_select=1, vis_units='Jy', file_ext=file_ext
+            output_file_select=1, write_kwargs={'vis_units': 'Jy'}, file_ext=file_ext
         )
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         # load a file

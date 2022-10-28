@@ -43,8 +43,12 @@ def simple_lst_bin(
     rephase: bool = True,
     antpos: np.ndarray | None = None,
     lat: float = -30.72152,
-):
-    required_shape = (len(data_lsts), len(baselines), len(pols), len(freq_array))
+    out_data: np.ndarray | None = None,
+    out_flags: np.ndarray | None = None,
+    out_std: np.ndarray | None = None,
+    out_counts: np.ndarray | None = None,    
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    required_shape = (len(data_lsts), len(baselines), len(freq_array), len(pols))
     if data.shape != required_shape:
         raise ValueError(
             f"data should have shape {required_shape} but got {data.shape}"
@@ -116,10 +120,18 @@ def simple_lst_bin(
 
     # TODO: check for baseline conjugation stuff.
 
-    davg = np.zeros((len(lst_bin_centres), len(baselines), len(pols), len(freq_array)), dtype=complex)
-    flag_min = np.zeros(davg.shape, dtype=bool)
-    std = np.ones(davg.shape, dtype=complex)
-    counts = np.zeros(davg.shape, dtype=float)
+    if out_data is None:
+        out_data = np.zeros((len(baselines), len(lst_bin_centres), len(freq_array), len(pols)), dtype=complex)
+    if out_flags is None:
+        out_flags = np.zeros(out_data.shape, dtype=bool)
+    if out_std is None:
+        out_std = np.ones(out_data.shape, dtype=complex)
+    if out_counts is None:
+        out_counts = np.zeros(out_data.shape, dtype=float)
+
+    assert out_data.shape == out_flags.shape == out_std.shape == out_counts.shape
+    assert out_data.shape == (len(baselines), len(lst_bin_centres), len(freq_array), len(pols))
+
     for lstbin in range(len(lst_bin_centres)):
         logger.info(f"Computing LST bin {lstbin+1} / {len(lst_bin_centres)}")
         # TODO: check that this doesn't make yet another copy...
@@ -127,31 +139,22 @@ def simple_lst_bin(
         mask = grid_indices==lstbin
         if np.any(mask):
             d = data[mask]
-            n = nsamples[ mask]
+            n = nsamples[mask]
             f = flags[mask]
 
-            davg[lstbin], flag_min[lstbin], std[lstbin], counts[lstbin] = lst_average(
-                d, n, f
-            )
+            (
+                out_data[:, lstbin], 
+                out_flags[:, lstbin], 
+                out_std[:, lstbin], 
+                out_counts[:, lstbin]
+            ) = lst_average(d, n, f)
         else:
-            davg[lstbin] = 1.0
-            flag_min[lstbin] = True
-            std[lstbin] = 1.0
-            counts[lstbin] = 0.0
-
-    # TODO: should we put these back into datacontainers before returning?
-    davg_dc = {}
-    std_dc = {}
-    flags_dc = {}
-    counts_dc = {}
-    for i, bl in enumerate(baselines):
-        for j, pol in enumerate(pols):
-            davg_dc[bl + (pol,)] = davg[:, i, j]
-            std_dc[bl + (pol,)] = std[:, i, j]
-            flags_dc[bl + (pol,)] = flag_min[:,i,j]
-            counts_dc[bl + (pol,)] = counts[:,i,j]
+            out_data[:, lstbin] = 1.0
+            out_flags[:, lstbin] = True
+            out_std[:, lstbin] = 1.0
+            out_counts[:, lstbin] = 0.0
             
-    return lst_bin_centres, davg_dc, flags_dc, std_dc, counts_dc
+    return lst_bin_centres, out_data, flags, out_std, out_counts
 
 @profile
 def lst_average(
@@ -288,13 +291,6 @@ def lst_bin_files(
 
     nfiles = len(file_lsts)
 
-    # If None, set to empty dict
-    write_kwargs = write_kwargs or {}
-
-    # make sure the JD corresponding to file_lsts[0][0] is the lowest JD in the LST-binned data set
-    if (lst_start is not None) and ('lst_branch_cut' not in write_kwargs):
-        write_kwargs['lst_branch_cut'] = file_lsts[0][0]
-
     logger.info("Setting output files")
 
     # select file_lsts
@@ -311,14 +307,6 @@ def lst_bin_files(
             )
             return
 
-    # get outdir
-    if outdir is None:
-        outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
-
-    # update kwrgs
-    write_kwargs['outdir'] = outdir
-    write_kwargs['overwrite'] = overwrite
-
     # get metadata from the zeroth data file in the last day
     last_day_index = np.argmax([np.min([time for tarr in tarrs for time in tarr]) for tarrs in time_arrs])
     zeroth_file_on_last_day_index = np.argmin([np.min(tarr) for tarr in time_arrs[last_day_index]])
@@ -332,7 +320,6 @@ def lst_bin_files(
     antpos = hd.antpos
     times = hd.times
     start_jd = np.floor(times.min())
-    write_kwargs['start_jd'] = start_jd
     integration_time = np.median(hd.integration_time)
     if not  np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6):
         raise ValueError('All integrations must be of equal length (BDA not supported)')
@@ -344,7 +331,7 @@ def lst_bin_files(
         include_autos=include_autos, 
         ignore_ants=ignore_ants
     )
-    all_baselines = list(all_baselines)
+    all_baselines = sorted(all_baselines)
 
     antpos = get_all_antpos_from_files(fls_with_ants, all_baselines)
     # Split up the baselines into chunks that will be LST-binned together.
@@ -402,13 +389,18 @@ def lst_bin_files(
             continue
         
         # iterate over baseline groups (for memory efficiency)
-        data_conts, flag_conts, std_conts, num_conts = [], [], [], []
+        out_data = np.zeros((len(all_baselines), len(outfile_lsts), len(freq_array), len(all_pols)), dtype='complex')
+        out_stds = np.zeros_like(out_data)
+        out_nsamples = np.zeros(out_data.shape, dtype=float)
+        out_flags = np.zeros(out_data.shape, dtype=bool)
+
+        nbls_so_far = 0
         for bi, bl_chunk in enumerate(bl_chunks):
             logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
 
             # Now we can set up our master arrays of data. 
             data = np.full((
-                len(all_lsts), len(bl_chunk), len(hd.pols), len(hd.freqs)), 
+                len(all_lsts), len(bl_chunk), len(hd.freqs), len(all_pols)), 
                 np.nan+np.nan*1j, dtype=complex
             )
             flags = np.ones(data.shape, dtype=bool)
@@ -445,15 +437,15 @@ def lst_bin_files(
                 for i, bl in enumerate(bl_chunk):
                     for j, pol in enumerate(all_pols):
                         if bl + (pol,) in _data:
-                            data[slc, i, j] = _data[bl+(pol,)]
-                            flags[slc, i, j] = _flags[bl+(pol,)]
-                            nsamples[slc, i, j] = _nsamples[bl+(pol,)]
+                            data[slc, i, :, j] = _data[bl+(pol,)]
+                            flags[slc, i, :, j] = _flags[bl+(pol,)]
+                            nsamples[slc, i, :, j] = _nsamples[bl+(pol,)]
                         else:
                             # This baseline+pol doesn't exist in this file. That's
                             # OK, we don't assume all baselines are in every file.
-                            data[slc, i, j] = np.nan
-                            flags[slc, i, j] = True
-                            nsamples[slc, i, j] = 0
+                            data[slc, i, :, j] = np.nan
+                            flags[slc, i, :, j] = True
+                            nsamples[slc, i, :, j] = 0
 
                 ntimes_so_far += _data.shape[0]
 
@@ -462,7 +454,7 @@ def lst_bin_files(
             # +1 of the LST centres. We use +dlst instead of +dlst/2 on the top edge
             # so that np.arange definitely gets the last edge.
             lst_edges = np.arange(outfile_lsts[0] - dlst/2, outfile_lsts[-1] + dlst, dlst)
-            bin_lst, bin_data, flag_data, std_data, num_data = simple_lst_bin(
+            bin_lst, _, _, _, _ = simple_lst_bin(
                 data=data, 
                 flags=None if ignore_flags else flags,
                 nsamples=nsamples,
@@ -473,29 +465,32 @@ def lst_bin_files(
                 freq_array = hd.freqs,
                 rephase = rephase,
                 antpos=antpos,
+                out_counts=out_nsamples[nbls_so_far:nbls_so_far + len(bl_chunk)],
+                out_data=out_data[nbls_so_far:nbls_so_far + len(bl_chunk)],
+                out_flags=out_flags[nbls_so_far:nbls_so_far + len(bl_chunk)],
+                out_std=out_stds[nbls_so_far:nbls_so_far + len(bl_chunk)]
             )
             
-            # append to lists
-            data_conts.append(bin_data)
-            flag_conts.append(flag_data)
-            std_conts.append(std_data)
-            num_conts.append(num_data)
+            nbls_so_far += len(bl_chunk)
 
-        logger.info("Merging DataContainers")
-        # join DataContainers across blgroups
-        bin_data = DataContainer(mergedicts(*data_conts))
-        flag_data = DataContainer(mergedicts(*flag_conts))
-        std_data = DataContainer(mergedicts(*std_conts))
-        num_data = DataContainer(mergedicts(*num_conts))
         
         logger.info("Writing output files")
+
+        # get outdir
+        if outdir is None:
+            outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
+
+        # update kwrgs
+        # If None, set to empty dict
+        write_kwargs = write_kwargs or {}
+
         # update history
         file_list_str = "-".join(os.path.basename(ff)for ff in file_list)
         file_history = f"{history} Input files: {file_list_str}"
-        write_kwargs['history'] = file_history + utils.history_string()
+        _history = file_history + utils.history_string()
 
         # form integration time array
-        write_kwargs['integration_time'] = integration_time*np.ones(
+        integration_time = integration_time*np.ones(
             len(bin_lst) * len(all_baselines), 
             dtype=np.float64
         )
@@ -503,7 +498,7 @@ def lst_bin_files(
         # file in data ext
         fkwargs = {"type": "LST", "time": bin_lst[0] - dlst / 2.0}
         if "{pol}" in file_ext:
-            fkwargs['pol'] = '.'.join(bin_data.pols())
+            fkwargs['pol'] = '.'.join(all_pols)
 
         # configure filenames
         bin_file = "zen." + file_ext.format(**fkwargs)
@@ -515,16 +510,26 @@ def lst_bin_files(
             logger.warning(f"{bin_file} exists, not overwriting")
             continue
 
-        # write to file
-        io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data,
-                     nsamples=num_data, filetype='uvh5', x_orientation=x_orientation, **write_kwargs)
-        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, flags=flag_data,
-                     nsamples=num_data, filetype='uvh5', x_orientation=x_orientation, **write_kwargs)
+        write_kwargs.update(
+            lst_array=bin_lst,
+            freq_array=freq_array,
+            antpos=antpos,
+            pols=all_pols,
+            antpairs=all_baselines,
+            flags=out_flags,
+            nsamples=out_nsamples,
+            x_orientation=x_orientation,
+            integration_time=integration_time,
+            history=_history,
+            start_jd=start_jd,
+            lst_branch_cut=write_kwargs.get('lst_branch_cut', lst_start or file_lsts[0][0])
+        )
+        uvd_data = io.create_uvd_from_hera_data(data = out_data, **write_kwargs)
+        uvd_data.write_uvh5(os.path.join(outdir, bin_file), clobber=overwrite)
 
-        del bin_file, std_file, bin_data, std_data, num_data, bin_lst, flag_data
-        del data_conts, flag_conts, std_conts, num_conts
-        gc.collect()
-
+        uvd_data = io.create_uvd_from_hera_data(data = out_stds, **write_kwargs)
+        uvd_data.write_uvh5(os.path.join(outdir, std_file), clobber=overwrite)
+        
 @profile
 def get_all_unflagged_baselines(
     data_files: list[list[str | Path]], 
