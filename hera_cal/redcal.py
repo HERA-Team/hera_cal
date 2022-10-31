@@ -12,7 +12,7 @@ from itertools import chain
 from . import utils
 from .noise import predict_noise_variance_from_autos, infer_dt
 from .datacontainer import DataContainer, RedDataContainer
-from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores, red_average
+from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores
 from .io import HERAData, HERACal, write_cal, save_redcal_meta
 from .apply_cal import calibrate_in_place
 
@@ -340,6 +340,89 @@ def make_sol_finite(sol):
             sol[k][~np.isfinite(sol[k])] = np.ones_like(sol[k][~np.isfinite(sol[k])])
 
 
+def remove_degen_gains(reds, gains, degen_gains=None, mode='phase', pol_mode='1pol'):
+    """ Removes degeneracies from gains (or replaces them with those in gains).  This
+    function is nominally intended for use with firstcal, which returns (phase/delay) solutions
+    for antennas only.
+
+    Args:
+        gains: dictionary that contains gain solutions in the {(index,antpol): np.array} format.
+        degen_gains: Optional dictionary in the same format as gains. Gain amplitudes and phases
+            in degen_sol replace the values of sol in the degenerate subspace of redcal. If
+            left as None, average gain amplitudes will be 1 and average phase terms will be 0.
+            For logcal/lincal/omnical, putting firstcal solutions in here can help avoid structure
+            associated with phase-wrapping issues.
+        mode: 'phase' or 'complex', indicating whether the gains are passed as phases (e.g. delay
+            or phi in e^(i*phi)), or as the complex number itself.  If 'phase', only phase degeneracies
+            removed.  If 'complex', both phase and amplitude degeneracies are removed.
+        pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
+    Returns:
+        new_gains: gains with degeneracy removal/replacement performed
+    """
+    # Check supported pol modes
+    assert pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], f'Unrecognized pol_mode: {pol_mode}'
+    assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
+    ants = gains.keys()
+    gainPols = np.array([ant[1] for ant in gains])  # gainPols is list of antpols, one per antenna
+    antpols = list(set(gainPols))
+
+    # if mode is 2pol, run as two 1pol remove degens
+    if pol_mode == '2pol':
+        pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
+        pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
+        new_gains = remove_degen_gains(reds, pol0_gains, degen_gains=degen_gains, mode=mode, pol_mode='1pol')
+        new_gains.update(remove_degen_gains(reds, pol1_gains, degen_gains=degen_gains, mode=mode, pol_mode='1pol'))
+        return new_gains
+
+    # Extract gains and degenerate gains and put into numpy arrays
+    gainSols = np.array([gains[ant] for ant in ants])
+    if degen_gains is None:
+        if mode == 'phase':
+            degenGains = np.array([np.zeros_like(gains[ant]) for ant in ants])
+        else:  # complex
+            degenGains = np.array([np.ones_like(gains[ant]) for ant in ants])
+    else:
+        degenGains = np.array([degen_gains[ant] for ant in ants])
+
+    # Build matrices for projecting gain degeneracies
+    antpos = reds_to_antpos(reds)
+    positions = np.array([antpos[ant[0]] for ant in gains])
+    if pol_mode == '1pol' or pol_mode == '4pol_minV':
+        # In 1pol and 4pol_minV, the phase degeneracies are 1 overall phase and 2 tip-tilt terms
+        # Rgains maps gain phases to degenerate parameters (either average phases or phase slopes)
+        Rgains = np.hstack((positions, np.ones((positions.shape[0], 1))))
+    else:  # pol_mode is '4pol'
+        # two columns give sums for two different polarizations
+        phasePols = np.vstack((gainPols == antpols[0], gainPols == antpols[1])).T
+        Rgains = np.hstack((positions, phasePols))
+    # Mgains is like (AtA)^-1 At in linear estimator formalism. It's a normalized estimator of degeneracies
+    Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
+
+    # degenToRemove is the amount we need to move in the degenerate subspace
+    if mode == 'phase':
+        # Fix phase terms only
+        degenToRemove = np.einsum('ij,jkl', Mgains, gainSols - degenGains)
+        gainSols -= np.einsum('ij,jkl', Rgains, degenToRemove)
+    else:  # working on complex data
+        # Fix phase terms
+        degenToRemove = np.einsum('ij,jkl', Mgains, np.angle(gainSols * np.conj(degenGains)))
+        gainSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rgains, degenToRemove))
+        # Fix abs terms: fixes the mean abs product of gains (as they appear in visibilities)
+        for pol in antpols:
+            meanSqAmplitude = np.mean([np.abs(g1 * g2) for (a1, p1), g1 in gains.items()
+                                       for (a2, p2), g2 in gains.items()
+                                       if p1 == pol and p2 == pol and a1 != a2], axis=0)
+            degenMeanSqAmplitude = np.mean([(np.ones_like(gains[k1]) if degen_gains is None
+                                             else np.abs(degen_gains[k1] * degen_gains[k2]))
+                                            for k1 in gains.keys() for k2 in gains.keys()
+                                            if k1[1] == pol and k2[1] == pol and k1[0] != k2[0]], axis=0)
+            gainSols[gainPols == pol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
+
+    # Create new solutions dictionary
+    new_gains = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
+    return new_gains
+
+
 class RedSol():
     '''Object for containing solutions to redundant calibraton, namely gains and
     unique-baseline visibilities, along with a variety of convenience methods.'''
@@ -433,60 +516,75 @@ class RedSol():
         Returns:
             new_sol: if not inplace, RedSol with degeneracy removal/replacement performed
         """
-        rc = RedundantCalibrator(self.reds)
-        new_sol = rc.remove_degen(self, degen_sol=degen_sol)
+        old_gains = self.gains
+        new_gains = remove_degen_gains(self.reds, old_gains, degen_gains=degen_sol, mode='complex',
+                                       pol_mode=parse_pol_mode(self.reds))
         if inplace:
-            self.__init__(self.reds, gains=new_sol.gains, vis=new_sol.vis)
+            calibrate_in_place(self.vis, new_gains, old_gains=old_gains)
+            self.gains = new_gains
         else:
-            return new_sol
+            new_vis = deepcopy(self.vis)
+            calibrate_in_place(new_vis, new_gains, old_gains=old_gains)
+            return RedSol(self.reds, gains=new_gains, vis=new_vis)
 
-    def red_average(self, data, flags=None, nsamples=None, gain_flags=None):
-        '''Performs redundant averaging of data using reds and gains stored in this RedSol object.
+    def gain_bl(self, bl):
+        '''Return gain for baseline bl = (ai, aj).
+
+        Arguments:
+            bl: tuple, baseline to be split into antennas indexing gain.
+
+        Returns:
+            gain: gi * conj(gj)
+        '''
+        ai, aj = split_bl(bl)
+        return self.gains[ai] * np.conj(self.gains[aj])
+
+    def model_bl(self, bl):
+        '''Return visibility data model (gain * vissol) for baseline bl
+
+        Arguments:
+            bl: tuple, baseline to return model for
+
+        Returns:
+            vis: gi * conj(gj) * vis[bl]
+        '''
+        return self.gain_bl(bl) * self.vis[bl]
+
+    def calibrate_bl(self, bl, data, copy=True):
+        '''Return calibrated data for baseline bl
+
+        Arguments:
+            bl: tuple, baseline from which to divide out gains
+            data: numpy array of data to calibrate
+            copy: if False, apply calibration to data in place
+
+        Returns:
+            vis: data / (gi * conj(gj))
+        '''
+        gij = self.gain_bl(bl)
+        if copy:
+            return np.divide(data, gij, where=(gij != 0))
+        else:
+            np.divide(data, gij, out=data, where=(gij != 0))
+            return data
+
+    def set_vis_from_data(self, data, wgts={}):
+        '''Performs redundant averaging of data using reds and gains stored in this RedSol object and
+           stores the result as the redundant solution.
 
         Arguments:
             data: DataContainer containing visibilities to redundantly average.
-            flags: optional DataContainer marking visibilities as flagged and therefore excluded from averaging.
-                If not provided, it is assumed that all data are unflagged.
-            nsamples: optional DataContainer containing the number of samples in each visibility. Used for
-                weighting data when averaging and for figuring out the number of samples in each baseline group.
-                If not provided, it is assumed that nsamples is uniformly 1.
-            gain_flags: optional dictionary used for per-antenna, per-time-and-frequency flagging when calibrating.
+            wgts: optional DataContainer weighting visibilities in averaging.
+                If not provided, it is assumed that all data are uniformly weighted.
 
         Returns:
-            red_data: RedDataContainer of redundantly averaged data.
-            red_flags: RedDataContainer of flags on redundantly averaged data.
-            red_nsamples: RedDataContainer of nsamples of that went into each redundantly averaged visibility
+            None
         '''
-        # make copies of data, flags, and nsamples, which are then modified and downselected in place
-        # if flags and/or nsamples, is not provided, create zeros or ones as appropriate
-        red_data, red_flags, red_nsamples = {}, {}, {}
-        if gain_flags is None:
-            gain_flags = {ant: np.zeros_like(self.gains[ant], bool) for ant in self.gains}
-
-        for red in self.reds:
-            # extract and copy this redundant group
-            data_here = DataContainer({bl: np.array(data[bl]) for bl in red})
-            flags_here = DataContainer({bl: (np.zeros_like(data[bl], bool) if flags is None
-                                             else np.array(flags[bl])) for bl in red})
-            nsamples_here = DataContainer({bl: (np.ones_like(data[bl], float) if nsamples is None
-                                                else np.array(nsamples[bl])) for bl in red})
-
-            # perform calibration if necessary
-            if self.gains is not None:
-                calibrate_in_place(data_here, self.gains, data_flags=flags_here, cal_flags=gain_flags)
-
-            # redundantly average and store in dictionary
-            pos_red = list(set(bl[0:2] for bl in red))
-            red_average(data_here, [pos_red], flags=flags_here, nsamples=nsamples_here, inplace=True)
-            for bl in data_here:
-                red_data[bl] = data_here[bl]
-                red_flags[bl] = flags_here[bl]
-                red_nsamples[bl] = nsamples_here[bl]
-
-        # convert dicts to RedDataContainer and return
-        return (RedDataContainer(red_data, reds=self.reds),
-                RedDataContainer(red_flags, reds=self.reds),
-                RedDataContainer(red_nsamples, reds=self.reds))
+        vis = {}
+        for grp in self.reds:
+            vis[grp[0]] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
+                                     weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
+        self.vis = RedDataContainer(vis, reds=self.reds)
 
     def chisq(self, data, data_wgts, gain_flags=None):
         """Computes chi^2 defined as: chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)|^2 * wgts_ij)
@@ -531,218 +629,6 @@ class RedSol():
     '''
         chisq, chisq_per_ant = normalized_chisq(data, data_wgts, self.reds, self.vis, self.gains)
         return chisq, chisq_per_ant
-
-
-def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8)):
-    '''This function looks at all redundant baselines and sees whether they mostly agree with the median
-    baseline or whether they look closer to being off by pi radians. The ones close to the median are the
-    "majority". The ones close to pi phase are the "minority." The rest are ambiguious and ignored in our
-    analysis. This function returns a dictionary that maps unique baselines to two groups of baselines,
-    both of which have the same internal polarity, through we don't know if it's "odd" (one flipped antenna)
-    or "even" (two or zero flipped antennas). See find_polarity_flipped_ants() for parameter descriptions.
-    '''
-    # make sure edge_cut and max_rel_angle are sensible
-    if not (0 < max_rel_angle <= np.pi / 2):
-        raise ValueError("max_rel_angle must be between 0 and np.pi/2.")
-    Nfreqs = list(dly_cal_data.values())[0].shape[1]
-    if 2 * edge_cut >= Nfreqs:
-        raise ValueError("edge_cut cannot be >= Nfreqs/2")
-    fslice = slice(edge_cut, Nfreqs - edge_cut)
-
-    polarity_groups = {}
-    for red in reds:
-        grp1, grp2 = [], []
-        # find the median baseline for this redundant group
-        conj_median_bl = np.conj(np.median([dly_cal_data[bl][:, fslice] for bl in red], axis=0))
-        for bl in red:
-            # compare the median baseline to this baseline, taking the median abs of the angle over time and freq
-            median_abs_relative_angle = np.median(np.abs(np.angle(conj_median_bl * dly_cal_data[bl][:, fslice])))
-            # sort baseline ito group based on max_rel_angle, ignoring ambiguous baselines in between
-            if median_abs_relative_angle < max_rel_angle:
-                grp1.append(bl)
-            elif median_abs_relative_angle > np.pi - max_rel_angle:
-                grp2.append(bl)
-        if (len(grp1) > 0) or (len(grp2) > 0):  # if any baselines are unambiguous
-            polarity_groups[red[0]] = (grp1, grp2)
-
-    return polarity_groups
-
-
-def _infer_polarity_flips(polarity_groups, prior_is_flipped, prior_even_vs_odd_IDs):
-    '''Take a set of polarity groups built by _build_polarity_baseline_groups() and prior
-    identifications of which antennas are flipped and which groups of baselines are "even"
-    (0 or 2 polarity flipped antennas) and which ones are "odd" (1 polarity flipped antenna).
-    Use those priors to infer as many additional flips and groups IDs as possible and return
-    the updated is_flipped and even_vs_odd_IDs dictionaries after getting stuck.
-    '''
-    is_flipped, even_vs_odd_IDs = deepcopy(prior_is_flipped), deepcopy(prior_even_vs_odd_IDs)
-
-    while True:
-        n_flipped, n_groups_IDed = len(is_flipped), len(even_vs_odd_IDs)
-
-        # loop over all groupings
-        for key, (grp1, grp2) in polarity_groups.items():
-            # if we think we know whether this group is even/odd or odd/even
-            if key in even_vs_odd_IDs:
-                even, odd = {'even/odd': (grp1, grp2), 'odd/even': (grp2, grp1)}[even_vs_odd_IDs[key]]
-
-                # use information about group and a known flip to infer other flips
-                for bl in even:
-                    ant0, ant1 = utils.split_bl(bl)
-                    if (ant0 in is_flipped) and (ant1 in is_flipped):
-                        assert is_flipped[ant0] == is_flipped[ant1], str((ant0, ant1))
-                    elif (ant0 in is_flipped):
-                        is_flipped[ant1] = is_flipped[ant0]
-                    elif (ant1 in is_flipped):
-                        is_flipped[ant0] = is_flipped[ant1]
-                for bl in odd:
-                    ant0, ant1 = utils.split_bl(bl)
-                    if (ant0 in is_flipped) and (ant1 in is_flipped):
-                        assert is_flipped[ant0] != is_flipped[ant1], str((ant0, ant1))
-                    elif (ant0 in is_flipped):
-                        is_flipped[ant1] = not is_flipped[ant0]
-                    elif (ant1 in is_flipped):
-                        is_flipped[ant0] = not is_flipped[ant1]
-
-            # try to infer if this group is even/odd or odd/even from two known flips
-            else:
-                for labels, grp in zip([['even/odd', 'odd/even'], ['odd/even', 'even/odd']], [grp1, grp2]):
-                    for bl in grp:
-                        ant0, ant1 = utils.split_bl(bl)
-                        if (ant0 in is_flipped) and (ant1 in is_flipped):
-                            if is_flipped[ant0] == is_flipped[ant1]:
-                                even_vs_odd_IDs[key] = labels[0]
-                            else:
-                                even_vs_odd_IDs[key] = labels[1]
-
-        # if no new identifications were made this iteration, break
-        if (n_flipped == len(is_flipped)) and (n_groups_IDed == len(even_vs_odd_IDs)):
-            break
-
-    return is_flipped, even_vs_odd_IDs
-
-
-def _check_polarity_results(polarity_groups, is_flipped, even_vs_odd_IDs):
-    '''For a set of polarity_groups (see _build_polarity_baseline_groups()) determine of the proposed solution
-    set of is_flipped dictionary and even_vs_odd_IDs built by _determine_polarity_flips() is consistent.
-    '''
-    for key, (grp1, grp2) in polarity_groups.items():
-        # parse majority and minority groups into "even/odd" or "odd/even"
-        even, odd = {'even/odd': (grp1, grp2), 'odd/even': (grp2, grp1)}[even_vs_odd_IDs[key]]
-        # assert that antennas in even baselines have the same polarity
-        for bl in even:
-            ant0, ant1 = utils.split_bl(bl)
-            assert is_flipped[ant0] == is_flipped[ant1], str((ant0, ant1))
-        # assert that antennas in oddd baselines have different polarities
-        for bl in odd:
-            ant0, ant1 = utils.split_bl(bl)
-            assert is_flipped[ant0] != is_flipped[ant1], str((ant0, ant1))
-
-
-def _find_starting_is_flipped(polarity_groups, ants, even_vs_odd_IDs):
-    '''Pick an antenna that participates mostly in even groups as a "not flipped" reference.'''
-    # Count how many times each antenna is involved in an assumed even group minus odd group
-    ant_even_counts = {ant: 0 for ant in ants}
-    for key, (grp1, grp2) in polarity_groups.items():
-        if key in even_vs_odd_IDs:
-            even, odd = {'even/odd': (grp1, grp2), 'odd/even': (grp2, grp1)}[even_vs_odd_IDs[key]]
-            for grp, to_add in zip([even, odd], [1, -1]):
-                for bl in grp:
-                    ant_even_counts[utils.split_bl(bl)[0]] += to_add
-                    ant_even_counts[utils.split_bl(bl)[1]] += to_add
-
-    # Select reference antenna based on maximizing the even - odd difference.
-    refant = sorted(ant_even_counts, key=ant_even_counts.get)[-1]
-    is_flipped = {refant: False}
-    return is_flipped
-
-
-def _recursive_try_assumptions(polarity_groups, ants, prior_is_flipped, prior_even_vs_odd_IDs, depth, max_recursion_depth=5):
-    '''Given a set of polarity groups and a partial solution for which antennas are flipped and which groups are "even"
-    (0 or 2 polarity flips) and which ones are "odd" (1 polarity flip), this function recursively tries new assumptions
-    for group IDs until a new solution is found and returned. If a contradiction or the max_recursion_depth is reached
-    an AssertionError is raised. '''
-    # If a full solution has been found for all antennas, check that solution and return it
-    if len(prior_is_flipped) == len(ants):
-        _check_polarity_results(polarity_groups, prior_is_flipped, prior_even_vs_odd_IDs)
-        return prior_is_flipped, prior_even_vs_odd_IDs
-
-    # If we've gone too deep without finding a solution, stop this line of inquiry
-    assert depth <= max_recursion_depth
-
-    # If all IDs have been made but a solution still hasn't been found, stop this line of inquiry
-    assert len(prior_even_vs_odd_IDs) < len(polarity_groups)
-
-    # sort polarity_group keys by number of "group 1" baselines minus "group 2" baselines, pick out first one not yet solved
-    group_keys = sorted(polarity_groups, key=lambda k: len(polarity_groups[k][0]) - len(polarity_groups[k][1]), reverse=True)
-    new_assumption_key = [k for k in group_keys if k not in prior_even_vs_odd_IDs][0]
-
-    # Try assuming both that the next group is even/odd and that it's odd/even
-    for assumed_ID in ['even/odd', 'odd/even']:
-        even_vs_odd_IDs = deepcopy(prior_even_vs_odd_IDs)
-        even_vs_odd_IDs[new_assumption_key] = assumed_ID
-        # find new starting assumption about antennas based on the current even_vs_odd_IDs
-        prior_is_flipped = _find_starting_is_flipped(polarity_groups, ants, even_vs_odd_IDs)
-        try:
-            new_is_flipped, new_even_vs_odd_IDs = _infer_polarity_flips(polarity_groups, prior_is_flipped, even_vs_odd_IDs)
-            return _recursive_try_assumptions(polarity_groups, ants, new_is_flipped, new_even_vs_odd_IDs,
-                                              depth + 1, max_recursion_depth=max_recursion_depth)
-        except AssertionError:
-            pass  # a contradiction or the max assertion depth was reached, so move on.
-
-    assert False  # neither solution worked, so move on to another line of inquiry
-
-
-def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8), max_recursion_depth=6):
-    '''Looks at delay calibrated (but not phase calibrated or redcaled) data to determine which
-    antennas appear to have reversed polarities (effectively a factor of -1 in the gains).
-
-    The basic algorithm is as follows:
-        1) For each redundant baseline group, split the baselines into two classes based on phases relative
-           to the median baseline. One of these is the "even" group (0 or 2 polarity flips) and one is the
-           "odd" group (1 flip), but we don't know which is which yet. Usually the larger group is the
-           even one, but if a redundant baseline has involves many polarity flipped antennas, the majority
-           group might be the odd one.
-        2) Pick the unique baseline that seems the most lopsided (more group 1 and than group 2) and
-           make an assumption about whether it's even or odd.
-        3) Given that assumption, pick an reference antenna that's involved mostly in even groups
-           and define its polarity as "not flipped."
-        4) Follow that chain of logic as far as possible, identifying as many groups and antennas as possible.
-        5) If a full solution is found, return it.
-        5) When we get stuck, make another assumption recursively (go to 2) about the most-lopsided un-IDed group.
-        6) Continue until a contradiction arises or the max_recursion_depth is reached. In that case, try the
-           opposite assumption at the previous step, eventually recursively trying all assumptions.
-
-    Arugments:
-        dly_cal_data: DataContainer mapping baseline tuples e.g. (0, 1, 'Jee') to delay-only calibrated visibilities
-        reds: list of list of baselines tuples considered redundant
-        edge_cut: number of channels to exclude for each edge of the band when computing median phase
-        max_rel_angle: cutoff median phase to assign baselines the "majority" polarity group.
-            (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
-        max_recursion_depth: maximum number of assumptions to try before giving up. Warning: the complexity
-            of this scales exponentially as 2^max_recursion_depth.
-
-    Returns:
-        polarity_flips: dictionary mapping antenna tuple e.g. (0, 'Jee') to Booleans.
-            If no solution is found returns a dictionary mapping antennas to None.
-    '''
-    ants = set([ant for red in reds for bl in red for ant in utils.split_bl(bl)])
-    antpols = set([ant[1] for ant in ants])
-    polarity_flips = {ant: None for ant in ants}
-
-    # find polarity flips, one antpol at a time
-    for ap in antpols:
-        reds_here = filter_reds(reds, pols=[join_pol(ap, ap)])
-        ants_here = [ant for ant in ants if ant[1] == ap]
-        polarity_groups = _build_polarity_baseline_groups(dly_cal_data, reds_here, edge_cut=edge_cut, max_rel_angle=np.pi / 8)
-        try:
-            is_flipped, even_vs_odd_IDs = _recursive_try_assumptions(polarity_groups, ants_here, {}, {}, 1, max_recursion_depth=max_recursion_depth)
-            for ant in ants_here:
-                polarity_flips[ant] = is_flipped[ant]
-        except AssertionError:
-            pass  # No solution is found, so leave fips as None
-
-    return polarity_flips
 
 
 def _check_polLists_minV(polLists):
@@ -937,6 +823,109 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
 
 
+def _wrap_phs(phs, wrap_pnt=(np.pi / 2)):
+    '''Adjust phase wrap point to be [-wrap_pnt, 2pi-wrap_pnt)'''
+    return (phs + wrap_pnt) % (2 * np.pi) - wrap_pnt
+
+
+def _flip_frac(offsets, flipped=set(), flip_pnt=(np.pi / 2)):
+    '''Calculate the fraction of (bl1, bl2) pairings an antenna is involved
+    in which have large phase offsets.'''
+    cnt = {}
+    tot = {}
+    for (bl1, bl2), off in offsets.items():
+        ijmn = split_bl(bl1) + split_bl(bl2)
+        num_in_flipped = sum([int(ant in flipped) for ant in ijmn])
+        for ant in ijmn:
+            tot[ant] = tot.get(ant, 0) + 1
+            if off > flip_pnt and num_in_flipped % 2 == 0:
+                cnt[ant] = cnt.get(ant, 0) + 1
+    flip_frac = [(k, v / tot[k]) for k, v in cnt.items()]
+    return flip_frac
+
+
+def _find_flipped(offsets, flip_pnt=(np.pi / 2), maxiter=100):
+    '''Given a dict of (bl1, bl2) keys and phase offset vals, identify
+    antennas which are likely to have a np.pi phase offset.'''
+    flipped = set()
+    for i in range(maxiter):
+        flip_frac = _flip_frac(offsets, flipped=flipped, flip_pnt=flip_pnt)
+        changed = False
+        for (ant, frac) in flip_frac:
+            if frac > 0.5:
+                changed = True
+                if ant in flipped:
+                    flipped.remove(ant)
+                else:
+                    flipped.add(ant)
+        if not changed:
+            break
+    return flipped
+
+
+def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=(np.pi / 2)):
+    '''Given a redundant group of bls, find per-baseline dly/off params that
+    bring them into phase alignment using hierarchical pairing.'''
+    fftfreqs = np.fft.fftfreq(freqs.shape[-1], np.median(np.diff(freqs)))
+    dtau = fftfreqs[1] - fftfreqs[0]
+    grps = [(bl,) for bl in bls]  # start with each bl in its own group
+    _data = {bl: data[bl[0]] for bl in grps}
+    Ntimes, Nfreqs = data[bls[0]].shape
+    times = np.arange(Ntimes)
+    dly_off_gps = {}
+
+    def process_pair(gp1, gp2):
+        '''Phase-align two groups, recording dly/off in dly_off_gps for gp2
+        and the phase-aligned sum in _data. Returns gp1 + gp2, which
+        keys the _data dict and represents group for next iteration.'''
+        d12 = _data[gp1] * np.conj(_data[gp2])
+        if norm:
+            ad12 = np.abs(d12)
+            np.divide(d12, ad12, out=d12, where=(ad12 != 0))
+        vfft = np.fft.fft(d12, axis=1)
+
+        # get interpolated peak and indices
+        inds = np.argmax(np.abs(vfft), axis=-1)
+
+        # calculate shifted peak for sub-bin resolution
+        k0 = vfft[times, (inds - 1) % Nfreqs]
+        k1 = vfft[times, inds]
+        k2 = vfft[times, (inds + 1) % Nfreqs]
+
+        alpha1 = (k0 / k1).real
+        alpha2 = (k2 / k1).real
+        delta1 = alpha1 / (1 - alpha1)
+        delta2 = -alpha2 / (1 - alpha2)
+        bin_shifts = (delta1 + delta2) / 2 + utils.quinn_tau(delta1 ** 2) - utils.quinn_tau(delta2 ** 2)
+
+        dly = (fftfreqs[inds] + bin_shifts * dtau).reshape(-1, 1)
+        phasor = np.exp(np.complex64(2j * np.pi) * dly * freqs)
+        off = np.angle(np.sum(d12 / phasor, axis=1, keepdims=True))
+
+        # Now that we know the slope, estimate the remaining phase offset
+        dly_off_gps[gp2] = dly, off
+        _data[gp1 + gp2] = _data[gp1] + _data[gp2] * phasor * np.exp(np.complex64(1j) * off)
+        return gp1 + gp2
+
+    # Main N log N loop
+    while len(grps) > 1:
+        new_grps = []
+        for gp1, gp2 in zip(grps[::2], grps[1::2]):
+            new_grps.append(process_pair(gp1, gp2))
+        # deal with stragglers
+        if len(grps) % 2 == 1:
+            new_grps = new_grps[:-1] + [process_pair(new_grps[-1], grps[-1])]
+        grps = new_grps
+    bl0 = bls[0]  # everything is effectively phase referenced off first bl
+    dly_offs = {}
+    for gp, (dly, off) in dly_off_gps.items():
+        for bl in gp:
+            dly0, off0 = dly_offs.get((bl0, bl), (0, 0))
+            dly_offs[(bl0, bl)] = (dly0 + dly, off0 + off)
+    dly_offs = {k: (v[0], _wrap_phs(v[1], wrap_pnt=wrap_pnt)) for k, v in dly_offs.items()}
+    return dly_offs
+
+
 class RedundantCalibrator:
 
     def __init__(self, reds, check_redundancy=False):
@@ -949,7 +938,6 @@ class RedundantCalibrator:
             check_redundancy: if True, raise an error if the array is not redundantly calibratable,
                 even when allowing for an arbitrary number of phase slope degeneracies.
         """
-
         self._set_reds(reds)
         self.pol_mode = parse_pol_mode(self.reds)
 
@@ -1039,85 +1027,7 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def _firstcal_iteration(self, data, df, f0, wgts={}, offsets_only=False, edge_cut=0,
-                            sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11),
-                            fc_min_vis_per_ant=None):
-        '''Runs a single iteration of firstcal, which uses phase differences between nominally
-        redundant meausrements to solve for delays and phase offsets that produce gains of the
-        form: np.exp(2j * np.pi * delay * freqs + 1j * offset).
-
-        Arguments:
-            df: frequency change between data bins, scales returned delays by 1/df.
-            f0: frequency of the first channel in the data
-            offsets_only: only solve for phase offsets, dly_sol will be {}
-            For all other arguments, see RedundantCalibrator.firstcal()
-
-        Returns:
-            dly_sol: dictionary of per-antenna delay solutions in the {(index,antpol): np.array}
-                format.  All delays are multiplied by 1/df, so use that to set physical scale.
-            off_sol: dictionary of per antenna phase offsets (in radians) in the same format.
-        '''
-        Nfreqs = data[next(iter(data))].shape[1]
-        if len(wgts) == 0:
-            wgts = {k: np.ones_like(data[k], dtype=np.float32) for k in data}
-        wgts = DataContainer(wgts)
-        taus_offs, twgts = {}, {}
-
-        # keep track of number of equations used per antenna and ndims
-        ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
-        ants_used_count = {ant: 0 for ant in ants}
-        if fc_min_vis_per_ant is not None:
-            ndims = len(list(reds_to_antpos(self.reds).values())[0])
-            reds_used = []
-
-        taus_offs, twgts = {}, {}
-        for bls in self.reds:
-            for i, bl1 in enumerate(bls):
-                d1, w1 = data[bl1], wgts[bl1]
-                for bl2 in bls[i + 1:]:
-                    d12 = d1 * np.conj(data[bl2])
-                    if norm:
-                        ad12 = np.abs(d12)
-                        d12 /= np.where(ad12 == 0, np.float32(1), ad12)
-                    w12 = w1 * wgts[bl2]
-                    taus_offs[(bl1, bl2)] = utils.fft_dly(d12, df, f0=f0, wgts=w12, medfilt=medfilt,
-                                                          kernel=kernel, edge_cut=edge_cut)
-                    twgts[(bl1, bl2)] = np.sum(w12)
-
-                    if not np.all(twgts[(bl1, bl2)] == 0):
-                        for bl_here in [bl1, bl2]:
-                            for ant in utils.split_bl(bl_here):
-                                ants_used_count[ant] += 1
-
-            # check to see if fc_min_vis_per_ant is satisfied without adding additional degeneracies
-            if fc_min_vis_per_ant is not None:
-                reds_used.append(bls)
-                if np.all(np.array(list(ants_used_count.values())) >= fc_min_vis_per_ant):
-                    ndims_here = len(list(reds_to_antpos(reds_used).values())[0])
-                    if ndims_here == ndims:
-                        break
-
-        d_ls, w_ls = {}, {}
-        for (bl1, bl2), tau_off_ij in taus_offs.items():
-            ai, aj = split_bl(bl1)
-            am, an = split_bl(bl2)
-            i, j, m, n = (self.pack_sol_key(k) for k in (ai, aj, am, an))
-            eq_key = '%s-%s-%s+%s' % (i, j, m, n)
-            d_ls[eq_key] = np.array(tau_off_ij)
-            w_ls[eq_key] = twgts[(bl1, bl2)]
-        ls = linsolve.LinearSolver(d_ls, wgts=w_ls, sparse=sparse)
-        sol = ls.solve(mode=mode)
-        dly_sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
-        off_sol = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
-        # add back in antennas in reds but not in the system of equations
-        ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
-        dly_sol = {ant: dly_sol.get(ant, (np.zeros_like(list(dly_sol.values())[0]))) for ant in ants}
-        off_sol = {ant: off_sol.get(ant, (np.zeros_like(list(off_sol.values())[0]))) for ant in ants}
-        return dly_sol, off_sol
-
-    def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-6,
-                 sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11),
-                 edge_cut=0, max_rel_angle=(np.pi / 8), max_recursion_depth=6, fc_min_vis_per_ant=None):
+    def firstcal(self, data, freqs, maxiter=100, sparse=False, mode='default', flip_pnt=(np.pi / 2)):
         """Solve for a calibration solution parameterized by a single delay and phase offset
         per antenna using the phase difference between nominally redundant measurements.
         Delays are solved in a single iteration, but phase offsets are solved for
@@ -1126,68 +1036,64 @@ class RedundantCalibrator:
         Args:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
             freqs: numpy array of frequencies in the data
-            wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
-            maxiter: maximum number of phase offset solver iterations
-            conv_crit: convergence criterion for iterative offset solver, defined as the L2 norm
-                of the changes in phase (in radians) over all times and antennas
+            maxiter: maximum number of iterations for finding flipped antennas
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
             mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
                 Suggest using 'default' unless solver is having stability (convergence) problems.
                 More documentation of modes in linsolve.LinearSolver.solve().
-            norm: calculate delays from just the phase information (not the amplitude) of the data.
-                This is a pretty effective way to get reliable delay even in the presence of RFI.
-            medfilt : boolean, median filter data before fft.  This can work for data containing
-                unflagged RFI, but tends to be less effective in practice than 'norm'.  Default False.
-            kernel : size of median filter kernel along (time, freq) axes
-            edge_cut: number of channels to exclude for each edge of the band when computing median phase
-                for find_polarity_flipped_ants or when computing delays and offsets in utils.fft_dly
-            max_rel_angle: cutoff median phase to assign baselines the "majority" polarity group.
+            flip_pnt: cutoff median phase to assign baselines the "majority" polarity group.
                 (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
-            max_recursion_depth: maximum number of assumptions to try before giving up.
-                Warning: the maximum complexity of this scales exponentially as 2^max_recursion_depth.
-            fc_min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
-                delay and phase offsets. If None, all visibilities will be included.
 
         Returns:
             meta: dictionary of metadata (including delays and suspected antenna flips for each integration)
-            g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the
-                {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
+            sol: RedSol with Ntimes x Nfreqs per-antenna gains solutions of the form
+                 np.exp(2j * np.pi * delay * freqs + 1j * offset), as well as visibility
+                 solutions formed from redundantly averaged first-caled data.
         """
-        df = np.median(np.ediff1d(freqs))
+        Ntimes, Nfreqs = data[self.reds[0][0]].shape
+        dlys_offs = {}
+
+        for bls in self.reds:
+            if len(bls) < 2:
+                continue
+            _dly_off = _firstcal_align_bls(bls, freqs, data)
+            dlys_offs.update(_dly_off)
+
+        # offsets often have phase wraps and need some finesse around np.pi
+        avg_offsets = {k: np.mean(v[1]) for k, v in dlys_offs.items()}  # XXX maybe do per-integration
+        flipped = _find_flipped(avg_offsets, flip_pnt=flip_pnt, maxiter=maxiter)
+
+        d_ls = {}
+        for (bl1, bl2), (dly, off) in dlys_offs.items():
+            ai, aj = split_bl(bl1)
+            am, an = split_bl(bl2)
+            i, j, m, n = (self.pack_sol_key(k) for k in (ai, aj, am, an))
+            eq_key = '%s-%s-%s+%s' % (i, j, m, n)
+            n_flipped = sum([int(ant in flipped) for ant in (ai, aj, am, an)])
+            if n_flipped % 2 == 0:
+                d_ls[eq_key] = np.array((dly, off))
+            else:
+                d_ls[eq_key] = np.array((dly, _wrap_phs(off + np.pi)))
+        ls = linsolve.LinearSolver(d_ls, sparse=sparse)
+        sol = ls.solve(mode=mode)
+        dlys = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
+        offs = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
+        # add back in antennas in reds but not in the system of equations
+        ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
+        dlys = {ant: dlys.get(ant, (np.zeros_like(list(dlys.values())[0]))) for ant in ants}
+        offs = {ant: offs.get(ant, (np.zeros_like(list(offs.values())[0]))) for ant in ants}
+
+        for ant in flipped:
+            offs[ant] = _wrap_phs(offs[ant] + np.pi)
+
         dtype = np.find_common_type([d.dtype for d in data.values()], [])
-
-        # iteratively solve for offsets to account for phase wrapping
-        for i in range(maxiter):
-            dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, edge_cut=edge_cut,
-                                                       offsets_only=(i > 0), sparse=sparse, mode=mode,
-                                                       norm=norm, medfilt=medfilt, kernel=kernel, fc_min_vis_per_ant=fc_min_vis_per_ant)
-            if i == 0:  # only solve for delays on the first iteration, also apply polarity flips
-                g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs)),
-                                      dtype=dtype) for ant, dly in dlys.items()}
-                calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
-
-                # build metadata and apply detected polarities as a firstcal starting point
-                meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()}}
-                polarity_flips = find_polarity_flipped_ants(data, self.reds, max_rel_angle=max_rel_angle,
-                                                            edge_cut=edge_cut, max_recursion_depth=max_recursion_depth)
-                meta['polarity_flips'] = {ant: np.array([polarity_flips[ant] for i in range(len(dlys[ant]))])
-                                          for ant in polarity_flips}
-                if np.all([flip is not None for flip in polarity_flips.values()]):
-                    polarities = {ant: -1.0 if polarity_flips[ant] else 1.0 for ant in g_fc}
-                    calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
-                    g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
-
-            else:  # on second and subsequent iterations, do phase shifts
-                delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
-                                             dtype=dtype) for ant in g_fc.keys()}
-                calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
-                g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
-
-            if (np.linalg.norm(list(delta_off.values())) < conv_crit) and (i > 1):
-                break
-
-        calibrate_in_place(data, g_fc, gain_convention='multiply')  # unapply calibration
-        return meta, g_fc
+        meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()},
+                'offs': {ant: off.flatten() for ant, off in offs.items()},
+                'polarity_flips': {ant: np.ones(Ntimes, dtype=bool) * bool(ant in flipped) for ant in ants}}
+        gains = {ant: np.exp(2j * np.pi * dly * freqs + 1j * offs[ant]).astype(dtype) for ant, dly in dlys.items()}
+        sol = RedSol(self.reds, gains=gains)
+        sol.set_vis_from_data(data)  # not strictly necessary now, but probably should be done
+        return meta, sol
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
@@ -1209,7 +1115,7 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-        fc_data = deepcopy(data)
+        fc_data = {bl: np.array(data[bl]) for red in self.reds for bl in red}
         calibrate_in_place(fc_data, sol0)
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve(mode=mode)
@@ -1297,69 +1203,7 @@ class RedundantCalibrator:
         Returns:
             new_gains: gains with degeneracy removal/replacement performed
         """
-
-        # Check supported pol modes
-        assert self.pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], 'Unrecognized pol_mode: %s' % self.pol_mode
-        assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
-        if degen_gains is None:
-            if mode == 'phase':
-                degen_gains = {key: np.zeros_like(val) for key, val in gains.items()}
-            else:  # complex
-                degen_gains = {key: np.ones_like(val) for key, val in gains.items()}
-        ants = gains.keys()
-        gainPols = np.array([ant[1] for ant in gains])  # gainPols is list of antpols, one per antenna
-        antpols = list(set(gainPols))
-
-        # if mode is 2pol, run as two 1pol remove degens
-        if self.pol_mode == '2pol':
-            self.pol_mode = '1pol'
-            pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
-            pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
-            new_gains = self.remove_degen_gains(pol0_gains, degen_gains=degen_gains, mode=mode)
-            new_gains.update(self.remove_degen_gains(pol1_gains, degen_gains=degen_gains, mode=mode))
-            self.pol_mode = '2pol'
-            return new_gains
-
-        # Extract gain and model visibiltiy solutions
-        gainSols = np.array([gains[ant] for ant in ants])
-        degenGains = np.array([degen_gains[ant] for ant in ants])
-
-        # Build matrices for projecting gain degeneracies
-        antpos = reds_to_antpos(self.reds)
-        positions = np.array([antpos[ant[0]] for ant in gains])
-        if self.pol_mode == '1pol' or self.pol_mode == '4pol_minV':
-            # In 1pol and 4pol_minV, the phase degeneracies are 1 overall phase and 2 tip-tilt terms
-            # Rgains maps gain phases to degenerate parameters (either average phases or phase slopes)
-            Rgains = np.hstack((positions, np.ones((positions.shape[0], 1))))
-        else:  # pol_mode is '4pol'
-            # two columns give sums for two different polarizations
-            phasePols = np.vstack((gainPols == antpols[0], gainPols == antpols[1])).T
-            Rgains = np.hstack((positions, phasePols))
-        # Mgains is like (AtA)^-1 At in linear estimator formalism. It's a normalized estimator of degeneracies
-        Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
-
-        # degenToRemove is the amount we need to move in the degenerate subspace
-        if mode == 'phase':
-            # Fix phase terms only
-            degenToRemove = np.einsum('ij,jkl', Mgains, gainSols - degenGains)
-            gainSols -= np.einsum('ij,jkl', Rgains, degenToRemove)
-        else:  # working on complex data
-            # Fix phase terms
-            degenToRemove = np.einsum('ij,jkl', Mgains, np.angle(gainSols * np.conj(degenGains)))
-            gainSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rgains, degenToRemove))
-            # Fix abs terms: fixes the mean abs product of gains (as they appear in visibilities)
-            for pol in antpols:
-                meanSqAmplitude = np.mean([np.abs(g1 * g2) for (a1, p1), g1 in gains.items()
-                                           for (a2, p2), g2 in gains.items()
-                                           if p1 == pol and p2 == pol and a1 != a2], axis=0)
-                degenMeanSqAmplitude = np.mean([np.abs(degen_gains[k1] * degen_gains[k2]) for k1 in gains.keys()
-                                                for k2 in gains.keys()
-                                                if k1[1] == pol and k2[1] == pol and k1[0] != k2[0]], axis=0)
-                gainSols[gainPols == pol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
-
-        # Create new solutions dictionary
-        new_gains = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
-        return new_gains
+        return remove_degen_gains(self.reds, gains, degen_gains=degen_gains, mode=mode, pol_mode=self.pol_mode)
 
     def remove_degen(self, sol, degen_sol=None):
         """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
@@ -1367,8 +1211,7 @@ class RedundantCalibrator:
         return complex solutions for antennas and visibilities.
 
         Args:
-            sol: dictionary (or RedSol) that contains both visibility and gain solutions in the
-                {(ind1,ind2,pol): np.array} and {(index,antpol): np.array} formats respectively
+            sol: RedSol object that contains both redundant visibilities and gain solutions
             degen_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
                 left as None, average gain amplitudes will be 1 and average phase terms will be 0.
@@ -1377,14 +1220,7 @@ class RedundantCalibrator:
         Returns:
             new_sol: RedSol with degeneracy removal/replacement performed
         """
-
-        gains, vis = get_gains_and_vis_from_sol(sol)
-        if degen_sol is None:
-            degen_sol = {key: np.ones_like(val) for key, val in gains.items()}
-        new_gains = self.remove_degen_gains(gains, degen_gains=degen_sol, mode='complex')
-        new_vis = deepcopy(vis)
-        calibrate_in_place(new_vis, new_gains, old_gains=gains)
-        return RedSol(self.reds, gains=new_gains, vis=new_vis)
+        return sol.remove_degen(degen_sol=degen_sol, inplace=False)
 
     def count_degens(self, assume_redundant=True):
         """Count the number of degeneracies in this redundant calibrator, given the redundancies and the pol_mode.
@@ -1435,31 +1271,83 @@ def is_redundantly_calibratable(antpos, bl_error_tol=1.0, require_coplanarity=Tr
             return False
     return (rc.count_degens() == rc.count_degens(assume_redundant=False))
 
+from linsolve import ast_getterms, jointerms, conjterm, LinearEquation
+import ast
+from scipy.sparse import csc_matrix
 
-def predict_chisq_per_bl(reds):
+def predict_chisq_per_bl(reds, just_do_it=False):
     '''Predict the expected value of chi^2 for each baselines (equivalently, the
     effective number of degrees of freedom). This is calculated from the logcal
     A and B matrices and their respective data resolution matrices.
 
     Arguments:
         reds: list of list of baselines (with polarizations) considered redundant
+        just_do_it: a recursive flag to force direct computation without checking
+            whether polarizations are separable.
 
     Returns:
         predicted_chisq_per_bl: dictionary mapping baseline tuples to the expected
             value of chi^2 = |Vij - gigj*Vi-j|^2/sigmaij^2.
     '''
-    bls = [bl for red in reds for bl in red]
-    dummy_data = DataContainer({bl: np.ones((1, 1), dtype=complex) for bl in bls})
-    rc = RedundantCalibrator(reds)
-    solver = rc._solver(linsolve.LogProductSolver, dummy_data)
-
-    A = solver.ls_amp.get_A()[:, :, 0]
-    B = solver.ls_phs.get_A()[:, :, 0]
-    A_data_resolution_diag_sum = (A.T * np.linalg.pinv(A.T.dot(A), hermitian=True).dot(A.T)).sum(axis=0)
-    B_data_resolution_diag_sum = (B.T * np.linalg.pinv(B.T.dot(B), hermitian=True).dot(B.T)).sum(axis=0)
-
-    predicted_chisq_per_bl = 1.0 - (A_data_resolution_diag_sum + B_data_resolution_diag_sum) / 2.0
-    return {bl: dof for bl, dof in zip(bls, predicted_chisq_per_bl)}
+    # figure out whether different pols are ever paired within redundant groups
+    pol_separable = False
+    if not just_do_it:
+        pol_gps = [set([antpol[-1] for bl in gp for antpol in split_bl(bl)]) for gp in reds]
+        pols = set()
+        for gp in pol_gps:
+            pols.update(gp)
+        npols = len(pols)
+        pol_separable = (npols > 1 and np.all([len(gp) == 1 for gp in pol_gps]))
+    if pol_separable:
+        # pols are separable and can be solved independently for significant speedup
+        reds_by_pol = {}
+        for gp in reds:
+            pol = gp[0][-1]
+            reds_by_pol[pol] = reds_by_pol.get(pol, []) + [gp]
+        predicted_chisq_per_bl = {}
+        for pol, polreds in reds_by_pol.items():
+            predicted_chisq_per_bl.update(predict_chisq_per_bl(polreds, just_do_it=True))
+        return predicted_chisq_per_bl
+    else:
+        # pols are not further separable and we need to build full equations
+        # doing a quicker breakdown of logcal equations w/o linsolve to
+        # avoid spending a lot of time parsing strings
+        bls = [bl for red in reds for bl in red]
+        ants = {}
+        for bl in bls:
+            for ant in split_bl(bl):
+                ants[ant] = ants.get(ant, len(ants))
+        # eqinds = (antpol, antpol, red-group-number) for each bl
+        eqinds = [split_bl(bl) + (u,)
+                  for u, gp in enumerate(reds) for bl in gp]
+        # eqinds = (ant-prm-index, ant-prm-index, red-gp-prm-index) for each bl
+        eqinds = [(ants[ai], ants[aj], len(ants) + ug)
+                  for ai, aj, ug in eqinds]
+        # eqinds = (AtA x/y indices = outer product of prm indices) for each bl
+        eqinds = [(np.array([ai, ai, ai, aj, aj, aj, ug, ug, ug]),
+                   np.array([ai, aj, ug, ai, aj, ug, ai, aj, ug]))
+                  for ai, aj, ug in eqinds]
+        nprms = len(ants) + len(reds)
+        diag_sums = []
+        # loop over amplitude and phase (respectively) "logcal" terms
+        for ci, cj, cu in ((1, 1, 1), (1, -1, 1)):
+            # coeffs = (AtA x/y wgts = outer product of prm coeffs) for each bl
+            coeffs = np.array([ci * ci, ci * cj, ci * cu,
+                               cj * ci, cj * cj, cj * cu,
+                               cu * ci, cu * cj, cu * cu])
+            # build A.T dot A from sparse representation of equations in eqinds
+            AtA = np.zeros((nprms, nprms), dtype=float)
+            for x, y in eqinds:
+                AtA[x, y] += coeffs
+            AtAi = np.linalg.pinv(AtA, rcond=1e-12, hermitian=True)
+            # compute sum(A.T * AtA^-1 dot A.T dot A, axis=0), using that for each eq
+            # in A, eq * (AtA^-1) * eq corresponds to summing over the same x/y
+            # indices we built above
+            diag_sum = np.array([np.sum(coeffs * AtAi[x, y])
+                                for x, y in eqinds])
+            diag_sums.append(diag_sum)
+        predicted_chisq_per_bl = 1.0 - sum(diag_sums) / 2.0
+        return {bl: dof for bl, dof in zip(bls, predicted_chisq_per_bl)}
 
 
 def predict_chisq_per_red(reds):
@@ -1490,9 +1378,11 @@ def predict_chisq_per_ant(reds):
         sum(|Vij - gigj*Vi-j|^2/sigmaij^2) over all baselines including that antenna
     '''
     predicted_chisq_per_bl = predict_chisq_per_bl(reds)
-    bls = [bl for red in reds for bl in red]
-    ants = sorted(set([ant for bl in bls for ant in split_bl(bl)]))
-    return {ant: np.sum([predicted_chisq_per_bl[bl] for bl in bls if ant in split_bl(bl)]) for ant in ants}
+    predicted_chisq_per_ant = {}
+    for bl, chisq in predicted_chisq_per_bl.items():
+        for ant in split_bl(bl):
+            predicted_chisq_per_ant[ant] = predicted_chisq_per_ant.get(ant, 0) + chisq
+    return predicted_chisq_per_ant
 
 
 def normalized_chisq(data, data_wgts, reds, vis_sols, gains):
@@ -1762,10 +1652,10 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             cal['vns_omnical'][bl] = np.zeros_like(vis, dtype=np.float32)
 
 
-def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6,
-                          fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
-                          check_after=50, gain=.4, max_dims=2, fc_min_vis_per_ant=None,
-                          prior_firstcal=None, prior_sol=None):
+def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None,
+                          oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
+                          check_after=50, gain=.4, max_dims=2,
+                          prior_firstcal=None, prior_sol=None, use_gpu=False):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -1779,8 +1669,6 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         times_by_bl: dictionary mapping antenna pairs like (0,1) to float Julian Date. Optional if
             inferable from data DataContainer, but must be provided if data is a dictionary,
             if it doesn't have .times_by_bl, or if the length of any list of times is 1.
-        fc_conv_crit: maximum allowed changed in firstcal phases for convergence
-        fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
@@ -1791,12 +1679,11 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
             with remove_degen() and must be later abscaled. None is no limit. 2 is a classically
             "redundantly calibratable" planar array.  More than 2 usually arises with subarrays of
             redundant baselines. Antennas will be excluded from reds to satisfy this.
-        fc_min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
-            delay and phase offsets in firstcal. If None, all visibilities will be included.
         prior_firstcal: Optional dictionary of gains keyed by ant-pol tuples. If not default None,
             skips performing firstcal and substitutes this for 'g_firstcal' in the returned dictionary.
         prior_sol: Optional dictionary of both gain keys and redundant visibility solutions. If not
             default None, this will be used to skip logcal and go straight into omnical.
+        use_gpu: Bool default False. If True, use GPU to run omnical. Requires hera_gpu.
 
     Returns a dictionary of results with the following keywords:
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
@@ -1819,7 +1706,11 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     '''
     rv = {}  # dictionary of return values
     filtered_reds = filter_reds(reds, max_dims=max_dims)
-    rc = RedundantCalibrator(filtered_reds)
+    if use_gpu:
+        from hera_gpu.redcal import RedundantCalibratorGPU
+        rc = RedundantCalibratorGPU(filtered_reds)
+    else:
+        rc = RedundantCalibrator(filtered_reds)
     if freqs is None:
         freqs = data.freqs
     if times_by_bl is None:
@@ -1828,8 +1719,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
 
     # perform firstcal if it hasn't already been done
     if prior_firstcal is None:
-        rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit,
-                                                      fc_min_vis_per_ant=fc_min_vis_per_ant)
+        rv['fc_meta'], fc_sol = rc.firstcal(data, freqs)
+        rv['g_firstcal'] = fc_sol.gains
     else:
         rv['fc_meta'], rv['g_firstcal'] = None, prior_firstcal
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
@@ -1861,9 +1752,9 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
 
 
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
-                     solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6,
-                     fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
-                     gain=.4, max_dims=2, fc_min_vis_per_ant=None, verbose=False, **filter_reds_kwargs):
+                     solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
+                     oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
+                     gain=.4, max_dims=2, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
 
@@ -1882,8 +1773,6 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             this altitude, calibration is skipped and the integrations are flagged.
         flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
-        fc_conv_crit: maximum allowed changed in firstcal phases for convergence
-        fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
@@ -1894,8 +1783,6 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             with remove_degen() and must be later abscaled. None is no limit. 2 is a classically
             "redundantly calibratable" planar array.  More than 2 usually arises with subarrays of
             redundant baselines. Antennas will be excluded from reds to satisfy this.
-        fc_min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
-            delay and phase offsets in firstcal. If None, all visibilities will be included.
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
@@ -1989,10 +1876,9 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 else:  # perform partial i/o
                     data, _, nsamples = hd.read(time_range=(hd.times[tinds][0], hd.times[tinds][-1]), frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
-                                            fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter,
                                             oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
                                             check_every=check_every, check_after=check_after,
-                                            max_dims=max_dims, gain=gain, fc_min_vis_per_ant=fc_min_vis_per_ant)
+                                            max_dims=max_dims, gain=gain)
                 expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
 
                 # gather results
@@ -2023,7 +1909,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
 
 
 def _redcal_run_write_results(cal, hd, firstcal_filename, omnical_filename, omnivis_filename,
-                              meta_filename, outdir, clobber=False, verbose=False, add_to_history=''):
+                              meta_filename, outdir, vispols=None, clobber=False, verbose=False, add_to_history=''):
     '''Helper function for writing the results of redcal_run.'''
     # get antnums2antnames dictionary
     antnums2antnames = dict(zip(hd.antenna_numbers, hd.antenna_names))
@@ -2055,8 +1941,13 @@ def _redcal_run_write_results(cal, hd, firstcal_filename, omnical_filename, omni
         if verbose:
             print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
         hd_out = HERAData(hd.filepaths[0], upsample=hd.upsample, downsample=hd.downsample, filetype=hd.filetype)
-        hd_out.read(bls=list(cal['v_omnical'].keys()))
-        hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
+        d, f, n = hd_out.read(bls=list(set([k[0:2] for k in cal['v_omnical']])), polarizations=vispols)
+        out_data, out_flags, out_nsamples = {}, {}, {}
+        for bl in d:
+            out_data[bl] = cal['v_omnical'][bl] if bl in cal['v_omnical'] else np.zeros_like(d[bl])
+            out_flags[bl] = cal['vf_omnical'][bl] if bl in cal['vf_omnical'] else np.ones_like(f[bl])
+            out_nsamples[bl] = cal['vns_omnical'][bl] if bl in cal['vns_omnical'] else np.zeros_like(n[bl])
+        hd_out.update(data=out_data, flags=out_flags, nsamples=out_nsamples)
         hd_out.history += utils.history_string(add_to_history)
         hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
 
@@ -2072,8 +1963,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None,
                upsample=False, downsample=False, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
                ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
-               fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
-               check_after=50, gain=.4, max_dims=2, fc_min_vis_per_ant=None, add_to_history='',
+               oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
+               check_after=50, gain=.4, max_dims=2, add_to_history='',
                verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
@@ -2116,8 +2007,6 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             this altitude, calibration is skipped and the integrations are flagged.
         flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
-        fc_conv_crit: maximum allowed changed in firstcal phases for convergence
-        fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
@@ -2128,8 +2017,6 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             with remove_degen() and must be later abscaled. None is no limit. 2 is a classically
             "redundantly calibratable" planar array.  More than 2 usually arises with subarrays of
             redundant baselines. Antennas will be excluded from reds to satisfy this.
-        fc_min_vis_per_ant: minimum number of visibilities to include per antenna when solving for
-            delay and phase offsets in firstcal. If None, all visibilities will be included.
         add_to_history: string to add to history of output firstcal and omnical files
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
@@ -2184,7 +2071,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             print('\nNow running redundant calibration without antennas', list(ex_ants), '...')
         cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol, ex_ants=ex_ants,
                                solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high,
-                               fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
+                               oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
                                check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain,
                                verbose=verbose, **filter_reds_kwargs)
 
@@ -2253,15 +2140,11 @@ def redcal_argparser():
                                                                         "redundantly calibratable" planar array. Antennas may be flagged to satisfy this criterion. See redcal.filter_reds() for details.')
 
     omni_opts = a.add_argument_group(title='Firstcal and Omnical-Specific Options')
-    omni_opts.add_argument("--fc_conv_crit", type=float, default=1e-6, help="maximum allowed changed in firstcal phases for convergence")
-    omni_opts.add_argument("--fc_maxiter", type=int, default=50, help="maximum number of firstcal iterations allowed for finding per-antenna phases")
     omni_opts.add_argument("--oc_conv_crit", type=float, default=1e-10, help="maximum allowed relative change in omnical solutions for convergence")
     omni_opts.add_argument("--oc_maxiter", type=int, default=500, help="maximum number of omnical iterations allowed before it gives up")
     omni_opts.add_argument("--check_every", type=int, default=10, help="compute omnical convergence every Nth iteration (saves computation).")
     omni_opts.add_argument("--check_after", type=int, default=50, help="start computing omnical convergence only after N iterations (saves computation).")
     omni_opts.add_argument("--gain", type=float, default=.4, help="The fractional step made toward the new solution each omnical iteration. Values in the range 0.1 to 0.5 are generally safe.")
-    omni_opts.add_argument("--fc_min_vis_per_ant", type=int, default=None, help="Minimum number of visibilities to include per antenna when solving for delay and phase offsets in firstcal. \
-                           Default None uses all visibilities.")
 
     args = a.parse_args()
     return args

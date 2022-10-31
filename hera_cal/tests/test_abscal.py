@@ -32,6 +32,7 @@ class Test_AbsCal_Funcs(object):
         self.data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.uvd = UVData()
         self.uvd.read_miriad(self.data_file)
+        self.uvd.use_future_array_shapes()
         self.freq_array = np.unique(self.uvd.freq_array)
         self.antpos, self.ants = self.uvd.get_ENU_antpos(center=True, pick_data_ants=True)
         self.antpos = odict(zip(self.ants, self.antpos))
@@ -1080,7 +1081,9 @@ class Test_AbsCal(object):
         hd = UVData()
         hdm = UVData()
         hd.read(data_fname)
+        hd.use_future_array_shapes()
         hdm.read(model_fname)
+        hdm.use_future_array_shapes()
         # test feeding UVData objects instead.
         abscal.run_model_based_calibration(data_file=hd, model_file=hdm, auto_file=hd,
                                            output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'), precalibration_gain_file=precal_fname)
