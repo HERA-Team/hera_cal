@@ -997,6 +997,8 @@ class NuCalibrator:
 
         # For each time and each polarization in the data calibrate
         solution = {parameter + pol: [] for pol in pols for parameter in ["A_J", "Phi_J"]}
+        solution['fg_r'] = []
+        solution['fg_i'] = []
         for pol in pols:
             # Sum over spectral filters to project onto u-model
             const_eigvals = np.sum(self.spectral_filters, axis=0).reshape(-1, 1)
@@ -1040,5 +1042,7 @@ class NuCalibrator:
                 # dictionary similarly to Redsol
                 solution[f"A_J{pol}"].append(fit_params['A'])
                 solution[f"Phi_J{pol}"].append(fit_params['Phi'])
+                solution[f'fg_r'].append(fit_params['fg_r'])
+                solution[f'fg_i'].append(fit_params['fg_i'])
 
         return solution, info
