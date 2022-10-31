@@ -2172,7 +2172,7 @@ def create_uvd_from_hera_data(
         The UVData object.
     """
     uvd = UVData()
-    uvd.future_array_shapes = True
+    uvd._set_future_array_shapes()
 
     # We have three options for the shape of the data. Either (bls, times, freqs, pols),
     # (times, bls, freqs, pols) or (bls*times, freqs, pols).
@@ -2201,8 +2201,8 @@ def create_uvd_from_hera_data(
 
     # get freqs
     uvd.Nfreqs = len(freq_array)
-    uvd.channel_width = np.median(np.diff(freq_array))
-    uvd.freq_array = freq_array[None, :]
+    uvd.channel_width = np.median(np.diff(freq_array)) * np.ones(len(freq_array))
+    uvd.freq_array = freq_array  #freq_array[None, :]
     uvd.spw_array = np.array([0])
     uvd.Nspws = 1
 
@@ -2268,7 +2268,7 @@ def create_uvd_from_hera_data(
     uvd.integration_time = integration_time
 
     # resort time and baseline axes
-    data.shape = (uvd.Nblts, 1, uvd.Nfreqs, uvd.Npols) #non-copying reshape
+    data.shape = (uvd.Nblts, uvd.Nfreqs, uvd.Npols) #non-copying reshape
     uvd.data_array = data
     
     if nsamples is None:
