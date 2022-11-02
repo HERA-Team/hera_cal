@@ -594,7 +594,6 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
     lst_arrays = []
     time_arrays = []
     for dfs in data_files:
-        logging.info(f"Getting {dfs} times.")
         # get times
         _, _, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
         # append
