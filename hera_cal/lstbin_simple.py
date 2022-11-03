@@ -580,7 +580,7 @@ def get_all_unflagged_baselines(
 
                 times = hfl['Header']["time_array"][:2]
 
-                if times[0] != times[0]:
+                if times[0] != times[1]:
                     # Assume time-first ordering.
                     ant1 = hfl['Header']['ant_1_array'][::ntimes]
                     ant2 = hfl['Header']['ant_2_array'][::ntimes]

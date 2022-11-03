@@ -2114,7 +2114,7 @@ def create_uvd_from_hera_data(
     """
     Takes simple data arrays and converts to a UVData object.
     
-    This function will always output a UVData object wit future_array_shapes set to 
+    This function will always output a UVData object with future_array_shapes set to 
     True.
 
     Parameters
@@ -2189,7 +2189,7 @@ def create_uvd_from_hera_data(
     elif data.ndim == 3:
         if data.shape != (len(antpairs), len(freq_array), len(pols)):
             raise ValueError("3D data must be shape (nblts, nfreqs, npols)")
-            bltime = True
+        bltime = True
     else:
         raise ValueError("data must be 3- or 4-dimensional.")
 
