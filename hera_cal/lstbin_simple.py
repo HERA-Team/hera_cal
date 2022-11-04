@@ -411,11 +411,8 @@ def lst_bin_files(
             for fl, calfl, tind, tarr in zip(file_list, cals, tinds, time_arrays):
                 hd = io.HERAData(fl, filetype='uvh5')
 
-                bls_to_load = [bl for bl in bl_chunk if bl in hd.antpairs]
-                _data, _flags, _nsamples  = hd.read(
-                    bls=bls_to_load, 
-                    times=tarr
-                )
+                bls_to_load = [bl for bl in bl_chunk if bl in hd.antpairs or bl[::-1] in hd.antpairs]
+                _data, _flags, _nsamples  = hd.read(bls=bls_to_load, times=tarr)
 
                 # load calibration
                 if calfl is not None:
@@ -436,7 +433,7 @@ def lst_bin_files(
                 slc = slice(ntimes_so_far,ntimes_so_far+_data.shape[0])
                 for i, bl in enumerate(bl_chunk):
                     for j, pol in enumerate(all_pols):
-                        if bl + (pol,) in _data:
+                        if bl + (pol,) in _data:  # DataContainer takes care of conjugates.
                             data[slc, i, :, j] = _data[bl+(pol,)]
                             flags[slc, i, :, j] = _flags[bl+(pol,)]
                             nsamples[slc, i, :, j] = _nsamples[bl+(pol,)]
