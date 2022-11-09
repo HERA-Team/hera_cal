@@ -318,9 +318,6 @@ def lst_bin_files_for_baselines(
     if antpos is None and rephase:
         antpos = get_all_antpos_from_files(data_files, baselines)
 
-    if time_arrays is None:
-        time_arrays = [obj.times for obj in metas]
-
     if time_idx is None:
         while lst_bin_edges[0] < 0:
             lst_bin_edges += 2*np.pi
@@ -330,6 +327,9 @@ def lst_bin_files_for_baselines(
 
         op = np.logical_and if lst_bin_edges[0] < lst_bin_edges[-1] else np.logical_or
         time_idx = [op(obj.lsts >= lst_bin_edges[0], obj.lsts < lst_bin_edges[-1]) for obj in metas]
+
+    if time_arrays is None:
+        time_arrays = [obj.times[idx] for obj, idx in zip(metas, time_idx)]
 
     if lsts is None:
         lsts = np.concatenate(
