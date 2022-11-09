@@ -309,7 +309,7 @@ def lst_bin_files_for_baselines(
     metas = [fl if isinstance(fl, io.FastUVH5Meta) else io.FastUVH5Meta(fl) for fl in data_files]
 
     lst_bin_edges = np.array(lst_bin_edges)
-    
+
     if freqs is None:
         freqs = metas[0].freqs
     if pols is None:
@@ -347,7 +347,7 @@ def lst_bin_files_for_baselines(
     # This loop actually reads the associated data in this LST bin.
     ntimes_so_far = 0
     for fl, calfl, tind, tarr in zip(data_files, cal_files, time_idx, time_arrays):
-        hd = io.HERAData(fl, filetype='uvh5')
+        hd = io.HERAData(str(fl), filetype='uvh5')
 
         bls_to_load = [bl for bl in baselines if bl in hd.antpairs or bl[::-1] in hd.antpairs]
         _data, _flags, _nsamples  = hd.read(bls=bls_to_load, times=tarr)
@@ -521,7 +521,7 @@ def lst_bin_files(
     zeroth_file_on_last_day_index = np.argmin([np.min(tarr) for tarr in time_arrs[last_day_index]])
 
     logger.info("Getting metadata from last data...")    
-    hd = io.HERAData(data_files[last_day_index][zeroth_file_on_last_day_index])
+    hd = io.HERAData(str(data_files[last_day_index][zeroth_file_on_last_day_index]))
     x_orientation = hd.x_orientation
 
     # get metadata
