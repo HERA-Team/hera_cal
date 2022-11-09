@@ -48,13 +48,13 @@ except NameError:
         return fnc
 
 def _parse_input_files(inputs, name='input_data'):
-    if isinstance(inputs, str):
+    if isinstance(inputs, (str, Path)):
         filepaths = [inputs]
     elif isinstance(inputs, Iterable):  # List loading
-        if np.all([isinstance(i, str) for i in inputs]):  # List of visibility data paths
+        if np.all([isinstance(i, (str, Path)) for i in inputs]):  # List of visibility data paths
             filepaths = list(inputs)
         else:
-            raise TypeError(f'If {name} is a list, it must be a list of strings.')
+            raise TypeError(f'If {name} is a list, it must be a list of strings or Paths.')
     else:
         raise ValueError(f'{name} must be a string or a list of strings.')
     for f in filepaths:
@@ -1534,7 +1534,7 @@ def get_file_times(filepaths, filetype='uvh5'):
     """
     _array = True
     # check filepaths type
-    if isinstance(filepaths, str):
+    if isinstance(filepaths, (str, Path)):
         _array = False
         filepaths = [filepaths]
 
@@ -1783,7 +1783,7 @@ def to_HERAData(input_data, filetype='miriad', **read_kwargs):
     '''
     if filetype not in ['miriad', 'uvfits', 'uvh5']:
         raise NotImplementedError("Data filetype must be 'miriad', 'uvfits', or 'uvh5'.")
-    if isinstance(input_data, str):  # single visibility data path
+    if isinstance(input_data, (str, Path)):  # single visibility data path
         return HERAData(input_data, filetype=filetype, **read_kwargs)
     elif isinstance(input_data, HERAData):  # already a HERAData object
         return input_data
@@ -1797,7 +1797,7 @@ def to_HERAData(input_data, filetype='miriad', **read_kwargs):
         hd.filepaths = None
         return hd
     elif isinstance(input_data, Iterable):  # List loading
-        if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
+        if np.all([isinstance(i, (str, Path)) for i in input_data]):  # List of visibility data paths
             return HERAData(input_data, filetype=filetype, **read_kwargs)
         elif np.all([isinstance(i, (UVData, HERAData)) for i in input_data]):  # List of uvdata objects
             hd = reduce(operator.add, input_data)
@@ -2414,7 +2414,7 @@ def to_HERACal(input_cal):
     Returns:
         hc: HERACal object. Will not have calibration loaded if initialized from string(s).
     '''
-    if isinstance(input_cal, str):  # single calfits path
+    if isinstance(input_cal, (str, Path)):  # single calfits path
         return HERACal(input_cal)
     if isinstance(input_cal, HERACal):  # single HERACal
         return input_cal
@@ -2424,7 +2424,7 @@ def to_HERACal(input_cal):
         input_cal._extract_metadata()  # initialize metadata vars.
         return input_cal
     elif isinstance(input_cal, Iterable):  # List loading
-        if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths
+        if np.all([isinstance(ic, (str, Path)) for ic in input_cal]):  # List of calfits paths
             return HERACal(input_cal)
         elif np.all([isinstance(ic, (UVCal, HERACal)) for ic in input_cal]):  # List of UVCal/HERACal objects
             hc = reduce(operator.add, input_cal)
