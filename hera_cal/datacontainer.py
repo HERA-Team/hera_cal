@@ -197,9 +197,9 @@ class DataContainer:
             keys.update(d.keys())
 
         # iterate over D keys
-        for i, k in enumerate(keys):
+        for k in enumerate(keys):
             if self.__contains__(k):
-                newD[k] = np.concatenate([self.__getitem__(k)] + list(map(lambda d: d[k], D)), axis=axis)
+                newD[k] = np.concatenate([self.__getitem__(k)] + [d[k] for d in D], axis=axis)
 
         return DataContainer(newD)
 

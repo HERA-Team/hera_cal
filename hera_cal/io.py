@@ -24,6 +24,10 @@ from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XY
 import argparse
 from hera_filters.dspec import place_data_on_uniform_grid
 from typing import Literal
+from pathlib import Path
+from functools import cached_property
+from astropy.time import Time
+from contextlib import contextmanager
 
 try:
     import aipy
@@ -2227,6 +2231,7 @@ def create_uvd_from_hera_data(
             longitude=(tel_lat_lon_alt[1] * 180 / np.pi),
             altitude=tel_lat_lon_alt[2]
         )
+        #print(lst_array, start_jd, time_array)
     
     if bltime:
         if len(antpairs) != len(lst_array):
@@ -2796,3 +2801,121 @@ def throw_away_flagged_ants_parser():
                     help="Also throw away baselines that have all channels and integrations flagged.")
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
+
+class FastUVH5Meta:
+    """
+    A fast read-only interface to UVH5 file metadata that makes some assumptions.
+    
+    This class is just a really thin wrapper over a UVH5 file that makes it easier
+    to read in parts of the metadata at a time. This makes it much faster to perform
+    small tasks where simple metadata is required, rather than reading in the whole 
+    header.
+
+    All metadata is available as attributes, through ``__getattr__`` magic. Thus, 
+    accessing eg. ``obj.freq_array`` will go and get the frequencies directly from the
+    file, and store them in memory. However, some attributes are made faster than the
+    default, by assumptions on the data shape -- in particular, times and baselines.
+
+    Anything that is read in is stored in memory so the second access is much faster.
+    However, the memory can be released simply by deleting the attribute (it can be
+    accessed again, and the data will be re-read).
+
+    This class assumes that each baseline has the same number of times.
+    """
+    def __init__(self, path: str | Path):
+        self.path = Path(path)
+
+        # The assumption is that all baselines have the same number of times.
+        with self.header() as h:
+            self.n_blts = int(h['Nblts'][()])
+            self.n_bls = int(h['Nbls'][()])
+            self.n_times = int(h['Ntimes'][()])
+
+        if not self.n_blts == self.n_bls * self.n_times:
+            raise NotImplementedError(
+                "The FastUVH5Meta class can only deal with files where each bl has "
+                f"the same number of times. Got nblts = {self.n_blts} and "
+                f"nbls*ntimes={self.n_bls * self.n_times}."
+            )
+
+    @contextmanager
+    def header(self):
+        with h5py.File(self.path, 'r') as fl:
+            yield fl['Header']
+
+    @cached_property
+    def _time_first(self) -> bool:
+        with self.header() as h:
+            t = h['time_array'][:2]
+            return t[1] != t[0]
+    
+    @cached_property
+    def times(self) -> np.ndarray:
+        with self.header() as h:
+            if self._time_first:        
+                return h['time_array'][:self.n_times]
+            else:
+                return h['time_array'][::self.n_bls]
+
+    @cached_property
+    def lsts(self) -> np.ndarray:
+        with self.header() as h:
+            if 'lst_array' in h:
+                if self._time_first:
+                    return h['lst_array'][:self.n_times]
+                else:
+                    return h['lst_array'][::self.n_bls]
+
+        # If lst_array not there, compute ourselves.
+        return Time(self.times, format='jd').sidereal_time("apparent", longitude=self.longitude).radian
+    
+    @cached_property
+    def ant_1_array(self) -> np.ndarray:
+        with self.header() as h:
+            if self._time_first:
+                return h['ant_1_array'][::self.n_times]
+            else:
+                return h['ant_1_array'][:self.n_bls]
+    
+    @cached_property
+    def ant_2_array(self) -> np.ndarray:
+        with self.header() as h:
+            if self._time_first:
+                return h['ant_2_array'][::self.n_times]
+            else:
+                return h['ant_2_array'][:self.n_bls]
+    
+    def get_antpairs(self) -> list[tuple[int, int]]:
+        return list(zip(self.ant_1_array, self.ant_2_array))
+
+    def __getattr__(self, name: str) -> Any:
+        with self.header() as h:
+            if name not in h:
+                raise AttributeError(f"{name} not found in {self.path}")
+            self.__dict__[name] = h[name][()]
+            return self.__dict__[name]
+        
+    @cached_property
+    def freqs(self) -> np.ndarray:
+        with self.header() as h:
+            fq = h['freq_array'][:]
+        
+        if fq.ndim == 2:
+            return fq[0]
+        else:
+            return fq
+
+    @cached_property
+    def x_orientation(self) -> str | None:
+        with self.header() as h:
+            if 'x_orientation' in h:
+                return bytes(h['x_orientation'][()]).decode('utf8')
+            else:
+                return None
+
+    @cached_property
+    def pols(self) -> list[str]:
+        return [
+            polnum2str(p, x_orientation=self.x_orientation) 
+            for p in self.polarization_array
+        ]

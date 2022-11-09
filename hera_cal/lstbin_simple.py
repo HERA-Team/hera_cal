@@ -35,7 +35,6 @@ def simple_lst_bin(
     data: np.ndarray,
     data_lsts: np.ndarray,
     baselines: list[tuple[int, int]],
-    pols: list[str],
     lst_bin_edges: np.ndarray,
     freq_array: np.ndarray,
     flags: np.ndarray | None = None,
@@ -43,12 +42,61 @@ def simple_lst_bin(
     rephase: bool = True,
     antpos: np.ndarray | None = None,
     lat: float = -30.72152,
-    out_data: np.ndarray | None = None,
-    out_flags: np.ndarray | None = None,
-    out_std: np.ndarray | None = None,
-    out_counts: np.ndarray | None = None,    
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    required_shape = (len(data_lsts), len(baselines), len(freq_array), len(pols))
+) -> tuple[np.ndarray, list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
+    """
+    Split input data into a list of LST bins.
+
+    This function simply splits a data array with multiple time stamps into a list of
+    arrays, each containing a single LST bin. Each of the data arrays in each bin
+    are also rephased onto a common LST grid.
+
+    Parameters
+    ----------
+    data
+        The visibility data. Must be shape (ntimes, nbls, nfreqs, npols)
+    data_lsts
+        The LSTs corresponding to each of the time stamps in the data. Must have
+        length ``data.shape[0]``
+    baselines
+        The list 2-tuples of baselines in the data array.
+    lst_bin_edges
+        A sequence of floats specifying the *edges* of the LST bins to use.
+    freq_array
+        An array of frequencies in the data, in Hz.
+    flags
+        An array of boolean flags, indicating bins NOT to use. Same shape as data.
+    nsamples
+        An array of sample counts, same shape as data.
+    rephase
+        Whether to apply re-phasing to the data, to bring it to a common LST grid.
+    antpos
+        3D Antenna positions for each antenna in the data.
+    lat
+        The latitude (in degrees) of the telescope.
+
+    Returns
+    -------
+    data
+        A nlst-length list of arrays, each of shape 
+        ``(nbls, ntimes_in_lst, nfreq, npol)``, where LST bins without data simply have
+        a second-axis of size zero.
+    flags
+        Same as ``data``, but boolean flags.
+    nsamples
+        Same as ``data``, but sample counts.
+
+    See Also
+    --------
+    :func:`reduce_lst_bins`
+        Function that takes outputs from this function and computes reduced values (e.g.
+        mean, std) from them.
+    """
+    npols = data.shape[-1]
+    required_shape = (len(data_lsts), len(baselines), len(freq_array), npols)
+    
+    if npols > 4:
+        raise ValueError(f"data has more than 4 pols! Got {npols} (last axis of data)")
+
     if data.shape != required_shape:
         raise ValueError(
             f"data should have shape {required_shape} but got {data.shape}"
@@ -57,17 +105,17 @@ def simple_lst_bin(
     if flags is None:
         flags = np.zeros(data.shape, dtype=bool)
 
-    if flags.shape != required_shape:
+    if flags.shape != data.shape:
         raise ValueError(
-            f"flags should have shape {required_shape} but got {flags.shape}"
+            f"flags should have shape {data.sahpe} but got {flags.shape}"
         )
 
     if nsamples is None:
         nsamples = np.ones(data.shape, dtype=float)
     
-    if nsamples.shape != required_shape:
+    if nsamples.shape != data.shape:
         raise ValueError(
-            f"nsampels should have shape {required_shape} but got {nsamples.shape}"
+            f"nsampels should have shape {data.shape} but got {nsamples.shape}"
         )
 
     if len(lst_bin_edges) < 2:
@@ -118,43 +166,88 @@ def simple_lst_bin(
         # this makes a copy of the data in d
         utils.lst_rephase_vectorized(data, bls, freq_array, lst_shift, lat=lat, inplace=True)
 
-    # TODO: check for baseline conjugation stuff.
+    # shortcut -- just return all the data, re-organized.
+    _data, _flags, _nsamples = [], [], []
+    empty_shape = (0, len(baselines), len(freq_array), npols)
+    for lstbin in range(len(lst_bin_centres)):
+        mask = grid_indices == lstbin
+        if np.any(mask):
+            _data.append(data[mask])
+            _flags.append(flags[mask])
+            _nsamples.append(nsamples[mask])
+        else:
+            _data.append(np.zeros(empty_shape, complex))
+            _flags.append(np.zeros(empty_shape, bool))
+            _nsamples.append(np.zeros(empty_shape, int))
+
+    return lst_bin_centres, _data, _flags, _nsamples
+
+def reduce_lst_bins(
+    data: list[np.ndarray], flags: list[np.ndarray], nsamples: list[np.ndarray],
+    out_data: np.ndarray | None = None, 
+    out_flags: np.ndarray | None = None,
+    out_std: np.ndarray | None = None,
+    out_nsamples: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    From a list of LST-binned data, produce reduced statistics.
+
+    Use this function to reduce lists of arrays with multiple time integrations per bin
+    (i.e. the output of :func:`simple_lst_bin`) to arrays of shape 
+    ``(nbl, nlst_bins, nfreq, npol)``. For example, compute the mean/std.
+
+    Parameters
+    ----------
+    data : list[np.ndarray]
+        The data to perform the reduction over. The length of the list is the number
+        of LST bins. Each array in the list should have shape 
+        ``(nbl, ntimes_per_lst, nfreq, npol)``.
+    flags
+        A list, the same length/shape as ``data``, containing the flags.
+    nsamples
+        A list, the same length/shape as ``data``, containing the number of samples
+        for each measurement.
+    out_data, out_flags, out_std, out_nsamples
+        Optional Arrays into which the output can be placed. Useful to provide if 
+        iterating over a set of inputs files, for example.
+    """
+    nlst_bins = len(data)
+    (_, nbl, nfreq, npol) = data[0].shape
+
+    for d, f, n in zip(data, flags, nsamples):
+        assert d.shape == f.shape == n.shape
 
     if out_data is None:
-        out_data = np.zeros((len(baselines), len(lst_bin_centres), len(freq_array), len(pols)), dtype=complex)
+        out_data = np.zeros((nbl, nlst_bins, nfreq, npol), dtype=complex)
     if out_flags is None:
         out_flags = np.zeros(out_data.shape, dtype=bool)
     if out_std is None:
         out_std = np.ones(out_data.shape, dtype=complex)
-    if out_counts is None:
-        out_counts = np.zeros(out_data.shape, dtype=float)
+    if out_nsamples is None:
+        out_nsamples = np.zeros(out_data.shape, dtype=float)
 
-    assert out_data.shape == out_flags.shape == out_std.shape == out_counts.shape
-    assert out_data.shape == (len(baselines), len(lst_bin_centres), len(freq_array), len(pols))
+    assert out_data.shape == out_flags.shape == out_std.shape == out_nsamples.shape
+    assert out_data.shape == (nbl, nlst_bins, nfreq, npol)
 
-    for lstbin in range(len(lst_bin_centres)):
-        logger.info(f"Computing LST bin {lstbin+1} / {len(lst_bin_centres)}")
+    for lstbin, (d,n,f) in enumerate(zip(data, nsamples, flags)):
+        logger.info(f"Computing LST bin {lstbin+1} / {nlst_bins}")
+        
         # TODO: check that this doesn't make yet another copy...
         # This is just the data in this particular lst-bin.
-        mask = grid_indices==lstbin
-        if np.any(mask):
-            d = data[mask]
-            n = nsamples[mask]
-            f = flags[mask]
-
+        if d.size:
             (
                 out_data[:, lstbin], 
                 out_flags[:, lstbin], 
                 out_std[:, lstbin], 
-                out_counts[:, lstbin]
+                out_nsamples[:, lstbin]
             ) = lst_average(d, n, f)
         else:
             out_data[:, lstbin] = 1.0
             out_flags[:, lstbin] = True
             out_std[:, lstbin] = 1.0
-            out_counts[:, lstbin] = 0.0
+            out_nsamples[:, lstbin] = 0.0
             
-    return lst_bin_centres, out_data, flags, out_std, out_counts
+    return out_data, out_flags, out_std, out_nsamples
 
 @profile
 def lst_average(
@@ -198,6 +291,117 @@ def lst_average(
 
     return data, f_min, std, norm
 
+
+def lst_bin_files_for_baselines(
+    data_files: list[Path | io.FastUVH5Meta], 
+    lst_bin_edges: np.ndarray, 
+    baselines, 
+    freqs: np.ndarray | None = None, 
+    pols: np.ndarray | None = None,
+    cal_files: list[Path | None] | None = None,
+    time_arrays: list[np.ndarray] | None = None,
+    time_idx: list[np.ndarray] | None = None,
+    ignore_flags: bool = False,
+    rephase: bool = True,
+    antpos: dict[int, np.ndarray] | None = None,
+    lsts: np.ndarray | None = None,
+):
+    metas = [
+        io.FastUVH5Meta(fl) if not isinstance(fl, io.FastUVH5Meta) else fl for fl in data_files
+    ]
+
+    if freqs is None:
+        freqs = metas[0].freqs
+    if pols is None:
+        pols = metas[0].pols
+
+    if antpos is None and rephase:
+        antpos = get_all_antpos_from_files(data_files, baselines)
+
+    if time_arrays is None:
+        time_arrays = [obj.times for obj in metas]
+
+    if time_idx is None:
+        while lst_bin_edges[0] < 0:
+            lst_bin_edges += 2*np.pi
+        while lst_bin_edges[0] >= 2*np.pi:
+            lst_bin_edges -= 2*np.pi
+        lst_bin_edges %= 2*np.pi
+
+        op = np.logical_and if lst_bin_edges[0] < lst_bin_edges[-1] else np.logical_or
+        time_idx = [op(obj.lsts >= lst_bin_edges[0], obj.lsts < lst_bin_edges[-1]) for obj in metas]
+
+    if lsts is None:
+        lsts = np.concatenate(
+            [obj.lsts[idx] for obj, idx in zip(metas, time_idx)]
+        )            
+
+    # Now we can set up our master arrays of data. 
+    data = np.full((
+        len(lsts), len(baselines), len(freqs), len(pols)), 
+        np.nan+np.nan*1j, dtype=complex
+    )
+    flags = np.ones(data.shape, dtype=bool)
+    nsamples = np.zeros(data.shape, dtype=float)
+
+    # This loop actually reads the associated data in this LST bin.
+    ntimes_so_far = 0
+    for fl, calfl, tind, tarr in zip(data_files, cal_files, time_idx, time_arrays):
+        hd = io.HERAData(fl, filetype='uvh5')
+
+        bls_to_load = [bl for bl in baselines if bl in hd.antpairs or bl[::-1] in hd.antpairs]
+        _data, _flags, _nsamples  = hd.read(bls=bls_to_load, times=tarr)
+
+        # load calibration
+        if calfl is not None:
+            logger.info(f"Opening and applying {calfl}")
+            uvc = io.to_HERACal(calfl)
+            gains, cal_flags, _, _ = uvc.read()
+            # down select times in necessary
+            if False in tind and uvc.Ntimes > 1:
+                # If uvc has Ntimes == 1, then broadcast across time will work automatically
+                uvc.select(times=uvc.time_array[tind])
+                gains, cal_flags, _, _ = uvc.build_calcontainers()
+            
+            apply_cal.calibrate_in_place(
+                _data, gains, data_flags=_flags, cal_flags=cal_flags,
+                gain_convention=uvc.gain_convention
+            )
+
+        slc = slice(ntimes_so_far,ntimes_so_far+_data.shape[0])
+        for i, bl in enumerate(baselines):
+            for j, pol in enumerate(pols):
+                if bl + (pol,) in _data:  # DataContainer takes care of conjugates.
+                    data[slc, i, :, j] = _data[bl+(pol,)]
+                    flags[slc, i, :, j] = _flags[bl+(pol,)]
+                    nsamples[slc, i, :, j] = _nsamples[bl+(pol,)]
+                else:
+                    # This baseline+pol doesn't exist in this file. That's
+                    # OK, we don't assume all baselines are in every file.
+                    data[slc, i, :, j] = np.nan
+                    flags[slc, i, :, j] = True
+                    nsamples[slc, i, :, j] = 0
+
+        ntimes_so_far += _data.shape[0]
+
+    logger.info("About to run LST binning...")
+    # LST bin edges are the actual edges of the bins, so should have length
+    # +1 of the LST centres. We use +dlst instead of +dlst/2 on the top edge
+    # so that np.arange definitely gets the last edge.
+    # lst_edges = np.arange(outfile_lsts[0] - dlst/2, outfile_lsts[-1] + dlst, dlst)
+    bin_lst, data, flags, nsamples = simple_lst_bin(
+        data=data, 
+        flags=None if ignore_flags else flags,
+        nsamples=nsamples,
+        data_lsts=lsts,
+        baselines=baselines,
+        lst_bin_edges=lst_bin_edges,
+        freq_array = freqs,
+        rephase = rephase,
+        antpos=antpos,
+    )
+    return bin_lst, data, flags, nsamples
+
 @profile
 def lst_bin_files(
     data_files: list[list[str]], 
@@ -208,7 +412,7 @@ def lst_bin_files(
     outdir: str | Path | None=None, 
     overwrite: bool=False, 
     history: str='', 
-    lst_start: float | None=None,
+    lst_start: float | None = None,
     atol: float=1e-6,  
     rephase: bool=False,
     output_file_select: int | Sequence[int] | None=None, 
@@ -292,6 +496,11 @@ def lst_bin_files(
     nfiles = len(file_lsts)
 
     logger.info("Setting output files")
+
+    # Set branch cut before trimming files -- want it to be the same for all files
+    write_kwargs = write_kwargs or {}
+    if 'lst_branch_cut' not in write_kwargs and lst_start is not None:
+        write_kwargs['lst_branch_cut'] = file_lsts[0][0]
 
     # select file_lsts
     if output_file_select is not None:
@@ -397,80 +606,31 @@ def lst_bin_files(
         nbls_so_far = 0
         for bi, bl_chunk in enumerate(bl_chunks):
             logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
-
-            # Now we can set up our master arrays of data. 
-            data = np.full((
-                len(all_lsts), len(bl_chunk), len(hd.freqs), len(all_pols)), 
-                np.nan+np.nan*1j, dtype=complex
-            )
-            flags = np.ones(data.shape, dtype=bool)
-            nsamples = np.zeros(data.shape, dtype=float)
-
-            # This loop actually reads the associated data in this LST bin.
-            ntimes_so_far = 0
-            for fl, calfl, tind, tarr in zip(file_list, cals, tinds, time_arrays):
-                hd = io.HERAData(fl, filetype='uvh5')
-
-                bls_to_load = [bl for bl in bl_chunk if bl in hd.antpairs or bl[::-1] in hd.antpairs]
-                _data, _flags, _nsamples  = hd.read(bls=bls_to_load, times=tarr)
-
-                # load calibration
-                if calfl is not None:
-                    logger.info(f"Opening and applying {calfl}")
-                    uvc = io.to_HERACal(calfl)
-                    gains, cal_flags, _, _ = uvc.read()
-                    # down select times in necessary
-                    if False in tind and uvc.Ntimes > 1:
-                        # If uvc has Ntimes == 1, then broadcast across time will work automatically
-                        uvc.select(times=uvc.time_array[tind])
-                        gains, cal_flags, _, _ = uvc.build_calcontainers()
-                    
-                    apply_cal.calibrate_in_place(
-                        _data, gains, data_flags=_flags, cal_flags=cal_flags,
-                        gain_convention=uvc.gain_convention
-                    )
-
-                slc = slice(ntimes_so_far,ntimes_so_far+_data.shape[0])
-                for i, bl in enumerate(bl_chunk):
-                    for j, pol in enumerate(all_pols):
-                        if bl + (pol,) in _data:  # DataContainer takes care of conjugates.
-                            data[slc, i, :, j] = _data[bl+(pol,)]
-                            flags[slc, i, :, j] = _flags[bl+(pol,)]
-                            nsamples[slc, i, :, j] = _nsamples[bl+(pol,)]
-                        else:
-                            # This baseline+pol doesn't exist in this file. That's
-                            # OK, we don't assume all baselines are in every file.
-                            data[slc, i, :, j] = np.nan
-                            flags[slc, i, :, j] = True
-                            nsamples[slc, i, :, j] = 0
-
-                ntimes_so_far += _data.shape[0]
-
-            logger.info("About to run LST binning...")
-            # LST bin edges are the actual edges of the bins, so should have length
-            # +1 of the LST centres. We use +dlst instead of +dlst/2 on the top edge
-            # so that np.arange definitely gets the last edge.
-            lst_edges = np.arange(outfile_lsts[0] - dlst/2, outfile_lsts[-1] + dlst, dlst)
-            bin_lst, _, _, _, _ = simple_lst_bin(
-                data=data, 
-                flags=None if ignore_flags else flags,
-                nsamples=nsamples,
-                data_lsts=all_lsts,
-                baselines=bl_chunk,
+            bin_lst, data, flags, nsamples = lst_bin_files_for_baselines(
+                data_files = file_list, 
+                lst_bin_edges=np.array([x - dlst/2 for x in outfile_lsts] + [outfile_lsts[-1] + dlst/2]), 
+                baselines=bl_chunk, 
+                freqs=freq_array, 
                 pols=all_pols,
-                lst_bin_edges=lst_edges,
-                freq_array = hd.freqs,
-                rephase = rephase,
+                cal_files=cals,
+                time_arrays=time_arrays,
+                time_idx=tinds,
+                ignore_flags=ignore_flags,
+                rephase=rephase,
                 antpos=antpos,
-                out_counts=out_nsamples[nbls_so_far:nbls_so_far + len(bl_chunk)],
-                out_data=out_data[nbls_so_far:nbls_so_far + len(bl_chunk)],
-                out_flags=out_flags[nbls_so_far:nbls_so_far + len(bl_chunk)],
-                out_std=out_stds[nbls_so_far:nbls_so_far + len(bl_chunk)]
+                lsts=all_lsts,
             )
-            
+            slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))
+            reduce_lst_bins(
+                data, flags, nsamples,
+                out_nsamples=out_nsamples[slc],
+                out_data=out_data[slc],
+                out_flags=out_flags[slc],
+                out_std=out_stds[slc]
+            )
+        
             nbls_so_far += len(bl_chunk)
 
-        
         logger.info("Writing output files")
 
         # get outdir
@@ -478,9 +638,6 @@ def lst_bin_files(
             outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
 
         # update kwrgs
-        # If None, set to empty dict
-        write_kwargs = write_kwargs or {}
-
         # update history
         file_list_str = "-".join(os.path.basename(ff)for ff in file_list)
         file_history = f"{history} Input files: {file_list_str}"
@@ -519,7 +676,6 @@ def lst_bin_files(
             integration_time=integration_time,
             history=_history,
             start_jd=start_jd,
-            lst_branch_cut=write_kwargs.get('lst_branch_cut', lst_start or file_lsts[0][0])
         )
         uvd_data = io.create_uvd_from_hera_data(data = out_data, **write_kwargs)
         uvd_data.write_uvh5(os.path.join(outdir, bin_file), clobber=overwrite)
@@ -549,8 +705,8 @@ def get_all_unflagged_baselines(
         A list of all polarizations in the files in the given list, as strings like 
         'ee' and 'nn' (i.e. with x_orientation information).
     """
-    all_pols = set()
-    xorient_bytes = None
+    pols = None
+    xorient = None
 
     all_baselines = set()
     files_with_ants = set()
@@ -568,31 +724,23 @@ def get_all_unflagged_baselines(
             fl_list = fl_list[-1:]
 
         for fl in fl_list:
+            hfl = io.FastUVH5Meta(fl)
             # To go faster, let's JUST read the antpairs and pols from the files.
-            with h5py.File(fl, 'r') as hfl:
-                ntimes= int(hfl['Header']['Ntimes'][()])
-                nblts = int(hfl['Header']['Nblts'][()])
-                if nblts % ntimes:
-                    raise ValueError(f'Datafile {fl} has different number of times for different baselines!')
+            
+            antpairs = hfl.get_antpairs()
+            
+            if pols is not None and not np.all(pols == hfl.polarization_array):
+                raise ValueError(
+                    f"The polarizations in {fl} are not the same as in {fl_list[0]}"
+                )
+            pols = hfl.polarization_array
 
-                times = hfl['Header']["time_array"][:2]
+            if xorient is not None and hfl.x_orientation != xorient:
+                raise ValueError("Not all input files have the same x_orientation!")
 
-                if times[0] != times[1]:
-                    # Assume time-first ordering.
-                    ant1 = hfl['Header']['ant_1_array'][::ntimes]
-                    ant2 = hfl['Header']['ant_2_array'][::ntimes]
-                else:
-                    nbls = nblts // ntimes
-                    ant1 = hfl['Header']['ant_1_array'][:nbls]
-                    ant2 = hfl['Header']['ant_2_array'][:nbls]
+            xorient = hfl.x_orientation
 
-                all_pols.update(list(hfl['Header']["polarization_array"][:]))
-                xb = bytes(hfl['Header']["x_orientation"][()])
-                if xorient_bytes is not None and xorient_bytes != xb:
-                    raise ValueError("Not all input files have the same x_orientation!")
-                xorient_bytes = xb
-
-            for a1, a2 in zip(ant1, ant2):
+            for a1, a2 in antpairs:
                 if (
                     (a1, a2) not in all_baselines and # Do this first because after the
                     (a2, a1) not in all_baselines and # first file it often triggers.
@@ -601,7 +749,7 @@ def get_all_unflagged_baselines(
                     (include_autos or a1 != a2) and 
                     a1 not in a_priori_antenna_flags and 
                     a2 not in a_priori_antenna_flags
-                ):  
+                ):
                     all_baselines.add((a1, a2))
 
 
@@ -613,7 +761,7 @@ def get_all_unflagged_baselines(
                         files_with_ants.add(fl)
                     
 
-    return all_baselines, [polnum2str(p, x_orientation=xorient_bytes.decode("utf8")) for p in all_pols], files_with_ants
+    return all_baselines, hfl.pols, files_with_ants
 
 
 def get_all_antpos_from_files(
