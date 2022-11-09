@@ -306,10 +306,10 @@ def lst_bin_files_for_baselines(
     antpos: dict[int, np.ndarray] | None = None,
     lsts: np.ndarray | None = None,
 ):
-    metas = [
-        io.FastUVH5Meta(fl) if not isinstance(fl, io.FastUVH5Meta) else fl for fl in data_files
-    ]
+    metas = [fl if isinstance(fl, io.FastUVH5Meta) else io.FastUVH5Meta(fl) for fl in data_files]
 
+    lst_bin_edges = np.array(lst_bin_edges)
+    
     if freqs is None:
         freqs = metas[0].freqs
     if pols is None:
@@ -362,7 +362,7 @@ def lst_bin_files_for_baselines(
                 # If uvc has Ntimes == 1, then broadcast across time will work automatically
                 uvc.select(times=uvc.time_array[tind])
                 gains, cal_flags, _, _ = uvc.build_calcontainers()
-            
+
             apply_cal.calibrate_in_place(
                 _data, gains, data_flags=_flags, cal_flags=cal_flags,
                 gain_convention=uvc.gain_convention
