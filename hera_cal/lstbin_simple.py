@@ -778,7 +778,7 @@ def get_all_antpos_from_files(
         # unfortunately, we're reading in way more than we need to here,
         # because the conversion from the antpos in the file to the ENU antpos is 
         # non trivial and hard to trace in uvdata.
-        hd = io.HERAData(fl)
+        hd = io.HERAData(str(fl))
 
         for ant in ants:
             if ant in hd.antpos and ant not in antpos_out:
