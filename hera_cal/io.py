@@ -2828,15 +2828,16 @@ class FastUVH5Meta:
         # The assumption is that all baselines have the same number of times.
         with self.header() as h:
             self.n_blts = int(h['Nblts'][()])
-            self.n_bls = int(h['Nbls'][()])
             self.n_times = int(h['Ntimes'][()])
 
-        if not self.n_blts == self.n_bls * self.n_times:
+        if self.n_blts % self.n_times:
             raise NotImplementedError(
                 "The FastUVH5Meta class can only deal with files where each bl has "
                 f"the same number of times. Got nblts = {self.n_blts} and "
-                f"nbls*ntimes={self.n_bls * self.n_times}."
+                f"ntimes={self.n_times}, which is not divisible."
             )
+
+        self.n_bls = self.n_blts // self.n_times
 
     @contextmanager
     def header(self):
