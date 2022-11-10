@@ -188,6 +188,7 @@ def reduce_lst_bins(
     out_flags: np.ndarray | None = None,
     out_std: np.ndarray | None = None,
     out_nsamples: np.ndarray | None = None,
+    mutable: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     From a list of LST-binned data, produce reduced statistics.
@@ -210,6 +211,9 @@ def reduce_lst_bins(
     out_data, out_flags, out_std, out_nsamples
         Optional Arrays into which the output can be placed. Useful to provide if 
         iterating over a set of inputs files, for example.
+    mutable
+        Whether the data (and flags and nsamples) can be modified in place within
+        the algorithm. Setting to true saves memory, and is safe for a one-shot script.
     """
     nlst_bins = len(data)
     (_, nbl, nfreq, npol) = data[0].shape
@@ -240,7 +244,7 @@ def reduce_lst_bins(
                 out_flags[:, lstbin], 
                 out_std[:, lstbin], 
                 out_nsamples[:, lstbin]
-            ) = lst_average(d, n, f)
+            ) = lst_average(d, n, f, mutable=mutable)
         else:
             out_data[:, lstbin] = 1.0
             out_flags[:, lstbin] = True
@@ -253,12 +257,18 @@ def reduce_lst_bins(
 def lst_average(
     data: np.ndarray, nsamples: np.ndarray, flags: np.ndarray, 
     flag_thresh: float = 0.7, median: bool = False,
+    mutable: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     # data has shape (ntimes, nbl, npols, nfreqs)
     # all data is assumed to be in the same LST bin.
 
     assert data.shape == nsamples.shape == flags.shape
     
+    if not mutable:
+        flags = flags.copy()
+        nsamples = nsamples.copy()
+        data = data.copy()
+
     flags[np.isnan(data) | np.isinf(data) | (nsamples == 0)] = True
 
     # Flag entire LST bins if there are too many flags over time
