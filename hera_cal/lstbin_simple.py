@@ -13,14 +13,10 @@ from . import abscal
 import os
 from . import io
 import logging
-import h5py
 from hera_qm.metrics_io import read_a_priori_ant_flags
 from . import apply_cal
-from .datacontainer import DataContainer
-from .utils import mergedicts
-import gc
 from typing import Sequence
-from pyuvdata.utils import polnum2str
+import argparse
 
 try:
     profile
@@ -796,3 +792,38 @@ def get_all_antpos_from_files(
 
     return antpos_out
 
+def lst_bin_arg_parser():
+    """
+    arg parser for lst_bin_files() function. data_files argument must be quotation-bounded
+    glob-parsable search strings to nightly data. For example:
+
+    '2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv'
+    """
+    a = argparse.ArgumentParser(
+        description=(
+            "drive script for lstbin.lst_bin_files(). "
+            "data_files argument must be quotation-bounded "
+            "glob-parsable search strings to nightly data. For example: \n"
+            "'2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv' \n"
+            "Consult lstbin.lst_bin_files() for further details on functionality."
+        )
+    )
+    a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to nightly data files (UVH5)")
+    a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to corresponding nightly calibration files")
+    a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
+    a.add_argument("--ntimes_per_file", name='n_lstbins_per_outfile', type=int, default=60, help="number of LST bins to write per output file")
+    a.add_argument("--file_ext", type=str, default="{type}.{time:7.5f}.uvh5", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
+    a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
+    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
+    a.add_argument("--lst_start", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is first LST of first file.")
+    a.add_argument("--rephase", default=False, action='store_true', help="rephase data to center of LST bin before binning")
+    a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
+    a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
+    a.add_argument("--output_file_select", default=None, nargs='*', help="list of output file integers ot run on. Default is all output files.")
+    a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
+    a.add_argument("--ignore_flags", default=False, action='store_true', help="Ignore flags in data files, such that all input data is included in binning.")
+    a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
+    a.add_argument("--ex_ant_yaml_files", default=None, type=str, nargs='+', help="list of paths to yamls with lists of antennas from each night to exclude lstbinned data files.")
+    a.add_argument("--ignore-ants", default=(), type=int, nargs='+', help='ants to ignore')
+    a.add_argument("--write_kwargs", default=None, type=str, help="json dictionary of arguments to the uvh5 writer")
+    return a
