@@ -20,7 +20,8 @@ from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
 
-def deinterleave(x: [np.ndarray], data: np.ndarray, wgts: np.ndarray, ax: str):
+# Should this live here or should it live in utils?
+def deinterleave(x: [np.ndarray], data: np.ndarray, wgts: np.ndarray, ax='freq'):
     """
     Helper function for deinterleaving data so that we can apply filters separately on even/odd samples.
 
@@ -32,14 +33,56 @@ def deinterleave(x: [np.ndarray], data: np.ndarray, wgts: np.ndarray, ax: str):
         ntime x nfrequency np.ndarray containing data to deinterleave. Typically complex type.
     wgts: np.ndarray
         ntime x nfrequency np.ndarray containing data weights. Typically float type.
-    ax: str
+    ax: str, optional
         specify which axes to deinterleave data along. Valid options include "time", "freq", "both".
+        default is 'freq'
 
     Returns
     -------
+    x0: 2-list of np.ndarray objects.
+        Even split of frequency/time axes (depending on ax param)
+    x1: 2-list of np.ndarray objects.
+        Odd split of frequency/time axes (depending on ax param)
+    data0: np.ndarray
+        Even split of data array
+    data1: np.ndarray
+        Odd split of data array.
+    wgts0: np.ndarray
+        Even split of wgts array.
+    wgts1: np.ndarray
+        Odd split of wgts array.
     
     """
-    return
+    if ax.lower() not in ('time', 'freq', 'both'):
+        raise ValueError("ax not a valid option. Valid options include 'time', 'freq', and 'both'")       
+    if ax.lower() == 'time' or ax.lower() == 'both':
+        if len(x[0]) !> 1:
+            raise ValueError("Cannot deinterleave time axis because it has length 1")
+        slice_t_0 = slice(0, len(x[0]), 2)
+        slice_t_1 = slice(1, len(x[0]), 2)
+    else:
+        slice_t_0 = slice(0, len(x[0]))
+        slice_t_1 = slice(0, len(x[0]))
+
+    if ax.lower() == 'freq' or ax.lower() == 'both':
+        if len(x[1]) !> 1:
+            raise ValueError("Cannot deinterleave freq axis because it has length 1")
+        slice_f_0 = slice(0, len(x[1]), 2)
+        slice_f_1 = slice(1, len(x[1]), 2)
+    else:
+        slice_f_0 = slice(0, len(x[1]))
+        slice_f_1 = slice(0, len(x[1]))
+
+    x0 = (x[0][slice_t_0], x[1][slice_f_0])
+    x1 = (x[1][slice_t_1], x[1][slice_f_1])
+    data0 = data[slice_t_0][:, slice_f_0]
+    data1 = data[slice_t_1][:, slice_f_1]
+    wgts0 = wgts[slice_t_0][:, slice_f_0]
+    wgts1 = wgts[slice_t_1][:, slice_f_1]
+
+
+    return x0, x1, data0, data1, wgts0, wgts1
+                    
 
 def discard_autocorr_imag(data_container):
     """
