@@ -1513,3 +1513,91 @@ def select_spw_ranges_argparser():
                                                                                 "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
+
+
+def deinterleave_data_in_time(taxis, data: np.ndarray, wgts: np.ndarray, ninterleave=2):
+    """
+    Helper function for deinterleaving *time-ordered* data along time axis.
+
+    Parameters
+    ----------
+    taxis: np.ndarray
+        ntime 1d array of times.
+        times are assumed to be ordered from earliest to latest!
+    data: np.ndarray
+        ntime x nfrequency np.ndarray containing data to deinterleave. Typically complex type.
+        data is assumed to be time ordered!
+    wgts: np.ndarray
+        ntime x nfrequency np.ndarray containing data weights. Typically float type.
+        wgts are assumed to be time ordered!
+    ninterleave: integer, optional
+        number of interleaves to split data into.
+
+    Returns
+    -------
+    tsets: list of np.ndarray
+        list of observation times sorted into the different interleaves
+        length equal to interleave
+    
+    dsets: list of np.ndarray
+        list of data arrays sorted into ninterleave different interleaves.
+    wsets: list of np.ndarray
+        list of wgts sorted into ninterleave different interleaves.
+    """
+    if len(taxis) < ninterleave or len(data) < ninterleave or len(wgts) < ninterleave:
+        raise ValueError("Number of times provided is less then the number of interleaves")
+    tsets, dsets, wsets = [], [], []
+    for i in range(ninterleave):
+        tsets.append(taxis[i::ninterleave])
+        dsets.append(data[i::ninterleave])
+        wgts.append(wgts[i::ninterleave])
+    
+    return tsets, dsets, wsets
+
+
+def interleave_data_in_time(tsets, dsets, wsets):
+    """
+    Helper function for interleaving sets of time-ordered data along time axis.
+
+    Parameters
+    -------
+    tsets: list of np.ndarray
+        list of observation times sorted into the different interleaves
+        length equal to interleave
+    
+    dsets: list of np.ndarray
+        list of data arrays sorted into ninterleave different interleaves.
+    wsets: list of np.ndarray
+        list of wgts sorted into ninterleave different interleaves.
+
+    Returns
+    ----------
+    taxis: np.ndarray
+        ntime 1d array of times.
+        times are assumed to be ordered from earliest to latest!
+    data: np.ndarray
+        ntime x nfrequency np.ndarray containing data to deinterleave. Typically complex type.
+        data is assumed to be time ordered!
+    wgts: np.ndarray
+        ntime x nfrequency np.ndarray containing data weights. Typically float type.
+        wgts are assumed to be time ordered!
+    """
+    taxis = []
+    data = []
+    wgts = []
+    ntimes = [tset.shape[0] for tset in tsets]
+    ninterleaves = len(ntimes)
+    counters = [0 for i in range(ninterleaves)]
+    nmax = int(np.max(ntimes))
+    for tstep in range(nmax):
+        for inum in range(ninterleave):
+            if counters[inum] < ntimes[inum]:
+                taxis.append(tsets[inum][tstep])
+                data.append(dsets[inum][tstep])
+                wgts.append(wsets[inum][tstep])
+                
+            counters[inum] += 1
+    # return interleaved data sets.
+    return np.asarray(taxis), np.asarray(data), np.asarray(wgts)
+    
+        
