@@ -20,6 +20,26 @@ from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
 
+def deinterleave(x: [np.ndarray], data: np.ndarray, wgts: np.ndarray, ax: str):
+    """
+    Helper function for deinterleaving data so that we can apply filters separately on even/odd samples.
+
+    Parameters
+    ----------
+    x : 2-list of np.ndarrays
+        specifying time and frequency axes of the data.
+    data: np.ndarray
+        ntime x nfrequency np.ndarray containing data to deinterleave. Typically complex type.
+    wgts: np.ndarray
+        ntime x nfrequency np.ndarray containing data weights. Typically float type.
+    ax: str
+        specify which axes to deinterleave data along. Valid options include "time", "freq", "both".
+
+    Returns
+    -------
+    
+    """
+    return
 
 def discard_autocorr_imag(data_container):
     """
@@ -812,6 +832,7 @@ class VisClean(object):
                        keep_flags=False, clean_flags_in_resid_flags=True,
                        skip_if_flag_within_edge_distance=0,
                        flag_model_rms_outliers=False, model_rms_threshold=1.1,
+                       interleave=False,
                        **filter_kwargs):
         """
         Generalized fourier filtering wrapper for hera_filters.dspec.fourier_filter.
@@ -919,6 +940,9 @@ class VisClean(object):
         model_rms_threshold : float, optional
             factor that rms of model in a channel or integration needs to exceed the rms of unflagged data
             to be flagged. only used if flag_model_rms_outliers is true.
+        interleave : bool, optional
+            If true, run filters separately on alternating time/frequency samples.
+            default is False.
         filter_kwargs: dict. Filtering arguments depending on type of filtering.
             NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
             dictionary with options for fitting techniques.
@@ -1133,10 +1157,23 @@ class VisClean(object):
 
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
                 if 0 not in din.shape:
-                    mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
-                                                          filter_half_widths=filter_half_widths,
-                                                          mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
-                                                          **filter_kwargs)
+                    if interleave:
+                        mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                                              filter_half_widths=filter_half_widths,
+                                                              mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                                              **filter_kwargs)
+
+                    else:
+                        xp1, xp2, din1, din2, win1, win2 = deinterleave(x=xp, data=din, wgts=win, ax=ax)
+                        mdl1, res1, info1 = dspec.fourier_filter(x=xp1, data=din1, wgts=win1, filter_centers=filter_centers,
+                                                                 filter_half_widths=filter_half_widths,
+                                                                 mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt, **filter_kwargs)
+                        mdl2, res2, info2 = dspec.fourier_filter(x=xp2, data=din2, wgts=win2, filter_centers=filter_centers,
+                                                                 filter_half_widths=filter_half_widths,
+                                                                 mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt, **filter_kwargs)
+                        mdl, res, info = interleave(mdl1, mdl2, res1, res2, info1, info2, ax=ax)
+                        
+                        
                     # insert back the filtered model if we are skipping flagged edgs.
                     if skip_flagged_edges:
                         mdl = restore_flagged_edges(mdl, chunks, edges, ax=ax)
