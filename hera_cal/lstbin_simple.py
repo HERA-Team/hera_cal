@@ -811,7 +811,7 @@ def lst_bin_arg_parser():
     a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to nightly data files (UVH5)")
     a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to corresponding nightly calibration files")
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
-    a.add_argument("--ntimes_per_file", name='n_lstbins_per_outfile', type=int, default=60, help="number of LST bins to write per output file")
+    a.add_argument("--ntimes_per_file", dest='n_lstbins_per_outfile', type=int, default=60, help="number of LST bins to write per output file")
     a.add_argument("--file_ext", type=str, default="{type}.{time:7.5f}.uvh5", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
