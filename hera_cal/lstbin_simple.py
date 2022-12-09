@@ -818,6 +818,7 @@ def lst_bin_arg_parser():
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
     a.add_argument("--lst_start", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is first LST of first file.")
+    a.add_argument("--lst-width", type=float, default=2*np.pi, help="how much LST to bin in total, default is full 2pi.")
     a.add_argument("--rephase", default=False, action='store_true', help="rephase data to center of LST bin before binning")
     a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
     a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
