@@ -825,5 +825,6 @@ def lst_bin_arg_parser():
     a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
     a.add_argument("--ex_ant_yaml_files", default=None, type=str, nargs='+', help="list of paths to yamls with lists of antennas from each night to exclude lstbinned data files.")
     a.add_argument("--ignore-ants", default=(), type=int, nargs='+', help='ants to ignore')
+    a.add_argument("--log-level", default='INFO', type=str, help='level of the logger')
     a.add_argument("--write_kwargs", default='{}', type=str, help="json dictionary of arguments to the uvh5 writer")
     return a
