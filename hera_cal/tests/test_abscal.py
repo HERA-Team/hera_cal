@@ -1604,7 +1604,7 @@ class Test_Post_Redcal_Abscal_Run(object):
             delta_gains = abscal.post_redcal_abscal(model, copy.deepcopy(data), wgts, rc_flags_subset, verbose=False,
                                                     use_abs_amp_logcal=False, use_abs_amp_lincal=False)
         for k in delta_gains:
-            np.testing.assert_array_equal(np.abs(delta_gains[k]), 1)
+            np.testing.assert_array_almost_equal(np.abs(delta_gains[k]), 1)
 
     def test_post_redcal_abscal_run_units_warning(self, tmpdir):
         tmp_path = tmpdir.strpath
