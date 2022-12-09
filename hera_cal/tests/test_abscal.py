@@ -1598,6 +1598,14 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert delta_gains[k].shape == (3, rc_gains[k].shape[1])
             assert delta_gains[k].dtype == complex
 
+        # try running without amplitude solvers
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            delta_gains = abscal.post_redcal_abscal(model, copy.deepcopy(data), wgts, rc_flags_subset, verbose=False,
+                                                    use_abs_amp_logcal=False, use_abs_amp_lincal=False)
+        for k in delta_gains:
+            np.testing.assert_array_equal(np.abs(delta_gains[k]), 1)
+
     def test_post_redcal_abscal_run_units_warning(self, tmpdir):
         tmp_path = tmpdir.strpath
         calfile_units = os.path.join(tmp_path, 'redcal_units.calfits')
