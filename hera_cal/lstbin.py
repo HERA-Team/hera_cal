@@ -651,7 +651,9 @@ def config_lst_bin_files(
                 file_lsts.append(f_lst)
                 break
     lst_grid = np.array([lst for file_lsts in all_file_lsts for lst in file_lsts])
-
+    print("LSTGRID: ", lst_grid)
+    print("LSTGRID (hours): ", lst_grid * 12/np.pi)
+    
     return lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays
 
 
