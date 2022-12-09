@@ -3479,7 +3479,8 @@ def _get_idealized_antpos(cal_flags, antpos, pols, tol=1.0, keep_flagged_ants=Tr
 
 
 def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, kernel=(1, 15),
-                       phs_max_iter=100, phs_conv_crit=1e-6, verbose=True, use_abs_amp_lincal=True):
+                       phs_max_iter=100, phs_conv_crit=1e-6, verbose=True,
+                       use_abs_amp_logcal=True, use_abs_amp_lincal=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
@@ -3496,6 +3497,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
         phs_max_iter: maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
             the updates to all 1.0s.
+        use_abs_amp_logcal: start absolute amplitude calibration with a biased but robust first step. Default True.
         use_abs_amp_lincal: finish calibration with an unbiased amplitude lincal step. Default True.
 
     Returns:
@@ -3511,9 +3513,12 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     reds = redcal.get_reds(idealized_antpos, pols=data.pols(), bl_error_tol=redcal.IDEALIZED_BL_TOL)
 
     # Abscal Step 1: Per-Channel Logarithmic Absolute Amplitude Calibration
-    gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
-    abscal_delta_gains = {ant: gains_here[ant] for ant in ants}
-    apply_cal.calibrate_in_place(data, gains_here)
+    if use_abs_amp_logcal:
+        gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+        abscal_delta_gains = {ant: gains_here[ant] for ant in ants}
+        apply_cal.calibrate_in_place(data, gains_here)
+    else:
+        abscal_delta_gains = {ant: np.ones_like(rc_flags[ant], dtype=np.complex64) for ant in ants}
 
     # Abscal Step 2: Global Delay Slope Calibration
     binary_wgts = DataContainer({bl: (data_wgts[bl] > 0).astype(float) for bl in data_wgts})
