@@ -558,7 +558,15 @@ def lst_bin_arg_parser():
     return a
 
 
-def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verbose=True, ntimes_per_file=60):
+def config_lst_bin_files(
+    data_files: list[list[str]], 
+    dlst: float | None=None, 
+    atol: float=1e-10, 
+    lst_start: float | None=None, 
+    lst_width: float = 2*np.pi,
+    verbose: bool=True, 
+    ntimes_per_file: int=60
+):
     """
     Configure data for LST binning.
 
@@ -567,13 +575,20 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
 
     Parameters
     ----------
-    data_files : type=list of lists: nested set of lists, with each nested list containing paths to
-                 data files from a particular night. Frequency axis of each file must be identical.
-    dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
-    atol : type=float, absolute tolerance for LST bin float comparison
-    lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
+    data_files : list of lists
+        nested set of lists, with each nested list containing paths to
+        data files from a particular night. Frequency axis of each file must be identical.
+    dlst : float
+        LST bin width. If None, will get this from the first file in data_files.
+    atol : float
+        absolute tolerance for LST bin float comparison
+    lst_start : float
+        starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
         Default is first LST of the first file of the first night.
-    ntimes_per_file : type=int, number of LST bins in a single output file
+    lst_width : float
+        How much LST to bin.
+    ntimes_per_file : int
+        number of LST bins in a single output file
 
     Returns
     -------
@@ -608,7 +623,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
     begin_lst = lst_start
 
     # make 24 hour LST grid
-    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
+    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, lst_width=lst_width, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
 
     # enforce that lst_arrays are in the same range as the lst_grid
@@ -970,7 +985,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         garbage_collector.collect()
 
 
-def make_lst_grid(dlst, begin_lst=None, verbose=True):
+def make_lst_grid(dlst, begin_lst=None, lst_width: float = 2*np.pi, verbose: bool=True):
     """
     Make a uniform grid in local sidereal time spanning 2pi radians.
 
@@ -1003,7 +1018,7 @@ def make_lst_grid(dlst, begin_lst=None, verbose=True):
         dlst = new_dlst
 
     # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
-    lst_grid = np.arange(0, 2 * np.pi - 1e-7, dlst) + dlst / 2
+    lst_grid = np.arange(0, lst_width - 1e-7, dlst) + dlst / 2
 
     # shift grid by begin_lst
     if begin_lst is not None:

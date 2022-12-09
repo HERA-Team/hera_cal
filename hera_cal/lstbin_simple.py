@@ -419,6 +419,7 @@ def lst_bin_files(
     overwrite: bool=False, 
     history: str='', 
     lst_start: float | None = None,
+    lst_width: float = 2*np.pi,
     atol: float=1e-6,  
     rephase: bool=False,
     output_file_select: int | Sequence[int] | None=None, 
@@ -496,6 +497,7 @@ def lst_bin_files(
         atol=atol, 
         lst_start=lst_start,
         ntimes_per_file=n_lstbins_per_outfile, 
+        lst_width=lst_width,
         verbose=False
     )
 
