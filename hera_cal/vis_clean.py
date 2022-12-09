@@ -1136,21 +1136,24 @@ class VisClean(object):
 
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
                 if 0 not in din.shape:
-                    if interleave:
+                    if not interleave or not (ax.lower() == 'time' or ax.lower() =='both'):
                         mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                                               filter_half_widths=filter_half_widths,
                                                               mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
                                                               **filter_kwargs)
 
                     else:
-                        xp1, xp2, din1, din2, win1, win2 = deinterleave(x=xp, data=din, wgts=win, ax=ax)
-                        mdl1, res1, info1 = dspec.fourier_filter(x=xp1, data=din1, wgts=win1, filter_centers=filter_centers,
-                                                                 filter_half_widths=filter_half_widths,
-                                                                 mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt, **filter_kwargs)
-                        mdl2, res2, info2 = dspec.fourier_filter(x=xp2, data=din2, wgts=win2, filter_centers=filter_centers,
-                                                                 filter_half_widths=filter_half_widths,
-                                                                 mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt, **filter_kwargs)
-                        mdl, res, info = interleave(mdl1, mdl2, res1, res2, info1, info2, ax=ax)
+                        tsets, dsets, wsets = deinterleave_data_in_time(taxis=xp[0], data=din, wgts=win, ninterleave=ninterleave)
+                        mdls, ress, infos = []
+                        for inum in range(ninterleave):
+                            mdlt, rest, infot = dspec.fourier_filter(x=[tsets[inum], xp[1]], data=dsets[inum],
+                                                                     wgts=win[inum], filter_centers=filter_centers,
+                                                                     filter_half_widths=filter_half_widths,
+                                                                     mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt, **filter_kwargs)
+                            mdls.append(mdlt)
+                            ress.append(rest)
+                            infos.append(infot)
+                            
                         
                         
                     # insert back the filtered model if we are skipping flagged edgs.
