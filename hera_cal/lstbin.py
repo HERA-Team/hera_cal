@@ -1021,7 +1021,7 @@ def make_lst_grid(dlst, begin_lst=None, lst_width: float = 2*np.pi, verbose: boo
         dlst = new_dlst
 
     # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
-    lst_grid = np.arange(0, lst_width - 1e-7, dlst) + dlst / 2
+    lst_grid = np.arange(0, 2*np.pi - 1e-7, dlst) + dlst / 2
 
     # shift grid by begin_lst
     if begin_lst is not None:
@@ -1035,6 +1035,7 @@ def make_lst_grid(dlst, begin_lst=None, lst_width: float = 2*np.pi, verbose: boo
         print("LST_GRID1xx:", lst_grid)
         lst_grid += begin_lst
 
+    lst_grid = lst_grid[lst_grid < begin_lst + lst_width]
     return lst_grid
 
 
