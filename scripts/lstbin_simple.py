@@ -35,7 +35,9 @@ from hera_cal import lstbin_simple as lstbin
 import sys
 import glob
 import json
+from hera_cal._cli_tools import setup_logger
 
+setup_logger()
 a = lstbin.lst_bin_arg_parser()
 args = a.parse_args()
 history = ' '.join(sys.argv)
