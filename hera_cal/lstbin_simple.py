@@ -411,7 +411,7 @@ def lst_bin_files_for_baselines(
 @profile
 def lst_bin_files(
     data_files: list[list[str]], 
-    input_cals: list[list[str]] | None = None, 
+    calfile_rules: tuple[tuple[str, str]] = (), 
     dlst: float | None=None, 
     n_lstbins_per_outfile: int=60,
     file_ext: str="{type}.{time:7.5f}.uvh5", 
@@ -429,6 +429,7 @@ def lst_bin_files(
     ex_ant_yaml_files=None, 
     ignore_ants: tuple[int]=(),
     write_kwargs: dict | None = None,
+    ignore_missing_calfiles: bool = False,
 ):
     """
     LST bin a series of UVH5 files.
@@ -492,15 +493,29 @@ def lst_bin_files(
     """
     # Check that that there are the same number of input data files and 
     # calibration files each night.
-    if input_cals is not None:
-        if len(input_cals) != len(data_files):
-            raise ValueError("Number of input_cal nights must be equal to number of data_file nights")
-        for j, (nc, nd) in enumerate(zip(input_cals, data_files)):
-            if len(nc) != len(nd):
-                raise ValueError(
-                    f"Number of input_cal files different to datafiles on night {j+1}."
-                    f"Got {nc} vs {nd}"
-                )
+    
+    input_cals = []
+    if calfile_rules:
+        
+        for night, dflist in enumerate(data_files):
+            this = []
+            input_cals.append(this)
+            missing = []
+            for df in dflist:
+                cf = df
+                for rule in calfile_rules:
+                    cf = cf.replace(rule[0], rule[1]) 
+                
+                if not os.path.exists(cf):
+                    if ignore_missing_calfiles:
+                        warnings.warn(f"Calibration file {cf} does not exist")
+                        missing.append(df)
+                    else:
+                        raise IOError(f"Calibration file {cf} does not exist")
+                else:
+                    this.append(cf)
+        
+            data_files[i] = [df for df in dflist if df not in missing]
 
     # get file lst arrays
     lst_grid, dlst, file_lsts, begin_lst, lst_arrs, time_arrs = config_lst_bin_files(
@@ -823,7 +838,10 @@ def lst_bin_arg_parser():
         )
     )
     a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to nightly data files (UVH5)")
-    a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to corresponding nightly calibration files")
+    a.add_argument(
+        "--calfile-rules", nargs='*', type=str, 
+        help="rules to convert datafile names to calfile names. A series of two strings where the first will be replaced by the latter"
+    )
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
     a.add_argument("--ntimes_per_file", dest='n_lstbins_per_outfile', type=int, default=60, help="number of LST bins to write per output file")
     a.add_argument("--file_ext", type=str, default="{type}.{time:7.5f}.uvh5", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
@@ -840,6 +858,7 @@ def lst_bin_arg_parser():
     a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
     a.add_argument("--ex_ant_yaml_files", default=None, type=str, nargs='+', help="list of paths to yamls with lists of antennas from each night to exclude lstbinned data files.")
     a.add_argument("--ignore-ants", default=(), type=int, nargs='+', help='ants to ignore')
+    a.add_argument("--ignore-missing-calfiles", default=False, type=bool, help='if true, any datafile with missing calfile will just be removed from lstbinning.')
     a.add_argument("--log-level", default='INFO', type=str, help='level of the logger')
     a.add_argument("--write_kwargs", default='{}', type=str, help="json dictionary of arguments to the uvh5 writer")
     return a
