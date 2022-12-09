@@ -1555,49 +1555,32 @@ def deinterleave_data_in_time(taxis, data: np.ndarray, wgts: np.ndarray, ninterl
     return tsets, dsets, wsets
 
 
-def interleave_data_in_time(tsets, dsets, wsets):
+def interleave_data_in_time(dsets):
     """
     Helper function for interleaving sets of time-ordered data along time axis.
 
     Parameters
     -------
-    tsets: list of np.ndarray
-        list of observation times sorted into the different interleaves
-        length equal to interleave
-    
     dsets: list of np.ndarray
         list of data arrays sorted into ninterleave different interleaves.
-    wsets: list of np.ndarray
-        list of wgts sorted into ninterleave different interleaves.
 
     Returns
     ----------
-    taxis: np.ndarray
-        ntime 1d array of times.
-        times are assumed to be ordered from earliest to latest!
     data: np.ndarray
         ntime x nfrequency np.ndarray containing data to deinterleave. Typically complex type.
         data is assumed to be time ordered!
-    wgts: np.ndarray
-        ntime x nfrequency np.ndarray containing data weights. Typically float type.
-        wgts are assumed to be time ordered!
     """
-    taxis = []
     data = []
-    wgts = []
-    ntimes = [tset.shape[0] for tset in tsets]
+    ntimes = [dset.shape[0] for dset in dsets]
     ninterleaves = len(ntimes)
     counters = [0 for i in range(ninterleaves)]
     nmax = int(np.max(ntimes))
     for tstep in range(nmax):
         for inum in range(ninterleave):
             if counters[inum] < ntimes[inum]:
-                taxis.append(tsets[inum][tstep])
                 data.append(dsets[inum][tstep])
-                wgts.append(wsets[inum][tstep])
-                
             counters[inum] += 1
     # return interleaved data sets.
-    return np.asarray(taxis), np.asarray(data), np.asarray(wgts)
+    return np.asarray(data)
     
         

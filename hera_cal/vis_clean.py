@@ -1153,6 +1153,10 @@ class VisClean(object):
                             mdls.append(mdlt)
                             ress.append(rest)
                             infos.append(infot)
+                        # recombine mdls, ress, infos
+                        mdl = interleave_data_in_time(mdls)
+                        res = interleave_data_in_time(ress)
+                        info = _interleave_statuses(infos)
                             
                         
                         
@@ -1887,7 +1891,6 @@ def _trim_status(info_dict, axis, zeropad):
     for i in range(nints):
         statuses[i] = statuses.pop(i + zeropad)
 
-
 def _adjust_info_indices(x, info_dict, edges, freq_baseind):
     """Adjust indices in info dict to reflect rows inserted by restore_flagged_edges
 
@@ -1921,7 +1924,27 @@ def _adjust_info_indices(x, info_dict, edges, freq_baseind):
                 statuses[ind + offset + baseinds[axind]] = statuses.pop(ind)
             offset -= edge[0]
 
+def _interleave_infos(infos):
+    """
+    Helper function to combine info dicts from interleaved filter application.
 
+    Parameters
+    ----------
+    infos: list of info dicts specified by fourier_filter
+
+    Returns
+    -------
+    info: combined info dicts with different time steps interleaved.
+    If a particular interleave failed to run correctly, the success
+    in time filtering a particular channel is set by the OR of success of all the 
+    different interleaved time steps.
+    """
+    # use the first infos as output template.
+    info = copy.deepcopy(infos[0])
+    # iterate through infos, copy statuses 
+    
+
+            
 # ------------------------------------------
 # Here is an argparser with core arguments
 # needed for all types of xtalk and delay
