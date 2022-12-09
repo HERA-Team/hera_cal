@@ -623,6 +623,7 @@ def config_lst_bin_files(
     begin_lst = lst_start
 
     # make 24 hour LST grid
+    print("BEGIN_LST: ", begin_lst)
     lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, lst_width=lst_width, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
 
