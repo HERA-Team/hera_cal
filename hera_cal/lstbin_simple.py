@@ -490,6 +490,18 @@ def lst_bin_files(
     zen.{pol}.LST.{file_lst}.uv : holds LST bin avg (data_array) and bin count (nsample_array)
     zen.{pol}.STD.{file_lst}.uv : holds LST bin stand dev along real and imag (data_array)
     """
+    # Check that that there are the same number of input data files and 
+    # calibration files each night.
+    if input_cals is not None:
+        if len(input_cals) != len(data_files):
+            raise ValueError("Number of input_cal nights must be equal to number of data_file nights")
+        for j, (nc, nd) in enumerate(zip(input_cals, data_files)):
+            if len(nc) != len(nd):
+                raise ValueError(
+                    f"Number of input_cal files different to datafiles on night {j+1}."
+                    f"Got {nc} vs {nd}"
+                )
+
     # get file lst arrays
     lst_grid, dlst, file_lsts, begin_lst, lst_arrs, time_arrs = config_lst_bin_files(
         data_files, 
