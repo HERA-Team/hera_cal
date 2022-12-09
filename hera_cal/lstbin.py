@@ -1029,7 +1029,10 @@ def make_lst_grid(dlst, begin_lst=None, lst_width: float = 2*np.pi, verbose: boo
         if begin_lst < 0 or begin_lst >= 2 * np.pi:
             utils.echo("begin_lst was < 0 or >= 2pi, taking modulus with (2pi)", verbose=verbose)
             begin_lst = begin_lst % (2 * np.pi)
+        print("BEFORE BEGIN: ", begin_lst)
         begin_lst = lst_grid[np.argmin(np.abs(lst_grid - begin_lst))] - dlst / 2
+        print("AFTER BEGIN: ", begin_lst)
+        print("LST_GRID1xx:", lst_grid)
         lst_grid += begin_lst
 
     return lst_grid
