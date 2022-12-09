@@ -36,14 +36,19 @@ import sys
 import glob
 import json
 from hera_cal._cli_tools import setup_logger
+import logging
 
+logger = logging.getLogger('hera_cal')
 setup_logger()
 a = lstbin.lst_bin_arg_parser()
 args = a.parse_args()
+
 history = ' '.join(sys.argv)
 
 # get kwargs
 kwargs = dict(vars(args))
+
+logger.setLevel(kwargs.pop("log_level"))
 
 # configure history
 kwargs['history'] += history
