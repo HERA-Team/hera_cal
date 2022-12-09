@@ -34,6 +34,7 @@ Note: make sure the search strings are bounded by quotations!
 from hera_cal import lstbin_simple as lstbin
 import sys
 import glob
+import json
 
 a = lstbin.lst_bin_arg_parser()
 args = a.parse_args()
@@ -59,12 +60,22 @@ if input_cals is not None:
 if not isinstance(data_files[0], list):
     raise ValueError("data_files is not a set of nested lists. check input to data_files. See lstbin_run.py doc-string for examples.")
 
+write_kwargs = json.load(kwargs.pop('write_kwargs'))
+if not write_kwargs:
+    write_kwargs = {}
+
+if not isinstance(write_kwargs, dict):
+    raise ValueError("write_kwargs must be a json dictionary")
+
 # configure vis_units
 if args.vis_units is None:
     del kwargs['vis_units']
+
+if 'vis_units' in kwargs:
+    write_kwargs['vis_units'] = kwargs.pop('vis_units')
 
 # handle output_file_select fed as None
 if kwargs['output_file_select'] == ['None']:
     del kwargs['output_file_select']
 
-lstbin.lst_bin_files(data_files, input_cals=input_cals, **kwargs)
+lstbin.lst_bin_files(data_files, input_cals=input_cals, write_kwargs=write_kwargs, **kwargs)
