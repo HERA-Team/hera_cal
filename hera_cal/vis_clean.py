@@ -17,7 +17,6 @@ from pyuvdata import utils as uvutils
 
 from . import io, apply_cal, utils, redcal
 from .datacontainer import DataContainer
-from .utils import echo, interleave_data_in_time, deinterleave_data_in_time
 from .flag_utils import factorize_flags
 
 def discard_autocorr_imag(data_container):
@@ -1135,31 +1134,11 @@ class VisClean(object):
                     win = flag_rows_with_flags_within_edge_distance(xp, win, skip_if_flag_within_edge_distance, ax=ax)
 
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
-                if 0 not in din.shape:
-                    if not interleave or not (ax.lower() == 'time' or ax.lower() =='both'):
-                        mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
-                                                              filter_half_widths=filter_half_widths,
-                                                              mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
-                                                              **filter_kwargs)
-
-                    else:
-                        tsets, dsets, wsets = deinterleave_data_in_time(taxis=xp[0], data=din, wgts=win, ninterleave=ninterleave)
-                        mdls, ress, infos = []
-                        for inum in range(ninterleave):
-                            mdlt, rest, infot = dspec.fourier_filter(x=[tsets[inum], xp[1]], data=dsets[inum],
-                                                                     wgts=win[inum], filter_centers=filter_centers,
-                                                                     filter_half_widths=filter_half_widths,
-                                                                     mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt, **filter_kwargs)
-                            mdls.append(mdlt)
-                            ress.append(rest)
-                            infos.append(infot)
-                        # recombine mdls, ress, infos
-                        mdl = interleave_data_in_time(mdls)
-                        res = interleave_data_in_time(ress)
-                        info = _interleave_statuses(infos)
-                            
-                        
-                        
+                mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                                      filter_half_widths=filter_half_widths,
+                                                      mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                                      **filter_kwargs)
+                                        
                     # insert back the filtered model if we are skipping flagged edgs.
                     if skip_flagged_edges:
                         mdl = restore_flagged_edges(mdl, chunks, edges, ax=ax)
@@ -1923,26 +1902,6 @@ def _adjust_info_indices(x, info_dict, edges, freq_baseind):
             for ind in range(chunk[1] - 1, chunk[0] - 1, -1):
                 statuses[ind + offset + baseinds[axind]] = statuses.pop(ind)
             offset -= edge[0]
-
-def _interleave_infos(infos):
-    """
-    Helper function to combine info dicts from interleaved filter application.
-
-    Parameters
-    ----------
-    infos: list of info dicts specified by fourier_filter
-
-    Returns
-    -------
-    info: combined info dicts with different time steps interleaved.
-    If a particular interleave failed to run correctly, the success
-    in time filtering a particular channel is set by the OR of success of all the 
-    different interleaved time steps.
-    """
-    # use the first infos as output template.
-    info = copy.deepcopy(infos[0])
-    # iterate through infos, copy statuses 
-    
 
             
 # ------------------------------------------
