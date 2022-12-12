@@ -26,12 +26,12 @@ from .utils import echo
 import datetime
 import astropy.constants as const
 from . import redcal
-from .utils import echo, interleave_data_in_time, deinterleave_data_in_time
+from .utils import echo
 
 SPEED_OF_LIGHT = const.c.si.value
 SDAY_KSEC = units.sday.to("ks")
 
-def deinterleave_data_in_time(taxis, data: np.ndarray, wgts: np.ndarray, ninterleave=2):
+def deinterleave_data_in_time(taxis, data: np.ndarray, ninterleave=2):
     """
     Helper function for deinterleaving *time-ordered* data along time axis.
 
@@ -41,13 +41,8 @@ def deinterleave_data_in_time(taxis, data: np.ndarray, wgts: np.ndarray, ninterl
         ntime 1d array of times.
         times are assumed to be ordered from earliest to latest!
     data: np.ndarray
-        ntime x nfrequency np.ndarray containing data to deinterleave. Typically complex type.
-        data is assumed to be time ordered!
-    wgts: np.ndarray
-        ntime x nfrequency np.ndarray containing data weights. Typically float type.
-        wgts are assumed to be time ordered!
-    ninterleave: integer, optional
-        number of interleaves to split data into.
+        ntime x nfrequency np.ndarray containing data to deinterleave.
+        data is assumed to be time ordered on 0 axis!
 
     Returns
     -------
@@ -57,18 +52,15 @@ def deinterleave_data_in_time(taxis, data: np.ndarray, wgts: np.ndarray, ninterl
     
     dsets: list of np.ndarray
         list of data arrays sorted into ninterleave different interleaves.
-    wsets: list of np.ndarray
-        list of wgts sorted into ninterleave different interleaves.
     """
     if len(taxis) < ninterleave or len(data) < ninterleave or len(wgts) < ninterleave:
         raise ValueError("Number of times provided is less then the number of interleaves")
-    tsets, dsets, wsets = [], [], []
+    tsets, dsets = [], []
     for i in range(ninterleave):
         tsets.append(taxis[i::ninterleave])
         dsets.append(data[i::ninterleave])
-        wsets.append(wgts[i::ninterleave])
     
-    return tsets, dsets, wsets
+    return tsets, dsets
 
 
 def interleave_data_in_time(dsets):
@@ -923,7 +915,7 @@ class FRFilter(VisClean):
     FRFilter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
     """
     
-    def _deinterleave_data_in_time(self, ninterleave=2, keys=None, remove_interleaved=True):
+    def _deinterleave_data_in_time(self, container_name, ninterleave=2, keys=None, remove_interleaved=True, set_time_sets=True):
         """
         Helper function to convert attached data and weights to time interleaved data and weights.
 
@@ -933,42 +925,63 @@ class FRFilter(VisClean):
         
         Parameters
         ---------
+        container_name: str
+            name of container to deinterleave.
         ninterleave: int, optional
             Number of interleaves to split all datacontainers into.
         keys: list (optional)
             List of antpairpol keys specifying which baseline/pols to split into de-interleaved sets.
         remove_originals: bool, optional
             Delete original 
-        
+        set_time_sets: bool, optional
+            Attach set of lits of times in each interleave set to self.
         Returns
         -------
         N/A
         
         """
+        container = getattr(self, container_name)
         if keys is None:
-            # only use original data here.
-            keys = [k for k in self.data.keys() if len(k) == 3]
-
+            keys = container.keys()
+        # generate an interleaved container
+        for inum in range(ninterleave):
+            newcontainer = DataContainer({})
+            setattr(self, container_name + f'_{inum}', newcontainer)
+            
         for k in keys:
-            tsets, dsets, wsets = deinterleave_data_in_time(self.times, self.data[k],
-                                                            self.weights[k], ninterleave=ninterleave)
-            for inum in range(len(dsets)):
-                self.data[k + (inum, )] = dsets[inum]
-                self.weights[k + (inum, )] = wsets[inum]
-
+            tsets, dsets = deinterleave_data_in_time(self.times, container[k], ninterleave=ninterleave)
+            for inum in range(ninterleave):
+                container[k] = dsets[inum]
             if remove_interleaved:
-                del self.data[k]
-                del self.weights[k]
+                del container[k]
                 
-        self.time_sets = tsets
-        
-
-    def _interleave_data_in_time(self, container, keys=None, remove_deinterleaved=True):
+        if set_time_sets:
+            self.time_sets = tsets
+            self.lst_sets = [[] for i in range(ninerleave)]
+            # populate lsts
+            iset = 0
+            for time, lst in zip(self.times, self.lsts):
+                self.lst_sets[iset].append(lst)
+                iset = (iset + 1) % ninterleave
+            self.lst_sets = [np.asarray(lst_set) for lst_set in self.lst_sets]
+            
+                
+    def _interleave_data_in_time(self, container_name, keys=None, remove_deinterleaved=True):
         """
         Helper function to restore deinterleaved data back to interleaved data.
         
         Parameters
+        ----------
+        container_name: str
+            name of container to interleave.
+        keys: list, optional
+            list of blpairpol keys for baselines to interleave (excluding interleave ind.
+            Default is None -> use all keys on container specified by container_name.
+        remove_deinterleaved: bool, optional
+            delete deinterleaved data.
+            default is True
         """
+            container = getattr(self, container_name)
             interleaved_baselines = set([k[:2] for k in container if len(k) == 4])
             ninterleaves = len(set([k[-1] for k in container if len(k) == 4]))
             if keys is None:
@@ -987,7 +1000,7 @@ class FRFilter(VisClean):
     
     def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None,
                      wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
-                     verbose=True, output_prefix='avg', keys=None, overwrite=False):
+                     verbose=True, output_prefix='avg', keys=None, overwrite=False, ninterleaves=1):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
         The resultant averaged data, flags, time arrays, etc. are attached to self
@@ -1238,14 +1251,28 @@ class FRFilter(VisClean):
             if 'data' in filter_kwargs_no_data:
                 del filter_kwargs_no_data['data']
         if ninterleave > 1:
-            self._deinterleave_data_in_time(ninterleave=ninterleave, keys=keys, remove_interleaved=True)
+            self._deinterleave_data_in_time("data", ninterleave=ninterleave, keys=keys, remove_interleaved=True)
+            self._deinterleave_data_in_time("flags", ninterleave=interleave, keuys=keys, remove_interleaved=True, set_time_sets=False)
+            self._deinterleave_data_in_time("nsamples", ninterleave=interleave, keuys=keys, remove_interleaved=True, set_time_sets=False)
+            
             keys_interleaved = []
             for k in keys:
                 for i in range(ninterleave):
                     keys_interleaved.append(k + (i, ))
         else:
             keys_interleaved = copy.deepcopy(keys)
-                    
+
+            
+      if 'output_prefix' in filter_kwargs:
+            data_name = filter_kwargs['output_prefix'] + '_data'
+            filtered_name = filter_kwargs['output_prefix'] + '_model'
+            filtered_resid = filter_kwargs['output_prefix'] + '_resid'                
+        else:
+            data_name = 'clean_data'
+            filtered_name = 'clean_model'
+            resid_name = 'clean_resid'
+
+            
         for k in keys_interleaved:
             if mode != 'clean':
                 filter_kwargs['suppression_factors'] = [tol]
@@ -1294,14 +1321,10 @@ class FRFilter(VisClean):
                                     ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
 
             # recenter data in fringe-rate by multiplying back the phaser.
-            if 'output_prefix' in filter_kwargs:
-                filtered_data = getattr(self, filter_kwargs['output_prefix'] + '_data')
-                filtered_model = getattr(self, filter_kwargs['output_prefix'] + '_model')
-                filtered_resid = getattr(self, filter_kwargs['output_prefix'] + '_resid')
-            else:
-                filtered_data = self.clean_data
-                filtered_model = self.clean_model
-                filtered_resid = self.clean_resid
+            filtered_data = getattr(self, data_name)
+            filtered_model = getattr(self, model_name)
+            filtered_resid = getattr(self, filtered_name)
+
             filtered_data[k] *= phasor[:, None]
             filtered_model[k] *= phasor[:, None]
             filtered_resid[k] *= phasor[:, None]
@@ -1315,13 +1338,13 @@ class FRFilter(VisClean):
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
         # re-interleave data
         if ninterleave > 1:
-            for _, container in self.__dict__.items():
-                # interleave container.
-                self._interleave_data_in_time(container, keys=keys_interleaved, remove_deinterleaved=True)
+            # interleave container.
+            self._interleave_data_in_time(, keys=keys_interleaved, remove_deinterleaved=True)
 
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
                             wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
-                            filetype='uvh5', verbose=False, clobber=False, flag_output=None, **read_kwargs):
+                            filetype='uvh5', verbose=False, clobber=False, flag_output=None,
+                            ninterleave=1, **read_kwargs):
     """Time-averaging with a baseline cornerturn
 
 
@@ -1354,8 +1377,11 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         default is False
     flag_output: str, optional
         string to write flag output. Optional.
+    ninterleave: int, optional
+        number of subsets to break data into for interleaving.
     read_kwargs: kwargs dict
         additional kwargs for for io.HERAData.read()
+    
     Returns
     -------
     None
@@ -1367,11 +1393,44 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
     else:
         fr = FRFilter(input_data_list, filetype=filetype)
         fr.read(bls=baseline_list, **read_kwargs)
+        # deinterleave data to be averaged separately.
+        if ninterleave > 1:
+            fr._deinterleave_data_in_time("data", ninterleave=ninterleave)
+            fr._deinterleave_data_in_time("flags", ninterleave=ninterleave, set_time_sets=False)
+            fr._deinterleave_data_in_time("nsamples", ninterleave=ninterleave, set_time_sets=False)
+            # run time average on each interleaved data set
+            for inum in range(ninterleave):
+                data = getattr(self, f'data_{inum}')
+                flags = getattr(self, f'flags_{inum}')
+                nsamples = getattr(self, f'nsamples_{inum}')
+                
+                fr.timeavg_data(fr.data, flags=flags, nsamples=nsamples,
+                                times=self.time_sets[inum], lsts=self.lst_sets[inum], t_avg=t_avg,
+                                keys=[k for k in self.data if k[-1] == inum], wgt_by_nsample=wgt_by_nsample,
+                                wgt_by_favg_nsample=wgt_by_favg_nsample, rephase=rephase, output_prefix=f'avg_{inum}')
+                
+                # relable keys to antpolpairs in avg sets
+                avg_data = getattr(self, f'avg_{inum}_data')
+                avg_nsamples = getattr(self, f'avg_{inum}_nsamples')
+                avg_flags = getattr(self, f'avg_{inum}_flags')
+                avg_times = getattr(self, f'avg_{inum}_times')
+                avg_lsts = getattr(self, f'avg_{inum}_lsts')
 
-        fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
-                        wgt_by_nsample=wgt_by_nsample, wgt_by_favg_nsample=wgt_by_favg_nsample, rephase=rephase)
-        fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
-                      nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
+                
+                # write data
+                fr.write_data(data=DataContainer(data=avg_data), flags=avg_flags, nsamples=avg_nsamples,
+                              times=fr.avg_times[inum]. lsts=fr.avg_lsts[inum])
+    
+                
+                
+                                            output_data, overwrite=clobber, filetype=filetype,
+            
+        
+        else:
+            fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
+                            wgt_by_nsample=wgt_by_nsample, wgt_by_favg_nsample=wgt_by_favg_nsample, rephase=rephase)
+            fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
+                          nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
         if flag_output is not None:
             uv_avg = UVData()
             uv_avg.read(output_data)
@@ -1435,6 +1494,10 @@ def tophat_frfilter_argparser(mode='clean'):
             "If case == 'sky': then use fringe-rates corresponding to range of ",
             "instantanous fringe-rates that include sky emission.")
     filt_options.add_argument("--case", default="sky", help=' '.join(desc), type=str)
+    desc = ("Number interleaved time subsets to split the data into ", 
+           "and apply independent fringe-rate filters. Default is 1 (no interleaved filters.")
+    filt_options.add_argument("--ninterleave", default=1, type="int", help=desc)
+    
     return ap
 
 
@@ -1668,5 +1731,4 @@ def time_average_argparser():
     ap.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
     ap.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
     ap.add_argument("--filetype", default="uvh5", type=str, help="optional filetype specifier. Default is 'uvh5'. Set to 'miriad' if reading miriad files etc...")
-
     return ap
