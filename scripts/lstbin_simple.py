@@ -81,6 +81,7 @@ if kwargs['output_file_select'] == ['None']:
 
 # Handle calfile rules
 # Turn a list into a list of 2-tuples.
-calfile_rules = [(kwargs['calfile_rules'][i], kwargs['calfile_rules'][i+1]) for i in range(len(kwargs['calfile_rules'])//2)]
+crules = kwargs.pop("calfile_rules")
+calfile_rules = [(crules[i], crules[i+1]) for i in range(len(crules)//2)]
 
-lstbin.lst_bin_files(data_files, write_kwargs=write_kwargs, **kwargs)
+lstbin.lst_bin_files(data_files, calfile_rules=calfile_rules, write_kwargs=write_kwargs, **kwargs)
