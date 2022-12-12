@@ -515,7 +515,7 @@ def lst_bin_files(
                 else:
                     this.append(cf)
         
-            data_files[i] = [df for df in dflist if df not in missing]
+            data_files[night] = [df for df in dflist if df not in missing]
 
     # get file lst arrays
     lst_grid, dlst, file_lsts, begin_lst, lst_arrs, time_arrs = config_lst_bin_files(
