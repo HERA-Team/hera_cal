@@ -517,6 +517,15 @@ def lst_bin_files(
         
             data_files[night] = [df for df in dflist if df not in missing]
 
+    logger.info("Got the following numbers of data files per night:")
+    for dflist in data_files:
+        logger.info(f"{dflist[0].split('/')[-1]}: {len(dflist)}")
+    
+    # Prune empty nights (some nights start with files, but have files removed because
+    # they have no associated calibration)
+    data_files = [df for df in data_files if df]
+    input_cals = [cf for cf in input_cals if cf]
+
     # get file lst arrays
     lst_grid, dlst, file_lsts, begin_lst, lst_arrs, time_arrs = config_lst_bin_files(
         data_files, 
