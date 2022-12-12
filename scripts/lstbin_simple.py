@@ -57,12 +57,6 @@ kwargs['history'] += history
 data_files = [sorted(glob.glob(s.strip("'").strip('"'))) for s in args.data_files]
 del kwargs['data_files']
 
-# configure input_cals
-input_cals = kwargs['input_cals']
-del kwargs['input_cals']
-if input_cals is not None:
-    input_cals = [sorted(glob.glob(s.strip("'").strip('"'))) for s in args.input_cals]
-
 # ensure data_files is a set of nested lists
 if not isinstance(data_files[0], list):
     raise ValueError("data_files is not a set of nested lists. check input to data_files. See lstbin_run.py doc-string for examples.")
@@ -85,4 +79,4 @@ if 'vis_units' in kwargs:
 if kwargs['output_file_select'] == ['None']:
     del kwargs['output_file_select']
 
-lstbin.lst_bin_files(data_files, input_cals=input_cals, write_kwargs=write_kwargs, **kwargs)
+lstbin.lst_bin_files(data_files, write_kwargs=write_kwargs, **kwargs)
