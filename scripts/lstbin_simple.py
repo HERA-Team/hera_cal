@@ -79,4 +79,8 @@ if 'vis_units' in kwargs:
 if kwargs['output_file_select'] == ['None']:
     del kwargs['output_file_select']
 
+# Handle calfile rules
+# Turn a list into a list of 2-tuples.
+calfile_rules = [(kwargs['calfile_rules'][i], kwargs['calfile_rules'][i+1]) for i in range(len(kwargs['calfile_rules'])//2)]
+
 lstbin.lst_bin_files(data_files, write_kwargs=write_kwargs, **kwargs)
