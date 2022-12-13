@@ -1071,7 +1071,7 @@ class FRFilter(VisClean):
 
         # setup containers
         for n in ['data', 'flags', 'nsamples']:
-            name = "{}_{}{}".format(output_prefix, n, f"_{output_postfix}")
+            name = "{}_{}_{}".format(output_prefix, n, output_postfix)
             if not hasattr(self, name):
                 setattr(self, name, DataContainer({}))
             if n == 'data':
@@ -1660,11 +1660,21 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                                                                         percentile_high=percentile_high,
                                                                         fr_freq_skip=fr_freq_skip,
                                                                         verbose=verbose, nfr=nfr)
+                # Lists of names of datacontainers that will hold each interleaved data set until they are
+                # recombined.
+                filtered_data_names = [ f'clean_data_interleave_{inum}' for inum in range(ninterleave) ]
+                filtered_flag_names = [ fstr.replace('data', 'flag') for fstr in filtered_data_names ]
+                filtered_resid_names = [ fstr.replace('data', 'resid') for fstr in filtered_data_names ]
+                filtered_model_names = [ fstr.replace('data', 'model') for fstr in filtered_data_names ]
+                filtered_resid_flag_names = [ fstr.replace('data', 'resid_flags') for fstr in filtered_data_names ]
+                
                 for inum in range(ninterleave):
+                    
                     # Build weights using flags, nsamples, and exlcuded lsts
                     flags = getattr(frfil, f'flags_interleave_{inum}')
                     nsamples = getattr(frfil, f'nsamples_interleave_{inum}')
                     wgts = io.DataContainer({k: (~flags[k]).astype(float) for k in flags})
+                    
                     lsts = frfil.lst_sets[inum]
                     for k in wgts:
                         if wgt_by_nsample:
@@ -1681,9 +1691,18 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                     filter_kwargs['data'] = f'data_interleave_{inum}'
                     filter_kwargs['flags'] = f'flags_interleave_{inum}'
                     filter_kwargs['nsamples'] = f'nsamples_interleave_{inum}'
+
+                    
                     # run tophat filter
                     frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
                                           keys=keys, verbose=verbose, wgts=wgts, **filter_kwargs)
+                
+                frfil._interleave_data_in_time(filtered_data_names, 'clean_data')
+                frfil._interleave_data_in_time(filtered_flag_names, 'clean_flags')
+                frfil._interleave_data_in_time(filtered_resid_names,' clean_resid')
+                frfil._interleave_data_in_time(filtered_resid_flag_names, 'clean_resid_flags')
+                frfil._interleave_data_in_time(filtered_model_names, 'clean_model')
+
             else:
                 frfil.clean_data = DataContainer({})
                 frfil.clean_flags = DataContainer({})
@@ -1701,7 +1720,6 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                         frfil.clean_model[bl] = np.zeros_like(frfil.data[bl])
                         frfil.clean_resid_flags[bl] = frfil.flags[bl]
             # interleave data again.
-            frfil._interleave_data_in_time()
             
             
             frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,

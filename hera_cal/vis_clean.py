@@ -721,7 +721,7 @@ class VisClean(object):
 
     def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
                   ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
-                  min_dly=10.0, max_frate=None, output_prefix='clean',
+                  min_dly=10.0, max_frate=None, output_prefix='clean', output_postfix='',
                   skip_wgt=0.1, verbose=False, tol=1e-9,
                   overwrite=False, **filter_kwargs):
         """
@@ -747,6 +747,10 @@ class VisClean(object):
         min_dly: max delay (in nanosec) used for freq filter is never below this.
         max_frate : max fringe rate (in milli-Hz) used for time filtering. See hera_filters.dspec.fourier_filter for options.
         output_prefix : str, attach output model, resid, etc, to self as output_prefix + '_model' etc.
+        output_postfix : str, optional
+             postfix to append to names of time averaged data containers.
+             Example: 'avg' means that 'data' -> 'data_avg'
+             Default is '', an empty string.
         cache: dict, optional
             dictionary for caching fitting matrices.
         skip_wgt : skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
@@ -877,7 +881,14 @@ class VisClean(object):
         data : DataContainer, data to clean. Default is self.data
         flags : Datacontainer, flags to use. Default is self.flags
         wgts : DataContainer, weights to use. Default is None.
-        output_prefix : string, prefix for attached filter data containers.
+        output_prefix : str, optional
+             Prefix for attached filter data containers.
+             'clean' -> flags for filtered data are stored in a new data container name
+             "clean_flags"
+             Default is 'clean'
+        output_postfix : str, optional
+             Postfix for attached filter data containers.
+             Default is ''
         zeropad : int, number of bins to zeropad on both sides of FFT axis. Provide 2-tuple if axis='both'
         ax : string, optional, string specifying axis to filter.
             Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
@@ -1041,7 +1052,7 @@ class VisClean(object):
             raise NotImplementedError("Channels detected in original frequency array that do not fall into any of the specified SPWS."
                                       "We currently only support SPWs that together include every channel in the original frequency axis.")
         # initialize containers
-        containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
+        containers = ["{}_{}_{}".format(output_prefix, dc, output_postfix) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
         for i, dc in enumerate(containers):
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
