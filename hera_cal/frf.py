@@ -966,14 +966,17 @@ class FRFilter(VisClean):
             self.lst_sets = [np.asarray(lst_set) for lst_set in self.lst_sets]
             
                 
-    def _interleave_data_in_time(self, container_name, keys=None, remove_deinterleaved=True):
+    def _interleave_data_in_time(self, deinterleaved_container_names, interleaved_container_name, keys=None, remove_deinterleaved=True):
         """
         Helper function to restore deinterleaved data back to interleaved data.
         
         Parameters
         ----------
-        container_name: str
-            name of container to interleave.
+        deinterleaved_container_names: list of strings
+            names of containers to deinterleave.
+        interleaved_container_name: str
+            name of destination container that will store data interleaved from deinterleaved
+            containers.
         keys: list, optional
             list of blpairpol keys for baselines to interleave (excluding interleave ind.
             Default is None -> use all keys on container specified by container_name.
@@ -981,26 +984,25 @@ class FRFilter(VisClean):
             delete deinterleaved data.
             default is True
         """
-            container = getattr(self, container_name)
-            interleaved_baselines = set([k[:2] for k in container if len(k) == 4])
-            ninterleaves = len(set([k[-1] for k in container if len(k) == 4]))
+            ninterleaves = len(deinterleaved_container_names)
+
             if keys is None:
-                keys = interleaved_baselines
-            for k in interleaved_baselines:
-                dsets = []
-                for i in range(ninterleave):
-                    ki = k + (i, )
-                    dsets.append(container[ki])
-                container[k] = interleave_data_in_time(dsets)
-                if remove_deinterleaved:
-                    for i in range(ninterleave):
-                        ki = k + (i, )
-                        del container[ki]
+                keys = getattr(self, deinterleaved_container_names[0])
+            
+            for k in keys:
+                getattr(self, interleaved_container_name)[k] = interleave_data_in_time([getattr(self, cname)[k] for cname in deinterleaved_container_names])
+            if remove_deinterleaved:
+                for cname in deinterleaved_container_names:
+                    origin = getattr(self, cname)
+                    for k in origin.keys():
+                        del origin[k]
+            
 
     
     def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None,
                      wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
-                     verbose=True, output_prefix='avg', keys=None, overwrite=False, ninterleaves=1):
+                     verbose=True, output_prefix='avg', output_postfix='',
+                     keys=None, overwrite=False):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
         The resultant averaged data, flags, time arrays, etc. are attached to self
@@ -1037,6 +1039,17 @@ class FRFilter(VisClean):
                 frequency for each integration. Mutually exclusive with wgt_by_nsample. Default False.
             rephase : bool
                 If True, rephase data in averaging window to the window-center.
+            verbose : bool, optional
+                Lots of diagnostic text output.
+                Default is True.
+            output_prefix : str, optional
+                prefix to prepend to names of time averaged data containers.
+                Example: 'avg' means that 'data' -> 'avg_data'
+                Default is 'avg'
+            output_postfix : str, optional
+               postfix to append to names of time averaged data containers.
+               Example: 'avg' means that 'data' -> 'data_avg'
+               Default is '', an empty string.
             keys : list of len-3 antpair-pol tuples
                 List of data keys to operate on.
             overwrite : bool
@@ -1058,7 +1071,7 @@ class FRFilter(VisClean):
 
         # setup containers
         for n in ['data', 'flags', 'nsamples']:
-            name = "{}_{}".format(output_prefix, n)
+            name = "{}_{}{}".format(output_prefix, n, f"_{output_postfix}")
             if not hasattr(self, name):
                 setattr(self, name, DataContainer({}))
             if n == 'data':
@@ -1177,7 +1190,7 @@ class FRFilter(VisClean):
     def tophat_frfilter(self, frate_centers, frate_half_widths, keys=None, wgts=None, mode='clean',
                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
                         write_cache=False, pre_filter_modes_between_lobe_minimum_and_zero=False,
-                        ninterleave=1, **filter_kwargs):
+                        **filter_kwargs):
         '''
         A wrapper around VisClean.fourier_filter specifically for
         filtering along the time axis with uniform fringe-rate weighting.
@@ -1214,11 +1227,6 @@ class FRFilter(VisClean):
             or if there is egregious cross-talk / ground pickup.
             This arg is only used if beamfitsfile is not None.
             Default is False.
-        ninterleave: int, optional
-            Set the number of interleaves to use in time-filtering.
-            Split data into ninteleave interleaved sets of observation times
-            And filter each independently.
-            Default is 1 = No interleaving of filters.
         filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Returns
@@ -1241,7 +1249,7 @@ class FRFilter(VisClean):
             keys_before = list(filter_cache.keys())
         else:
             filter_cache = None
-
+        
         if wgts is None:
             wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         if pre_filter_modes_between_lobe_minimum_and_zero:
@@ -1250,20 +1258,8 @@ class FRFilter(VisClean):
             filter_kwargs_no_data = copy.deepcopy(filter_kwargs)
             if 'data' in filter_kwargs_no_data:
                 del filter_kwargs_no_data['data']
-        if ninterleave > 1:
-            self._deinterleave_data_in_time("data", ninterleave=ninterleave, keys=keys, remove_interleaved=True)
-            self._deinterleave_data_in_time("flags", ninterleave=interleave, keuys=keys, remove_interleaved=True, set_time_sets=False)
-            self._deinterleave_data_in_time("nsamples", ninterleave=interleave, keuys=keys, remove_interleaved=True, set_time_sets=False)
-            
-            keys_interleaved = []
-            for k in keys:
-                for i in range(ninterleave):
-                    keys_interleaved.append(k + (i, ))
-        else:
-            keys_interleaved = copy.deepcopy(keys)
-
-            
-      if 'output_prefix' in filter_kwargs:
+                
+        if 'output_prefix' in filter_kwargs:
             data_name = filter_kwargs['output_prefix'] + '_data'
             filtered_name = filter_kwargs['output_prefix'] + '_model'
             filtered_resid = filter_kwargs['output_prefix'] + '_resid'                
@@ -1271,9 +1267,8 @@ class FRFilter(VisClean):
             data_name = 'clean_data'
             filtered_name = 'clean_model'
             resid_name = 'clean_resid'
-
             
-        for k in keys_interleaved:
+        for k in keys:
             if mode != 'clean':
                 filter_kwargs['suppression_factors'] = [tol]
             else:
@@ -1336,10 +1331,7 @@ class FRFilter(VisClean):
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
-        # re-interleave data
-        if ninterleave > 1:
-            # interleave container.
-            self._interleave_data_in_time(, keys=keys_interleaved, remove_deinterleaved=True)
+                
 
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
                             wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
@@ -1386,6 +1378,9 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
     -------
     None
     """
+    if ninterleave > 1 and filetype.lowe() != 'uvh5':
+        raise ValueError(f"Interleaved data only supported for 'uvh5' filetype! User provided '{filetype}'.")
+        
     if baseline_list is not None and len(baseline_list) == 0:
         warnings.warn("Length of baseline list is zero."
                       "This can happen under normal circumstances when there are more files in datafile_list then baselines."
@@ -1400,44 +1395,37 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
             fr._deinterleave_data_in_time("nsamples", ninterleave=ninterleave, set_time_sets=False)
             # run time average on each interleaved data set
             for inum in range(ninterleave):
-                data = getattr(self, f'data_{inum}')
-                flags = getattr(self, f'flags_{inum}')
-                nsamples = getattr(self, f'nsamples_{inum}')
+                data = getattr(self, f'data_interleave_{inum}')
+                flags = getattr(self, f'flags_interleave_{inum}')
+                nsamples = getattr(self, f'nsamples_interleave_{inum}')
                 
-                fr.timeavg_data(fr.data, flags=flags, nsamples=nsamples,
-                                times=self.time_sets[inum], lsts=self.lst_sets[inum], t_avg=t_avg,
-                                keys=[k for k in self.data if k[-1] == inum], wgt_by_nsample=wgt_by_nsample,
-                                wgt_by_favg_nsample=wgt_by_favg_nsample, rephase=rephase, output_prefix=f'avg_{inum}')
+                fr.timeavg_data(data=data, flags=flags, nsamples=nsamples, times=self.time_sets[inum],
+                                lsts=self.lst_sets[inum], t_avg=t_avg, wgt_by_nsample=wgt_by_nsample,
+                                wgt_by_favg_nsample=wgt_by_favg_nsample, output_postfix=f'interleave_{inum}',
+                                rephase=rephase)
                 
                 # relable keys to antpolpairs in avg sets
-                avg_data = getattr(self, f'avg_{inum}_data')
-                avg_nsamples = getattr(self, f'avg_{inum}_nsamples')
-                avg_flags = getattr(self, f'avg_{inum}_flags')
-                avg_times = getattr(self, f'avg_{inum}_times')
-                avg_lsts = getattr(self, f'avg_{inum}_lsts')
+                avg_data = getattr(self, f'avg_data_interleave_{inum}')
+                avg_nsamples = getattr(self, f'avg_nsamples_interleave_{inum}')
+                avg_flags = getattr(self, f'avg_flags_interleave_{inum}')
+                avg_times = getattr(self, f'avg_times_interleave_{inum}')
+                avg_lsts = getattr(self, f'avg_lsts_interleave_{inum}')
 
-                
                 # write data
-                fr.write_data(data=DataContainer(data=avg_data), flags=avg_flags, nsamples=avg_nsamples,
-                              times=fr.avg_times[inum]. lsts=fr.avg_lsts[inum])
-    
-                
-                
-                                            output_data, overwrite=clobber, filetype=filetype,
-            
-        
+                fr.write_data(data=avg_data, filename=output_data.replace('.uvh5', f'.interleave_{fnum}.uvh5'), flags=avg_flags, nsamples=avg_nsamples,
+                              times=avg_times, lsts=avg_lsts, filetype=filetype, overwrite=clobber)    
         else:
             fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
                             wgt_by_nsample=wgt_by_nsample, wgt_by_favg_nsample=wgt_by_favg_nsample, rephase=rephase)
             fr.write_data(fr.avg_data, output_data, overwrite=clobber, flags=fr.avg_flags, filetype=filetype,
                           nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
-        if flag_output is not None:
-            uv_avg = UVData()
-            uv_avg.read(output_data)
-            uv_avg.use_future_array_shapes()
-            uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
-            uvf.to_waterfall(keep_pol=False, method='and')
-            uvf.write(flag_output, clobber=clobber)
+            if flag_output is not None:
+                uv_avg = UVData()
+                uv_avg.read(output_data)
+                uv_avg.use_future_array_shapes()
+                uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
+                uvf.to_waterfall(keep_pol=False, method='and')
+                uvf.write(flag_output, clobber=clobber)
 
 
 def tophat_frfilter_argparser(mode='clean'):
@@ -1513,7 +1501,7 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                                    percentile_low=5., percentile_high=95.,
                                    frate_standoff=0.0, frate_width_multiplier=1.0,
                                    min_frate_half_width=0.025, max_frate_half_width=np.inf,
-                                   max_frate_coeffs=None, fr_freq_skip=1,
+                                   max_frate_coeffs=None, fr_freq_skip=1, ninterleave=1,
                                    **filter_kwargs):
     '''
     A tophat fr-filtering method that only simultaneously loads and writes user-provided
@@ -1595,6 +1583,8 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             bin fringe rates from every freq_skip channels.
             default is 1 -> takes a long time. We recommend setting this to be larger.
             only used if case == 'uvbeam'
+        ninterleave: int, optional
+            Number of interleaved sets to run time filtering on.
         filter_kwargs: additional keyword arguments to be passed to FRFilter.tophat_frfilter()
     '''
     if baseline_list is not None and Nbls_per_load is not None:
@@ -1651,8 +1641,14 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             else:
                 uvb = None
             if len(keys) > 0:
+                # Deal with interleaved sets
+                frfil._deinterleave_data_in_time('data', ninterleave=ninterleave)
+                frfil._deinterleave_data_in_time('flags', ninterleave=ninterleave, set_tsets=False)
+                frfil._deinterleave_data_in_time('nsamples', ninterleave=ninterleave, set_tsets=False)
                 # figure out frige rate centers and half-widths
                 assert case in ['sky', 'max_frate_coeffs', 'uvbeam'], f'case={case} is not valid.'
+                # use conservative nfr (lowest resolution set).
+                nfr = int(np.min([len(tset) for tset in frfil.time_sets]))
                 frate_centers, frate_half_widths = select_tophat_frates(uvd=frfil.hd, blvecs=frfil.blvecs,
                                                                         case=case, keys=keys, uvb=uvb,
                                                                         frate_standoff=frate_standoff,
@@ -1663,24 +1659,31 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                                                                         percentile_low=percentile_low,
                                                                         percentile_high=percentile_high,
                                                                         fr_freq_skip=fr_freq_skip,
-                                                                        verbose=verbose)
+                                                                        verbose=verbose, nfr=nfr)
+                for inum in range(ninterleave):
+                    # Build weights using flags, nsamples, and exlcuded lsts
+                    flags = getattr(frfil, f'flags_interleave_{inum}')
+                    nsamples = getattr(frfil, f'nsamples_interleave_{inum}')
+                    wgts = io.DataContainer({k: (~flags[k]).astype(float) for k in flags})
+                    lsts = frfil.lst_sets[inum]
+                    for k in wgts:
+                        if wgt_by_nsample:
+                            wgts[k] *= nsamples[k]
+                        if lst_blacklists is not None:
+                            for lb in lst_blacklists:
+                                if lb[0] < lb[1]:
+                                    is_blacklisted = (lsts[inum] >= lb[0] * np.pi / 12)\
+                                        & (lsts[inum] <= lb[1] * np.pi / 12)
+                                else:
+                                    is_blacklisted = (lsts[inum] >= lb[0] * np.pi / 12) | (lsts <= lb[1] * np.pi / 12)
+                                wgts[k][is_blacklisted, :] = wgts[k][is_blacklisted, :] * blacklist_wgt
 
-                # Build weights using flags, nsamples, and exlcuded lsts
-                wgts = io.DataContainer({k: (~frfil.flags[k]).astype(float) for k in frfil.flags})
-                for k in wgts:
-                    if wgt_by_nsample:
-                        wgts[k] *= frfil.nsamples[k]
-                    if lst_blacklists is not None:
-                        for lb in lst_blacklists:
-                            if lb[0] < lb[1]:
-                                is_blacklisted = (frfil.lsts >= lb[0] * np.pi / 12) & (frfil.lsts <= lb[1] * np.pi / 12)
-                            else:
-                                is_blacklisted = (frfil.lsts >= lb[0] * np.pi / 12) | (frfil.lsts <= lb[1] * np.pi / 12)
-                            wgts[k][is_blacklisted, :] = wgts[k][is_blacklisted, :] * blacklist_wgt
-
-                # run tophat filter
-                frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
-                                      keys=keys, verbose=verbose, wgts=wgts, **filter_kwargs)
+                    filter_kwargs['data'] = f'data_interleave_{inum}'
+                    filter_kwargs['flags'] = f'flags_interleave_{inum}'
+                    filter_kwargs['nsamples'] = f'nsamples_interleave_{inum}'
+                    # run tophat filter
+                    frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
+                                          keys=keys, verbose=verbose, wgts=wgts, **filter_kwargs)
             else:
                 frfil.clean_data = DataContainer({})
                 frfil.clean_flags = DataContainer({})
@@ -1697,7 +1700,10 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                         frfil.clean_resid[bl] = frfil.data[bl]
                         frfil.clean_model[bl] = np.zeros_like(frfil.data[bl])
                         frfil.clean_resid_flags[bl] = frfil.flags[bl]
-
+            # interleave data again.
+            frfil._interleave_data_in_time()
+            
+            
             frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                       filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
                                       clobber=clobber, add_to_history=add_to_history,
