@@ -17,6 +17,7 @@ from pyuvdata import utils as uvutils
 
 from . import io, apply_cal, utils, redcal
 from .datacontainer import DataContainer
+from .utils import echo
 from .flag_utils import factorize_flags
 
 def discard_autocorr_imag(data_container):
@@ -807,7 +808,7 @@ class VisClean(object):
 
     def fourier_filter(self, filter_centers, filter_half_widths, mode='clean',
                        x=None, keys=None, data=None, flags=None, wgts=None,
-                       output_prefix='clean', zeropad=None, cache=None,
+                       output_prefix='clean', output_postfix='', zeropad=None, cache=None,
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
                        skip_flagged_edges=False, filter_spw_ranges=None,
                        skip_contiguous_flags=False, max_contiguous_flag=None,
@@ -1052,7 +1053,11 @@ class VisClean(object):
             raise NotImplementedError("Channels detected in original frequency array that do not fall into any of the specified SPWS."
                                       "We currently only support SPWs that together include every channel in the original frequency axis.")
         # initialize containers
-        containers = ["{}_{}_{}".format(output_prefix, dc, output_postfix) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
+        if output_postfix != '':
+            containers = ["{}_{}_{}".format(output_prefix, dc, output_postfix) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
+        else:
+            containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
+
         for i, dc in enumerate(containers):
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
@@ -1145,11 +1150,12 @@ class VisClean(object):
                     win = flag_rows_with_flags_within_edge_distance(xp, win, skip_if_flag_within_edge_distance, ax=ax)
 
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
-                mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
-                                                      filter_half_widths=filter_half_widths,
-                                                      mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
-                                                      **filter_kwargs)
-                                        
+                
+                if 0 not in din.shape:
+                    mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                                          filter_half_widths=filter_half_widths,
+                                                          mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                                          **filter_kwargs)
                     # insert back the filtered model if we are skipping flagged edgs.
                     if skip_flagged_edges:
                         mdl = restore_flagged_edges(mdl, chunks, edges, ax=ax)

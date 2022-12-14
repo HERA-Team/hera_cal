@@ -31,7 +31,7 @@ from .utils import echo
 SPEED_OF_LIGHT = const.c.si.value
 SDAY_KSEC = units.sday.to("ks")
 
-def deinterleave_data_in_time(taxis, data: np.ndarray, ninterleave=2):
+def deinterleave_data_in_time(taxis, data: np.ndarray, ninterleave=1):
     """
     Helper function for deinterleaving *time-ordered* data along time axis.
 
@@ -43,7 +43,9 @@ def deinterleave_data_in_time(taxis, data: np.ndarray, ninterleave=2):
     data: np.ndarray
         ntime x nfrequency np.ndarray containing data to deinterleave.
         data is assumed to be time ordered on 0 axis!
-
+    ninterleave : int, optional
+        number of deinterleaved sets to generate.
+        Default is 1 -> No actual deinterleaving.
     Returns
     -------
     tsets: list of np.ndarray
@@ -53,7 +55,7 @@ def deinterleave_data_in_time(taxis, data: np.ndarray, ninterleave=2):
     dsets: list of np.ndarray
         list of data arrays sorted into ninterleave different interleaves.
     """
-    if len(taxis) < ninterleave or len(data) < ninterleave or len(wgts) < ninterleave:
+    if len(taxis) < ninterleave or len(data) < ninterleave:
         raise ValueError("Number of times provided is less then the number of interleaves")
     tsets, dsets = [], []
     for i in range(ninterleave):
@@ -80,8 +82,8 @@ def interleave_data_in_time(dsets):
     """
     data = []
     ntimes = [dset.shape[0] for dset in dsets]
-    ninterleaves = len(ntimes)
-    counters = [0 for i in range(ninterleaves)]
+    ninterleave = len(ntimes)
+    counters = [0 for i in range(ninterleave)]
     nmax = int(np.max(ntimes))
     for tstep in range(nmax):
         for inum in range(ninterleave):
@@ -915,7 +917,7 @@ class FRFilter(VisClean):
     FRFilter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
     """
     
-    def _deinterleave_data_in_time(self, container_name, ninterleave=2, keys=None, remove_interleaved=True, set_time_sets=True):
+    def _deinterleave_data_in_time(self, container_name, ninterleave=1, keys=None, set_time_sets=True):
         """
         Helper function to convert attached data and weights to time interleaved data and weights.
 
@@ -929,10 +931,9 @@ class FRFilter(VisClean):
             name of container to deinterleave.
         ninterleave: int, optional
             Number of interleaves to split all datacontainers into.
+            Default is 1 -> No interleaving.
         keys: list (optional)
             List of antpairpol keys specifying which baseline/pols to split into de-interleaved sets.
-        remove_originals: bool, optional
-            Delete original 
         set_time_sets: bool, optional
             Attach set of lits of times in each interleave set to self.
         Returns
@@ -945,19 +946,20 @@ class FRFilter(VisClean):
             keys = container.keys()
         # generate an interleaved container
         for inum in range(ninterleave):
-            newcontainer = DataContainer({})
-            setattr(self, container_name + f'_{inum}', newcontainer)
+            new_container_name = container_name + f'_interleave_{inum}'
+            new_container = DataContainer({})
+            setattr(self, new_container_name, new_container)
             
         for k in keys:
             tsets, dsets = deinterleave_data_in_time(self.times, container[k], ninterleave=ninterleave)
             for inum in range(ninterleave):
-                container[k] = dsets[inum]
-            if remove_interleaved:
-                del container[k]
+                new_container_name = container_name + f'_interleave_{inum}'
+                new_container = getattr(self, new_container_name)
+                new_container[k] = dsets[inum]
                 
         if set_time_sets:
             self.time_sets = tsets
-            self.lst_sets = [[] for i in range(ninerleave)]
+            self.lst_sets = [[] for i in range(ninterleave)]
             # populate lsts
             iset = 0
             for time, lst in zip(self.times, self.lsts):
@@ -966,7 +968,7 @@ class FRFilter(VisClean):
             self.lst_sets = [np.asarray(lst_set) for lst_set in self.lst_sets]
             
                 
-    def _interleave_data_in_time(self, deinterleaved_container_names, interleaved_container_name, keys=None, remove_deinterleaved=True):
+    def _interleave_data_in_time(self, deinterleaved_container_names, interleaved_container_name, keys=None):
         """
         Helper function to restore deinterleaved data back to interleaved data.
         
@@ -980,25 +982,17 @@ class FRFilter(VisClean):
         keys: list, optional
             list of blpairpol keys for baselines to interleave (excluding interleave ind.
             Default is None -> use all keys on container specified by container_name.
-        remove_deinterleaved: bool, optional
-            delete deinterleaved data.
-            default is True
         """
-            ninterleaves = len(deinterleaved_container_names)
+        ninterleaves = len(deinterleaved_container_names)
+        if not hasattr(self, interleaved_container_name):
+            setattr(self, interleaved_container_name, DataContainer({}))
+        if keys is None:
+            keys = getattr(self, deinterleaved_container_names[0])
 
-            if keys is None:
-                keys = getattr(self, deinterleaved_container_names[0])
-            
-            for k in keys:
-                getattr(self, interleaved_container_name)[k] = interleave_data_in_time([getattr(self, cname)[k] for cname in deinterleaved_container_names])
-            if remove_deinterleaved:
-                for cname in deinterleaved_container_names:
-                    origin = getattr(self, cname)
-                    for k in origin.keys():
-                        del origin[k]
+        for k in keys:
+            getattr(self, interleaved_container_name)[k] = interleave_data_in_time([getattr(self, cname)[k] for cname in deinterleaved_container_names])
             
 
-    
     def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None,
                      wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
                      verbose=True, output_prefix='avg', output_postfix='',
@@ -1071,7 +1065,12 @@ class FRFilter(VisClean):
 
         # setup containers
         for n in ['data', 'flags', 'nsamples']:
-            name = "{}_{}_{}".format(output_prefix, n, output_postfix)
+            
+            if output_postfix != '':
+                name = "{}_{}_{}".format(output_prefix, n, output_postfix)
+            else:
+                name = "{}_{}".format(output_prefix, n)
+                
             if not hasattr(self, name):
                 setattr(self, name, DataContainer({}))
             if n == 'data':
@@ -1190,6 +1189,7 @@ class FRFilter(VisClean):
     def tophat_frfilter(self, frate_centers, frate_half_widths, keys=None, wgts=None, mode='clean',
                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
                         write_cache=False, pre_filter_modes_between_lobe_minimum_and_zero=False,
+                        times=None,
                         **filter_kwargs):
         '''
         A wrapper around VisClean.fourier_filter specifically for
@@ -1227,6 +1227,9 @@ class FRFilter(VisClean):
             or if there is egregious cross-talk / ground pickup.
             This arg is only used if beamfitsfile is not None.
             Default is False.
+        times: np.ndarray, optional
+            1d array of observation times in units KSEC.
+            Default is None -> use self.times.
         filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Returns
@@ -1238,6 +1241,8 @@ class FRFilter(VisClean):
           self.clean_model: DataContainer formatted like self.data with only low-fringe-rate components
           self.clean_info: Dictionary of info from hera_filters.dspec.fourier_filter with the same keys as self.data
         '''
+        if times is None:
+            times = self.times * SDAY_KSEC
         if keys is None:
             keys = list(self.data.keys())
         # read in cache
@@ -1255,19 +1260,32 @@ class FRFilter(VisClean):
         if pre_filter_modes_between_lobe_minimum_and_zero:
             self.pre_filter_resid = DataContainer({})
             self.pre_filter_resid_flags = DataContainer({})
-            filter_kwargs_no_data = copy.deepcopy(filter_kwargs)
-            if 'data' in filter_kwargs_no_data:
-                del filter_kwargs_no_data['data']
-                
+
         if 'output_prefix' in filter_kwargs:
-            data_name = filter_kwargs['output_prefix'] + '_data'
-            filtered_name = filter_kwargs['output_prefix'] + '_model'
-            filtered_resid = filter_kwargs['output_prefix'] + '_resid'                
+            filtered_name = filter_kwargs['output_prefix'] + '_data'
+            model_name = filter_kwargs['output_prefix'] + '_model'
+            resid_name = filter_kwargs['output_prefix'] + '_resid'
         else:
-            data_name = 'clean_data'
-            filtered_name = 'clean_model'
+            filtered_name = 'clean_data'
+            model_name = 'clean_model'
             resid_name = 'clean_resid'
             
+        if 'output_postfix' in filter_kwargs:
+            filtered_name = filtered_name + '_' + filter_kwargs['output_postfix']
+            model_name = model_name + '_' + filter_kwargs['output_postfix']
+            resid_name = resid_name + '_' + filter_kwargs['output_postfix']
+            
+        if 'data' in filter_kwargs:
+            input_data = filter_kwargs.pop('data')
+        else:
+            input_data = self.data
+            
+        if 'flags' in filter_kwargs:
+            input_flags = filter_kwargs.pop('flags')
+        else:
+            input_flags = self.flags
+        
+
         for k in keys:
             if mode != 'clean':
                 filter_kwargs['suppression_factors'] = [tol]
@@ -1280,53 +1298,37 @@ class FRFilter(VisClean):
                 # only pre-filter if main-lobe does not include zero fringe-rates.
                 if not (frate_centers[k] + frate_half_widths[k] >= 0. and frate_centers[k] - frate_half_widths[k] <= 0.):
                     self.fourier_filter(keys=[k], filter_centers=[0.], filter_half_widths=[min_frate_abs],
-                                        mode=mode, x=self.times * SDAY_KSEC,
-                                        wgts=wgts, output_prefix='pre_filter',
+                                        mode=mode, x=times, data=input_data, flags=input_flags,
+                                        wgts=wgts, output_prefix='pre_filter', overwrite=True,
                                         ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
                 else:
-                    if 'data' not in filter_kwargs:
-                        self.pre_filter_resid[k] = self.data[k]
-                    else:
-                        self.pre_filter_resid[k] = filter_kwargs['data'][k]
-                    if 'flags' not in filter_kwargs:
-                        self.pre_filter_resid_flags[k] = self.flags[k]
-                    else:
-                        self.pre_filter_flags[k] = filter_kwargs['flags'][k]
+                    self.pre_filter_resid[k] =input_data[k]
+                    self.pre_filter_resid_flags[k] = input_flags[k]
                 # center at zero fringe-rate since some fourier_filter modes are
                 # high pass only.
-                phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
+                phasor = np.exp(2j * np.pi * times * frate_centers[k])
                 self.pre_filter_resid[k] /= phasor[:, None]
-                filter_center_to_use = 0.0
-                self.fourier_filter(keys=[k], filter_centers=[filter_center_to_use], filter_half_widths=[frate_half_widths[k]],
-                                    mode=mode, x=self.times * SDAY_KSEC,
+                self.fourier_filter(keys=[k], filter_centers=[0.], filter_half_widths=[frate_half_widths[k]],
+                                    mode=mode, x=times,
                                     wgts=wgts, data=self.pre_filter_resid, flags=self.pre_filter_resid_flags,
-                                    ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs_no_data)
+                                    ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
             else:
                 # center sky-modes at zero fringe-rate.
-                phasor = np.exp(2j * np.pi * self.times * SDAY_KSEC * frate_centers[k])
-                if 'data' in filter_kwargs:
-                    input_data = filter_kwargs['data']
-                else:
-                    input_data = self.data
+                phasor = np.exp(2j * np.pi * times * frate_centers[k])
                 input_data[k] /= phasor[:, None]
-                filter_center_to_use = 0.0
-                self.fourier_filter(keys=[k], filter_centers=[filter_center_to_use], filter_half_widths=[frate_half_widths[k]],
-                                    mode=mode, x=self.times * SDAY_KSEC,
-                                    flags=self.flags, wgts=wgts,
+                self.fourier_filter(keys=[k], filter_centers=[0.], filter_half_widths=[frate_half_widths[k]],
+                                    mode=mode, x=times,
+                                    flags=input_flags, wgts=wgts, data=input_data,
                                     ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
 
             # recenter data in fringe-rate by multiplying back the phaser.
-            filtered_data = getattr(self, data_name)
+            filtered_data = getattr(self, filtered_name)
             filtered_model = getattr(self, model_name)
-            filtered_resid = getattr(self, filtered_name)
+            filtered_resid = getattr(self, resid_name)
 
             filtered_data[k] *= phasor[:, None]
             filtered_model[k] *= phasor[:, None]
             filtered_resid[k] *= phasor[:, None]
-            if 'data' in filter_kwargs:
-                input_data = filter_kwargs['data']
-            else:
-                input_data = self.data
             input_data[k] *= phasor[:, None]
         if not mode == 'clean':
             if write_cache:
@@ -1484,7 +1486,7 @@ def tophat_frfilter_argparser(mode='clean'):
     filt_options.add_argument("--case", default="sky", help=' '.join(desc), type=str)
     desc = ("Number interleaved time subsets to split the data into ", 
            "and apply independent fringe-rate filters. Default is 1 (no interleaved filters.")
-    filt_options.add_argument("--ninterleave", default=1, type="int", help=desc)
+    filt_options.add_argument("--ninterleave", default=1, type=int, help=desc)
     
     return ap
 
@@ -1643,8 +1645,8 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             if len(keys) > 0:
                 # Deal with interleaved sets
                 frfil._deinterleave_data_in_time('data', ninterleave=ninterleave)
-                frfil._deinterleave_data_in_time('flags', ninterleave=ninterleave, set_tsets=False)
-                frfil._deinterleave_data_in_time('nsamples', ninterleave=ninterleave, set_tsets=False)
+                frfil._deinterleave_data_in_time('flags', ninterleave=ninterleave, set_time_sets=False)
+                frfil._deinterleave_data_in_time('nsamples', ninterleave=ninterleave, set_time_sets=False)
                 # figure out frige rate centers and half-widths
                 assert case in ['sky', 'max_frate_coeffs', 'uvbeam'], f'case={case} is not valid.'
                 # use conservative nfr (lowest resolution set).
@@ -1663,7 +1665,7 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                 # Lists of names of datacontainers that will hold each interleaved data set until they are
                 # recombined.
                 filtered_data_names = [ f'clean_data_interleave_{inum}' for inum in range(ninterleave) ]
-                filtered_flag_names = [ fstr.replace('data', 'flag') for fstr in filtered_data_names ]
+                filtered_flag_names = [ fstr.replace('data', 'flags') for fstr in filtered_data_names ]
                 filtered_resid_names = [ fstr.replace('data', 'resid') for fstr in filtered_data_names ]
                 filtered_model_names = [ fstr.replace('data', 'model') for fstr in filtered_data_names ]
                 filtered_resid_flag_names = [ fstr.replace('data', 'resid_flags') for fstr in filtered_data_names ]
@@ -1688,18 +1690,16 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                                     is_blacklisted = (lsts[inum] >= lb[0] * np.pi / 12) | (lsts <= lb[1] * np.pi / 12)
                                 wgts[k][is_blacklisted, :] = wgts[k][is_blacklisted, :] * blacklist_wgt
 
-                    filter_kwargs['data'] = f'data_interleave_{inum}'
-                    filter_kwargs['flags'] = f'flags_interleave_{inum}'
-                    filter_kwargs['nsamples'] = f'nsamples_interleave_{inum}'
-
-                    
                     # run tophat filter
                     frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
-                                          keys=keys, verbose=verbose, wgts=wgts, **filter_kwargs)
+                                          keys=keys, verbose=verbose, wgts=wgts, flags=getattr(frfil, f'flags_interleave_{inum}'),
+                                          data= getattr(frfil, f'data_interleave_{inum}'), output_postfix=f'interleave_{inum}',
+                                          times=frfil.time_sets[inum] * SDAY_KSEC,
+                                          **filter_kwargs)
                 
                 frfil._interleave_data_in_time(filtered_data_names, 'clean_data')
                 frfil._interleave_data_in_time(filtered_flag_names, 'clean_flags')
-                frfil._interleave_data_in_time(filtered_resid_names,' clean_resid')
+                frfil._interleave_data_in_time(filtered_resid_names, 'clean_resid')
                 frfil._interleave_data_in_time(filtered_resid_flag_names, 'clean_resid_flags')
                 frfil._interleave_data_in_time(filtered_model_names, 'clean_model')
 
@@ -1719,8 +1719,6 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                         frfil.clean_resid[bl] = frfil.data[bl]
                         frfil.clean_model[bl] = np.zeros_like(frfil.data[bl])
                         frfil.clean_resid_flags[bl] = frfil.flags[bl]
-            # interleave data again.
-            
             
             frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                       filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
