@@ -353,9 +353,22 @@ def lst_bin_files_for_baselines(
     # This loop actually reads the associated data in this LST bin.
     ntimes_so_far = 0
     for fl, calfl, tind, tarr in zip(data_files, cal_files, time_idx, time_arrays):
-        hd = io.HERAData(str(fl), filetype='uvh5')
+        logger.info(f"Reading {fl}")
+        slc = slice(ntimes_so_far,ntimes_so_far+len(tarr))
+        ntimes_so_far += len(tarr)
 
+        hd = io.HERAData(str(fl), filetype='uvh5')
         bls_to_load = [bl for bl in baselines if bl in hd.antpairs or bl[::-1] in hd.antpairs]
+
+        if not bls_to_load:
+            # If none of the requested baselines are in this file, then just 
+            # set stuff as nan and go to next file. 
+            logger.info("None of the baselines are in this file. Skipping.")
+            data[slc, :, :, :] = np.nan
+            flags[slc, :, :, :] = True
+            nsamples[slc, :, :, :] = 0
+            continue
+
         _data, _flags, _nsamples  = hd.read(bls=bls_to_load, times=tarr)
 
         # load calibration
@@ -363,7 +376,7 @@ def lst_bin_files_for_baselines(
             logger.info(f"Opening and applying {calfl}")
             uvc = io.to_HERACal(calfl)
             gains, cal_flags, _, _ = uvc.read()
-            # down select times in necessary
+            # down select times if necessary
             if False in tind and uvc.Ntimes > 1:
                 # If uvc has Ntimes == 1, then broadcast across time will work automatically
                 uvc.select(times=uvc.time_array[tind])
@@ -374,7 +387,6 @@ def lst_bin_files_for_baselines(
                 gain_convention=uvc.gain_convention
             )
 
-        slc = slice(ntimes_so_far,ntimes_so_far+_data.shape[0])
         for i, bl in enumerate(baselines):
             for j, pol in enumerate(pols):
                 if bl + (pol,) in _data:  # DataContainer takes care of conjugates.
@@ -388,7 +400,6 @@ def lst_bin_files_for_baselines(
                     flags[slc, i, :, j] = True
                     nsamples[slc, i, :, j] = 0
 
-        ntimes_so_far += _data.shape[0]
 
     logger.info("About to run LST binning...")
     # LST bin edges are the actual edges of the bins, so should have length
@@ -493,7 +504,7 @@ def lst_bin_files(
     """
     # Check that that there are the same number of input data files and 
     # calibration files each night.
-    
+
     input_cals = []
     if calfile_rules:
         
@@ -505,22 +516,20 @@ def lst_bin_files(
                 cf = df
                 for rule in calfile_rules:
                     cf = cf.replace(rule[0], rule[1]) 
-                
-                if not os.path.exists(cf):
-                    if ignore_missing_calfiles:
-                        warnings.warn(f"Calibration file {cf} does not exist")
-                        missing.append(df)
-                    else:
-                        raise IOError(f"Calibration file {cf} does not exist")
-                else:
+
+                if os.path.exists(cf):
                     this.append(cf)
-        
+                elif ignore_missing_calfiles:
+                    warnings.warn(f"Calibration file {cf} does not exist")
+                    missing.append(df)
+                else:
+                    raise IOError(f"Calibration file {cf} does not exist")
             data_files[night] = [df for df in dflist if df not in missing]
 
     logger.info("Got the following numbers of data files per night:")
     for dflist in data_files:
         logger.info(f"{dflist[0].split('/')[-1]}: {len(dflist)}")
-    
+
     # Prune empty nights (some nights start with files, but have files removed because
     # they have no associated calibration)
     data_files = [df for df in data_files if df]
@@ -564,7 +573,7 @@ def lst_bin_files(
     last_day_index = np.argmax([np.min([time for tarr in tarrs for time in tarr]) for tarrs in time_arrs])
     zeroth_file_on_last_day_index = np.argmin([np.min(tarr) for tarr in time_arrs[last_day_index]])
 
-    logger.info("Getting metadata from last data...")    
+    logger.info("Getting metadata from last data...")
     hd = io.HERAData(str(data_files[last_day_index][zeroth_file_on_last_day_index]))
     x_orientation = hd.x_orientation
 
@@ -601,7 +610,7 @@ def lst_bin_files(
 
         outfile_lst_min = outfile_lsts[0] - (dlst / 2 + atol)
         outfile_lst_max = outfile_lsts[-1] + (dlst / 2 + atol)
-        
+
         tinds = []
         all_lsts = []
         file_list = []
@@ -610,9 +619,9 @@ def lst_bin_files(
         # This loop just gets the number of times that we'll be reading.
         for night, night_files in enumerate(data_files):
             # iterate over files in each night, and open files that fall into this output file LST range
-            
+
             for k_file, fl in enumerate(night_files):
-                
+
                 # unwrap la relative to itself
                 larr = lst_arrs[night][k_file]
                 larr[larr < larr[0]] += 2 * np.pi
@@ -640,7 +649,7 @@ def lst_bin_files(
         # If we have no times at all for this bin, just continue to the next bin.
         if len(all_lsts) == 0:
             continue
-        
+
         # iterate over baseline groups (for memory efficiency)
         out_data = np.zeros((len(all_baselines), len(outfile_lsts), len(freq_array), len(all_pols)), dtype='complex')
         out_stds = np.zeros_like(out_data)
@@ -672,7 +681,7 @@ def lst_bin_files(
                 out_flags=out_flags[slc],
                 out_std=out_stds[slc]
             )
-        
+
             nbls_so_far += len(bl_chunk)
 
         logger.info("Writing output files")
@@ -699,12 +708,12 @@ def lst_bin_files(
             fkwargs['pol'] = '.'.join(all_pols)
 
         # configure filenames
-        bin_file = "zen." + file_ext.format(**fkwargs)
+        bin_file = f"zen.{file_ext.format(**fkwargs)}"
         fkwargs['type'] = 'STD'
-        std_file = "zen." + file_ext.format(**fkwargs)
+        std_file = f"zen.{file_ext.format(**fkwargs)}"
 
         # check for overwrite
-        if os.path.exists(bin_file) and overwrite is False:
+        if os.path.exists(bin_file) and not overwrite:
             logger.warning(f"{bin_file} exists, not overwriting")
             continue
 
