@@ -37,6 +37,8 @@ import glob
 import json
 from hera_cal._cli_tools import setup_logger
 import logging
+import importlib
+from pathlib import Path
 
 logger = logging.getLogger('hera_cal')
 setup_logger()
@@ -84,4 +86,45 @@ if kwargs['output_file_select'] == ['None']:
 crules = kwargs.pop("calfile_rules")
 calfile_rules = [(crules[i], crules[i+1]) for i in range(len(crules)//2)]
 
-lstbin.lst_bin_files(data_files, calfile_rules=calfile_rules, write_kwargs=write_kwargs, **kwargs)
+if args.profile:
+    from line_profiler import LineProfiler
+    if 'output_file_select' in kwargs:
+        label = '.'.join(kwargs['output_file_select'])
+        output_file = Path(f"lst_bin_profile_{label}.prof")
+    else:
+        output_file = Path('lst_bin_profile.prof')
+
+    print(f"Profiling the LST-binning. Output to {output_file}")
+
+    profiler = LineProfiler()
+
+    profiler.add_function(lstbin.lst_bin_files)
+
+    # Now add any user-defined functions that they want to be profiled.
+    # Functions must be sent in as "path.to.module:function_name" or
+    # "path.to.module:Class.method".
+    for fnc in args.profile_funcs:
+        module = importlib.import_module(fnc.split(":")[0])
+        _fnc = module
+        if ":" not in _fnc:
+            profiler.add_module(_fnc)
+        else:
+            for att in fnc.split(":")[-1].split("."):
+                _fnc = getattr(_fnc, att)
+            profiler.add_function(_fnc)
+
+else:
+    profiler = None
+
+if args.profile:
+    profiler.runcall(lstbin.lst_bin_files, calfile_rules=calfile_rules, write_kwargs=write_kwargs, **kwargs)
+else:
+    lstbin.lst_bin_files(data_files, calfile_rules=calfile_rules, write_kwargs=write_kwargs, **kwargs)
+
+if args.profile:
+    with open(output_file, "w") as fl:
+        profiler.dump_stats(stream=fl)
+
+    with open(output_file.with_suffix(".txt"), "w") as fl:
+        profiler.print_stats(stream=fl, stripzeros=True)
+
