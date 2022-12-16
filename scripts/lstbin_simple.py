@@ -106,7 +106,7 @@ if args.profile:
     # Now add any user-defined functions that they want to be profiled.
     # Functions must be sent in as "path.to.module:function_name" or
     # "path.to.module:Class.method".
-    for fnc in args.profile_funcs:
+    for fnc in args.profile_funcs.split(","):
         module = importlib.import_module(fnc.split(":")[0])
         _fnc = module
         if ":" not in _fnc:

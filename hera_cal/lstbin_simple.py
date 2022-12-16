@@ -870,7 +870,7 @@ def lst_bin_arg_parser():
     a.add_argument("--rephase", default=False, action='store_true', help="rephase data to center of LST bin before binning")
     a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
     a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
-    a.add_argument("--output_file_select", default=None, nargs='*', help="list of output file integers ot run on. Default is all output files.")
+    a.add_argument("--output_file_select", default=None, nargs='*', help="list of output file integers to run on. Default is all output files.")
     a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
     a.add_argument("--ignore_flags", default=False, action='store_true', help="Ignore flags in data files, such that all input data is included in binning.")
     a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
@@ -880,5 +880,5 @@ def lst_bin_arg_parser():
     a.add_argument("--log-level", default='INFO', type=str, help='level of the logger')
     a.add_argument("--write_kwargs", default='{}', type=str, help="json dictionary of arguments to the uvh5 writer")
     a.add_argument("--profile", action="store_true", default=False, help="whether to run line profiling")
-    a.add_argument("--profile-funcs", nargs='*', type=str, help="functions to profile.")
+    a.add_argument("--profile-funcs", type=str, help="functions to profile, separated by commas")
     return a
