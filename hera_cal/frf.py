@@ -1297,12 +1297,18 @@ class FRFilter(VisClean):
                                         np.abs(frate_centers[k] - frate_half_widths[k])])
                 # only pre-filter if main-lobe does not include zero fringe-rates.
                 if not (frate_centers[k] + frate_half_widths[k] >= 0. and frate_centers[k] - frate_half_widths[k] <= 0.):
+                    opp_in_filter_kwargs = 'output_postfix' in filter_kwargs
+                    if opp_in_filter_kwargs:
+                        output_postfix = filter_kwargs.pop('output_postfix')
+                    
                     self.fourier_filter(keys=[k], filter_centers=[0.], filter_half_widths=[min_frate_abs],
                                         mode=mode, x=times, data=input_data, flags=input_flags,
                                         wgts=wgts, output_prefix='pre_filter', overwrite=True,
                                         ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
+                    if opp_in_filter_kwargs:
+                        filter_kwargs['output_postfix'] = output_postfix
                 else:
-                    self.pre_filter_resid[k] =input_data[k]
+                    self.pre_filter_resid[k] = input_data[k]
                     self.pre_filter_resid_flags[k] = input_flags[k]
                 # center at zero fringe-rate since some fourier_filter modes are
                 # high pass only.
