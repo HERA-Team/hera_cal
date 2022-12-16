@@ -86,6 +86,9 @@ if kwargs['output_file_select'] == ['None']:
 crules = kwargs.pop("calfile_rules")
 calfile_rules = [(crules[i], crules[i+1]) for i in range(len(crules)//2)]
 
+del kwargs['profile']
+del kwargs['profile_funcs']
+
 if args.profile:
     from line_profiler import LineProfiler
     if 'output_file_select' in kwargs:
