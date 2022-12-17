@@ -943,9 +943,11 @@ def RFI_delay_slope_cal(reds, antpos, red_data, freqs, rfi_chans, rfi_headings, 
     rfi_phs = np.array([np.exp(-2j * np.pi * np.dot(unique_blvecs[red[0]], rfi_headings) * freqs[rfi_chans] / constants.c) for red in reds])
     dlys_to_check = np.arange(min_tau, max_tau, delta_tau)
     dly_terms = np.exp(2j * np.pi * np.outer(freqs[rfi_chans], dlys_to_check))
-    # dimensions: i = Nubls, j = Ntimes, k = Nrfi_chans, l = Ndlys
-    to_minimize = np.einsum('ijk,ik,kl->ijkl', vis, rfi_phs, dly_terms) - 1
-    to_minimize = np.einsum('ijkl,k->ijl', np.abs(to_minimize), np.array(rfi_wgts if rfi_wgts is not None else np.ones_like(rfi_chans)))
+    # dimensions: i = Nubls, j = Ntimes, k = Ndlys
+    to_minimize = np.zeros(vis.shape[0:2] + (len(dlys_to_check),))
+    for ci in range(len(rfi_chans)):
+        wgt_here = (rfi_wgts[ci] if rfi_wgts is not None else 1.0)
+        to_minimize += np.abs(np.einsum('ij,i,k->ijk', vis[:, :, ci], rfi_phs[:, ci], dly_terms[ci, :]) - 1) * wgt_here
     dly_sol_args = np.argmin(to_minimize, axis=-1)
     delay_sols = {red[0]: dlys_to_check[dly_sol_args[i]] for i, red in enumerate(reds)}
 
