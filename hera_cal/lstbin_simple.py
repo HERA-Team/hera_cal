@@ -827,7 +827,11 @@ def lst_bin_files(
                 integration_time=integration_time[0],
                 history=_history,
             )
-            guvd.write_uvh5(os.path.join(outdir, filename), clobber=overwrite)
+            # Don't check autos because we've set flagged stuff to NaN and that fails.
+            guvd.write_uvh5(
+                os.path.join(outdir, filename), clobber=overwrite, 
+                check_autos=False, fix_autos=False
+            )
 
         # Now write out reduced-channel data
         if save_channels:
@@ -847,7 +851,11 @@ def lst_bin_files(
                 integration_time=integration_time[0],
                 history=_history,
             )
-            guvd.write_uvh5(os.path.join(outdir, filename), clobber=overwrite)
+            # Don't check autos because we've set flagged stuff to NaN and that fails.
+            guvd.write_uvh5(
+                os.path.join(outdir, filename), clobber=overwrite, 
+                check_autos=False, fix_autos=False
+            )
 
 @profile
 def get_all_unflagged_baselines(
