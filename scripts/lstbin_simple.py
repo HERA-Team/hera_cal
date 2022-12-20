@@ -89,6 +89,9 @@ calfile_rules = [(crules[i], crules[i+1]) for i in range(len(crules)//2)]
 del kwargs['profile']
 del kwargs['profile_funcs']
 
+kwargs['save_channels'] = tuple(int(ch) for ch in kwargs['save_channels'].split(','))
+kwargs['golden_lsts'] = tuple(float(lst) for lst in kwargs['golden_lsts'].split(','))
+
 if args.profile:
     from line_profiler import LineProfiler
     if 'output_file_select' in kwargs:

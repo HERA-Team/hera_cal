@@ -74,8 +74,8 @@ def simple_lst_bin(
     -------
     data
         A nlst-length list of arrays, each of shape 
-        ``(nbls, ntimes_in_lst, nfreq, npol)``, where LST bins without data simply have
-        a second-axis of size zero.
+        ``(ntimes_in_lst, nbls, nfreq, npol)``, where LST bins without data simply have
+        a first-axis of size zero.
     flags
         Same as ``data``, but boolean flags.
     nsamples
@@ -129,12 +129,8 @@ def simple_lst_bin(
         )
 
     # Now ensure that all the observed LSTs are wrapped so they start above the first bin edges
-    data_lsts %= 2*np.pi
-    data_lsts[data_lsts < lst_bin_edges[0]] += 2* np.pi
-
+    grid_indices, data_lsts = get_lst_bins(data_lsts, lst_bin_edges)
     lst_bin_centres = (lst_bin_edges[1:] + lst_bin_edges[:-1])/2
-
-    grid_indices = np.digitize(data_lsts, lst_bin_edges, right=True) - 1
 
     # Now, any grid index that is less than zero, or len(edges) - 1 is not included in this grid.
     lst_mask = (grid_indices >= 0) & (grid_indices < len(lst_bin_centres))
@@ -178,6 +174,15 @@ def simple_lst_bin(
 
     return lst_bin_centres, _data, _flags, _nsamples
 
+def get_lst_bins(lsts: np.ndarray, edges: np.ndarray):
+    lsts = np.array(lsts).copy()
+    
+    # Now ensure that all the observed LSTs are wrapped so they start above the first bin edges
+    lsts %= 2*np.pi
+    lsts[lsts < edges[0]] += 2* np.pi
+
+    return np.digitize(lsts, edges, right=True) - 1, lsts
+
 def reduce_lst_bins(
     data: list[np.ndarray], flags: list[np.ndarray], nsamples: list[np.ndarray],
     out_data: np.ndarray | None = None, 
@@ -185,6 +190,10 @@ def reduce_lst_bins(
     out_std: np.ndarray | None = None,
     out_nsamples: np.ndarray | None = None,
     mutable: bool = False,
+    save_channels: tuple[int] = (),
+    save_data: np.ndarray | None = None,
+    save_flags: np.ndarray | None = None,
+    save_nsamples: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     From a list of LST-binned data, produce reduced statistics.
@@ -210,6 +219,10 @@ def reduce_lst_bins(
     mutable
         Whether the data (and flags and nsamples) can be modified in place within
         the algorithm. Setting to true saves memory, and is safe for a one-shot script.
+    save_channels
+        A subset of channels can be saved directly to disk as an array of shape
+        ``(nbl, ntimes_per_lst, len(save_channels), npol)``, for easy access after
+        LST-binning.
     """
     nlst_bins = len(data)
     (_, nbl, nfreq, npol) = data[0].shape
@@ -217,6 +230,8 @@ def reduce_lst_bins(
     for d, f, n in zip(data, flags, nsamples):
         assert d.shape == f.shape == n.shape
 
+    # Do this just so that we can save memory if the call to this function already
+    # has allocated memory.
     if out_data is None:
         out_data = np.zeros((nbl, nlst_bins, nfreq, npol), dtype=complex)
     if out_flags is None:
@@ -226,6 +241,14 @@ def reduce_lst_bins(
     if out_nsamples is None:
         out_nsamples = np.zeros(out_data.shape, dtype=float)
 
+    # This as well.
+    if save_data is None:
+        save_data = np.zeros((nbl, nlst_bins, len(save_channels), npol), dtype=complex)
+    if save_flags is None:
+        save_flags = np.zeros(save_data.shape, dtype=bool)
+    if save_nsamples is None:    
+        save_nsamples = np.zeros(save_data.shape, dtype=float)
+    
     assert out_data.shape == out_flags.shape == out_std.shape == out_nsamples.shape
     assert out_data.shape == (nbl, nlst_bins, nfreq, npol)
 
@@ -246,8 +269,20 @@ def reduce_lst_bins(
             out_flags[:, lstbin] = True
             out_std[:, lstbin] = 1.0
             out_nsamples[:, lstbin] = 0.0
-            
-    return out_data, out_flags, out_std, out_nsamples
+
+        if save_channels:
+            save_data[:, lstbin] = d[:, :, list(save_channels)]
+            save_flags[:, lstbin] = f[:, :, list(save_channels)]
+            save_nsamples[:, lstbin] = n[:, :, list(save_channels)]
+
+        
+    return out_data, out_flags, out_std, out_nsamples, save_data, save_flags, save_nsamples
+
+def _allocate_dnf(shape: tuple[int], d=0.0, f=0, n=0):
+    data = np.full(shape, d, dtype=complex)
+    flags = np.full(shape, f, dtype=bool)
+    nsamples = np.full(shape, n, dtype=float)
+    return data, flags, nsamples
 
 @profile
 def lst_average(
@@ -343,12 +378,11 @@ def lst_bin_files_for_baselines(
         )            
 
     # Now we can set up our master arrays of data. 
-    data = np.full((
-        len(lsts), len(baselines), len(freqs), len(pols)), 
-        np.nan+np.nan*1j, dtype=complex
+    data, flags, nsamples = _allocate_dnf(
+        (len(lsts), len(baselines), len(freqs), len(pols)),
+        d=np.nan + np.nan*1j,
+        f=True
     )
-    flags = np.ones(data.shape, dtype=bool)
-    nsamples = np.zeros(data.shape, dtype=float)
 
     # This loop actually reads the associated data in this LST bin.
     ntimes_so_far = 0
@@ -417,7 +451,15 @@ def lst_bin_files_for_baselines(
         rephase = rephase,
         antpos=antpos,
     )
-    return bin_lst, data, flags, nsamples
+
+    bins = get_lst_bins(lsts, lst_bin_edges)
+    times = np.concatenate(time_arrays)
+    times_in_bins = []
+    for i in range(len(bin_lst)):
+        mask = bins == i
+        times_in_bins.append(times[mask])
+
+    return bin_lst, data, flags, nsamples, times_in_bins
 
 @profile
 def lst_bin_files(
@@ -441,6 +483,8 @@ def lst_bin_files(
     ignore_ants: tuple[int]=(),
     write_kwargs: dict | None = None,
     ignore_missing_calfiles: bool = False,
+    save_channels: tuple[int] = (),
+    golden_lsts: tuple[int] = (),
 ):
     """
     LST bin a series of UVH5 files.
@@ -651,17 +695,40 @@ def lst_bin_files(
             continue
 
         # iterate over baseline groups (for memory efficiency)
-        out_data = np.zeros((len(all_baselines), len(outfile_lsts), len(freq_array), len(all_pols)), dtype='complex')
+        out_data, out_flags, out_nsamples = _allocate_dnf(
+            (len(all_baselines), len(outfile_lsts), len(freq_array), len(all_pols)),
+        )
         out_stds = np.zeros_like(out_data)
-        out_nsamples = np.zeros(out_data.shape, dtype=float)
-        out_flags = np.zeros(out_data.shape, dtype=bool)
 
         nbls_so_far = 0
+        lst_bin_edges = np.array(
+            [x - dlst/2 for x in outfile_lsts] + [outfile_lsts[-1] + dlst/2]
+        )
+        
+        # The "golden" data is the full data over all days for a small subset of LST
+        # bins. This works best if the LST bins are small (similar to the size of the
+        # raw integrations). Usually, the length of "bins" will be zero.
+        # NOTE: we work under the assumption that the LST bins are small, so that 
+        # each night only gets one integration in each LST bin. If there are *more*
+        # than one integration in the bin, we take the first one only.
+        bins, _ = get_lst_bins(golden_lsts, lst_bin_edges)
+        bins = bins[(bins >= 0) & (bins <= len(lst_bin_edges))]
+        golden_data, golden_flags, golden_nsamples = [], [], []        
+
+        # The "chan" data is a subset of the full data, taking days, baselines
+        # and pols, but only a small subset of frequencies. We do this for the first 
+        # LST bin in each output file.
+        chan_data, chan_nsamples, chan_flags = _allocate_dnf(
+            (len(all_baselines), len(time_arrays), len(save_channels), len(all_pols))
+        )
+
         for bi, bl_chunk in enumerate(bl_chunks):
             logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
-            bin_lst, data, flags, nsamples = lst_bin_files_for_baselines(
+            # data/flags/nsamples are *lists*, with nlst_bins entries, each being an
+            # array, with shape (times, bls, freqs, npols)
+            bin_lst, data, flags, nsamples, binned_times = lst_bin_files_for_baselines(
                 data_files = file_list, 
-                lst_bin_edges=np.array([x - dlst/2 for x in outfile_lsts] + [outfile_lsts[-1] + dlst/2]), 
+                lst_bin_edges=lst_bin_edges, 
                 baselines=bl_chunk, 
                 freqs=freq_array, 
                 pols=all_pols,
@@ -673,14 +740,37 @@ def lst_bin_files(
                 antpos=antpos,
                 lsts=all_lsts,
             )
+
             slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))
             reduce_lst_bins(
                 data, flags, nsamples,
                 out_nsamples=out_nsamples[slc],
                 out_data=out_data[slc],
                 out_flags=out_flags[slc],
-                out_std=out_stds[slc]
+                out_std=out_stds[slc],
+                save_channels=save_channels,
             )
+
+            if len(bins):
+                for nbin, b in enumerate(bins):
+                    if bi == 0:
+                        nt, _, nf, np = data[b].shape
+                        d, f, n = _allocate_dnf(
+                            (len(all_baselines), nt, nf, np)
+                        )
+                        golden_data.append(d)
+                        golden_flags.append(f)
+                        golden_nsamples.append(n)
+                    
+                    golden_data[nbin][slc] = data[b].transpose((1,0,2,3))
+                    golden_flags[nbin][slc] = flags[b].transpose((1,0,2,3))
+                    golden_nsamples[nbin][slc] = nsamples[b].transpose((1,0,2,3))
+
+            if len(save_channels):
+                for ichan, chan in enumerate(save_channels):
+                    chan_data[slc, :, ichan] = data[0][:, :, chan].transpose((1, 0, 2))
+                    chan_flags[slc, :, ichan] = flags[0][:, :, chan].transpose((1, 0, 2))
+                    chan_nsamples[slc, :, ichan] = nsamples[0][:, :, chan].transpose((1, 0, 2))
 
             nbls_so_far += len(bl_chunk)
 
@@ -735,7 +825,48 @@ def lst_bin_files(
 
         uvd_data = io.create_uvd_from_hera_data(data = out_stds, **write_kwargs)
         uvd_data.write_uvh5(os.path.join(outdir, std_file), clobber=overwrite)
-        
+
+        # Now write out the golden lsts
+        for gd, gn, gf, bt, ib in zip(golden_data, golden_nsamples, golden_flags, binned_times, bins):
+            fkwargs['type'] = 'GOLDEN'
+            fkwargs['time'] = lst_bin_edges[ib]
+            filename = f"zen.{file_ext.format(**fkwargs)}"
+
+            guvd = io.create_uvd_from_hera_data(
+                data = gd,
+                time_array = bt,
+                freq_array=freq_array,
+                antpos=antpos,
+                pols=all_pols,
+                antpairs=all_baselines,
+                flags=gf,
+                nsamples=gn,
+                x_orientation=x_orientation,
+                integration_time=integration_time,
+                history=_history,
+            )
+            guvd.write_uvh5(os.path.join(outdir, filename), clobber=overwrite)
+
+        # Now write out reduced-channel data
+        if save_channels:
+            fkwargs['type'] = 'REDUCEDCHAN'
+            fkwargs['time'] = bin_lst[0] - dlst / 2.0
+            filename = f"zen.{file_ext.format(**fkwargs)}"
+            guvd = io.create_uvd_from_hera_data(
+                data = chan_data,
+                time_array = binned_times[0],
+                freq_array=freq_array,
+                antpos=antpos,
+                pols=all_pols,
+                antpairs=all_baselines,
+                flags=chan_flags,
+                nsamples=chan_nsamples,
+                x_orientation=x_orientation,
+                integration_time=integration_time,
+                history=_history,
+            )
+            guvd.write_uvh5(os.path.join(outdir, filename), clobber=overwrite)
+
 @profile
 def get_all_unflagged_baselines(
     data_files: list[list[str | Path]], 
@@ -881,4 +1012,6 @@ def lst_bin_arg_parser():
     a.add_argument("--write_kwargs", default='{}', type=str, help="json dictionary of arguments to the uvh5 writer")
     a.add_argument("--profile", action="store_true", default=False, help="whether to run line profiling")
     a.add_argument("--profile-funcs", type=str, help="functions to profile, separated by commas")
+    a.add_argument("--golden-lsts", type=str, help="LSTS (rad) to save longitudinal data for, separated by commas")
+    a.add_argument("--save-channels", type=str, help="integer channels separated by commas to save longitudinal data for")
     return a
