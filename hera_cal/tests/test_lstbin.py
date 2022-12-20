@@ -56,6 +56,7 @@ class Test_lstbin(object):
         self.flgs_list = [self.flgs1, self.flgs2, self.flgs3]
         self.lst_list = [self.lsts1, self.lsts2, self.lsts3]
         self.nsmp_list = [self.nsmps1, self.nsmps2, self.nsmps3]
+        self.file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
 
     def test_make_lst_grid(self):
         lst_grid = lstbin.make_lst_grid(0.01, begin_lst=None, verbose=False)
@@ -649,7 +650,7 @@ class Test_lstbin(object):
     @pytest.mark.filterwarnings("ignore:antenna_diameters is not set")
     def test_simpler_lst_bin_files(self):
         # basic execution
-        file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
+        file_ext = self.file_ext
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
             file_ext=file_ext, ignore_flags=True
@@ -773,6 +774,8 @@ class Test_lstbin(object):
             if os.path.exists(of):
                 os.remove(of)
 
+
+
         # test input_cal
         uvc = UVCal()
         uvc.read_calfits(os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits'))
@@ -825,6 +828,86 @@ class Test_lstbin(object):
 
         os.remove(output_lst_file)
         os.remove(output_std_file)
+
+    def test_lstbin_golden(self):
+        # test smaller ntimes file output, sweeping through f_select
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True,
+            write_kwargs={'vis_units': 'Jy'}, file_ext=self.file_ext)
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        # load a file
+        uvd1 = UVData()
+        uvd1.read(output_files[1])
+        assert uvd1.vis_units == 'Jy'
+        assert 'Thisfilewasproducedbythefunction' in uvd1.history.replace('\n', '').replace(' ', '')
+        assert uvd1.Ntimes == 80
+        assert np.isclose(uvd1.nsample_array.max(), 3.0)
+        # remove files
+        for of in output_files:
+            if os.path.exists(of):
+                os.remove(of)
+
+
+        # test golden_lsts
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True, 
+            output_file_select=1, write_kwargs={'vis_units': 'Jy'}, file_ext=self.file_ext,
+            golden_lsts=(0.265,)
+        )
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        # load a file
+        uvd2 = UVData()
+        uvd2.read(output_files[0])
+        # assert equivalence with previous run
+        assert uvd1 == uvd2
+
+        golden = glob.glob("./zen.ee.GOLDEN*")
+        assert golden
+
+        # remove files
+        for of in output_files + golden:
+            if os.path.exists(of):
+                os.remove(of)
+
+    def test_lstbin_savechans(self):
+        # test smaller ntimes file output, sweeping through f_select
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True,
+            write_kwargs={'vis_units': 'Jy'}, file_ext=self.file_ext)
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        # load a file
+        uvd1 = UVData()
+        uvd1.read(output_files[1])
+        assert uvd1.vis_units == 'Jy'
+        assert 'Thisfilewasproducedbythefunction' in uvd1.history.replace('\n', '').replace(' ', '')
+        assert uvd1.Ntimes == 80
+        assert np.isclose(uvd1.nsample_array.max(), 3.0)
+        # remove files
+        for of in output_files:
+            if os.path.exists(of):
+                os.remove(of)
+
+
+        # test golden_lsts
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True, 
+            output_file_select=1, write_kwargs={'vis_units': 'Jy'}, file_ext=self.file_ext,
+            save_channels=(32,)
+        )
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        # load a file
+        uvd2 = UVData()
+        uvd2.read(output_files[0])
+        # assert equivalence with previous run
+        assert uvd1 == uvd2
+
+        golden = glob.glob("./zen.ee.REDUCEDCHAN*")
+        assert golden
+
+        # remove files
+        for of in output_files + golden:
+            if os.path.exists(of):
+                os.remove(of)
 
     def tearDown(self):
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))

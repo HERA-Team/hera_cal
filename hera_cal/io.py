@@ -2178,6 +2178,8 @@ def create_uvd_from_hera_data(
     uvd = UVData()
     uvd._set_future_array_shapes()
 
+    tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
+
     # get times
     if time_array is None:
         if start_jd is None or lst_array is None:
@@ -2196,6 +2198,7 @@ def create_uvd_from_hera_data(
             longitude=(tel_lat_lon_alt[1] * 180 / np.pi),
             altitude=tel_lat_lon_alt[2]
         )
+
     # We have three options for the shape of the data. Either (bls, times, freqs, pols),
     # (times, bls, freqs, pols) or (bls*times, freqs, pols).
     blfirst = False
@@ -2207,7 +2210,7 @@ def create_uvd_from_hera_data(
         elif data.shape == (len(time_array), len(antpairs), len(freq_array), len(pols)):
             timefirst = True
         else:
-            raise ValueError("data shape must be (bls, times, freqs, pols) or (times, bls, freqs, pols)")
+            raise ValueError(f"data shape must be (bls, times, freqs, pols) or (times, bls, freqs, pols). Got {data.shape}")
     elif data.ndim == 3:
         if data.shape != (len(antpairs), len(freq_array), len(pols)):
             raise ValueError("3D data must be shape (nblts, nfreqs, npols)")
@@ -2234,7 +2237,6 @@ def create_uvd_from_hera_data(
     uvd.antenna_names = [f"HH{a}" for a in uvd.antenna_numbers]
 
     # get antenna positions in ITRF frame
-    tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
     antenna_positions = np.array([antpos[k] for k in uvd.antenna_numbers])
     uvd.antenna_positions = uvutils.ECEF_from_ENU(antenna_positions, *tel_lat_lon_alt) - telescope_location
     uvd.telescope_location = telescope_location
@@ -2270,10 +2272,12 @@ def create_uvd_from_hera_data(
     # configure integration time, converting from days (the unit of time_array)
     # to seconds (the unit of integration_time)
     if integration_time is None:
-        integration_time = np.ones_like(time_array, dtype=np.float64) * np.median(np.diff(np.unique(time_array))) * 24 * 3600.
-
+        integration_time = np.ones_like(uvd.time_array, dtype=np.float64) * np.median(np.diff(np.unique(time_array))) * 24 * 3600.
+    elif not hasattr(integration_time, "__len__"):
+        integration_time = np.ones_like(uvd.time_array, dtype=np.float64) * integration_time
+    
     if len(integration_time) != len(uvd.time_array):
-        raise ValueError("integration_time must be same shape as time_array")
+        raise ValueError(f"integration_time must be same shape as time_array. Got {len(integration_time)} not {len(uvd.time_array)}")
 
     uvd.integration_time = integration_time
 

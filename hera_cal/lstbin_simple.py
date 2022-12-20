@@ -177,8 +177,9 @@ def get_lst_bins(lsts: np.ndarray, edges: np.ndarray):
     # Now ensure that all the observed LSTs are wrapped so they start above the first bin edges
     lsts %= 2*np.pi
     lsts[lsts < edges[0]] += 2* np.pi
-    mask = (lsts >= 0) & (lsts < len(edges)-1)
-    return np.digitize(lsts, edges, right=True) - 1, lsts, mask
+    bins = np.digitize(lsts, edges, right=True) - 1
+    mask = (bins >= 0) & (bins < (len(edges)-1))
+    return bins, lsts, mask
 
 def reduce_lst_bins(
     data: list[np.ndarray], flags: list[np.ndarray], nsamples: list[np.ndarray],
@@ -441,6 +442,7 @@ def lst_bin_files_for_baselines(
 def lst_bin_files(
     data_files: list[list[str]], 
     calfile_rules: tuple[tuple[str, str]] = (), 
+    input_cals: tuple[list[str]] | None = (),
     dlst: float | None=None, 
     n_lstbins_per_outfile: int=60,
     file_ext: str="{type}.{time:7.5f}.uvh5", 
@@ -525,26 +527,26 @@ def lst_bin_files(
     # Check that that there are the same number of input data files and 
     # calibration files each night.
 
-    input_cals = []
-    if calfile_rules:
-        
-        for night, dflist in enumerate(data_files):
-            this = []
-            input_cals.append(this)
-            missing = []
-            for df in dflist:
-                cf = df
-                for rule in calfile_rules:
-                    cf = cf.replace(rule[0], rule[1]) 
+    if not input_cals:
+        if calfile_rules:
+            
+            for night, dflist in enumerate(data_files):
+                this = []
+                input_cals.append(this)
+                missing = []
+                for df in dflist:
+                    cf = df
+                    for rule in calfile_rules:
+                        cf = cf.replace(rule[0], rule[1]) 
 
-                if os.path.exists(cf):
-                    this.append(cf)
-                elif ignore_missing_calfiles:
-                    warnings.warn(f"Calibration file {cf} does not exist")
-                    missing.append(df)
-                else:
-                    raise IOError(f"Calibration file {cf} does not exist")
-            data_files[night] = [df for df in dflist if df not in missing]
+                    if os.path.exists(cf):
+                        this.append(cf)
+                    elif ignore_missing_calfiles:
+                        warnings.warn(f"Calibration file {cf} does not exist")
+                        missing.append(df)
+                    else:
+                        raise IOError(f"Calibration file {cf} does not exist")
+                data_files[night] = [df for df in dflist if df not in missing]
 
     logger.info("Got the following numbers of data files per night:")
     for dflist in data_files:
@@ -659,7 +661,8 @@ def lst_bin_files(
                     time_arrays.append(time_arrs[night][k_file][tind])
                     all_lsts.append(larr[tind])
                     file_list.append(fl)
-                    if input_cals is not None:
+                    print(input_cals, night, k_file)
+                    if input_cals:
                         cals.append(input_cals[night][k_file])
                     else:
                         cals.append(None)
@@ -690,14 +693,9 @@ def lst_bin_files(
         bins, _, mask = get_lst_bins(golden_lsts, lst_bin_edges)
         bins = bins[mask]
         golden_data, golden_flags, golden_nsamples = [], [], []
-        logger.info(f"golden_lsts bins in this output file: {bins}, lst_bin_edges={lst_bin_edges}")
+        print(f"golden_lsts bins in this output file: {bins}, lst_bin_edges={lst_bin_edges}, {len(lst_bin_edges)}")
 
-        # The "chan" data is a subset of the full data, taking days, baselines
-        # and pols, but only a small subset of frequencies. We do this for the first 
-        # LST bin in each output file.
-        chan_data, chan_nsamples, chan_flags = _allocate_dnf(
-            (len(all_baselines), len(time_arrays), len(save_channels), len(all_pols))
-        )
+        
 
         for bi, bl_chunk in enumerate(bl_chunks):
             logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
@@ -744,6 +742,15 @@ def lst_bin_files(
                     golden_nsamples[nbin][slc] = nsamples[b].transpose((1,0,2,3))
 
             if len(save_channels):
+                if bi == 0:
+                    # The "chan" data is a subset of the full data, taking days, baselines
+                    # and pols, but only a small subset of frequencies. We do this for the first 
+                    # LST bin in each output file.
+                    chan_data, chan_flags, chan_nsamples = _allocate_dnf(
+                        (len(all_baselines), data[0].shape[0], len(save_channels), len(all_pols))
+                    )
+                    print(data[0].shape, len(binned_times[0]))
+
                 for ichan, chan in enumerate(save_channels):
                     chan_data[slc, :, ichan] = data[0][:, :, chan].transpose((1, 0, 2))
                     chan_flags[slc, :, ichan] = flags[0][:, :, chan].transpose((1, 0, 2))
@@ -819,7 +826,7 @@ def lst_bin_files(
                 flags=gf,
                 nsamples=gn,
                 x_orientation=x_orientation,
-                integration_time=integration_time,
+                integration_time=integration_time[0],
                 history=_history,
             )
             guvd.write_uvh5(os.path.join(outdir, filename), clobber=overwrite)
@@ -832,14 +839,14 @@ def lst_bin_files(
             guvd = io.create_uvd_from_hera_data(
                 data = chan_data,
                 time_array = binned_times[0],
-                freq_array=freq_array,
+                freq_array=freq_array[list(save_channels)],
                 antpos=antpos,
                 pols=all_pols,
                 antpairs=all_baselines,
                 flags=chan_flags,
                 nsamples=chan_nsamples,
                 x_orientation=x_orientation,
-                integration_time=integration_time,
+                integration_time=integration_time[0],
                 history=_history,
             )
             guvd.write_uvh5(os.path.join(outdir, filename), clobber=overwrite)
