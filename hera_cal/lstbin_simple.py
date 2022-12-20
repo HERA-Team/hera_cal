@@ -190,10 +190,6 @@ def reduce_lst_bins(
     out_std: np.ndarray | None = None,
     out_nsamples: np.ndarray | None = None,
     mutable: bool = False,
-    save_channels: tuple[int] = (),
-    save_data: np.ndarray | None = None,
-    save_flags: np.ndarray | None = None,
-    save_nsamples: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     From a list of LST-binned data, produce reduced statistics.
@@ -219,10 +215,6 @@ def reduce_lst_bins(
     mutable
         Whether the data (and flags and nsamples) can be modified in place within
         the algorithm. Setting to true saves memory, and is safe for a one-shot script.
-    save_channels
-        A subset of channels can be saved directly to disk as an array of shape
-        ``(nbl, ntimes_per_lst, len(save_channels), npol)``, for easy access after
-        LST-binning.
     """
     nlst_bins = len(data)
     (_, nbl, nfreq, npol) = data[0].shape
@@ -241,14 +233,6 @@ def reduce_lst_bins(
     if out_nsamples is None:
         out_nsamples = np.zeros(out_data.shape, dtype=float)
 
-    # This as well.
-    if save_data is None:
-        save_data = np.zeros((nbl, nlst_bins, len(save_channels), npol), dtype=complex)
-    if save_flags is None:
-        save_flags = np.zeros(save_data.shape, dtype=bool)
-    if save_nsamples is None:    
-        save_nsamples = np.zeros(save_data.shape, dtype=float)
-    
     assert out_data.shape == out_flags.shape == out_std.shape == out_nsamples.shape
     assert out_data.shape == (nbl, nlst_bins, nfreq, npol)
 
@@ -270,13 +254,8 @@ def reduce_lst_bins(
             out_std[:, lstbin] = 1.0
             out_nsamples[:, lstbin] = 0.0
 
-        if save_channels:
-            save_data[:, lstbin] = d[:, :, list(save_channels)]
-            save_flags[:, lstbin] = f[:, :, list(save_channels)]
-            save_nsamples[:, lstbin] = n[:, :, list(save_channels)]
-
         
-    return out_data, out_flags, out_std, out_nsamples, save_data, save_flags, save_nsamples
+    return out_data, out_flags, out_std, out_nsamples
 
 def _allocate_dnf(shape: tuple[int], d=0.0, f=0, n=0):
     data = np.full(shape, d, dtype=complex)
@@ -748,7 +727,6 @@ def lst_bin_files(
                 out_data=out_data[slc],
                 out_flags=out_flags[slc],
                 out_std=out_stds[slc],
-                save_channels=save_channels,
             )
 
             if len(bins):
