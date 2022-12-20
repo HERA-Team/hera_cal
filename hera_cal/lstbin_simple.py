@@ -754,9 +754,9 @@ def lst_bin_files(
             if len(bins):
                 for nbin, b in enumerate(bins):
                     if bi == 0:
-                        nt, _, nf, np = data[b].shape
+                        nt, _, nf, npol = data[b].shape
                         d, f, n = _allocate_dnf(
-                            (len(all_baselines), nt, nf, np)
+                            (len(all_baselines), nt, nf, npol)
                         )
                         golden_data.append(d)
                         golden_flags.append(f)
