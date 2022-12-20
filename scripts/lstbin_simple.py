@@ -123,7 +123,7 @@ else:
     profiler = None
 
 if args.profile:
-    profiler.runcall(lstbin.lst_bin_files, calfile_rules=calfile_rules, write_kwargs=write_kwargs, **kwargs)
+    profiler.runcall(lstbin.lst_bin_files, data_files, calfile_rules=calfile_rules, write_kwargs=write_kwargs, **kwargs)
 else:
     lstbin.lst_bin_files(data_files, calfile_rules=calfile_rules, write_kwargs=write_kwargs, **kwargs)
 
