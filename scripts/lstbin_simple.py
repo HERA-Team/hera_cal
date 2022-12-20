@@ -112,7 +112,7 @@ if args.profile:
     for fnc in args.profile_funcs.split(","):
         module = importlib.import_module(fnc.split(":")[0])
         _fnc = module
-        if ":" not in _fnc:
+        if ":" not in fnc:
             profiler.add_module(_fnc)
         else:
             for att in fnc.split(":")[-1].split("."):
