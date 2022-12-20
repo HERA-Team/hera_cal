@@ -528,7 +528,7 @@ def lst_bin_files(
     # calibration files each night.
 
     input_cals = input_cals or []
-    if not input_cals and if calfile_rules:
+    if not input_cals and calfile_rules:
             
         for night, dflist in enumerate(data_files):
             this = []
