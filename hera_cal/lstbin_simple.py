@@ -690,7 +690,7 @@ def lst_bin_files(
         bins, _, mask = get_lst_bins(golden_lsts, lst_bin_edges)
         bins = bins[mask]
         golden_data, golden_flags, golden_nsamples = [], [], []
-        logger.info(f"golden_lsts bins in this output file: {bins}")
+        logger.info(f"golden_lsts bins in this output file: {bins}, lst_bin_edges={lst_bin_edges}")
 
         # The "chan" data is a subset of the full data, taking days, baselines
         # and pols, but only a small subset of frequencies. We do this for the first 

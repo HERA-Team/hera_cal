@@ -2100,11 +2100,11 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 @profile
 def create_uvd_from_hera_data(
     data: np.ndarray, 
-    lst_array: np.ndarray, 
     freq_array: np.ndarray, 
     antpos: dict[str, np.ndarray], 
     pols: list[str],
     antpairs: list[str[int, int]],
+    lst_array: np.ndarray | None = None, 
     time_array: np.ndarray | None=None, 
     flags: np.ndarray | None=None, 
     nsamples: np.ndarray | None=None,
@@ -2178,15 +2178,33 @@ def create_uvd_from_hera_data(
     uvd = UVData()
     uvd._set_future_array_shapes()
 
+    # get times
+    if time_array is None:
+        if start_jd is None or lst_array is None:
+            raise AttributeError("if time_array is not fed, start_jd and lst_array must be fed")
+        time_array = LST2JD(
+            lst_array, start_jd, allow_other_jd=True, lst_branch_cut=lst_branch_cut,
+            latitude=(tel_lat_lon_alt[0] * 180 / np.pi),
+            longitude=(tel_lat_lon_alt[1] * 180 / np.pi),
+            altitude=tel_lat_lon_alt[2]
+        )
+
+    if lst_array is None:
+        lst_array = JD2LST(
+            time_array,
+            latitude=(tel_lat_lon_alt[0] * 180 / np.pi),
+            longitude=(tel_lat_lon_alt[1] * 180 / np.pi),
+            altitude=tel_lat_lon_alt[2]
+        )
     # We have three options for the shape of the data. Either (bls, times, freqs, pols),
     # (times, bls, freqs, pols) or (bls*times, freqs, pols).
     blfirst = False
     timefirst = False
     bltime = False
     if data.ndim == 4:
-        if data.shape == (len(antpairs), len(lst_array), len(freq_array), len(pols)):
+        if data.shape == (len(antpairs), len(time_array), len(freq_array), len(pols)):
             blfirst = True
-        elif data.shape == (len(lst_array), len(antpairs), len(freq_array), len(pols)):
+        elif data.shape == (len(time_array), len(antpairs), len(freq_array), len(pols)):
             timefirst = True
         else:
             raise ValueError("data shape must be (bls, times, freqs, pols) or (times, bls, freqs, pols)")
@@ -2221,22 +2239,9 @@ def create_uvd_from_hera_data(
     uvd.antenna_positions = uvutils.ECEF_from_ENU(antenna_positions, *tel_lat_lon_alt) - telescope_location
     uvd.telescope_location = telescope_location
 
-    # get times
-    if time_array is None:
-        if start_jd is None:
-            raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = LST2JD(
-            lst_array, start_jd, allow_other_jd=True, lst_branch_cut=lst_branch_cut,
-            latitude=(tel_lat_lon_alt[0] * 180 / np.pi),
-            longitude=(tel_lat_lon_alt[1] * 180 / np.pi),
-            altitude=tel_lat_lon_alt[2]
-        )
         #print(lst_array, start_jd, time_array)
     
     if bltime:
-        if len(antpairs) != len(lst_array):
-            raise ValueError("If using a combined blt axis, require antpairs same length as lst_array")
-
         if len(antpairs) != len(time_array):
             raise ValueError("If using a combined blt axis, require antpairs same length as time_array")
 
