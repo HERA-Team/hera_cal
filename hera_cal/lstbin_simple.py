@@ -691,9 +691,9 @@ def lst_bin_files(
         # each night only gets one integration in each LST bin. If there are *more*
         # than one integration in the bin, we take the first one only.
         bins, _ = get_lst_bins(golden_lsts, lst_bin_edges)
-        bins = bins[(bins >= 0) & (bins <= len(lst_bin_edges))]
-        golden_data, golden_flags, golden_nsamples = [], [], []        
-        logger.info(f"golden_lsts bins in this file: {bins}, {lst_bin_edges[bins]}")
+        bins = bins[(bins >= 0) & (bins < len(lst_bin_edges))]
+        golden_data, golden_flags, golden_nsamples = [], [], []
+        logger.info(f"golden_lsts bins in this output file: {bins}")
 
         # The "chan" data is a subset of the full data, taking days, baselines
         # and pols, but only a small subset of frequencies. We do this for the first 
