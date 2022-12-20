@@ -693,6 +693,7 @@ def lst_bin_files(
         bins, _ = get_lst_bins(golden_lsts, lst_bin_edges)
         bins = bins[(bins >= 0) & (bins <= len(lst_bin_edges))]
         golden_data, golden_flags, golden_nsamples = [], [], []        
+        logger.info(f"golden_lsts bins in this file: {bins}, {lst_bin_edges[bins]}")
 
         # The "chan" data is a subset of the full data, taking days, baselines
         # and pols, but only a small subset of frequencies. We do this for the first 
@@ -732,6 +733,7 @@ def lst_bin_files(
             if len(bins):
                 for nbin, b in enumerate(bins):
                     if bi == 0:
+                        logger.info(f"length of data: {len(data)}")
                         nt, _, nf, npol = data[b].shape
                         d, f, n = _allocate_dnf(
                             (len(all_baselines), nt, nf, npol)
