@@ -129,11 +129,8 @@ def simple_lst_bin(
         )
 
     # Now ensure that all the observed LSTs are wrapped so they start above the first bin edges
-    grid_indices, data_lsts = get_lst_bins(data_lsts, lst_bin_edges)
+    grid_indices, data_lsts, lst_mask = get_lst_bins(data_lsts, lst_bin_edges)
     lst_bin_centres = (lst_bin_edges[1:] + lst_bin_edges[:-1])/2
-
-    # Now, any grid index that is less than zero, or len(edges) - 1 is not included in this grid.
-    lst_mask = (grid_indices >= 0) & (grid_indices < len(lst_bin_centres))
 
     # TODO: check whether this creates a data copy. Don't want the extra RAM...
     data = data[lst_mask]  # actually good if this is copied, because we do LST rephase in-place
@@ -180,8 +177,8 @@ def get_lst_bins(lsts: np.ndarray, edges: np.ndarray):
     # Now ensure that all the observed LSTs are wrapped so they start above the first bin edges
     lsts %= 2*np.pi
     lsts[lsts < edges[0]] += 2* np.pi
-
-    return np.digitize(lsts, edges, right=True) - 1, lsts
+    mask = (lsts >= 0) & (lsts < len(edges)-1)
+    return np.digitize(lsts, edges, right=True) - 1, lsts, mask
 
 def reduce_lst_bins(
     data: list[np.ndarray], flags: list[np.ndarray], nsamples: list[np.ndarray],
@@ -431,7 +428,7 @@ def lst_bin_files_for_baselines(
         antpos=antpos,
     )
 
-    bins = get_lst_bins(lsts, lst_bin_edges)
+    bins = get_lst_bins(lsts, lst_bin_edges)[0]
     times = np.concatenate(time_arrays)
     times_in_bins = []
     for i in range(len(bin_lst)):
@@ -690,8 +687,8 @@ def lst_bin_files(
         # NOTE: we work under the assumption that the LST bins are small, so that 
         # each night only gets one integration in each LST bin. If there are *more*
         # than one integration in the bin, we take the first one only.
-        bins, _ = get_lst_bins(golden_lsts, lst_bin_edges)
-        bins = bins[(bins >= 0) & (bins < len(lst_bin_edges))]
+        bins, _, mask = get_lst_bins(golden_lsts, lst_bin_edges)
+        bins = bins[mask]
         golden_data, golden_flags, golden_nsamples = [], [], []
         logger.info(f"golden_lsts bins in this output file: {bins}")
 
