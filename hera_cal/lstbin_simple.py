@@ -527,26 +527,26 @@ def lst_bin_files(
     # Check that that there are the same number of input data files and 
     # calibration files each night.
 
-    if not input_cals:
-        if calfile_rules:
+    input_cals = input_cals or []
+    if not input_cals and if calfile_rules:
             
-            for night, dflist in enumerate(data_files):
-                this = []
-                input_cals.append(this)
-                missing = []
-                for df in dflist:
-                    cf = df
-                    for rule in calfile_rules:
-                        cf = cf.replace(rule[0], rule[1]) 
+        for night, dflist in enumerate(data_files):
+            this = []
+            input_cals.append(this)
+            missing = []
+            for df in dflist:
+                cf = df
+                for rule in calfile_rules:
+                    cf = cf.replace(rule[0], rule[1]) 
 
-                    if os.path.exists(cf):
-                        this.append(cf)
-                    elif ignore_missing_calfiles:
-                        warnings.warn(f"Calibration file {cf} does not exist")
-                        missing.append(df)
-                    else:
-                        raise IOError(f"Calibration file {cf} does not exist")
-                data_files[night] = [df for df in dflist if df not in missing]
+                if os.path.exists(cf):
+                    this.append(cf)
+                elif ignore_missing_calfiles:
+                    warnings.warn(f"Calibration file {cf} does not exist")
+                    missing.append(df)
+                else:
+                    raise IOError(f"Calibration file {cf} does not exist")
+            data_files[night] = [df for df in dflist if df not in missing]
 
     logger.info("Got the following numbers of data files per night:")
     for dflist in data_files:
@@ -661,7 +661,6 @@ def lst_bin_files(
                     time_arrays.append(time_arrs[night][k_file][tind])
                     all_lsts.append(larr[tind])
                     file_list.append(fl)
-                    print(input_cals, night, k_file)
                     if input_cals:
                         cals.append(input_cals[night][k_file])
                     else:
@@ -693,7 +692,7 @@ def lst_bin_files(
         bins, _, mask = get_lst_bins(golden_lsts, lst_bin_edges)
         bins = bins[mask]
         golden_data, golden_flags, golden_nsamples = [], [], []
-        print(f"golden_lsts bins in this output file: {bins}, lst_bin_edges={lst_bin_edges}, {len(lst_bin_edges)}")
+        logger.info(f"golden_lsts bins in this output file: {bins}, lst_bin_edges={lst_bin_edges}, {len(lst_bin_edges)}")
 
         
 
@@ -749,7 +748,6 @@ def lst_bin_files(
                     chan_data, chan_flags, chan_nsamples = _allocate_dnf(
                         (len(all_baselines), data[0].shape[0], len(save_channels), len(all_pols))
                     )
-                    print(data[0].shape, len(binned_times[0]))
 
                 for ichan, chan in enumerate(save_channels):
                     chan_data[slc, :, ichan] = data[0][:, :, chan].transpose((1, 0, 2))
