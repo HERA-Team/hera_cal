@@ -128,8 +128,7 @@ else:
     lstbin.lst_bin_files(data_files, calfile_rules=calfile_rules, write_kwargs=write_kwargs, **kwargs)
 
 if args.profile:
-    with open(output_file, "w") as fl:
-        profiler.dump_stats(stream=fl)
+    profiler.dump_stats(output_file)
 
     with open(output_file.with_suffix(".txt"), "w") as fl:
         profiler.print_stats(stream=fl, stripzeros=True)
