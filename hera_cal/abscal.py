@@ -943,9 +943,11 @@ def RFI_delay_slope_cal(reds, antpos, red_data, freqs, rfi_chans, rfi_headings, 
     rfi_phs = np.array([np.exp(-2j * np.pi * np.dot(unique_blvecs[red[0]], rfi_headings) * freqs[rfi_chans] / constants.c) for red in reds])
     dlys_to_check = np.arange(min_tau, max_tau, delta_tau)
     dly_terms = np.exp(2j * np.pi * np.outer(freqs[rfi_chans], dlys_to_check))
-    # dimensions: i = Nubls, j = Ntimes, k = Nrfi_chans, l = Ndlys
-    to_minimize = np.einsum('ijk,ik,kl->ijkl', vis, rfi_phs, dly_terms) - 1
-    to_minimize = np.einsum('ijkl,k->ijl', np.abs(to_minimize), np.array(rfi_wgts if rfi_wgts is not None else np.ones_like(rfi_chans)))
+    # dimensions: i = Nubls, j = Ntimes, k = Ndlys
+    to_minimize = np.zeros(vis.shape[0:2] + (len(dlys_to_check),))
+    for ci in range(len(rfi_chans)):
+        wgt_here = (rfi_wgts[ci] if rfi_wgts is not None else 1.0)
+        to_minimize += np.abs(np.einsum('ij,i,k->ijk', vis[:, :, ci], rfi_phs[:, ci], dly_terms[ci, :]) - 1) * wgt_here
     dly_sol_args = np.argmin(to_minimize, axis=-1)
     delay_sols = {red[0]: dlys_to_check[dly_sol_args[i]] for i, red in enumerate(reds)}
 
@@ -3479,7 +3481,8 @@ def _get_idealized_antpos(cal_flags, antpos, pols, tol=1.0, keep_flagged_ants=Tr
 
 
 def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, kernel=(1, 15),
-                       phs_max_iter=100, phs_conv_crit=1e-6, verbose=True, use_abs_amp_lincal=True):
+                       phs_max_iter=100, phs_conv_crit=1e-6, verbose=True,
+                       use_abs_amp_logcal=True, use_abs_amp_lincal=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
@@ -3496,6 +3499,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
         phs_max_iter: maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
             the updates to all 1.0s.
+        use_abs_amp_logcal: start absolute amplitude calibration with a biased but robust first step. Default True.
         use_abs_amp_lincal: finish calibration with an unbiased amplitude lincal step. Default True.
 
     Returns:
@@ -3511,9 +3515,12 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     reds = redcal.get_reds(idealized_antpos, pols=data.pols(), bl_error_tol=redcal.IDEALIZED_BL_TOL)
 
     # Abscal Step 1: Per-Channel Logarithmic Absolute Amplitude Calibration
-    gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
-    abscal_delta_gains = {ant: gains_here[ant] for ant in ants}
-    apply_cal.calibrate_in_place(data, gains_here)
+    if use_abs_amp_logcal:
+        gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+        abscal_delta_gains = {ant: gains_here[ant] for ant in ants}
+        apply_cal.calibrate_in_place(data, gains_here)
+    else:
+        abscal_delta_gains = {ant: np.ones_like(rc_flags[ant], dtype=np.complex64) for ant in ants}
 
     # Abscal Step 2: Global Delay Slope Calibration
     binary_wgts = DataContainer({bl: (data_wgts[bl] > 0).astype(float) for bl in data_wgts})
@@ -3649,8 +3656,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
             warnings.warn(f"Warning: Overwriting redcal gain_scale of {hc.gain_scale} with model gain_scale of {hdm.vis_units}", RuntimeWarning)
         hc.gain_scale = hdm.vis_units  # set vis_units of hera_cal based on model files.
         hd_autos = io.HERAData(raw_auto_file)
-        assert hdm.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation, hdm.x_orientation)
-        assert hc.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation, hc.x_orientation)
+        assert hdm.x_orientation.lower() == hd.x_orientation.lower(), 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation.lower(), hdm.x_orientation.lower())
+        assert hc.x_orientation.lower() == hd.x_orientation.lower(), 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation.lower(), hc.x_orientation.lower())
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
 
         # get model bls and antpos to use later in baseline matching
