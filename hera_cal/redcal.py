@@ -1672,6 +1672,30 @@ def expand_omni_gains(sol, all_reds, data, nsamples, chisq_per_ant=None):
                     chisq_per_ant[ant][~np.isfinite(cs)] = np.zeros_like(cs[~np.isfinite(cs)])
 
 
+def _init_redcal_meta_dict(nTimes, nFreqs, ants, pol_load_list):
+    '''Helper for redcal_iteration. Creates dictionary to contain firstcal and omnical metas for the full file.'''
+    redcal_meta = {}
+    redcal_meta['fc_meta'] = {'dlys': {ant: np.full(nTimes, np.nan) for ant in ants}}
+    redcal_meta['fc_meta']['polarity_flips'] = {ant: np.full(nTimes, np.nan) for ant in ants}
+    redcal_meta['omni_meta'] = {'chisq': {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}}
+    redcal_meta['omni_meta']['iter'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=int) for pols in pol_load_list}
+    redcal_meta['omni_meta']['conv_crit'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
+    return redcal_meta
+
+
+def _update_redcal_meta(redcal_meta, meta_slice, tSlice, fSlice, pols):
+    '''Helper for redcal_iteration. Updates a subset of redcal_meta using meta_slice.'''
+    # update firstcal metadata
+    for ant in meta_slice['fc_meta']['dlys']:
+        redcal_meta['fc_meta']['dlys'][ant][tSlice] = meta_slice['fc_meta']['dlys'][ant]
+        redcal_meta['fc_meta']['polarity_flips'][ant][tSlice] = meta_slice['fc_meta']['polarity_flips'][ant]
+
+    # update omnical metadata
+    redcal_meta['omni_meta']['chisq'][str(pols)][tSlice, fSlice] = meta_slice['omni_meta']['chisq']
+    redcal_meta['omni_meta']['iter'][str(pols)][tSlice, fSlice] = meta_slice['omni_meta']['iter']
+    redcal_meta['omni_meta']['conv_crit'][str(pols)][tSlice, fSlice] = meta_slice['omni_meta']['conv_crit']
+
+
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
                      solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
                      oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
