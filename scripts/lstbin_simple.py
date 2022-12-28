@@ -39,10 +39,12 @@ from hera_cal._cli_tools import setup_logger
 import logging
 import importlib
 from pathlib import Path
+from hera_cal.profiling_utils import add_profiling_args, run_func_with_profiling
 
 logger = logging.getLogger('hera_cal')
 setup_logger()
 a = lstbin.lst_bin_arg_parser()
+add_profiling_args(a)
 args = a.parse_args()
 
 history = ' '.join(sys.argv)
@@ -88,48 +90,16 @@ calfile_rules = [(crules[i], crules[i+1]) for i in range(len(crules)//2)]
 
 del kwargs['profile']
 del kwargs['profile_funcs']
+del kwargs['profile_output']
 
 kwargs['save_channels'] = tuple(int(ch) for ch in kwargs['save_channels'].split(','))
 kwargs['golden_lsts'] = tuple(float(lst) for lst in kwargs['golden_lsts'].split(','))
 
-if args.profile:
-    from line_profiler import LineProfiler
-    if 'output_file_select' in kwargs:
-        label = '.'.join(kwargs['output_file_select'])
-        output_file = Path(f"lst_bin_profile_{label}.prof")
-    else:
-        output_file = Path('lst_bin_profile.prof')
-
-    print(f"Profiling the LST-binning. Output to {output_file}")
-
-    profiler = LineProfiler()
-
-    profiler.add_function(lstbin.lst_bin_files)
-
-    # Now add any user-defined functions that they want to be profiled.
-    # Functions must be sent in as "path.to.module:function_name" or
-    # "path.to.module:Class.method".
-    for fnc in args.profile_funcs.split(","):
-        module = importlib.import_module(fnc.split(":")[0])
-        _fnc = module
-        if ":" not in fnc:
-            profiler.add_module(_fnc)
-        else:
-            for att in fnc.split(":")[-1].split("."):
-                _fnc = getattr(_fnc, att)
-            profiler.add_function(_fnc)
-
-else:
-    profiler = None
-
-if args.profile:
-    profiler.runcall(lstbin.lst_bin_files, data_files, calfile_rules=calfile_rules, write_kwargs=write_kwargs, **kwargs)
-else:
-    lstbin.lst_bin_files(data_files, calfile_rules=calfile_rules, write_kwargs=write_kwargs, **kwargs)
-
-if args.profile:
-    profiler.dump_stats(output_file)
-
-    with open(output_file.with_suffix(".txt"), "w") as fl:
-        profiler.print_stats(stream=fl, stripzeros=True)
-
+run_func_with_profiling(
+    lstbin.lst_bin_files, 
+    a, 
+    data_files=data_files,
+    calfile_rules=calfile_rules, 
+    write_kwargs=write_kwargs, 
+    **kwargs
+)
