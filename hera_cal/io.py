@@ -1872,7 +1872,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
               telescope_location=HERA_TELESCOPE_LOCATION, integration_time=None, **kwargs):
     """
     Take DataContainer dictionary, export to UVData object and write to file. See pyuvdata.UVdata
-    documentation for more info on these attributes.
+    documentation for more info on these attributes. Makes hard-coded assumptions that the telescope is HERA.
 
     Parameters:
     -----------
@@ -1947,7 +1947,11 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # get telescope ants
     antenna_numbers = np.unique(list(antpos.keys()))
     Nants_telescope = len(antenna_numbers)
-    antenna_names = list(map(lambda a: "HH{}".format(a), antenna_numbers))
+
+    # get antenna names, where all antennas 320 and above are outriggers (not valid for non-HERA data)
+    ring_A_ants = {325, 326, 327, 330, 331, 334, 335, 338, 339, 342, 343, 344}
+    ring = {a: 'H' if a < 320 else ('A' if a in ring_A_ants else 'B') for a in antenna_numbers}
+    antenna_names = [f'H{ring[a]}{a}' for a in antenna_numbers]
 
     # get antenna positions in ITRF frame
     tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
@@ -2020,9 +2024,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # set uvw assuming drift phase i.e. phase center is zenith
     uvw_array = np.array([antpos[k[1]] - antpos[k[0]] for k in zip(ant_1_array, ant_2_array)])
 
-    # get zenith location: can only write drift phase
-    phase_type = 'drift'
-
     # instantiate object
     uvd = UVData()
 
@@ -2030,7 +2031,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     params = ['Nants_data', 'Nants_telescope', 'Nbls', 'Nblts', 'Nfreqs', 'Npols', 'Nspws', 'Ntimes',
               'ant_1_array', 'ant_2_array', 'antenna_names', 'antenna_numbers', 'baseline_array',
               'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'x_orientation',
-              'instrument', 'integration_time', 'lst_array', 'nsample_array', 'object_name', 'phase_type',
+              'instrument', 'integration_time', 'lst_array', 'nsample_array', 'object_name',
               'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
               'uvw_array', 'vis_units', 'antenna_positions']
     local_params = locals()
@@ -2041,6 +2042,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # set parameters in uvd
     for p in params:
         uvd.__setattr__(p, local_params[p])
+
+    # handle unprojected phasing, equivalent to the old phase_type = "drift"
+    cat_id = uvd._add_phase_center(cat_name="zenith", cat_type="unprojected")
+    uvd.phase_center_id_array = np.zeros(uvd.Nblts, dtype=int) + cat_id
 
     # write to file
     if write_file:
