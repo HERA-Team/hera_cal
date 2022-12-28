@@ -1054,6 +1054,28 @@ class HERAData(UVData):
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
 
+    def init_HERACal(self, gain_convention='divide', cal_style='redundant'):
+        '''Produces a HERACal object using the metadata in this HERAData object.
+
+        Arguments:
+            gain_convention: str indicating whether gains are to calibrated by "multiply"ing or "divide"ing.
+            cal_style: str indicating how calibration was done, either "sky" or "redundant".
+
+        Returns:
+            HERACal object with gain, flag, quality, and total_quality arrays initialized (to 1, True, 0, and 0)
+        '''
+        # create UVCal object from self
+        uvc = UVCal().initialize_from_uvdata(self, gain_convention='divide', cal_style='redundant')
+
+        # create empty data arrays (using future array shapes, which is default true for initialize_from_uvdata)
+        uvc.gain_array = np.ones((uvc.Nants_data, uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=np.complex64)
+        uvc.flag_array = np.ones((uvc.Nants_data, uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=bool)
+        uvc.quality_array = np.zeros((uvc.Nants_data, uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=np.float32)
+        uvc.total_quality_array = np.zeros((uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=np.float32)
+
+        # convert to HERACal and return
+        return to_HERACal(uvc)
+
 
 def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                    read_data=True, read_flags=False, read_nsamples=False,
