@@ -711,7 +711,7 @@ def get_sun_alt(jds, latitude=-30.721526120689507, longitude=21.428303826863015)
     a = crd.AltAz(location=e)
 
     # get Sun locations
-    alts = np.array(list(map(lambda t: crd.get_sun(Time(t, format='jd')).transform_to(a).alt.value, jds)))
+    alts = np.array([crd.get_sun(Time(t, format='jd')).transform_to(a).alt.value for t in jds])
 
     if array:
         return alts

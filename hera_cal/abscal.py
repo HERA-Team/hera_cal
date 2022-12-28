@@ -554,12 +554,12 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
 
     # get unique gain polarizations
-    gain_pols = np.unique(list(map(lambda k: list(split_pol(k[2])), keys)))
+    gain_pols = np.unique([split_pol(k[2]) for k in keys])
 
     # set reference antenna phase to zero
     if refant is None:
         refant = keys[0][0]
-    assert np.array(list(map(lambda k: refant in k, keys))).any(), "refant {} not found in data and model".format(refant)
+    assert any(refant in k for k in keys), f"refant {refant} not found in data and model"
 
     for p in gain_pols:
         ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
@@ -688,12 +688,12 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solv
     ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
 
     # get unique gain polarizations
-    gain_pols = np.unique(list(map(lambda k: [split_pol(k[2])[0], split_pol(k[2])[1]], keys)))
+    gain_pols = np.unique([list(split_pol(k[2])[:2]) for k in keys])
 
     # set reference antenna phase to zero
     if refant is None:
         refant = keys[0][0]
-    assert np.array(list(map(lambda k: refant in k, keys))).any(), "refant {} not found in data and model".format(refant)
+    assert any(refant in k for k in keys), f"refant {refant} not found in data and model"
 
     for p in gain_pols:
         ls_data['tau_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
@@ -1181,7 +1181,7 @@ def global_phase_slope_logcal(model, data, antpos, reds=None, solver='linfit', w
     if refant is None:
         refant = keys[0][0]
     assert refant in antnums, "reference antenna {} not found in antenna list".format(refant)
-    antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
+    antpos = odict([(k, antpos[k] - antpos[refant]) for k in antpos.keys()])
 
     # count dimensions of antenna positions, figure out how many to solve for
     nDims = _count_nDims(antpos, assume_2D=assume_2D)
@@ -1368,11 +1368,11 @@ def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
 
     # sort keys across key_index
     key_sort = np.argsort(np.array(keys, dtype=object)[:, key_index])
-    keys = list(map(lambda i: keys[i], key_sort))
+    keys = [keys[i] for i in key_sort]
     popped_keys = np.unique(np.array(keys, dtype=object)[:, key_index])
 
     # get new keys
-    new_keys = list(map(lambda k: k[:key_index] + k[key_index + 1:], keys))
+    new_keys = [k[:key_index] + k[key_index + 1:] for k in keys]
     new_unique_keys = []
 
     # iterate over new_keys
@@ -1383,7 +1383,7 @@ def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
         new_unique_keys.append(nk)
 
         # get all instances of redundant keys
-        ravel = list(map(lambda k: k == nk, new_keys))
+        ravel = [k == nk for k in new_keys]
 
         # iterate over redundant keys and consolidate into new arrays
         arr = []
@@ -1565,8 +1565,8 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     new_flags = odict()
 
     # get nearest neighbor points
-    freq_nn = np.array(list(map(lambda x: np.argmin(np.abs(model_freqs - x)), data_freqs)))
-    time_nn = np.array(list(map(lambda x: np.argmin(np.abs(model_lsts - x)), data_lsts)))
+    freq_nn = np.array([np.argmin(np.abs(model_freqs - x)) for x in data_freqs])
+    time_nn = np.array([np.argmin(np.abs(model_lsts - x)) for x in data_lsts])
     freq_nn, time_nn = np.meshgrid(freq_nn, time_nn)
 
     # get model indices meshgrid
@@ -1578,9 +1578,12 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
               "This may cause weird behavior of interpolated points near flagged data.")
 
     # ensure flags are booleans
-    if flags is not None:
-        if np.issubdtype(flags[list(flags.keys())[0]].dtype, np.floating):
-            flags = DataContainer(odict(list(map(lambda k: (k, ~flags[k].astype(bool)), flags.keys()))))
+    if flags is not None and np.issubdtype(
+        flags[list(flags.keys())[0]].dtype, np.floating
+    ):
+        flags = DataContainer(
+            odict([(k, ~flags[k].astype(bool)) for k in flags.keys()])
+        )
 
     # loop over keys
     for i, k in enumerate(list(model.keys())):
@@ -1709,7 +1712,7 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, inplace=False, flags=N
     data_lsts[data_lsts < data_lsts[0]] += 2 * np.pi
 
     # get nearest neighbor model points
-    lst_nn = np.array(list(map(lambda x: np.argmin(np.abs(model_lsts - x)), data_lsts)))
+    lst_nn = np.array([np.argmin(np.abs(model_lsts - x)) for x in data_lsts])
 
     # get dlst array
     dlst = data_lsts - model_lsts[lst_nn]
@@ -1828,7 +1831,7 @@ class Baseline(object):
         # check same length
         if np.isclose(self.len, B2.len, atol=tol):
             # check x, y, z
-            equiv = bool(reduce(operator.mul, list(map(lambda x: np.isclose(*x, atol=tol), zip(self.bl, B2.bl)))))
+            equiv = np.all([np.isclose(*x, atol=tol) for x in zip(self.bl, B2.bl)])
             dot = np.dot(self.unit, B2.unit)
             if equiv:
                 return True
@@ -1875,17 +1878,17 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
 
     # create baseline keys for model
     model_keys = list(model.keys())
-    model_bls = np.array(list(map(lambda k: Baseline(model_antpos[k[1]] - model_antpos[k[0]], tol=tol), model_keys)))
+    model_bls = np.array([Baseline(model_antpos[k[1]] - model_antpos[k[0]], tol=tol) for k in model_keys])
 
     # create baseline keys for data
     data_keys = list(data.keys())
-    data_bls = np.array(list(map(lambda k: Baseline(data_antpos[k[1]] - data_antpos[k[0]], tol=tol), data_keys)))
+    data_bls = np.array([Baseline(data_antpos[k[1]] - data_antpos[k[0]], tol=tol) for k in data_keys])
 
     # iterate over data baselines
     new_model = odict()
     for i, bl in enumerate(model_bls):
         # compre bl to all model_bls
-        comparison = np.array(list(map(lambda mbl: bl == mbl, data_bls)), np.str)
+        comparison = np.array([bl == mbl for mbl in data_bls], np.str)
 
         # get matches
         matches = np.where((comparison == 'True') | (comparison == 'conjugated'))[0]
@@ -1896,7 +1899,10 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
             continue
         else:
             if len(matches) > 1:
-                echo("found more than 1 match in data to model {}: {}".format(model_keys[i], list(map(lambda j: data_keys[j], matches))), verbose=verbose)
+                echo(
+                    f"found more than 1 match in data to model {model_keys[i]}: {[data_keys[j] for j in matches]}",
+                    verbose=verbose
+                )
             # assign to new_data
             if comparison[matches[0]] == 'True':
                 new_model[data_keys[matches[0]]] = model[model_keys[i]]
@@ -1941,10 +1947,12 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     keys = list(data.keys())
 
     # get data, wgts and ants
-    pols = np.unique(list(map(lambda k: k[2], data.keys())))
+    pols = np.unique([k[2] for k in data.keys()])
     ants = np.unique(np.concatenate(keys))
     if wgts is None:
-        wgts = DataContainer(odict(list(map(lambda k: (k, np.ones_like(data[k]).astype(float)), data.keys()))))
+        wgts = DataContainer(
+            odict([(k, np.ones_like(data[k]).astype(float)) for k in data.keys()])
+        )
 
     # get redundant baselines if not provided
     if reds is None:
@@ -1967,14 +1975,14 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     # iterate over reds
     for i, bl_group in enumerate(stripped_reds):
         # average redundant baseline group
-        d = np.nansum(list(map(lambda k: data[k] * wgts[k], bl_group)), axis=0)
-        d /= np.nansum(list(map(lambda k: wgts[k], bl_group)), axis=0)
+        d = np.nansum([data[k] * wgts[k] for k in bl_group], axis=0)
+        d /= np.nansum([wgts[k] for k in  bl_group], axis=0)
 
         # get wgts
         if broadcast_wgts:
-            w = np.array(reduce(operator.mul, list(map(lambda k: wgts[k], bl_group))), float) ** (1. / len(bl_group))
+            w = np.array(reduce(operator.mul, [wgts[k] for k in bl_group]), float) ** (1. / len(bl_group))
         else:
-            w = np.array(reduce(operator.add, list(map(lambda k: wgts[k], bl_group))), float) / len(bl_group)
+            w = np.array(reduce(operator.add, [wgts[k] for k in  bl_group]), float) / len(bl_group)
 
         # iterate over bl_group
         for j, key in enumerate(sorted(bl_group)):
@@ -2033,11 +2041,11 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
     for i, k in enumerate(keys):
 
         # find which bl_group this key belongs to
-        match = np.array(list(map(lambda r: k in r, reds)))
-        conj_match = np.array(list(map(lambda r: reverse_bl(k) in r, reds)))
+        match = np.array([k in r for r in reds])
+        conj_match = np.array([reverse_bl(k) in r for r in reds])
 
         # if no match, just copy data over to red_data
-        if True not in match and True not in conj_match:
+        if not np.any(match) and not np.any(conj_match):
             red_data[k] = copy.copy(data[k])
 
         else:
@@ -2308,10 +2316,10 @@ class AbsCal(object):
         self.keys = sorted(set(model.keys()) & set(data.keys()))
         assert len(self.keys) > 0, "no shared keys exist between model and data"
         if pols is None:
-            pols = np.unique(list(map(lambda k: k[2], self.keys)))
+            pols = np.unique([k[2] for k in self.keys])
         self.pols = pols
         self.Npols = len(self.pols)
-        self.gain_pols = np.unique(list(map(lambda p: list(split_pol(p)), self.pols)))
+        self.gain_pols = np.unique([list(split_pol(p)) for p in self.pols])
         self.Ngain_pols = len(self.gain_pols)
 
         # append attributes
@@ -2338,7 +2346,7 @@ class AbsCal(object):
         self.wgts = wgts
 
         # setup ants
-        self.ants = np.unique(np.concatenate(list(map(lambda k: k[:2], self.keys))))
+        self.ants = np.unique(np.concatenate([k[:2] for k in self.keys]))
         self.Nants = len(self.ants)
         if refant is None:
             refant = self.keys[0][0]
@@ -2386,7 +2394,7 @@ class AbsCal(object):
             # center antpos about reference antenna
             self.antpos = odict([(k, antpos[k] - antpos[self.refant]) for k in self.ants])
             self.bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in self.keys])
-            self.antpos_arr = np.array(list(map(lambda x: self.antpos[x], self.ants)))
+            self.antpos_arr = np.array([self.antpos[x] for x in self.ants])
             self.antpos_arr -= np.median(self.antpos_arr, axis=0)
 
     def amp_logcal(self, verbose=True):
@@ -2415,8 +2423,8 @@ class AbsCal(object):
         fit = amp_logcal(model, data, wgts=wgts, verbose=verbose)
 
         # form result array
-        self._ant_eta = odict(list(map(lambda k: (k, copy.copy(fit["eta_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys))))
-        self._ant_eta_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_eta[k], pk)), self._gain_keys)), 0, -1)
+        self._ant_eta = odict([(k, copy.copy(fit[f"eta_{k[0]}_{k[1]}"])) for k in flatten(self._gain_keys)])
+        self._ant_eta_arr = np.moveaxis([[self._ant_eta[k] for k in  pk] for pk in self._gain_keys], 0, -1)
 
     def phs_logcal(self, avg=False, verbose=True):
         """
@@ -2446,15 +2454,21 @@ class AbsCal(object):
         fit = phs_logcal(model, data, wgts=wgts, refant=self.refant, verbose=verbose)
 
         # form result array
-        self._ant_phi = odict(list(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys))))
-        self._ant_phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_phi[k], pk)), self._gain_keys)), 0, -1)
+        self._ant_phi = odict([(k, copy.copy(fit[f"phi_{k[0]}_{k[1]}"])) for k in flatten(self._gain_keys)])
+        self._ant_phi_arr = np.moveaxis([[self._ant_phi[k] for k in pk] for pk in self._gain_keys], 0, -1)
 
         # take time and freq average
         if avg:
-            self._ant_phi = odict(list(map(lambda k: (k, np.ones_like(self._ant_phi[k])
-                                                      * np.angle(np.median(np.real(np.exp(1j * self._ant_phi[k])))
-                                                                 + 1j * np.median(np.imag(np.exp(1j * self._ant_phi[k]))))), flatten(self._gain_keys))))
-            self._ant_phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_phi[k], pk)), self._gain_keys)), 0, -1)
+            self._ant_phi = odict([
+                (
+                    k, 
+                    np.ones_like(self._ant_phi[k]) * np.angle(
+                        np.median(np.real(np.exp(1j * self._ant_phi[k])))
+                        + 1j * np.median(np.imag(np.exp(1j * self._ant_phi[k])))
+                    )
+                ) for k in flatten(self._gain_keys)
+            ])
+            self._ant_phi_arr = np.moveaxis([[self._ant_phi[k] for k in pk] for pk in self._gain_keys], 0, -1)
 
     def delay_lincal(self, medfilt=True, kernel=(1, 11), verbose=True, time_avg=False, edge_cut=0):
         """
@@ -2517,11 +2531,11 @@ class AbsCal(object):
                 fit[phi_key] = np.repeat(phi_avg, Ntimes, axis=0)
 
         # form result
-        self._ant_dly = odict(list(map(lambda k: (k, copy.copy(fit["tau_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys))))
-        self._ant_dly_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_dly[k], pk)), self._gain_keys)), 0, -1)
+        self._ant_dly = odict([(k, copy.copy(fit[f"tau_{k[0]}_{k[1]}"])) for k in  flatten(self._gain_keys)])
+        self._ant_dly_arr = np.moveaxis([[self._ant_dly[k] for k in pk] for pk in self._gain_keys], 0, -1)
 
-        self._ant_dly_phi = odict(list(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys))))
-        self._ant_dly_phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_dly_phi[k], pk)), self._gain_keys)), 0, -1)
+        self._ant_dly_phi = odict([(k, copy.copy(fit[f"phi_{k[0]}_{k[1]}"])) for k in  flatten(self._gain_keys)])
+        self._ant_dly_phi_arr = np.moveaxis([[self._ant_dly_phi[k] for k in pk] for pk in self._gain_keys], 0, -1)
 
     def delay_slope_lincal(self, medfilt=True, kernel=(1, 15), verbose=True, time_avg=False,
                            four_pol=False, edge_cut=0):
@@ -2578,8 +2592,8 @@ class AbsCal(object):
                 fit.pop('T_ns')
 
         # form result
-        self._dly_slope = odict(list(map(lambda k: (k, copy.copy(np.array([fit["T_ew_{}".format(k[1])], fit["T_ns_{}".format(k[1])]]))), flatten(self._gain_keys))))
-        self._dly_slope_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: np.array([self._dly_slope[k][0], self._dly_slope[k][1]]), pk)), self._gain_keys)), 0, -1)
+        self._dly_slope = odict([(k, copy.copy(np.array([fit[f"T_ew_{k[1]}"], fit[f"T_ns_{k[1]}"]]))) for k in flatten(self._gain_keys)])
+        self._dly_slope_arr = np.moveaxis([[np.array([self._dly_slope[k][0], self._dly_slope[k][1]]) for k in pk] for pk in self._gain_keys], 0, -1)
 
     def global_phase_slope_logcal(self, solver='linfit', tol=1.0, edge_cut=0, verbose=True):
         """
@@ -2618,8 +2632,8 @@ class AbsCal(object):
                                         refant=self.refant, verbose=verbose, tol=tol, edge_cut=edge_cut)
 
         # form result
-        self._phs_slope = odict(list(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys))))
-        self._phs_slope_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: np.array([self._phs_slope[k][0], self._phs_slope[k][1]]), pk)), self._gain_keys)), 0, -1)
+        self._phs_slope = odict([(k, copy.copy(np.array([fit[f"Phi_ew_{k[1]}"], fit[f"Phi_ns_{k[1]}"]]))) for k in  flatten(self._gain_keys)])
+        self._phs_slope_arr = np.moveaxis([[np.array([self._phs_slope[k][0], self._phs_slope[k][1]]) for k in pk] for pk in  self._gain_keys], 0, -1)
 
     def abs_amp_logcal(self, verbose=True):
         """
@@ -2646,8 +2660,8 @@ class AbsCal(object):
         fit = abs_amp_logcal(model, data, wgts=wgts, verbose=verbose)
 
         # form result
-        self._abs_eta = odict(list(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), flatten(self._gain_keys))))
-        self._abs_eta_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._abs_eta[k], pk)), self._gain_keys)), 0, -1)
+        self._abs_eta = odict([(k, copy.copy(fit[f"eta_{k[1]}"])) for k in flatten(self._gain_keys)])
+        self._abs_eta_arr = np.moveaxis([[self._abs_eta[k] for k in pk] for pk in self._gain_keys], 0, -1)
 
     def TT_phs_logcal(self, verbose=True, zero_psi=True, four_pol=False):
         """
@@ -2695,11 +2709,11 @@ class AbsCal(object):
                 fit.pop('Phi_ns')
 
         # form result
-        self._abs_psi = odict(list(map(lambda k: (k, copy.copy(fit["psi_{}".format(k[1])])), flatten(self._gain_keys))))
-        self._abs_psi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._abs_psi[k], pk)), self._gain_keys)), 0, -1)
+        self._abs_psi = odict([(k, copy.copy(fit[f"psi_{k[1]}"])) for k in  flatten(self._gain_keys)])
+        self._abs_psi_arr = np.moveaxis([[self._abs_psi[k] for k in pk] for pk in self._gain_keys], 0, -1)
 
-        self._TT_Phi = odict(list(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys))))
-        self._TT_Phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: np.array([self._TT_Phi[k][0], self._TT_Phi[k][1]]), pk)), self._gain_keys)), 0, -1)
+        self._TT_Phi = odict([(k, copy.copy(np.array([fit[f"Phi_ew_{k[1]}"], fit[f"Phi_ns_{k[1]}"]]))) for k in flatten(self._gain_keys)])
+        self._TT_Phi_arr = np.moveaxis([[np.array([self._TT_Phi[k][0], self._TT_Phi[k][1]]) for k in  pk] for pk in  self._gain_keys], 0, -1)
 
     # amp_logcal results
     @property
@@ -2715,7 +2729,7 @@ class AbsCal(object):
         """ form complex gain from _ant_eta dict """
         if hasattr(self, '_ant_eta'):
             ant_eta = self.ant_eta
-            return odict(list(map(lambda k: (k, np.exp(ant_eta[k]).astype(complex)), flatten(self._gain_keys))))
+            return odict([(k, np.exp(ant_eta[k]).astype(complex)) for k in flatten(self._gain_keys)])
         else:
             return None
 
@@ -2744,12 +2758,16 @@ class AbsCal(object):
         else:
             return None
 
+    def _make_new_odict(self, fnc):
+        """Create new odict with keys from gain_keys, applying fnc to every key."""
+        return odict([(k, fnc(k)) for k in flatten(self._gain_keys)])
+
     @property
     def ant_phi_gain(self):
         """ form complex gain from _ant_phi dict """
         if hasattr(self, '_ant_phi'):
             ant_phi = self.ant_phi
-            return odict(list(map(lambda k: (k, np.exp(1j * ant_phi[k])), flatten(self._gain_keys))))
+            return self._make_new_odict(lambda k: np.exp(1j * ant_phi[k]))
         else:
             return None
 
@@ -2783,7 +2801,10 @@ class AbsCal(object):
         """ form complex gain from _ant_dly dict """
         if hasattr(self, '_ant_dly'):
             ant_dly = self.ant_dly
-            return odict(list(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * ant_dly[k])), flatten(self._gain_keys))))
+            factor = 2j * np.pi * self.freqs.reshape(1, -1)
+            return self._make_new_odict(
+                lambda k: np.exp(factor * ant_dly[k])
+            )
         else:
             return None
 
@@ -2816,7 +2837,9 @@ class AbsCal(object):
         """ form complex gain from _ant_dly_phi dict """
         if hasattr(self, '_ant_dly_phi'):
             ant_dly_phi = self.ant_dly_phi
-            return odict(list(map(lambda k: (k, np.exp(1j * np.repeat(ant_dly_phi[k], self.Nfreqs, 1))), flatten(self._gain_keys))))
+            return self._make_new_odict(
+                lambda k: np.exp(1j * np.repeat(ant_dly_phi[k], self.Nfreqs, 1))
+            )
         else:
             return None
 
@@ -2853,8 +2876,12 @@ class AbsCal(object):
             dly_slope = self.dly_slope
             # turn delay slope into per-antenna complex gains, while iterating over self._gain_keys
             # einsum sums over antenna position
-            return odict(list(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope[k], self.antpos[k[0]][:2]))),
-                                  flatten(self._gain_keys))))
+            factor = 2j * np.pi * self.freqs.reshape(1, -1)
+            return self._make_new_odict(
+                lambda k: np.exp(
+                    factor * np.einsum("i...,i->...", dly_slope[k], self.antpos[k[0]][:2])
+                )
+            )
         else:
             return None
 
@@ -2922,8 +2949,12 @@ class AbsCal(object):
             phs_slope = self.phs_slope
             # turn phs slope into per-antenna complex gains, while iterating over self._gain_keys
             # einsum sums over antenna position
-            return odict(list(map(lambda k: (k, np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2]))),
-                                  flatten(self._gain_keys))))
+            fac = 1.0j * np.ones_like(self.freqs).reshape(1, -1)
+            return self._make_new_odict(
+                lambda k: np.exp(
+                    fac* np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2])
+                )
+            )
         else:
             return None
 
@@ -2989,7 +3020,7 @@ class AbsCal(object):
         """form complex gain from _abs_eta dict"""
         if hasattr(self, '_abs_eta'):
             abs_eta = self.abs_eta
-            return odict(list(map(lambda k: (k, np.exp(abs_eta[k]).astype(complex)), flatten(self._gain_keys))))
+            return self._make_new_odict(lambda k: np.exp(abs_eta[k]).astype(complex))
         else:
             return None
 
@@ -3043,7 +3074,7 @@ class AbsCal(object):
         """ form complex gain from _abs_psi array """
         if hasattr(self, '_abs_psi'):
             abs_psi = self.abs_psi
-            return odict(list(map(lambda k: (k, np.exp(1j * abs_psi[k])), flatten(self._gain_keys))))
+            return self._make_new_odict(lambda k: np.exp(1j * abs_psi[k]))
         else:
             return None
 
@@ -3096,7 +3127,11 @@ class AbsCal(object):
         if hasattr(self, '_TT_Phi'):
             TT_Phi = self.TT_Phi
             # einsum sums over antenna position
-            return odict(list(map(lambda k: (k, np.exp(1j * np.einsum("i...,i->...", TT_Phi[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys))))
+            return self._make_new_odict(
+                lambda k: np.exp(
+                    1j * np.einsum("i...,i->...", TT_Phi[k], self.antpos[k[0]][:2])
+                )
+            )
         else:
             return None
 

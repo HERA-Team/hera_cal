@@ -1235,7 +1235,7 @@ class Test_Calibration_IO_Legacy(object):
         if os.path.exists('ex.calfits'):
             os.remove('ex.calfits')
         # test single integration write
-        gains2 = odict(list(map(lambda k: (k, gains[k][:1]), gains.keys())))
+        gains2 = odict([(k, gains[k][:1]) for k in gains.keys()])
         uvc = io.write_cal("ex.calfits", gains2, freqs, times[:1], return_uvc=True, outdir='./')
         assert np.allclose(uvc.integration_time, 0.0)
         assert uvc.Ntimes == 1
