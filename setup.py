@@ -47,7 +47,7 @@ setup_args = {
                 'scripts/multiply_gains.py'],
     'package_data': {'hera_cal': data_files},
     'install_requires': [
-        'numpy>=1.10',
+        'numpy>=1.10<1.24',
         'scipy',
         'h5py',
         'hdf5plugin',
