@@ -844,7 +844,7 @@ class HERAData(UVData):
         except KeyError:
             return self.read(bls=key)[0][key]
 
-    def update(self, data=None, flags=None, nsamples=None):
+    def update(self, data=None, flags=None, nsamples=None, tSlice=None, fSlice=None):
         '''Update internal data arrays (data_array, flag_array, and nsample_array)
         using DataContainers (if not left as None) in preparation for writing to disk.
 
@@ -852,16 +852,37 @@ class HERAData(UVData):
             data: Optional DataContainer mapping baselines to complex visibility waterfalls
             flags: Optional DataContainer mapping baselines to boolean flag waterfalls
             nsamples: Optional DataContainer mapping baselines to interger Nsamples waterfalls
+            tSlice: Optional slice of indices of the times to update. Must have the same size
+                as the 0th dimension of the input gains/flags/nsamples.
+            fSlice: Optional slice of indices of the freqs to update. Must have the same size
+                as the 1st dimension of the input gains/flags/nsamples.
         '''
+        # provide sensible defaults for tinds and finds
+        update_full_waterfall = (tSlice is None) and (fSlice is None)
+        if tSlice is None:
+            tSlice = slice(0, self.Ntimes)
+        if fSlice is None:
+            fSlice = slice(0, self.Nfreqs)
+
+        def _set_subslice(data_array, bl, this_waterfall):
+            if update_full_waterfall:
+                # directly write into relevant data_array
+                self._set_slice(data_array, bl, this_waterfall)
+            else:
+                # copy out full waterfall, update just the relevant slices, and write back to data_array
+                full_waterfall = self._get_slice(data_array, bl)
+                full_waterfall[tSlice, fSlice] = this_waterfall
+                self._set_slice(data_array, bl, full_waterfall)
+
         if data is not None:
             for bl in data.keys():
-                self._set_slice(self.data_array, bl, data[bl])
+                _set_subslice(self.data_array, bl, data[bl])
         if flags is not None:
             for bl in flags.keys():
-                self._set_slice(self.flag_array, bl, flags[bl])
+                _set_subslice(self.flag_array, bl, flags[bl])
         if nsamples is not None:
             for bl in nsamples.keys():
-                self._set_slice(self.nsample_array, bl, nsamples[bl])
+                _set_subslice(self.nsample_array, bl, nsamples[bl])
 
     def partial_write(self, output_path, data=None, flags=None, nsamples=None,
                       clobber=False, inplace=False, add_to_history='',
