@@ -1731,26 +1731,15 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
-    Returns a dictionary of results with the following keywords:
-        XXX: rewrite
-        'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
-            Gains are Ntimes x Nfreqs gains but fully described by a per-antenna delay.
-        'gf_firstcal': firstcal gain flags in the same format as 'g_firstcal'. Will be all False.
-        'g_omnical': full omnical gain dictionary (which include firstcal gains) in the same format.
-            Flagged gains will be 1.0s.
-        'gf_omnical': omnical flag dictionary in the same format. Flags arise from NaNs in log/omnical.
-        'v_omnical': omnical visibility solutions dictionary with baseline-pol tuple keys that are the
-            first elements in each of the sub-lists of reds. Flagged visibilities will be 0.0s.
-        'vf_omnical': omnical visibility flag dictionary in the same format. Flags arise from NaNs.
-        'vns_omnical': omnical visibility nsample dictionary that counts the number of unflagged redundancies.
-        'chisq': chi^2 per degree of freedom for the omnical solution. Normalized using noise derived
-            from autocorrelations. If the inferred pol_mode from reds (see redcal.parse_pol_mode) is
-            '1pol' or '2pol', this is a dictionary mapping antenna polarization (e.g. 'Jnn') to chi^2.
-            Otherwise, there is a single chisq (because polarizations mix) and this is a numpy array.
-        'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jnn') to the average chisq
-            for all visibilities that an antenna participates in.
-        'fc_meta' : dictionary that includes delays and identifies flipped antennas
-        'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
+    Returns:
+        redcal_meta: dictionary of 'fc_meta' and 'omni_meta' dictionaries, which contain informaiton about about
+            firstcal delays, polarity flips, omnical chisq, omnical iterations, and omnical convergence
+        hc_first: HERACal object containing the results of firstcal. Flags are all False for antennas calibrated.
+            Qualities (usually chisq_per_ant) are all zeros. Total qualities (usually chisq) is None.
+        hc_omni: HERACal object containing the results of omnical. Flags arise from NaNs in log/omnical or ex_ants.
+            Qualities are chisq_per_ant and total qualities are chisq.
+        hd_vissol: HERAData object containing omnical visibility solutions. DataContainers (data, flags, nsamples)
+            can be extracted using hd_vissol.build_datacontainers().
     '''
     if nInt_to_load is not None:
         assert hd.filetype == 'uvh5', 'Partial loading only available for uvh5 filetype.'
@@ -1774,11 +1763,17 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                         pol_mode=pol_mode, pols=set([pol for pols in pol_load_list for pol in pols]))
     filtered_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
 
-    # initialize RedCalContainers to contain the full set of data and metadata
-    cal_first = RedCalContainer(ants, all_reds, nTimes, nFreqs, gains_only=True, skip_chisq=True)
-    cal_first._init_firstcal_meta(ants, nTimes, nFreqs)
-    cal_omni = RedCalContainer(ants, all_reds, nTimes, nFreqs, gains_only=False, skip_chisq=False)
-    cal_omni._init_omnical_meta(pol_load_list, nTimes, nFreqs)
+    # initialize HERAData and HERACal to contain the full set of data and metadata
+    hc_first = hd.init_HERACal()
+    hc_omni = hd.init_HERACal()
+    hd_vissol = deepcopy(hd)
+    hd_vissol.read(bls=[red[0] for red in all_reds], return_data=False)
+    hd_vissol.data_array = np.zeros_like(hd_vissol.data_array)
+    hd_vissol.nsample_array = np.zeros_like(hd_vissol.nsample_array)
+    hd_vissol.flag_array = np.ones_like(hd_vissol.flag_array)
+
+    # setup metadata dictionaries
+    redcal_meta = _init_redcal_meta_dict(nTimes, nFreqs, ants, pol_load_list)
 
     # solar flagging
     lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
@@ -1792,36 +1787,55 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         if verbose:
             print('Now calibrating', pols, 'polarization(s)...')
         reds = filter_reds(filtered_reds, ex_ants=ex_ants, pols=pols)
-        if nInt_to_load is not None:  # split up the integrations to load nInt_to_load at a time
-            tind_groups = np.split(np.arange(nTimes)[~solar_flagged],
-                                   np.arange(nInt_to_load, len(hd.times[~solar_flagged]), nInt_to_load))
-        else:
-            tind_groups = [np.arange(nTimes)[~solar_flagged]]  # just load a single group
-        for tinds in tind_groups:
-            if len(tinds) > 0:
-                if verbose:
-                    print('    Now calibrating times', hd.times[tinds[0]], 'through', hd.times[tinds[-1]], '...')
-                if nInt_to_load is None:  # don't perform partial I/O
-                    data, _, nsamples = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
-                    for bl in data:
-                        data[bl] = data[bl][tinds, fSlice]  # cut down size of DataContainers to match unflagged indices
-                        nsamples[bl] = nsamples[bl][tinds, fSlice]
-                else:  # perform partial i/o
-                    data, _, nsamples = hd.read(time_range=(hd.times[tinds][0], hd.times[tinds][-1]), frequencies=hd.freqs[fSlice], polarizations=pols)
-                meta, sol = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
-                                                  run_logcal=True, run_omnical=True,
-                                                  oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
-                                                  check_every=check_every, check_after=check_after,
-                                                  max_dims=max_dims, gain=gain)
 
-                # fill out relevant parts of cal_first
-                cal_first.update_cal_first_after_redundantly_calibrate(meta, tSlice=tinds, fSlice=fSlice)
+        # figure out time slices to load
+        if nInt_to_load is None:
+            nInt_to_load = nTimes
+        start_ind = np.min(np.arange(nTimes)[~solar_flagged])
+        stop_ind = np.max(np.arange(nTimes)[~solar_flagged])
+        tSlices = [slice(start_ind + i, min(start_ind + i + nInt_to_load, stop_ind + 1)) for i in range(0, nTimes, nInt_to_load)]
 
-                # update cal_omni and expand omni sol
-                cal_omni.update_cal_omni_after_redundantly_calibrate(meta, sol, filter_reds(all_reds, pols=pols), pols, pol_mode,
-                                                                     expand_sol=True, data=data, nsamples=nsamples, tSlice=tinds, fSlice=fSlice)
+        for tSlice in tSlices:
+            # get DataContainers, performing i/o if necessary
+            if verbose:
+                print('    Now calibrating times', hd.times[tSlice][0], 'through', hd.times[tSlice][-1], '...')
+            if nInt_to_load is None:  # don't perform partial I/O
+                data, _, nsamples = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
+                for bl in data:
+                    data[bl] = data[bl][tSlice, fSlice]  # cut down size of DataContainers to match unflagged indices
+                    nsamples[bl] = nsamples[bl][tSlice, fSlice]
+            else:  # perform partial i/o
+                data, _, nsamples = hd.read(time_range=(hd.times[tSlice][0], hd.times[tSlice][-1]), frequencies=hd.freqs[fSlice], polarizations=pols)
 
-    return cal_first, cal_omni
+            #
+            meta, sol = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
+                                              run_logcal=True, run_omnical=True,
+                                              oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
+                                              check_every=check_every, check_after=check_after,
+                                              max_dims=max_dims, gain=gain)
+
+            # solve for visibilities excluded from reds but with baselines with both gains in sol. These are not flagged.
+            expand_omni_vis(sol, filter_reds(all_reds, pols=pols), data, nsamples, chisq=meta['chisq'], chisq_per_ant=meta['chisq_per_ant'])
+
+            # make dicts and data containers not in meta or sol. Everything not yet solved for stays flagged.
+            first_flags = {ant: np.zeros_like(g, dtype=bool) for ant, g in meta['fc_gains'].items()}
+            omni_flags = {ant: ~np.isfinite(g) for ant, g in sol.gains.items()}
+            vissol_flags = RedDataContainer({bl: ~np.isfinite(v) for bl, v in sol.vis.items()}, reds=sol.vis.reds)
+            vissol_nsamples = RedDataContainer({red[0]: np.sum([nsamples[bl] for bl in red], axis=0) for red in reds}, reds=sol.vis.reds)
+            sol.make_sol_finite()
+
+            # try to solve for gains on antennas excluded from calibration, but keep them flagged
+            expand_omni_gains(sol, filter_reds(all_reds, pols=pols), data, nsamples, chisq_per_ant=meta['chisq_per_ant'])
+            # try one more time to expand visibilities, keeping new ones flagged, but don't update chisq or chisq_per_ant
+            expand_omni_vis(sol, filter_reds(all_reds, pols=pols), data, nsamples)
+
+            # update various objects containing information about the full file
+            hc_first.update(gains=meta['fc_gains'], flags=first_flags, tSlice=tSlice, fSlice=fSlice)
+            hc_omni.update(gains=sol.gains, flags=omni_flags, quals=meta['chisq_per_ant'], total_qual=meta['chisq'], tSlice=tSlice, fSlice=fSlice)
+            hd_vissol.update(data=sol.vis, flags=vissol_flags, nsamples=vissol_nsamples, tSlice=tSlice, fSlice=fSlice)
+            _update_redcal_meta(redcal_meta, meta, tSlice, fSlice, pols)
+
+    return redcal_meta, hc_first, hc_omni, hd_vissol
 
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
