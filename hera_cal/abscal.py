@@ -1885,7 +1885,7 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
     new_model = odict()
     for i, bl in enumerate(model_bls):
         # compre bl to all model_bls
-        comparison = np.array(list(map(lambda mbl: bl == mbl, data_bls)), np.str)
+        comparison = np.array(list(map(lambda mbl: bl == mbl, data_bls)), str)
 
         # get matches
         matches = np.where((comparison == 'True') | (comparison == 'conjugated'))[0]
