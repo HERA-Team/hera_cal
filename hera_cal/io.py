@@ -176,7 +176,7 @@ class HERACal(UVCal):
             self.select(times=times)
         return self.build_calcontainers()
 
-    def update(self, gains=None, flags=None, quals=None, total_qual=None):
+    def update(self, gains=None, flags=None, quals=None, total_qual=None, tSlice=None, fSlice=None):
         '''Update internal calibrations arrays (data_array, flag_array, and nsample_array)
         using DataContainers (if not left as None) in preparation for writing to disk.
 
@@ -185,14 +185,24 @@ class HERACal(UVCal):
             flags: optional dict mapping antenna-pol to boolean flag arrays
             quals: optional dict mapping antenna-pol to float qual arrays
             total_qual: optional dict mapping polarization to float total quality array
+            tSlice: optional slice of indices of the times to update. Must have the same size
+                as the 0th dimension of the input gains/flags/quals/total_quals
+            fSlice: optional slice of indices of the freqs to update. Must have the same size
+                as the 1st dimension of the input gains/flags/quals/total_quals
         '''
+        # provide sensible defaults for tSlice and fSlice
+        if tSlice is None:
+            tSlice = slice(0, self.Ntimes)
+        if fSlice is None:
+            fSlice = slice(0, self.Nfreqs)
+
         # loop over and update gains, flags, and quals
         data_arrays = [self.gain_array, self.flag_array, self.quality_array]
         for to_update, array in zip([gains, flags, quals], data_arrays):
             if to_update is not None:
                 for (ant, pol) in to_update.keys():
                     i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-                    array[i, :, :, ip] = to_update[(ant, pol)].T
+                    array[i, fSlice, tSlice, ip] = to_update[(ant, pol)].T
 
         # update total_qual
         if total_qual is not None:
@@ -200,7 +210,7 @@ class HERACal(UVCal):
                 self.total_quality_array = np.zeros(self.gain_array.shape[1:], dtype=float)
             for pol in total_qual.keys():
                 ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-                self.total_quality_array[:, :, ip] = total_qual[pol].T
+                self.total_quality_array[fSlice, tSlice, ip] = total_qual[pol].T
 
     def write(self, filename, spoof_missing_channels=False, **write_kwargs):
         """
