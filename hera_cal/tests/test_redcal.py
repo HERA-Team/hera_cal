@@ -1793,9 +1793,10 @@ class TestRunMethods(object):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            cal_first, cal_omni = om.redcal_iteration(hd, nInt_to_load=1, flag_nchan_high=40, flag_nchan_low=30)
+            redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_iteration(hd, nInt_to_load=1, flag_nchan_high=40, flag_nchan_low=30)
+        _, cal_flags, _, _ = hc_omni.build_calcontainers()
         for t in range(len(hd.times)):
-            for flag in cal_omni.flags.values():
+            for flag in cal_flags.values():
                 assert not np.all(flag[t, :])
                 assert np.all(flag[t, 0:30])
                 assert np.all(flag[t, -40:])
@@ -1803,9 +1804,10 @@ class TestRunMethods(object):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))  # test w/o partial loading
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            cal_first, cal_omni = om.redcal_iteration(hd, flag_nchan_high=40, flag_nchan_low=30)
+            redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_iteration(hd, flag_nchan_high=40, flag_nchan_low=30)
+        _, cal_flags, _, _ = hc_omni.build_calcontainers()
         for t in range(len(hd.times)):
-            for flag in cal_omni.flags.values():
+            for flag in cal_flags.values():
                 assert not np.all(flag[t, :])
                 assert np.all(flag[t, 0:30])
                 assert np.all(flag[t, -40:])
@@ -1813,27 +1815,32 @@ class TestRunMethods(object):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            cal_first, cal_omni = om.redcal_iteration(hd, pol_mode='4pol')
-        np.testing.assert_array_equal(cal_omni.chisq['Jee'], cal_omni.chisq['Jnn'])
+            redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_iteration(hd, pol_mode='4pol')
+        _, _, _, chisq = hc_omni.build_calcontainers()
+        np.testing.assert_array_equal(chisq['Jee'], chisq['Jnn'])
 
         hd.telescope_location_lat_lon_alt_degrees = (-30.7, 121.4, 1051.7)  # move array longitude
-        cal_first, cal_omni = om.redcal_iteration(hd, solar_horizon=0.0)
-        for flag in cal_first.gain_flags.values():
+        redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_iteration(hd, solar_horizon=0.0)
+        _, cal_flags, _, _ = hc_first.build_calcontainers()
+        for flag in cal_flags.values():
             np.testing.assert_array_equal(flag, True)
-        for flag in cal_omni.flags.values():
+
+        _, flags, nsamples = hc_omni.build_datacontainers()
+        for flag in flags.values():
             np.testing.assert_array_equal(flag, True)
-        for flag in cal_omni.flags.values():
-            np.testing.assert_array_equal(flag, True)
-        for nsamples in cal_omni.nsamples.values():
+        for nsamples in nsamples.values():
             np.testing.assert_array_equal(nsamples, 0)
 
         # this tests redcal.expand_omni_sol
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            cal_first, cal_omni = om.redcal_iteration(hd, pol_mode='2pol', ex_ants=[1, 27], min_bl_cut=15)
+            redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_iteration(hd, pol_mode='2pol', ex_ants=[1, 27], min_bl_cut=15)
+
+        data, flags, nsamples = hd_vissol.build_datacontainers()
+
         for pol in ['ee', 'nn']:
-            for rdc in [cal_omni.vis, cal_omni.flags, cal_omni.nsamples]:
+            for rdc in [data, flags, nsamples]:
                 # test that the unique baseline is keyed by the first entry in all_reds, not filtered_reds
                 assert (1, 12, pol) in rdc
                 # test that completely excluded baselines from redcal are still represented
