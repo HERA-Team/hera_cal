@@ -1605,18 +1605,42 @@ def redundantly_calibrate(data, reds, sol0=None, run_logcal=True, run_omnical=Tr
     return meta, sol
 
 
-def expand_omni_vis(sol, all_reds, data, nsamples, chisq=None, chisq_per_ant=None):
-    '''XXX: document'''
-    good_ants_reds = filter_reds(all_reds, ants=list(sol.gains.keys()))
-    good_ants_bls = [bl for red in good_ants_reds for bl in red]
+def expand_omni_vis(sol, expanded_reds, data, nsamples=None, chisq=None, chisq_per_ant=None):
+    '''Updates sol by solving for unique visibilities not in sol.vis but for which there is at
+    least one baseline with both antennas in sol.gains. Constructs inverse-variance weights from
+    noise inferred from autocorrelations (and nsamples, if provided).
+
+    Arguments:
+        sol: RedSol with vis and gains, which are used to update its vis.
+            Both sol.vis.reds and sol.reds will be updated.
+        expanded_reds: List of list of redundant baseline tuples, of which sol.reds is a subset.
+        data: DataContainer mapping baseline-pol tuples like (0,1,'nn') to complex visibility data waterfalls.
+        nsamples: Optional DataContainer mapping baseline-pol tuples like (0,1,'nn') to waterfalls of number of samples.
+            If None, treat all data as having nsamples = 1.
+        chisq: chi^2 to update, if desired. See normalized_chisq() for more info.
+        chisq_per_ant: per-antenna chi^2 to update, if desired. See normalized_chisq() for more info.
+    '''
+    # figure out which reds are solvable using the baselines for which we have gains for both antennas
+    solved_ants = set(sol.gains.keys())
+    good_ants_reds = filter_reds(expanded_reds, ants=solved_ants)
     reds_to_solve = [red for red in good_ants_reds if not np.any([bl in sol.vis for bl in red])]
+    data_bls_to_use = [bl for red in reds_to_solve for bl in red
+                       if (split_bl(bl)[0] in solved_ants) and (split_bl(bl)[1] in solved_ants)]
+
     if len(reds_to_solve) > 0:
-        dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in good_ants_bls})
-        data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 * nsamples[bl] for bl in good_ants_bls})
+        # figure out weights for only the absolutely necessary baselines (to save memory)
+        if nsamples is None:
+            nsamples = {bl: 1.0 for bl in data_bls_to_use}
+        dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in data_bls_to_use})
+        data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 * nsamples[bl] for bl in data_bls_to_use})
+
+        # extend sol and re-solve for chi^2 if desired
         sol.extend_vis(data, wgts=data_wgts, reds_to_solve=reds_to_solve)
         if (chisq is not None) or (chisq_per_ant is not None):
             chisq, chisq_per_ant = normalized_chisq(data, data_wgts, good_ants_reds, sol.vis, sol.gains)
-    sol.vis.build_red_keys(all_reds)
+
+    # update keys
+    sol.vis.build_red_keys(expanded_reds)
 
 
 def expand_omni_gains(sol, all_reds, data, nsamples, chisq_per_ant=None):
