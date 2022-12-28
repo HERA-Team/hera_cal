@@ -1902,8 +1902,14 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
     Returns:
-        TODO: update
-        cal: the dictionary result of the final run of redcal_iteration (see above for details)
+        redcal_meta: dictionary of 'fc_meta' and 'omni_meta' dictionaries, which contain informaiton about about
+            firstcal delays, polarity flips, omnical chisq, omnical iterations, and omnical convergence
+        hc_first: HERACal object containing the results of firstcal. Flags are all False for antennas calibrated.
+            Qualities (usually chisq_per_ant) are all zeros. Total qualities (usually chisq) is None.
+        hc_omni: HERACal object containing the results of omnical. Flags arise from NaNs in log/omnical or ex_ants.
+            Qualities are chisq_per_ant and total qualities are chisq.
+        hd_vissol: HERAData object containing omnical visibility solutions. DataContainers (data, flags, nsamples)
+            can be extracted using hd_vissol.build_datacontainers().
     '''
     if isinstance(input_data, str):
         hd = HERAData(input_data, upsample=upsample, downsample=downsample, filetype=filetype)
@@ -1950,14 +1956,15 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         # Run redundant calibration
         if verbose:
             print('\nNow running redundant calibration without antennas', list(ex_ants), '...')
-        cal_first, cal_omni = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol, ex_ants=ex_ants,
-                                               solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high,
-                                               oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
-                                               check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain,
-                                               verbose=verbose, **filter_reds_kwargs)
+        redcal_meta, hc_first, hc_omni, hd_vissol = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol,
+                                                                     ex_ants=ex_ants, solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low,
+                                                                     flag_nchan_high=flag_nchan_high, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
+                                                                     check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain,
+                                                                     verbose=verbose, **filter_reds_kwargs)
 
         # Determine whether to add additional antennas to exclude
-        z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal_omni.chisq_per_ant.items()
+        _, _, chisq_per_ant, _ = hc_omni.build_calcontainers()
+        z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in chisq_per_ant.items()
                                                   if (ant[0] not in ex_ants) and not np.all(cspa == 0)})
         n_ex = len(ex_ants)
         for ant, score in z_scores.items():
@@ -1974,19 +1981,21 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         # If there is going to be a re-run and if iter0_prefix is not the empty string, then save the iter0 results.
         if run_number == 1 and len(iter0_prefix) > 0:
             write_kwargs = {'outdir': outdir, 'clobber': clobber, 'verbose': verbose, 'add_to_history': add_to_history + '\n' + 'Iteration 0 Results.\n'}
-            cal_first.write_cal(filename_no_ext + iter0_prefix + firstcal_ext, hd, **write_kwargs)
-            cal_omni.write_cal(filename_no_ext + iter0_prefix + omnical_ext, hd, **write_kwargs)
-            cal_omni.write_vis(filename_no_ext + iter0_prefix + omnivis_ext, hd, **write_kwargs)
-            cal_omni.write_meta(filename_no_ext + iter0_prefix + meta_ext, hd, cal_first.meta, **write_kwargs)
+            hc_first.write_calfits(filename_no_ext + iter0_prefix + firstcal_ext, **write_kwargs)
+            hc_omni.write_calfits(filename_no_ext + iter0_prefix + omnical_ext, **write_kwargs)
+            hd_vissol.write_uvh5(filename_no_ext + iter0_prefix + omnivis_ext, **write_kwargs)
+            save_redcal_meta(filename_no_ext + iter0_prefix + meta_ext, redcal_meta['fc_meta'], redcal_meta['omni_meta'], hd.freqs, hd.times,
+                             hd.lsts, hd.antpos, hd.history + utils.history_string(write_kwargs['add_to_history']), clobber=clobber)
 
     # output results files
     write_kwargs = {'outdir': outdir, 'clobber': clobber, 'verbose': verbose, 'add_to_history': add_to_history + '\n' + high_z_ant_hist}
-    cal_first.write_cal(filename_no_ext + firstcal_ext, hd, **write_kwargs)
-    cal_omni.write_cal(filename_no_ext + omnical_ext, hd, **write_kwargs)
-    cal_omni.write_vis(filename_no_ext + omnivis_ext, hd, **write_kwargs)
-    cal_omni.write_meta(filename_no_ext + meta_ext, hd, cal_first.meta, **write_kwargs)
+    hc_first.write_calfits(filename_no_ext + iter0_prefix + firstcal_ext, **write_kwargs)
+    hc_omni.write_calfits(filename_no_ext + iter0_prefix + omnical_ext, **write_kwargs)
+    hd_vissol.write_uvh5(filename_no_ext + iter0_prefix + omnivis_ext, **write_kwargs)
+    save_redcal_meta(filename_no_ext + iter0_prefix + meta_ext, redcal_meta['fc_meta'], redcal_meta['omni_meta'], hd.freqs, hd.times,
+                     hd.lsts, hd.antpos, hd.history + utils.history_string(write_kwargs['add_to_history']), clobber=clobber)
 
-    return cal_first, cal_omni
+    return redcal_meta, hc_first, hc_omni, hd_vissol
 
 
 def redcal_argparser():
