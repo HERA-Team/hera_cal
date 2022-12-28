@@ -8,7 +8,7 @@ dependencies:
   - astropy>=5.0.4
   - h5py
   - hdf5plugin
-  - numpy>=1.23
+  - numpy>=1.23<1.24
   - pytest
   - scipy
   - scikit-learn
