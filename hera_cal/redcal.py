@@ -1995,20 +1995,26 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
 
         # If there is going to be a re-run and if iter0_prefix is not the empty string, then save the iter0 results.
         if run_number == 1 and len(iter0_prefix) > 0:
-            write_kwargs = {'outdir': outdir, 'clobber': clobber, 'verbose': verbose, 'add_to_history': add_to_history + '\n' + 'Iteration 0 Results.\n'}
-            hc_first.write_calfits(filename_no_ext + iter0_prefix + firstcal_ext, **write_kwargs)
-            hc_omni.write_calfits(filename_no_ext + iter0_prefix + omnical_ext, **write_kwargs)
-            hd_vissol.write_uvh5(filename_no_ext + iter0_prefix + omnivis_ext, **write_kwargs)
-            save_redcal_meta(filename_no_ext + iter0_prefix + meta_ext, redcal_meta['fc_meta'], redcal_meta['omni_meta'], hd.freqs, hd.times,
-                             hd.lsts, hd.antpos, hd.history + utils.history_string(write_kwargs['add_to_history']), clobber=clobber)
+            out_prefix = os.path.join(outdir, filename_no_ext + iter0_prefix)
+            _add_to_history = utils.history_string(add_to_history + '\n' + 'Iteration 0 Results.\n')
+            for h in [hc_first, hc_omni, hd_vissol]:
+                h.history += _add_to_history
+            hc_first.write_calfits(out_prefix + firstcal_ext, clobber=clobber)
+            hc_omni.write_calfits(out_prefix + omnical_ext, clobber=clobber)
+            hd_vissol.write_uvh5(out_prefix + omnivis_ext, clobber=clobber)
+            save_redcal_meta(out_prefix + meta_ext, redcal_meta['fc_meta'], redcal_meta['omni_meta'], hd.freqs,
+                             hd.times, hd.lsts, hd.antpos, hd.history + _add_to_history, clobber=clobber)
 
     # output results files
-    write_kwargs = {'outdir': outdir, 'clobber': clobber, 'verbose': verbose, 'add_to_history': add_to_history + '\n' + high_z_ant_hist}
-    hc_first.write_calfits(filename_no_ext + iter0_prefix + firstcal_ext, **write_kwargs)
-    hc_omni.write_calfits(filename_no_ext + iter0_prefix + omnical_ext, **write_kwargs)
-    hd_vissol.write_uvh5(filename_no_ext + iter0_prefix + omnivis_ext, **write_kwargs)
-    save_redcal_meta(filename_no_ext + iter0_prefix + meta_ext, redcal_meta['fc_meta'], redcal_meta['omni_meta'], hd.freqs, hd.times,
-                     hd.lsts, hd.antpos, hd.history + utils.history_string(write_kwargs['add_to_history']), clobber=clobber)
+    out_prefix = os.path.join(outdir, filename_no_ext + iter0_prefix)
+    _add_to_history = utils.history_string(add_to_history + '\n' + high_z_ant_hist)
+    for h in [hc_first, hc_omni, hd_vissol]:
+        h.history += _add_to_history
+    hc_first.write_calfits(out_prefix + firstcal_ext, clobber=clobber)
+    hc_omni.write_calfits(out_prefix + omnical_ext, clobber=clobber)
+    hd_vissol.write_uvh5(out_prefix + omnivis_ext, clobber=clobber)
+    save_redcal_meta(out_prefix + meta_ext, redcal_meta['fc_meta'], redcal_meta['omni_meta'], hd.freqs,
+                     hd.times, hd.lsts, hd.antpos, hd.history + _add_to_history, clobber=clobber)
 
     return redcal_meta, hc_first, hc_omni, hd_vissol
 
