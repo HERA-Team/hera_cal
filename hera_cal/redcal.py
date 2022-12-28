@@ -1643,29 +1643,44 @@ def expand_omni_vis(sol, expanded_reds, data, nsamples=None, chisq=None, chisq_p
     sol.vis.build_red_keys(expanded_reds)
 
 
-def expand_omni_gains(sol, all_reds, data, nsamples, chisq_per_ant=None):
-    '''XXX: document'''
+def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=None):
+    '''Updates sol by solving for gains involved in visibilities with at least one solved-for gain.
+    This is performed iteratively until all antennas that can be solved for have been. Constructs
+    inverse-variance weights from noise inferred from autocorrelations (and nsamples, if provided).
+
+    Arguments:
+        sol: RedSol with vis and gains, which are used to update its vis.
+            Both sol.vis.reds and sol.reds will be updated.
+        expanded_reds: List of list of redundant baseline tuples, of which sol.reds is a subset.
+        data: DataContainer mapping baseline-pol tuples like (0,1,'nn') to complex visibility data waterfalls.
+        nsamples: Optional DataContainer mapping baseline-pol tuples like (0,1,'nn') to waterfalls of number of samples.
+            If None, treat all data as having nsamples = 1.
+        chisq_per_ant: per-antenna chi^2 to update, if desired. Only newly-solved-for antennas will be updated.
+            See normalized_chisq() for more info.
+    '''
     while True:
-        bls_to_use = set([bl for red in all_reds for bl in red if ((red[0] in sol.vis)
+        bls_to_use = set([bl for red in expanded_reds for bl in red if ((red[0] in sol.vis)
                           and ((split_bl(bl)[0] not in sol.gains) ^ (split_bl(bl)[1] not in sol.gains)))])
         if len(bls_to_use) == 0:
             break  # iterate to also solve for ants only found in bls with other ex_ants
 
-        # create data subset and get data_wgts
+        # create data subset and get data_wgts for just that subset of data to save memory
+        if nsamples is None:
+            nsamples = {bl: 1.0 for bl in bls_to_use}
         data_subset = DataContainer({bl: data[bl] for bl in bls_to_use})
         dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in bls_to_use})
         data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 * nsamples[bl] for bl in bls_to_use})
 
         # expand gains
-        reds_to_use = filter_reds(all_reds, bls=bls_to_use)
-        sol.extend_gains(data_subset, wgts=data_wgts, extended_reds=reds_to_use)
+        sol.extend_gains(data_subset, wgts=data_wgts, extended_reds=filter_reds(expanded_reds, bls=bls_to_use))
 
+        # update chi^2 if desired
         if chisq_per_ant is not None:
-            bls_for_chisq = [bl for red in all_reds for bl in red if ((red[0] in sol.vis)
+            bls_for_chisq = [bl for red in expanded_reds for bl in red if ((red[0] in sol.vis)
                              and ((split_bl(bl)[0] in sol.gains) | (split_bl(bl)[1] in sol.gains)))]
-            reds_for_chisq = filter_reds(all_reds, bls=bls_for_chisq)
+            reds_for_chisq = filter_reds(expanded_reds, bls=bls_for_chisq)
             predicted_chisq_per_ant = predict_chisq_per_ant(reds_for_chisq)
-            _, _, cspa, _ = utils.chisq(data_subset, sol.vis, data_wgts=data_wgts, gains=sol.gains, reds=all_reds)
+            _, _, cspa, _ = utils.chisq(data_subset, sol.vis, data_wgts=data_wgts, gains=sol.gains, reds=expanded_reds)
             for ant, cs in cspa.items():
                 if ant not in chisq_per_ant:
                     chisq_per_ant[ant] = cs / predicted_chisq_per_ant[ant]
