@@ -1868,7 +1868,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
 def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None, nsamples=None,
               filetype='miriad', write_file=True, outdir="./", overwrite=False, verbose=True, history=" ",
               return_uvd=False, start_jd=None, lst_branch_cut=0.0, x_orientation="north", instrument="HERA",
-              telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
+              telescope_name="HERA", vis_units='uncalib', dec=-30.72152,
               telescope_location=HERA_TELESCOPE_LOCATION, integration_time=None, **kwargs):
     """
     Take DataContainer dictionary, export to UVData object and write to file. See pyuvdata.UVdata
@@ -1917,8 +1917,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     instrument : type=str, instrument name.
 
     telescope_name : type=str, telescope name.
-
-    object_name : type=str, observing object name.
 
     vis_unit : type=str, visibility units.
 
@@ -2031,7 +2029,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     params = ['Nants_data', 'Nants_telescope', 'Nbls', 'Nblts', 'Nfreqs', 'Npols', 'Nspws', 'Ntimes',
               'ant_1_array', 'ant_2_array', 'antenna_names', 'antenna_numbers', 'baseline_array',
               'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'x_orientation',
-              'instrument', 'integration_time', 'lst_array', 'nsample_array', 'object_name',
+              'instrument', 'integration_time', 'lst_array', 'nsample_array',
               'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
               'uvw_array', 'vis_units', 'antenna_positions']
     local_params = locals()
@@ -2046,6 +2044,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # handle unprojected phasing, equivalent to the old phase_type = "drift"
     cat_id = uvd._add_phase_center(cat_name="zenith", cat_type="unprojected")
     uvd.phase_center_id_array = np.zeros(uvd.Nblts, dtype=int) + cat_id
+    uvd._set_app_coords_helper()
 
     # write to file
     if write_file:
