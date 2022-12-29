@@ -335,7 +335,7 @@ def read_hera_calfits(filenames, ants=None, pols=None,
         ants = set((ant,) for ant in info['ants'])
         ants = set(ant + (p,) for ant in ants for p in pols)
     else:
-        ants = set((ant,) if type(ant) in (int, np.int, np.int64) else ant for ant in ants)
+        ants = set((ant,) if np.issubdtype(type(ant), np.integer) else ant for ant in ants)
         # if length 1 ants are passed in, add on polarizations
         ants_len1 = set(ant for ant in ants if len(ant) == 1)
         if len(ants_len1) > 0:
@@ -1997,18 +1997,18 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     """
     # configure UVData parameters
     # get pols
-    pols = np.unique(list(map(lambda k: k[-1], data.keys())))
+    pols = np.unique([k[-1] for k in data.keys()])
     Npols = len(pols)
-    polarization_array = np.array(list(map(lambda p: polstr2num(p, x_orientation=x_orientation), pols)))
+    polarization_array = np.array([polstr2num(p, x_orientation=x_orientation) for p in pols])
 
     # get telescope ants
     antenna_numbers = np.unique(list(antpos.keys()))
     Nants_telescope = len(antenna_numbers)
-    antenna_names = list(map(lambda a: "HH{}".format(a), antenna_numbers))
+    antenna_names = [f"HH{a}" for a in antenna_numbers]
 
     # get antenna positions in ITRF frame
     tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
-    antenna_positions = np.array(list(map(lambda k: antpos[k], antenna_numbers)))
+    antenna_positions = np.array([antpos[k] for k in antenna_numbers])
     antenna_positions = uvutils.ECEF_from_ENU(antenna_positions, *tel_lat_lon_alt) - telescope_location
 
     # get times

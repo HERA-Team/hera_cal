@@ -163,15 +163,15 @@ class Test_AbsCal_Funcs(object):
         i2 = keys.index(k2)
         k3 = (52, 53, 'ee')   # 14.6 m E-W
         i3 = keys.index(k3)
-        bls = list(map(lambda k: abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0), keys))
-        bls_conj = list(map(lambda k: abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0), keys))
+        bls = [abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0) for k in keys]
+        bls_conj = [abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0) for k in keys]
         assert bls[i1] == bls[i1]
         assert bls[i1] != bls[i2]
         assert (bls[i1] == bls_conj[i1]) == 'conjugated'
         # test different yet redundant baselines still agree
         assert bls[i1] == bls[i3]
         # test tolerance works as expected
-        bls = list(map(lambda k: abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4), keys))
+        bls = [abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4) for k in keys]
         assert bls[i1] != bls[i3]
 
     def test_match_red_baselines(self):
@@ -187,7 +187,7 @@ class Test_AbsCal_Funcs(object):
     def test_mirror_data_to_red_bls(self):
         # make fake data
         reds = redcal.get_reds(self.antpos, pols=['ee'])
-        data = DataContainer(odict(list(map(lambda k: (k[0], self.data[k[0]]), reds[:5]))))
+        data = DataContainer(odict([(k[0], self.data[k[0]]) for k in reds[:5]]))
         # test execuation
         d = abscal.mirror_data_to_red_bls(data, self.antpos)
         assert len(d.keys()) == 16
@@ -228,10 +228,9 @@ class Test_AbsCal_Funcs(object):
         assert len(rf.keys()) == 21
 
     def test_match_times(self):
-        dfiles = list(map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458043.12552.xx.HH.uvORA',
-                                                                 'zen.2458043.13298.xx.HH.uvORA']))
-        mfiles = list(map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458042.12552.xx.HH.uvXA',
-                                                                 'zen.2458042.13298.xx.HH.uvXA']))
+        dfiles =[os.path.join(DATA_PATH, f'zen.2458043.{f}.xx.HH.uvORA') for f in (12552, 13298)]
+        mfiles =[os.path.join(DATA_PATH, f'zen.2458042.{f}.xx.HH.uvXA') for f in (12552, 13298)]
+
         # test basic execution
         relevant_mfiles = abscal.match_times(dfiles[0], mfiles, filetype='miriad')
         assert len(relevant_mfiles) == 2
@@ -245,10 +244,10 @@ class Test_AbsCal_Funcs(object):
 
     def test_rephase_vis(self):
         dfile = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA')
-        mfiles = list(map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458042.12552.xx.HH.uvXA']))
+        mfiles = [os.path.join(DATA_PATH, 'zen.2458042.12552.xx.HH.uvXA')]
         m, mf, mantp, mant, mfr, mt, ml, mp = io.load_vis(mfiles, return_meta=True)
         d, df, dantp, dant, dfr, dt, dl, dp = io.load_vis(dfile, return_meta=True)
-        bls = odict(list(map(lambda k: (k, dantp[k[0]] - dantp[k[1]]), d.keys())))
+        bls = odict([(k, dantp[k[0]] - dantp[k[1]]) for k in d.keys()])
 
         # basic execution
         new_m, new_f = abscal.rephase_vis(m, ml, dl, bls, dfr)
@@ -680,9 +679,9 @@ class Test_AbsCal(object):
         d, fl, ap, a, f, t, l, p = io.load_vis(self.data_fname, return_meta=True, pick_data_ants=False)
         self.freq_array = f
         self.antpos = ap
-        gain_pols = np.unique(list(map(split_pol, p)))
+        gain_pols = np.unique([split_pol(pp) for pp in p])
         self.ap = ap
-        self.gk = abscal.flatten(list(map(lambda p: list(map(lambda k: (k, p), a)), gain_pols)))
+        self.gk = abscal.flatten([[(k, p) for k in a] for p in gain_pols])
         self.freqs = f
 
     def test_init(self):
@@ -701,7 +700,7 @@ class Test_AbsCal(object):
         assert AC.refant == 24
         assert np.allclose(np.linalg.norm(AC.antpos[24]), 0.0)
         # test bl cut
-        assert not np.any(np.array(list(map(lambda k: np.linalg.norm(AC.bls[k]), AC.bls.keys()))) > 26.0)
+        assert not np.any(np.array([np.linalg.norm(AC.bls[k]) for k in AC.bls.keys()]) > 26.0)
         # test bl taper
         assert np.median(AC.wgts[(24, 25, 'ee')]) > np.median(AC.wgts[(24, 39, 'ee')])
 

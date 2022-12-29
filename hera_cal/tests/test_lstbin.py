@@ -129,7 +129,7 @@ class Test_lstbin(object):
         assert len(output[2][list(output[2].keys())[0]][100]) == 3
         assert len(output[2][list(output[2].keys())[0]][100][0]) == 64
         # test switch bl
-        conj_data3 = DataContainer(odict(list(map(lambda k: (utils.reverse_bl(k), np.conj(self.data3[k])), self.data3.keys()))))
+        conj_data3 = DataContainer(odict([(utils.reverse_bl(k), np.conj(self.data3[k])) for k in self.data3.keys()]))
         data_list = [self.data1, self.data2, conj_data3]
         output = lstbin.lst_bin(data_list, self.lst_list, dlst=dlst)
         assert output[1][(24, 25, 'ee')].shape == (224, 64)
@@ -139,7 +139,7 @@ class Test_lstbin(object):
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
                                 verbose=False, sig_clip=True, min_N=15, flag_below_min_N=True, sigma=2)
         # test wrapping
-        lst_list = list(map(lambda l: (copy.deepcopy(l) + 6) % (2 * np.pi), self.lst_list))
+        lst_list = [(copy.deepcopy(l) + 6) % (2 * np.pi) for l in self.lst_list]
         output = lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, begin_lst=np.pi)
         assert output[0][0] > output[0][-1]
         assert len(output[0]) == 175
@@ -604,7 +604,7 @@ class Test_lstbin(object):
         assert np.all(arr[10])
         assert np.all(arr[11])
         # test array performance
-        x = np.array(list(map(lambda s: stats.norm.rvs(0, s, 100), np.arange(1, 5.1, 1))))
+        x = np.array([stats.norm.rvs(0, s, 100) for s in np.arange(1, 5.1, 1)])
         x[0, 50] = 100
         x[4, 50] = 5
         arr = lstbin.sigma_clip(x, sigma=2.0)
