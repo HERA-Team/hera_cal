@@ -4,10 +4,11 @@ channels:
   - defaults
 dependencies:
   - pip
+  #- aipy>=3.0.0rc2
   - astropy
   - h5py
   - hdf5plugin
-  - numpy=1.23
+  - numpy>=1.24
   - pytest
   - scipy
   - scikit-learn
