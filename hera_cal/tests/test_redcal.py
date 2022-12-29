@@ -1963,24 +1963,6 @@ class TestRunMethods(object):
         os.remove(os.path.splitext(input_data)[0] + '.iter0.omni_vis.uvh5')
         os.remove(os.path.splitext(input_data)[0] + '.iter0.redcal_meta.hdf5')
 
-        hd = io.HERAData(input_data)
-        hd.read()
-        hd.channel_width = np.median(np.diff(hd.freqs)) * np.ones_like(hd.freq_array)
-        hd.write_miriad(os.path.join(DATA_PATH, 'test_output/temp.uv'))
-        hd = io.HERAData(os.path.join(DATA_PATH, 'test_output/temp.uv'), filetype='miriad')
-        hd.read()
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            sys.stdout = open(os.devnull, 'w')
-            cal_first, cal_omni = om.redcal_run(hd, metrics_files=ant_metrics_file, clobber=True)
-            sys.stdout = sys.__stdout__
-        assert cal_first is not None
-        assert cal_omni is not None
-        shutil.rmtree(os.path.join(DATA_PATH, 'test_output/temp.uv'))
-        os.remove(os.path.join(DATA_PATH, 'test_output/temp.first.calfits'))
-        os.remove(os.path.join(DATA_PATH, 'test_output/temp.omni.calfits'))
-        os.remove(os.path.join(DATA_PATH, 'test_output/temp.omni_vis.uvh5'))
-
         with pytest.raises(TypeError):
             cal_first, cal_omni = om.redcal_run({})
 
