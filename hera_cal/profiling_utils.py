@@ -2,16 +2,11 @@ import importlib
 from pathlib import Path
 from argparse import ArgumentParser
 
-def run_func_with_profiling(fnc, args, **kwargs):
+def run_with_profiling(function, args, **kwargs):
     if args.profile:
         from line_profiler import LineProfiler
-        if 'output_file_select' in kwargs:
-            label = '.'.join(kwargs['output_file_select'])
-            output_file = Path(f"lst_bin_profile_{label}.prof")
-        else:
-            output_file = Path('lst_bin_profile.prof')
 
-        print(f"Profiling the LST-binning. Output to {output_file}")
+        print(f"Profiling {function.__name__}. Output to {args.profile_output}")
 
         profiler = LineProfiler()
 
@@ -32,9 +27,9 @@ def run_func_with_profiling(fnc, args, **kwargs):
 
             
     if args.profile:
-        profiler.runcall(fnc, **kwargs)
+        profiler.runcall(function, **kwargs)
     else:
-        fnc(**kwargs)
+        function(**kwargs)
 
     if args.profile:
         pth = Path(args.profile_output)

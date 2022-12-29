@@ -7,7 +7,7 @@
 
 from hera_cal import delay_filter
 import sys
-from hera_cal.profiling_utils import add_profiling_args, run_func_with_profiling
+from hera_cal.profiling_utils import add_profiling_args, run_with_profiling
 
 parser = delay_filter.delay_filter_argparser()
 add_profiling_args(parser)
@@ -37,7 +37,7 @@ if isinstance(ap.calfilelist, str) and ap.calfilelist.lower() == 'none':
     ap.calfilelist = None
 
 # Run Delay Filter
-run_func_with_profiling(
+run_with_profiling(
     delay_filter.load_delay_filter_and_write,
     ap,
     datafile_list=ap.datafilelist, 

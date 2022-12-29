@@ -39,7 +39,7 @@ from hera_cal._cli_tools import setup_logger
 import logging
 import importlib
 from pathlib import Path
-from hera_cal.profiling_utils import add_profiling_args, run_func_with_profiling
+from hera_cal.profiling_utils import add_profiling_args, run_with_profiling
 
 logger = logging.getLogger('hera_cal')
 setup_logger()
@@ -95,7 +95,7 @@ del kwargs['profile_output']
 kwargs['save_channels'] = tuple(int(ch) for ch in kwargs['save_channels'].split(','))
 kwargs['golden_lsts'] = tuple(float(lst) for lst in kwargs['golden_lsts'].split(','))
 
-run_func_with_profiling(
+run_with_profiling(
     lstbin.lst_bin_files, 
     a, 
     data_files=data_files,
