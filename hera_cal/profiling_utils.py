@@ -10,7 +10,7 @@ def run_with_profiling(function, args, **kwargs):
 
         profiler = LineProfiler()
 
-        profiler.add_function(fnc)
+        profiler.add_function(function)
 
         # Now add any user-defined functions that they want to be profiled.
         # Functions must be sent in as "path.to.module:function_name" or
