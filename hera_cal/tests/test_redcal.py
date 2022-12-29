@@ -1825,7 +1825,7 @@ class TestRunMethods(object):
         for flag in cal_flags.values():
             np.testing.assert_array_equal(flag, True)
 
-        _, flags, nsamples = hc_omni.build_datacontainers()
+        _, flags, nsamples = hd_vissol.build_datacontainers()
         for flag in flags.values():
             np.testing.assert_array_equal(flag, True)
         for nsamples in nsamples.values():
@@ -1838,7 +1838,6 @@ class TestRunMethods(object):
             redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_iteration(hd, pol_mode='2pol', ex_ants=[1, 27], min_bl_cut=15)
 
         data, flags, nsamples = hd_vissol.build_datacontainers()
-
         for pol in ['ee', 'nn']:
             for rdc in [data, flags, nsamples]:
                 # test that the unique baseline is keyed by the first entry in all_reds, not filtered_reds
@@ -1846,13 +1845,15 @@ class TestRunMethods(object):
                 # test that completely excluded baselines from redcal are still represented
                 assert (23, 27, pol) in rdc
             # test redundant baseline counting
-            np.testing.assert_array_equal(cal_omni.nsamples[(1, 12, pol)][~cal_omni.flags[(1, 12, pol)]], 4.0)
-            np.testing.assert_array_equal(cal_omni.nsamples[(23, 27, pol)], 0.0)
-            np.testing.assert_array_equal(cal_omni.nsamples[(1, 27, pol)], 0.0)
+            np.testing.assert_array_equal(nsamples[(1, 12, pol)][~flags[(1, 12, pol)]], 4.0)
+            np.testing.assert_array_equal(nsamples[(23, 27, pol)], 0.0)
+            np.testing.assert_array_equal(nsamples[(1, 27, pol)], 0.0)
+
+        gains, gain_flags, chisq_per_ant, _ = hc_omni.build_calcontainers()
         for ant in [(1, 'Jee'), (1, 'Jnn'), (27, 'Jee'), (27, 'Jnn')]:
-            assert not np.all(cal_omni.gains[ant] == 1.0)
-            assert not np.all(cal_omni.chisq_per_ant[ant] == 0.0)
-            np.testing.assert_array_equal(cal_omni.gain_flags[ant], True)
+            assert not np.all(gains[ant] == 1.0)
+            assert not np.all(chisq_per_ant[ant] == 0.0)
+            np.testing.assert_array_equal(gain_flags[ant], True)
 
     def test_redcal_run(self):
         input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
@@ -1860,11 +1861,11 @@ class TestRunMethods(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sys.stdout = open(os.devnull, 'w')
-            cal_first, cal_omni = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.7, add_to_history='testing',
-                                                a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
-                                                iter0_prefix='.iter0', metrics_files=ant_metrics_file, clobber=True)
+            redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.7, add_to_history='testing',
+                                                                      a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
+                                                                      iter0_prefix='.iter0', metrics_files=ant_metrics_file, clobber=True)
             hd = io.HERAData(input_data)
-            cal_first0, cal_omni0 = om.redcal_iteration(hd, ex_ants=[11, 50])
+            redcal_meta0, hc_first0, hc_omni0, hd_vissol0 = om.redcal_iteration(hd, ex_ants=[11, 50])
             sys.stdout = sys.__stdout__
 
         for prefix, cal_here, bad_ants in [('', cal_first, [11, 50, 12, 24]), ('.iter0', cal_first0, [11, 50])]:
