@@ -1964,17 +1964,21 @@ class TestRunMethods(object):
         os.remove(os.path.splitext(input_data)[0] + '.iter0.redcal_meta.hdf5')
 
         with pytest.raises(TypeError):
-            cal_first, cal_omni = om.redcal_run({})
+            redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_run({})
 
     def test_redcal_run_bda(self):
         uvh5_bda = os.path.join(DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.uvh5")
         # test that gains have 8 times when we're upsampling
-        cal_first, cal_omni = om.redcal_run(uvh5_bda, upsample=True, clobber=True)
-        for gain in cal_omni.gains.values():
+        redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_run(uvh5_bda, upsample=True, clobber=True)
+        gains, _, _, _ = hc_omni.build_calcontainers()
+        for gain in gains.values():
             assert gain.shape[0] == 8
+
+        uvh5_bda = os.path.join(DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.uvh5")
         # test that gains have 1 time when we're downsampling
-        cal_first, cal_omni = om.redcal_run(uvh5_bda, downsample=True, clobber=True)
-        for gain in cal_omni.gains.values():
+        redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_run(uvh5_bda, downsample=True, clobber=True)
+        gains, _, _, _ = hc_omni.build_calcontainers()
+        for gain in gains.values():
             assert gain.shape[0] == 1
         os.remove(os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.first.calfits'))
         os.remove(os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.omni.calfits'))
