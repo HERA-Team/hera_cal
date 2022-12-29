@@ -1834,7 +1834,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             # get DataContainers, performing i/o if necessary
             if verbose:
                 print('    Now calibrating times', hd.times[tSlice][0], 'through', hd.times[tSlice][-1], '...')
-            if nInt_to_load is None:  # don't perform partial I/O
+            if nInt_to_load == nTimes:  # don't perform partial I/O
                 data, _, nsamples = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
                 for bl in data:
                     data[bl] = data[bl][tSlice, fSlice]  # cut down size of DataContainers to match unflagged indices
