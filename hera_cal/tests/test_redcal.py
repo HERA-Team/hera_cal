@@ -1868,17 +1868,18 @@ class TestRunMethods(object):
             redcal_meta0, hc_first0, hc_omni0, hd_vissol0 = om.redcal_iteration(hd, ex_ants=[11, 50])
             sys.stdout = sys.__stdout__
 
-        for prefix, cal_here, bad_ants in [('', cal_first, [11, 50, 12, 24]), ('.iter0', cal_first0, [11, 50])]:
+        for prefix, hc_here, bad_ants in [('', hc_first, [11, 50, 12, 24]), ('.iter0', hc_first0, [11, 50])]:
             # bad_ants is based on experiments with this particular file
             hc = io.HERACal(os.path.splitext(input_data)[0] + prefix + '.first.calfits')
             gains, flags, quals, total_qual = hc.read()
+            gains_here, flags_here, quals_here, total_qual_here = hc_here.build_calcontainers()
             np.testing.assert_almost_equal(np.unique(hc.lst_array), np.unique(hd.lst_array))
             np.testing.assert_almost_equal(hc.telescope_location, hd.telescope_location)
             for antnum, antpos in zip(hc.antenna_numbers, hc.antenna_positions):
                 np.testing.assert_almost_equal(antpos, hd.antenna_positions[hd.antenna_numbers == antnum].flatten())
             for ant in gains.keys():
-                np.testing.assert_almost_equal(gains[ant], cal_here.gains[ant])
-                np.testing.assert_almost_equal(flags[ant], cal_here.gain_flags[ant])
+                np.testing.assert_almost_equal(gains[ant], gains_here[ant])
+                np.testing.assert_almost_equal(flags[ant], flags_here[ant])
                 if ant[0] in bad_ants:
                     np.testing.assert_array_equal(gains[ant], 1.0)
                     np.testing.assert_array_equal(flags[ant], True)
@@ -1890,24 +1891,25 @@ class TestRunMethods(object):
                 assert 'Iteration0Results.' in hc.history.replace('\n', '').replace(' ', '')
             assert 'Thisfilewasproducedbythefunction' in hc.history.replace('\n', '').replace(' ', '')
 
-        for prefix, cal_here, bad_ants in [('', cal_omni, [11, 50, 12, 24]), ('.iter0', cal_omni0, [11, 50])]:
+        for prefix, hc_here, hd_here, bad_ants in [('', hc_omni, hd_vissol, [11, 50, 12, 24]), ('.iter0', hc_omni0, hd_vissol0, [11, 50])]:
             hc = io.HERACal(os.path.splitext(input_data)[0] + prefix + '.omni.calfits')
             gains, flags, quals, total_qual = hc.read()
+            gains_here, flags_here, quals_here, total_qual_here = hc_here.build_calcontainers()
             np.testing.assert_almost_equal(np.unique(hc.lst_array), np.unique(hd.lst_array))
             np.testing.assert_almost_equal(hc.telescope_location, hd.telescope_location)
             for antnum, antpos in zip(hc.antenna_numbers, hc.antenna_positions):
                 np.testing.assert_almost_equal(antpos, hd.antenna_positions[hd.antenna_numbers == antnum].flatten())
             for ant in gains.keys():
-                zero_check = np.isclose(cal_here.gains[ant], 0, rtol=1e-10, atol=1e-10)
-                np.testing.assert_array_almost_equal(gains[ant][~zero_check], cal_here.gains[ant][~zero_check])
-                np.testing.assert_array_almost_equal(flags[ant][~zero_check], cal_here.gain_flags[ant][~zero_check])
+                zero_check = np.isclose(gains_here[ant], 0, rtol=1e-10, atol=1e-10)
+                np.testing.assert_array_almost_equal(gains[ant][~zero_check], gains_here[ant][~zero_check])
+                np.testing.assert_array_almost_equal(flags[ant][~zero_check], flags_here[ant][~zero_check])
                 if np.sum(zero_check) > 0:
                     np.testing.assert_array_equal(flags[ant][zero_check], True)
-                np.testing.assert_array_almost_equal(quals[ant][~zero_check], cal_here.chisq_per_ant[ant][~zero_check])
+                np.testing.assert_array_almost_equal(quals[ant][~zero_check], quals_here[ant][~zero_check])
                 if ant[0] in bad_ants:
                     np.testing.assert_array_equal(flags[ant], True)
             for antpol in total_qual.keys():
-                np.testing.assert_array_almost_equal(total_qual[antpol], cal_here.chisq[antpol])
+                np.testing.assert_array_almost_equal(total_qual[antpol], total_qual_here[antpol])
             assert 'testing' in hc.history.replace('\n', '').replace(' ', '')
             if prefix == '':
                 # assert 'Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', '')
@@ -1918,10 +1920,11 @@ class TestRunMethods(object):
 
             hd = io.HERAData(os.path.splitext(input_data)[0] + prefix + '.omni_vis.uvh5')
             data, flags, nsamples = hd.read()
-            for bl in cal_here.vis:
-                np.testing.assert_array_almost_equal(data[bl], cal_here.vis[bl])
-                np.testing.assert_array_almost_equal(flags[bl], cal_here.flags[bl])
-                np.testing.assert_array_almost_equal(nsamples[bl], cal_here.nsamples[bl])
+            data_here, flags_here, nsamples_here = hd_here.build_datacontainers()
+            for bl in data_here:
+                np.testing.assert_array_almost_equal(data[bl], data_here[bl])
+                np.testing.assert_array_almost_equal(flags[bl], flags_here[bl])
+                np.testing.assert_array_almost_equal(nsamples[bl], nsamples_here[bl])
             assert 'testing' in hd.history.replace('\n', '').replace(' ', '')
             if prefix == '':
                 # assert 'Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', '')
@@ -1930,15 +1933,15 @@ class TestRunMethods(object):
                 assert 'Iteration0Results.' in hc.history.replace('\n', '').replace(' ', '')
             assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
 
-        for prefix, omnical_here, firstcal_here, bad_ants in [('', cal_omni, cal_first, [11, 50, 12, 24]), ('.iter0', cal_omni0, cal_first0, [11, 50])]:
+        for prefix, meta_here, bad_ants in [('', redcal_meta, [11, 50, 12, 24]), ('.iter0', redcal_meta0, [11, 50])]:
             meta_file = os.path.splitext(input_data)[0] + prefix + '.redcal_meta.hdf5'
             fc_meta, omni_meta, freqs, times, lsts, antpos, history = io.read_redcal_meta(meta_file)
             for key1 in fc_meta:
                 for key2 in fc_meta[key1]:
-                    np.testing.assert_array_almost_equal(fc_meta[key1][key2], firstcal_here.meta[key1][key2])
+                    np.testing.assert_array_almost_equal(fc_meta[key1][key2], meta_here['fc_meta'][key1][key2])
             for key1 in omni_meta:
                 for key2 in omni_meta[key1]:
-                    np.testing.assert_array_almost_equal(omni_meta[key1][key2], omnical_here.meta[key1][key2])
+                    np.testing.assert_array_almost_equal(omni_meta[key1][key2], meta_here['omni_meta'][key1][key2])
             np.testing.assert_array_almost_equal(freqs, hd.freqs)
             np.testing.assert_array_almost_equal(times, hd.times)
             np.testing.assert_array_almost_equal(lsts, hd.lsts)
