@@ -1711,6 +1711,26 @@ def _update_redcal_meta(redcal_meta, meta_slice, tSlice, fSlice, pols):
     redcal_meta['omni_meta']['conv_crit'][str(pols)][tSlice, fSlice] = meta_slice['omni_meta']['conv_crit']
 
 
+def count_redundant_nsamples(nsamples, reds, good_ants=None):
+    '''Computes a nsamples RedDataContainer from a full nsamples DataContainer and a set of reds.
+
+    Arguments:
+        nsamples: DataContainer mapping baseline tuples to nsamples waterfalls.
+        reds: List of list of redundant baseline tuples
+        good_ants: optional list (or iterable that supports "in") of ant-pol tuples where both
+            antennas in a baseline must be good for that nsamples to be included. If None (default),
+            all baselines will be included.
+
+    Returns:
+        red_nsamples: RedDataContainer of result with red_nsamples.reds set to the input reds
+    '''
+    red_nsamples = {}
+    for red in reds:
+        good_bls = [bl for bl in red if (good_ants is None) or ((split_bl(bl)[0] in good_ants) and (split_bl(bl)[1] in good_ants))]
+        red_nsamples[red[0]] = np.sum([nsamples[bl] for bl in good_bls], axis=0)
+    return RedDataContainer(red_nsamples, reds=reds)
+
+
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
                      solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0,
                      oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
@@ -1796,6 +1816,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     solar_flagged = solar_alts > solar_horizon
     if verbose and np.any(solar_flagged):
         print(len(hd.times[solar_flagged]), 'integrations flagged due to sun above', solar_horizon, 'degrees.')
+    if np.all(solar_flagged):
+        return redcal_meta, hc_first, hc_omni, hd_vissol
 
     # loop over polarizations and times, performing partial loading if desired
     for pols in pol_load_list:
@@ -1822,7 +1844,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             else:  # perform partial i/o
                 data, _, nsamples = hd.read(time_range=(hd.times[tSlice][0], hd.times[tSlice][-1]), frequencies=hd.freqs[fSlice], polarizations=pols)
 
-            #
+            # run redundant calibration
             meta, sol = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                               run_logcal=True, run_omnical=True,
                                               oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
@@ -1830,23 +1852,31 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                                               max_dims=max_dims, gain=gain)
 
             # solve for visibilities excluded from reds but with baselines with both gains in sol. These are not flagged.
-            expand_omni_vis(sol, filter_reds(all_reds, pols=pols), data, nsamples, chisq=meta['chisq'], chisq_per_ant=meta['chisq_per_ant'])
+            all_reds_this_pol = filter_reds(all_reds, pols=pols)
+            expand_omni_vis(sol, all_reds_this_pol, data, nsamples, chisq=meta['chisq'], chisq_per_ant=meta['chisq_per_ant'])
+
+            # rekey sol.vis so that iterating over it will use red[0] in all_reds
+            sol.vis = RedDataContainer({red[0]: sol.vis[red[0]] for red in all_reds_this_pol if red[0] in sol.vis}, reds=all_reds_this_pol)
 
             # make dicts and data containers not in meta or sol. Everything not yet solved for stays flagged.
             first_flags = {ant: np.zeros_like(g, dtype=bool) for ant, g in meta['fc_gains'].items()}
             omni_flags = {ant: ~np.isfinite(g) for ant, g in sol.gains.items()}
             vissol_flags = RedDataContainer({bl: ~np.isfinite(v) for bl, v in sol.vis.items()}, reds=sol.vis.reds)
-            vissol_nsamples = RedDataContainer({red[0]: np.sum([nsamples[bl] for bl in red], axis=0) for red in reds}, reds=sol.vis.reds)
+            vissol_nsamples = count_redundant_nsamples(nsamples, all_reds_this_pol, good_ants=sol.gains)
             sol.make_sol_finite()
 
             # try to solve for gains on antennas excluded from calibration, but keep them flagged
-            expand_omni_gains(sol, filter_reds(all_reds, pols=pols), data, nsamples, chisq_per_ant=meta['chisq_per_ant'])
+            expand_omni_gains(sol, all_reds_this_pol, data, nsamples, chisq_per_ant=meta['chisq_per_ant'])
+
             # try one more time to expand visibilities, keeping new ones flagged, but don't update chisq or chisq_per_ant
-            expand_omni_vis(sol, filter_reds(all_reds, pols=pols), data, nsamples)
+            expand_omni_vis(sol, all_reds_this_pol, data, nsamples)
 
             # update various objects containing information about the full file
             hc_first.update(gains=meta['fc_gains'], flags=first_flags, tSlice=tSlice, fSlice=fSlice)
-            hc_omni.update(gains=sol.gains, flags=omni_flags, quals=meta['chisq_per_ant'], total_qual=meta['chisq'], tSlice=tSlice, fSlice=fSlice)
+            total_qual = meta['chisq']
+            if pol_mode in ['4pol', '4pol_minV']:  # in which case meta['chisq'] is a numpy array
+                total_qual = {ap: meta['chisq'] for ap in hc_omni.pols}
+            hc_omni.update(gains=sol.gains, flags=omni_flags, quals=meta['chisq_per_ant'], total_qual=total_qual, tSlice=tSlice, fSlice=fSlice)
             hd_vissol.update(data=sol.vis, flags=vissol_flags, nsamples=vissol_nsamples, tSlice=tSlice, fSlice=fSlice)
             _update_redcal_meta(redcal_meta, meta, tSlice, fSlice, pols)
 
