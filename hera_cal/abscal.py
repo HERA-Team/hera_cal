@@ -1888,7 +1888,7 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
     new_model = odict()
     for i, bl in enumerate(model_bls):
         # compre bl to all model_bls
-        comparison = np.array([bl == mbl for mbl in data_bls], np.str)
+        comparison = np.array(list(map(lambda mbl: bl == mbl, data_bls)), str)
 
         # get matches
         matches = np.where((comparison == 'True') | (comparison == 'conjugated'))[0]
@@ -1976,13 +1976,13 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     for i, bl_group in enumerate(stripped_reds):
         # average redundant baseline group
         d = np.nansum([data[k] * wgts[k] for k in bl_group], axis=0)
-        d /= np.nansum([wgts[k] for k in  bl_group], axis=0)
+        d /= np.nansum([wgts[k] for k in bl_group], axis=0)
 
         # get wgts
         if broadcast_wgts:
             w = np.array(reduce(operator.mul, [wgts[k] for k in bl_group]), float) ** (1. / len(bl_group))
         else:
-            w = np.array(reduce(operator.add, [wgts[k] for k in  bl_group]), float) / len(bl_group)
+            w = np.array(reduce(operator.add, [wgts[k] for k in bl_group]), float) / len(bl_group)
 
         # iterate over bl_group
         for j, key in enumerate(sorted(bl_group)):
@@ -2424,7 +2424,7 @@ class AbsCal(object):
 
         # form result array
         self._ant_eta = odict([(k, copy.copy(fit[f"eta_{k[0]}_{k[1]}"])) for k in flatten(self._gain_keys)])
-        self._ant_eta_arr = np.moveaxis([[self._ant_eta[k] for k in  pk] for pk in self._gain_keys], 0, -1)
+        self._ant_eta_arr = np.moveaxis([[self._ant_eta[k] for k in pk] for pk in self._gain_keys], 0, -1)
 
     def phs_logcal(self, avg=False, verbose=True):
         """
@@ -2461,7 +2461,7 @@ class AbsCal(object):
         if avg:
             self._ant_phi = odict([
                 (
-                    k, 
+                    k,
                     np.ones_like(self._ant_phi[k]) * np.angle(
                         np.median(np.real(np.exp(1j * self._ant_phi[k])))
                         + 1j * np.median(np.imag(np.exp(1j * self._ant_phi[k])))
@@ -2531,10 +2531,10 @@ class AbsCal(object):
                 fit[phi_key] = np.repeat(phi_avg, Ntimes, axis=0)
 
         # form result
-        self._ant_dly = odict([(k, copy.copy(fit[f"tau_{k[0]}_{k[1]}"])) for k in  flatten(self._gain_keys)])
+        self._ant_dly = odict([(k, copy.copy(fit[f"tau_{k[0]}_{k[1]}"])) for k in flatten(self._gain_keys)])
         self._ant_dly_arr = np.moveaxis([[self._ant_dly[k] for k in pk] for pk in self._gain_keys], 0, -1)
 
-        self._ant_dly_phi = odict([(k, copy.copy(fit[f"phi_{k[0]}_{k[1]}"])) for k in  flatten(self._gain_keys)])
+        self._ant_dly_phi = odict([(k, copy.copy(fit[f"phi_{k[0]}_{k[1]}"])) for k in flatten(self._gain_keys)])
         self._ant_dly_phi_arr = np.moveaxis([[self._ant_dly_phi[k] for k in pk] for pk in self._gain_keys], 0, -1)
 
     def delay_slope_lincal(self, medfilt=True, kernel=(1, 15), verbose=True, time_avg=False,
@@ -2632,8 +2632,8 @@ class AbsCal(object):
                                         refant=self.refant, verbose=verbose, tol=tol, edge_cut=edge_cut)
 
         # form result
-        self._phs_slope = odict([(k, copy.copy(np.array([fit[f"Phi_ew_{k[1]}"], fit[f"Phi_ns_{k[1]}"]]))) for k in  flatten(self._gain_keys)])
-        self._phs_slope_arr = np.moveaxis([[np.array([self._phs_slope[k][0], self._phs_slope[k][1]]) for k in pk] for pk in  self._gain_keys], 0, -1)
+        self._phs_slope = odict([(k, copy.copy(np.array([fit[f"Phi_ew_{k[1]}"], fit[f"Phi_ns_{k[1]}"]]))) for k in flatten(self._gain_keys)])
+        self._phs_slope_arr = np.moveaxis([[np.array([self._phs_slope[k][0], self._phs_slope[k][1]]) for k in pk] for pk in self._gain_keys], 0, -1)
 
     def abs_amp_logcal(self, verbose=True):
         """
@@ -2709,11 +2709,11 @@ class AbsCal(object):
                 fit.pop('Phi_ns')
 
         # form result
-        self._abs_psi = odict([(k, copy.copy(fit[f"psi_{k[1]}"])) for k in  flatten(self._gain_keys)])
+        self._abs_psi = odict([(k, copy.copy(fit[f"psi_{k[1]}"])) for k in flatten(self._gain_keys)])
         self._abs_psi_arr = np.moveaxis([[self._abs_psi[k] for k in pk] for pk in self._gain_keys], 0, -1)
 
         self._TT_Phi = odict([(k, copy.copy(np.array([fit[f"Phi_ew_{k[1]}"], fit[f"Phi_ns_{k[1]}"]]))) for k in flatten(self._gain_keys)])
-        self._TT_Phi_arr = np.moveaxis([[np.array([self._TT_Phi[k][0], self._TT_Phi[k][1]]) for k in  pk] for pk in  self._gain_keys], 0, -1)
+        self._TT_Phi_arr = np.moveaxis([[np.array([self._TT_Phi[k][0], self._TT_Phi[k][1]]) for k in pk] for pk in self._gain_keys], 0, -1)
 
     # amp_logcal results
     @property
@@ -2952,7 +2952,7 @@ class AbsCal(object):
             fac = 1.0j * np.ones_like(self.freqs).reshape(1, -1)
             return self._make_new_odict(
                 lambda k: np.exp(
-                    fac* np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2])
+                    fac * np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2])
                 )
             )
         else:

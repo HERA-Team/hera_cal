@@ -325,7 +325,7 @@ def read_hera_calfits(filenames, ants=None, pols=None,
         ants = set((ant,) for ant in info['ants'])
         ants = set(ant + (p,) for ant in ants for p in pols)
     else:
-        ants = set((ant,) if type(ant) in (int, np.int, np.int64) else ant for ant in ants)
+        ants = set((ant,) if np.issubdtype(type(ant), np.integer) else ant for ant in ants)
         # if length 1 ants are passed in, add on polarizations
         ants_len1 = set(ant for ant in ants if len(ant) == 1)
         if len(ants_len1) > 0:
