@@ -584,7 +584,7 @@ class HERAData(UVData):
         }
         pols = [polnum2str(polnum, x_orientation=self.x_orientation) for polnum in self.polarization_array]
         self._polstr_indices = {
-            pol: self._polnum_indices[polstr2num(pol)] for pol in pols
+            pol: self._polnum_indices[polstr2num(pol, x_orientation=self.x_orientation)] for pol in pols
         }
 
     def _get_slice(self, data_array, key):
