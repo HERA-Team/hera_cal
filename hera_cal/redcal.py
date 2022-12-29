@@ -1742,7 +1742,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         hd: HERAData object, instantiated with the datafile or files to calibrate. Must be loaded using uvh5.
             Assumed to have no prior flags.
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
-            Partial io requires 'uvh5' filetype for hd. Lower numbers save memory, but incur a CPU overhead.
+            Lower numbers save memory, but incur a CPU overhead.
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
             See recal.get_reds for more information.
         bl_error_tol: the largest allowable difference between baselines in a redundant group
@@ -1776,9 +1776,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         hd_vissol: HERAData object containing omnical visibility solutions. DataContainers (data, flags, nsamples)
             can be extracted using hd_vissol.build_datacontainers().
     '''
-    if nInt_to_load is not None:
-        assert hd.filetype == 'uvh5', 'Partial loading only available for uvh5 filetype.'
-    else:
+    if nInt_to_load is None:
         if hd.data_array is None:  # if data loading hasn't happened yet, load the whole file
             hd.read()
         if hd.times is None:  # load metadata into HERAData object if necessary
@@ -1883,7 +1881,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     return redcal_meta, hc_first, hc_omni, hd_vissol
 
 
-def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
+def redcal_run(input_data, firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
                omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None,
                metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None,
                upsample=False, downsample=False, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
@@ -1897,7 +1895,6 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
 
     Arguments:
         input_data: path to visibility data file to calibrate or HERAData object
-        filetype: filetype of input_data (if it's a path). Supports 'uvh5' (defualt), 'miriad', 'uvfits'
         firstcal_ext: string to replace file extension of input_data for saving firstcal calfits
         omnical_ext: string to replace file extension of input_data for saving omnical calfits
         omnivis_ext: string to replace file extension of input_data for saving omnical visibilities as uvh5
@@ -1914,7 +1911,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             polarization is flagged for an antenna, all polarizations are flagged.
         clobber: if True, overwrites existing files for the firstcal and omnical results
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
-            Partial io requires 'uvh5' filetype. Lower numbers save memory, but incur a CPU overhead.
+            Lower numbers save memory, but incur a CPU overhead.
         upsample: if True, upsample baseline-dependent-averaged data file to highest temporal resolution
         downsample: if True, downsample baseline-dependent-averaged data file to lowest temporal resolution
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
@@ -1957,8 +1954,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             can be extracted using hd_vissol.build_datacontainers().
     '''
     if isinstance(input_data, str):
-        hd = HERAData(input_data, upsample=upsample, downsample=downsample, filetype=filetype)
-        if filetype != 'uvh5' or nInt_to_load is None:
+        hd = HERAData(input_data, upsample=upsample, downsample=downsample)
+        if nInt_to_load is None:
             hd.read()
     elif isinstance(input_data, HERAData):
         hd = input_data
