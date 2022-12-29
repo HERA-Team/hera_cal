@@ -1797,9 +1797,9 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     filtered_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
 
     # initialize HERAData and HERACal to contain the full set of data and metadata
-    hc_first = hd.init_HERACal()
-    hc_omni = hd.init_HERACal()
-    hd_vissol = deepcopy(hd)
+    hd_vissol = HERAData(hd.filepaths, upsample=hd.upsample, downsample=hd.downsample)
+    hc_first = hd_vissol.init_HERACal()
+    hc_omni = hd_vissol.init_HERACal()
     hd_vissol.read(bls=[red[0] for red in all_reds], return_data=False)
     hd_vissol.data_array = np.zeros_like(hd_vissol.data_array)
     hd_vissol.nsample_array = np.zeros_like(hd_vissol.nsample_array)
