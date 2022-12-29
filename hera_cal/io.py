@@ -184,7 +184,7 @@ class HERACal(UVCal):
             gains: optional dict mapping antenna-pol to complex gains arrays
             flags: optional dict mapping antenna-pol to boolean flag arrays
             quals: optional dict mapping antenna-pol to float qual arrays
-            total_qual: optional dict mapping polarization to float total quality array
+            total_qual: optional dict mapping polarization to float total quality array.
             tSlice: optional slice of indices of the times to update. Must have the same size
                 as the 0th dimension of the input gains/flags/quals/total_quals
             fSlice: optional slice of indices of the freqs to update. Must have the same size
