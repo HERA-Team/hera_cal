@@ -2033,7 +2033,7 @@ def redcal_run(input_data, firstcal_ext='.first.calfits', omnical_ext='.omni.cal
                              hd.times, hd.lsts, hd.antpos, hd.history + _add_to_history, clobber=clobber)
 
     # output results files
-    out_prefix = os.path.join(outdir, filename_no_ext + iter0_prefix)
+    out_prefix = os.path.join(outdir, filename_no_ext)
     _add_to_history = utils.history_string(add_to_history + '\n' + high_z_ant_hist)
     for h in [hc_first, hc_omni, hd_vissol]:
         h.history += _add_to_history
