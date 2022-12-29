@@ -1900,12 +1900,13 @@ class TestRunMethods(object):
             for antnum, antpos in zip(hc.antenna_numbers, hc.antenna_positions):
                 np.testing.assert_almost_equal(antpos, hd.antenna_positions[hd.antenna_numbers == antnum].flatten())
             for ant in gains.keys():
+                np.testing.assert_array_equal(flags[ant], flags_here[ant])
+                if not np.all(flags[ant]):
+                    np.testing.assert_array_almost_equal(quals[ant][~flags[ant]], quals_here[ant][~flags[ant]])
+                    np.testing.assert_array_almost_equal(gains[ant][~flags[ant]], gains_here[ant][~flags[ant]])
                 zero_check = np.isclose(gains_here[ant], 0, rtol=1e-10, atol=1e-10)
-                np.testing.assert_array_almost_equal(gains[ant][~zero_check], gains_here[ant][~zero_check])
-                np.testing.assert_array_almost_equal(flags[ant][~zero_check], flags_here[ant][~zero_check])
                 if np.sum(zero_check) > 0:
                     np.testing.assert_array_equal(flags[ant][zero_check], True)
-                np.testing.assert_array_almost_equal(quals[ant][~zero_check], quals_here[ant][~zero_check])
                 if ant[0] in bad_ants:
                     np.testing.assert_array_equal(flags[ant], True)
             for antpol in total_qual.keys():
