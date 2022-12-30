@@ -105,6 +105,54 @@ class Test_HERACal(object):
         for k in g2:
             np.testing.assert_array_equal(g[k], g2[k])
 
+    def test_update(self):
+        hc = io.HERACal(self.fname)
+        g, f, q, tq = hc.read()
+        for ant in hc.ants:
+            g[ant] *= (2.0 + 1.0j)
+            f[ant] = np.logical_not(f[ant])
+            q[ant] += 1
+        for pol in hc.pols:
+            tq[pol] += 2
+        hc.update(gains=g, flags=f, quals=q, total_qual=tq)
+        g2, f2, q2, tq2 = hc.build_calcontainers()
+        for ant in hc.ants:
+            np.testing.assert_array_almost_equal(g[ant], g2[ant])
+            np.testing.assert_array_equal(f[ant], f2[ant])
+            np.testing.assert_array_equal(q[ant], q2[ant])
+        for pol in hc.pols:
+            np.testing.assert_array_equal(tq[pol], tq2[pol])
+
+        # test with slicing
+        hc = io.HERACal(self.fname)
+        g, f, q, tq = hc.read()
+        g0, f0, q0, tq0 = hc.read()
+        is_updated = np.zeros((hc.Ntimes, hc.Nfreqs), dtype=bool)
+        is_updated[slice(0, 11), slice(500, 600)] = True
+        for ant in hc.ants:
+            g[ant] = g[ant][slice(0, 1), slice(500, 600)]
+            f[ant] = f[ant][slice(0, 1), slice(500, 600)]
+            q[ant] = q[ant][slice(0, 1), slice(500, 600)]
+            g[ant] *= (2.0 + 1.0j)
+            f[ant] = np.logical_not(f[ant])
+            q[ant] += 1
+        for pol in hc.pols:
+            tq[pol] = tq[pol][slice(0, 1), slice(500, 600)]
+            tq[pol] += 2
+
+        hc.update(gains=g, flags=f, quals=q, total_qual=tq, tSlice=slice(0, 1), fSlice=slice(500, 600))
+        g2, f2, q2, tq2 = hc.build_calcontainers()
+        for ant in hc.ants:
+            np.testing.assert_array_almost_equal(g[ant].flatten(), g2[ant][is_updated])
+            np.testing.assert_array_equal(f[ant].flatten(), f2[ant][is_updated])
+            np.testing.assert_array_equal(q[ant].flatten(), q2[ant][is_updated])
+            np.testing.assert_array_almost_equal(g0[ant][~is_updated], g2[ant][~is_updated])
+            np.testing.assert_array_equal(f0[ant][~is_updated], f2[ant][~is_updated])
+            np.testing.assert_array_equal(q0[ant][~is_updated], q2[ant][~is_updated])
+        for pol in hc.pols:
+            np.testing.assert_array_equal(tq[pol].flatten(), tq2[pol][is_updated])
+            np.testing.assert_array_equal(tq0[pol][~is_updated], tq2[pol][~is_updated])
+
     def test_write(self):
         hc = HERACal(self.fname)
         gains, flags, quals, total_qual = hc.read()
@@ -510,6 +558,29 @@ class Test_HERAData(object):
             np.testing.assert_array_almost_equal(d[bl], d2[bl])
             np.testing.assert_array_equal(f[bl], f2[bl])
             np.testing.assert_array_equal(n[bl], n2[bl])
+
+        # test with slicing
+        hd = HERAData(self.uvh5_1)
+        d0, f0, n0 = hd.read()
+        d, f, n = hd.read()
+        is_updated = np.zeros((hd.Ntimes, hd.Nfreqs), dtype=bool)
+        is_updated[slice(3, 10), slice(500, 600)] = True
+        for bl in hd.bls:
+            d[bl] = d[bl][slice(3, 10), slice(500, 600)]
+            f[bl] = f[bl][slice(3, 10), slice(500, 600)]
+            n[bl] = n[bl][slice(3, 10), slice(500, 600)]
+            d[bl] *= (2.0 + 1.0j)
+            f[bl] = np.logical_not(f[bl])
+            n[bl] += 1
+        hd.update(data=d, flags=f, nsamples=n, tSlice=slice(3, 10), fSlice=slice(500, 600))
+        d2, f2, n2 = hd.build_datacontainers()
+        for bl in hd.bls:
+            np.testing.assert_array_almost_equal(d[bl].flatten(), d2[bl][is_updated])
+            np.testing.assert_array_equal(f[bl].flatten(), f2[bl][is_updated])
+            np.testing.assert_array_equal(n[bl].flatten(), n2[bl][is_updated])
+            np.testing.assert_array_almost_equal(d0[bl][~is_updated], d2[bl][~is_updated])
+            np.testing.assert_array_equal(f0[bl][~is_updated], f2[bl][~is_updated])
+            np.testing.assert_array_equal(n0[bl][~is_updated], n2[bl][~is_updated])
 
     def test_partial_write(self):
         hd = HERAData(self.uvh5_1)
