@@ -583,9 +583,15 @@ class HERAData(UVData):
             polnum: i for i, polnum in enumerate(self.polarization_array)
         }
         pols = [polnum2str(polnum, x_orientation=self.x_orientation) for polnum in self.polarization_array]
-        self._polstr_indices = {
-            pol: self._polnum_indices[polstr2num(pol, x_orientation=self.x_orientation)] for pol in pols
-        }
+        self._polstr_indices = {}
+        # Add upper-case indices as well, so we don't need to use .lower() on input
+        # keys (for which there can be many tens of thousands).
+        for pol in pols:
+            indx = self._polnum_indices[polstr2num(pol, x_orientation=self.x_orientation)]
+            self._polstr_indices[pol.lower()] = indx
+            self._polstr_indices[pol.upper()] = indx
+            self._polstr_indices[pol[0].upper() + pol[1].lower()] = indx
+            self._polstr_indices[pol[0].lower() + pol[1].upper()] = indx
 
     def _get_slice(self, data_array, key):
         '''Return a copy of the Nint by Nfreq waterfall or waterfalls for a given key. Abstracts
