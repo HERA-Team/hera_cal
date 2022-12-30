@@ -28,12 +28,13 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
         uvd.read(os.path.join(DATA_PATH, 'PyGSM_Jy_downselect.uvh5'),
                  run_check_acceptability=False)
     else:
-        if isinstance(uvd, (str, np.str)):
+        if isinstance(uvd, str):
             _uvd = UVData()
             _uvd.read(uvd)
             uvd = _uvd
         elif isinstance(uvd, UVData):
             uvd = deepcopy(uvd)
+    uvd.use_future_array_shapes()
 
     # TODO: use hera_sim.simulate.Simulator
     freqs = np.unique(uvd.freq_array)
@@ -83,12 +84,12 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
                 # add xtalk to both pos and neg delays
                 xt = hs.sigchain.gen_cross_coupling_xtalk(freqs / 1e9, autocorr, amp=xamp, dly=xdelay, phs=xphase)
                 xt += hs.sigchain.gen_cross_coupling_xtalk(freqs / 1e9, autocorr, amp=xamp, dly=xdelay, phs=xphase, conj=True)
-                uvd.data_array[bl_inds, 0] += xt[:, :, None]
+                uvd.data_array[bl_inds] += xt[:, :, None]
 
         # add a cable reflection term eps_11
         if add_cable:
             gain = cable_gains[antpair[0]] * np.conj(cable_gains[antpair[1]])
-            uvd.data_array[bl_inds, 0] *= gain[:, :, None]
+            uvd.data_array[bl_inds] *= gain[:, :, None]
 
     # get fourier modes
     uvd.frates = np.fft.fftshift(np.fft.fftfreq(uvd.Ntimes, np.diff(np.unique(uvd.time_array))[0] * 24 * 3600)) * 1e3
@@ -278,6 +279,7 @@ class Test_ReflectionFitter_Cables(object):
         # test input calibration with slightly shifted frequencies
         uvc.read_calfits("./ex.calfits")
         uvc.freq_array += 1e-5  # assert this doesn't fail
+        uvc.use_future_array_shapes()
         T = reflections.ReflectionFitter(self.uvd, input_cal=uvc)
         assert isinstance(T.hc, io.HERACal)
         uvc.freq_array += 1e2  # now test it fails with a large shift

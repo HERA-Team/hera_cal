@@ -731,7 +731,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             output_file_select = [output_file_select]
         output_file_select = [int(o) for o in output_file_select]
         try:
-            file_lsts = list(map(lambda i: file_lsts[i], output_file_select))
+            file_lsts = [file_lsts[i] for i in output_file_select]
         except IndexError:
             print("Warning: one or more indices in output_file_select {} caused an index error with length {} "
                   "file_lsts list, exiting...".format(output_file_select, nfiles))
@@ -953,7 +953,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         num_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in num_conts])))
 
         # update history
-        file_history = history + " Input files: " + "-".join(list(map(lambda ff: os.path.basename(ff), file_list)))
+        file_history = history + " Input files: " + "-".join([os.path.basename(ff) for ff in file_list])
         kwargs['history'] = file_history + utils.history_string()
 
         # form integration time array

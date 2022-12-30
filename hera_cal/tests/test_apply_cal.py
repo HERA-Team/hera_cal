@@ -185,6 +185,7 @@ class Test_Update_Cal(object):
         # Now test with partial I/O
         uv = UVData()
         uv.read_miriad(miriad)
+        uv.use_future_array_shapes()
         inname_uvh5 = os.path.join(tmp_path, "red_in.uvh5")
         uv.write_uvh5(inname_uvh5)
         ac.apply_cal(inname_uvh5, outname_uvh5, new_cal, old_calibration=old_cal, filetype_in='uvh5', filetype_out='uvh5',
@@ -259,7 +260,7 @@ class Test_Update_Cal(object):
         # test w/ data weights
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
-        wgts = DataContainer(dict(map(lambda k: (k, (~flags[k]).astype(float)), flags.keys())))
+        wgts = DataContainer({k: (~flags[k]).astype(float) for k in flags.keys()})
         del g_new[(0, 'Jxx')]
         ac.calibrate_in_place(dc, g_new, wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
         assert np.allclose(wgts[(0, 1, 'xx')].max(), 0.0)
@@ -374,6 +375,7 @@ class Test_Update_Cal(object):
 
         uvd_with_units = UVData()
         uvd_with_units.read_uvh5(uvh5)
+        uvd_with_units.use_future_array_shapes()
         uvd_with_units.vis_units = 'k str'
         uvh5_units = os.path.join(tmp_path, 'test_input_kstr.uvh5')
         uvd_with_units.write_uvh5(uvh5_units)

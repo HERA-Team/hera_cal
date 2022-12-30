@@ -238,8 +238,8 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
                 min_frate_df = -frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
                 max_frate_df = frateamp_df * sinlat
 
-            min_frate = np.min([f0 * min_frate_df for f0 in uvd.freq_array[0]])
-            max_frate = np.max([f0 * max_frate_df for f0 in uvd.freq_array[0]])
+            min_frate = np.min([f0 * min_frate_df for f0 in uvd.freq_array])
+            max_frate = np.max([f0 * max_frate_df for f0 in uvd.freq_array])
         else:
             max_frate = 0.0
             min_frate = 0.0
@@ -338,7 +338,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     hp = HEALPix(nside=uvb.nside, order=uvb.ordering)
     az, alt = hp.healpix_to_lonlat(range(uvb.Npixels))
     # zero out beam below the horizon
-    uvb.data_array[0, 0, :, :, alt <= 0 * units.radian] = 0.
+    uvb.data_array[0, :, :, alt <= 0 * units.radian] = 0.
     # Covert AltAz coordinates of UVBeam pixels to barycentric coordinates.
     obstime = Time(np.median(np.unique(uvd.time_array)), format='jd')
     altaz = AltAz(obstime=obstime, location=location)
@@ -393,14 +393,14 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         binned_power_conj = np.zeros_like(fr_grid)
         # iterate over each frequency and ftaper weighting.
         # use linspace to make sure we get first and last frequencies.
-        unflagged_chans = ~np.all(np.all(uvd.flag_array[:, 0, :, :].squeeze(), axis=0), axis=-1)
+        unflagged_chans = ~np.all(np.all(uvd.flag_array[:, :, :].squeeze(), axis=0), axis=-1)
         chans_to_use = np.arange(uvd.Nfreqs).astype(int)[unflagged_chans][::fr_freq_skip]
         frate_coeff = 2 * np.pi / SPEED_OF_LIGHT / SDAY_KSEC
         frate_over_freq = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * frate_coeff
         # histogram all frequencies together in one step.
-        frates = np.hstack([frate_over_freq * freq for freq in uvd.freq_array[0, chans_to_use]]).squeeze()
+        frates = np.hstack([frate_over_freq * freq for freq in uvd.freq_array[chans_to_use]]).squeeze()
         # beam squared values weighted by the taper function.
-        bsq = np.hstack([np.abs(uvb.data_array[0, 0, polindex, np.argmin(np.abs(freq - uvb.freq_array[0])), :].squeeze()) ** 2. * freqweight ** 2. for freq, freqweight in zip(uvd.freq_array[0, chans_to_use], ftaper[chans_to_use])])
+        bsq = np.hstack([np.abs(uvb.data_array[0, polindex, np.argmin(np.abs(freq - uvb.freq_array[0])), :].squeeze()) ** 2. * freqweight ** 2. for freq, freqweight in zip(uvd.freq_array[chans_to_use], ftaper[chans_to_use])])
         # histogram fringe rates weighted by beam square values.
         binned_power = np.histogram(frates, bins=frate_bins, weights=bsq)[0]
         binned_power_conj = np.histogram(-frates, bins=frate_bins, weights=bsq)[0]
@@ -1224,6 +1224,7 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         if flag_output is not None:
             uv_avg = UVData()
             uv_avg.read(output_data)
+            uv_avg.use_future_array_shapes()
             uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
             uvf.to_waterfall(keep_pol=False, method='and')
             uvf.write(flag_output, clobber=clobber)
@@ -1265,9 +1266,9 @@ def tophat_frfilter_argparser(mode='clean'):
                                                                           "bin fringe rates from every freq_skip channels. "
                                                                           "default is 1 -> takes a long time. We recommend setting this to be larger.")
     filt_options.add_argument("--pre_filter_modes_between_lobe_minimum_and_zero", action="store_true", default=False, help="Subtract emission between the main-lobe fringe-rate region and zero "
-                                                                                                                 "before applying main-lobe fringe rate filter. This is to prevent "
-                                                                                                                 "the main-lobe filter to responding to overwhelmingly bright emission "
-                                                                                                                 "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
+                                                                                                                           "before applying main-lobe fringe rate filter. This is to prevent "
+                                                                                                                           "the main-lobe filter to responding to overwhelmingly bright emission "
+                                                                                                                           "centered at zero fringe-rate, which can happen if we have lots of cross-talk.")
     filt_options.add_argument("--wgt_by_nsample", default=False, action="store_true", help="Use weights proportional to nsamples during FRF. Default is to just use flags by nsamples.")
     from .smooth_cal import _pair
     filt_options.add_argument("--lst_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of LSTs in hours bounding (inclusively) \
@@ -1432,6 +1433,7 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             if beamfitsfile is not None:
                 uvb = UVBeam()
                 uvb.read_beamfits(beamfitsfile)
+                uvb.use_future_array_shapes()
             else:
                 uvb = None
             if len(keys) > 0:
@@ -1485,7 +1487,7 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                       filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
                                       clobber=clobber, add_to_history=add_to_history,
-                                      extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array})
+                                      extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array, 'channel_width': frfil.hd.channel_width})
             frfil.hd.data_array = None  # this forces a reload in the next loop
 
 

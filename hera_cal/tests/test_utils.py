@@ -467,7 +467,7 @@ def test_lst_rephase():
 
     # get integration time in LST, baseline dict
     dlst = np.median(np.diff(lsts))
-    bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
+    bls = odict([(k, antpos[k[0]] - antpos[k[1]]) for k in data.keys()])
 
     # basic test: single dlst for all integrations
     utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
@@ -879,11 +879,11 @@ def test_select_spw_ranges(tmpdir):
     output = os.path.join(tmp_path, 'test_calibrated_output.uvh5')
     utils.select_spw_ranges(inputfilename=uvh5, outputfilename=output, spw_ranges=[(0, 256), (332, 364), (792, 1000)])
     hdo = io.HERAData(output)
-    assert np.allclose(hdo.freq_array[0], np.hstack([hd.freq_array[0, :256], hd.freq_array[0, 332:364], hd.freq_array[0, 792:1000]]))
+    assert np.allclose(hdo.freq_array, np.hstack([hd.freq_array[:256], hd.freq_array[332:364], hd.freq_array[792:1000]]))
     # test case where no spw-ranges supplied
     utils.select_spw_ranges(inputfilename=uvh5, outputfilename=output, clobber=True)
     hdo = io.HERAData(output)
-    assert np.allclose(hdo.freq_array[0], hd.freq_array[0])
+    assert np.allclose(hdo.freq_array, hd.freq_array)
 
 
 def test_select_spw_ranges_argparser():
@@ -914,9 +914,9 @@ def test_select_spw_ranges_run_script_code(tmpdir):
     # test that output has correct frequencies.
     hdo = io.HERAData(output)
     hdo.read()
-    assert np.allclose(hdo.freq_array[0], np.hstack([hd.freq_array[0, :256], hd.freq_array[0, 332:364], hd.freq_array[0, 792:1000]]))
+    assert np.allclose(hdo.freq_array, np.hstack([hd.freq_array[:256], hd.freq_array[332:364], hd.freq_array[792:1000]]))
     freq_inds = np.hstack([np.arange(0, 256).astype(int), np.arange(332, 364).astype(int), np.arange(792, 1000).astype(int)])
     # and check that data, flags, nsamples make sense.
-    assert np.allclose(hdo.data_array, hd.data_array[:, :, freq_inds, :])
-    assert np.allclose(hdo.flag_array, hd.flag_array[:, :, freq_inds, :])
-    assert np.allclose(hdo.nsample_array, hd.nsample_array[:, :, freq_inds, :])
+    assert np.allclose(hdo.data_array, hd.data_array[:, freq_inds, :])
+    assert np.allclose(hdo.flag_array, hd.flag_array[:, freq_inds, :])
+    assert np.allclose(hdo.nsample_array, hd.nsample_array[:, freq_inds, :])
