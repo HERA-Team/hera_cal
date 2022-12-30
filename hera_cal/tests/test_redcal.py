@@ -1923,9 +1923,10 @@ class TestRunMethods(object):
             data, flags, nsamples = hd.read()
             data_here, flags_here, nsamples_here = hd_here.build_datacontainers()
             for bl in data_here:
-                np.testing.assert_array_almost_equal(data[bl], data_here[bl])
                 np.testing.assert_array_almost_equal(flags[bl], flags_here[bl])
-                np.testing.assert_array_almost_equal(nsamples[bl], nsamples_here[bl])
+                if not np.all(flags[bl]):
+                    np.testing.assert_array_almost_equal(data[bl][~flags[bl]], data_here[bl][~flags[bl]])
+                    np.testing.assert_array_almost_equal(nsamples[bl][~flags[bl]], nsamples_here[bl][~flags[bl]])
             assert 'testing' in hd.history.replace('\n', '').replace(' ', '')
             if prefix == '':
                 # assert 'Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', '')
