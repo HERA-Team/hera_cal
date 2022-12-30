@@ -547,6 +547,17 @@ class TestRedSol(object):
                 assert cspa[ant].shape == cs['Jee'].shape
                 assert cspa[ant].dtype == np.float64
 
+    def test_count_redundant_nsamples(self):
+        reds = [[(0, 1, 'ee'), (1, 2, 'ee'), (2, 3, 'ee')]]
+        nsamples = {bl: np.ones((10, 4)) for red in reds for bl in red}
+        red_nsamples = om.count_redundant_nsamples(nsamples, reds, good_ants=None)
+        assert len(red_nsamples) == 1
+        np.testing.assert_array_equal(red_nsamples[0, 1, 'ee'], 3)
+
+        red_nsamples = om.count_redundant_nsamples(nsamples, reds, good_ants=[(0, 'Jee'), (1, 'Jee'), (3, 'Jee')])
+        assert len(red_nsamples) == 1
+        np.testing.assert_array_equal(red_nsamples[0, 1, 'ee'], 1)
+
 
 class TestRedundantCalibrator(object):
 
