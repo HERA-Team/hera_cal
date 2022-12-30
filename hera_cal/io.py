@@ -590,8 +590,7 @@ class HERAData(UVData):
             indx = self._polnum_indices[polstr2num(pol, x_orientation=self.x_orientation)]
             self._polstr_indices[pol.lower()] = indx
             self._polstr_indices[pol.upper()] = indx
-            self._polstr_indices[pol[0].upper() + pol[1].lower()] = indx
-            self._polstr_indices[pol[0].lower() + pol[1].upper()] = indx
+
 
     def _get_slice(self, data_array, key):
         '''Return a copy of the Nint by Nfreq waterfall or waterfalls for a given key. Abstracts
@@ -611,11 +610,29 @@ class HERAData(UVData):
             return {pol: self._get_slice(data_array, key + (pol,)) for pol in pols}
         elif len(key) == 3:  # asking for bl-pol
             try:
-                return np.array(data_array[self._blt_slices[tuple(key[:2])], :,
-                                           self._polstr_indices[key[2]]])
+                return np.array(
+                    data_array[
+                        self._blt_slices[tuple(key[:2])], :,
+                        self._polstr_indices.get(
+                            key[2],
+                            self._polnum_indices[
+                                polstr2num(key[2], x_orientation=self.x_orientation)
+                            ]
+                        )
+                    ]
+                )
             except KeyError:
-                return np.conj(data_array[self._blt_slices[tuple(key[1::-1])], :,
-                                          self._polstr_indices[conj_pol(key[2])]])
+                return np.conj(
+                    data_array[
+                        self._blt_slices[tuple(key[1::-1])], :,
+                        self._polstr_indices.get(
+                            conj_pol(key[2]),
+                            self._polnum_indices[
+                                polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)
+                            ]
+                        )
+                    ]
+                )
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
