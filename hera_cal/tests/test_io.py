@@ -734,6 +734,25 @@ class Test_HERAData(object):
         uvf2 = UVFlag(hd)
         assert uvf1 == uvf2
 
+    def init_HERACal(self):
+        hd = HERAData(self.uvh5_1)
+        hc = hd.init_HERACal(gain_convention='divide', cal_style='redundant')
+
+        # check some metadata
+        assert hd.Ntimes == hc.Ntimes
+        assert hc.Nants_data == hd.Nants_data
+        assert hc.telescope_name == hd.telescope_name
+
+        # check that arrays have been initialized
+        assert hc.gain_array is not None
+        np.testing.assert_array_equal(hc.gain_array, 1 + 0j)
+        assert hc.flag_array is not None
+        np.testing.assert_array_equal(hc.flag_array, True)
+        assert hc.quality_array is not None
+        np.testing.assert_array_equal(hc.quality_array, 0)
+        assert hc.total_quality_array is not None
+        np.testing.assert_array_equal(hc.total_quality_array, 0)
+
 
 class Test_ReadHeraHdf5(object):
     def setup_method(self):
