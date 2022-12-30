@@ -59,7 +59,7 @@ def _parse_input_files(inputs, name='input_data'):
         raise ValueError(f'{name} must be a string or a list of strings.')
     for f in filepaths:
         if not os.path.exists(f):
-            raise IOError(f'Cannot find file {f}')
+            raise IOError(f'Cannot find file {f} in {os.getcwd()}')
     return filepaths
 
 
