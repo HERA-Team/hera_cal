@@ -1058,9 +1058,10 @@ class RedundantCalibrator:
                                  + 'degeneracies expected (assuming {} phase slopes).'.format(nPhaseSlopes))
 
     def _set_reds(self, reds):
-        '''Sets reds interally, updating self._ubl_to_reds_index.'''
+        '''Sets reds interally, updating self._ubl_to_reds_index and self._ants_in_reds.'''
         self.reds = reds
         self._ubl_to_reds_index = {red[0]: i for i, red in enumerate(self.reds)}
+        self._ants_in_reds = set([ant for red in self.reds for bl in red for ant in split_bl(bl)])
 
     def build_eqs(self, dc=None):
         """Function for generating linsolve equation strings. Optionally takes in a DataContainer to check
@@ -1261,7 +1262,7 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-        sol0pack = {self.pack_sol_key(ant): gain for ant, gain in sol0.gains.items()}
+        sol0pack = {self.pack_sol_key(ant): sol0.gains[ant] for ant in self._ants_in_reds}
         for ubl in self._ubl_to_reds_index.keys():
             sol0pack[self.pack_sol_key(ubl)] = sol0[ubl]
         ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0pack, wgts=wgts, sparse=sparse)
@@ -1295,8 +1296,7 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-
-        sol0pack = {self.pack_sol_key(ant): gain for ant, gain in sol0.gains.items()}
+        sol0pack = {self.pack_sol_key(ant): sol0.gains[ant] for ant in self._ants_in_reds}
         for ubl in self._ubl_to_reds_index.keys():
             sol0pack[self.pack_sol_key(ubl)] = sol0[ubl]
         ls = self._solver(OmnicalSolver, data, sol0=sol0pack, wgts=wgts, gain=gain)
