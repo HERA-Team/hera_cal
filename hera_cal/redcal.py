@@ -1671,15 +1671,18 @@ def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=Non
         dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in bls_to_use})
         data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 * nsamples[bl] for bl in bls_to_use})
 
-        # expand gains
-        sol.extend_gains(data_subset, wgts=data_wgts, extended_reds=filter_reds(expanded_reds, bls=bls_to_use))
-
-        # update chi^2 if desired
+        # preliminaries for updating chi^2 using only baselines where at least one antenna is good
         if chisq_per_ant is not None:
             bls_for_chisq = [bl for red in expanded_reds for bl in red if ((red[0] in sol.vis)
                              and ((split_bl(bl)[0] in sol.gains) | (split_bl(bl)[1] in sol.gains)))]
             reds_for_chisq = filter_reds(expanded_reds, bls=bls_for_chisq)
             predicted_chisq_per_ant = predict_chisq_per_ant(reds_for_chisq)
+
+        # expand gains
+        sol.extend_gains(data_subset, wgts=data_wgts, extended_reds=filter_reds(expanded_reds, bls=bls_to_use))
+
+        # update chi^2 if desired
+        if chisq_per_ant is not None:
             _, _, cspa, _ = utils.chisq(data_subset, sol.vis, data_wgts=data_wgts, gains=sol.gains, reds=expanded_reds)
             for ant, cs in cspa.items():
                 if ant not in chisq_per_ant:
