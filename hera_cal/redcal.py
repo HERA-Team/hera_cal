@@ -1801,9 +1801,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     hc_first = hd_vissol.init_HERACal()
     hc_omni = hd_vissol.init_HERACal()
     hd_vissol.read(bls=[red[0] for red in all_reds], return_data=False)
-    hd_vissol.data_array = np.zeros_like(hd_vissol.data_array)
-    hd_vissol.nsample_array = np.zeros_like(hd_vissol.nsample_array)
-    hd_vissol.flag_array = np.ones_like(hd_vissol.flag_array)
+    hd_vissol.empty_arrays()
 
     # setup metadata dictionaries
     redcal_meta = _init_redcal_meta_dict(nTimes, nFreqs, ants, pol_load_list)

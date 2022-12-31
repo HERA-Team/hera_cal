@@ -601,7 +601,6 @@ class HERAData(UVData):
             self._polstr_indices[pol.lower()] = indx
             self._polstr_indices[pol.upper()] = indx
 
-
     def _get_slice(self, data_array, key):
         '''Return a copy of the Nint by Nfreq waterfall or waterfalls for a given key. Abstracts
         away both baseline ordering (by applying complex conjugation) and polarization capitalization.
@@ -1102,6 +1101,12 @@ class HERAData(UVData):
 
         # convert to HERACal and return
         return to_HERACal(uvc)
+
+    def empty_arrays(self):
+        '''Sets self.data_array and self.nsample_array to all zeros and self.flag_array to all True (if they are not None).'''
+        self.data_array = (np.zeros_like(self.data_array) if self.data_array is not None else None)
+        self.flag_array = (np.ones_like(self.flag_array) if self.flag_array is not None else None)
+        self.nsample_array = (np.zeros_like(self.nsample_array) if self.nsample_array is not None else None)
 
 
 def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
