@@ -400,7 +400,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         # histogram all frequencies together in one step.
         frates = np.hstack([frate_over_freq * freq for freq in uvd.freq_array[chans_to_use]]).squeeze()
         # beam squared values weighted by the taper function.
-        bsq = np.hstack([np.abs(uvb.data_array[0, polindex, np.argmin(np.abs(freq - uvb.freq_array[0])), :].squeeze()) ** 2. * freqweight ** 2. for freq, freqweight in zip(uvd.freq_array[chans_to_use], ftaper[chans_to_use])])
+        bsq = np.hstack([np.abs(uvb.data_array[0, 0, polindex, np.argmin(np.abs(freq - uvb.freq_array[0])), :].squeeze()) ** 2. * freqweight ** 2. for freq, freqweight in zip(uvd.freq_array[chans_to_use], ftaper[chans_to_use])])
         # histogram fringe rates weighted by beam square values.
         binned_power = np.histogram(frates, bins=frate_bins, weights=bsq)[0]
         binned_power_conj = np.histogram(-frates, bins=frate_bins, weights=bsq)[0]
