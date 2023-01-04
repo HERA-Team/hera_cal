@@ -338,7 +338,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     hp = HEALPix(nside=uvb.nside, order=uvb.ordering)
     az, alt = hp.healpix_to_lonlat(range(uvb.Npixels))
     # zero out beam below the horizon
-    uvb.data_array[0, :, :, alt <= 0 * units.radian] = 0.
+    uvb.data_array[0, 0, :, :, alt <= 0 * units.radian] = 0.
     # Covert AltAz coordinates of UVBeam pixels to barycentric coordinates.
     obstime = Time(np.median(np.unique(uvd.time_array)), format='jd')
     altaz = AltAz(obstime=obstime, location=location)
