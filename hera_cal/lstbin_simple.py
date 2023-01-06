@@ -1000,8 +1000,8 @@ def lst_bin_arg_parser():
     a.add_argument("--ignore-missing-calfiles", default=False,action='store_true', help='if true, any datafile with missing calfile will just be removed from lstbinning.')
     a.add_argument("--log-level", default='INFO', type=str, help='level of the logger')
     a.add_argument("--write_kwargs", default='{}', type=str, help="json dictionary of arguments to the uvh5 writer")
-    a.add_argument("--profile", action="store_true", default=False, help="whether to run line profiling")
-    a.add_argument("--profile-funcs", type=str, help="functions to profile, separated by commas")
+    #a.add_argument("--profile", action="store_true", default=False, help="whether to run line profiling")
+    #a.add_argument("--profile-funcs", type=str, help="functions to profile, separated by commas")
     a.add_argument("--golden-lsts", type=str, help="LSTS (rad) to save longitudinal data for, separated by commas")
     a.add_argument("--save-channels", type=str, help="integer channels separated by commas to save longitudinal data for")
     return a
