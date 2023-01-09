@@ -1229,10 +1229,11 @@ class VisClean(object):
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice]) | skipped
                 else:
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice])
-                # loop through resids, model, and data and make sure everything is real.
-                discard_autocorr_imag(filtered_model)
-                discard_autocorr_imag(filtered_resid)
-                discard_autocorr_imag(filtered_data)
+        
+        # loop through resids, model, and data and make sure everything is real.
+        discard_autocorr_imag(filtered_model)
+        discard_autocorr_imag(filtered_resid)
+        discard_autocorr_imag(filtered_data)
 
         if hasattr(data, 'times'):
             filtered_data.times = data.times
