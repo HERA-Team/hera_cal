@@ -176,7 +176,7 @@ class HERACal(UVCal):
             self.select(times=times)
         return self.build_calcontainers()
 
-    def update(self, gains=None, flags=None, quals=None, total_qual=None):
+    def update(self, gains=None, flags=None, quals=None, total_qual=None, tSlice=None, fSlice=None):
         '''Update internal calibrations arrays (data_array, flag_array, and nsample_array)
         using DataContainers (if not left as None) in preparation for writing to disk.
 
@@ -184,15 +184,25 @@ class HERACal(UVCal):
             gains: optional dict mapping antenna-pol to complex gains arrays
             flags: optional dict mapping antenna-pol to boolean flag arrays
             quals: optional dict mapping antenna-pol to float qual arrays
-            total_qual: optional dict mapping polarization to float total quality array
+            total_qual: optional dict mapping polarization to float total quality array.
+            tSlice: optional slice of indices of the times to update. Must have the same size
+                as the 0th dimension of the input gains/flags/quals/total_quals
+            fSlice: optional slice of indices of the freqs to update. Must have the same size
+                as the 1st dimension of the input gains/flags/quals/total_quals
         '''
+        # provide sensible defaults for tSlice and fSlice
+        if tSlice is None:
+            tSlice = slice(0, self.Ntimes)
+        if fSlice is None:
+            fSlice = slice(0, self.Nfreqs)
+
         # loop over and update gains, flags, and quals
         data_arrays = [self.gain_array, self.flag_array, self.quality_array]
         for to_update, array in zip([gains, flags, quals], data_arrays):
             if to_update is not None:
                 for (ant, pol) in to_update.keys():
                     i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-                    array[i, :, :, ip] = to_update[(ant, pol)].T
+                    array[i, fSlice, tSlice, ip] = to_update[(ant, pol)].T
 
         # update total_qual
         if total_qual is not None:
@@ -200,7 +210,7 @@ class HERACal(UVCal):
                 self.total_quality_array = np.zeros(self.gain_array.shape[1:], dtype=float)
             for pol in total_qual.keys():
                 ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-                self.total_quality_array[:, :, ip] = total_qual[pol].T
+                self.total_quality_array[fSlice, tSlice, ip] = total_qual[pol].T
 
     def write(self, filename, spoof_missing_channels=False, **write_kwargs):
         """
@@ -591,7 +601,6 @@ class HERAData(UVData):
             self._polstr_indices[pol.lower()] = indx
             self._polstr_indices[pol.upper()] = indx
 
-
     def _get_slice(self, data_array, key):
         '''Return a copy of the Nint by Nfreq waterfall or waterfalls for a given key. Abstracts
         away both baseline ordering (by applying complex conjugation) and polarization capitalization.
@@ -861,7 +870,7 @@ class HERAData(UVData):
         except KeyError:
             return self.read(bls=key)[0][key]
 
-    def update(self, data=None, flags=None, nsamples=None):
+    def update(self, data=None, flags=None, nsamples=None, tSlice=None, fSlice=None):
         '''Update internal data arrays (data_array, flag_array, and nsample_array)
         using DataContainers (if not left as None) in preparation for writing to disk.
 
@@ -869,16 +878,37 @@ class HERAData(UVData):
             data: Optional DataContainer mapping baselines to complex visibility waterfalls
             flags: Optional DataContainer mapping baselines to boolean flag waterfalls
             nsamples: Optional DataContainer mapping baselines to interger Nsamples waterfalls
+            tSlice: Optional slice of indices of the times to update. Must have the same size
+                as the 0th dimension of the input gains/flags/nsamples.
+            fSlice: Optional slice of indices of the freqs to update. Must have the same size
+                as the 1st dimension of the input gains/flags/nsamples.
         '''
+        # provide sensible defaults for tinds and finds
+        update_full_waterfall = (tSlice is None) and (fSlice is None)
+        if tSlice is None:
+            tSlice = slice(0, self.Ntimes)
+        if fSlice is None:
+            fSlice = slice(0, self.Nfreqs)
+
+        def _set_subslice(data_array, bl, this_waterfall):
+            if update_full_waterfall:
+                # directly write into relevant data_array
+                self._set_slice(data_array, bl, this_waterfall)
+            else:
+                # copy out full waterfall, update just the relevant slices, and write back to data_array
+                full_waterfall = self._get_slice(data_array, bl)
+                full_waterfall[tSlice, fSlice] = this_waterfall
+                self._set_slice(data_array, bl, full_waterfall)
+
         if data is not None:
             for bl in data.keys():
-                self._set_slice(self.data_array, bl, data[bl])
+                _set_subslice(self.data_array, bl, data[bl])
         if flags is not None:
             for bl in flags.keys():
-                self._set_slice(self.flag_array, bl, flags[bl])
+                _set_subslice(self.flag_array, bl, flags[bl])
         if nsamples is not None:
             for bl in nsamples.keys():
-                self._set_slice(self.nsample_array, bl, nsamples[bl])
+                _set_subslice(self.nsample_array, bl, nsamples[bl])
 
     def partial_write(self, output_path, data=None, flags=None, nsamples=None,
                       clobber=False, inplace=False, add_to_history='',
@@ -1049,6 +1079,34 @@ class HERAData(UVData):
                 times = np.unique(list(times.values()))
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
+
+    def init_HERACal(self, gain_convention='divide', cal_style='redundant'):
+        '''Produces a HERACal object using the metadata in this HERAData object.
+
+        Arguments:
+            gain_convention: str indicating whether gains are to calibrated by "multiply"ing or "divide"ing.
+            cal_style: str indicating how calibration was done, either "sky" or "redundant".
+
+        Returns:
+            HERACal object with gain, flag, quality, and total_quality arrays initialized (to 1, True, 0, and 0)
+        '''
+        # create UVCal object from self
+        uvc = UVCal().initialize_from_uvdata(self, gain_convention='divide', cal_style='redundant')
+
+        # create empty data arrays (using future array shapes, which is default true for initialize_from_uvdata)
+        uvc.gain_array = np.ones((uvc.Nants_data, uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=np.complex64)
+        uvc.flag_array = np.ones((uvc.Nants_data, uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=bool)
+        uvc.quality_array = np.zeros((uvc.Nants_data, uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=np.float32)
+        uvc.total_quality_array = np.zeros((uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=np.float32)
+
+        # convert to HERACal and return
+        return to_HERACal(uvc)
+
+    def empty_arrays(self):
+        '''Sets self.data_array and self.nsample_array to all zeros and self.flag_array to all True (if they are not None).'''
+        self.data_array = (np.zeros_like(self.data_array) if self.data_array is not None else None)
+        self.flag_array = (np.ones_like(self.flag_array) if self.flag_array is not None else None)
+        self.nsample_array = (np.zeros_like(self.nsample_array) if self.nsample_array is not None else None)
 
 
 def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
@@ -1699,7 +1757,7 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
     return combined_hd.build_datacontainers()
 
 
-def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history):
+def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history, clobber=True):
     '''Saves redcal metadata to a hdf5 file. See also read_redcal_meta.
 
     Arguments:
@@ -1711,7 +1769,11 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         lsts: 1D numpy array of LSTs in the data
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}
         history: string describing the creation of this file
+        clobber: If False and meta_filename exists, raise OSError.
     '''
+    if os.path.exists(meta_filename) and not clobber:
+        raise OSError(f'{meta_filename} already exists but clobber=False.')
+
     with h5py.File(meta_filename, "w") as outfile:
         # save the metadata of the metadata
         header = outfile.create_group('header')

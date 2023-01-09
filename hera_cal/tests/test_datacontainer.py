@@ -271,16 +271,9 @@ class TestDataContainer(object):
 
     def test_get(self):
         dc = datacontainer.DataContainer(self.blpol)
-        assert dc.get((1, 2), 'yy') == 1j
-        assert dc.get((2, 1), 'yy') == -1j
-        dc = datacontainer.DataContainer(self.polbl)
-        assert dc.get((1, 2), 'yy') == 1j
-        assert dc.get((2, 1), 'yy') == -1j
-        dc = datacontainer.DataContainer(self.both)
-        assert dc.get((1, 2), 'yy') == 1j
-        assert dc.get((2, 1), 'yy') == -1j
-        assert dc.get((1, 2), 'YY') == 1j
-        assert dc.get((2, 1), 'YY') == -1j
+        assert dc.get((1, 2, 'yy')) == 1j
+        assert dc.get((2, 1, 'yy'), 10) == -1j
+        assert dc.get((1, 200, 'yy'), 10) == 10
 
     def test_setter(self):
         dc = datacontainer.DataContainer(self.blpol)
@@ -448,12 +441,16 @@ def test_RedDataContainer():
     reverse_data = datacontainer.DataContainer({red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reverse_reds})
     rdata4 = datacontainer.RedDataContainer(deepcopy(reverse_data), reverse_reds)
     rdata5 = datacontainer.RedDataContainer(deepcopy(reverse_data), reds)
+    # build an incomplete datacontainer, then finish it
+    rdata6 = datacontainer.RedDataContainer(deepcopy(data), reds[:-1])
+    rdata6[reds[-1][0]] = deepcopy(data[reds[-1][0]])
+    rdata6.build_red_keys(reds)
 
     # make sure that the data for a redundant group are being accessed from the same place in memory
-    for i, rdata in enumerate([rdata1, rdata2, rdata3, rdata4, rdata5]):
+    for i, rdata in enumerate([rdata1, rdata2, rdata3, rdata4, rdata5, rdata6]):
         for red in rdata.reds:
             for bl in red:
-                if i < 4:
+                if rdata != rdata5:
                     assert id(rdata[bl]) == id(rdata[red[0]])
                 else:
                     assert id(rdata[reverse_bl(bl)]) == id(rdata[reverse_bl(red[0])])
@@ -480,3 +477,39 @@ def test_RedDataContainer():
     with pytest.raises(ValueError):
         data = datacontainer.DataContainer({bl: np.ones((10, 10)) * (bl[0] + 1.0j * bl[1]) for red in reds for bl in red})
         rdata = datacontainer.RedDataContainer(data, reds)
+
+
+def test_RedDataContainerKeyManipulation():
+    rdc = datacontainer.RedDataContainer({(0, 1, 'ee'): 10}, reds=[[(0, 1, 'ee'), (1, 2, 'ee')], [(2, 3, 'ee'), (3, 4, 'ee')]])
+
+    # test contains
+    assert (0, 1, 'ee') in rdc
+    assert (1, 2, 'ee') in rdc
+    assert (2, 1, 'ee') in rdc
+    assert (2, 3, 'ee') not in rdc
+
+    # basic operation test
+    rdc[1, 2, 'ee'] = 11j
+    assert rdc[0, 1, 'ee'] == 11j
+
+    # test that uninstantianted red has no data
+    with pytest.raises(KeyError):
+        rdc[2, 3, 'ee']
+
+    # test that uninstantiated red can still be used late
+    rdc[4, 3, 'ee'] = 12j
+    assert rdc[2, 3, 'ee'] == -12j
+
+    # test that rekeying eliminates keys
+    assert (2, 3, 'ee') in rdc._data or (3, 2, 'ee') in rdc._data
+    rdc.build_red_keys([[(0, 1, 'ee'), (1, 2, 'ee')]])
+    assert (2, 3, 'ee') not in rdc._data
+    assert (3, 2, 'ee') not in rdc._data
+    with pytest.raises(KeyError):
+        rdc[3, 4, 'ee']
+
+    # test collision after adding keys
+    rdc[0, 2, 'ee'] = 20j
+    rdc[1, 3, 'ee'] = 21j
+    with pytest.raises(ValueError):
+        rdc.build_red_keys([[(0, 2, 'ee'), (1, 3, 'ee')]])
