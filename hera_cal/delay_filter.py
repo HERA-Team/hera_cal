@@ -171,19 +171,18 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         if Nbls_per_load is None:
             Nbls_per_load = len(baseline_list)
         nbl_groups = int(np.ceil(len(baseline_list) / Nbls_per_load))
-        for i in range(0, len(baseline_list), Nbls_per_load):
+        
+        for i in range(0, nbl_groups):
             logger.info(f"Delay-Filtering baseline group {i+1}/{nbl_groups}")
 
             df = DelayFilter(hd, input_cal=cals)
-            if i + Nbls_per_load >= len(baseline_list):
-                nbls = len(baseline_list) - i
-            else:
-                nbls = Nbls_per_load
-
-            df.read(bls=baseline_list[i:i + nbls],
-                    frequencies=freqs, polarizations=polarizations, axis=read_axis)
+            
+            df.read(
+                bls=baseline_list[i*Nbls_per_load:min((i+1)*Nbls_per_load, len(baseline_list))],
+                frequencies=freqs, polarizations=polarizations, axis=read_axis
+            )
             if avg_red_bllens:
-                logger.info("  Averaging redundant baselines")
+                logger.info("  Averaging redundant baseline vector coordinates")
                 df.avg_red_baseline_vectors()
             if external_flags is not None:
                 logger.info("  Applying external flags")
