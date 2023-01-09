@@ -175,12 +175,12 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
             logger.info(f"Delay-Filtering baseline group {i+1}/{nbl_groups}")
 
             df = DelayFilter(hd, input_cal=cals)
-            if i + Nbls_to_load >= len(baseline_list):
+            if i + Nbls_per_load >= len(baseline_list):
                 nbls = len(baseline_list) - i
             else:
                 nbls = Nbls_per_load
 
-            df.read(bls=baseline_list[i:i + Nbls_per_load],
+            df.read(bls=baseline_list[i:i + nbls],
                     frequencies=freqs, polarizations=polarizations, axis=read_axis)
             if avg_red_bllens:
                 logger.info("  Averaging redundant baselines")
@@ -199,10 +199,17 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                                 skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
             logger.info("  Writing filtered data")
-            df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                   filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
-                                   clobber=clobber, add_to_history=add_to_history,
-                                   extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': df.hd.freq_array, 'channel_width': df.hd.channel_width})
+            df.write_filtered_data(
+                res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                filled_outfilename=filled_outfilename, 
+                partial_write=Nbls_per_load < len(baseline_list),
+                clobber=clobber, add_to_history=add_to_history,
+                extra_attrs={
+                    'Nfreqs': df.Nfreqs, 
+                    'freq_array': df.hd.freq_array, 
+                    'channel_width': df.hd.channel_width
+                }
+            )
             df.hd.data_array = None  # this forces a reload in the next loop
 
 
