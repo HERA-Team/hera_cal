@@ -741,7 +741,7 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
 @jax.jit
 def foreground_model(params, spectral_filters, spatial_filters):
     """
-    Function for computing foreground models from 
+    Compute the foreground model for a given set of spectral and spatial filters 
     
     Parameters:
     ----------
@@ -764,7 +764,7 @@ def foreground_model(params, spectral_filters, spatial_filters):
     return jnp.vstack(model_r), jnp.vstack(model_i)
 
 @jax.jit
-def _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
+def mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
     """
     Loss function used for solving for redcal degenerate parameters and a model of the sky
     
@@ -802,10 +802,11 @@ def _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, bl
     # Compute loss using weights and foreground model
     return jnp.sum((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
 
-def _iterate_through_groups(params, data, wgts, spectral_filters, spatial_filters, idealized_blvecs):
+def loss_function(params, data, wgts, spectral_filters, spatial_filters, idealized_blvecs):
     """
-    Function for iterating through groups of radially redundant baselines
-    to compute the loss value
+    Compute the loss value for a given set of fit parameters, data, and weights
+
+    ## Add more description here
 
     Parameters: 
     ----------
@@ -815,14 +816,16 @@ def _iterate_through_groups(params, data, wgts, spectral_filters, spatial_filter
         List of jnp.ndarrays of data for each radially redundant group of baselines
     wgts : list of jnp.ndarrays
         List of jnp.ndarrays of the data weights for each radially redundant group of baselines
-    spec : jnp.ndarray
+    spectral_filters : jnp.ndarray
         Array of spectrally DPSS eigenvectors used for modeling foregrounds
-    spat : list of jnp.ndarrays
+    spatial_filters : list of jnp.ndarrays
         Array of spatial PSWF eigenvectors used for modeling foregrounds
+    idealized_blvecs : np.ndarray
+        pass
     """
     loss = 0
     fg_model_r, fg_model_i = foreground_model(params, spectral_filters, spatial_filters)
-    loss = _mean_squared_error(params, data.real, data.imag, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
+    loss = mean_squared_error(params, data.real, data.imag, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
     return loss
 
 def calibrate_single_integration(data, wgts, params, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
@@ -866,7 +869,7 @@ def calibrate_single_integration(data, wgts, params, optimizer, spectral_filters
     # Start gradient descent
     for step in range(maxiter):
         # Compute loss and gradient
-        loss, gradient = jax.value_and_grad(_iterate_through_groups)(params, data, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs)
+        loss, gradient = jax.value_and_grad(loss_function)(params, data, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs)
         updates, opt_state = optimizer.update(gradient, opt_state, params)
         params = optax.apply_updates(params, updates)
         
@@ -945,7 +948,10 @@ class NuCalibrator:
 
         Returns:
         -------
-        gains : 
+        solution : dictionary
+            pass
+        info : dictionary
+            pass
         """
         # Get frequency array data if not given
         if freqs is None:
@@ -974,35 +980,30 @@ class NuCalibrator:
         assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
         optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
                             
-        # Populate with variables
+        # Get data weights
         #data_wgts = build_nucal_wgts()
         data_wgts = {bl: np.ones_like(data[bl], dtype="float64") for bl in data}
 
-        # TODO: compute estimate of the degenerate parameters from spatial filters if not given.
+        # Compute estimate of the degenerate parameters from spatial filters
         degen_params, _, model_comps = estimate_degenerate_parameters(
             data, data_wgts, self.radial_reds, rc_flags, self.spatial_filters, niter=initial_est_niter
         )
+
+        # Sum over spectral filters to project onto u-model
+        const_eigvals = np.sum(self.spectral_filters, axis=0).reshape(-1, 1)
+
         # Pack tip-tilts into single entry in dictionary
         for pol in pols:
             degen_params[f"Phi_J{pol}"] = np.transpose([degen_params[f"Phi_{ni}_J{pol}"] for ni in range(self.ndims)], axes=(1, 0, 2))
-
         degens = {**degen_params, **model_comps}
 
-        
-        # Sky Model Parameters should eventually be NPOLS, Ntimes, Ncomps
-        # Tip-tilts should be NPOLS, NTIMES, NFREQS, NDIMS
-        # Amplitude should be NPOLS, NTIMES, NFREQS
-        # Solution keys should be stored as A_J{nn or ee} and Phi_{0, 1, ..., n}_J_{nn or ee}
-
-
-        # For each time and each polarization in the data calibrate
+        # Create solution dictionary
         solution = {parameter + pol: [] for pol in pols for parameter in ["A_J", "Phi_J"]}
         solution['fg_r'] = []
         solution['fg_i'] = []
-        for pol in pols:
-            # Sum over spectral filters to project onto u-model
-            const_eigvals = np.sum(self.spectral_filters, axis=0).reshape(-1, 1)
 
+        # For each time and each polarization in the data calibrate
+        for pol in pols:
             idealized_blvecs = []
             for group in self.radial_reds.get_pol(pol):
                 group_vecs = []
@@ -1037,12 +1038,12 @@ class NuCalibrator:
                     spatial_filters=spatial_filters, maxiter=maxiter, idealized_blvecs=idealized_blvecs, tol=tol
                 )
 
-                # TODO: unpack solution and organize it in a sensible way
-                # Consider nucal_sol object that gets added to. Nucal sol object could work like
-                # dictionary similarly to Redsol
+                # TODO: unpack solution and organize it in a sensible way. Consider nucal_sol object that gets added to.
                 solution[f"A_J{pol}"].append(fit_params['A'])
                 solution[f"Phi_J{pol}"].append(fit_params['Phi'])
                 solution[f'fg_r'].append(fit_params['fg_r'])
                 solution[f'fg_i'].append(fit_params['fg_i'])
 
         return solution, info
+
+    
