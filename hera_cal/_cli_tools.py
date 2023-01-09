@@ -13,19 +13,21 @@ from rich.text import Text, TextType
 from string import Template
 from typing import Iterable, Literal
 import logging
+from argparse import ArgumentParser
 
-def setup_logger(width: int=160):    
+def setup_logger(level: str = 'INFO', width: int=160, show_time_as_diff: bool=True, rich_tracebacks: bool=True):    
     cns = Console(width=width)
 
     logging.basicConfig(
         format="%(message)s",
+        level=level,
         handlers=[
             RicherHandler(
                 console=cns,
-                rich_tracebacks=True,
+                rich_tracebacks=rich_tracebacks,
                 tracebacks_show_locals=True,
                 show_path=False,
-                show_time_as_diff=True,
+                show_time_as_diff=show_time_as_diff,
             )
         ],
     )
@@ -230,3 +232,33 @@ class RicherHandler(RichHandler):
             show_time_as_diff=show_time_as_diff,
             delta_time_format=delta_time_format,
         )
+
+
+def add_logging_args(parser: ArgumentParser):
+    grp = parser.add_argument_group(title="Options for logging")
+
+    grp.add_argument(
+        "--log-level", type=str, default='INFO', 
+        choices=['INFO', 'ERROR', 'WARNING', 'CRITICAL', "DEBUG"],
+        help="logging level to display. "
+    )
+    grp.add_argument(
+        "--log-width", type=int, default=160,
+        help="width of logging output"
+    )
+    grp.add_argument(
+        "--log-plain-tracebacks", action='store_true', 
+        help="use plain instead of rich tracebacks"
+    )
+    grp.add_argument(
+        "--log-absolute-time", action='store_true',
+        help="show logger time as absolute instead of relative to start"
+    )
+
+def init_logger_from_args(args):
+    setup_logger(
+        width=args.log_width,
+        level=args.log_level,
+        rich_tracebacks=not args.log_plain_tracebacks,
+        show_time_as_diff=not args.log_absolute_time,
+    )
