@@ -1690,12 +1690,11 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                         if lst_blacklists is not None:
                             for lb in lst_blacklists:
                                 if lb[0] < lb[1]:
-                                    is_blacklisted = (lsts[inum] >= lb[0] * np.pi / 12)\
-                                        & (lsts[inum] <= lb[1] * np.pi / 12)
+                                    is_blacklisted = (lsts >= lb[0] * np.pi / 12)\
+                                        & (lsts <= lb[1] * np.pi / 12)
                                 else:
-                                    is_blacklisted = (lsts[inum] >= lb[0] * np.pi / 12) | (lsts <= lb[1] * np.pi / 12)
+                                    is_blacklisted = (lsts >= lb[0] * np.pi / 12) | (lsts <= lb[1] * np.pi / 12)
                                 wgts[k][is_blacklisted, :] = wgts[k][is_blacklisted, :] * blacklist_wgt
-
                     # run tophat filter
                     frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
                                           keys=keys, verbose=verbose, wgts=wgts, flags=getattr(frfil, f'flags_interleave_{inum}'),
