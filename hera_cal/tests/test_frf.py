@@ -800,6 +800,19 @@ class Test_FRFilter(object):
         for k in f:
             assert np.all(~f[k])
 
+    @pytest.mark.parametrize(
+        "ninterleave", [2, 3, 4, 5, 6])
+    def test_load_tophat_frfilter_and_write_interleave(self, tmpdir, ninterleave):
+        tmp_path = tmpdir.strpath
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+        outfilename = os.path.join(tmp_path, 'temp.h5')
+        frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename,
+                                           Nbls_per_load=1, clobber=True, mode='dpss_leastsq',
+                                           overwrite_flags=True, ninterleave=ninterleave,
+                                           max_frate_coeffs=[0.025, 0.0],
+                                           case='max_frate_coeffs')
+        assert os.path.exists(outfilename)
+
     def test_sky_frates_minfrate_and_to_filter(self):
         # test edge frates
         V = frf.FRFilter(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
