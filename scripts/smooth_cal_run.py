@@ -12,8 +12,11 @@ See help for a more detailed explanation of the parameters.
 
 from hera_cal.smooth_cal import CalibrationSmoother, smooth_cal_argparser
 import sys
+from hera_cal._cli_tools import parse_args, run_with_profiling
 
 a = smooth_cal_argparser()
+a = parse_args(a)
+
 mode = a.method
 filter_kwargs = {}
 if mode != 'clean':
@@ -27,19 +30,22 @@ else:
         filter_kwargs['alpha'] = a.alpha
     filter_kwargs['max_iter'] = a.max_iter
 
-if a.run_if_first is None or sorted(a.calfits_list)[0] == a.run_if_first:
-    cs = CalibrationSmoother(a.calfits_list, flag_file_list=a.flag_file_list, flag_filetype=a.flag_filetype,
-                             antflag_thresh=a.antflag_thresh, time_blacklists=a.time_blacklists,
-                             lst_blacklists=a.lst_blacklists, freq_blacklists=a.freq_blacklists, blacklist_wgt=a.blacklist_wgt,
-                             chan_blacklists=a.chan_blacklists, pick_refant=a.pick_refant, freq_threshold=a.freq_threshold,
-                             time_threshold=a.time_threshold, ant_threshold=a.ant_threshold, verbose=a.verbose)
-    if a.axis == 'both':
-        cs.time_freq_2D_filter(freq_scale=a.freq_scale, time_scale=a.time_scale, tol=a.tol,
-                               filter_mode=a.filter_mode, window=a.window, maxiter=a.maxiter, method=a.method, **filter_kwargs)
+def run():
+    if a.run_if_first is None or sorted(a.calfits_list)[0] == a.run_if_first:
+        cs = CalibrationSmoother(a.calfits_list, flag_file_list=a.flag_file_list, flag_filetype=a.flag_filetype,
+                                antflag_thresh=a.antflag_thresh, time_blacklists=a.time_blacklists,
+                                lst_blacklists=a.lst_blacklists, freq_blacklists=a.freq_blacklists, blacklist_wgt=a.blacklist_wgt,
+                                chan_blacklists=a.chan_blacklists, pick_refant=a.pick_refant, freq_threshold=a.freq_threshold,
+                                time_threshold=a.time_threshold, ant_threshold=a.ant_threshold, verbose=a.verbose)
+        if a.axis == 'both':
+            cs.time_freq_2D_filter(freq_scale=a.freq_scale, time_scale=a.time_scale, tol=a.tol,
+                                filter_mode=a.filter_mode, window=a.window, maxiter=a.maxiter, method=a.method, **filter_kwargs)
+        else:
+            cs.filter_1d(filter_scale=a.freq_scale, tol=a.tol, skip_wgt=a.skip_wgt, mode=a.method, ax=a.axis,
+                        **filter_kwargs)
+        cs.write_smoothed_cal(output_replace=(a.infile_replace, a.outfile_replace),
+                            add_to_history=' '.join(sys.argv), clobber=a.clobber)
     else:
-        cs.filter_1d(filter_scale=a.freq_scale, tol=a.tol, skip_wgt=a.skip_wgt, mode=a.method, ax=a.axis,
-                     **filter_kwargs)
-    cs.write_smoothed_cal(output_replace=(a.infile_replace, a.outfile_replace),
-                          add_to_history=' '.join(sys.argv), clobber=a.clobber)
-else:
-    print(sorted(a.calfits_list)[0], 'is not', a.run_if_first, '...skipping.')
+        print(sorted(a.calfits_list)[0], 'is not', a.run_if_first, '...skipping.')
+
+run_with_profiling(run, a)

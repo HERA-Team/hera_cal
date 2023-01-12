@@ -2091,5 +2091,4 @@ def redcal_argparser():
     omni_opts.add_argument("--check_after", type=int, default=50, help="start computing omnical convergence only after N iterations (saves computation).")
     omni_opts.add_argument("--gain", type=float, default=.4, help="The fractional step made toward the new solution each omnical iteration. Values in the range 0.1 to 0.5 are generally safe.")
 
-    args = a.parse_args()
-    return args
+    return a

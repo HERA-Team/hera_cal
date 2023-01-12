@@ -5,9 +5,10 @@
 
 from hera_cal import frf
 from hera_cal import io
+from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
 
 a = frf.time_average_argparser()
-args = a.parse_args()
+args = parse_args(a)
 
 # only use baseline_list if cornerturn requested.
 if args.cornerturnfile is not None:
@@ -16,14 +17,19 @@ if args.cornerturnfile is not None:
 else:
     baseline_list = None
 
-frf.time_avg_data_and_write(flag_output=args.flag_output,
-                            input_data_list=args.input_data_list,
-                            baseline_list=baseline_list,
-                            output_data=args.output_data,
-                            t_avg=args.t_avg, rephase=args.rephase,
-                            # wgt_by_nsample is default True in frf.time_avg_data_and_write
-                            # for this reason, the argparser requests the negation.
-                            filetype=args.filetype,
-                            wgt_by_nsample=not(args.dont_wgt_by_nsample),
-                            wgt_by_favg_nsample=args.wgt_by_favg_nsample,
-                            clobber=args.clobber, verbose=args.verbose)
+run_with_profiling(
+    frf.time_avg_data_and_write, 
+    args,
+    flag_output=args.flag_output,
+    input_data_list=args.input_data_list,
+    baseline_list=baseline_list,
+    output_data=args.output_data,
+    t_avg=args.t_avg, rephase=args.rephase,
+    # wgt_by_nsample is default True in frf.time_avg_data_and_write
+    # for this reason, the argparser requests the negation.
+    filetype=args.filetype,
+    wgt_by_nsample=not(args.dont_wgt_by_nsample),
+    wgt_by_favg_nsample=args.wgt_by_favg_nsample,
+    clobber=args.clobber, verbose=args.verbose
+)
+ 
