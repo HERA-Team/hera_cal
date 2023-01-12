@@ -86,7 +86,10 @@ if kwargs['output_file_select'] == ['None']:
 # Handle calfile rules
 # Turn a list into a list of 2-tuples.
 crules = kwargs.pop("calfile_rules")
-calfile_rules = [(crules[i], crules[i+1]) for i in range(len(crules)//2)]
+if crules is not None:
+    calfile_rules = [(crules[i], crules[i+1]) for i in range(len(crules)//2)]
+else:
+    calfile_rules = None
 
 del kwargs['profile']
 del kwargs['profile_funcs']

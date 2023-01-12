@@ -21,3 +21,4 @@ hera_cal/notebooks
 *.ipynb_checkpoints*
 .pytest_cache*
 .vscode/
+**/cache_temp/
