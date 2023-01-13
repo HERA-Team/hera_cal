@@ -5,7 +5,7 @@
 
 from hera_cal import frf
 from hera_cal import io
-from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
+from hera_cal._cli_tools import parse_args, run_with_profiling
 
 a = frf.time_average_argparser()
 args = parse_args(a)

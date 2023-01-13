@@ -8,7 +8,7 @@ Each text file lists the baselines to be processed in each
 compute job in baseline parallelization mode.
 """
 from hera_cal import io
-from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
+from hera_cal._cli_tools import parse_args, run_with_profiling
 
 parser = io.antpairpol_parallelization_parser()
 a = parse_args(parser)

@@ -9,7 +9,7 @@ Includes solar flagging and iterative antenna exclusion based on chi^2."""
 import argparse
 from hera_cal.redcal import redcal_argparser, redcal_run
 import sys
-from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
+from hera_cal._cli_tools import parse_args, run_with_profiling
 
 
 a = redcal_argparser()
