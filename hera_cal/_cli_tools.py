@@ -32,6 +32,7 @@ def setup_logger(level: str = 'INFO', width: int=160, show_time_as_diff: bool=Tr
                 show_time_as_diff=show_time_as_diff,
             )
         ],
+        force=True,
     )
     
 
@@ -282,15 +283,16 @@ def run_with_profiling(function, args, **kwargs):
         # Now add any user-defined functions that they want to be profiled.
         # Functions must be sent in as "path.to.module:function_name" or
         # "path.to.module:Class.method".
-        for fnc in args.profile_funcs.split(","):
-            module = importlib.import_module(fnc.split(":")[0])
-            _fnc = module
-            if ":" not in fnc:
-                profiler.add_module(_fnc)
-            else:
-                for att in fnc.split(":")[-1].split("."):
-                    _fnc = getattr(_fnc, att)
-                profiler.add_function(_fnc)
+        if args.profile_funcs:
+            for fnc in args.profile_funcs.split(","):
+                module = importlib.import_module(fnc.split(":")[0])
+                _fnc = module
+                if ":" not in fnc:
+                    profiler.add_module(_fnc)
+                else:
+                    for att in fnc.split(":")[-1].split("."):
+                        _fnc = getattr(_fnc, att)
+                    profiler.add_function(_fnc)
 
             
     if args.profile:
@@ -311,7 +313,7 @@ def add_profiling_args(parser: ArgumentParser):
 
     grp.add_argument("--profile", action="store_true",
                         help="Line-Profile the script")
-    grp.add_argument("--profile-funcs", type=str,
+    grp.add_argument("--profile-funcs", type=str, default='',
                         help="List of functions to profile")
     grp.add_argument("--profile-output", type=str, help="Output file for profiling info.")
 
