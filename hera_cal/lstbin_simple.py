@@ -853,7 +853,8 @@ def lst_bin_files(
             )
             logger.info(f"BINNED TIMES: {binned_times[0]}")
             logger.info(f"REDUCEDCHAN DATA SHAPE: {guvd.data_array.shape}")
-            logger.info(f"Ntimes: {guvd.ntimes}")
+            logger.info(f"Ntimes: {guvd.Ntimes}")
+
             # Don't check autos because we've set flagged stuff to NaN and that fails.
             guvd.write_uvh5(
                 os.path.join(outdir, filename), clobber=overwrite, 

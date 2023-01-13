@@ -2336,8 +2336,7 @@ def create_uvd_from_hera_data(
     uvd.antenna_positions = uvutils.ECEF_from_ENU(antenna_positions, *tel_lat_lon_alt) - telescope_location
     uvd.telescope_location = telescope_location
 
-        #print(lst_array, start_jd, time_array)
-    
+
     if bltime:
         if len(antpairs) != len(time_array):
             raise ValueError("If using a combined blt axis, require antpairs same length as time_array")
