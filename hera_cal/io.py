@@ -925,7 +925,10 @@ class HERAData(UVData):
                 self._set_slice(data_array, bl, full_waterfall)
 
         if data_array is None:
-            data_array = np.zeros_like(self.data_array)
+            if dc.dtype != bool:
+                data_array = np.zeros_like(self.data_array, dtype=dc.dtype)  # nsamples or data
+            else:
+                data_array = np.ones_like(self.data_array, dtype=bool)  # flags
         else:
             assert data_array.shape == self.data_array.shape
 

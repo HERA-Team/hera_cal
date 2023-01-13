@@ -67,7 +67,10 @@ class DataContainer:
                     setattr(self, attr, getattr(data, attr))
                 else:
                     setattr(self, attr, None)
-
+            
+            # Define the dtype of the data itself
+            self.dtype = self._data[next(self.keys())]
+            
     def antpairs(self, pol=None):
         '''Return a set of antenna pairs (with a specific pol or more generally).'''
         if pol is None:
