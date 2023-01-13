@@ -835,9 +835,6 @@ def lst_bin_files(
 
         # Now write out reduced-channel data
         if save_channels:
-            logger.info(f"BINNED TIMES: {binned_times[0]}")
-            logger.info(f"REDUCEDCHAN DATA SHAPE: {guvd.data_array.shape}")
-            
             fkwargs['type'] = 'REDUCEDCHAN'
             fkwargs['time'] = bin_lst[0] - dlst / 2.0
             filename = f"zen.{file_ext.format(**fkwargs)}"
@@ -854,6 +851,9 @@ def lst_bin_files(
                 integration_time=integration_time[0],
                 history=_history,
             )
+            logger.info(f"BINNED TIMES: {binned_times[0]}")
+            logger.info(f"REDUCEDCHAN DATA SHAPE: {guvd.data_array.shape}")
+            
             # Don't check autos because we've set flagged stuff to NaN and that fails.
             guvd.write_uvh5(
                 os.path.join(outdir, filename), clobber=overwrite, 
