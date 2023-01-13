@@ -835,6 +835,9 @@ def lst_bin_files(
 
         # Now write out reduced-channel data
         if save_channels:
+            logger.info(f"BINNED TIMES: {binned_times[0]}")
+            logger.info(f"REDUCEDCHAN DATA SHAPE: {guvd.data_array.shape}")
+            
             fkwargs['type'] = 'REDUCEDCHAN'
             fkwargs['time'] = bin_lst[0] - dlst / 2.0
             filename = f"zen.{file_ext.format(**fkwargs)}"
