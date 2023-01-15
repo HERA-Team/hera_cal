@@ -1105,9 +1105,12 @@ class FRFilter(VisClean):
             avg_flags[k] = af
             avg_nsamples[k] = an
             at = ea['avg_times']
-
-        setattr(self, "{}_times".format(output_prefix), np.asarray(at))
-        setattr(self, "{}_lsts".format(output_prefix), np.asarray(al))
+        if output_postfix != '':
+            setattr(self, "{}_times_{}".format(output_prefix, output_postfix), np.asarray(at))
+            setattr(self, "{}_lsts_{}".format(output_prefix, output_postfix), np.asarray(al))
+        else:
+            setattr(self, "{}_times".format(output_prefix), np.asarray(at))
+            setattr(self, "{}_lsts".format(output_prefix), np.asarray(al))
         self.t_avg = t_avg
         self.Navg = Navg
 
@@ -1386,7 +1389,7 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
     -------
     None
     """
-    if ninterleave > 1 and filetype.lowe() != 'uvh5':
+    if ninterleave > 1 and filetype.lower() != 'uvh5':
         raise ValueError(f"Interleaved data only supported for 'uvh5' filetype! User provided '{filetype}'.")
         
     if baseline_list is not None and len(baseline_list) == 0:
@@ -1403,25 +1406,33 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
             fr._deinterleave_data_in_time("nsamples", ninterleave=ninterleave, set_time_sets=False)
             # run time average on each interleaved data set
             for inum in range(ninterleave):
-                data = getattr(self, f'data_interleave_{inum}')
-                flags = getattr(self, f'flags_interleave_{inum}')
-                nsamples = getattr(self, f'nsamples_interleave_{inum}')
+                data = getattr(fr, f'data_interleave_{inum}')
+                flags = getattr(fr, f'flags_interleave_{inum}')
+                nsamples = getattr(fr, f'nsamples_interleave_{inum}')
                 
-                fr.timeavg_data(data=data, flags=flags, nsamples=nsamples, times=self.time_sets[inum],
-                                lsts=self.lst_sets[inum], t_avg=t_avg, wgt_by_nsample=wgt_by_nsample,
+                fr.timeavg_data(data=data, flags=flags, nsamples=nsamples, times=fr.time_sets[inum],
+                                lsts=fr.lst_sets[inum], t_avg=t_avg, wgt_by_nsample=wgt_by_nsample,
                                 wgt_by_favg_nsample=wgt_by_favg_nsample, output_postfix=f'interleave_{inum}',
                                 rephase=rephase)
                 
                 # relable keys to antpolpairs in avg sets
-                avg_data = getattr(self, f'avg_data_interleave_{inum}')
-                avg_nsamples = getattr(self, f'avg_nsamples_interleave_{inum}')
-                avg_flags = getattr(self, f'avg_flags_interleave_{inum}')
-                avg_times = getattr(self, f'avg_times_interleave_{inum}')
-                avg_lsts = getattr(self, f'avg_lsts_interleave_{inum}')
+                avg_data = getattr(fr, f'avg_data_interleave_{inum}')
+                avg_nsamples = getattr(fr, f'avg_nsamples_interleave_{inum}')
+                avg_flags = getattr(fr, f'avg_flags_interleave_{inum}')
+                avg_times = getattr(fr, f'avg_times_interleave_{inum}')
+                avg_lsts = getattr(fr, f'avg_lsts_interleave_{inum}')
 
                 # write data
-                fr.write_data(data=avg_data, filename=output_data.replace('.uvh5', f'.interleave_{fnum}.uvh5'), flags=avg_flags, nsamples=avg_nsamples,
-                              times=avg_times, lsts=avg_lsts, filetype=filetype, overwrite=clobber)    
+                output_data_name = output_data.replace('.uvh5', f'.interleave_{inum}.uvh5')
+                fr.write_data(data=avg_data, filename=output_data_name, flags=avg_flags, nsamples=avg_nsamples,
+                              times=avg_times, lsts=avg_lsts, filetype=filetype, overwrite=clobber)
+                if flag_output is not None:
+                    uv_avg = UVData()
+                    uv_avg.read(output_data_name)
+                    uv_avg.use_future_array_shapes()
+                    uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
+                    uvf.to_waterfall(keep_pol=False, method='and')
+                    uvf.write(flag_output.replace('h5', f'.interleave_{inum}.h5'), clobber=clobber)
         else:
             fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
                             wgt_by_nsample=wgt_by_nsample, wgt_by_favg_nsample=wgt_by_favg_nsample, rephase=rephase)

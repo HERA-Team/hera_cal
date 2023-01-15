@@ -160,6 +160,7 @@ class Test_FRFilter(object):
 
         # exceptions
         pytest.raises(AssertionError, self.F.timeavg_data, self.F.data, self.F.times, self.F.lsts, 1.0)
+        
 
     def test_filter_data(self):
         # construct high-pass filter
@@ -219,6 +220,34 @@ class Test_FRFilter(object):
             assert np.allclose(data_out.data[k], self.F.avg_data[k])
             assert np.allclose(data_out.flags[k], self.F.avg_flags[k])
             assert np.allclose(data_out.nsamples[k], self.F.avg_nsamples[k])
+
+
+    @pytest.mark.parametrize(
+        "ninterleave", [2, 3, 4, 5, 6])
+    def test_time_avg_data_and_write_interleave(self, tmpdir, ninterleave):        
+        tmp_path = tmpdir.strpath
+        input_name = os.path.join(tmp_path, 'test_input.uvh5')
+        uvd = UVData()
+        uvd.read(self.fname)
+        uvd.write_uvh5(input_name)
+        output_name = os.path.join(tmp_path, 'test_output.uvh5')
+        flag_output = tmp_path + '/test_output.flags.h5'
+        frf.time_avg_data_and_write(input_name, output_name, t_avg=35., rephase=True,
+                                    wgt_by_nsample=True, flag_output=flag_output,
+                                    filetype='uvh5', ninterleave=ninterleave)
+        # check that the correct number of files exist.
+        interleaved_data = {}
+        for inum in range(ninterleave):
+            iname = output_name.replace('.uvh5', f'.interleave_{inum}.uvh5')
+            assert os.path.exists(iname)
+            hd = io.HERAData(iname)
+            hd.read()
+            interleaved_data[inum] = hd
+            os.remove(iname)
+            # check that times are complementary (don't overlap and ordered by file correctly).
+            if inum > 0:
+                for tn in range(interleaved_data[inum].Ntimes):
+                    assert interleaved_data[inum].times[tn] > interleaved_data[inum-1].times[tn]
 
     def test_time_avg_data_and_write_baseline_list(self, tmpdir):
         # compare time averaging over baseline list versus time averaging
@@ -811,7 +840,9 @@ class Test_FRFilter(object):
                                            overwrite_flags=True, ninterleave=ninterleave,
                                            max_frate_coeffs=[0.025, 0.0],
                                            case='max_frate_coeffs')
+        # check that output exists.
         assert os.path.exists(outfilename)
+        # check that it has the original number of times.
 
     def test_sky_frates_minfrate_and_to_filter(self):
         # test edge frates
