@@ -323,8 +323,12 @@ def lst_bin_files_for_baselines(
     rephase: bool = True,
     antpos: dict[int, np.ndarray] | None = None,
     lsts: np.ndarray | None = None,
+    assume_time_first = None,
 ):
     metas = [fl if isinstance(fl, io.FastUVH5Meta) else io.FastUVH5Meta(fl) for fl in data_files]
+    
+    if assume_time_first is None:
+        assume_time_first = metas[0]._time_first
 
     lst_bin_edges = np.array(lst_bin_edges)
 
@@ -380,7 +384,7 @@ def lst_bin_files_for_baselines(
             nsamples[slc, :, :, :] = 0
             continue
 
-        _data, _flags, _nsamples  = hd.read(bls=bls_to_load, times=tarr)
+        _data, _flags, _nsamples  = hd.read(bls=bls_to_load, times=tarr, assume_time_first=assume_time_first)
 
         # load calibration
         if calfl is not None:
@@ -626,6 +630,9 @@ def lst_bin_files(
     bl_chunks = [all_baselines[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(n_bl_chunks)]
     bl_chunks = [blg for blg in bl_chunks if len(blg) > 0]
 
+    meta0 = io.FastUVH5Meta(data_files[0][0])
+    time_first_ordering = meta0._time_first
+
     # iterate over output LST files
     for i, outfile_lsts in enumerate(file_lsts):
         logger.info(f"LST file {i+1} / {len(file_lsts)}")
@@ -713,6 +720,7 @@ def lst_bin_files(
                 rephase=rephase,
                 antpos=antpos,
                 lsts=all_lsts,
+                assume_time_first=time_first_ordering,
             )
 
             slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))

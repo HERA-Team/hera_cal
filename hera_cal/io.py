@@ -419,7 +419,7 @@ def read_hera_calfits(filenames, ants=None, pols=None,
     return rv
 
 
-def get_blt_slices(uvo, tried_to_reorder=False):
+def get_blt_slices(uvo, tried_to_reorder=False, assume_time_first: bool=False, assume_bl_first: bool=False):
     '''For a pyuvdata-style UV object, get the mapping from antenna pair to blt slice.
     If the UV object does not have regular spacing of baselines in its baseline-times,
     this function will try to reorder it using UVData.reorder_blts() to see if that helps.
@@ -431,20 +431,39 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     Returns:
         blt_slices: dictionary mapping anntenna pair tuples to baseline-time slice objects
     '''
-    blt_slices = {}
-    for ant1, ant2 in uvo.get_antpairs():
-        indices = uvo.antpair2ind(ant1, ant2)
-        if len(indices) == 1:  # only one blt matches
-            blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, uvo.Nblts)
-        elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
-            if not tried_to_reorder:
-                uvo.reorder_blts(order='time')
-                return get_blt_slices(uvo, tried_to_reorder=True)
+    if assume_bl_first and assume_time_first:
+        raise ValueError("Cannot assume both bl first and time first ordering!")
+    if assume_bl_first:
+        if not uvo.Nblts != uvo.Nbls * uvo.Ntimes:
+            raise ValueError("Assumption of bl first ordering cannot be correct if Nblts != Nbls * Ntimes")
+        for i in range(uvo.Nbls):
+            antp = (uvo.ant_1_array[i], uvo.ant_2_array[i])
+            blt_slices[antp] = slice(i, uvo.Nblts, uvo.Nbls)
+        assert uvo.Nbls == len(blt_slices)
+
+    elif assume_time_first:
+        if not uvo.Nblts != uvo.Nbls * uvo.Ntimes:
+            raise ValueError("Assumption of time first ordering cannot be correct if Nblts != Nbls * Ntimes")
+        for i in range(uvo.Nbls):
+            antp = (uvo.ant_1_array[i*uvo.Ntimes], uvo.ant_2_array[i*uvo.Ntimes])
+            blt_slices[antp] = slice(i, uvo.Nbls + i, 1)
+        assert uvo.Nbls == len(blt_slices)
+
+    else:
+        blt_slices = {}
+        for ant1, ant2 in uvo.get_antpairs():
+            indices = uvo.antpair2ind(ant1, ant2)
+            if len(indices) == 1:  # only one blt matches
+                blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, uvo.Nblts)
+            elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
+                if not tried_to_reorder:
+                    uvo.reorder_blts(order='time')
+                    return get_blt_slices(uvo, tried_to_reorder=True)
+                else:
+                    raise NotImplementedError('UVData objects with non-regular spacing of '
+                                            'baselines in its baseline-times are not supported.')
             else:
-                raise NotImplementedError('UVData objects with non-regular spacing of '
-                                          'baselines in its baseline-times are not supported.')
-        else:
-            blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
+                blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
     return blt_slices
 
 
@@ -591,9 +610,9 @@ class HERAData(UVData):
         locs = locals()
         return {meta: locs[meta] for meta in self.HERAData_metas}
 
-    def _determine_blt_slicing(self):
+    def _determine_blt_slicing(self, assume_bl_first: bool = False, assume_time_first: bool = False):
         '''Determine the mapping between antenna pairs and slices of the blt axis of the data_array.'''
-        self._blt_slices = get_blt_slices(self)
+        self._blt_slices = get_blt_slices(self, assume_bl_first=assume_bl_first, assume_time_first=assume_time_first)
 
     def _determine_pol_indexing(self):
         '''Determine the mapping between polnums and indices
@@ -713,7 +732,8 @@ class HERAData(UVData):
 
     def read(self, bls=None, polarizations=None, times=None, time_range=None, lsts=None, lst_range=None,
              frequencies=None, freq_chans=None, axis=None, read_data=True, return_data=True,
-             run_check=True, check_extra=True, run_check_acceptability=True, **kwargs):
+             run_check=True, check_extra=True, run_check_acceptability=True, 
+             assume_time_first: bool = False, assume_bl_first: bool = False, **kwargs):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
         Arguments:
@@ -754,6 +774,12 @@ class HERAData(UVData):
                 ones. Default is True.
             run_check_acceptability: Option to check acceptable range of the values of
                 parameters after reading in the file. Default is True.
+            assume_time_first : bool
+                If it is known that the data's blt axis is in time-first ordering, then
+                specify this as true, it will speed up reading reasonably significantly.
+            assume_bl_first : bool
+                If it is known that the data's blt axis is in baseline-first ordering, then
+                specify this as true, it will speed up reading reasonably significantly.
             kwargs: extra keyword arguments to pass to UVData.read()
 
         Returns:
@@ -814,7 +840,10 @@ class HERAData(UVData):
 
         # process data into DataContainers
         if read_data or self.filetype in ['uvh5', 'uvfits']:
-            self._determine_blt_slicing()
+            self._determine_blt_slicing(
+                assume_bl_first=assume_bl_first, 
+                assume_time_first=assume_time_first
+            )
             self._determine_pol_indexing()
         if read_data and return_data:
             return self.build_datacontainers()
@@ -1512,7 +1541,7 @@ def write_filter_cache_scratch(filter_cache, cache_dir=None, skip_keys=None):
         warnings.warn("No new keys provided. No cache file written.")
 
 
-def load_flags(flagfile, filetype='h5', return_meta=False):
+def load_flags(flagfile, filetype='h5', return_meta=False, assume_time_first: bool = False, assume_bl_first: bool = False):
     '''Load flags from a file and returns them as a DataContainer (for per-visibility flags)
     or dictionary (for per-antenna or per-polarization flags). More than one spectral window
     is not supported. Assumes times are evenly-spaced and in order for each baseline.
@@ -1548,7 +1577,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         history = uvf.history
 
         if uvf.type == 'baseline':  # one time x freq waterfall per baseline
-            blt_slices = get_blt_slices(uvf)
+            blt_slices = get_blt_slices(uvf, assume_time_first=assume_time_first, assume_bl_first=assume_bl_first)
             for ip, pol in enumerate(uvf.polarization_array):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                     pol = polnum2str(pol, x_orientation=uvf.x_orientation)  # convert to string if possible
