@@ -67,16 +67,19 @@ class DataContainer:
                     setattr(self, attr, getattr(data, attr))
                 else:
                     setattr(self, attr, None)
-            
-            # Define the dtype of the data itself. next(iter()) gets the first element
-            # of keys() without creating a whole list.
-            if self.keys():
-                try:
-                    self.dtype = self._data[next(iter(self.keys()))].dtype
-                except AttributeError:
-                    self.dtype = None
-            else:
-                self.dtype = None
+        
+        
+    @property
+    def dtype(self):
+        """The dtype of the underlying data."""
+        if self.keys():
+            try:
+                return self._data[next(iter(self.keys()))].dtype
+            except AttributeError:
+                return None
+        else:
+            return None
+
 
     def antpairs(self, pol=None):
         '''Return a set of antenna pairs (with a specific pol or more generally).'''
