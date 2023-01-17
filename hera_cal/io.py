@@ -592,11 +592,10 @@ class HERAData(UVData):
         self._polnum_indices = {
             polnum: i for i, polnum in enumerate(self.polarization_array)
         }
-        pols = [polnum2str(polnum, x_orientation=self.x_orientation) for polnum in self.polarization_array]
         self._polstr_indices = {}
         # Add upper-case indices as well, so we don't need to use .lower() on input
         # keys (for which there can be many tens of thousands).
-        for pol in pols:
+        for pol in self.pols:
             indx = self._polnum_indices[polstr2num(pol, x_orientation=self.x_orientation)]
             self._polstr_indices[pol.lower()] = indx
             self._polstr_indices[pol.upper()] = indx
@@ -615,33 +614,31 @@ class HERAData(UVData):
         if isinstance(key, str):  # asking for a pol
             return {antpair: self._get_slice(data_array, antpair + (key,)) for antpair in self.get_antpairs()}
         elif len(key) == 2:  # asking for antpair
-            pols = np.array([polnum2str(polnum, x_orientation=self.x_orientation) for polnum in self.polarization_array])
-            return {pol: self._get_slice(data_array, key + (pol,)) for pol in pols}
+            return {pol: self._get_slice(data_array, key + (pol,)) for pol in self.pols}
         elif len(key) == 3:  # asking for bl-pol
             try:
-                return np.array(
-                    data_array[
-                        self._blt_slices[tuple(key[:2])], :,
-                        self._polstr_indices.get(
-                            key[2],
-                            self._polnum_indices[
-                                polstr2num(key[2], x_orientation=self.x_orientation)
-                            ]
-                        )
+                polidx = self._polstr_indices.get(
+                    key[2],
+                    self._polnum_indices[
+                        polstr2num(key[2], x_orientation=self.x_orientation)
                     ]
                 )
+                if key[2] not in self._polstr_indices:
+                    self._polstr_indices[key[2]] = polidx
+
+                return np.array(data_array[self._blt_slices[tuple(key[:2])], :, polidx])
             except KeyError:
-                return np.conj(
-                    data_array[
-                        self._blt_slices[tuple(key[1::-1])], :,
-                        self._polstr_indices.get(
-                            conj_pol(key[2]),
-                            self._polnum_indices[
-                                polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)
-                            ]
-                        )
+                kk = conj_pol(key[2])
+                pidx = self._polstr_indices.get(
+                    kk,
+                    self._polnum_indices[
+                        polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)
                     ]
                 )
+                if kk not in self._polstr_indices:
+                    self._polstr_indices[kk] = pidx
+
+                return np.conj(data_array[self._blt_slices[tuple(key[1::-1])], :, pidx])
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
@@ -665,11 +662,21 @@ class HERAData(UVData):
                 self._set_slice(data_array, (key + (pol,)), value[pol])
         elif len(key) == 3:  # providing bl-pol
             try:
-                data_array[self._blt_slices[tuple(key[0:2])], :,
-                           self._polnum_indices[polstr2num(key[2], x_orientation=self.x_orientation)]] = value
-            except(KeyError):
-                data_array[self._blt_slices[tuple(key[1::-1])], :,
-                           self._polnum_indices[polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)]] = np.conj(value)
+                polidx = self._polstr_indices.get(
+                    key[2],
+                    self._polnum_indices[
+                        polstr2num(key[2], x_orientation=self.x_orientation)
+                    ]
+                )
+                data_array[self._blt_slices[tuple(key[:2])], :, polidx] = value
+            except KeyError:
+                polidx = self._polstr_indices.get(
+                    conj_pol(key[2]),
+                    self._polnum_indices[
+                        polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)
+                    ]
+                )
+                data_array[self._blt_slices[tuple(key[1::-1])], :, polidx] = np.conj(value)
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
