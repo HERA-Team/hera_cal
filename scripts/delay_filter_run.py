@@ -40,7 +40,7 @@ if isinstance(ap.calfilelist, str) and ap.calfilelist.lower() == 'none':
 run_with_profiling(
     delay_filter.load_delay_filter_and_write,
     ap,
-    ap.datafilelist, calfile_list=ap.calfilelist, avg_red_bllens=avg_red_bllens,
+    datafile_list=ap.datafilelist, calfile_list=ap.calfilelist, avg_red_bllens=avg_red_bllens,
     baseline_list=baseline_list, spw_range=ap.spw_range,
     cache_dir=ap.cache_dir, res_outfilename=ap.res_outfilename,
     clobber=ap.clobber, write_cache=ap.write_cache, external_flags=ap.external_flags,
