@@ -171,7 +171,8 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         if Nbls_per_load is None:
             Nbls_per_load = len(baseline_list)
         nbl_groups = int(np.ceil(len(baseline_list) / Nbls_per_load))
-        
+        logger.info(f"Number of baselines in file: {len(baseline_list)}. Chunking in {nbl_groups} groups of {Nbls_per_load}.")
+
         for i in range(0, nbl_groups):
             logger.info(f"Delay-Filtering baseline group {i+1}/{nbl_groups}")
 
