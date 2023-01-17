@@ -559,7 +559,7 @@ def lst_bin_arg_parser():
 
 
 def config_lst_bin_files(
-    data_files: list[list[str]], 
+    data_files: list[list[str | io.FastUVH5Meta]], 
     dlst: float | None=None, 
     atol: float=1e-10, 
     lst_start: float | None=None, 
@@ -601,19 +601,17 @@ def config_lst_bin_files(
     time_arrays : list, list of time arrays for each file
     """
     logger.info("Configuring lst_grid")
+    
+    # Make the data files into FastUVH5Meta objects
+    data_files = [[df if isinstance(df, io.FastUVH5Meta) else io.FastUVH5Meta(df) for df in dfs ] for dfs in data_files]
+
     # get dlst from first data file if None
     if dlst is None:
-        dlst, _, _, _ = io.get_file_times(data_files[0][0], filetype='uvh5')
+        dlst = data_files[0][0].lsts[1] - data_files[0][0].lsts[0]
 
     # get time arrays for each file
-    lst_arrays = []
-    time_arrays = []
-    for dfs in data_files:
-        # get times
-        _, _, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
-        # append
-        lst_arrays.append(larrs)
-        time_arrays.append(tarrs)
+    lst_arrays = [[df.lsts for df in dfs] for dfs in data_files]
+    time_arrays = [[df.times for df in dfs] for dfs in data_files]
 
     # get begin_lst from lst_start or from the first JD in the data_files
     if lst_start is None:

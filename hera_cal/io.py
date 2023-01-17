@@ -28,6 +28,7 @@ from pathlib import Path
 from functools import cached_property
 from astropy.time import Time
 from contextlib import contextmanager
+from functools import lru_cache
 
 try:
     import aipy
@@ -1442,7 +1443,7 @@ class HERADataFastReader:
                             check=check, dtype=dtype, verbose=verbose)
         self._adapt_metadata(rv['info'], skip_lsts=skip_lsts)
 
-        # make autocorrleations real by taking the abs, matches UVData._fix_autos()
+        # make autocorrelations real by taking the abs, matches UVData._fix_autos()
         if 'data' in rv:
             for bl in rv['data']:
                 if split_bl(bl)[0] == split_bl(bl)[1]:
@@ -2976,6 +2977,11 @@ class FastUVH5Meta:
         with h5py.File(self.path, 'r') as fl:
             yield fl['Header']
 
+    @contextmanager
+    def datagrp(self):
+        with h5py.File(self.path, 'r') as fl:
+            yield fl['/Data']
+
     @cached_property
     def _time_first(self) -> bool:
         with self.header() as h:
@@ -3018,6 +3024,7 @@ class FastUVH5Meta:
             else:
                 return h['ant_2_array'][:self.n_bls]
     
+    @lru_cache
     def get_antpairs(self) -> list[tuple[int, int]]:
         return list(zip(self.ant_1_array, self.ant_2_array))
 
@@ -3052,3 +3059,103 @@ class FastUVH5Meta:
             polnum2str(p, x_orientation=self.x_orientation) 
             for p in self.polarization_array
         ]
+
+    @cached_property
+    def antpos(self) -> np.ndarray:
+        with self.header() as h:
+            XYZ = XYZ_from_LatLonAlt(
+                self.latitude * np.pi / 180, 
+                self.longitude * np.pi / 180, 
+                self.altitude
+            )
+            return ENU_from_ECEF(
+                self.antenna_positions + XYZ,
+                self.latitude * np.pi / 180, 
+                self.longitude, 
+                self.altitude
+            )
+        
+    @lru_cache
+    def get_antpair_indices(self, times: list[float] | None = None) -> dict[tuple[int, int], np.ndarray]:
+        """Get the indices for each baseline."""
+        bls = self.get_antpairs()
+        
+        if times is None:
+            tdx = np.arange(self.n_times)
+        else:
+            tdx = np.array([i for i, t in enumerate(times) if t in self.times])
+        
+        if self._time_first:    
+            return {bl: tdx + i*self.n_bls for i, bl in enumerate(bls)}
+        else:
+            return {bl: tdx*self.n_bls + i for i, bl in enumerate(bls)}
+
+    def get_datacontainer(
+        self, 
+        key: Literal['data', 'visdata', 'nsamples', 'flags'],
+        bls: list[tuple[int, int]] | None = None,
+        pols: list[str] | None = None,
+        blps: list[tuple[int, int, str]] | None = None,
+        times: list[float] | None = None,
+        full_read_thresh: float = 0.002,
+    ) -> DataContainer:
+        """Get a DataContainer with the data from the file."""
+        if key == 'data':
+            key = 'visdata'
+
+        if blps is None:
+            if bls is None:
+                bls = self.get_antpairs()
+            if pols is None:
+                pols = self.pols
+            blps = [(i, j, p) for i, j in bls for p in pols]
+            
+        if times is None:
+            times = self.times
+
+        full_read = len(blps)*len(times) > full_read_thresh * self.n_bls * self.n_pols * self.n_times
+        pol_indices = {p: i for i, p in enumerate(self.pols)}
+        inds = self.get_antpair_indices(times)
+
+        out = {}
+        with self.datagrp() as fl:
+            d = fl[key]  # data not read yet
+
+            if full_read:
+                d = d[()]  # reads data
+
+            # Support old array shapes
+            if len(d.shape) == 4:
+                # Support polarization-transposed arrays
+                if d.shape[-1] == len(self.freqs):
+                    def index_exp(i, j, p):
+                        return np.index_exp[inds[i, j], 0, pol_indices[p]]
+                else:
+                    def index_exp(i, j, p):
+                        return np.index_exp[inds[i, j], 0, :, pol_indices[p]]
+            # Support new array shapes
+            elif len(d.shape) == 3:
+                # Support polarization-transposed arrays
+                if d.shape[-1] == len(self.freqs):
+                    def index_exp(i, j, p):
+                        return np.index_exp[inds[i, j], pol_indices[p]]
+                else:
+                    def index_exp(i, j, p):
+                        return np.index_exp[inds[i, j], :, pol_indices[p]]
+
+            # handle HERA's raw (int) and calibrated (complex) file formats
+            if key == 'visdata' and not np.iscomplexobj(d):
+                for i, j, p in bls:
+                    _d = d[index_exp(i, j, p)]
+                    out[(i, j, p)] = _d['r'] + _d['i']*1j
+            else:
+                for i, j, p in bls:
+                    out[i, j, p] = d[index_exp(i, j, p)]
+
+        # construct datacontainer with whatever metadata is available
+        dc = DataContainer(out)
+        for meta in HERAData.HERAData_metas:
+            if hasattr(self, meta) and meta not in ['pols', 'antpairs', 'bls']:  # these are functions on datacontainers
+                setattr(dc, meta, getattr(self, meta))
+
+        return dc

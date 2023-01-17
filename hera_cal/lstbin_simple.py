@@ -338,7 +338,7 @@ def lst_bin_files_for_baselines(
         pols = metas[0].pols
 
     if antpos is None and rephase:
-        antpos = get_all_antpos_from_files(data_files, baselines)
+        antpos = get_all_antpos_from_files(metas, baselines)
 
     if time_idx is None:
         while lst_bin_edges[0] < 0:
@@ -367,13 +367,14 @@ def lst_bin_files_for_baselines(
 
     # This loop actually reads the associated data in this LST bin.
     ntimes_so_far = 0
-    for fl, calfl, tind, tarr in zip(data_files, cal_files, time_idx, time_arrays):
-        logger.info(f"Reading {fl}")
+    for meta, calfl, tind, tarr in zip(metas, cal_files, time_idx, time_arrays):
+        logger.info(f"Reading {meta.path}")
         slc = slice(ntimes_so_far,ntimes_so_far+len(tarr))
         ntimes_so_far += len(tarr)
 
-        hd = io.HERAData(str(fl), filetype='uvh5')
-        bls_to_load = [bl for bl in baselines if bl in hd.antpairs or bl[::-1] in hd.antpairs]
+        #hd = io.HERAData(str(fl.path), filetype='uvh5')
+        antpairs = meta.get_antpairs()
+        bls_to_load = [bl for bl in baselines if bl in antpairs or bl[::-1] in antpairs]
 
         if not bls_to_load:
             # If none of the requested baselines are in this file, then just 
@@ -384,8 +385,10 @@ def lst_bin_files_for_baselines(
             nsamples[slc, :, :, :] = 0
             continue
 
-        _data, _flags, _nsamples  = hd.read(bls=bls_to_load, times=tarr, assume_time_first=assume_time_first)
-
+        _data = meta.get_datacontainer('data', bls = bls_to_load, times=tarr)
+        _flags = meta.get_datacontainer('flags', bls = bls_to_load, times=tarr)
+        _nsamples = meta.get_datacontainer('nsamples', bls = bls_to_load, times=tarr)
+        
         # load calibration
         if calfl is not None:
             logger.info(f"Opening and applying {calfl}")
@@ -561,9 +564,11 @@ def lst_bin_files(
     data_files = [df for df in data_files if df]
     input_cals = [cf for cf in input_cals if cf]
 
+    data_metas = [[io.HERAData(df) for df in dflist] for dflist in data_files]
+
     # get file lst arrays
-    lst_grid, dlst, file_lsts, begin_lst, lst_arrs, time_arrs = config_lst_bin_files(
-        data_files, 
+    _, dlst, file_lsts, _, lst_arrs, time_arrs = config_lst_bin_files(
+        data_metas, 
         dlst=dlst, 
         atol=atol, 
         lst_start=lst_start,
@@ -600,21 +605,25 @@ def lst_bin_files(
     zeroth_file_on_last_day_index = np.argmin([np.min(tarr) for tarr in time_arrs[last_day_index]])
 
     logger.info("Getting metadata from last data...")
-    hd = io.HERAData(str(data_files[last_day_index][zeroth_file_on_last_day_index]))
-    x_orientation = hd.x_orientation
+    
+    # TODO: since hd is only used for metadata, we could use the FastUVH5Meta class.
+    #       However, we need to figure out how to read the antpos properly first.
+    #hd = io.HERAData(str(data_files[last_day_index][zeroth_file_on_last_day_index]))
+    meta = data_meta[last_day_index][zeroth_file_on_last_day_index]
+    x_orientation = meta.x_orientation
 
     # get metadata
-    freq_array = hd.freqs
-    antpos = hd.antpos
-    times = hd.times
+    freq_array = meta.freqs
+    antpos = meta.antpos
+    times = meta.times
     start_jd = np.floor(times.min())
-    integration_time = np.median(hd.integration_time)
+    integration_time = np.median(meta.integration_time)
     if not  np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6):
         raise ValueError('All integrations must be of equal length (BDA not supported)')
 
     logger.info("Compiling all unflagged baselines...")
     all_baselines, all_pols, fls_with_ants = get_all_unflagged_baselines(
-        data_files, 
+        data_metas, 
         ex_ant_yaml_files, 
         include_autos=include_autos, 
         ignore_ants=ignore_ants
@@ -630,8 +639,7 @@ def lst_bin_files(
     bl_chunks = [all_baselines[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(n_bl_chunks)]
     bl_chunks = [blg for blg in bl_chunks if len(blg) > 0]
 
-    meta0 = io.FastUVH5Meta(data_files[0][0])
-    time_first_ordering = meta0._time_first
+    time_first_ordering = data_metas[0][0]._time_first
 
     # iterate over output LST files
     for i, outfile_lsts in enumerate(file_lsts):
@@ -646,7 +654,7 @@ def lst_bin_files(
         time_arrays = []
         cals = []
         # This loop just gets the number of times that we'll be reading.
-        for night, night_files in enumerate(data_files):
+        for night, night_files in enumerate(data_metas):
             # iterate over files in each night, and open files that fall into this output file LST range
 
             for k_file, fl in enumerate(night_files):
@@ -772,7 +780,7 @@ def lst_bin_files(
 
         # update kwrgs
         # update history
-        file_list_str = "-".join(os.path.basename(ff)for ff in file_list)
+        file_list_str = "-".join(os.path.basename(ff.path)for ff in file_list)
         file_history = f"{history} Input files: {file_list_str}"
         _history = file_history + utils.history_string()
 
@@ -871,7 +879,7 @@ def lst_bin_files(
 
 @profile
 def get_all_unflagged_baselines(
-    data_files: list[list[str | Path]], 
+    data_files: list[list[str | Path | io.FastUVH5Meta]], 
     ex_ant_yaml_files: list[str] | None = None,
     include_autos: bool = True,
     ignore_ants: tuple[int] = (),
@@ -881,7 +889,7 @@ def get_all_unflagged_baselines(
     
     This is performed over a list of nights, each of which consists of a list of 
     individual uvh5 files. Each UVH5 file is *assumed* to have the same set of times
-    for each baseline internally (difference nights obviously have different times).
+    for each baseline internally (different nights obviously have different times).
     
     Returns
     -------
@@ -891,6 +899,8 @@ def get_all_unflagged_baselines(
         A list of all polarizations in the files in the given list, as strings like 
         'ee' and 'nn' (i.e. with x_orientation information).
     """
+    data_files = [[fl if isinstance(fl, io.FastUVH5Meta) else io.FastUVH5Meta(fl) for fl in fl_list] for fl_list in data_files]
+    
     pols = None
     xorient = None
 
@@ -910,9 +920,6 @@ def get_all_unflagged_baselines(
             fl_list = fl_list[-1:]
 
         for fl in fl_list:
-            hfl = io.FastUVH5Meta(fl)
-            # To go faster, let's JUST read the antpairs and pols from the files.
-            
             antpairs = hfl.get_antpairs()
             
             if pols is not None and not np.all(pols == hfl.polarization_array):
@@ -938,7 +945,6 @@ def get_all_unflagged_baselines(
                 ):
                     all_baselines.add((a1, a2))
 
-
                     if a1 not in unique_ants:
                         unique_ants.add(a1)
                         files_with_ants.add(fl)
@@ -951,7 +957,7 @@ def get_all_unflagged_baselines(
 
 
 def get_all_antpos_from_files(
-    data_files: list[str | Path], 
+    data_files: list[io.FastUVH5Meta], 
     all_baselines: list[tuple[int, int]]
 ) -> dict[tuple[int, int], np.ndarray]:
 
@@ -964,7 +970,7 @@ def get_all_antpos_from_files(
         # unfortunately, we're reading in way more than we need to here,
         # because the conversion from the antpos in the file to the ENU antpos is 
         # non trivial and hard to trace in uvdata.
-        hd = io.HERAData(str(fl))
+        hd = io.HERAData(str(fl.path))
 
         for ant in ants:
             if ant in hd.antpos and ant not in antpos_out:
@@ -1010,10 +1016,7 @@ def lst_bin_arg_parser():
     a.add_argument("--ex_ant_yaml_files", default=None, type=str, nargs='+', help="list of paths to yamls with lists of antennas from each night to exclude lstbinned data files.")
     a.add_argument("--ignore-ants", default=(), type=int, nargs='+', help='ants to ignore')
     a.add_argument("--ignore-missing-calfiles", default=False,action='store_true', help='if true, any datafile with missing calfile will just be removed from lstbinning.')
-    a.add_argument("--log-level", default='INFO', type=str, help='level of the logger')
     a.add_argument("--write_kwargs", default='{}', type=str, help="json dictionary of arguments to the uvh5 writer")
-    #a.add_argument("--profile", action="store_true", default=False, help="whether to run line profiling")
-    #a.add_argument("--profile-funcs", type=str, help="functions to profile, separated by commas")
     a.add_argument("--golden-lsts", type=str, help="LSTS (rad) to save longitudinal data for, separated by commas")
     a.add_argument("--save-channels", type=str, help="integer channels separated by commas to save longitudinal data for")
     return a
