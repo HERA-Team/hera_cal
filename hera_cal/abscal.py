@@ -4123,8 +4123,7 @@ def post_redcal_abscal_argparser():
     a.add_argument("--skip_abs_amp_lincal", default=False, action="store_true", help="finish calibration with an unbiased amplitude lincal step")
     a.add_argument("--write_delta_gains", default=False, action="store_true", help="Write degenerate abscal component of gains separately.")
     a.add_argument("--output_file_delta", type=str, default=None, help="Filename to write delta gains too.")
-    args = a.parse_args()
-    return args
+    return a
 
 
 def model_calibration_argparser():
