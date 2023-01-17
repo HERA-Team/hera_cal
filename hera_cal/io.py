@@ -23,7 +23,7 @@ import glob
 from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
 import argparse
 from hera_filters.dspec import place_data_on_uniform_grid
-
+from functools import lru_cache, cached_property
 
 try:
     import aipy
