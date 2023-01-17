@@ -23,7 +23,7 @@ import glob
 from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
 import argparse
 from hera_filters.dspec import place_data_on_uniform_grid
-from functools import lru_cache, cached_property
+from functools import lru_cache
 
 try:
     import aipy
@@ -37,6 +37,10 @@ from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
 from .utils import split_pol, conj_pol, split_bl, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
 
+# The following two functions are potentially called MANY times with 
+# the same arguments, so we cache them to speed things up.
+polnum2str = lru_cache(polnum2str)
+polstr2num = lru_cache(polstr2num)
 
 def _parse_input_files(inputs, name='input_data'):
     if isinstance(inputs, str):
@@ -586,19 +590,19 @@ class HERAData(UVData):
         '''Determine the mapping between antenna pairs and slices of the blt axis of the data_array.'''
         self._blt_slices = get_blt_slices(self)
 
-    @cached_property
-    def _polnum_indices(self) -> dict[str, int]:
-        return {
-            polnum: i for i, polnum in enumerate(self.polarization_array)
-        }
-
-    @lru_cache
     def get_polstr_index(self, pol: str) -> int:
-        return self._polnum_indices[polstr2num(pol, x_orientation=self.x_orientation)]
+        num = polstr2num(pol, x_orientation=self.x_orientation)
+
+        try:
+            return self._polnum_indices[num]
+        except AttributeError:
+            self._determine_pol_indexing()
+            return self._polnum_indices[num]
 
     def _determine_pol_indexing(self):
-        self.get_polstr_index.cache_clear()
-        del self._polnum_indices
+        self._polnum_indices = {
+            polnum: i for i, polnum in enumerate(self.polarization_array)
+        }
 
     def _get_slice(self, data_array, key):
         '''Return a copy of the Nint by Nfreq waterfall or waterfalls for a given key. Abstracts
@@ -646,10 +650,10 @@ class HERAData(UVData):
         elif len(key) == 3:  # providing bl-pol
             try:
                 pidx = self.get_polstr_index(key[2])
-                data_array[self._blt_slices[tuple(key[:2])], :, polidx] = value
+                data_array[self._blt_slices[tuple(key[:2])], :, pidx] = value
             except KeyError:
                 pidx = self.get_polstr_index(conj_pol(key[2]))
-                data_array[self._blt_slices[tuple(key[1::-1])], :, polidx] = np.conj(value)
+                data_array[self._blt_slices[tuple(key[1::-1])], :, pidx] = np.conj(value)
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
@@ -786,6 +790,7 @@ class HERAData(UVData):
         # process data into DataContainers
         if read_data or self.filetype in ['uvh5', 'uvfits']:
             self._determine_blt_slicing()
+            self._determine_pol_indexing()
         if read_data and return_data:
             return self.build_datacontainers()
 
@@ -808,11 +813,10 @@ class HERAData(UVData):
         for n in names:
             if n in kwargs and kwargs[n] is not None:
                 output._determine_blt_slicing()
+                output._determine_pol_indexing()
                 break
-        
-        # For good measure, delete polarization indexing cache.
-        output.get_polstr_index.cache_clear()
-        del output._polnum_indices
+        if 'polarizations' in kwargs and kwargs['polarizations'] is not None:
+            output._determine_pol_indexing()
 
         if not inplace:
             return output
