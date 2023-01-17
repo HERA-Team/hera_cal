@@ -586,20 +586,19 @@ class HERAData(UVData):
         '''Determine the mapping between antenna pairs and slices of the blt axis of the data_array.'''
         self._blt_slices = get_blt_slices(self)
 
-    def _determine_pol_indexing(self):
-        '''Determine the mapping between polnums and indices
-        in the polarization axis of the data_array.'''
-        self._polnum_indices = {
+    @cached_property
+    def _polnum_indices(self) -> dict[str, int]:
+        return {
             polnum: i for i, polnum in enumerate(self.polarization_array)
         }
-        self._polstr_indices = {}
-        # Add upper-case indices as well, so we don't need to use .lower() on input
-        # keys (for which there can be many tens of thousands).
-        pols = getattr(self, 'pols', [polnum2str(polnum, x_orientation=self.x_orientation) for polnum in self.polarization_array])
-        for pol in pols:
-            indx = self._polnum_indices[polstr2num(pol, x_orientation=self.x_orientation)]
-            self._polstr_indices[pol.lower()] = indx
-            self._polstr_indices[pol.upper()] = indx
+
+    @lru_cache
+    def get_polstr_index(self, pol: str) -> int:
+        return self._polnum_indices[polstr2num(pol, x_orientation=self.x_orientation)]
+
+    def _determine_pol_indexing(self):
+        self.get_polstr_index.cache_clear()
+        del self._polnum_indices
 
     def _get_slice(self, data_array, key):
         '''Return a copy of the Nint by Nfreq waterfall or waterfalls for a given key. Abstracts
@@ -618,27 +617,10 @@ class HERAData(UVData):
             return {pol: self._get_slice(data_array, key + (pol,)) for pol in self.pols}
         elif len(key) == 3:  # asking for bl-pol
             try:
-                polidx = self._polstr_indices.get(
-                    key[2],
-                    self._polnum_indices[
-                        polstr2num(key[2], x_orientation=self.x_orientation)
-                    ]
-                )
-                if key[2] not in self._polstr_indices:
-                    self._polstr_indices[key[2]] = polidx
-
-                return np.array(data_array[self._blt_slices[tuple(key[:2])], :, polidx])
+                pidx = self.get_polstr_index(key[2])
+                return np.array(data_array[self._blt_slices[tuple(key[:2])], :, pidx])
             except KeyError:
-                kk = conj_pol(key[2])
-                pidx = self._polstr_indices.get(
-                    kk,
-                    self._polnum_indices[
-                        polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)
-                    ]
-                )
-                if kk not in self._polstr_indices:
-                    self._polstr_indices[kk] = pidx
-
+                pidx = self.get_polstr_index(conj_pol(key[2]))
                 return np.conj(data_array[self._blt_slices[tuple(key[1::-1])], :, pidx])
         else:
             raise KeyError('Unrecognized key type for slicing data.')
@@ -663,20 +645,10 @@ class HERAData(UVData):
                 self._set_slice(data_array, (key + (pol,)), value[pol])
         elif len(key) == 3:  # providing bl-pol
             try:
-                polidx = self._polstr_indices.get(
-                    key[2],
-                    self._polnum_indices[
-                        polstr2num(key[2], x_orientation=self.x_orientation)
-                    ]
-                )
+                pidx = self.get_polstr_index(key[2])
                 data_array[self._blt_slices[tuple(key[:2])], :, polidx] = value
             except KeyError:
-                polidx = self._polstr_indices.get(
-                    conj_pol(key[2]),
-                    self._polnum_indices[
-                        polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)
-                    ]
-                )
+                pidx = self.get_polstr_index(conj_pol(key[2]))
                 data_array[self._blt_slices[tuple(key[1::-1])], :, polidx] = np.conj(value)
         else:
             raise KeyError('Unrecognized key type for slicing data.')
@@ -814,7 +786,6 @@ class HERAData(UVData):
         # process data into DataContainers
         if read_data or self.filetype in ['uvh5', 'uvfits']:
             self._determine_blt_slicing()
-            self._determine_pol_indexing()
         if read_data and return_data:
             return self.build_datacontainers()
 
@@ -837,10 +808,11 @@ class HERAData(UVData):
         for n in names:
             if n in kwargs and kwargs[n] is not None:
                 output._determine_blt_slicing()
-                output._determine_pol_indexing()
                 break
-        if 'polarizations' in kwargs and kwargs['polarizations'] is not None:
-            output._determine_pol_indexing()
+        
+        # For good measure, delete polarization indexing cache.
+        output.get_polstr_index.cache_clear()
+        del output._polnum_indices
 
         if not inplace:
             return output
@@ -1882,7 +1854,6 @@ def to_HERAData(input_data, filetype='miriad', **read_kwargs):
         hd = input_data
         hd.__class__ = HERAData
         hd._determine_blt_slicing()
-        hd._determine_pol_indexing()
         if filetype == 'uvh5':
             hd._attach_metadata()
         hd.filepaths = None
@@ -1894,7 +1865,6 @@ def to_HERAData(input_data, filetype='miriad', **read_kwargs):
             hd = reduce(operator.add, input_data)
             hd.__class__ = HERAData
             hd._determine_blt_slicing()
-            hd._determine_pol_indexing()
             return hd
         else:
             raise TypeError('If input is a list, it must be only strings or only UVData/HERAData objects.')

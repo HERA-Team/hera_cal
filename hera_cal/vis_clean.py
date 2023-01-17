@@ -688,8 +688,6 @@ class VisClean(object):
 
         # select out a copy of hd
         hd = self.hd.select(bls=keys, inplace=False, times=_times, frequencies=self.freqs, run_check=False)
-        hd._determine_blt_slicing()
-        hd._determine_pol_indexing()
 
         # update HERAData data arrays
         hd.update(data=data, flags=flags, nsamples=nsamples)
