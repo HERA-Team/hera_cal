@@ -3087,7 +3087,7 @@ class FastUVH5Meta:
             tdx = np.array([i for i, t in enumerate(times) if t in self.times])
         
         if self._time_first:    
-            return {bl: tdx + i for i, bl in enumerate(bls)}
+            return {bl: tdx + i*self.n_times for i, bl in enumerate(bls)}
         else:
             return {bl: tdx*self.n_bls + i for i, bl in enumerate(bls)}
 
@@ -3117,6 +3117,7 @@ class FastUVH5Meta:
         full_read = len(blps)*len(times) > full_read_thresh * self.n_bls * self.n_pols * self.n_times
         pol_indices = {p: i for i, p in enumerate(self.pols)}
         inds = self.get_antpair_indices(tuple(times))
+        inds = np.concatenate(list(inds.values()))
 
         out = {}
         with self.datagrp() as fl:
