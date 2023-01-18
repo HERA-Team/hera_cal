@@ -3087,7 +3087,7 @@ class FastUVH5Meta:
             tdx = np.array([i for i, t in enumerate(times) if t in self.times])
         
         if self._time_first:    
-            return {bl: tdx + i*self.n_bls for i, bl in enumerate(bls)}
+            return {bl: tdx + i for i, bl in enumerate(bls)}
         else:
             return {bl: tdx*self.n_bls + i for i, bl in enumerate(bls)}
 
