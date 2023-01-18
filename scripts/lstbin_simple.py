@@ -35,24 +35,20 @@ from hera_cal import lstbin_simple as lstbin
 import sys
 import glob
 import json
-from hera_cal._cli_tools import setup_logger
+from hera_cal._cli_tools import setup_logger, parse_args, filter_kwargs
 import logging
 import importlib
 from pathlib import Path
 from hera_cal.profiling_utils import add_profiling_args, run_with_profiling
 
-logger = logging.getLogger('hera_cal')
-setup_logger()
 a = lstbin.lst_bin_arg_parser()
-add_profiling_args(a)
-args = a.parse_args()
+args = parse_args(a)
 
 history = ' '.join(sys.argv)
 
 # get kwargs
-kwargs = dict(vars(args))
+kwargs = filter_kwargs(dict(vars(args)))
 
-logger.setLevel(kwargs.pop("log_level"))
 
 # configure history
 kwargs['history'] += history
@@ -91,9 +87,6 @@ if crules is not None:
 else:
     calfile_rules = None
 
-del kwargs['profile']
-del kwargs['profile_funcs']
-del kwargs['profile_output']
 
 kwargs['save_channels'] = tuple(int(ch) for ch in kwargs['save_channels'].split(','))
 kwargs['golden_lsts'] = tuple(float(lst) for lst in kwargs['golden_lsts'].split(','))
