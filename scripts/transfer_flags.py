@@ -5,9 +5,9 @@
 
 """Command-line script for completely for transferring flags from one visibility file to another."""
 
-import sys
 import argparse
 from pyuvdata import UVData
+
 # Parse arguments
 ap = argparse.ArgumentParser(description="Apply flags from one visibility file to another.")
 ap.add_argument("flag_origin", type=str, help="path fot visibility data to transfer flags from.")

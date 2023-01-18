@@ -1,4 +1,4 @@
-"""Useful helper functions and argparsers for running simulations via CLI."""
+"""Useful helper functions and argparsers for scripts."""
 from __future__ import annotations
 
 import math
@@ -15,7 +15,17 @@ from typing import Iterable, Literal
 import logging
 from argparse import ArgumentParser
 
-def setup_logger(level: str = 'INFO', width: int=160, show_time_as_diff: bool=True, rich_tracebacks: bool=True):    
+logger = logging.getLogger(__name__)
+
+def setup_logger(
+    level: str = 'INFO', 
+    width: int=160, 
+    show_time_as_diff: bool=True, 
+    rich_tracebacks: bool=True,
+    show_mem: bool = True,
+    mem_backend: Literal["tracemalloc", "psutil"] = "tracemalloc",
+    show_path: bool = False,
+):    
     cns = Console(width=width)
 
     logging.basicConfig(
@@ -26,10 +36,13 @@ def setup_logger(level: str = 'INFO', width: int=160, show_time_as_diff: bool=Tr
                 console=cns,
                 rich_tracebacks=rich_tracebacks,
                 tracebacks_show_locals=True,
-                show_path=False,
+                show_path=show_path,
                 show_time_as_diff=show_time_as_diff,
+                show_mem_usage=show_mem,
+                mem_backend=mem_backend,
             )
         ],
+        force=True,
     )
     
 
@@ -58,7 +71,7 @@ def fmt_bytes(x: int):
     order = int(math.log(x, 1024))
     x /= 1024**order
 
-    if x >= 100.0:
+    if x >= 100:
         order += 1
         x /= 1024
 
@@ -254,6 +267,16 @@ def add_logging_args(parser: ArgumentParser):
         "--log-absolute-time", action='store_true',
         help="show logger time as absolute instead of relative to start"
     )
+    grp.add_argument(
+        "--log-no-mem", action='store_true', help='do not show memory usage'
+    )
+    grp.add_argument(
+        "--log-mem-backend", type=str, default='tracemalloc', choices=['tracemalloc', 'psutil'],
+    )
+    grp.add_argument(
+        "--log-show-path", action='store_true', help='show path of code in log msg'
+    )
+        
 
 def init_logger_from_args(args):
     setup_logger(
@@ -261,4 +284,68 @@ def init_logger_from_args(args):
         level=args.log_level,
         rich_tracebacks=not args.log_plain_tracebacks,
         show_time_as_diff=not args.log_absolute_time,
+        mem_backend=args.log_mem_backend,
+        show_mem=not args.log_no_mem,
+        show_path=args.log_show_path,
     )
+
+import importlib
+from pathlib import Path
+from argparse import ArgumentParser
+
+def _add_profile_funcs(profiler, profile_funcs):
+    for fnc in profile_funcs.split(","):
+        module = importlib.import_module(fnc.split(":")[0])
+        _fnc = module
+        if ":" not in fnc:
+            profiler.add_module(_fnc)
+        else:
+            for att in fnc.split(":")[-1].split("."):
+                _fnc = getattr(_fnc, att)
+            profiler.add_function(_fnc)
+
+def run_with_profiling(function, args, **kwargs):
+    if args.profile:
+        from line_profiler import LineProfiler
+
+        logger.info(f"Profiling {function.__name__}. Output to {args.profile_output}")
+
+        profiler = LineProfiler()
+
+        profiler.add_function(function)
+
+        # Now add any user-defined functions that they want to be profiled.
+        # Functions must be sent in as "path.to.module:function_name" or
+        # "path.to.module:Class.method".
+        if args.profile_funcs:
+            _add_profile_funcs(profiler, args.profile_funcs)
+            
+        pth = Path(args.profile_output)
+        if not pth.parent.exists():
+            pth.parent.mkdir(parents=True)
+
+        profiler.runcall(function, **kwargs)
+
+        with open(pth, "w") as fl:
+            profiler.print_stats(stream=fl, stripzeros=True)
+    else:
+        function(**kwargs)
+
+def add_profiling_args(parser: ArgumentParser):
+    grp = parser.add_argument_group(title="Options for line-profiling")
+
+    grp.add_argument("--profile", action="store_true",
+                        help="Line-Profile the script")
+    grp.add_argument("--profile-funcs", type=str, default='',
+                        help="List of functions to profile")
+    grp.add_argument("--profile-output", type=str, help="Output file for profiling info.")
+
+def parse_args(parser: ArgumentParser):
+    add_profiling_args(parser)
+    add_logging_args(parser)
+    args = parser.parse_args()
+    init_logger_from_args(args)
+    return args
+
+def filter_kwargs(kwargs: dict):
+    return {k: v for k, v in kwargs.items() if not k.startswith("profile") and not k.startswith("log")}

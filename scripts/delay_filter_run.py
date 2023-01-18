@@ -7,16 +7,11 @@
 
 from hera_cal import delay_filter
 import sys
-from hera_cal.profiling_utils import add_profiling_args, run_with_profiling
-from hera_cal._cli_tools import add_logging_args, init_logger_from_args
+from hera_cal._cli_tools import parse_args, run_with_profiling
+from hera_cal import io
 
 parser = delay_filter.delay_filter_argparser()
-add_profiling_args(parser)
-add_logging_args(parser)
-
-ap = parser.parse_args()
-
-init_logger_from_args(ap)
+ap = parse_args(parser)
 
 # set kwargs
 if ap.mode == 'clean':

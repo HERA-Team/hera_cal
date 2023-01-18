@@ -22,3 +22,4 @@ hera_cal/notebooks
 .pytest_cache*
 .vscode/
 **/cache_temp/
+htmlcov/
