@@ -564,7 +564,7 @@ def lst_bin_files(
     data_files = [df for df in data_files if df]
     input_cals = [cf for cf in input_cals if cf]
 
-    data_metas = [[io.HERAData(df) for df in dflist] for dflist in data_files]
+    data_metas = [[io.FastUVH5Meta(df) for df in dflist] for dflist in data_files]
 
     # get file lst arrays
     _, dlst, file_lsts, _, lst_arrs, time_arrs = config_lst_bin_files(
@@ -609,7 +609,7 @@ def lst_bin_files(
     # TODO: since hd is only used for metadata, we could use the FastUVH5Meta class.
     #       However, we need to figure out how to read the antpos properly first.
     #hd = io.HERAData(str(data_files[last_day_index][zeroth_file_on_last_day_index]))
-    meta = data_meta[last_day_index][zeroth_file_on_last_day_index]
+    meta = data_metas[last_day_index][zeroth_file_on_last_day_index]
     x_orientation = meta.x_orientation
 
     # get metadata
@@ -920,18 +920,18 @@ def get_all_unflagged_baselines(
             fl_list = fl_list[-1:]
 
         for fl in fl_list:
-            antpairs = hfl.get_antpairs()
+            antpairs = fl.get_antpairs()
             
-            if pols is not None and not np.all(pols == hfl.polarization_array):
+            if pols is not None and not np.all(pols == fl.polarization_array):
                 raise ValueError(
                     f"The polarizations in {fl} are not the same as in {fl_list[0]}"
                 )
-            pols = hfl.polarization_array
+            pols = fl.polarization_array
 
-            if xorient is not None and hfl.x_orientation != xorient:
+            if xorient is not None and fl.x_orientation != xorient:
                 raise ValueError("Not all input files have the same x_orientation!")
 
-            xorient = hfl.x_orientation
+            xorient = fl.x_orientation
 
             for a1, a2 in antpairs:
                 if (
@@ -953,7 +953,7 @@ def get_all_unflagged_baselines(
                         files_with_ants.add(fl)
                     
 
-    return all_baselines, hfl.pols, files_with_ants
+    return all_baselines, fl.pols, files_with_ants
 
 
 def get_all_antpos_from_files(

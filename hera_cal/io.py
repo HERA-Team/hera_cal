@@ -2962,6 +2962,7 @@ class FastUVH5Meta:
         with self.header() as h:
             self.n_blts = int(h['Nblts'][()])
             self.n_times = int(h['Ntimes'][()])
+            self.n_pols = int(h['Npols'][()])
 
         if self.n_blts % self.n_times:
             raise NotImplementedError(
@@ -3076,7 +3077,7 @@ class FastUVH5Meta:
             )
         
     @lru_cache
-    def get_antpair_indices(self, times: list[float] | None = None) -> dict[tuple[int, int], np.ndarray]:
+    def get_antpair_indices(self, times: tuple[float] | None = None) -> dict[tuple[int, int], np.ndarray]:
         """Get the indices for each baseline."""
         bls = self.get_antpairs()
         
@@ -3115,7 +3116,7 @@ class FastUVH5Meta:
 
         full_read = len(blps)*len(times) > full_read_thresh * self.n_bls * self.n_pols * self.n_times
         pol_indices = {p: i for i, p in enumerate(self.pols)}
-        inds = self.get_antpair_indices(times)
+        inds = self.get_antpair_indices(tuple(times))
 
         out = {}
         with self.datagrp() as fl:
@@ -3145,11 +3146,11 @@ class FastUVH5Meta:
 
             # handle HERA's raw (int) and calibrated (complex) file formats
             if key == 'visdata' and not np.iscomplexobj(d):
-                for i, j, p in bls:
+                for i, j, p in blps:
                     _d = d[index_exp(i, j, p)]
                     out[(i, j, p)] = _d['r'] + _d['i']*1j
             else:
-                for i, j, p in bls:
+                for i, j, p in blps:
                     out[i, j, p] = d[index_exp(i, j, p)]
 
         # construct datacontainer with whatever metadata is available

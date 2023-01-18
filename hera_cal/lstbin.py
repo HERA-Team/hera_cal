@@ -1026,8 +1026,8 @@ def make_lst_grid(dlst, begin_lst=None, lst_width: float = 2*np.pi, verbose: boo
             begin_lst = begin_lst % (2 * np.pi)
         begin_lst = lst_grid[np.argmin(np.abs(lst_grid - begin_lst))] - dlst / 2
         lst_grid += begin_lst
-
-    lst_grid = lst_grid[lst_grid < (begin_lst + lst_width)]
+        lst_grid = lst_grid[lst_grid < (begin_lst + lst_width)]
+    
     return lst_grid
 
 
