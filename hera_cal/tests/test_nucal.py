@@ -262,3 +262,8 @@ def test_compute_spatial_filters():
 
 def test_build_nucal_wgts():
     pass
+
+def test_estimate_degenerate_parameters():
+    pass
+
+def 

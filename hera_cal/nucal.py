@@ -537,30 +537,29 @@ def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutof
 
     return spatial_filters
 
-def build_nucal_wgts(radial_reds, freqs, data_flags, data_nsamples, autocorrs, auto_flags, times_by_bl=None,
+def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, times_by_bl=None,
                      df=None, data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None, 
                      min_u_cut=None, max_u_cut=None, min_freq_cut=None, max_freq_cut=None):
     """
     Build linear weights for data in nucal (or calculating loss) defined as
     wgts = (noise variance * nsamples)^-1 * (0 if data or model is flagged). Light wrapper
-    over abscal.build_data_wgts with more stricts requirements. Adds additional flagging based 
-    on u-cuts and frequency cuts.
+    over abscal.build_data_wgts with additional flagging based cuts in uv and frequency.
 
     Parameters:
     ----------
-        radial_reds : FrequencyRedundant object
-            FrequencyRedundant object containing a list of list baseline tuples of radially redundant
-            groups
-        freqs : np.ndarray
-            Frequency values present in the data in units of Hz     
         data_flags : DataContainer
-            Contains flags on data
+            Containing flags on data to be calibrated
         data_nsamples : DataContainer
             Contains the number of samples in each data point
         autocorrs : DataContainer
              DataContainer with autocorrelation visibilities
         auto_flags : DataContainer
             DataContainer containing flags for autocorrelation visibilities
+        radial_reds : FrequencyRedundant object
+            FrequencyRedundant object containing a list of list baseline tuples of radially redundant
+            groups
+        freqs : np.ndarray
+            Frequency values present in the data in units of Hz     
         times_by_bl : dictionary
             Maps antenna pairs like (0,1) to float Julian Date. Optional if
             inferable from data_flags and all times have length > 1.
@@ -618,6 +617,8 @@ def build_nucal_wgts(radial_reds, freqs, data_flags, data_nsamples, autocorrs, a
                 wgts[:, freqs > max_freq_cut] = True
                 
             model_flags[key] = wgts
+
+    model_flags = DataContainer(model_flags)
     
     weights = abscal.build_data_wgts(
         data_flags, data_nsamples, model_flags, autocorrs, auto_flags, 
@@ -630,8 +631,9 @@ def build_nucal_wgts(radial_reds, freqs, data_flags, data_nsamples, autocorrs, a
 def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spatial_filters,
                                    niter=1, phs_max_iter=10, return_gains=False):
     """
-    Relatively quick estimate of the redcal degenerate parameters using
-    a common u-model
+    Relatively quick, first-pass estimate of the redcal degenerate parameters using
+    a common u-model for each baseline group. Intended to be used as a starting point
+    for gradient descent.
     
     Parameters:
     ----------
@@ -643,11 +645,11 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
         FrequencyRedundancy object which contains of baseline tuple which are considered
         to be radially redundant
     rc_flags : dictionary, DataContainer
-        pass
+        Dictionary mapping keys like (1, 'Jnn') to flag waterfalls from redundant calibration.
     spatial_filters : dictionary
         pass
     niter : int, default=1
-        Number of iterations to attempt to 
+        Number of iterations to use when attempting to estimate the degenerate parameters
     phs_max_iter : int, default=10
         pass
     return_gains : bool, default=False
@@ -664,11 +666,10 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
     gains : dictionary
         pass
     """
-    # 
-    keys = [bl for group in radial_reds for bl in group]
-    antpols = list(set([antpol for bl in keys for antpol in utils.split_bl(bl)]))
-    
-    # Keep only data found in 
+    # Get list of baseline keys to store data and data weights
+    keys = [bl for grp in radial_reds for bl in grp]
+
+    # Keep only data and data weights for the radial groups
     data_here = DataContainer(deepcopy({bl: data[bl] for bl in keys}))
     data_wgts_here = DataContainer(deepcopy({bl: data_wgts[bl] for bl in keys}))
     
@@ -677,8 +678,7 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
     data_wgts_here.antpos = data.antpos
     data_here.freqs = data.freqs
     
-    
-    # Storage dictionaries
+    # Storage dictionaries for caching intermediate results
     cache = {}
     model_comps = {}
     
@@ -696,12 +696,12 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
                 XTXinv = jnp.linalg.pinv(XTX)
                 cache[group[0]] = XTXinv
             else:
-                XTXinv = cache[group[0]]
+                XTXinv = cache[grp[0]]
             
             # Compute solution vector
             Xy = jnp.einsum('afm,atf->tm', design_matrix, wgts_arr * data_arr)
             beta = jnp.einsum('tmn,tm->tn', XTXinv, Xy)
-            model_comps[group[0]] = beta
+            model_comps[grp[0]] = beta
 
             # Evaluate model with solution vector
             for bl in group:
@@ -741,7 +741,8 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
 @jax.jit
 def foreground_model(params, spectral_filters, spatial_filters):
     """
-    Compute the foreground model for a given set of spectral and spatial filters 
+    Compute the foreground model for a given set of spectral and spatial PSWF eigenvectors and their
+    associated eigenvalues
     
     Parameters:
     ----------
@@ -751,10 +752,17 @@ def foreground_model(params, spectral_filters, spatial_filters):
     fg_model_comps_i : jnp.ndarray
         Modeling components used to compute the sky model using DPSS vectors for the
         imaginary component of the data.
-    spec : jnp.ndarray
+    spectral_filters : jnp.ndarray
         Array of spectrally DPSS eigenvectors used for modeling foregrounds
-    spat : list of jnp.ndarrays
+    spatial_filters : list of jnp.ndarrays
         Array of spatial PSWF eigenvectors used for modeling foregrounds
+
+    Returns:
+    -------
+    model_r : jnp.ndarray
+        Real component of the foreground model
+    model_i : jnp.ndarray
+        Imaginary component of the foreground model
     """
     model_r, model_i = [], []
     for sf, fgr, fgi in zip(spatial_filters, params['fg_r'], params['fg_i']):
@@ -771,21 +779,20 @@ def mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blv
     Parameters:
     ----------
     params : dictionary
+        Dictionary of parameters to be solved for. Contains the following keys: 
+        "A", the amplitude degeneracy, "Phi", the tip-tilt degeneracy
+    data_r : jnp.ndarray
+        Real component of the data array
+    data_r : jnp.ndarray
+        Imaginary component of the data array
+    wgts : jnp.ndarray
         pass
     fg_model_comps_r : jnp.ndarray
         pass
     fg_model_comps_i : jnp.ndarray
         pass
-    data_r : jnp.ndarray
+    blvecs : jnp.ndarray
         pass
-    data_r : jnp.ndarray
-        pass
-    wgts : jnp.ndarray
-        pass
-    spectral_filters : jnp.ndarray
-        Array of spectrally DPSS eigenvectors used for modeling foregrounds
-    spatial_filters : list of jnp.ndarrays
-        Array of spatial PSWF eigenvectors used for modeling foregrounds
     
     Returns:
     -------
@@ -819,7 +826,7 @@ def loss_function(params, data, wgts, spectral_filters, spatial_filters, idealiz
     spectral_filters : jnp.ndarray
         Array of spectrally DPSS eigenvectors used for modeling foregrounds
     spatial_filters : list of jnp.ndarrays
-        Array of spatial PSWF eigenvectors used for modeling foregrounds
+        Array of spatial PSWF eigenvectors used for modeling foregrounds along the u and v axes
     idealized_blvecs : np.ndarray
         pass
     """
@@ -899,7 +906,7 @@ class NuCalibrator:
             FrequencyRedundancy object containing of lists of baselines that are considered to
             be radially redundant.
         freqs : np.ndarray
-            pass
+            Frequencies found in the data in units of Hz
         """
         # Store radial reds
         self.radial_reds = radial_reds
@@ -914,10 +921,10 @@ class NuCalibrator:
         # Compute spatial filters
         self.spatial_filters = compute_spatial_filters(self.radial_reds, freqs, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
 
-        # Compute spectral dpss filters
+        # Compute spectral DPSS filters
         self.spectral_filters = dspec.dpss_operator(freqs, [0], [eta_half_width], eigenval_cutoff=[eigenval_cutoff])[0].real
     
-    def fit_redcal_degens(self, data, rc_flags, freqs=None, pols=None, learning_rate=1e-3, maxiter=100, 
+    def post_redcal_nucal(self, data, rc_flags, freqs=None, pols=None, learning_rate=1e-3, maxiter=100, 
                   optimizer='adabelief', initial_est_niter=1, tol=1e-10, **opt_kwargs):
         """
         Parameters:
@@ -926,6 +933,8 @@ class NuCalibrator:
             pass
         wgts : DataContainer
             pass
+        rc_flags : dictionary, DataContainer
+            Dictionary mapping keys like (1, 'Jnn') to flag waterfalls from redundant calibration.
         eta_half_width : float, default=20e-9
             Filter half width along the spectral axis
         ell_half_width : float, default=1
@@ -936,21 +945,17 @@ class NuCalibrator:
             Effective learning rate of chosen optimizer
         maxiter : int, default=100
             Maximum number of iterations to perform
-        amp_estimate : dictionary, default=None
-            pass
-        tiptilt_estimate : dictionary, default=None
-            pass
         optimizer : str, default='adabelief'
             Optimizer used when performing gradient descent
-        opt_kwargs :
+        opt_kwargs : dictionary
             Additional keyword arguments to be passed to the optimizer chosen. See optax documentation
             for additional details.
 
         Returns:
         -------
-        solution : dictionary
-            pass
-        info : dictionary
+        meta : dictionary
+            Metadata associated with the calibration
+        sol : dictionary
             pass
         """
         # Get frequency array data if not given
@@ -973,15 +978,14 @@ class NuCalibrator:
             ntimes = data[key].shape[0]
 
         # If pols is None, get pols from the data
-        if pols is None:
-            pols = np.unique(list(map(lambda k: k[2], data.keys())))
+        if pols is None: pols = np.unique(list(map(lambda k: k[2], data.keys())))
 
         # Choose optimizer and initialize
         assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
         optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
                             
         # Get data weights
-        #data_wgts = build_nucal_wgts()
+        # data_wgts = build_nucal_wgts()
         data_wgts = {bl: np.ones_like(data[bl], dtype="float64") for bl in data}
 
         # Compute estimate of the degenerate parameters from spatial filters
@@ -998,9 +1002,9 @@ class NuCalibrator:
         degens = {**degen_params, **model_comps}
 
         # Create solution dictionary
-        solution = {parameter + pol: [] for pol in pols for parameter in ["A_J", "Phi_J"]}
-        solution['fg_r'] = []
-        solution['fg_i'] = []
+        sol = {parameter + pol: [] for pol in pols for parameter in ["A_J", "Phi_J"]}
+        sol['fg_r'] = []
+        sol['fg_i'] = []
 
         # For each time and each polarization in the data calibrate
         for pol in pols:
@@ -1033,17 +1037,52 @@ class NuCalibrator:
                 _wgts = jnp.array([data_wgts[bl][tind] for group in self.radial_reds.get_pol(pol) for bl in group])
                 
                 # Main optimization loop function
-                fit_params, info = calibrate_single_integration(
+                fit_params, meta = calibrate_single_integration(
                     _data, _wgts, initial_params, optimizer, spectral_filters=self.spectral_filters, 
                     spatial_filters=spatial_filters, maxiter=maxiter, idealized_blvecs=idealized_blvecs, tol=tol
                 )
 
                 # TODO: unpack solution and organize it in a sensible way. Consider nucal_sol object that gets added to.
-                solution[f"A_J{pol}"].append(fit_params['A'])
-                solution[f"Phi_J{pol}"].append(fit_params['Phi'])
-                solution[f'fg_r'].append(fit_params['fg_r'])
-                solution[f'fg_i'].append(fit_params['fg_i'])
+                sol[f"A_J{pol}"].append(fit_params['A'])
+                sol[f"Phi_J{pol}"].append(fit_params['Phi'])
+                sol[f'fg_r'].append(fit_params['fg_r'])
+                sol[f'fg_i'].append(fit_params['fg_i'])
 
-        return solution, info
+        return meta, sol
 
-    
+def post_redcal_nucal(data, data_wgts, rc_flags, tol=1.0, initial_est_niter=1, maxiter=1000, optimizer="adam", 
+                      learning_rate=1e-3, **opt_kwargs):
+    """
+    """
+    # get ants, idealized_antpos, and reds
+    ants = sorted(list(rc_flags.keys()))
+    idealized_antpos = abscal._get_idealized_antpos(rc_flags, data.antpos, data.pols(),
+                                             data_wgts=data_wgts, tol=tol, keep_flagged_ants=True)
+    reds = redcal.get_reds(idealized_antpos, pols=data.pols(), bl_error_tol=redcal.IDEALIZED_BL_TOL)
+
+    # Get frequency and times from data
+    if hasattr(data, "freqs"):
+        freqs = data.freqs
+    else:
+        raise ValueError("Frequency array not found in the data.")
+
+    if hasattr(data, 'times'):
+        ntimes = data.times.shape[0]
+    else:
+        key = list(data.keys())[0]
+        ntimes = data[key].shape[0]
+
+    # Choose optimizer and initialize
+    assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
+    optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
+
+    # Get spatial and spectral filters
+    pass
+
+    # Get radial reds from the reds
+    pass
+
+    # Compute estimate of the degenerate parameters from spatial filters
+    degen_params, _, model_comps = estimate_degenerate_parameters(
+        data, data_wgts, radial_reds, rc_flags, spatial_filters, niter=initial_est_niter
+    )
