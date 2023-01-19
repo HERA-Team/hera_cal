@@ -1148,9 +1148,11 @@ class HERAData(UVData):
         self.nsample_array = (np.zeros_like(self.nsample_array) if self.nsample_array is not None else None)
 
 
-def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
-                   read_data=True, read_flags=False, read_nsamples=False,
-                   check=False, dtype=np.complex128, verbose=False):
+def read_hera_hdf5(
+    filenames, bls=None, pols=None, keep_times=list[float] | None, full_read_thresh=0.002,
+    read_data=True, read_flags=False, read_nsamples=False,
+    check=False, dtype=np.complex128, verbose=False
+):
     '''A potentially faster interface for reading HERA HDF5 files. Only concatenates
     along time axis. Puts times in ascending order, but does not check that
     files are contiguous. Currently not BDA compatible.
@@ -1161,6 +1163,9 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
              Default: all bls common to all files.
         pols: list of pol strings to read out of files. Default: all, but is
               superceded by any polstrs listed in bls.
+        keep_times: list of times to read out of files. Default: all. Note: all times 
+              are always read from the files, setting this only down-filters times
+              after reading.
         full_read_thresh (0.002): fractional threshold for reading whole file
                                   instead of baseline by baseline.
         read_data (bool, True): read data
@@ -1348,6 +1353,16 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                         data[i, j, p][t:t + ntimes] = d[index_exp(i, j, p)]
 
             t += ntimes
+    
+    # Now subselect the times. 
+    if keep_times is not None:
+        time_mask = np.array([t in keep_times for t in info['times']])
+        info['times'] = info['times'][time_mask]
+        for key in ['visdata', 'flags', 'nsamples']:
+            if key in rv:
+                for bl in rv[key]:
+                    rv[key][bl] = rv[key][bl][time_mask]
+
     # Quick renaming of data key for niceness
     if 'visdata' in rv:
         rv['data'] = rv.pop('visdata', [])
@@ -1416,7 +1431,8 @@ class HERADataFastReader:
     def _HERAData_error(self, *args, **kwargs):
         raise NotImplementedError('HERADataFastReader does not support this method. Try HERAData instead.')
 
-    def read(self, bls=None, pols=None, full_read_thresh=0.002, read_data=True, read_flags=True,
+    def read(self, bls=None, pols=None, keep_times: list[float] | None = None,
+             full_read_thresh=0.002, read_data=True, read_flags=True,
              read_nsamples=True, check=False, dtype=np.complex128, verbose=False, skip_lsts=False):
         '''A faster read that only concatenates along the time axis. Puts times in ascending order, but does not
         check that files are contiguous. Currently not BDA compatible.
@@ -1424,6 +1440,9 @@ class HERADataFastReader:
         Arguments:
             bls: list of (ant_1, ant_2, [polstr]) tuples to read out of files. Default: all bls common to all files.
             pols: list of pol strings to read out of files. Default: all, but is superceded by any polstrs listed in bls.
+            keep_times: list of times to read out of files. Default: all. Note: all times 
+              are always read from the files, setting this only down-filters times
+              after reading.
             full_read_thresh (0.002): fractional threshold for reading whole file instead of baseline by baseline.
             read_data (bool, True): read data
             read_flags (bool, True): read flags
@@ -1438,9 +1457,12 @@ class HERADataFastReader:
             flags: DataContainer mapping baseline keys to boolean flag waterfalls (if read_flags is True, else None)
             nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls (if read_nsamples is True, else None)
         '''
-        rv = read_hera_hdf5(self.filepaths, bls=bls, pols=pols, full_read_thresh=full_read_thresh,
-                            read_data=read_data, read_flags=read_flags, read_nsamples=read_nsamples,
-                            check=check, dtype=dtype, verbose=verbose)
+        rv = read_hera_hdf5(
+            self.filepaths, bls=bls, pols=pols, keep_times=keep_times,
+            full_read_thresh=full_read_thresh,
+            read_data=read_data, read_flags=read_flags, read_nsamples=read_nsamples,
+            check=check, dtype=dtype, verbose=verbose
+        )
         self._adapt_metadata(rv['info'], skip_lsts=skip_lsts)
 
         # make autocorrelations real by taking the abs, matches UVData._fix_autos()
@@ -1450,7 +1472,11 @@ class HERADataFastReader:
                     rv['data'][bl] = np.abs(rv['data'][bl])
 
         # construct datacontainers from result
-        return self._make_datacontainer(rv, 'data'), self._make_datacontainer(rv, 'flags'), self._make_datacontainer(rv, 'nsamples')
+        return (
+            self._make_datacontainer(rv, 'data'), 
+            self._make_datacontainer(rv, 'flags'), 
+            self._make_datacontainer(rv, 'nsamples')
+        )
 
     def _make_datacontainer(self, rv, key='data'):
         '''Converts outputs from read_hera_hdf5 to a more standard HERAData output.'''
@@ -3077,7 +3103,7 @@ class FastUVH5Meta:
             )
         
     @lru_cache
-    def get_antpair_indices(self, times: tuple[float] | None = None) -> dict[tuple[int, int], np.ndarray]:
+    def get_blt_indices(self, times: tuple[float] | None = None) -> dict[tuple[int, int], np.ndarray]:
         """Get the indices for each baseline."""
         bls = self.get_antpairs()
         
@@ -3091,67 +3117,103 @@ class FastUVH5Meta:
         else:
             return {bl: tdx*self.n_bls + i for i, bl in enumerate(bls)}
 
+    @lru_cache
+    def get_antpair_indices(self):
+        return {bl: i for i, bl in enumerate(self.get_antpairs())}
+
     def get_datacontainer(
         self, 
         key: Literal['data', 'visdata', 'nsamples', 'flags'],
         bls: list[tuple[int, int]] | None = None,
         pols: list[str] | None = None,
-        blps: list[tuple[int, int, str]] | None = None,
         times: list[float] | None = None,
+        time_idx: list[int] | slice | None = None,
         full_read_thresh: float = 0.002,
     ) -> DataContainer:
         """Get a DataContainer with the data from the file."""
         if key == 'data':
             key = 'visdata'
 
-        if blps is None:
-            if bls is None:
-                bls = self.get_antpairs()
-            if pols is None:
-                pols = self.pols
-            blps = [(i, j, p) for i, j in bls for p in pols]
-            
-        if times is None:
-            times = self.times
+        if bls is None:
+            bls = self.get_antpairs()
 
-        full_read = len(blps)*len(times) > full_read_thresh * self.n_bls * self.n_pols * self.n_times
+        if pols is None:
+            pols = self.pols            
+        
         pol_indices = {p: i for i, p in enumerate(self.pols)}
-        inds = self.get_antpair_indices(tuple(times))
+
+        if time_idx is None:
+            if times is None:
+                time_idx = slice(None)
+                times = self.times
+            else:
+                time_idx = [i for i, t in enumerate(times) if t in self.times]
+        else:
+            times = self.times[time_idx]
+
+        full_read = len(bls)*len(pols)*len(times) >= full_read_thresh * self.n_bls * self.n_pols * self.n_times
+        
+        bl_inds = self.get_antpair_indices(tuple(times))
 
         out = {}
         with self.datagrp() as fl:
             d = fl[key]  # data not read yet
 
             if full_read:
+                # If we read the full dataset in, it's much easier to index,
+                # because we can just reshape the bls and times out, and use numpy indexing.
                 d = d[()]  # reads data
 
-            # Support old array shapes
-            if len(d.shape) == 4:
-                # Support polarization-transposed arrays
-                if d.shape[-1] == len(self.freqs):
-                    def index_exp(i, j, p):
-                        return np.index_exp[inds[i, j], 0, pol_indices[p]]
-                else:
-                    def index_exp(i, j, p):
-                        return np.index_exp[inds[i, j], 0, :, pol_indices[p]]
-            # Support new array shapes
-            elif len(d.shape) == 3:
-                # Support polarization-transposed arrays
-                if d.shape[-1] == len(self.freqs):
-                    def index_exp(i, j, p):
-                        return np.index_exp[inds[i, j], pol_indices[p]]
-                else:
-                    def index_exp(i, j, p):
-                        return np.index_exp[inds[i, j], :, pol_indices[p]]
+                d = np.squeeze(d)  # Remove potential spw-axis of size 1.
+                blps = [(i, j, p) for i, j in bls for p in pols]
 
-            # handle HERA's raw (int) and calibrated (complex) file formats
-            if key == 'visdata' and not np.iscomplexobj(d):
-                for i, j, p in blps:
-                    _d = d[index_exp(i, j, p)]
-                    out[(i, j, p)] = _d['r'] + _d['i']*1j
+                if self._time_first:
+                    d.shape = (self.n_bls, self.n_times, ) + d.shape[1:]
+                    if d.shape[-1] == len(self.freqs):
+                        for i,j,p in blps:
+                            out[(i,j,p)] = d[bl_inds[i,j], time_idx, pol_indices[p]]
+                    else:
+                        for i,j,p in blps:
+                            out[(i,j,p)] = d[bl_inds[i,j], time_idx, :, pol_indices[p]]
+                else:
+                    d.shape = (self.n_times, self.n_bls, ) + d.shape[1:]
+                    if d.shape[-1] == len(self.freqs):
+                        for i,j,p in blps:
+                            out[(i,j,p)] = d[time_idx, bl_inds[i,j], pol_indices[p]]
+                    else:
+                        for i,j,p in blps:
+                            out[(i,j,p)] = d[time_idx, bl_inds[i,j], :, pol_indices[p]]
+
             else:
-                for i, j, p in blps:
-                    out[i, j, p] = d[index_exp(i, j, p)]
+                # If we don't read the full dataset in, we can't reshape a HDF5 Group.
+
+                # Support old array shapes
+                if len(d.shape) == 4:
+                    # Support polarization-transposed arrays
+                    if d.shape[-1] == len(self.freqs):
+                        def index_exp(i, j, p):
+                            return np.index_exp[inds[i, j], 0, pol_indices[p]]
+                    else:
+                        def index_exp(i, j, p):
+                            return np.index_exp[inds[i, j], 0, :, pol_indices[p]]
+                # Support new array shapes
+                elif len(d.shape) == 3:
+                    # Support polarization-transposed arrays
+                    if d.shape[-1] == len(self.freqs):
+                        def index_exp(i, j, p):
+                            return np.index_exp[inds[i, j], pol_indices[p]]
+                    else:
+                        def index_exp(i, j, p):
+                            return np.index_exp[inds[i, j], :, pol_indices[p]]
+
+                # handle HERA's raw (int) and calibrated (complex) file formats
+                if key == 'visdata' and not np.iscomplexobj(d):
+                    for i, j, p in blps:
+                        _d = d[index_exp(i, j, p)]
+                        out[(i, j, p)] = _d['r'] + _d['i']*1j
+                else:
+                    for i, j, p in blps:
+                        out[i, j, p] = d[index_exp(i, j, p)]
 
         # construct datacontainer with whatever metadata is available
         dc = DataContainer(out)
