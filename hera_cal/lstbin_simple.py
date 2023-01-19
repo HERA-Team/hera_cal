@@ -389,7 +389,9 @@ def lst_bin_files_for_baselines(
         _data, _flags, _nsamples = io.HERADataFastReader(meta.path).read(
             bls=bls_to_load, 
         )
+        logger.info(f"TARR: {tarr}, _data.times: {_data.times}")
         _data.select_or_expand_times(tarr)
+        logger.info(f" (AFTER DATA): TARR: {tarr}, _data.times: {_data.times}")
         _flags.select_or_expand_times(tarr)
         _nsamples.select_or_expand_times(tarr)
         
