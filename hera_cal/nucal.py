@@ -496,7 +496,7 @@ class FrequencyRedundancy:
 
 def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutoff=1e-12):
     """
-    Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds. 
+    Compute prolate spheroidal wave function (PSWF) eigenvectors filters for each radially redundant group in radial_reds. 
     Note that if you are using a large array with a large range short and long baselines in an individual radially
     redundant group, it is advised to filter radial_reds using radial_reds.filter_reds before running this function 
     to reduce the size of filters generated
@@ -515,7 +515,7 @@ def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutof
 
     Returns:
     -------
-    spatial_modes : dictionary
+    spatial_filters : dictionary
         Dictionary containing baseline tuple / PSWF eigenvectors key-value pairs used for modeling 
         foregrounds
     """
@@ -629,11 +629,15 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
     return weights
 
 def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spatial_filters,
-                                   niter=1, phs_max_iter=10, return_gains=False):
+                                   niter=1, phs_max_iter=10):
     """
-    Relatively quick, first-pass estimate of the redcal degenerate parameters using
-    a common u-model for each baseline group. Intended to be used as a starting point
-    for gradient descent.
+    First-pass estimate of the redcal degenerate parameters using a common u-model for each baseline group.
+    Method starts by unpacking the data into a dictionary containing only baselines found in radial_reds.
+    Then, a u-dependent model per radially redundant group is computed for each baseline by fitting PSWF eigenvectors 
+    to the data. The model is then used to remove the degenerate parameters from the redundantly calibrated data by
+    using the model and the data as inputs to abscal. This is then iterated niter times to attempt to converge on a good
+    starting solution for gradient descent. The final "calibrated" data is the compared to the original data to estimate the
+    degenerate parameters. The degenerate parameters are then returned as a dictionary.
     
     Parameters:
     ----------
@@ -652,18 +656,12 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
         Number of iterations to use when attempting to estimate the degenerate parameters
     phs_max_iter : int, default=10
         pass
-    return_gains : bool, default=False
-        pass
         
     Returns:
     -------
     degen_params : dictionary
         pass
-    model : dictionary
-        pass
     model_comps : dictionary
-        pass
-    gains : dictionary
         pass
     """
     # Get list of baseline keys to store data and data weights
@@ -696,12 +694,12 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
                 XTXinv = jnp.linalg.pinv(XTX)
                 cache[group[0]] = XTXinv
             else:
-                XTXinv = cache[grp[0]]
+                XTXinv = cache[group[0]]
             
             # Compute solution vector
             Xy = jnp.einsum('afm,atf->tm', design_matrix, wgts_arr * data_arr)
             beta = jnp.einsum('tmn,tm->tn', XTXinv, Xy)
-            model_comps[grp[0]] = beta
+            model_comps[group[0]] = beta
 
             # Evaluate model with solution vector
             for bl in group:
@@ -711,7 +709,7 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
         model = DataContainer(model)
     
         # Estimate Degenerate Gain Parameters using abscal
-        gains_here = abscal.post_redcal_abscal(model, data_here, data_wgts_here, rc_flags, verbose=False, phs_max_iter=phs_max_iter)
+        _ = abscal.post_redcal_abscal(model, data_here, data_wgts_here, rc_flags, verbose=False, phs_max_iter=phs_max_iter)
 
     
     # Get final set of degenerate parameters
@@ -731,31 +729,29 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
     phase_params = abscal.TT_phs_logcal(model, data_here, idealized_antpos, wgts=angle_wgts, verbose=False, assume_2D=False, return_gains=False, gain_ants=ants)
     degen_params = {**amp_params, **phase_params}
     
-    # Return degenerate parameters and model components
-    if return_gains:
-        gains = abscal.post_redcal_abscal(model, data_here, data_wgts_here, rc_flags, verbose=False, phs_max_iter=phs_max_iter)
-        return degen_params, model, model_comps, gains
-    else:
-        return degen_params, model, model_comps
+    return degen_params, model_comps
 
 @jax.jit
-def foreground_model(params, spectral_filters, spatial_filters):
+def _foreground_model(params, spectral_filters, spatial_filters):
     """
-    Compute the foreground model for a given set of spectral and spatial PSWF eigenvectors and their
-    associated eigenvalues
+    Function used to compute the foreground model for a given set of PSWF eigenvectors for the spatial and spectral
+    axes and their corresponding coefficients. The model is computed as the matrix product of the spatial and spectral
+    axes and their corresponding coefficients. The model is computed for both the real and imaginary components of the
     
     Parameters:
     ----------
-    fg_model_comps_r : jnp.ndarray
-        Modeling components used to compute the sky model using DPSS vectors for the
-        real component of the data.
-    fg_model_comps_i : jnp.ndarray
-        Modeling components used to compute the sky model using DPSS vectors for the
-        imaginary component of the data.
+    params : dictionary
+        Dictionary containing the coefficients for the foreground model. The dictionary should contain the following:
+            fg_model_comps_r : jnp.ndarray
+                Modeling components used to compute the sky model using DPSS vectors for the
+                real component of the data.
+            fg_model_comps_i : jnp.ndarray
+                Modeling components used to compute the sky model using DPSS vectors for the
+                imaginary component of the data.
     spectral_filters : jnp.ndarray
-        Array of spectrally DPSS eigenvectors used for modeling foregrounds
+        Array of PSWF eigenvectors used for modeling foregrounds along the frequency axis
     spatial_filters : list of jnp.ndarrays
-        Array of spatial PSWF eigenvectors used for modeling foregrounds
+        Array of PSWF eigenvectors used for modeling foregrounds along the spatial axis
 
     Returns:
     -------
@@ -772,32 +768,35 @@ def foreground_model(params, spectral_filters, spatial_filters):
     return jnp.vstack(model_r), jnp.vstack(model_i)
 
 @jax.jit
-def mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
+def _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
     """
-    Loss function used for solving for redcal degenerate parameters and a model of the sky
+    Mean-squared error function used for computing the loss function for the foreground model for all of the radially redundant groups. 
+    The loss function is used solving for redcal degenerate parameters and a model of the sky
     
     Parameters:
     ----------
     params : dictionary
         Dictionary of parameters to be solved for. Contains the following keys: 
-        "A", the amplitude degeneracy, "Phi", the tip-tilt degeneracy
+            "A": the amplitude degeneracy
+            "Phi": the tip-tilt degeneracy
     data_r : jnp.ndarray
-        Real component of the data array
+        Real component of the data array for a single 
     data_r : jnp.ndarray
         Imaginary component of the data array
     wgts : jnp.ndarray
-        pass
+        Array of weights for the data
     fg_model_comps_r : jnp.ndarray
-        pass
+        Real-valued modeling components used to compute the sky model using DPSS vectors
     fg_model_comps_i : jnp.ndarray
-        pass
+        Imaginary modeling components used to compute the sky model using DPSS vectors
     blvecs : jnp.ndarray
-        pass
+        Array of baseline vectors used to evaluate the tip-tilt degeneracy
     
     Returns:
     -------
     loss : float
-        pass
+        Real-valued loss computed using the mean squared error of the real and imaginary componenets
+        of the data and model, weighted by the data weights.
     """
     # Dot baseline vector into tip-tilt parameters
     phase = jnp.einsum('bn,nf->bf', blvecs, params["Phi"])
@@ -809,32 +808,31 @@ def mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blv
     # Compute loss using weights and foreground model
     return jnp.sum((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
 
-def loss_function(params, data, wgts, spectral_filters, spatial_filters, idealized_blvecs):
+def _loss_function(params, data, wgts, spectral_filters, spatial_filters, idealized_blvecs):
     """
     Compute the loss value for a given set of fit parameters, data, and weights
-
-    ## Add more description here
 
     Parameters: 
     ----------
     params : dictionary
         Parameter dictionary containing current iterations estimate of the parameter values
-    data : list of jnp.ndarrays
-        List of jnp.ndarrays of data for each radially redundant group of baselines
-    wgts : list of jnp.ndarrays
-        List of jnp.ndarrays of the data weights for each radially redundant group of baselines
+    data : jnp.ndarray
+        Array of data for each radially redundant group of baselines
+    wgts : jnp.ndarray
+        Array of the data weights for each radially redundant group of baselines
     spectral_filters : jnp.ndarray
-        Array of spectrally DPSS eigenvectors used for modeling foregrounds
-    spatial_filters : list of jnp.ndarrays
+        Array of DPSS eigenvectors used for modeling foregrounds along the frequency axis
+    spatial_filters : jnp.ndarray
         Array of spatial PSWF eigenvectors used for modeling foregrounds along the u and v axes
     idealized_blvecs : np.ndarray
-        pass
+        Array of baseline vectors used to evaluate the tip-tilt degeneracy
     """
     loss = 0
-    fg_model_r, fg_model_i = foreground_model(params, spectral_filters, spatial_filters)
-    loss = mean_squared_error(params, data.real, data.imag, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
+    fg_model_r, fg_model_i = _foreground_model(params, spectral_filters, spatial_filters)
+    loss = _mean_squared_error(params, data.real, data.imag, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
     return loss
 
+@jax.jit
 def calibrate_single_integration(data, wgts, params, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
                                     maxiter=100, tol=1e-10):
     """
@@ -842,18 +840,18 @@ def calibrate_single_integration(data, wgts, params, optimizer, spectral_filters
 
     Parameters:
     ----------
-    data : list of jnp.ndarrays
+    data : jnp.ndarray
         List of jnp.ndarrays of data for each radially redundant group of baselines
-    wgts : list of jnp.ndarrays
+    wgts : jnp.ndarray
         List of jnp.ndarrays of the data weights for each radially redundant group of baselines
     initial_params : pass
         pass
     optimizer : pass
         pass
     spectral_filters : jnp.ndarray
-        Array of spectrally DPSS eigenvectors used for modeling foregrounds
+        Array of DPSS eigenvectors used for modeling foregrounds along the frequency axis
     spatial_filters : list of jnp.ndarrays
-        Array of spatial PSWF eigenvectors used for modeling foregrounds
+        List of jnp.arrays of PSWF eigenvectors used for modeling foregrounds along the spatial axis
     maxiter : int, default=100
         Maximum number of gradient descent steps to use when finding the optimal parameter values
     tol : float, default=1e-10
@@ -876,7 +874,7 @@ def calibrate_single_integration(data, wgts, params, optimizer, spectral_filters
     # Start gradient descent
     for step in range(maxiter):
         # Compute loss and gradient
-        loss, gradient = jax.value_and_grad(loss_function)(params, data, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs)
+        loss, gradient = jax.value_and_grad(_loss_function)(params, data, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs)
         updates, opt_state = optimizer.update(gradient, opt_state, params)
         params = optax.apply_updates(params, updates)
         
@@ -1054,6 +1052,10 @@ def post_redcal_nucal(data, data_wgts, rc_flags, tol=1.0, initial_est_niter=1, m
                       learning_rate=1e-3, **opt_kwargs):
     """
     """
+    # Choose optimizer type and initialize optax optimizer
+    assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
+    optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
+
     # get ants, idealized_antpos, and reds
     ants = sorted(list(rc_flags.keys()))
     idealized_antpos = abscal._get_idealized_antpos(rc_flags, data.antpos, data.pols(),
@@ -1071,10 +1073,6 @@ def post_redcal_nucal(data, data_wgts, rc_flags, tol=1.0, initial_est_niter=1, m
     else:
         key = list(data.keys())[0]
         ntimes = data[key].shape[0]
-
-    # Choose optimizer and initialize
-    assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
-    optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
 
     # Get spatial and spectral filters
     pass

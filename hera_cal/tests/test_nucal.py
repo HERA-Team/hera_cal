@@ -266,4 +266,17 @@ def test_build_nucal_wgts():
 def test_estimate_degenerate_parameters():
     pass
 
-def 
+def test_foreground_model():
+    pass
+
+def test_mean_squared_error():
+    pass
+
+def test_loss_function():
+    pass
+
+def test_calibrate_single_integration():
+    pass
+
+def test_post_redcal_nucal():
+    pass
