@@ -1242,18 +1242,19 @@ def read_hera_hdf5(
             _hash = hash((ant1_array.tobytes(), ant2_array.tobytes(), time_first, ntimes))
             # map baselines to array indices for each unique antenna order
             if _hash not in inds:
-                if time_first:
-                    inds[_hash] = {(i, j): slice(n * ntimes, (n + 1) * ntimes)
-                                   for n, (i, j) in enumerate(zip(ant1_array,
-                                                                  ant2_array))}
-                else:
-                    inds[_hash] = {(i, j): slice(n, None, nbls)
-                                   for n, (i, j) in enumerate(zip(ant1_array,
-                                                                  ant2_array))}
+                inds[_hash] = {}
 
-                # Allow for conjugates.
-                for bl in inds[_hash]:
-                    inds[_hash][bl[::-1]] = inds[_hash][bl]
+                if time_first:
+                    for n, (i, j) in  enumerate(zip(ant1_array, ant2_array)):
+                        slc = slice(n * ntimes, (n + 1) * ntimes)
+                        inds[_hash][(i, j)] = slc
+                        inds[_hash][(j, i)] = slc  # Allow for conjugation
+                else:
+                    for n, (i, j) in  enumerate(zip(ant1_array, ant2_array)):
+                        slc = slice(n, None, nbls)
+                        inds[_hash][(i, j)] = slc
+                        inds[_hash][(j, i)] = slc  # Allow for conjugation
+
 
                 if bls is not None:
                     # Make sure our baselines of interest are in this file
