@@ -1250,12 +1250,17 @@ def read_hera_hdf5(
                     inds[_hash] = {(i, j): slice(n, None, nbls)
                                    for n, (i, j) in enumerate(zip(ant1_array,
                                                                   ant2_array))}
+
+                # Allow for conjugates.
+                for bl in inds[_hash]:
+                    inds[_hash][bl[::-1]] = inds[_hash][bl]
+
                 if bls is not None:
                     # Make sure our baselines of interest are in this file
-                    if not all([bl[:2] in inds[_hash] for bl in bls]):
+                    if not all(bl[:2] in inds[_hash] for bl in bls):
                         missing_bls = [bl for bl in bls if bl[:2] not in inds[_hash]]
                         raise ValueError(f'File {filename} missing:' + str(missing_bls))
-                        assert bl[:2] in inds[_hash]
+
                 if 'bls' not in info:
                     info['bls'] = set(inds[_hash].keys())
                     info['data_ants'] = data_ants
