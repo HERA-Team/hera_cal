@@ -864,7 +864,7 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, a
         phs = np.exp(-2j * np.pi * freqs[None, :] * tau[:, None])
 
         # multiply into data
-        data[k] = data[k] * phs
+        data[k] *= phs
 
     if array:
         data = data['data']
