@@ -1630,7 +1630,7 @@ def expand_omni_vis(sol, expanded_reds, data, nsamples=None, chisq=None, chisq_p
     if len(reds_to_solve) > 0:
         # figure out weights for only the absolutely necessary baselines (to save memory)
         if nsamples is None:
-            nsamples = {bl: 1.0 for bl in data_bls_to_use}
+            nsamples = DataContainer({bl: 1.0 for bl in data_bls_to_use})
         dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in data_bls_to_use})
         data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 * nsamples[bl] for bl in data_bls_to_use})
 
@@ -1666,10 +1666,12 @@ def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=Non
 
         # create data subset and get data_wgts for just that subset of data to save memory
         if nsamples is None:
-            nsamples = {bl: 1.0 for bl in bls_to_use}
+            nsamples_here = DataContainer({bl: 1.0 for bl in bls_to_use})
+        else:
+            nsamples_here = nsamples
         data_subset = DataContainer({bl: data[bl] for bl in bls_to_use})
         dts_by_bl = DataContainer({bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY for bl in bls_to_use})
-        data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 * nsamples[bl] for bl in bls_to_use})
+        data_wgts = DataContainer({bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 * nsamples_here[bl] for bl in bls_to_use})
 
         # preliminaries for updating chi^2 using only baselines where at least one antenna is good
         if chisq_per_ant is not None:
