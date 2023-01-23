@@ -29,15 +29,15 @@ from . import redcal
 from .utils import echo
 
 SPEED_OF_LIGHT = const.c.si.value
-SDAY_KSEC = units.sday.to("ks")
+SDAY_SEC = units.sday.to("s")
 
-def deinterleave_data_in_time(taxis, data: np.ndarray, ninterleave=1):
+def deinterleave_data_in_time(times, data: np.ndarray, ninterleave=1):
     """
     Helper function for deinterleaving *time-ordered* data along time axis.
 
     Parameters
     ----------
-    taxis: np.ndarray
+    times: np.ndarray
         ntime 1d array of times.
         times are assumed to be ordered from earliest to latest!
     data: np.ndarray
@@ -55,11 +55,11 @@ def deinterleave_data_in_time(taxis, data: np.ndarray, ninterleave=1):
     dsets: list of np.ndarray
         list of data arrays sorted into ninterleave different interleaves.
     """
-    if len(taxis) < ninterleave or len(data) < ninterleave:
+    if len(times) < ninterleave or len(data) < ninterleave:
         raise ValueError("Number of times provided is less then the number of interleaves")
     tsets, dsets = [], []
     for i in range(ninterleave):
-        tsets.append(taxis[i::ninterleave])
+        tsets.append(times[i::ninterleave])
         dsets.append(data[i::ninterleave])
     
     return tsets, dsets
@@ -68,6 +68,7 @@ def deinterleave_data_in_time(taxis, data: np.ndarray, ninterleave=1):
 def interleave_data_in_time(dsets):
     """
     Helper function for interleaving sets of time-ordered data along time axis.
+    time axis is presumed to be the 0th dimension.
 
     Parameters
     -------
@@ -80,16 +81,20 @@ def interleave_data_in_time(dsets):
         ntime x nfrequency np.ndarray containing data to deinterleave. Typically complex type.
         data is assumed to be time ordered!
     """
-    data = []
     ntimes = [dset.shape[0] for dset in dsets]
     ninterleave = len(ntimes)
-    counters = [0 for i in range(ninterleave)]
     nmax = int(np.max(ntimes))
+    counters = [0 for i in range(ninterleave)]
+    # pre-allocate array
+    interleaved_shape = (int(np.sum(ntimes)), ) + tuple(*dsets[0].shape[1:])
+    data = np.zeros(*interleaved_shape, dsets[0].dtype)
+    tcounter = 0
     for tstep in range(nmax):
         for inum in range(ninterleave):
             if counters[inum] < ntimes[inum]:
-                data.append(dsets[inum][tstep])
-            counters[inum] += 1
+                data[tcounter] = dsets[inum][tstep]
+                counters[inum] += 1
+                tcounter += 1
     # return interleaved data sets.
     return np.asarray(data)
 
@@ -291,7 +296,7 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
         blvec = antpos[ind1] - antpos[ind2]
         blcos = blvec[0] / np.linalg.norm(blvec[:2])
         if np.isfinite(blcos):
-            frateamp_df = np.linalg.norm(blvec[:2]) / SDAY_KSEC / SPEED_OF_LIGHT * 2 * np.pi
+            frateamp_df = np.linalg.norm(blvec[:2]) / (SDAY_SEC * 1e-3) / SPEED_OF_LIGHT * 2 * np.pi
             # set autocorrs to have blcose of 0.0
 
             if blcos >= 0:
@@ -413,7 +418,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     eq_xyz = np.vstack([eq_coords.x, eq_coords.y, eq_coords.z])
 
     # generate fringe_rate grid in mHz.
-    dt = SDAY_KSEC * np.median(np.diff(np.unique(uvd.time_array)))  # times in kSec
+    dt = 1e-3 * SDAY_SEC * np.median(np.diff(np.unique(uvd.time_array)))  # times in kSec
     if nfr is None:
         nfr = uvd.Ntimes
     if dfr is None:
@@ -458,7 +463,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         # use linspace to make sure we get first and last frequencies.
         unflagged_chans = ~np.all(np.all(uvd.flag_array[:, :, :].squeeze(), axis=0), axis=-1)
         chans_to_use = np.arange(uvd.Nfreqs).astype(int)[unflagged_chans][::fr_freq_skip]
-        frate_coeff = 2 * np.pi / SPEED_OF_LIGHT / SDAY_KSEC
+        frate_coeff = 2 * np.pi / SPEED_OF_LIGHT / (1e-3 * SDAY_SEC)
         frate_over_freq = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * frate_coeff
         # histogram all frequencies together in one step.
         frates = np.hstack([frate_over_freq * freq for freq in uvd.freq_array[chans_to_use]]).squeeze()
@@ -578,7 +583,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
         if nfr is None:
             nfr = uvd.Ntimes
         if dfr is None:
-            dfr = 1. / (nfr * np.mean(np.diff(np.unique(uvd.time_array))) * SDAY_KSEC)
+            dfr = 1. / (nfr * np.mean(np.diff(np.unique(uvd.time_array))) * 1e-3 * SDAY_SEC)
         fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
 
     reds = _get_key_reds(dict(zip(*uvd.get_ENU_antpos()[::-1])), keys)
@@ -938,7 +943,13 @@ class FRFilter(VisClean):
             Attach set of lits of times in each interleave set to self.
         Returns
         -------
-        N/A
+        N/A: modifies FRFilter object in-place.
+            Attaches data sets as new DataContainers with names set to
+            container_name + '_interleave_i' where i is the number of the interleave.
+            for example if ninterleave = 2 and container_name = data then this method
+            will create two new DataContainers labeled 'data_interleave_0' and 'data_interleave_1'
+            It will also attach two lists called 'lst_sets' and 'time_sets' which have lists of the lsts
+            and times in each interleaved DataContainer.
         
         """
         container = getattr(self, container_name)
@@ -1245,7 +1256,7 @@ class FRFilter(VisClean):
           self.clean_info: Dictionary of info from hera_filters.dspec.fourier_filter with the same keys as self.data
         '''
         if times is None:
-            times = self.times * SDAY_KSEC
+            times = self.times * SDAY_SEC * 1e-3
         if keys is None:
             keys = list(self.data.keys())
         # read in cache
@@ -1287,7 +1298,11 @@ class FRFilter(VisClean):
             input_flags = filter_kwargs.pop('flags')
         else:
             input_flags = self.flags
-        
+
+        if 'overwrite' in filter_kwargs:
+            overwrite = filter_kwargs.pop('overwrite')
+        else:
+            overwrite = True
 
         for k in keys:
             if mode != 'clean':
@@ -1303,10 +1318,9 @@ class FRFilter(VisClean):
                     opp_in_filter_kwargs = 'output_postfix' in filter_kwargs
                     if opp_in_filter_kwargs:
                         output_postfix = filter_kwargs.pop('output_postfix')
-                    
                     self.fourier_filter(keys=[k], filter_centers=[0.], filter_half_widths=[min_frate_abs],
                                         mode=mode, x=times, data=input_data, flags=input_flags,
-                                        wgts=wgts, output_prefix='pre_filter', overwrite=True,
+                                        wgts=wgts, output_prefix='pre_filter', overwrite=overwrite,
                                         ax='time', cache=filter_cache, skip_wgt=skip_wgt, verbose=verbose, **filter_kwargs)
                     if opp_in_filter_kwargs:
                         filter_kwargs['output_postfix'] = output_postfix
@@ -1382,6 +1396,13 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         string to write flag output. Optional.
     ninterleave: int, optional
         number of subsets to break data into for interleaving.
+        this will product ninterleave different output files
+        with names set equal to <output_name\ext>.interleave_<inum>.<ext>
+        for example, if ninterleave = 2, outputname='averaged_data.uvh5'
+        then this method will produce two files named
+        'averaged_data.interleave_0.uvh5' and 'averaged_data.interleave_1.uvh5'
+        Note that the actual integration time in in the interleaved files will be reduced by
+        a factor of t_avg / ninterleave!
     read_kwargs: kwargs dict
         additional kwargs for for io.HERAData.read()
     
@@ -1502,7 +1523,8 @@ def tophat_frfilter_argparser(mode='clean'):
             "instantanous fringe-rates that include sky emission.")
     filt_options.add_argument("--case", default="sky", help=' '.join(desc), type=str)
     desc = ("Number interleaved time subsets to split the data into ", 
-           "and apply independent fringe-rate filters. Default is 1 (no interleaved filters.")
+            "and apply independent fringe-rate filters. Default is 1 (no interleaved filters).",
+            "This does not change the format of the output files but it does change the nature of their content.")
     filt_options.add_argument("--ninterleave", default=1, type=int, help=desc)
     
     return ap
@@ -1710,7 +1732,7 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                     frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
                                           keys=keys, verbose=verbose, wgts=wgts, flags=getattr(frfil, f'flags_interleave_{inum}'),
                                           data= getattr(frfil, f'data_interleave_{inum}'), output_postfix=f'interleave_{inum}',
-                                          times=frfil.time_sets[inum] * SDAY_KSEC,
+                                          times=frfil.time_sets[inum] * SDAY_SEC * 1e-3,
                                           **filter_kwargs)
                 
                 frfil._interleave_data_in_time(filtered_data_names, 'clean_data')
@@ -1769,4 +1791,11 @@ def time_average_argparser():
     ap.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
     ap.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
     ap.add_argument("--filetype", default="uvh5", type=str, help="optional filetype specifier. Default is 'uvh5'. Set to 'miriad' if reading miriad files etc...")
+    desc = ("Number interleaved time subsets to split the data into ", 
+            "before averaging. Setting this greater than 1 will result in ninterleave different files ",
+            "with names equal to <output_data\ext>.interleave_<inum>.<ext>. ",
+            "For example, output_data = 'averaged_data.uvh5' and ninterleave=2' ",
+            "will result in two output files named 'averaged_data.interleave_0.uvh5 ",
+            "and 'averaged_data.interleave_1.uvh5'")
+    filt_options.add_argument("--ninterleave", default=1, type=int, help=desc)
     return ap
