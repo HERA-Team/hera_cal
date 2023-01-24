@@ -2987,7 +2987,7 @@ class FastUVH5Meta:
 
     This class assumes that each baseline has the same number of times.
     """
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, time_first: bool | None = None):
         self.path = Path(path)
 
         # The assumption is that all baselines have the same number of times.
@@ -3004,6 +3004,7 @@ class FastUVH5Meta:
             )
 
         self.n_bls = self.n_blts // self.n_times
+        self.__time_first = time_first
 
     @contextmanager
     def header(self):
@@ -3017,6 +3018,9 @@ class FastUVH5Meta:
 
     @cached_property
     def _time_first(self) -> bool:
+        if self.__time_first is not None:
+            return self.__time_first
+            
         with self.header() as h:
             t = h['time_array'][:2]
             return t[1] != t[0]
@@ -3039,7 +3043,7 @@ class FastUVH5Meta:
                     return h['lst_array'][::self.n_bls]
 
         # If lst_array not there, compute ourselves.
-        return Time(self.times, format='jd').sidereal_time("apparent", longitude=self.longitude).radian
+        return JD2LST(self.times, self.latitude, self.longitude, self.altitude)
     
     @cached_property
     def ant_1_array(self) -> np.ndarray:
