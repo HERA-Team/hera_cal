@@ -622,10 +622,24 @@ class HERAData(UVData):
         elif len(key) == 3:  # asking for bl-pol
             try:
                 pidx = self.get_polstr_index(key[2])
-                return np.array(data_array[self._blt_slices[tuple(key[:2])], :, pidx])
+                if data_array.ndim == 4: # old shapes
+                    return np.array(
+                        data_array[self._blt_slices[tuple(key[:2])], 0, :, pidx]
+                    )
+                else:
+                    return np.array(
+                        data_array[self._blt_slices[tuple(key[:2])], :, pidx]
+                    )
             except KeyError:
                 pidx = self.get_polstr_index(conj_pol(key[2]))
-                return np.conj(data_array[self._blt_slices[tuple(key[1::-1])], :, pidx])
+                if data_array.ndim == 4:
+                    return np.conj(
+                        data_array[self._blt_slices[tuple(key[1::-1])], 0, :, pidx]
+                    )
+                else:
+                    return np.conj(
+                        data_array[self._blt_slices[tuple(key[1::-1])], :, pidx]
+                    )
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
