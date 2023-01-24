@@ -86,8 +86,8 @@ def interleave_data_in_time(dsets):
     nmax = int(np.max(ntimes))
     counters = [0 for i in range(ninterleave)]
     # pre-allocate array
-    interleaved_shape = (int(np.sum(ntimes)), ) + tuple(*dsets[0].shape[1:])
-    data = np.zeros(*interleaved_shape, dsets[0].dtype)
+    interleaved_shape = (int(np.sum(ntimes)), ) + dsets[0].shape[1:]
+    data = np.zeros(interleaved_shape, dsets[0].dtype)
     tcounter = 0
     for tstep in range(nmax):
         for inum in range(ninterleave):
@@ -1797,5 +1797,5 @@ def time_average_argparser():
             "For example, output_data = 'averaged_data.uvh5' and ninterleave=2' ",
             "will result in two output files named 'averaged_data.interleave_0.uvh5 ",
             "and 'averaged_data.interleave_1.uvh5'")
-    filt_options.add_argument("--ninterleave", default=1, type=int, help=desc)
+    ap.add_argument("--ninterleave", default=1, type=int, help=desc)
     return ap
