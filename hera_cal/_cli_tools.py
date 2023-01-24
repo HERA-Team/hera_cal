@@ -573,4 +573,10 @@ def parse_args(parser: ArgumentParser):
 
 def filter_kwargs(kwargs: dict) -> dict:
     """Filter out kwargs that are used for logging and profiling."""
-    return {k: v for k, v in kwargs.items() if not k.startswith("profile") and not k.startswith("log-")}
+    return {
+        k: v for k, v in kwargs.items() if (
+            k != "profile" and 
+            not k.startswith("profile_") and 
+            not k.startswith("log_")
+        )
+    }
