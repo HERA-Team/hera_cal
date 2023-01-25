@@ -3020,7 +3020,7 @@ class FastUVH5Meta:
     def _time_first(self) -> bool:
         if self.__time_first is not None:
             return self.__time_first
-            
+
         with self.header() as h:
             t = h['time_array'][:2]
             return t[1] != t[0]
@@ -3064,6 +3064,18 @@ class FastUVH5Meta:
     @lru_cache
     def get_antpairs(self) -> list[tuple[int, int]]:
         return list(zip(self.ant_1_array, self.ant_2_array))
+
+    def has_key(self, key: tuple[int, int] | tuple[int, int, str]) -> bool:
+        antpairs = self.get_antpairs()  # cached so we can call it each time.
+        if len(key) == 2 and key in antpairs or (key[1], key[0]) in antpairs:
+            return True
+        elif len(key) == 3 and (
+            (key[:2] in antpairs and key[2] in self.pols) or
+            ((key[1], key[0]) in antpairs and key[2][::-1] in self.pols)
+        ):
+            return True
+        else:
+            return False
 
     def __getattr__(self, name: str) -> Any:
         with self.header() as h:
