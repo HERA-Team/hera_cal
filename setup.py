@@ -58,6 +58,7 @@ setup_args = {
         'hera_qm',
         'scikit-learn',
         'hera_filters',
+        "line_profiler",
         'aipy',
     ],
     # 'extras_require': {

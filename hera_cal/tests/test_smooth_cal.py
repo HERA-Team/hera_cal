@@ -33,7 +33,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
 
     def test_smooth_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--flag_file_list', 'c', '--lst_blacklists', '3-4', '10-12', '23-.5']
-        a = smooth_cal.smooth_cal_argparser()
+        a = smooth_cal.smooth_cal_argparser().parse_args()
         assert a.calfits_list == ['a', 'b']
         assert a.flag_file_list == ['c']
         assert a.lst_blacklists == [(3, 4), (10, 12), (23, .5)]
