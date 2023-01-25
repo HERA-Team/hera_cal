@@ -2000,7 +2000,7 @@ class TestRunMethods(object):
 
     def test_redcal_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--metrics_files', 'b', '--ex_ants', '5', '6', '--verbose']
-        a = om.redcal_argparser()
+        a = om.redcal_argparser().parse_args()
         assert a.input_data == 'a'
         assert a.metrics_files == ['b']
         assert a.ex_ants == [5, 6]

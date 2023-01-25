@@ -1792,7 +1792,7 @@ class Test_Post_Redcal_Abscal_Run(object):
 
     def test_post_redcal_abscal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', 'c', 'd', '--nInt_to_load', '6', '--verbose']
-        a = abscal.post_redcal_abscal_argparser()
+        a = abscal.post_redcal_abscal_argparser().parse_args()
         assert a.data_file == 'a'
         assert a.redcal_file == 'b'
         assert a.model_files[0] == 'c'

@@ -35,13 +35,14 @@ from hera_cal import lstbin
 import sys
 import os
 import glob
+from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
 
 a = lstbin.lst_bin_arg_parser()
-args = a.parse_args()
+args = parse_args(a)
 history = ' '.join(sys.argv)
 
 # get kwargs
-kwargs = dict(vars(args))
+kwargs = filter_kwargs(dict(vars(args)))
 
 # configure history
 kwargs['history'] += history
@@ -72,4 +73,9 @@ if args.vis_units is None:
 if kwargs['output_file_select'] == ['None']:
     del kwargs['output_file_select']
 
-lstbin.lst_bin_files(data_files, input_cals=input_cals, **kwargs)
+run_with_profiling(
+    lstbin.lst_bin_files,
+    args,
+    data_files, input_cals=input_cals, **kwargs
+)
+
