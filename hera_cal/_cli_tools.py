@@ -146,6 +146,7 @@ def setup_logger(
     ----------
     level : str, optional
         The logging level to use. Only messages at or above this level will be printed.
+        Options are "DEBUG", "INFO", "WARNING", "ERROR", and "CRITICAL".
     width : int, optional
         The width of the on-screen text before wrapping.
     show_time_as_diff : bool, optional
