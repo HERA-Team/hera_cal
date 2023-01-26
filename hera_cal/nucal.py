@@ -6,7 +6,7 @@ from .datacontainer import DataContainer
 import warnings
 import numpy as np
 from copy import deepcopy
-from functools import partial
+from itertools import chain
 from hera_filters import dspec
 import astropy.constants as const
 from scipy.cluster.hierarchy import fclusterdata
@@ -247,7 +247,9 @@ class FrequencyRedundancy:
         self.blvec_error_tol = blvec_error_tol
 
         if reds is None:
-            reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol)
+            self.reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol)
+        else:
+            self.reds = reds
 
         # Get unique orientations
         self._radial_groups = get_unique_orientations(antpos, reds=reds, blvec_error_tol=blvec_error_tol)
@@ -493,6 +495,144 @@ class FrequencyRedundancy:
         """Sorts list by length of the radial groups"""
         self._radial_groups.sort(key=(len if key is None else key), reverse=reverse)
 
+class NucalSol:
+    """Object for containing solutions to frequency-redundant calibraton, namely gains and
+    unique-baseline visibilities, along with a variety of convenience methods."""
+    def __init__(self, radial_reds, gains={}, vis={}, sol_dict={}):
+        '''Initializes NucalSol object.
+
+        Arguments:
+            reds: list of lists of redundant baseline tuples, e.g. (0, 1, 'ee')
+            gains: optional dictionary. Maps keys like (1, 'Jee') to complex
+                numpy arrays of gains of size (Ntimes, Nfreqs).
+            vis: optional dictionary or DataContainer. Maps keys like (0, 1, 'ee')
+                to complex numpy arrays of visibilities of size (Ntimes, Nfreqs).
+                May only contain at most one visibility per unique baseline group.
+            sol_dict: optional dictionary. Maps both gain keys and visibilitity keys
+                to numpy arrays. Must be empty if gains or vis is not.
+        '''
+        if len(sol_dict) > 0:
+            if (len(gains) > 0) or (len(vis) > 0):
+                raise ValueError('If sol_dict is not empty, both gains and vis must be.')
+            self.gains, self.vis = get_gains_and_vis_from_sol(sol_dict)
+        else:
+            self.gains = gains
+            self.vis = vis
+        self.radial_reds = radial_reds
+        self.vis = redcal.RedDataContainer(self.vis, reds=self.radial_reds)
+
+    def __getitem__(self, key):
+        '''Get underlying gain or visibility, depending on the length of the key.'''
+        if len(key) == 3:  # visibility key
+            return self.vis[key]
+        elif len(key) == 2:  # antenna-pol key
+            return self.gains[key]
+        else:
+            raise KeyError('NucalSol keys should be length-2 (for gains) or length-3 (for visibilities).')
+
+    def __setitem__(self, key, value):
+        '''Set underlying gain or visibility, depending on the length of the key.'''
+        if len(key) == 3:  # visibility key
+            self.vis[key] = value
+        elif len(key) == 2:  # antenna-pol key
+            self.gains[key] = value
+        else:
+            raise KeyError('NucalSol keys should be length-2 (for gains) or length-3 (for visibilities).')
+
+    def __contains__(self, key):
+        '''Returns True if key is a gain key or a redundant visbility key, False otherwise.'''
+        return (key in self.gains) or (key in self.vis)
+
+    def __iter__(self):
+        '''Iterate over gain keys, then iterate over visibility keys.'''
+        return chain(self.gains, self.vis)
+
+    def __len__(self):
+        '''Returns the total number of entries in self.gains or self.vis.'''
+        return len(self.gains) + len(self.vis)
+
+    def keys(self):
+        '''Iterate over gain keys, then iterate over visibility keys.'''
+        return self.__iter__()
+
+    def values(self):
+        '''Iterate over gain values, then iterate over visibility values.'''
+        return chain(self.gains.values(), self.vis.values())
+
+    def items(self):
+        '''Returns the keys and values of the gains, then over those of the visibilities.'''
+        return chain(self.gains.items(), self.vis.items())
+
+    def get(self, key, default=None):
+        '''Returns value associated with key, but default if key is not found.'''
+        if key in self:
+            return self[key]
+        else:
+            return default
+
+    def make_sol_finite(self):
+        '''Replaces nans and infs in this object, see redcal.make_sol_finite() for details.'''
+        redcal.make_sol_finite(self)
+
+    def gain_bl(self, bl):
+        '''Return gain for baseline bl = (ai, aj).
+
+        Arguments:
+            bl: tuple, baseline to be split into antennas indexing gain.
+
+        Returns:
+            gain: gi * conj(gj)
+        '''
+        ai, aj = utils.split_bl(bl)
+        return self.gains[ai] * np.conj(self.gains[aj])
+
+    def model_bl(self, bl):
+        '''Return visibility data model (gain * vissol) for baseline bl
+
+        Arguments:
+            bl: tuple, baseline to return model for
+
+        Returns:
+            vis: gi * conj(gj) * vis[bl]
+        '''
+        return self.gain_bl(bl) * self.vis[bl]
+
+    def calibrate_bl(self, bl, data, copy=True):
+        '''Return calibrated data for baseline bl
+
+        Arguments:
+            bl: tuple, baseline from which to divide out gains
+            data: numpy array of data to calibrate
+            copy: if False, apply calibration to data in place
+
+        Returns:
+            vis: data / (gi * conj(gj))
+        '''
+        gij = self.gain_bl(bl)
+        if copy:
+            return np.divide(data, gij, where=(gij != 0))
+        else:
+            np.divide(data, gij, out=data, where=(gij != 0))
+            return data
+
+    def set_vis_from_data(self, data, wgts={}):
+        '''Performs redundant averaging of data using reds and gains stored in this NucalSol object and
+           stores the result as the redundant solution.
+
+        Arguments:
+            data: DataContainer containing visibilities to redundantly average.
+            wgts: optional DataContainer weighting visibilities in averaging.
+                If not provided, it is assumed that all data are uniformly weighted.
+
+        Returns:
+            None
+        '''
+        vis = {}
+        for grp in self.reds:
+            vis[grp[0]] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
+                                     weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
+        self.vis = redcal.RedDataContainer(vis, reds=self.reds)
+
 
 def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutoff=1e-12):
     """
@@ -628,10 +768,10 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
 
     return weights
 
-def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spatial_filters,
+def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spatial_filters, spectral_filters,
                                    niter=1, phs_max_iter=10):
     """
-    First-pass estimate of the redcal degenerate parameters using a common u-model for each baseline group.
+    First-pass estimate of the redcal degenerate parameters using a common u-model for each radially redundant group.
     Method starts by unpacking the data into a dictionary containing only baselines found in radial_reds.
     Then, a u-dependent model per radially redundant group is computed for each baseline by fitting PSWF eigenvectors 
     to the data. The model is then used to remove the degenerate parameters from the redundantly calibrated data by
@@ -724,7 +864,7 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, rc_flags, spati
     data_wgts_here = DataContainer({bl: data_wgts[bl] for bl in keys})
     
     # Use best-fit u-model to get amplitude and tip-tilt parameters
-    amp_params = abscal.abs_amp_lincal(model, data_here, wgts=data_wgts_here, verbose=False, return_gains=False, gain_ants=ants)
+    amp_params = abscal.abs_amp_logcal(model, data_here, wgts=data_wgts_here, verbose=False, return_gains=False, gain_ants=ants)
     angle_wgts = DataContainer({bl: 2 * np.abs(model[bl])**2 * data_wgts_here[bl] for bl in model})
     phase_params = abscal.TT_phs_logcal(model, data_here, idealized_antpos, wgts=angle_wgts, verbose=False, assume_2D=False, return_gains=False, gain_ants=ants)
     degen_params = {**amp_params, **phase_params}
@@ -808,6 +948,7 @@ def _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, bl
     # Compute loss using weights and foreground model
     return jnp.sum((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
 
+@jax.jit
 def _loss_function(params, data, wgts, spectral_filters, spatial_filters, idealized_blvecs):
     """
     Compute the loss value for a given set of fit parameters, data, and weights
@@ -833,7 +974,7 @@ def _loss_function(params, data, wgts, spectral_filters, spatial_filters, ideali
     return loss
 
 @jax.jit
-def calibrate_single_integration(data, wgts, params, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
+def gradient_descent_single_integration(data, wgts, params, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
                                     maxiter=100, tol=1e-10):
     """
     Function for calibrating a single polarization/time integration
@@ -874,7 +1015,9 @@ def calibrate_single_integration(data, wgts, params, optimizer, spectral_filters
     # Start gradient descent
     for step in range(maxiter):
         # Compute loss and gradient
-        loss, gradient = jax.value_and_grad(_loss_function)(params, data, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs)
+        loss, gradient = jax.value_and_grad(_loss_function)(
+            params, data, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs
+        )
         updates, opt_state = optimizer.update(gradient, opt_state, params)
         params = optax.apply_updates(params, updates)
         
@@ -893,8 +1036,7 @@ class NuCalibrator:
     calibrated data. This class handles the calibration and degeneracy correction of
     frequency redundantly calibrated gains.
     """
-    def __init__(self, reds, radial_reds, freqs, eta_half_width=20e-9, ell_half_width=1, 
-                  eigenval_cutoff=1e-12):
+    def __init__(self, radial_reds):
         """
         Parameters:
         ----------
@@ -910,20 +1052,45 @@ class NuCalibrator:
         self.radial_reds = radial_reds
         
         # Get idealized antenna positions and baseline vectors from reds
-        self.idealized_antpos = redcal.reds_to_antpos(reds)
-        self.idealized_blvecs = {red[0]: self.idealized_antpos[red[0][1]] - self.idealized_antpos[red[0][0]] for red in reds}
+        self.idealized_antpos = redcal.reds_to_antpos(radial_reds.reds)
+        self.idealized_blvecs = {red[0]: self.idealized_antpos[red[0][1]] - self.idealized_antpos[red[0][0]] for red in radial_reds.reds}
         
         # Get number of tip-tilt dimensions from 
         self.ndims = self.idealized_antpos[list(self.idealized_antpos.keys())[0]].shape[0]
-            
-        # Compute spatial filters
-        self.spatial_filters = compute_spatial_filters(self.radial_reds, freqs, ell_half_width=ell_half_width, eigenval_cutoff=eigenval_cutoff)
 
-        # Compute spectral DPSS filters
-        self.spectral_filters = dspec.dpss_operator(freqs, [0], [eta_half_width], eigenval_cutoff=[eigenval_cutoff])[0].real
+    def _check_input_parameters(self, data, freqs, pols, learning_rate, **opt_kwargs):
+        """
+        Function for checking the input parameters to the calibration functions
+        """
+        # Choose optimizer and initialize
+        assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
+        optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
+
+        # Get frequency array data if not given
+        if freqs is None:
+            if hasattr(data, "freqs"):
+                freqs = data.freqs
+            else:
+                raise ValueError("Frequency array not provided and not found in the data.")
+
+        # Check to make sure all of the baselines in the radially redundant group also exist in the data provided
+        for group in self.radial_reds:
+            for bl in group:
+                assert bl in data, "Baseline {bl} not found in data."
+
+        # Get number of times in the data or infer it
+        if hasattr(data, 'times'):
+            ntimes = data.times.shape[0]
+        else:
+            key = list(data.keys())[0]
+            ntimes = data[key].shape[0]
+
+        # If pols is None, get pols from the data
+        if pols is None: pols = np.unique(list(map(lambda k: k[2], data.keys())))
     
-    def post_redcal_nucal(self, data, rc_flags, freqs=None, pols=None, learning_rate=1e-3, maxiter=100, 
-                  optimizer='adabelief', initial_est_niter=1, tol=1e-10, **opt_kwargs):
+    def post_redcal_nucal(self, data, ant_flags, freqs=None, pols=None, eta_half_width=20e-9, ell_half_width=1, 
+                          eigenval_cutoff=1e-12, learning_rate=1e-3, maxiter=100, optimizer='adabelief', initial_est_niter=1, 
+                          tol=1e-10, **opt_kwargs):
         """
         Parameters:
         ----------
@@ -931,8 +1098,8 @@ class NuCalibrator:
             pass
         wgts : DataContainer
             pass
-        rc_flags : dictionary, DataContainer
-            Dictionary mapping keys like (1, 'Jnn') to flag waterfalls from redundant calibration.
+        ant_flags : dictionary, DataContainer
+            Dictionary mapping keys like (1, 'Jnn') to flag waterfalls from previous calibration steps.
         eta_half_width : float, default=20e-9
             Filter half width along the spectral axis
         ell_half_width : float, default=1
@@ -956,31 +1123,11 @@ class NuCalibrator:
         sol : dictionary
             pass
         """
-        # Get frequency array data if not given
-        if freqs is None:
-            if hasattr(data, "freqs"):
-                freqs = data.freqs
-            else:
-                raise ValueError("Frequency array not provided and not found in the data.")
-
-        # Check to make sure all of the baselines in the radially redundant group also exist in the data provided
-        for group in self.radial_reds:
-            for bl in group:
-                assert bl in data
-
-        # Get number of times in the data or infer it
-        if hasattr(data, 'times'):
-            ntimes = data.times.shape[0]
-        else:
-            key = list(data.keys())[0]
-            ntimes = data[key].shape[0]
-
-        # If pols is None, get pols from the data
-        if pols is None: pols = np.unique(list(map(lambda k: k[2], data.keys())))
-
-        # Choose optimizer and initialize
-        assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
-        optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
+        # Check input parameters
+        pass
+        
+        # Compute spatial and spectral filters
+        pass
                             
         # Get data weights
         # data_wgts = build_nucal_wgts()
@@ -988,23 +1135,21 @@ class NuCalibrator:
 
         # Compute estimate of the degenerate parameters from spatial filters
         degen_params, _, model_comps = estimate_degenerate_parameters(
-            data, data_wgts, self.radial_reds, rc_flags, self.spatial_filters, niter=initial_est_niter
+            data=data, data_wgts=data_wgts, radial_reds=self.radial_reds, rc_flags=ant_flags, 
+            spatial_filters=self.spatial_filters, niter=initial_est_niter
         )
-
-        # Sum over spectral filters to project onto u-model
-        const_eigvals = np.sum(self.spectral_filters, axis=0).reshape(-1, 1)
-
-        # Pack tip-tilts into single entry in dictionary
+        # Pack tip-tilts into single entry in dictionary - TODO: make this more general, this transposition assumes 3 tip-tilt dimensions
         for pol in pols:
             degen_params[f"Phi_J{pol}"] = np.transpose([degen_params[f"Phi_{ni}_J{pol}"] for ni in range(self.ndims)], axes=(1, 0, 2))
-        degens = {**degen_params, **model_comps}
+        initial_degens = {**degen_params, **model_comps}
 
         # Create solution dictionary
-        sol = {parameter + pol: [] for pol in pols for parameter in ["A_J", "Phi_J"]}
-        sol['fg_r'] = []
-        sol['fg_i'] = []
+        sol = {parameter + pol: [] for pol in pols for parameter in ["A_J", "Phi_J", "fg_model_comps_J"]}
 
-        # For each time and each polarization in the data calibrate
+        # Sum over spectral filters to project onto u-model
+        const_eigvals = np.sum(spectral_filters, axis=0).reshape(-1, 1) 
+    
+        # For each time and each polarization in the data solve for the redundant calibration degenerate parameters
         for pol in pols:
             idealized_blvecs = []
             for group in self.radial_reds.get_pol(pol):
@@ -1024,8 +1169,8 @@ class NuCalibrator:
             for tind in range(ntimes):
                 # Group degenerate parameter estimates into dictionary for the current integration
                 initial_params = {
-                    f"A": degens[f"A_J{pol}"][tind],
-                    f"Phi": degens[f"Phi_J{pol}"][tind],
+                    f"A": initial_degens[f"A_J{pol}"][tind],
+                    f"Phi": initial_degens[f"Phi_J{pol}"][tind],
                     f"fg_r": [jnp.real(model_comps[group[0]][tind]).reshape(1, -1) * const_eigvals for group in self.radial_reds.get_pol(pol)],
                     f"fg_i": [jnp.imag(model_comps[group[0]][tind]).reshape(1, -1) * const_eigvals for group in self.radial_reds.get_pol(pol)]
                 }
@@ -1035,7 +1180,7 @@ class NuCalibrator:
                 _wgts = jnp.array([data_wgts[bl][tind] for group in self.radial_reds.get_pol(pol) for bl in group])
                 
                 # Main optimization loop function
-                fit_params, meta = calibrate_single_integration(
+                fit_params, meta = gradient_descent_single_integration(
                     _data, _wgts, initial_params, optimizer, spectral_filters=self.spectral_filters, 
                     spatial_filters=spatial_filters, maxiter=maxiter, idealized_blvecs=idealized_blvecs, tol=tol
                 )
@@ -1043,44 +1188,7 @@ class NuCalibrator:
                 # TODO: unpack solution and organize it in a sensible way. Consider nucal_sol object that gets added to.
                 sol[f"A_J{pol}"].append(fit_params['A'])
                 sol[f"Phi_J{pol}"].append(fit_params['Phi'])
-                sol[f'fg_r'].append(fit_params['fg_r'])
-                sol[f'fg_i'].append(fit_params['fg_i'])
-
-        return meta, sol
-
-def post_redcal_nucal(data, data_wgts, rc_flags, tol=1.0, initial_est_niter=1, maxiter=1000, optimizer="adam", 
-                      learning_rate=1e-3, **opt_kwargs):
-    """
-    """
-    # Choose optimizer type and initialize optax optimizer
-    assert optimizer in OPTIMIZERS, "Invalid optimizer type chosen. Please refer to Optax documentation for available optimizers"
-    optimizer = OPTIMIZERS[optimizer](learning_rate, **opt_kwargs)
-
-    # get ants, idealized_antpos, and reds
-    ants = sorted(list(rc_flags.keys()))
-    idealized_antpos = abscal._get_idealized_antpos(rc_flags, data.antpos, data.pols(),
-                                             data_wgts=data_wgts, tol=tol, keep_flagged_ants=True)
-    reds = redcal.get_reds(idealized_antpos, pols=data.pols(), bl_error_tol=redcal.IDEALIZED_BL_TOL)
-
-    # Get frequency and times from data
-    if hasattr(data, "freqs"):
-        freqs = data.freqs
-    else:
-        raise ValueError("Frequency array not found in the data.")
-
-    if hasattr(data, 'times'):
-        ntimes = data.times.shape[0]
-    else:
-        key = list(data.keys())[0]
-        ntimes = data[key].shape[0]
-
-    # Get spatial and spectral filters
-    pass
-
-    # Get radial reds from the reds
-    pass
-
-    # Compute estimate of the degenerate parameters from spatial filters
-    degen_params, _, model_comps = estimate_degenerate_parameters(
-        data, data_wgts, radial_reds, rc_flags, spatial_filters, niter=initial_est_niter
-    )
+                sol[f'fg_J{pol}'].append(fit_params['fg_r'] + 1j * fit_params['fg_i'])
+    
+        nucal_sol = NucalSol(sol)
+        return meta, nucal_sol

@@ -277,6 +277,3 @@ def test_loss_function():
 
 def test_calibrate_single_integration():
     pass
-
-def test_post_redcal_nucal():
-    pass
