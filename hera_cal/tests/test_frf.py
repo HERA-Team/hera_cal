@@ -205,15 +205,17 @@ class Test_FRFilter(object):
 
         pytest.raises(AssertionError, self.F.write_data, self.F.avg_data, "./out.uv", times=self.F.avg_times)
         pytest.raises(ValueError, self.F.write_data, self.F.data, "hi", filetype='foo')
-
-    def test_time_avg_data_and_write(self, tmpdir):
+        
+    @pytest.mark.parametrize("equalize_times", [True, False])
+    def test_time_avg_data_and_write(self, tmpdir, equalize_times):
         # time-averaged data written too file will be compared to this.
         tmp_path = tmpdir.strpath
         output = tmp_path + '/test_output.miriad'
         flag_output = tmp_path + '/test_output.flags.h5'
         self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 35., rephase=True, overwrite=True,
                             wgt_by_nsample=True, flags=self.F.flags, nsamples=self.F.nsamples)
-        frf.time_avg_data_and_write(self.fname, output, t_avg=35., rephase=True, wgt_by_nsample=True, flag_output=flag_output, filetype='miriad')
+        frf.time_avg_data_and_write(self.fname, output, t_avg=35., rephase=True, wgt_by_nsample=True,
+                                    flag_output=flag_output, filetype='miriad', equalize_interleave_times=equalize_times)
         data_out = frf.FRFilter(output, filetype='miriad')
         data_out.read()
         for k in data_out.data:

@@ -1404,8 +1404,8 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         Note that the actual integration time in in the interleaved files will be reduced by
         a factor of t_avg / ninterleave!
     equalize_interleave_times: bool, optional
-        Set the times in the different interleaved averages to all be equal to the time-array
-        of the first interleaved average. This is necessary for hera_pspec which only allows
+        Set the times in the different interleaved averages to all be equal to the average of times of all interleaves.
+        This is necessary for hera_pspec which only allows
         products between different data sets with the same observation times.
         default is True.
     read_kwargs: kwargs dict
@@ -1441,26 +1441,26 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                                 wgt_by_favg_nsample=wgt_by_favg_nsample, output_postfix=f'interleave_{inum}',
                                 rephase=rephase)
                 
+            if equalize_interleave_times:
+                timesets = [getattr(fr, f'avg_times_interleave_{inum}') for inum in range(ninterleave)]
+                ntimes = np.min([len(tset) for tset in timesets])
+                avg_times = np.mean([tset[:ntimes] for tset in timesets], axis=0)
+                avg_lsts = np.mean([getattr(fr, f'avg_lsts_interleave_{inum}')[:ntimes] for inum in range(ninterleave)], axis=0)
+            for inum in range(ninterleave):
                 # relable keys to antpolpairs in avg sets
                 avg_data = getattr(fr, f'avg_data_interleave_{inum}')
                 avg_nsamples = getattr(fr, f'avg_nsamples_interleave_{inum}')
                 avg_flags = getattr(fr, f'avg_flags_interleave_{inum}')
                 
                 if equalize_interleave_times:
-                    avg_times = fr.avg_times_interleave_0
-                    ntimes = len(avg_times)
-                    avg_lsts = fr.avg_lsts_interleave_0
                     for blk in avg_data:
                         avg_data[blk] = avg_data[blk][:ntimes]
                         avg_flags[blk] = avg_flags[blk][:ntimes]
                         avg_nsamples[blk] = avg_nsamples[blk][:ntimes]
                         
-                    tnum = 0
                 else:
-                    tnum = inum
-                        
-                avg_times = getattr(fr, f'avg_times_interleave_{tnum}')
-                avg_lsts = getattr(fr, f'avg_lsts_interleave_{tnum}')
+                    avg_times = getattr(fr, f'avg_times_interleave_{inum}')
+                    avg_lsts = getattr(fr, f'avg_lsts_interleave_{inum}')
 
                 # write data
                 output_data_name = output_data.replace('.uvh5', f'.interleave_{inum}.uvh5')
