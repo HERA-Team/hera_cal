@@ -1817,6 +1817,8 @@ def time_average_argparser():
             "will result in two output files named 'averaged_data.interleave_0.uvh5 ",
             "and 'averaged_data.interleave_1.uvh5'")
     ap.add_argument("--ninterleave", default=1, type=int, help=desc)
-    ap.add_argument("--dont_equalize_interleave_times", action="store_true", default=False)
+    desc = ("If set to True, times of interleave files are set to actual averages of interleave sets.",
+            "By default these times are just set to the averages of the times in the first interleave set.")
+    ap.add_argument("--dont_equalize_interleave_times", action="store_true", default=False, help=desc)
     
     return ap
