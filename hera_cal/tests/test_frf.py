@@ -223,8 +223,10 @@ class Test_FRFilter(object):
 
 
     @pytest.mark.parametrize(
-        "ninterleave", [2, 3, 4, 5, 6])
-    def test_time_avg_data_and_write_interleave(self, tmpdir, ninterleave):        
+        "ninterleave, equalize_times", [(2, True), (2, False), (3, True), (3, False),
+                                        (4, True), (4, False), (5, True),
+                                        (5, False), (6, True), (6, False)])
+    def test_time_avg_data_and_write_interleave(self, tmpdir, ninterleave, equalize_times):        
         tmp_path = tmpdir.strpath
         input_name = os.path.join(tmp_path, 'test_input.uvh5')
         uvd = UVData()
@@ -234,7 +236,8 @@ class Test_FRFilter(object):
         flag_output = tmp_path + '/test_output.flags.h5'
         frf.time_avg_data_and_write(input_name, output_name, t_avg=35., rephase=True,
                                     wgt_by_nsample=True, flag_output=flag_output,
-                                    filetype='uvh5', ninterleave=ninterleave)
+                                    filetype='uvh5', ninterleave=ninterleave,
+                                    equalize_interleave_times=equalize_times)
         # check that the correct number of files exist.
         interleaved_data = {}
         for inum in range(ninterleave):
@@ -244,10 +247,17 @@ class Test_FRFilter(object):
             hd.read()
             interleaved_data[inum] = hd
             os.remove(iname)
+            # if equalize_times was False
             # check that times are complementary (don't overlap and ordered by file correctly).
+            # otherwise, check that all times are equal.
             if inum > 0:
                 for tn in range(interleaved_data[inum].Ntimes):
-                    assert interleaved_data[inum].times[tn] > interleaved_data[inum-1].times[tn]
+                    if not equalize_times:
+                        assert interleaved_data[inum].times[tn] > interleaved_data[inum-1].times[tn]
+                    else:
+                        assert interleaved_data[inum].times[tn] == interleaved_data[inum-1].times[tn]
+                        assert interleaved_data[inum].lsts[tn] == interleaved_data[inum-1].lsts[tn]
+                        
 
     def test_time_avg_data_and_write_baseline_list(self, tmpdir):
         # compare time averaging over baseline list versus time averaging

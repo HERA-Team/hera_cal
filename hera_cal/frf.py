@@ -1361,7 +1361,7 @@ class FRFilter(VisClean):
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
                             wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
                             filetype='uvh5', verbose=False, clobber=False, flag_output=None,
-                            ninterleave=1, **read_kwargs):
+                            ninterleave=1, equalize_interleave_times=True, **read_kwargs):
     """Time-averaging with a baseline cornerturn
 
 
@@ -1403,6 +1403,11 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         'averaged_data.interleave_0.uvh5' and 'averaged_data.interleave_1.uvh5'
         Note that the actual integration time in in the interleaved files will be reduced by
         a factor of t_avg / ninterleave!
+    equalize_interleave_times: bool, optional
+        Set the times in the different interleaved averages to all be equal to the time-array
+        of the first interleaved average. This is necessary for hera_pspec which only allows
+        products between different data sets with the same observation times.
+        default is True.
     read_kwargs: kwargs dict
         additional kwargs for for io.HERAData.read()
     
@@ -1440,8 +1445,22 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                 avg_data = getattr(fr, f'avg_data_interleave_{inum}')
                 avg_nsamples = getattr(fr, f'avg_nsamples_interleave_{inum}')
                 avg_flags = getattr(fr, f'avg_flags_interleave_{inum}')
-                avg_times = getattr(fr, f'avg_times_interleave_{inum}')
-                avg_lsts = getattr(fr, f'avg_lsts_interleave_{inum}')
+                
+                if equalize_interleave_times:
+                    avg_times = fr.avg_times_interleave_0
+                    ntimes = len(avg_times)
+                    avg_lsts = fr.avg_lsts_interleave_0
+                    for blk in avg_data:
+                        avg_data[blk] = avg_data[blk][:ntimes]
+                        avg_flags[blk] = avg_flags[blk][:ntimes]
+                        avg_nsamples[blk] = avg_nsamples[blk][:ntimes]
+                        
+                    tnum = 0
+                else:
+                    tnum = inum
+                        
+                avg_times = getattr(fr, f'avg_times_interleave_{tnum}')
+                avg_lsts = getattr(fr, f'avg_lsts_interleave_{tnum}')
 
                 # write data
                 output_data_name = output_data.replace('.uvh5', f'.interleave_{inum}.uvh5')
@@ -1798,4 +1817,6 @@ def time_average_argparser():
             "will result in two output files named 'averaged_data.interleave_0.uvh5 ",
             "and 'averaged_data.interleave_1.uvh5'")
     ap.add_argument("--ninterleave", default=1, type=int, help=desc)
+    ap.add_argument("--dont_equalize_interleave_times", action="store_true", default=False)
+    
     return ap
