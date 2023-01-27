@@ -11,6 +11,8 @@ from argparse import ArgumentParser
 import os
 import numpy as np
 from pyuvdata import UVData
+import logging
+logger = logging.getLogger("hera_cal.subselect")
 
 ap = ArgumentParser(
     description="Sub-select parts of a data file and write out the results."
@@ -74,13 +76,17 @@ def select(
         raise FileNotFoundError(f"File {ap} does not exist.")
     if infile != outfile and os.path.exists(outfile) and not clobber:
         raise FileExistsError(f"File {outfile} exists and clobber is False.")
+    if infile == outfile:
+        clobber= True
 
     hd = UVData()
+    logger.info(f"Reading metadata from file {infile}")
     hd.read(infile, read_data=False)
     hd.use_future_array_shapes()
 
     # Get frequencies
     if freq_min is not None or freq_max is not None or freq_spws is not None:
+        logger.info("Getting frequencies to read.")
         freqs = hd.freq_array.copy()
         if freq_min is not None:
             freqs = freqs[freqs >= freq_min]
@@ -94,6 +100,7 @@ def select(
 
     # Get times
     if time_min is not None or time_max is not None or time_idxs is not None:
+        logger.info("Getting times to read.")
         times = np.unique(hd.time_array)
         time_bools = np.ones_like(times, dtype=bool)
 
@@ -121,12 +128,14 @@ def select(
 
     # Get polarizations
     if pols is not None:
+        logger.info("Getting polarizations to read.")
         pols = [pol.upper() for pol in pols.split(",")]
     else:
         pols = None
 
     # Get antennas
     if antennas is not None or calfile is not None:
+        logger.info("Getting antennas to read.")
         if antennas is not None:
             antennas = [tuple(map(int, ant.split("~"))) for ant in antennas.split(",")]
             antennas = np.concatenate([np.arange(*ant) for ant in antennas])
@@ -148,6 +157,7 @@ def select(
         max_ew_length is not None
         or antennas is not None
     ):
+        logger.info("Getting baselines to read.")
         if bls is not None:
             bls = [tuple(map(int, bl.split(":"))) for bl in bls.split(",")]
         else:
@@ -166,6 +176,9 @@ def select(
                 antpos = {ant:pos for ant,pos in zip(ants, antpos)}
 
                 if min_bl_length is not None or max_bl_length is not None:
+                    min_bl_length = min_bl_length or 0
+                    max_bl_length = max_bl_length or np.inf
+
                     def bl_length(bl):
                         return np.sqrt(np.sum(np.square(antpos[bl[0]] - antpos[bl[1]])))
 
@@ -173,6 +186,8 @@ def select(
                     bls = [bl for bl in bls if min_bl_length <= bl_length(bl) <= max_bl_length]
             
                 if min_ew_length is not None or max_ew_length is not None:
+                    min_ew_length = min_ew_length or 0
+                    max_ew_length = max_ew_length or np.inf
                     def ew_length(bl):
                         return np.abs(antpos[bl[0]][0] - antpos[bl[1]][0])
 
@@ -180,7 +195,7 @@ def select(
     else:
         bls = None
 
-
+    logger.info("Reading data.")
     hd.read(
         bls=bls, times=times, freqs=freqs, pols=pols,
         run_check=check, run_check_acceptability=check_acceptability,
@@ -190,6 +205,7 @@ def select(
         fix_autos=fix_autos,
     )
 
+    logger.info(f"Writing data to {outfile}")
     hd.write_uvh5(
         outfile,
         run_check=check,
@@ -197,6 +213,7 @@ def select(
         strict_uvw_antpos_check=check_uvw_antpos,
         check_autos=check_autos,
         fix_autos=fix_autos,
+        clobber=clobber
     )
 
 run_with_profiling(
