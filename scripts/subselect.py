@@ -66,7 +66,7 @@ def select(
     freq_min=None, freq_max=None, freq_spws=None, time_min=None, time_max=None, 
     time_idxs=None, lst_min=None, lst_max=None, lst_in_hours=False, pols=None, 
     antennas=None, calfile=None, bls=None, only_autos=False, only_cross=False, 
-    min_bl_length=None, max_bl_length=None, min_ew_length=None, max_ew_length=None
+    min_bl_length=None, max_bl_length=None, min_ew_length=None, max_ew_length=None,
     clobber=False,  check=False, check_acceptability=False, check_uvw_strict=False,
     check_autos=False, fix_autos=False
 ):
