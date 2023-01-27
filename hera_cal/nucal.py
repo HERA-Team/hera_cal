@@ -252,7 +252,7 @@ class FrequencyRedundancy:
             self.reds = reds
 
         # Get unique orientations
-        self._radial_groups = get_unique_orientations(antpos, reds=reds, blvec_error_tol=blvec_error_tol)
+        self._radial_groups = get_unique_orientations(antpos, reds=self.reds, blvec_error_tol=blvec_error_tol)
 
         # Map baseline key to baseline length
         self.baseline_lengths = {}
@@ -263,9 +263,9 @@ class FrequencyRedundancy:
                 self.baseline_lengths[bl] = blmag
 
         # Map baselines to spatially redundant groups
-        self._mapped_reds = {red[0]: red for red in reds}
+        self._mapped_reds = {red[0]: red for red in self.reds}
         self._bl_to_red_key = {}
-        for red in reds:
+        for red in self.reds:
             for bl in red:
                 self._bl_to_red_key[bl] = red[0]
 
