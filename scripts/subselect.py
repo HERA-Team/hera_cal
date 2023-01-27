@@ -198,8 +198,8 @@ def select(
     logger.info("Reading data.")
     hd.read(
         bls=bls, times=times, freqs=freqs, pols=pols,
-        run_check=check, run_check_acceptability=check_acceptability,
-        keep_all_metadata=keep_all_metadata,
+        run_check=check, 
+        run_check_acceptability=check_acceptability,
         strict_uvw_antpos_check=check_uvw_antpos,
         check_autos=check_autos,
         fix_autos=fix_autos,
