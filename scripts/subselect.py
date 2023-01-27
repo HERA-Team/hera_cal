@@ -3,7 +3,12 @@
 # Copyright 2021 the HERA Project
 # Licensed under the MIT License
 
-"""Command line driver for utils.select_spw_ranges"""
+"""Command-line interface for subselecting parts of a data file and writing a new file out.
+
+This is useful in that it essentially supports the full range of functionality
+of the UVData select() method, but provides useful ways of specifying the selection
+criteria via command-line arguments.
+"""
 
 from hera_cal import io
 from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
@@ -197,10 +202,11 @@ def select(
 
     logger.info("Reading data.")
     hd.read(
-        bls=bls, times=times, freqs=freqs, pols=pols,
+        infile,
+        bls=bls, times=times, frequencies=freqs, polarizations=pols,
         run_check=check, 
         run_check_acceptability=check_acceptability,
-        strict_uvw_antpos_check=check_uvw_antpos,
+        strict_uvw_antpos_check=check_uvw_strict,
         check_autos=check_autos,
         fix_autos=fix_autos,
     )
@@ -210,7 +216,7 @@ def select(
         outfile,
         run_check=check,
         run_check_acceptability=check_acceptability,
-        strict_uvw_antpos_check=check_uvw_antpos,
+        strict_uvw_antpos_check=check_uvw_strict,
         check_autos=check_autos,
         fix_autos=fix_autos,
         clobber=clobber
