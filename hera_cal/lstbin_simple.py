@@ -581,14 +581,15 @@ def lst_bin_files(
                     raise IOError(f"Calibration file {cf} does not exist")
             data_files[night] = [df for df in dflist if df not in missing]
 
-    logger.info("Got the following numbers of data files per night:")
-    for dflist in data_files:
-        logger.info(f"{dflist[0].split('/')[-1]}: {len(dflist)}")
 
     # Prune empty nights (some nights start with files, but have files removed because
     # they have no associated calibration)
     data_files = [df for df in data_files if df]
     input_cals = [cf for cf in input_cals if cf]
+
+    logger.info("Got the following numbers of data files per night:")
+    for dflist in data_files:
+        logger.info(f"{dflist[0].split('/')[-1]}: {len(dflist)}")
 
     data_metas = [[io.FastUVH5Meta(df) for df in dflist] for dflist in data_files]
 
