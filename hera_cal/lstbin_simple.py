@@ -386,8 +386,8 @@ def lst_bin_files_for_baselines(
             continue
 
         # TODO: use Fast readers here instead.
-        _data, _flags, _nsamples = io.HERADataFastReader(meta.path).read(
-            bls=bls_to_load, keep_times=tarr
+        _data, _flags, _nsamples = io.HERAData(meta.path).read(
+            bls=bls_to_load, times=tarr
         )
         
         # _data = meta.get_datacontainer('data', bls = bls_to_load, times=tarr)
