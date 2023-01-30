@@ -8,7 +8,7 @@ import numpy as np
 from . import utils
 import warnings
 from pathlib import Path
-from .lstbin import config_lst_bin_files
+from .lstbin import config_lst_bin_files, sigma_clip
 from . import abscal
 import os
 from . import io
@@ -188,6 +188,8 @@ def reduce_lst_bins(
     out_std: np.ndarray | None = None,
     out_nsamples: np.ndarray | None = None,
     mutable: bool = False,
+    sigma_clip_thresh: float = 0.0,
+    sigma_clip_min_N: int = 4,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     From a list of LST-binned data, produce reduced statistics.
@@ -245,7 +247,11 @@ def reduce_lst_bins(
                 out_flags[:, lstbin], 
                 out_std[:, lstbin], 
                 out_nsamples[:, lstbin]
-            ) = lst_average(d, n, f, mutable=mutable)
+            ) = lst_average(
+                d, n, f, mutable=mutable, 
+                sigma_clip_thresh=sigma_clip_thresh, 
+                sigma_clip_min_N=sigma_clip_min_N
+            )
         else:
             out_data[:, lstbin] = 1.0
             out_flags[:, lstbin] = True
@@ -266,6 +272,8 @@ def lst_average(
     data: np.ndarray, nsamples: np.ndarray, flags: np.ndarray, 
     flag_thresh: float = 0.7, median: bool = False,
     mutable: bool = False,
+    sigma_clip_thresh: float = 0.0,
+    sigma_clip_min_N: int=4,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     # data has shape (ntimes, nbl, npols, nfreqs)
     # all data is assumed to be in the same LST bin.
@@ -281,9 +289,18 @@ def lst_average(
 
     # Flag entire LST bins if there are too many flags over time
     flag_frac = np.sum(flags, axis=0) / flags.shape[0]
+    nflags = np.sum(flags)
+    logger.info(f"Percent of data flagged before thresholding: {100*np.sum(flags)/flags.size:.2f}%")
     flags |= flag_frac > flag_thresh
-
     data[flags] *= np.nan  # do this so that we can do nansum later. multiply to get both real/imag as nan
+    logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size}% visibilities due to flag_frac > {flag_thresh}")
+
+    # Now do sigma-clipping.
+    if sigma_clip_thresh > 0:
+        nflags = np.sum(flags)
+        flags |= sigma_clip(data, sigma=sigma_clip_thresh, min_N = sigma_clip_min_N)
+        data[flags] *= np.nan
+        logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size}% visibilities due to sigma clipping")
 
     # get other stats
     logger.info("Calculating std")
@@ -475,6 +492,8 @@ def lst_bin_files(
     ignore_missing_calfiles: bool = False,
     save_channels: tuple[int] = (),
     golden_lsts: tuple[int] = (),
+    sigma_clip_thresh: float = 0.0,
+    sigma_clip_min_N: int = 4,
 ):
     """
     LST bin a series of UVH5 files.
@@ -530,6 +549,8 @@ def lst_bin_files(
     ex_ant_yaml_files : list of strings, optional
         list of paths of yaml files specifying antennas to flag and remove from data on each night.
     kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
+    sigma_clip_thresh : float, threshold for sigma clipping. If 0, no sigma clipping is done.
+    sigma_clip_min_N : int, minimum number of points to perform sigma clipping on.
 
     Result:
     -------
@@ -743,6 +764,8 @@ def lst_bin_files(
                 out_data=out_data[slc],
                 out_flags=out_flags[slc],
                 out_std=out_stds[slc],
+                sigma_clip_thresh = sigma_clip_thresh,
+                sigma_clip_min_N = sigma_clip_min_N,
             )
 
             if len(bins):
@@ -1024,4 +1047,6 @@ def lst_bin_arg_parser():
     a.add_argument("--write_kwargs", default='{}', type=str, help="json dictionary of arguments to the uvh5 writer")
     a.add_argument("--golden-lsts", type=str, help="LSTS (rad) to save longitudinal data for, separated by commas")
     a.add_argument("--save-channels", type=str, help="integer channels separated by commas to save longitudinal data for")
+    a.add_argument("--sigma-clip-thresh", type=float, help="sigma clip threshold for flagging data in an LST bin over time. Zero means no clipping.", default=0.0)
+    a.add_argument("--sigma-clip-min-N", type=int, help="number of unflagged data points over time to require before considering sigma clipping", default=4)
     return a

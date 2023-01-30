@@ -790,6 +790,23 @@ class Test_lstbin(object):
                 os.remove(of)
 
 
+         # test sigma-clip
+        lstbin_simple.lst_bin_files(
+            self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
+            lst_start=0.18, file_ext=file_ext, sigma_clip_thresh=4.0, sigma_clip_min_N=4
+        )
+        output_lst_file = "./zen.ee.LST.0.17932.uvh5"
+        output_std_file = "./zen.ee.STD.0.17932.uvh5"
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+        extra_files = ["zen.ee.LST.0.37508.uvh5", "zen.ee.STD.0.37508.uvh5"]
+        for of in extra_files:
+            if os.path.exists(of):
+                os.remove(of)
+
+
 
         # test input_cal
         uvc = UVCal()

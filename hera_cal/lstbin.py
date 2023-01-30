@@ -1031,7 +1031,7 @@ def make_lst_grid(dlst, begin_lst=None, lst_width: float = 2*np.pi, verbose: boo
     return lst_grid
 
 
-def sigma_clip(array, sigma=4.0, min_N=4):
+def sigma_clip(array, sigma=4.0, min_N=4, axis: int = 0):
     """
     One-iteration robust sigma clipping algorithm. Returns clip_flags array.
 
@@ -1054,14 +1054,14 @@ def sigma_clip(array, sigma=4.0, min_N=4):
         array = np.array(array)
 
     # ensure array passes min_N criterion:
-    if array.shape[0] < min_N:
+    if array.shape[axis] < min_N:
         return np.zeros_like(array, dtype=bool)
 
     # get robust location
-    location = np.nanmedian(array, axis=0)
+    location = np.expand_dims(np.nanmedian(array, axis=axis), axis=axis)
 
     # get MAD * 1.482579 for consistency with Gaussian white noise
-    scale = np.nanmedian(np.abs(array - location), axis=0) * 1.482579
+    scale = np.expand_dims(np.nanmedian(np.abs(array - location), axis=axis) * 1.482579, axis=axis)
 
     # get clipped data
     clip_flags = np.abs(array - location) / scale > sigma
