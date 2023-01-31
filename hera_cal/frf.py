@@ -1408,6 +1408,9 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         This is necessary for hera_pspec which only allows
         products between different data sets with the same observation times.
         default is True.
+    equalize_interleave_ntimes: bool, optional
+        Set the number of times in different interleaved files to be the same. This will truncate files that have more
+        times then the others.
     read_kwargs: kwargs dict
         additional kwargs for for io.HERAData.read()
     
@@ -1441,9 +1444,10 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                                 wgt_by_favg_nsample=wgt_by_favg_nsample, output_postfix=f'interleave_{inum}',
                                 rephase=rephase)
                 
+            timesets = [getattr(fr, f'avg_times_interleave_{inum}') for inum in range(ninterleave)]
+            ntimes = np.min([len(tset) for tset in timesets])
+            
             if equalize_interleave_times:
-                timesets = [getattr(fr, f'avg_times_interleave_{inum}') for inum in range(ninterleave)]
-                ntimes = np.min([len(tset) for tset in timesets])
                 avg_times = np.mean([tset[:ntimes] for tset in timesets], axis=0)
                 avg_lsts = np.mean([getattr(fr, f'avg_lsts_interleave_{inum}')[:ntimes] for inum in range(ninterleave)], axis=0)
             for inum in range(ninterleave):
@@ -1452,15 +1456,19 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                 avg_nsamples = getattr(fr, f'avg_nsamples_interleave_{inum}')
                 avg_flags = getattr(fr, f'avg_flags_interleave_{inum}')
                 
-                if equalize_interleave_times:
+                if equalize_interleave_times or equalize_interleave_ntimes:
                     for blk in avg_data:
                         avg_data[blk] = avg_data[blk][:ntimes]
                         avg_flags[blk] = avg_flags[blk][:ntimes]
                         avg_nsamples[blk] = avg_nsamples[blk][:ntimes]
-                        
-                else:
+
+                
+                if not equalize_interleave_times:
                     avg_times = getattr(fr, f'avg_times_interleave_{inum}')
                     avg_lsts = getattr(fr, f'avg_lsts_interleave_{inum}')
+                if equalize_interleave_ntimes:
+                    avg_times = avg_times[:ntimes]
+                    avg_lsts = avg_lsts[:ntimes]
 
                 # write data
                 output_data_name = output_data.replace('.uvh5', f'.interleave_{inum}.uvh5')
@@ -1820,5 +1828,9 @@ def time_average_argparser():
     desc = ("If set to True, times of interleave files are set to actual averages of interleave sets.",
             "By default these times are just set to the averages of the times in the first interleave set.")
     ap.add_argument("--dont_equalize_interleave_times", action="store_true", default=False, help=desc)
+    desc = ("If set to True, interleave files with more time samples then others will not be truncated so that",
+            " all files have the same number of times.")
+    ap.add_argument("--dont_equalize_interleave_ntimes", action="store_true", default=False, help=desc)
+    
     
     return ap
