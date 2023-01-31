@@ -3971,7 +3971,6 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         # also make sure to only include baselines present in hdd.
         hdm.select(bls=hdd.bls)
         hdm._determine_blt_slicing()
-        hdm._determine_pol_indexing()
 
     model, model_flags, model_nsamples = hdm.build_datacontainers()
 
