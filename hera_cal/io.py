@@ -235,6 +235,8 @@ class HERACal(UVCal):
             writer.freq_array = freqs_filled.flatten()
             writer.Nfreqs = len(freqs_filled)
             writer.channel_width = np.median(writer.channel_width) * np.ones_like(writer.freq_array)
+            if hasattr(writer, "flex_spw_id_array") and writer.flex_spw_id_array is not None:
+                writer.flex_spw_id_array = np.full(writer.Nfreqs, writer.spw_array[0], dtype=int)
             # insert original flags and gains into appropriate channels.
             new_gains = np.ones((writer.Nants_data, writer.Nfreqs, writer.Ntimes, writer.Njones), dtype=complex)
             new_gains[:, ~inserted, :, :] = writer.gain_array
