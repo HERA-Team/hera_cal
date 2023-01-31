@@ -1144,7 +1144,7 @@ class HERAData(UVData):
 
 
 def read_hera_hdf5(
-    filenames, bls=None, pols=None, keep_times=list[float] | None, full_read_thresh=0.002,
+    filenames, bls=None, pols=None, keep_times: list[float] | None=None, full_read_thresh=0.002,
     read_data=True, read_flags=False, read_nsamples=False,
     check=False, dtype=np.complex128, verbose=False
 ):
@@ -1187,6 +1187,8 @@ def read_hera_hdf5(
     inds = {}
     # Read file metadata to size up arrays and sort times
     filenames = _parse_input_files(filenames, name='input_data')
+    
+    
     for filename in filenames:
         if verbose:
             print(f'Reading header of {filename}')
@@ -1202,11 +1204,18 @@ def read_hera_hdf5(
                     info['freqs'] = h['freq_array'][()]  # make 1D instead of 2D
                 nfreqs = info['freqs'].size
                 pol_array = h['polarization_array'][()]
+
                 npols = pol_array.size
                 # the following errors if x_orientation not set in this hdf5
                 x_orient = str(h['x_orientation'][()], encoding='utf-8')
-                pol_indices = {uvutils.parse_polstr(POL_NUM2STR_DICT[n], x_orientation=x_orient): cnt
-                               for cnt, n in enumerate(pol_array)}
+
+                pol_indices = {
+                    uvutils.parse_polstr(POL_NUM2STR_DICT[n], x_orientation=x_orient): cnt
+                    for cnt, n in enumerate(pol_array)
+                }
+                if pols is not None:
+                    pols = [uvutils.parse_polstr(p, x_orientation=x_orient) for p in pols]
+
                 info['pols'] = list(pol_indices.keys())
                 info['x_orientation'] = x_orient
                 info['ants'] = antenna_numbers = h['antenna_numbers'][()]
@@ -1236,16 +1245,17 @@ def read_hera_hdf5(
             data_ants.update(set(ant2_array))
             _hash = hash((ant1_array.tobytes(), ant2_array.tobytes(), time_first, ntimes))
             # map baselines to array indices for each unique antenna order
+            existing_bls = list(zip(ant1_array, ant2_array))
             if _hash not in inds:
                 inds[_hash] = {}
 
                 if time_first:
-                    for n, (i, j) in  enumerate(zip(ant1_array, ant2_array)):
+                    for n, (i, j) in  enumerate(existing_bls):
                         slc = slice(n * ntimes, (n + 1) * ntimes)
                         inds[_hash][(i, j)] = slc
                         inds[_hash][(j, i)] = slc  # Allow for conjugation
                 else:
-                    for n, (i, j) in  enumerate(zip(ant1_array, ant2_array)):
+                    for n, (i, j) in  enumerate(existing_bls):
                         slc = slice(n, None, nbls)
                         inds[_hash][(i, j)] = slc
                         inds[_hash][(j, i)] = slc  # Allow for conjugation
@@ -1257,11 +1267,12 @@ def read_hera_hdf5(
                         missing_bls = [bl for bl in bls if bl[:2] not in inds[_hash]]
                         raise ValueError(f'File {filename} missing:' + str(missing_bls))
 
+
                 if 'bls' not in info:
-                    info['bls'] = set(inds[_hash].keys())
+                    info['bls'] = set(existing_bls)
                     info['data_ants'] = data_ants
                 else:
-                    info['bls'].intersection_update(set(inds[_hash].keys()))
+                    info['bls'].intersection_update(set(existing_bls))
                     info['data_ants'].intersection_update(data_ants)
             bl2ind[filename] = inds[_hash]
 
@@ -1297,7 +1308,7 @@ def read_hera_hdf5(
     # bail here if all we wanted was the info
     if len(rv) == 0:
         return {'info': info}
-
+    
     t = 0
     for _times, filename, _info in times:
         inds = bl2ind[filename]
@@ -1348,11 +1359,16 @@ def read_hera_hdf5(
                     for i, j, p in bls:
                         _d = d[index_exp(i, j, p)]
                         data[i, j, p][t:t + ntimes].real = _d['r']
-                        data[i, j, p][t:t + ntimes].imag = _d['i']
+                        if (i,j) in info['bls']:
+                            data[i, j, p][t:t + ntimes].imag = _d['i']
+                        else:  # conjugate
+                            data[i, j, p][t:t + ntimes].imag = -_d['i']
                 else:
                     for i, j, p in bls:
-                        data[i, j, p][t:t + ntimes] = d[index_exp(i, j, p)]
-
+                        if (i, j) in info['bls']:
+                            data[i, j, p][t:t + ntimes] = d[index_exp(i, j, p)]
+                        else:
+                            data[i, j, p][t:t + ntimes] = np.conj(d[index_exp(i, j, p)])
             t += ntimes
     
     # Now subselect the times. 
@@ -1367,7 +1383,16 @@ def read_hera_hdf5(
     # Quick renaming of data key for niceness
     if 'visdata' in rv:
         rv['data'] = rv.pop('visdata', [])
-    info['data_ants'] = np.array(sorted(info['data_ants']))
+    
+    # Ensure info['bls'] matches input bls.
+    antpairs = set(bl[:2] for bl in bls)
+    info['bls'] = [bl for bl in info['bls'] if bl in antpairs]
+
+    info['data_ants'] = set()
+    for bl in info['bls']:
+        info['data_ants'].add(bl[0])
+        info['data_ants'].add(bl[1])
+
     rv['info'] = info
     return rv
 
@@ -1402,7 +1427,7 @@ class HERADataFastReader:
             else:
                 setattr(self, meta, None)
 
-        self.x_orientation = rv['info']['x_orientation']
+        self.x_orientation = rv['info'].get('x_orientation', None)
         
         # create functions that error informatively when trying to use standard HERAData/UVData methods
         for funcname in list(dir(HERAData)):
@@ -1424,7 +1449,7 @@ class HERADataFastReader:
         info_dict['data_antpos'] = {ant: info_dict['antpos'][ant] for ant in info_dict['data_ants']}
         info_dict['times'] = np.unique(info_dict['times'])
         info_dict['times_by_bl'] = {ap: info_dict['times'] for ap in info_dict['antpairs']}
-        info_dict['times_by_bl'].update({(a2, a1): info_dict['times'] for (a1, a2) in info_dict['antpairs']})
+        # info_dict['times_by_bl'].update({(a2, a1): info_dict['times'] for (a1, a2) in info_dict['antpairs']})
         if not skip_lsts:
             info_dict['lsts'] = JD2LST(info_dict['times'], info_dict['latitude'], info_dict['longitude'], info_dict['altitude'])
             info_dict['lsts_by_bl'] = {ap: info_dict['lsts'] for ap in info_dict['antpairs']}
@@ -1465,6 +1490,7 @@ class HERADataFastReader:
             check=check, dtype=dtype, verbose=verbose
         )
         self._adapt_metadata(rv['info'], skip_lsts=skip_lsts)
+        print("IN: ", rv['info']['antpairs'])
 
         # make autocorrelations real by taking the abs, matches UVData._fix_autos()
         if 'data' in rv:
