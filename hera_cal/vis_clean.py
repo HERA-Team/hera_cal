@@ -511,7 +511,7 @@ class VisClean(object):
             self.Nfreqs = len(self.freqs)
         # link the data if they exist
         if self.hd.data_array is not None and link_data:
-            self.hd.select(frequencies=self.freqs)
+            self.hd.select(frequencies=self.freqs, run_check=False)
             data, flags, nsamples = self.hd.build_datacontainers()
             self.data = data
             self.flags = flags
@@ -687,9 +687,7 @@ class VisClean(object):
             _times = None
 
         # select out a copy of hd
-        hd = self.hd.select(bls=keys, inplace=False, times=_times, frequencies=self.freqs)
-        hd._determine_blt_slicing()
-        hd._determine_pol_indexing()
+        hd = self.hd.select(bls=keys, inplace=False, times=_times, frequencies=self.freqs, run_check=False)
 
         # update HERAData data arrays
         hd.update(data=data, flags=flags, nsamples=nsamples)

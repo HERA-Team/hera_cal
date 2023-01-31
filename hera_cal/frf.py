@@ -1487,7 +1487,7 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                       filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
                                       clobber=clobber, add_to_history=add_to_history,
-                                      extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array, 'channel_width': frfil.hd.channel_width})
+                                      extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array, 'channel_width': frfil.hd.channel_width,  'flex_spw_id_array': frfil.hd.flex_spw_id_array})
             frfil.hd.data_array = None  # this forces a reload in the next loop
 
 

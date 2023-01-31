@@ -207,7 +207,8 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
                 extra_attrs={
                     'Nfreqs': df.Nfreqs, 
                     'freq_array': df.hd.freq_array, 
-                    'channel_width': df.hd.channel_width
+                    'channel_width': df.hd.channel_width,
+                    'flex_spw_id_array': df.hd.flex_spw_id_array,
                 }
             )
             df.hd.data_array = None  # this forces a reload in the next loop
