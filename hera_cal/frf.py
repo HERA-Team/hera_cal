@@ -1361,7 +1361,8 @@ class FRFilter(VisClean):
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
                             wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
                             filetype='uvh5', verbose=False, clobber=False, flag_output=None,
-                            ninterleave=1, equalize_interleave_times=True, **read_kwargs):
+                            ninterleave=1, equalize_interleave_times=True,
+                            equalize_interleave_ntimes=True, **read_kwargs):
     """Time-averaging with a baseline cornerturn
 
 
