@@ -21,7 +21,7 @@ from .utils import echo
 from .flag_utils import factorize_flags
 
 
-def discard_autocorr_imag(data_container):
+def discard_autocorr_imag(data_container, keys = None):
     """
     Helper function to discard all imaginary components in autocorrs in a datacontainer.
 
@@ -33,9 +33,12 @@ def discard_autocorr_imag(data_container):
     -------
     N/A modifies DataContainer in place.
     """
-    for k in data_container:
+    if keys is None:
+        keys = data_container.keys()
+
+    for k in keys:
         if k[0] == k[1]:
-            data_container[k] = data_container[k].real + 0j
+            data_container[k].imag = 0
 
 
 def find_discontinuity_edges(x, xtol=1e-3):
@@ -508,7 +511,7 @@ class VisClean(object):
             self.Nfreqs = len(self.freqs)
         # link the data if they exist
         if self.hd.data_array is not None and link_data:
-            self.hd.select(frequencies=self.freqs)
+            self.hd.select(frequencies=self.freqs, run_check=False)
             data, flags, nsamples = self.hd.build_datacontainers()
             self.data = data
             self.flags = flags
@@ -684,9 +687,7 @@ class VisClean(object):
             _times = None
 
         # select out a copy of hd
-        hd = self.hd.select(bls=keys, inplace=False, times=_times, frequencies=self.freqs)
-        hd._determine_blt_slicing()
-        hd._determine_pol_indexing()
+        hd = self.hd.select(bls=keys, inplace=False, times=_times, frequencies=self.freqs, run_check=False)
 
         # update HERAData data arrays
         hd.update(data=data, flags=flags, nsamples=nsamples)
@@ -1231,9 +1232,9 @@ class VisClean(object):
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice])
         
         # loop through resids, model, and data and make sure everything is real.
-        discard_autocorr_imag(filtered_model)
-        discard_autocorr_imag(filtered_resid)
-        discard_autocorr_imag(filtered_data)
+        discard_autocorr_imag(filtered_model, keys=keys)
+        discard_autocorr_imag(filtered_resid, keys=keys)
+        discard_autocorr_imag(filtered_data, keys=keys)
 
         if hasattr(data, 'times'):
             filtered_data.times = data.times
