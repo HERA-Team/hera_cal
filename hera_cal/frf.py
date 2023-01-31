@@ -1396,7 +1396,7 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         string to write flag output. Optional.
     ninterleave: int, optional
         number of subsets to break data into for interleaving.
-        this will product ninterleave different output files
+        this will produce ninterleave different output files
         with names set equal to <output_name\ext>.interleave_<inum>.<ext>
         for example, if ninterleave = 2, outputname='averaged_data.uvh5'
         then this method will produce two files named
