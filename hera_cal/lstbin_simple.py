@@ -111,7 +111,7 @@ def simple_lst_bin(
     
     if nsamples.shape != data.shape:
         raise ValueError(
-            f"nsampels should have shape {data.shape} but got {nsamples.shape}"
+            f"nsamples should have shape {data.shape} but got {nsamples.shape}"
         )
 
     if len(lst_bin_edges) < 2:
@@ -293,14 +293,14 @@ def lst_average(
     logger.info(f"Percent of data flagged before thresholding: {100*np.sum(flags)/flags.size:.2f}%")
     flags |= flag_frac > flag_thresh
     data[flags] *= np.nan  # do this so that we can do nansum later. multiply to get both real/imag as nan
-    logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size}% visibilities due to flag_frac > {flag_thresh}")
+    logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to flag_frac > {flag_thresh}")
 
     # Now do sigma-clipping.
     if sigma_clip_thresh > 0:
         nflags = np.sum(flags)
         flags |= sigma_clip(data, sigma=sigma_clip_thresh, min_N = sigma_clip_min_N)
         data[flags] *= np.nan
-        logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size}% visibilities due to sigma clipping")
+        logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to sigma clipping")
 
     # get other stats
     logger.info("Calculating std")
