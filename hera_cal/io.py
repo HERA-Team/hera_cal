@@ -1111,7 +1111,7 @@ class HERAData(UVData):
 
 
 def read_hera_hdf5(
-    filenames, bls=None, pols=None, keep_times: list[float] | None=None, full_read_thresh=0.002,
+    filenames, bls=None, pols=None, keep_times: list[float] | None = None, full_read_thresh=0.002,
     read_data=True, read_flags=False, read_nsamples=False,
     check=False, dtype=np.complex128, verbose=False
 ):
@@ -1260,7 +1260,7 @@ def read_hera_hdf5(
             bls = bls.union([bl + (p,) for bl in bls_len2 for p in pols])
         
         # now, conjugate them if they're not in the data
-        bls = {(i, j, p) if (i, j) in info['bls'] else (j, i, utils.conj_pol(p)) for (i, j, p) in bls}
+        bls = {bl if bl[:2] in info['bls'] else utils.reverse_bl(bl) for bl in bls}
 
         # record polarizations as total of ones indexed in bls
         pols = set(bl[2] for bl in bls)
@@ -1340,7 +1340,14 @@ def read_hera_hdf5(
     
     # Now subselect the times. 
     if keep_times is not None:
-        time_mask = np.array([t in keep_times for t in info['times']])
+        time_mask = np.array([
+            np.isclose(
+                keep_times,
+                t,
+                rtol=UVData._time_array.tols[0],
+                atol=UVData._time_array.tols[1],
+            ).any() for t in info['times']
+        ])
         info['times'] = info['times'][time_mask]
         for key in ['visdata', 'flags', 'nsamples']:
             if key in rv:
@@ -1415,7 +1422,6 @@ class HERADataFastReader:
         info_dict['data_antpos'] = {ant: info_dict['antpos'][ant] for ant in info_dict['data_ants']}
         info_dict['times'] = np.unique(info_dict['times'])
         info_dict['times_by_bl'] = {ap: info_dict['times'] for ap in info_dict['antpairs']}
-        # info_dict['times_by_bl'].update({(a2, a1): info_dict['times'] for (a1, a2) in info_dict['antpairs']})
         if not skip_lsts:
             info_dict['lsts'] = JD2LST(info_dict['times'], info_dict['latitude'], info_dict['longitude'], info_dict['altitude'])
             info_dict['lsts_by_bl'] = {ap: info_dict['lsts'] for ap in info_dict['antpairs']}
