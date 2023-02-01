@@ -902,7 +902,7 @@ class Test_HERADataFastReader:
         'infile', (['uvh5_1'], ['uvh5_1', 'uvh5_2'], 'uvh5_h4c')
     )
     @pytest.mark.parametrize(
-        'bls', (None, 'first10')
+        'bls', (None, 'first10', 'conjugated')
     )
     @pytest.mark.parametrize(
         'pols', (None, ['ee'], ['yy'])
@@ -925,6 +925,9 @@ class Test_HERADataFastReader:
         if bls == "first10":
             bls = hd2.get_antpairs()[:10]
             print(bls)
+        elif bls == "conjugated":
+            bls = hd2.get_antpairs()[:15]
+            bls = [(b, a) for a, b in bls]
         if times == "first3":
             if isinstance(hd2.times, np.ndarray):
                 times = hd2.times[:3]

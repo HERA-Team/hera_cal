@@ -1151,7 +1151,6 @@ def read_hera_hdf5(
     '''A potentially faster interface for reading HERA HDF5 files. Only concatenates
     along time axis. Puts times in ascending order, but does not check that
     files are contiguous. Currently not BDA compatible.
-
     Arguments:
         filenames: list of files to read
         bls: list of (ant_1, ant_2, [polstr]) tuples to read out of files.
@@ -1169,7 +1168,6 @@ def read_hera_hdf5(
         check (bool, False): run sanity checks to make sure files match.
         dtype (np.complex128): numpy datatype for output complex-valued arrays
         verbose: print some progress messages.
-
     Returns:
         rv: dict with keys 'info' and optionally 'data', 'flags', and 'nsamples',
             based on whether read_data, read_flags, and read_nsamples are true.
@@ -1188,6 +1186,10 @@ def read_hera_hdf5(
     # Read file metadata to size up arrays and sort times
     filenames = _parse_input_files(filenames, name='input_data')
     
+    if bls is not None:
+        antpairs = [bl[:2] for bl in bls]
+    else:
+        antpairs = None
     
     for filename in filenames:
         if verbose:
@@ -1245,35 +1247,34 @@ def read_hera_hdf5(
             data_ants.update(set(ant2_array))
             _hash = hash((ant1_array.tobytes(), ant2_array.tobytes(), time_first, ntimes))
             # map baselines to array indices for each unique antenna order
-            existing_bls = list(zip(ant1_array, ant2_array))
+            data_bls = list(zip(ant1_array, ant2_array))
+            
             if _hash not in inds:
                 inds[_hash] = {}
 
                 if time_first:
-                    for n, (i, j) in  enumerate(existing_bls):
+                    for n, (i, j) in  enumerate(data_bls):
                         slc = slice(n * ntimes, (n + 1) * ntimes)
                         inds[_hash][(i, j)] = slc
-                        inds[_hash][(j, i)] = slc  # Allow for conjugation
                 else:
-                    for n, (i, j) in  enumerate(existing_bls):
+                    for n, (i, j) in  enumerate(data_bls):
                         slc = slice(n, None, nbls)
                         inds[_hash][(i, j)] = slc
-                        inds[_hash][(j, i)] = slc  # Allow for conjugation
 
-
-                if bls is not None:
+                if antpairs is not None:
                     # Make sure our baselines of interest are in this file
-                    if not all(bl[:2] in inds[_hash] for bl in bls):
-                        missing_bls = [bl for bl in bls if bl[:2] not in inds[_hash]]
+                    missing_bls = [(i,j) for (i,j) in antpairs if not ((i,j) in inds[_hash] or (j,i) in inds[_hash])]
+                    if missing_bls:
                         raise ValueError(f'File {filename} missing:' + str(missing_bls))
 
-
+                # Use intersection of bls across files.
                 if 'bls' not in info:
                     info['bls'] = set(existing_bls)
                     info['data_ants'] = data_ants
                 else:
-                    info['bls'].intersection_update(set(existing_bls))
-                    info['data_ants'].intersection_update(data_ants)
+                    info['bls'] &= set(inds[_hash].keys())
+                    info['data_ants'] &= data_ants
+
             bl2ind[filename] = inds[_hash]
 
     if bls is None:
@@ -1290,8 +1291,13 @@ def read_hera_hdf5(
                 pols = list(pol_indices.keys())
             bls = set(bl for bl in bls if len(bl) == 3)
             bls = bls.union([bl + (p,) for bl in bls_len2 for p in pols])
+        
+        # now, conjugate them if they're not in the data
+        bls = {(i, j, p) if (i, j) in info['bls'] else (j, i, utils.conj_pol(p)) for (i, j, p) in bls}
+
         # record polarizations as total of ones indexed in bls
         pols = set(bl[2] for bl in bls)
+
     # sort files by time of first integration
     times.sort(key=lambda x: x[0][0])
     info['times'] = np.concatenate([t[0] for t in times], axis=0)
@@ -1365,10 +1371,7 @@ def read_hera_hdf5(
                             data[i, j, p][t:t + ntimes].imag = -_d['i']
                 else:
                     for i, j, p in bls:
-                        if (i, j) in info['bls']:
-                            data[i, j, p][t:t + ntimes] = d[index_exp(i, j, p)]
-                        else:
-                            data[i, j, p][t:t + ntimes] = np.conj(d[index_exp(i, j, p)])
+                        data[i, j, p][t:t + ntimes] = d[index_exp(i, j, p)]
             t += ntimes
     
     # Now subselect the times. 
@@ -1385,8 +1388,8 @@ def read_hera_hdf5(
         rv['data'] = rv.pop('visdata', [])
     
     # Ensure info['bls'] matches input bls.
-    antpairs = set(bl[:2] for bl in bls)
-    info['bls'] = [bl for bl in info['bls'] if bl in antpairs]
+    if antpairs is not None:
+        info['bls'] = {bl[:2] for bl in bls}
 
     info['data_ants'] = set()
     for bl in info['bls']:
@@ -1403,7 +1406,6 @@ class HERADataFastReader:
     def __init__(self, input_data, read_metadata=True, check=False, skip_lsts=False):
         '''Instantiates a HERADataFastReader object. Only supports reading uvh5 files, not writing them.
         Does not support BDA and only supports patial i/o along baselines and polarization axes.
-
         Arguments:
             input_data: path or list of paths to uvh5 files.
             read_metadata (bool, True): reads metadata from file and stores it internally to try to match HERAData
@@ -1462,7 +1464,6 @@ class HERADataFastReader:
              read_nsamples=True, check=False, dtype=np.complex128, verbose=False, skip_lsts=False):
         '''A faster read that only concatenates along the time axis. Puts times in ascending order, but does not
         check that files are contiguous. Currently not BDA compatible.
-
         Arguments:
             bls: list of (ant_1, ant_2, [polstr]) tuples to read out of files. Default: all bls common to all files.
             pols: list of pol strings to read out of files. Default: all, but is superceded by any polstrs listed in bls.
@@ -1477,7 +1478,6 @@ class HERADataFastReader:
             dtype (np.complex128): numpy datatype for output complex-valued arrays
             verbose: print some progress messages.
             skip_lsts (bool, False): save time by not computing LSTs from JDs
-
         Returns:
             data: DataContainer mapping baseline keys to complex visibility waterfalls (if read_data is True, else None)
             flags: DataContainer mapping baseline keys to boolean flag waterfalls (if read_flags is True, else None)
