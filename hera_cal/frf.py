@@ -1361,8 +1361,8 @@ class FRFilter(VisClean):
 def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=None,
                             wgt_by_nsample=True, wgt_by_favg_nsample=False, rephase=False,
                             filetype='uvh5', verbose=False, clobber=False, flag_output=None,
-                            ninterleave=1, equalize_interleave_times=True,
-                            equalize_interleave_ntimes=True, **read_kwargs):
+                            ninterleave=1, equalize_interleave_times=False,
+                            equalize_interleave_ntimes=False, **read_kwargs):
     """Time-averaging with a baseline cornerturn
 
 
@@ -1408,10 +1408,11 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
         Set the times in the different interleaved averages to all be equal to the average of times of all interleaves.
         This is necessary for hera_pspec which only allows
         products between different data sets with the same observation times.
-        default is True.
+        default is False.
     equalize_interleave_ntimes: bool, optional
         Set the number of times in different interleaved files to be the same. This will truncate files that have more
         times then the others.
+        default is False.
     read_kwargs: kwargs dict
         additional kwargs for for io.HERAData.read()
     
@@ -1826,12 +1827,10 @@ def time_average_argparser():
             "will result in two output files named 'averaged_data.interleave_0.uvh5 ",
             "and 'averaged_data.interleave_1.uvh5'")
     ap.add_argument("--ninterleave", default=1, type=int, help=desc)
-    desc = ("If set to True, times of interleave files are set to actual averages of interleave sets.",
-            "By default these times are just set to the averages of the times in the first interleave set.")
-    ap.add_argument("--dont_equalize_interleave_times", action="store_true", default=False, help=desc)
-    desc = ("If set to True, interleave files with more time samples then others will not be truncated so that",
-            " all files have the same number of times.")
-    ap.add_argument("--dont_equalize_interleave_ntimes", action="store_true", default=False, help=desc)
+    desc = ("If set to True, times of interleave files are set to averages over the interleavd sets.")
+    ap.add_argument("--equalize_interleave_times", action="store_true", default=False, help=desc)
+    desc = ("If set to True, truncate files with more excess interleaved times so all files have the same number of times.")
+    ap.add_argument("--equalize_interleave_ntimes", action="store_true", default=False, help=desc)
     
     
     return ap

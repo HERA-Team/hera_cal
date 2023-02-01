@@ -31,7 +31,7 @@ run_with_profiling(
     wgt_by_nsample=not(args.dont_wgt_by_nsample),
     wgt_by_favg_nsample=args.wgt_by_favg_nsample,
     clobber=args.clobber, verbose=args.verbose
-    equalize_interleave_times=not(args.dont_equalize_interleave_times),
-    equalize_interleave_ntimes=not(args.dont_equalize_interleave_ntimes)
+    equalize_interleave_times=args.equalize_interleave_times,
+    equalize_interleave_ntimes=args.equalize_interleave_ntimes)
 )
  
