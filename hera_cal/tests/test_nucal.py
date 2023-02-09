@@ -6,6 +6,8 @@ from hera_sim.antpos import linear_array, hex_array
 from .. import redcal
 from .. import nucal
 from .. import utils
+from .. import abscal
+from ..datacontainer import DataContainer
 
 def test_get_u_bounds():
     antpos = {i: np.array([i, 0, 0]) for i in range(7)}
@@ -261,7 +263,50 @@ def test_compute_spatial_filters():
     pass
 
 def test_build_nucal_wgts():
-    pass
+    bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee')]
+    auto_bls = [(0, 0, 'ee'), (1, 1, 'ee'), (2, 2, 'ee')]
+    data_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in bls})
+    data_flags.times_by_bl = {bl[:2]: np.arange(3) / 86400 for bl in bls}
+    data_flags.freqs = np.arange(4)
+    data_flags.antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0])}
+    data_flags.data_antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0])}
+    data_nsamples = DataContainer({bl: np.ones((3, 4), dtype=float) for bl in bls})
+    data_nsamples[(0, 1, 'ee')][1, 1] = 2
+    model_flags = data_flags
+    autocorrs = DataContainer({bl: np.ones((3, 4), dtype=complex) for bl in auto_bls})
+    autocorrs[(1, 1, 'ee')][2, 2] = 3
+    auto_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in auto_bls})
+
+    radial_reds = nucal.FrequencyRedundancy(data_flags.data_antpos, pols=['ee'])
+    freqs = np.linspace(100e6, 200e6, 4)
+
+    #  Set weights for low end of the frequency band to zeros
+    wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, min_freq_cut=130e6)
+    for key in wgts:
+        assert np.allclose(wgts[key][:, 0], 0)
+
+    # Set weights for high end of the frequency band to zeros
+    wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, max_freq_cut=180e6)
+    for key in wgts:
+        assert np.allclose(wgts[key][:, -1], 0)
+
+    # Set weights for samples below a certain u-magnitude to zero
+    wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, min_u_cut=10)
+    for key in wgts:
+        radial_reds.baseline
+        assert np.allclose(wgts[key], 0)
+
+    # Set weights for samples below a certain u-magnitude to zero
+    wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, max_u_cut=0)
+    for key in wgts:
+        assert np.allclose(wgts[key], 0)
+
+    # Assert that weights are the same in the case when there are no model flags or cuts in u-magnitude or frequency
+    abscal_wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flags)
+    nucal_wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs)
+    for key in abscal_wgts:
+        assert np.allclose(abscal_wgts[key], nucal_wgts[key])
+
 
 def test_estimate_degenerate_parameters():
     pass

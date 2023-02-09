@@ -62,7 +62,8 @@ setup_args = {
     'extras_require': {
         "all": [
             'aipy>=3.0',
-            'jax'
+            'jax',
+            'optax',
         ]
     },
     'zip_safe': False,
