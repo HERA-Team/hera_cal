@@ -409,7 +409,7 @@ def test_lst_rephase():
 
     # get integration time in LST, baseline dict
     dlst = np.median(np.diff(lsts))
-    bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
+    bls = odict([(k, antpos[k[0]] - antpos[k[1]]) for k in data.keys()])
 
     # basic test: single dlst for all integrations
     utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)

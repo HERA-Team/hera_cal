@@ -1196,3 +1196,26 @@ class Test_VisClean(object):
         # check warning.
         with pytest.warns(RuntimeWarning):
             vis_clean.time_chunk_from_baseline_chunks(datafiles[0], baseline_chunk_files=datafiles[1:], clobber=True, outfilename=str(tmp_path / fname), time_bounds=True)
+
+def test_discard_autocorr_imag():
+    hd = io.HERAData(os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"))
+    data = hd.read()[0]
+
+    data0 = deepcopy(data)
+    vis_clean.discard_autocorr_imag(data0)
+
+    for k, v in data0.items():
+        assert v.dtype == np.complex64
+        if k[0] == k[1] and k[2][0] == k[2][1]:
+            assert np.all(v.imag == 0)
+
+    # only first key modified.
+    data1 = deepcopy(data)
+    first_key = next(iter(data1.keys()))
+    vis_clean.discard_autocorr_imag(data1, keys = [first_key])
+
+    assert data1[first_key].dtype == np.complex64
+    assert np.all(data1[first_key].imag == 0)
+    assert np.all(data1[first_key] == data0[first_key])
+
+        

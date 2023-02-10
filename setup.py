@@ -53,18 +53,20 @@ setup_args = {
         'hdf5plugin',
         'astropy',
         'astropy-healpix',
-        'pyuvdata',
+        'pyuvdata<=2.2.12',
         'linsolve',
         'hera_qm',
         'scikit-learn',
         'hera_filters',
+        "line_profiler",
+        'aipy',
     ],
     'extras_require': {
-        "all": [
-            'aipy>=3.0',
-            'jax',
-            'optax',
-        ]
+         "all": [
+             'aipy @ git+https://github.com/hera-team/aipy',
+              'jax',
+              'optax'
+         ]
     },
     'zip_safe': False,
 }

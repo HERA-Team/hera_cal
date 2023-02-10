@@ -4,11 +4,11 @@ channels:
   - defaults
 dependencies:
   - pip
-  - aipy>=3.0.0rc2
-  - astropy>=5.0.4
+  - aipy>=3.0.5
+  - astropy
   - h5py
   - hdf5plugin
-  - numpy>=1.23
+  - numpy>=1.24
   - pytest
   - scipy
   - scikit-learn
@@ -21,10 +21,12 @@ dependencies:
   - pytest-cov
   - coveralls
   - jax
-  #- pyuvdata<2.2.0
+  - line_profiler
+  # - pyuvdata==2.2.12
 
   - pip:
     - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
+    # - git+https://github.com/HERA-Team/aipy
     - git+https://github.com/HERA-Team/hera_filters
     - git+https://github.com/HERA-Team/linsolve
     - git+https://github.com/HERA-Team/hera_qm

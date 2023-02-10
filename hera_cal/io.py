@@ -23,7 +23,7 @@ import glob
 from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
 import argparse
 from hera_filters.dspec import place_data_on_uniform_grid
-
+from functools import lru_cache
 
 try:
     import aipy
@@ -37,6 +37,10 @@ from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
 from .utils import split_pol, conj_pol, split_bl, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
 
+# The following two functions are potentially called MANY times with 
+# the same arguments, so we cache them to speed things up.
+polnum2str = lru_cache(polnum2str)
+polstr2num = lru_cache(polstr2num)
 
 def _parse_input_files(inputs, name='input_data'):
     if isinstance(inputs, str):
@@ -176,7 +180,7 @@ class HERACal(UVCal):
             self.select(times=times)
         return self.build_calcontainers()
 
-    def update(self, gains=None, flags=None, quals=None, total_qual=None):
+    def update(self, gains=None, flags=None, quals=None, total_qual=None, tSlice=None, fSlice=None):
         '''Update internal calibrations arrays (data_array, flag_array, and nsample_array)
         using DataContainers (if not left as None) in preparation for writing to disk.
 
@@ -184,15 +188,25 @@ class HERACal(UVCal):
             gains: optional dict mapping antenna-pol to complex gains arrays
             flags: optional dict mapping antenna-pol to boolean flag arrays
             quals: optional dict mapping antenna-pol to float qual arrays
-            total_qual: optional dict mapping polarization to float total quality array
+            total_qual: optional dict mapping polarization to float total quality array.
+            tSlice: optional slice of indices of the times to update. Must have the same size
+                as the 0th dimension of the input gains/flags/quals/total_quals
+            fSlice: optional slice of indices of the freqs to update. Must have the same size
+                as the 1st dimension of the input gains/flags/quals/total_quals
         '''
+        # provide sensible defaults for tSlice and fSlice
+        if tSlice is None:
+            tSlice = slice(0, self.Ntimes)
+        if fSlice is None:
+            fSlice = slice(0, self.Nfreqs)
+
         # loop over and update gains, flags, and quals
         data_arrays = [self.gain_array, self.flag_array, self.quality_array]
         for to_update, array in zip([gains, flags, quals], data_arrays):
             if to_update is not None:
                 for (ant, pol) in to_update.keys():
                     i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-                    array[i, :, :, ip] = to_update[(ant, pol)].T
+                    array[i, fSlice, tSlice, ip] = to_update[(ant, pol)].T
 
         # update total_qual
         if total_qual is not None:
@@ -200,7 +214,7 @@ class HERACal(UVCal):
                 self.total_quality_array = np.zeros(self.gain_array.shape[1:], dtype=float)
             for pol in total_qual.keys():
                 ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-                self.total_quality_array[:, :, ip] = total_qual[pol].T
+                self.total_quality_array[fSlice, tSlice, ip] = total_qual[pol].T
 
     def write(self, filename, spoof_missing_channels=False, **write_kwargs):
         """
@@ -225,6 +239,8 @@ class HERACal(UVCal):
             writer.freq_array = freqs_filled.flatten()
             writer.Nfreqs = len(freqs_filled)
             writer.channel_width = np.median(writer.channel_width) * np.ones_like(writer.freq_array)
+            if hasattr(writer, "flex_spw_id_array") and writer.flex_spw_id_array is not None:
+                writer.flex_spw_id_array = np.full(writer.Nfreqs, writer.spw_array[0], dtype=int)
             # insert original flags and gains into appropriate channels.
             new_gains = np.ones((writer.Nants_data, writer.Nfreqs, writer.Ntimes, writer.Njones), dtype=complex)
             new_gains[:, ~inserted, :, :] = writer.gain_array
@@ -325,7 +341,7 @@ def read_hera_calfits(filenames, ants=None, pols=None,
         ants = set((ant,) for ant in info['ants'])
         ants = set(ant + (p,) for ant in ants for p in pols)
     else:
-        ants = set((ant,) if type(ant) in (int, np.int, np.int64) else ant for ant in ants)
+        ants = set((ant,) if np.issubdtype(type(ant), np.integer) else ant for ant in ants)
         # if length 1 ants are passed in, add on polarizations
         ants_len1 = set(ant for ant in ants if len(ant) == 1)
         if len(ants_len1) > 0:
@@ -576,12 +592,19 @@ class HERAData(UVData):
         '''Determine the mapping between antenna pairs and slices of the blt axis of the data_array.'''
         self._blt_slices = get_blt_slices(self)
 
+    def get_polstr_index(self, pol: str) -> int:
+        num = polstr2num(pol, x_orientation=self.x_orientation)
+
+        try:
+            return self._polnum_indices[num]
+        except AttributeError:
+            self._determine_pol_indexing()
+            return self._polnum_indices[num]
+
     def _determine_pol_indexing(self):
-        '''Determine the mapping between polnums and indices
-        in the polarization axis of the data_array.'''
-        self._polnum_indices = {}
-        for i, polnum in enumerate(self.polarization_array):
-            self._polnum_indices[polnum] = i
+        self._polnum_indices = {
+            polnum: i for i, polnum in enumerate(self.polarization_array)
+        }
 
     def _get_slice(self, data_array, key):
         '''Return a copy of the Nint by Nfreq waterfall or waterfalls for a given key. Abstracts
@@ -597,15 +620,28 @@ class HERAData(UVData):
         if isinstance(key, str):  # asking for a pol
             return {antpair: self._get_slice(data_array, antpair + (key,)) for antpair in self.get_antpairs()}
         elif len(key) == 2:  # asking for antpair
-            pols = np.array([polnum2str(polnum, x_orientation=self.x_orientation) for polnum in self.polarization_array])
-            return {pol: self._get_slice(data_array, key + (pol,)) for pol in pols}
+            return {pol: self._get_slice(data_array, key + (pol,)) for pol in self.pols}
         elif len(key) == 3:  # asking for bl-pol
             try:
-                return np.array(data_array[self._blt_slices[tuple(key[0:2])], :,
-                                           self._polnum_indices[polstr2num(key[2], x_orientation=self.x_orientation)]])
+                pidx = self.get_polstr_index(key[2])
+                if data_array.ndim == 4: # old shapes
+                    return np.array(
+                        data_array[self._blt_slices[tuple(key[:2])], 0, :, pidx]
+                    )
+                else:
+                    return np.array(
+                        data_array[self._blt_slices[tuple(key[:2])], :, pidx]
+                    )
             except KeyError:
-                return np.conj(data_array[self._blt_slices[tuple(key[1::-1])], :,
-                                          self._polnum_indices[polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)]])
+                pidx = self.get_polstr_index(conj_pol(key[2]))
+                if data_array.ndim == 4:
+                    return np.conj(
+                        data_array[self._blt_slices[tuple(key[1::-1])], 0, :, pidx]
+                    )
+                else:
+                    return np.conj(
+                        data_array[self._blt_slices[tuple(key[1::-1])], :, pidx]
+                    )
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
@@ -629,11 +665,11 @@ class HERAData(UVData):
                 self._set_slice(data_array, (key + (pol,)), value[pol])
         elif len(key) == 3:  # providing bl-pol
             try:
-                data_array[self._blt_slices[tuple(key[0:2])], :,
-                           self._polnum_indices[polstr2num(key[2], x_orientation=self.x_orientation)]] = value
-            except(KeyError):
-                data_array[self._blt_slices[tuple(key[1::-1])], :,
-                           self._polnum_indices[polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)]] = np.conj(value)
+                pidx = self.get_polstr_index(key[2])
+                data_array[self._blt_slices[tuple(key[:2])], :, pidx] = value
+            except KeyError:
+                pidx = self.get_polstr_index(conj_pol(key[2]))
+                data_array[self._blt_slices[tuple(key[1::-1])], :, pidx] = np.conj(value)
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
@@ -834,7 +870,7 @@ class HERAData(UVData):
         except KeyError:
             return self.read(bls=key)[0][key]
 
-    def update(self, data=None, flags=None, nsamples=None):
+    def update(self, data=None, flags=None, nsamples=None, tSlice=None, fSlice=None):
         '''Update internal data arrays (data_array, flag_array, and nsample_array)
         using DataContainers (if not left as None) in preparation for writing to disk.
 
@@ -842,16 +878,37 @@ class HERAData(UVData):
             data: Optional DataContainer mapping baselines to complex visibility waterfalls
             flags: Optional DataContainer mapping baselines to boolean flag waterfalls
             nsamples: Optional DataContainer mapping baselines to interger Nsamples waterfalls
+            tSlice: Optional slice of indices of the times to update. Must have the same size
+                as the 0th dimension of the input gains/flags/nsamples.
+            fSlice: Optional slice of indices of the freqs to update. Must have the same size
+                as the 1st dimension of the input gains/flags/nsamples.
         '''
+        # provide sensible defaults for tinds and finds
+        update_full_waterfall = (tSlice is None) and (fSlice is None)
+        if tSlice is None:
+            tSlice = slice(0, self.Ntimes)
+        if fSlice is None:
+            fSlice = slice(0, self.Nfreqs)
+
+        def _set_subslice(data_array, bl, this_waterfall):
+            if update_full_waterfall:
+                # directly write into relevant data_array
+                self._set_slice(data_array, bl, this_waterfall)
+            else:
+                # copy out full waterfall, update just the relevant slices, and write back to data_array
+                full_waterfall = self._get_slice(data_array, bl)
+                full_waterfall[tSlice, fSlice] = this_waterfall
+                self._set_slice(data_array, bl, full_waterfall)
+
         if data is not None:
             for bl in data.keys():
-                self._set_slice(self.data_array, bl, data[bl])
+                _set_subslice(self.data_array, bl, data[bl])
         if flags is not None:
             for bl in flags.keys():
-                self._set_slice(self.flag_array, bl, flags[bl])
+                _set_subslice(self.flag_array, bl, flags[bl])
         if nsamples is not None:
             for bl in nsamples.keys():
-                self._set_slice(self.nsample_array, bl, nsamples[bl])
+                _set_subslice(self.nsample_array, bl, nsamples[bl])
 
     def partial_write(self, output_path, data=None, flags=None, nsamples=None,
                       clobber=False, inplace=False, add_to_history='',
@@ -1022,6 +1079,34 @@ class HERAData(UVData):
                 times = np.unique(list(times.values()))
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
+
+    def init_HERACal(self, gain_convention='divide', cal_style='redundant'):
+        '''Produces a HERACal object using the metadata in this HERAData object.
+
+        Arguments:
+            gain_convention: str indicating whether gains are to calibrated by "multiply"ing or "divide"ing.
+            cal_style: str indicating how calibration was done, either "sky" or "redundant".
+
+        Returns:
+            HERACal object with gain, flag, quality, and total_quality arrays initialized (to 1, True, 0, and 0)
+        '''
+        # create UVCal object from self
+        uvc = UVCal().initialize_from_uvdata(self, gain_convention='divide', cal_style='redundant')
+
+        # create empty data arrays (using future array shapes, which is default true for initialize_from_uvdata)
+        uvc.gain_array = np.ones((uvc.Nants_data, uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=np.complex64)
+        uvc.flag_array = np.ones((uvc.Nants_data, uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=bool)
+        uvc.quality_array = np.zeros((uvc.Nants_data, uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=np.float32)
+        uvc.total_quality_array = np.zeros((uvc.Nfreqs, uvc.Ntimes, uvc.Njones), dtype=np.float32)
+
+        # convert to HERACal and return
+        return to_HERACal(uvc)
+
+    def empty_arrays(self):
+        '''Sets self.data_array and self.nsample_array to all zeros and self.flag_array to all True (if they are not None).'''
+        self.data_array = (np.zeros_like(self.data_array) if self.data_array is not None else None)
+        self.flag_array = (np.ones_like(self.flag_array) if self.flag_array is not None else None)
+        self.nsample_array = (np.zeros_like(self.nsample_array) if self.nsample_array is not None else None)
 
 
 def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
@@ -1672,7 +1757,7 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
     return combined_hd.build_datacontainers()
 
 
-def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history):
+def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history, clobber=True):
     '''Saves redcal metadata to a hdf5 file. See also read_redcal_meta.
 
     Arguments:
@@ -1684,7 +1769,11 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         lsts: 1D numpy array of LSTs in the data
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}
         history: string describing the creation of this file
+        clobber: If False and meta_filename exists, raise OSError.
     '''
+    if os.path.exists(meta_filename) and not clobber:
+        raise OSError(f'{meta_filename} already exists but clobber=False.')
+
     with h5py.File(meta_filename, "w") as outfile:
         # save the metadata of the metadata
         header = outfile.create_group('header')
@@ -1785,7 +1874,6 @@ def to_HERAData(input_data, filetype='miriad', **read_kwargs):
         hd = input_data
         hd.__class__ = HERAData
         hd._determine_blt_slicing()
-        hd._determine_pol_indexing()
         if filetype == 'uvh5':
             hd._attach_metadata()
         hd.filepaths = None
@@ -1797,7 +1885,6 @@ def to_HERAData(input_data, filetype='miriad', **read_kwargs):
             hd = reduce(operator.add, input_data)
             hd.__class__ = HERAData
             hd._determine_blt_slicing()
-            hd._determine_pol_indexing()
             return hd
         else:
             raise TypeError('If input is a list, it must be only strings or only UVData/HERAData objects.')
@@ -1940,18 +2027,18 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     """
     # configure UVData parameters
     # get pols
-    pols = np.unique(list(map(lambda k: k[-1], data.keys())))
+    pols = np.unique([k[-1] for k in data.keys()])
     Npols = len(pols)
-    polarization_array = np.array(list(map(lambda p: polstr2num(p, x_orientation=x_orientation), pols)))
+    polarization_array = np.array([polstr2num(p, x_orientation=x_orientation) for p in pols])
 
     # get telescope ants
     antenna_numbers = np.unique(list(antpos.keys()))
     Nants_telescope = len(antenna_numbers)
-    antenna_names = list(map(lambda a: "HH{}".format(a), antenna_numbers))
+    antenna_names = [f"HH{a}" for a in antenna_numbers]
 
     # get antenna positions in ITRF frame
     tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
-    antenna_positions = np.array(list(map(lambda k: antpos[k], antenna_numbers)))
+    antenna_positions = np.array([antpos[k] for k in antenna_numbers])
     antenna_positions = uvutils.ECEF_from_ENU(antenna_positions, *tel_lat_lon_alt) - telescope_location
 
     # get times

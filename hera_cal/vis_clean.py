@@ -21,7 +21,8 @@ from .utils import echo
 from .flag_utils import factorize_flags
 
 
-def discard_autocorr_imag(data_container):
+
+def discard_autocorr_imag(data_container, keys=None):
     """
     Helper function to discard all imaginary components in autocorrs in a datacontainer.
 
@@ -33,9 +34,12 @@ def discard_autocorr_imag(data_container):
     -------
     N/A modifies DataContainer in place.
     """
-    for k in data_container:
+    if keys is None:
+        keys = data_container.keys()
+
+    for k in keys:
         if k[0] == k[1]:
-            data_container[k] = data_container[k].real + 0j
+            data_container[k].imag = 0
 
 
 def find_discontinuity_edges(x, xtol=1e-3):
@@ -508,7 +512,7 @@ class VisClean(object):
             self.Nfreqs = len(self.freqs)
         # link the data if they exist
         if self.hd.data_array is not None and link_data:
-            self.hd.select(frequencies=self.freqs)
+            self.hd.select(frequencies=self.freqs, run_check=False)
             data, flags, nsamples = self.hd.build_datacontainers()
             self.data = data
             self.flags = flags
@@ -684,9 +688,7 @@ class VisClean(object):
             _times = None
 
         # select out a copy of hd
-        hd = self.hd.select(bls=keys, inplace=False, times=_times, frequencies=self.freqs)
-        hd._determine_blt_slicing()
-        hd._determine_pol_indexing()
+        hd = self.hd.select(bls=keys, inplace=False, times=_times, frequencies=self.freqs, run_check=False)
 
         # update HERAData data arrays
         hd.update(data=data, flags=flags, nsamples=nsamples)
@@ -723,7 +725,7 @@ class VisClean(object):
 
     def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
                   ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
-                  min_dly=10.0, max_frate=None, output_prefix='clean',
+                  min_dly=10.0, max_frate=None, output_prefix='clean', output_postfix='',
                   skip_wgt=0.1, verbose=False, tol=1e-9,
                   overwrite=False, **filter_kwargs):
         """
@@ -749,6 +751,10 @@ class VisClean(object):
         min_dly: max delay (in nanosec) used for freq filter is never below this.
         max_frate : max fringe rate (in milli-Hz) used for time filtering. See hera_filters.dspec.fourier_filter for options.
         output_prefix : str, attach output model, resid, etc, to self as output_prefix + '_model' etc.
+        output_postfix : str, optional
+             postfix to append to names of time averaged data containers.
+             Example: 'avg' means that 'data' -> 'data_avg'
+             Default is '', an empty string.
         cache: dict, optional
             dictionary for caching fitting matrices.
         skip_wgt : skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
@@ -805,13 +811,14 @@ class VisClean(object):
 
     def fourier_filter(self, filter_centers, filter_half_widths, mode='clean',
                        x=None, keys=None, data=None, flags=None, wgts=None,
-                       output_prefix='clean', zeropad=None, cache=None,
+                       output_prefix='clean', output_postfix='', zeropad=None, cache=None,
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
                        skip_flagged_edges=False, filter_spw_ranges=None,
                        skip_contiguous_flags=False, max_contiguous_flag=None,
                        keep_flags=False, clean_flags_in_resid_flags=True,
                        skip_if_flag_within_edge_distance=0,
                        flag_model_rms_outliers=False, model_rms_threshold=1.1,
+                       interleave=False,
                        **filter_kwargs):
         """
         Generalized fourier filtering wrapper for hera_filters.dspec.fourier_filter.
@@ -878,7 +885,14 @@ class VisClean(object):
         data : DataContainer, data to clean. Default is self.data
         flags : Datacontainer, flags to use. Default is self.flags
         wgts : DataContainer, weights to use. Default is None.
-        output_prefix : string, prefix for attached filter data containers.
+        output_prefix : str, optional
+             Prefix for attached filter data containers.
+             'clean' -> flags for filtered data are stored in a new data container name
+             "clean_flags"
+             Default is 'clean'
+        output_postfix : str, optional
+             Postfix for attached filter data containers.
+             Default is ''
         zeropad : int, number of bins to zeropad on both sides of FFT axis. Provide 2-tuple if axis='both'
         ax : string, optional, string specifying axis to filter.
             Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
@@ -919,6 +933,9 @@ class VisClean(object):
         model_rms_threshold : float, optional
             factor that rms of model in a channel or integration needs to exceed the rms of unflagged data
             to be flagged. only used if flag_model_rms_outliers is true.
+        interleave : bool, optional
+            If true, run filters separately on alternating time/frequency samples.
+            default is False.
         filter_kwargs: dict. Filtering arguments depending on type of filtering.
             NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
             dictionary with options for fitting techniques.
@@ -1039,7 +1056,11 @@ class VisClean(object):
             raise NotImplementedError("Channels detected in original frequency array that do not fall into any of the specified SPWS."
                                       "We currently only support SPWs that together include every channel in the original frequency axis.")
         # initialize containers
-        containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
+        if output_postfix != '':
+            containers = ["{}_{}_{}".format(output_prefix, dc, output_postfix) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
+        else:
+            containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
+
         for i, dc in enumerate(containers):
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
@@ -1132,6 +1153,7 @@ class VisClean(object):
                     win = flag_rows_with_flags_within_edge_distance(xp, win, skip_if_flag_within_edge_distance, ax=ax)
 
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
+                
                 if 0 not in din.shape:
                     mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                                           filter_half_widths=filter_half_widths,
@@ -1229,10 +1251,11 @@ class VisClean(object):
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice]) | skipped
                 else:
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice])
-                # loop through resids, model, and data and make sure everything is real.
-                discard_autocorr_imag(filtered_model)
-                discard_autocorr_imag(filtered_resid)
-                discard_autocorr_imag(filtered_data)
+        
+        # loop through resids, model, and data and make sure everything is real.
+        discard_autocorr_imag(filtered_model, keys=keys)
+        discard_autocorr_imag(filtered_resid, keys=keys)
+        discard_autocorr_imag(filtered_data, keys=keys)
 
         if hasattr(data, 'times'):
             filtered_data.times = data.times
@@ -1867,7 +1890,6 @@ def _trim_status(info_dict, axis, zeropad):
     for i in range(nints):
         statuses[i] = statuses.pop(i + zeropad)
 
-
 def _adjust_info_indices(x, info_dict, edges, freq_baseind):
     """Adjust indices in info dict to reflect rows inserted by restore_flagged_edges
 
@@ -1901,7 +1923,7 @@ def _adjust_info_indices(x, info_dict, edges, freq_baseind):
                 statuses[ind + offset + baseinds[axind]] = statuses.pop(ind)
             offset -= edge[0]
 
-
+            
 # ------------------------------------------
 # Here is an argparser with core arguments
 # needed for all types of xtalk and delay

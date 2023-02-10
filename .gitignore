@@ -21,3 +21,6 @@ hera_cal/notebooks
 *.ipynb_checkpoints*
 .pytest_cache*
 .vscode/
+htmlcov/
+hera_cal/data/zen*.downsample.iter0*
+cache_temp/

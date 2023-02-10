@@ -28,7 +28,7 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
         uvd.read(os.path.join(DATA_PATH, 'PyGSM_Jy_downselect.uvh5'),
                  run_check_acceptability=False)
     else:
-        if isinstance(uvd, (str, np.str)):
+        if isinstance(uvd, str):
             _uvd = UVData()
             _uvd.read(uvd)
             uvd = _uvd
