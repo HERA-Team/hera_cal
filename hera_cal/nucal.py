@@ -543,8 +543,8 @@ def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutof
     return spatial_filters
 
 def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, times_by_bl=None,
-                     df=None, data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None, 
-                     min_u_cut=None, max_u_cut=None, min_freq_cut=None, max_freq_cut=None):
+                     df=None, data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None, min_u_cut=None, 
+                     max_u_cut=None, min_freq_cut=None, max_freq_cut=None, spw_range_flags=None):
     """
     Build linear weights for data in nucal (or calculating loss) defined as
     wgts = (noise variance * nsamples)^-1 * (0 if data or model is flagged). Light wrapper
@@ -593,9 +593,11 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
         min_freq_cut : float
             Minimum frequency value to include in calibration in units of Hz. All frequency channels less than
             this value will be set to 0.
-        max_u_cut : float
+        max_freq_cut : float
             Maximum frequency value to include in calibration in units of Hz. All frequency channels greater than
             this value will be set to 0.
+        spw_range_flags : list of tuples
+            List of tuples containing the start and stop frequency of each spectral window to flag in units of Hz.
                  
     Returns:
     -------
@@ -619,6 +621,9 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
                 wgts[:, freqs < min_freq_cut] = True
             if max_freq_cut is not None:
                 wgts[:, freqs > max_freq_cut] = True
+            if spw_range_flags is not None:
+                for spw in spw_range_flags:
+                    wgts[:, (freqs > spw[0]) & (freqs < spw[1])] = True
 
             # Set model flags for all baselines in the group
             for bl in radial_reds.get_redundant_group(key):

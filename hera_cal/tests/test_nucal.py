@@ -340,12 +340,17 @@ def test_build_nucal_wgts():
         umodes = freqs * bl / 2.998e8
         assert np.allclose(wgts[key][:, umodes < 10], 0)
 
-    # Set weights for samples below a certain u-magnitude to zero
+    # Set weights for samples above a certain u-magnitude to zero
     wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, max_u_cut=10)
     for key in wgts:
         bl = radial_reds.baseline_lengths[radial_reds._bl_to_red_key[key]]
         umodes = freqs * bl / 2.998e8
         assert np.allclose(wgts[key][:, umodes > 10], 0)
+
+    # Set weights for samples above a certain u-magnitude to zero
+    wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, spw_range_flags=[(120e6, 180e6)])
+    for key in wgts:
+        assert np.allclose(wgts[key][:, [1, 2]], 0)
 
     # Assert that weights are the same in the case when there are no model flags or cuts in u-magnitude or frequency
     abscal_wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flags)
