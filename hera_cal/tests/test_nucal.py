@@ -260,7 +260,50 @@ class TestFrequencyRedundancy:
         assert len(radial_reds[0]) > len(radial_reds[-1])
 
 def test_compute_spatial_filters():
-    pass
+    # Generate a mock array for generating filters
+    antpos = hex_array(3, split_core=False, outriggers=0)
+    radial_reds = nucal.FrequencyRedundancy(antpos)
+    radial_reds.filter_radial_groups(min_nbls=3)
+    freqs = np.linspace(50e6, 250e6, 200)
+
+    spatial_filters = nucal.compute_spatial_filters(radial_reds, freqs)
+
+    # Number of filters should equal number of baselines in radial_reds
+    assert len(spatial_filters) == sum(map(len, radial_reds))
+
+    # First index of filter should equal number of frequencies
+    # Second index is number of modeling components, should be less than or 
+    # equal to number of frequencies
+    for bl in spatial_filters:
+        assert spatial_filters[bl].shape[0] == freqs.shape[0]
+        assert spatial_filters[bl].shape[1] <= freqs.shape[0]
+
+    # All filters within the same group should have the same size
+    for rdgrp in radial_reds:
+        filter_shape = spatial_filters[rdgrp[0]].shape
+        for bl in rdgrp:
+            assert filter_shape == spatial_filters[bl].shape
+
+    # Show that filters can be used to model a common u-plane with 
+    # uneven sampling
+    antpos = linear_array(6, sep=5)
+    radial_reds = nucal.FrequencyRedundancy(antpos)
+    spatial_filters = nucal.compute_spatial_filters(radial_reds, freqs)
+    data = []
+    design_matrix = []
+    for rdgrp in radial_reds:
+        for bl in rdgrp:
+            blmag = np.linalg.norm(antpos[bl[1]] - antpos[bl[0]])
+            data.append(np.sin(freqs * blmag / 2.998e8))
+            design_matrix.append(spatial_filters[bl])
+            
+    # Fit PSWF to mock data
+    design_matrix = np.array(design_matrix)
+    XTXinv = np.linalg.pinv(np.einsum('afm,afn->mn', design_matrix, design_matrix))
+    Xy = np.einsum('afm,af->m', design_matrix, data)
+    model = design_matrix @ (XTXinv @ Xy)
+    np.allclose(model, data, atol=1e-6)
+
 
 def test_build_nucal_wgts():
     bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee')]
@@ -293,32 +336,19 @@ def test_build_nucal_wgts():
     # Set weights for samples below a certain u-magnitude to zero
     wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, min_u_cut=10)
     for key in wgts:
-        radial_reds.baseline
-        assert np.allclose(wgts[key], 0)
+        bl = radial_reds.baseline_lengths[radial_reds._bl_to_red_key[key]]
+        umodes = freqs * bl / 2.998e8
+        assert np.allclose(wgts[key][:, umodes < 10], 0)
 
     # Set weights for samples below a certain u-magnitude to zero
-    wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, max_u_cut=0)
+    wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, max_u_cut=10)
     for key in wgts:
-        assert np.allclose(wgts[key], 0)
+        bl = radial_reds.baseline_lengths[radial_reds._bl_to_red_key[key]]
+        umodes = freqs * bl / 2.998e8
+        assert np.allclose(wgts[key][:, umodes > 10], 0)
 
     # Assert that weights are the same in the case when there are no model flags or cuts in u-magnitude or frequency
     abscal_wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flags)
     nucal_wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs)
     for key in abscal_wgts:
         assert np.allclose(abscal_wgts[key], nucal_wgts[key])
-
-
-def test_estimate_degenerate_parameters():
-    pass
-
-def test_foreground_model():
-    pass
-
-def test_mean_squared_error():
-    pass
-
-def test_loss_function():
-    pass
-
-def test_calibrate_single_integration():
-    pass

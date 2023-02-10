@@ -11,6 +11,7 @@ from hera_filters import dspec
 import astropy.constants as const
 from scipy.cluster.hierarchy import fclusterdata
 
+
 # Optional import of Optax and Jax libraries
 try:
     import optax
