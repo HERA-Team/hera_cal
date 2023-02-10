@@ -21,6 +21,7 @@ dependencies:
   - pytest-cov
   - coveralls
   - jax
+  - optax
   - line_profiler
   # - pyuvdata==2.2.12
 
