@@ -8,8 +8,9 @@
 import sys
 import argparse
 from hera_cal import io
+from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
 
 
 ap = io.throw_away_flagged_ants_parser()
-args = ap.parse_args()
-io.throw_away_flagged_ants(**vars(args))
+args = parse_args(ap)
+run_with_profiling(io.throw_away_flagged_ants, args, **filter_kwargs(vars(args)))

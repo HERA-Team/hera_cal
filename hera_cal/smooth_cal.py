@@ -1046,5 +1046,5 @@ def smooth_cal_argparser():
                           Only used when method used is 'DPSS'")
     flt_opts.add_argument("--axis", default="both", type=str, help="smooth either in 'freq', or 'both' (time and freq) axes.")
     flt_opts.add_argument("--skip_wgt", default=0.1, type=float, help="skip if this fraction is flagged.")
-    args = a.parse_args()
-    return args
+    
+    return a
