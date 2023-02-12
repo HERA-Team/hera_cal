@@ -63,7 +63,6 @@ setup_args = {
     ],
     'extras_require': {
          "all": [
-             'aipy @ git+https://github.com/hera-team/aipy',
               'jax',
               'optax'
          ]

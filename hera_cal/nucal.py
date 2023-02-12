@@ -11,29 +11,6 @@ from hera_filters import dspec
 import astropy.constants as const
 from scipy.cluster.hierarchy import fclusterdata
 
-
-# Optional import of Optax and Jax libraries
-try:
-    import optax
-
-    # Approved Optax Optimizers
-    OPTIMIZERS = {
-        'adabelief': optax.adabelief, 'adafactor': optax.adafactor, 'adagrad': optax.adagrad, 'adam': optax.adam,
-        'adamw': optax.adamw, 'fromage': optax.fromage, 'lamb': optax.lamb, 'lars': optax.lars,
-        'noisy_sgd': optax.noisy_sgd, 'dpsgd': optax.dpsgd, 'radam': optax.radam, 'rmsprop': optax.rmsprop,
-        'sgd': optax.sgd, 'sm3': optax.sm3, 'yogi': optax.yogi
-    }
-except:
-    warnings.warn('Optax is not installed. Some functionality may not be available')
-
-try:
-    import jax
-    from jax import numpy as jnp
-    jax.config.update("jax_enable_x64", True)
-
-except:
-    warnings.warn('Jax is not installed. Some functionality may not be available')
-    
 # Constants
 SPEED_OF_LIGHT = const.c.si.value
 
@@ -133,7 +110,7 @@ def get_u_bounds(radial_reds, antpos, freqs):
 
     Parameters:
     ----------
-    radial_reds: list of lists of baseline tuples (or FrequencyRedundancy)
+    radial_reds: list of lists of baseline tuples (or RadialRedundancy)
         List of lists of radially redundant groups of baselines
     antpos: dict
         Antenna positions in the form {ant_index: np.array([x,y,z])}.
@@ -157,8 +134,9 @@ def get_u_bounds(radial_reds, antpos, freqs):
 
 def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=1e-4):
     """
-    Sort baselines into groups with the same radial heading. These groups of baselines are potentially
-    frequency redundant in a similar way to redcal.get_reds does. Returns a list of RadialRedundantGroup objects
+    Sort baselines into groups with the same radial heading. These groups of baselines are
+    radially redundant in a similar way to redcal.get_reds does. Returns a list of list of 
+    radially redundant baselines.
 
     Parameters:
     ----------
@@ -213,12 +191,12 @@ def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=
         for group in uors:
             _uors[group[0]] = group
 
-    # Convert lists to RadialRedundantGroup objects
+    # Filter out groups with less than min_ubl_per_orient baselines
     uors = [_uors[key] for key in _uors if len(_uors[key]) >= min_ubl_per_orient]
     return sorted(uors, key=len, reverse=True)
 
 
-class FrequencyRedundancy:
+class RadialRedundancy:
     """List-like object that contains lists of baselines that are radially redundant. 
     Functions similarly to the output of redcal.get_reds for frequency redundant
     calibration. In addition to mimicking list functionality, this object also filters
@@ -427,11 +405,14 @@ class FrequencyRedundancy:
         self._reset_mapping_dictionaries()
 
     def __len__(self):
-        """Get number of frequency redundant groups"""
+        """Get number of radially redundant groups"""
         return len(self._radial_groups)
 
     def __getitem__(self, index):
-        """Get RadialRedundantGroup object from list of unique orientations"""
+        """
+        Get a list of baselines that are radially redundant at a given index from the list
+        of unique orientations.
+        """
         return self._radial_groups[index]
 
     def __setitem__(self, index, value):
@@ -496,24 +477,26 @@ class FrequencyRedundancy:
         """Sorts list by length of the radial groups"""
         self._radial_groups.sort(key=(len if key is None else key), reverse=reverse)
 
-def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutoff=1e-12, cache={}):
+def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eigenval_cutoff=1e-12, cache={}):
     """
     Compute prolate spheroidal wave function (PSWF) eigenvectors filters for each radially redundant group in radial_reds. 
-    Note that if you are using a large array with a large range short and long baselines in an individual radially
+    Note that if you are using a large array with a large range of short and long baselines in an individual radially
     redundant group, it is advised to filter radial_reds using radial_reds.filter_reds before running this function 
     to reduce the size of filters generated
 
     Parameters:
     ----------
-    radial_reds : FrequencyRedundant object
-        FrequencyRedundant object containing lists of radially redundant baselines. 
+    radial_reds : RadialRedundancy object
+        RadialRedundancy object containing lists of radially redundant baselines. 
     freqs : np.ndarray
         Frequencies found in the data in units of Hz
-    ell_half_width : float, default=1
+    spatial_half_width : float, default=1
         Filter half width used to generate PSWF filters. Default value of 1 cooresponds to
         modeling foregrounds out to the horizon.
     eigenval_cutoff : float, default=1e-12
         Sinc matrix eigenvalue cutoffs to use for included PSWF modes.
+    cache : dictionary, default={}
+        Dictionary containing cached PSWF eigenvectors to speed up computation
 
     Returns:
     -------
@@ -533,7 +516,7 @@ def compute_spatial_filters(radial_reds, freqs, ell_half_width=1, eigenval_cutof
         for bl in group:
             umodes = radial_reds.baseline_lengths[bl] / SPEED_OF_LIGHT * freqs
             pswf, _ = dspec.pswf_operator(
-                umodes, filter_centers=[0], filter_half_widths=[ell_half_width], eigenval_cutoff=[eigenval_cutoff], 
+                umodes, filter_centers=[0], filter_half_widths=[spatial_filter_half_width], eigenval_cutoff=[eigenval_cutoff], 
                 xmin=umin, xmax=umax, cache=cache
             )
             
@@ -560,8 +543,8 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
              DataContainer with autocorrelation visibilities
         auto_flags : DataContainer
             DataContainer containing flags for autocorrelation visibilities
-        radial_reds : FrequencyRedundant object
-            FrequencyRedundant object containing a list of list baseline tuples of radially redundant
+        radial_reds : RadialRedundancy object
+            RadialRedundancy object containing a list of list baseline tuples of radially redundant
             groups
         freqs : np.ndarray
             Frequency values present in the data in units of Hz     
@@ -610,24 +593,24 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
         for key in group:
             # Get u-magnitudes of all samples for this baseline
             umag = radial_reds.baseline_lengths[key] * freqs / SPEED_OF_LIGHT
-            wgts = np.zeros_like(data_flags[key], dtype=bool)
+            flags = np.zeros_like(data_flags[key], dtype=bool)
 
             # Apply u-magnitude and frequency cuts
             if min_u_cut is not None:
-                wgts[:, umag < min_u_cut] = True
+                flags[:, umag < min_u_cut] = True
             if max_u_cut is not None:
-                wgts[:, umag > max_u_cut] = True
+                flags[:, umag > max_u_cut] = True
             if min_freq_cut is not None:
-                wgts[:, freqs < min_freq_cut] = True
+                flags[:, freqs < min_freq_cut] = True
             if max_freq_cut is not None:
-                wgts[:, freqs > max_freq_cut] = True
+                flags[:, freqs > max_freq_cut] = True
             if spw_range_flags is not None:
                 for spw in spw_range_flags:
-                    wgts[:, (freqs > spw[0]) & (freqs < spw[1])] = True
+                    flags[:, (freqs > spw[0]) & (freqs < spw[1])] = True
 
             # Set model flags for all baselines in the group
             for bl in radial_reds.get_redundant_group(key):
-                model_flags[bl] = wgts
+                model_flags[bl] = flags
 
     # Add flags to DataContainer
     model_flags = DataContainer(model_flags)

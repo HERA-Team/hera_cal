@@ -34,3 +34,4 @@ from . import vis_clean
 from . import autos
 from . import noise
 from . import tempcal
+from . import nucal
