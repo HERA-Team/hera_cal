@@ -61,11 +61,12 @@ setup_args = {
         "line_profiler",
         'aipy',
     ],
-    # 'extras_require': {
-    #     "all": [
-    #         'aipy @ git+https://github.com/hera-team/aipy'
-    #     ]
-    # },
+    'extras_require': {
+         "all": [
+              'jax',
+              'optax'
+         ]
+    },
     'zip_safe': False,
 }
 
