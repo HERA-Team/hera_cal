@@ -622,3 +622,146 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
     )
 
     return wgts
+
+def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
+    """
+    Project u-model components on to the spectral axis using a pre-computed set of DPSS-filters for the spectral
+    axis.
+
+    Parameters:
+    -----------
+    u_model_comps : list of np.ndarray
+        List of u-model PSWF fit components to project on to the spectral axis. Each set of u-model components is a
+        either a 1D array with shape (Nfreqs) where Nfreqs in the number of frequencies in the data or a 2D array with 
+        shape (Ntimes, Nfreqs) where Ntimes is the number of times in the data
+    spectral_filters : np.ndarray
+        Array of DPSS filters with shape (Nfreqs, Nfilters) where Nfilters is the number of DPSS eigenvectors.
+
+    Returns:
+    --------
+    model_comps : list of np.ndarray
+        List of model components projected on to the spectral axis. Each component is a 2D array with shape
+        (Ntimes, Nfilters) where Ntimes is the number of times in the data and Nfilters is the number of DPSS
+        eigenvectors.
+    """
+    if not isinstance(u_model_comps, list):
+        u_model_comps = [u_model_comps]
+
+    is_2D = u_model_comps.ndim == 2
+
+    # Calculate the constant eigenvalues of the spectral filters TODO FIXME
+    const_eigen_vals = np.sum(spectral_filters ** 2, axis=0, keepdims=True)
+    if is_2D:
+        const_eigen_vals = np.expand_dims(const_eigen_vals, axis=0)
+
+    # Project u-model components on to the spectral axis
+    model_comps = []
+    for u_comps in u_model_comps:
+        model_comps.append(np.dot(u_comps, spectral_filters) / const_eigen_vals)
+
+    return model_comps
+
+def estimate_degenerate_parameters(data, data_wgts, radial_reds, ant_flags, spatial_filters, niter=1, phs_max_iter=10):
+    """
+    First-pass estimate of the redcal degenerate parameters using a common u-model for each radially redundant group.
+    Method starts by unpacking the data into a dictionary containing only baselines found in radial_reds.
+    Then, a u-dependent model per radially redundant group is computed for each baseline by fitting a set of smooth PSWF 
+    eigenvectors to the data. The model is then used to remove the degenerate parameters from the redundantly calibrated 
+    data by using the model and the data as inputs to abscal. This is then iterated niter times to attempt to converge 
+    on a good starting solution for a follow-up method such as gradient descent. The final "calibrated" data is the 
+    compared to the original data to estimate the degenerate parameters. The redcal degenerate parameters and u-model components
+    are then returned as a dictionary.
+    
+    Parameters:
+    ----------
+    data : dictionary, DataContainer
+        DataContainer of redundantly calibrated visibilities
+    data_wgts : dictionary, DataContainer
+        Weights associated with redudantly calibrated visibilities
+    radial_reds : RadialRedundancy
+        RadialRedundancy object which contains of baseline tuple which are considered
+        to be radially redundant
+    ant_flags : dictionary, DataContainer
+        Dictionary mapping keys like (1, 'Jnn') to flag waterfalls from redundant calibration.
+    spatial_filters : dictionary
+        pass
+    spectral_filters : np.ndarray
+        pass
+    niter : int, default=1
+        Number of iterations to use when attempting to estimate the degenerate parameters
+    phs_max_iter : int, default=10
+        pass
+        
+    Returns:
+    -------
+    degen_params : dictionary
+        pass
+    u_model_comps : dictionary
+        pass
+    """
+    # Get list of baseline keys to store data and data weights
+    keys = [bl for rdgrp in radial_reds for bl in rdgrp]
+
+    # Keep only data and data weights for the radial groups
+    data_here = DataContainer(deepcopy({bl: data[bl] for bl in keys}))
+    data_wgts_here = DataContainer(deepcopy({bl: data_wgts[bl] for bl in keys}))
+    
+    # Reset metadata
+    data_here.antpos = data.antpos
+    data_wgts_here.antpos = data.antpos
+    data_here.freqs = data.freqs
+    
+    # Storage dictionaries for caching intermediate results
+    cache = {}
+    model_comps = {}
+    
+    # Estimate initial model of the uv-plane along radial spokes
+    for i in range(niter):
+        model = {}
+        for group in radial_reds:
+            design_matrix = jnp.array([spatial_filters[bl] for bl in group])
+            wgts_arr = jnp.array([data_wgts_here[bl] for bl in group])
+            data_arr = jnp.array([data_here[bl] for bl in group])
+
+            # Compute XTX and inverse
+            if i == 0:
+                XTX = jnp.einsum('afm,atf,afn->tmn', design_matrix, wgts_arr, design_matrix)
+                XTXinv = np.linalg.pinv(XTX, hermitian=True)
+                cache[group[0]] = XTXinv
+            else:
+                XTXinv = cache[group[0]]
+            
+            # Compute solution vector
+            Xy = jnp.einsum('afm,atf->tm', design_matrix, wgts_arr * data_arr)
+            beta = jnp.einsum('tmn,tm->tn', XTXinv, Xy)
+            model_comps[group[0]] = beta
+
+            # Evaluate model with solution vector
+            for bl in group:
+                model[bl] = np.einsum('fm,tm->tf', spatial_filters[bl], beta)
+        
+        # Add model to DataContainer
+        model = DataContainer(model)
+    
+        # Estimate Degenerate Gain Parameters using abscal
+        _ = abscal.post_redcal_abscal(model, data_here, data_wgts_here, ant_flags, verbose=False, phs_max_iter=phs_max_iter)
+
+    
+    # Get final set of degenerate parameters
+    ants = sorted(list(ant_flags.keys()))
+    idealized_antpos = abscal._get_idealized_antpos(ant_flags, data_here.antpos, data_here.pols(),
+                                             data_wgts=data_wgts_here, keep_flagged_ants=True)
+
+    # Repack data into new datacontainers for estimate of degenerate parameters
+    data_here = DataContainer({bl: data[bl] for bl in keys})
+    data_here.antpos = data.antpos
+    data_here.freqs = data.freqs
+    data_wgts_here = DataContainer({bl: data_wgts[bl] for bl in keys})
+    
+    # Use best-fit u-model to get amplitude and tip-tilt parameters
+    # amp_params = abscal.abs_amp_logcal(model, data_here, wgts=data_wgts_here, verbose=False, return_gains=False, gain_ants=ants)
+    # angle_wgts = DataContainer({bl: 2 * np.abs(model[bl])**2 * data_wgts_here[bl] for bl in model})
+    # phase_params = abscal.TT_phs_logcal(model, data_here, idealized_antpos, wgts=angle_wgts, verbose=False, assume_2D=False, return_gains=False, gain_ants=ants)
+    # degen_params = {**amp_params, **phase_params}
+
+    return degen_params, model_comps
