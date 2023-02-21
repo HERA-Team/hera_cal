@@ -27,3 +27,6 @@ hera_cal/data/zen.*.sum.bda.downsampled.first.calfits
 hera_cal/data/zen.*.sum.bda.downsampled.omni.calfits
 hera_cal/data/zen.*.sum.bda.downsampled.omni_vis.uvh5
 hera_cal/data/zen.*.sum.bda.downsampled.redcal_meta.hdf5
+
+htmlcov/
+cache_temp/

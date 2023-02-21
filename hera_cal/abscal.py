@@ -3971,7 +3971,6 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         # also make sure to only include baselines present in hdd.
         hdm.select(bls=hdd.bls)
         hdm._determine_blt_slicing()
-        hdm._determine_pol_indexing()
 
     model, model_flags, model_nsamples = hdm.build_datacontainers()
 
@@ -4123,8 +4122,7 @@ def post_redcal_abscal_argparser():
     a.add_argument("--skip_abs_amp_lincal", default=False, action="store_true", help="finish calibration with an unbiased amplitude lincal step")
     a.add_argument("--write_delta_gains", default=False, action="store_true", help="Write degenerate abscal component of gains separately.")
     a.add_argument("--output_file_delta", type=str, default=None, help="Filename to write delta gains too.")
-    args = a.parse_args()
-    return args
+    return a
 
 
 def model_calibration_argparser():

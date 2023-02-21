@@ -57,12 +57,15 @@ setup_args = {
         'linsolve',
         'hera_qm',
         'scikit-learn',
-        'hera_filters'
+        'hera_filters',
+        "line_profiler",
+        'aipy',
     ],
     'extras_require': {
-        "all": [
-            'aipy @ git+https://github.com/hera-team/aipy'
-        ]
+         "all": [
+              'jax',
+              'optax'
+         ]
     },
     'zip_safe': False,
 }
