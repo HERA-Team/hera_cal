@@ -65,6 +65,11 @@ setup_args = {
          "all": [
               'jax',
               'optax'
+         ],
+         'dev': [
+            "pytest",
+            "pre-commit",
+            "pytest-cov"
          ]
     },
     'zip_safe': False,
