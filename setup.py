@@ -72,6 +72,7 @@ setup_args = {
             "pre-commit",
             "pytest-cov",
             "hera_sim",
+            "pytest-xdist"
          ]
     },
     'zip_safe': False,

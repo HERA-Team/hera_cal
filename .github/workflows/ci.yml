@@ -38,7 +38,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          pytest --pyargs hera_cal --cov=hera_cal --cov-config=./.coveragerc --cov-report xml:./coverage.xml --durations=15
+          pytest -n auto --pyargs hera_cal --cov=hera_cal --cov-config=./.coveragerc --cov-report xml:./coverage.xml --durations=15
 
       - name: Upload Coverage (Ubuntu)
         if: matrix.os == 'ubuntu-latest' && success()
