@@ -60,6 +60,7 @@ setup_args = {
         'hera_filters',
         "line_profiler",
         'aipy',
+        "rich",
     ],
     'extras_require': {
          "all": [
@@ -69,7 +70,8 @@ setup_args = {
          'dev': [
             "pytest",
             "pre-commit",
-            "pytest-cov"
+            "pytest-cov",
+            "hera_sim",
          ]
     },
     'zip_safe': False,
