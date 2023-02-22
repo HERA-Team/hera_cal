@@ -60,11 +60,19 @@ setup_args = {
         'hera_filters',
         "line_profiler",
         'aipy',
+        "rich",
     ],
     'extras_require': {
          "all": [
               'jax',
               'optax'
+         ],
+         'dev': [
+            "pytest",
+            "pre-commit",
+            "pytest-cov",
+            "hera_sim",
+            "pytest-xdist"
          ]
     },
     'zip_safe': False,

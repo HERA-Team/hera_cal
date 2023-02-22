@@ -14,10 +14,7 @@ jobs:
       PYTHON: ${{ matrix.python-version }}
       OS: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        # Adding -l {0} helps ensure conda can be found properly in windows.
-        shell: bash -l {0}
+    
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -25,36 +22,23 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@main
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v2.0.0
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          auto-update-conda: true
-          auto-activate-base: false
-          miniconda-version: "latest"
           python-version: ${{ matrix.python-version }}
-          environment-file: ci/${{ env.ENV_NAME }}.yml
-          activate-environment: ${{ env.ENV_NAME }}
-
-      - name: Conda Info
-        run: |
-          conda info -a
-          conda list
-          PYVER=`python -c "import sys; print('{:d}.{:d}'.format(sys.version_info.major, sys.version_info.minor))"`
-          if [[ $PYVER != $PYTHON ]]; then
-            exit 1;
-          fi
 
       - name: Install
         run: |
-          pip install .
+          pip install .[dev]
+          pip install git+https://github.com/hera-team/hera_filters  # temporary until hera-filters is released
 
       - name: Run Tests
         run: |
-          pytest --pyargs hera_cal --cov=hera_cal --cov-config=./.coveragerc --cov-report xml:./coverage.xml
+          pytest -n auto --pyargs hera_cal --cov=hera_cal --cov-config=./.coveragerc --cov-report xml:./coverage.xml --durations=15
 
       - name: Upload Coverage (Ubuntu)
         if: matrix.os == 'ubuntu-latest' && success()
