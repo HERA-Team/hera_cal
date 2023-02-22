@@ -490,7 +490,7 @@ def _add_profile_funcs(profiler, profile_funcs):
         module = importlib.import_module(fnc.split(":")[0])
         _fnc = module
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=UserWarning):
+            warnings.filterwarnings("ignore", category=UserWarning)
             if ":" not in fnc:
                 profiler.add_module(_fnc)
             else:
