@@ -79,10 +79,8 @@ def select(
 ):
     if not os.path.exists(infile):
         raise FileNotFoundError(f"File {ap} does not exist.")
-    if infile != outfile and os.path.exists(outfile) and not clobber:
+    if os.path.exists(outfile) and not clobber:
         raise FileExistsError(f"File {outfile} exists and clobber is False.")
-    if infile == outfile:
-        clobber= True
 
     hd = UVData()
     logger.info(f"Reading metadata from file {infile}")
@@ -107,13 +105,16 @@ def select(
     if time_min is not None or time_max is not None or time_idxs is not None:
         logger.info("Getting times to read.")
         times = np.unique(hd.time_array)
-        time_bools = np.ones_like(times, dtype=bool)
 
         if time_idxs is not None:
+            time_bools = np.zeros_like(times, dtype=bool)
             time_idxs = [tuple(map(int, idx.split("~"))) for idx in time_idxs.split(",")]
+            
             for idx in time_idxs:
-                time_bools[idx[0]:idx[1]] = False
-        
+                time_bools[idx[0]:idx[1]] = True
+        else:
+            time_bools = np.ones_like(times, dtype=bool)
+            
         if time_min is not None:
             time_bools[times < time_min] = False
         if time_max is not None:
