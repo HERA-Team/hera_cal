@@ -815,8 +815,6 @@ class CalibrationSmoother():
                 '{} and {} have different frequencies.'.format(cal, self.cals[0])
         if len(self.flag_files) > 0:
             all_flag_time_indices = np.array([i for indices in self.flag_time_indices.values() for i in indices])
-            assert len(all_flag_time_indices) == len(np.unique(all_flag_time_indices)), \
-                'Multiple flag file integrations map to the same time index.'
             assert np.all(np.unique(all_flag_time_indices) == np.unique(all_time_indices)), \
                 'The number of unique indices for the flag files does not match the calibration files.'
             for ff in self.flag_files:
