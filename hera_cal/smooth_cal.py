@@ -672,7 +672,7 @@ class CalibrationSmoother():
         Arguments:
             calfits_list: list of string paths to calfits files containing calibration solutions and flags
             flag_file_list: list of string paths to files containing flags as a function of time, frequency, and
-                either baseline, antnena, or just antenna polarization. Must have all baselines/ants/pols for all times.
+                either baseline, antenna, or just antenna polarization. Must have all baselines/ants/pols for all times.
                 Flags on baselines are broadcast to both antennas involved, unless either antenna is completely flagged
                 for all times and frequencies.
             flag_filetype: filetype of flag_file_list to pass into io.load_flags. Either 'h5' (default) or legacy 'npz'.
