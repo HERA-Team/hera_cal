@@ -359,3 +359,26 @@ def test_build_nucal_wgts():
     nucal_wgts = nucal.build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs)
     for key in abscal_wgts:
         assert np.allclose(abscal_wgts[key], nucal_wgts[key])
+
+def test_project_u_model_comps_on_spec_axis():
+    # Test that the projection of the u-model components on the spectral axis
+    # is the same as the projection of the data on the spectral axis
+    antpos = linear_array(6, sep=5)
+    radial_reds = nucal.RadialRedundancy(antpos)
+    spatial_filters = nucal.compute_spatial_filters(radial_reds, freqs)
+    data = []
+    design_matrix = []
+    for rdgrp in radial_reds:
+        for bl in rdgrp:
+            blmag = np.linalg.norm(antpos[bl[1]] - antpos[bl[0]])
+            data.append(np.sin(freqs * blmag / 2.998e8))
+            design_matrix.append(spatial_filters[bl])
+    data = np.array(data)
+    design_matrix = np.array(design_matrix)
+    XTXinv = np.linalg.pinv(np.einsum('afm,afn->mn', design_matrix, design_matrix))
+    Xy = np.einsum('afm,af->m', design_matrix, data)
+    model = design_matrix @ (XTXinv @ Xy)
+    model = model.reshape(len(radial_reds), 4)
+    model_proj = nucal.project_u_model_comps_on_spec_axis(model, freqs)
+    data_proj = np.einsum('af,af->f', data, design_matrix)
+    np.allclose(model_proj, data_proj, atol=1e-6)

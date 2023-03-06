@@ -6,10 +6,18 @@ from .datacontainer import DataContainer, RedDataContainer
 
 import warnings
 import numpy as np
-from copy import deepcopy
+from scipy import linalg
 from hera_filters import dspec
 import astropy.constants as const
 from scipy.cluster.hierarchy import fclusterdata
+
+try:
+    import jax
+    from jax import numpy as jnp
+    jax.config.update("jax_enable_x64", True)
+
+except:
+    warnings.warn('Jax is not installed. Some functionality may not be available')
 
 # Constants
 SPEED_OF_LIGHT = const.c.si.value
@@ -477,9 +485,35 @@ class RadialRedundancy:
         """Sorts list by length of the radial groups"""
         self._radial_groups.sort(key=(len if key is None else key), reverse=reverse)
 
+def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filter_half_width=1, eigenval_cutoff=1e-12):
+    """
+    Compute prolate spheroidal wave function (PSWF) filters for a single radially redundant group.
+    """
+
+    # Compute the minimum and maximum u values for the spatial filter
+    group_bls_lengths = [bls_lengths[bl] for bl in group]
+    umin = np.min(group_bls_lengths) / SPEED_OF_LIGHT * np.min(freqs)
+    umax = np.max(group_bls_lengths) / SPEED_OF_LIGHT * np.max(freqs)
+
+    # Create dictionary for storing spatial filters
+    spatial_filters = {}
+
+    # Compute spatial filters for each baseline in the group
+    for bl in group:
+        umodes = bls_lengths[bl] / SPEED_OF_LIGHT * freqs
+        pswf, _ = dspec.pswf_operator(
+            umodes, filter_centers=[0], filter_half_widths=[spatial_filter_half_width], 
+            eigenval_cutoff=[eigenval_cutoff], xmin=umin, xmax=umax
+        )
+        
+        # Filters should be strictly real-valued
+        spatial_filters[bl] = np.real(pswf)
+
+    return spatial_filters
+
 def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eigenval_cutoff=1e-12, cache={}):
     """
-    Compute prolate spheroidal wave function (PSWF) eigenvectors filters for each radially redundant group in radial_reds. 
+    Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds. 
     Note that if you are using a large array with a large range of short and long baselines in an individual radially
     redundant group, it is advised to filter radial_reds using radial_reds.filter_reds before running this function 
     to reduce the size of filters generated
@@ -507,21 +541,13 @@ def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eig
     # Create dictionary for all uv pswf eigenvectors
     spatial_filters = {}
 
-    # Get the minimum and maximum u-bounds used
-    u_bounds = get_u_bounds(radial_reds, radial_reds.antpos, freqs)
-
     # Loop through each baseline in each radial group
-    for gi, group in enumerate(radial_reds):
-        umin, umax = u_bounds[gi]
-        for bl in group:
-            umodes = radial_reds.baseline_lengths[bl] / SPEED_OF_LIGHT * freqs
-            pswf, _ = dspec.pswf_operator(
-                umodes, filter_centers=[0], filter_half_widths=[spatial_filter_half_width], eigenval_cutoff=[eigenval_cutoff], 
-                xmin=umin, xmax=umax, cache=cache
+    for group in radial_reds:
+        # Compute spatial filters for each baseline in the group
+        spatial_filters.update(compute_spatial_filters_single_group(
+            group, freqs, radial_reds.baseline_lengths, spatial_filter_half_width, eigenval_cutoff
             )
-            
-            # Filters should be strictly real-valued
-            spatial_filters[bl] = np.real(pswf)
+        )
 
     return spatial_filters
 
@@ -623,10 +649,91 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
 
     return wgts
 
+def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters, solver="cholesky", tol=1e-15,
+                               share_fg_model=False, return_model_comps=True):
+    """
+    Compute a foreground model for a set of radially redundant baselines. The model is computed by performing a linear
+    least-squares fit a set of spatial and spectral filters to model the TODO ADD MORE DOCUMENTATION. 
+    The model components for this fit are then returned.
+    
+    Parameters:
+    -----------
+    data : DataContainer
+        DataContainer containing complex visibility data. Dictionary is of the form
+        {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])} where Ntimes is the number of times in the data and Nfreqs
+        is the number of frequency channels.
+    data_wgts : DataContainer
+        DataContainer containing weights for each visibility. Dictionary is of the form
+        {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])} where Ntimes is the number of times in the data and Nfreqs
+        is the number of frequency channels.
+    radial_reds : RadialRedundancy, list of lists of tuples
+        List of lists of redundant baseline tuples. Each list of redundant tuples represents a radial group of
+        baselines.
+    spatial_filters : dict
+        Dictionary mapping baseline tuples to spatial filters. Dictionary is of the form {(ant1, ant2, pol):
+        np.array([Ntimes, Nspatial_filters])} where Ntimes is the number of times in the data and Nspatial_filters
+        is the number of spatial filters.
+    spectral_filters : np.ndarray
+        Array of DPSS filters with shape (Nfreqs, Nfilters) where Nfilters is the number of DPSS eigenvectors.
+    solver : str, optional, Default is 'cholesky'
+        Solver to use for linear least-squares fit. Options are 'cholesky', 'solve', and ''.
+    tol : float, optional, Default is 1e-15.
+        Tolerance for linear least-squares fit. 
+    share_fg_model : bool, optional, Default is False.
+        If True, the foreground model for each radially-redundant group is shared across the time axis. 
+        Otherwise, a nucal foreground will be independently computed for each frequency.
+    return_model_comps: bool, optional, Default is True.
+        If True, the model components for the foreground model are returned. Otherwise, only the model visibilities
+        are returned. 
+    
+    Returns:
+    --------
+    model_comps : list of np.ndarray
+        List of model components projected on to the spectral axis. Each component is a 2D array with shape
+        (Ntimes, Nfilters) where Ntimes is the number of times in the data and Nfilters is the number of DPSS
+        eigenvectors.
+    """        
+    # Create empty dictionary for model components and model visibilities
+    model_comps = {}
+    model = {}
+
+    # Loop over radial groups
+    for group in radial_reds:
+        # Get the data and design matrix for this group
+        design_matrix = jnp.array([spatial_filters[bl] for bl in group])
+        wgts_arr = jnp.array([data_wgts[bl] for bl in group])
+        data_arr = jnp.array([data[bl] for bl in group])
+                
+        # Number of fit parameters 
+        ndim = spectral_filters.shape[1] * design_matrix.shape[-1]
+
+        # Compute the XTX
+        if share_fg_model:
+            XTX = jnp.einsum("fm,afn,af,fk,afj->mnkj", 
+                spectral_filters, design_matrix, wgts_arr, spectral_filters, design_matrix
+            ).reshape(ndim, ndim)
+        
+        XTX[np.diag_indices_from(XTX)] += tol
+        L = linalg.lu_factor(XTX)
+        XTWy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_arr * wgts_arr).reshape(ndim)
+        beta = linalg.lu_solve(L, XTWy.T).T
+        beta = beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1])
+        model_comps[group[0]] = beta
+                        
+    if return_model_comps:
+        return model_comps
+    else:
+        # Compute the foreground model 
+        for group in radial_reds:
+            for bl in group:
+                model[bl] = jnp.einsum("fm,fn,mn->f", spatial_filters[bl], spectral_filters, model_comps[group[0]])
+
+        return model
+
 def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
     """
     Project u-model components on to the spectral axis using a pre-computed set of DPSS-filters for the spectral
-    axis.
+    axis. Can be used with the output of estimate_degenerate_parameters
 
     Parameters:
     -----------
@@ -647,30 +754,23 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
     if not isinstance(u_model_comps, list):
         u_model_comps = [u_model_comps]
 
-    is_2D = u_model_comps.ndim == 2
-
-    # Calculate the constant eigenvalues of the spectral filters TODO FIXME
+    # Compute the magnitude of each eigenvector in spectral filters
     const_eigen_vals = np.sum(spectral_filters ** 2, axis=0, keepdims=True)
-    if is_2D:
+
+    # Expand the shape of const_eigen_vals if necessary
+    if u_model_comps[0].ndim == 2:
         const_eigen_vals = np.expand_dims(const_eigen_vals, axis=0)
 
     # Project u-model components on to the spectral axis
     model_comps = []
     for u_comps in u_model_comps:
-        model_comps.append(np.dot(u_comps, spectral_filters) / const_eigen_vals)
+        model_comps.append(np.dot(u_comps, spectral_filters) * const_eigen_vals)
 
     return model_comps
 
-def estimate_degenerate_parameters(data, data_wgts, radial_reds, ant_flags, spatial_filters, niter=1, phs_max_iter=10):
+def fit_u_model(data, data_wgts, radial_reds, spatial_filters):
     """
-    First-pass estimate of the redcal degenerate parameters using a common u-model for each radially redundant group.
-    Method starts by unpacking the data into a dictionary containing only baselines found in radial_reds.
-    Then, a u-dependent model per radially redundant group is computed for each baseline by fitting a set of smooth PSWF 
-    eigenvectors to the data. The model is then used to remove the degenerate parameters from the redundantly calibrated 
-    data by using the model and the data as inputs to abscal. This is then iterated niter times to attempt to converge 
-    on a good starting solution for a follow-up method such as gradient descent. The final "calibrated" data is the 
-    compared to the original data to estimate the degenerate parameters. The redcal degenerate parameters and u-model components
-    are then returned as a dictionary.
+    
     
     Parameters:
     ----------
@@ -681,87 +781,38 @@ def estimate_degenerate_parameters(data, data_wgts, radial_reds, ant_flags, spat
     radial_reds : RadialRedundancy
         RadialRedundancy object which contains of baseline tuple which are considered
         to be radially redundant
-    ant_flags : dictionary, DataContainer
-        Dictionary mapping keys like (1, 'Jnn') to flag waterfalls from redundant calibration.
     spatial_filters : dictionary
-        pass
-    spectral_filters : np.ndarray
-        pass
-    niter : int, default=1
-        Number of iterations to use when attempting to estimate the degenerate parameters
-    phs_max_iter : int, default=10
-        pass
+        Dictionary containing the spatial filters for each baseline. The spatial filters
+        are a set of smooth PSWF eigenvectors which are fit to the data. 
         
     Returns:
     -------
-    degen_params : dictionary
-        pass
     u_model_comps : dictionary
-        pass
-    """
-    # Get list of baseline keys to store data and data weights
-    keys = [bl for rdgrp in radial_reds for bl in rdgrp]
-
-    # Keep only data and data weights for the radial groups
-    data_here = DataContainer(deepcopy({bl: data[bl] for bl in keys}))
-    data_wgts_here = DataContainer(deepcopy({bl: data_wgts[bl] for bl in keys}))
-    
-    # Reset metadata
-    data_here.antpos = data.antpos
-    data_wgts_here.antpos = data.antpos
-    data_here.freqs = data.freqs
-    
-    # Storage dictionaries for caching intermediate results
-    cache = {}
+        Compute a set of u-model components for each radially-redundant group in the data. 
+        The u-model components are a set of smooth PSWF eigenvectors which are fit to the
+        data. The u-model components are returned as a dictionary with keys corresponding
+        to the first baseline in each radially redundant group.
+    """ 
+    # Storage dictionaries for the u-model components and the model visibilities
     model_comps = {}
+    model = {}
+
+    for group in radial_reds:
+        # Compute design matrix
+        ncomps = spatial_filters[group[0]].shape[1]
+        design_matrix = []
+        for bl in group:
+            design_matrix.append(spatial_filters[bl])
+
+        # Compute model components
+        design_matrix = np.array(design_matrix)
+
+        # Compute XTX and Xy
+        XTX = jnp.einsum("fm,tf,fn->tmn", spatial_filters[bl], , spatial_filters[bl])
+        Xy = jnp.einsum("fm,tf->tm", spatial_filters[bl], data[bl] * data_wgts[bl])
+
+        # Solve for model components
+        beta = np.linalg.solve(XTX, Xy)
+        model_comps[group[0]] = beta
     
-    # Estimate initial model of the uv-plane along radial spokes
-    for i in range(niter):
-        model = {}
-        for group in radial_reds:
-            design_matrix = jnp.array([spatial_filters[bl] for bl in group])
-            wgts_arr = jnp.array([data_wgts_here[bl] for bl in group])
-            data_arr = jnp.array([data_here[bl] for bl in group])
-
-            # Compute XTX and inverse
-            if i == 0:
-                XTX = jnp.einsum('afm,atf,afn->tmn', design_matrix, wgts_arr, design_matrix)
-                XTXinv = np.linalg.pinv(XTX, hermitian=True)
-                cache[group[0]] = XTXinv
-            else:
-                XTXinv = cache[group[0]]
-            
-            # Compute solution vector
-            Xy = jnp.einsum('afm,atf->tm', design_matrix, wgts_arr * data_arr)
-            beta = jnp.einsum('tmn,tm->tn', XTXinv, Xy)
-            model_comps[group[0]] = beta
-
-            # Evaluate model with solution vector
-            for bl in group:
-                model[bl] = np.einsum('fm,tm->tf', spatial_filters[bl], beta)
-        
-        # Add model to DataContainer
-        model = DataContainer(model)
-    
-        # Estimate Degenerate Gain Parameters using abscal
-        _ = abscal.post_redcal_abscal(model, data_here, data_wgts_here, ant_flags, verbose=False, phs_max_iter=phs_max_iter)
-
-    
-    # Get final set of degenerate parameters
-    ants = sorted(list(ant_flags.keys()))
-    idealized_antpos = abscal._get_idealized_antpos(ant_flags, data_here.antpos, data_here.pols(),
-                                             data_wgts=data_wgts_here, keep_flagged_ants=True)
-
-    # Repack data into new datacontainers for estimate of degenerate parameters
-    data_here = DataContainer({bl: data[bl] for bl in keys})
-    data_here.antpos = data.antpos
-    data_here.freqs = data.freqs
-    data_wgts_here = DataContainer({bl: data_wgts[bl] for bl in keys})
-    
-    # Use best-fit u-model to get amplitude and tip-tilt parameters
-    # amp_params = abscal.abs_amp_logcal(model, data_here, wgts=data_wgts_here, verbose=False, return_gains=False, gain_ants=ants)
-    # angle_wgts = DataContainer({bl: 2 * np.abs(model[bl])**2 * data_wgts_here[bl] for bl in model})
-    # phase_params = abscal.TT_phs_logcal(model, data_here, idealized_antpos, wgts=angle_wgts, verbose=False, assume_2D=False, return_gains=False, gain_ants=ants)
-    # degen_params = {**amp_params, **phase_params}
-
-    return degen_params, model_comps
+    return model_comps
