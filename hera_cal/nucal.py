@@ -785,7 +785,9 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
 
 def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-9, share_fg_model=False, return_model_comps=True):
     """
-    
+    Fit a u-dependent foreground model to each radial spoke in the radial_reds. The model is fit using a set of 
+    smooth PSWF eigenvectors. Returns the model components for the foreground model for each radial spoke if return_model_comps
+    is True. Otherwise, returns the model visibilities.
     
     Parameters:
     ----------
