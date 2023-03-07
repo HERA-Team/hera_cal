@@ -649,7 +649,7 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
 
     return wgts
 
-def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters, solver="cholesky", tol=1e-15,
+def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters, tol=1e-15,
                                share_fg_model=False, return_model_comps=True):
     """
     Compute a foreground model for a set of radially redundant baselines. The model is computed by performing a linear
@@ -709,15 +709,30 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
 
         # Compute the XTX
         if share_fg_model:
-            XTX = jnp.einsum("fm,afn,af,fk,afj->mnkj", 
+            # Compute the XTX and XTWy
+            XTX = jnp.einsum("fm,afn,taf,fk,afj->mnkj", 
                 spectral_filters, design_matrix, wgts_arr, spectral_filters, design_matrix
             ).reshape(ndim, ndim)
-        
-        XTX[np.diag_indices_from(XTX)] += tol
-        L = linalg.lu_factor(XTX)
-        XTWy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_arr * wgts_arr).reshape(ndim)
-        beta = linalg.lu_solve(L, XTWy.T).T
-        beta = beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1])
+            XTX[np.diag_indices_from(XTX)] += tol
+            XTWy = jnp.einsum("fm,afn,taf->mn", spectral_filters, design_matrix, data_arr * wgts_arr).reshape(ndim)
+
+            # Solve for the model components
+            L = linalg.lu_factor(XTX)
+            beta = linalg.lu_solve(L, XTWy.T).T
+            beta = beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1])
+        else:
+            # Compute the XTX and XTWy
+            XTX = jnp.einsum("fm,afn,taf,fk,afj->tmnkj", 
+                spectral_filters, design_matrix, wgts_arr, spectral_filters, design_matrix
+            ).reshape(data_arr.shape[0], ndim, ndim)
+            XTX[np.diag_indices_from(XTX)] += tol
+            XTWy = jnp.einsum("fm,afn,taf->tmn", spectral_filters, design_matrix, data_arr * wgts_arr)
+
+            # Solve for the model components
+            L = linalg.lu_factor(XTX)
+            beta = linalg.lu_solve(L, XTWy.T).T
+            beta = beta.reshape(data_arr.shape[0], spectral_filters.shape[-1], design_matrix.shape[-1])
+
         model_comps[group[0]] = beta
                         
     if return_model_comps:
@@ -768,7 +783,7 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
 
     return model_comps
 
-def fit_u_model(data, data_wgts, radial_reds, spatial_filters):
+def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-9, share_fg_model=False, return_model_comps=True):
     """
     
     
@@ -784,6 +799,12 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters):
     spatial_filters : dictionary
         Dictionary containing the spatial filters for each baseline. The spatial filters
         are a set of smooth PSWF eigenvectors which are fit to the data. 
+    share_fg_model : bool, optional
+        If True, the foreground model for each radially-redundant group is shared across the time axis. 
+        Otherwise, a nucal foreground will be independently computed for each frequency.
+    return_model_comps : bool, optional
+        If True, the model components for the foreground model are returned. Otherwise, only the model visibilities
+        are returned. 
         
     Returns:
     -------
@@ -794,7 +815,7 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters):
         to the first baseline in each radially redundant group.
     """ 
     # Storage dictionaries for the u-model components and the model visibilities
-    model_comps = {}
+    u_model_comps = {}
     model = {}
 
     for group in radial_reds:
@@ -813,6 +834,15 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters):
 
         # Solve for model components
         beta = np.linalg.solve(XTX, Xy)
-        model_comps[group[0]] = beta
+        u_model_comps[group[0]] = beta
     
-    return model_comps
+    if return_model_comps:
+        return u_model_comps
+
+    else:
+        # Compute the foreground model 
+        for group in radial_reds:
+            for bl in group:
+                model[bl] = jnp.einsum("fm,tm->tf", spatial_filters[bl], model_comps[group[0]])
+
+        return model
