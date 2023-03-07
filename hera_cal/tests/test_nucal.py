@@ -306,7 +306,6 @@ def test_compute_spatial_filters():
     model = design_matrix @ (XTXinv @ Xy)
     np.allclose(model, data, atol=1e-6)
 
-
 def test_build_nucal_wgts():
     bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee')]
     auto_bls = [(0, 0, 'ee'), (1, 1, 'ee'), (2, 2, 'ee')]
@@ -382,3 +381,30 @@ def test_project_u_model_comps_on_spec_axis():
     model_proj = nucal.project_u_model_comps_on_spec_axis(model, freqs)
     data_proj = np.einsum('af,af->f', data, design_matrix)
     np.allclose(model_proj, data_proj, atol=1e-6)
+
+def test_fit_nucal_foreground_model():
+    antpos = linear_array(6, sep=5)
+    radial_reds = nucal.RadialRedundancy(antpos)
+    spatial_filters = nucal.compute_spatial_filters(radial_reds, freqs)
+    
+
+def test_fit_u_model():
+    antpos = linear_array(6, sep=5)
+    radial_reds = nucal.RadialRedundancy(antpos)
+    freqs = np.linspace(50e6, 250e6, 200)
+    spatial_filters = nucal.compute_spatial_filters(radial_reds, freqs)
+    data = {}
+    data_wgts = {}
+    # Generate mock data
+    for rdgrp in radial_reds:
+        for bl in rdgrp:
+            blmag = np.linalg.norm(antpos[bl[1]] - antpos[bl[0]])
+            data[bl] = np.sin(freqs * blmag / 2.998e8)[None, :]
+            data_wgts[bl] = np.ones_like(freqs[None, :])
+
+    # Compute the model
+    model = nucal.fit_u_model(data, data_wgts, radial_reds, spatial_filters, return_model_comps=False)
+
+    # Check that the model is the same as the data
+    for k in model:
+        assert np.all(np.isclose(model[k], data[k], atol=1e-5))

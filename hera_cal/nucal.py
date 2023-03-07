@@ -783,7 +783,7 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
 
     return model_comps
 
-def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-9, share_fg_model=False, return_model_comps=True):
+def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, share_fg_model=False, return_model_comps=True):
     """
     Fit a u-dependent foreground model to each radial spoke in the radial_reds. The model is fit using a set of 
     smooth PSWF eigenvectors. Returns the model components for the foreground model for each radial spoke if return_model_comps
@@ -823,16 +823,14 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-9, share_f
     for group in radial_reds:
         # Compute design matrix
         ncomps = spatial_filters[group[0]].shape[1]
-        design_matrix = []
-        for bl in group:
-            design_matrix.append(spatial_filters[bl])
-
-        # Compute model components
-        design_matrix = np.array(design_matrix)
+        
+        design_matrix = jnp.array([spatial_filters[bl] for bl in group])
+        data_here = jnp.array([data[bl] for bl in group])
+        wgts_here = jnp.array([data_wgts[bl] for bl in group])
 
         # Compute XTX and Xy
-        XTX = jnp.einsum("fm,tf,fn->tmn", spatial_filters[bl], , spatial_filters[bl])
-        Xy = jnp.einsum("fm,tf->tm", spatial_filters[bl], data[bl] * data_wgts[bl])
+        XTX = jnp.einsum("afm,atf,afn->tmn", design_matrix, wgts_here, design_matrix)
+        Xy = jnp.einsum("afm,atf->tm", design_matrix, data_here * wgts_here)
 
         # Solve for model components
         beta = np.linalg.solve(XTX, Xy)
@@ -845,6 +843,6 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-9, share_f
         # Compute the foreground model 
         for group in radial_reds:
             for bl in group:
-                model[bl] = jnp.einsum("fm,tm->tf", spatial_filters[bl], model_comps[group[0]])
+                model[bl] = jnp.einsum("fm,tm->tf", spatial_filters[bl], u_model_comps[group[0]])
 
         return model
