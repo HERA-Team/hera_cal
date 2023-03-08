@@ -820,6 +820,9 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, share_
     u_model_comps = {}
     model = {}
 
+    # Get number of times in the data
+    ntimes = data[radial_reds[0][0]].shape[0]
+
     for group in radial_reds:
         # Compute design matrix
         ncomps = spatial_filters[group[0]].shape[1]
@@ -829,12 +832,22 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, share_
         wgts_here = jnp.array([data_wgts[bl] for bl in group])
 
         # Compute XTX and Xy
-        XTX = jnp.einsum("afm,atf,afn->tmn", design_matrix, wgts_here, design_matrix)
-        Xy = jnp.einsum("afm,atf->tm", design_matrix, data_here * wgts_here)
+        if share_fg_model:
+            XTX = jnp.einsum("afm,atf,afn->mn", design_matrix, wgts_here, design_matrix)
+            Xy = jnp.einsum("afm,atf->m", design_matrix, data_here * wgts_here)
+        else:
+            XTX = jnp.einsum("afm,atf,afn->tmn", design_matrix, wgts_here, design_matrix)
+            Xy = jnp.einsum("afm,atf->tm", design_matrix, data_here * wgts_here)
 
         # Solve for model components
         beta = np.linalg.solve(XTX, Xy)
-        u_model_comps[group[0]] = beta
+
+        # Expand the solution components along the time axis
+        if share_fg_model:
+            beta = np.expand_dims(beta, axis=0) * np.ones((ntimes, 1))
+
+        # Store the model components
+        u_model_comps[group[0]] = beta 
     
     if return_model_comps:
         return u_model_comps

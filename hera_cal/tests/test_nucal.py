@@ -400,7 +400,7 @@ def test_fit_u_model():
         for bl in rdgrp:
             blmag = np.linalg.norm(antpos[bl[1]] - antpos[bl[0]])
             data[bl] = np.sin(freqs * blmag / 2.998e8)[None, :]
-            data_wgts[bl] = np.ones_like(freqs[None, :])
+            data_wgts[bl] = np.ones_like(data[bl])
 
     # Compute the model
     model = nucal.fit_u_model(data, data_wgts, radial_reds, spatial_filters, return_model_comps=False)
