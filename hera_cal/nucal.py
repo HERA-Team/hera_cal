@@ -649,6 +649,87 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
 
     return wgts
 
+def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15):
+    """
+    Solves a linear system of equations using a variety of methods. This is a light wrapper
+    around np.linalg.solve, np.linalg.lstsq, and scipy.linalg.lu_solve which helps fit nucal
+    foreground models to the data.
+
+    Parameters:
+    ----------
+        XTX : np.ndarray
+            Matrix of shape (N, N) where N is the number of parameters in the model
+        Xy : np.ndarray
+            Matrix of shape (N) where N is the number of parameters in the model
+        method : str, default='lu_solve'
+            Method to use to solve the linear system of equations. Options are 'lu_solve', 'solve', 'pinv', 'lstsq'.
+            'lu_solve' uses scipy.linalg.lu_solve to solve the linear system of equations, 'solve' uses np.linalg.solve.
+            'pinv' uses np.linalg.pinv to solve the linear system of equations, and 'lstsq' uses np.linalg.lstsq. 'lu_solve' 
+            and 'solve' tend to be the faster methods, but 'lstsq' and 'pinv' are more robust.
+        tol : float, default=1e-15
+            Tolerance to use for regularization. If method is 'lu_solve' or 'solve', this is added to the diagonal of XTX. 
+            If method is 'pinv' or 'lstsq', this is used as the rcond parameter for np.linalg.pinv and np.linalg.lstsq respectively.
+    
+    Returns:
+    -------
+        beta : np.ndarray
+            Array of shape (N) where N is the number of parameters in the model.
+    """
+    # Assert that the method is valid
+    assert solver in ['lu_solve', 'solve', 'pinv', 'lstsq'], "method must be one of {}".format(['lu_solve', 'solve', 'pinv', 'lstsq'])
+
+    # Assert that the regularization tolerance is non-negative
+    assert tol >= 0.0, "tol must be non-negative."
+
+    if solver == 'lu_solve':
+        # Add regularization tolerance to the diagonal of XTX
+        XTX[np.diag_indices_from(XTX)] += tol
+
+        # Factor XTX using scipy.linalg.lu_factor
+        L = linalg.lu_factor(XTX)
+
+        # Solve the linear system of equations using scipy.linalg.lu_solve
+        beta = linalg.lu_solve(L, Xy)
+        
+    elif solver == 'solve':
+        # Add regularization tolerance to the diagonal of XTX
+        XTX[np.diag_indices_from(XTX)] += tol
+
+        # Solve the linear system of equations using np.linalg.solve
+        beta = np.linalg.solve(XTX, Xy)
+
+    elif solver == 'pinv':
+        # Compute the pseudo-inverse of XTX using np.linalg.pinv
+        XTXinv = np.linalg.pinv(XTX, rcond=tol)
+
+        # Compute the model parameters using the pseudo-inverse
+        beta = np.dot(XTXinv, Xy)
+
+    elif solver == 'lstsq':
+        # Compute the model parameters using np.linalg.lstsq
+        beta = np.linalg.lstsq(XTX, Xy, rcond=tol)[0]
+
+    return beta
+
+def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spectral_filters=None):
+    """
+    """
+    # Determine whether to use spectral filters when evaluating the model
+    use_spectral_filters = spectral_filters is not None    
+
+    # Assert that the model components match the baselines in the radial_reds
+    for group in radial_reds:
+        assert group[0] in fg_model_comps, "fg_model_comps must contain a model component for each baseline in radial_reds."
+        if use_spectral_filters:
+            assert (fg_model_comps[group[0]].shape[1:] == (spatial_filters[group[0]].shape[-1], spectral_filters.shape[-1]), 
+                f"The number of  must contain a spectral filter for each baseline in radial_reds.")
+        else:
+            assert (fg_model_comps[group[0]].shape[-1] == spatial_filters[group[0]].shape[-1], 
+                f"The number of model components in fg_model_comps must match the number of \
+                  eigenvectors in spatial_filters for baseline {group[0]}."
+            )
+
+
 def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters, tol=1e-15,
                                share_fg_model=False, return_model_comps=True):
     """
@@ -701,8 +782,8 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
     for group in radial_reds:
         # Get the data and design matrix for this group
         design_matrix = jnp.array([spatial_filters[bl] for bl in group])
-        wgts_arr = jnp.array([data_wgts[bl] for bl in group])
-        data_arr = jnp.array([data[bl] for bl in group])
+        wgts_here = jnp.array([data_wgts[bl] for bl in group])
+        data_here = jnp.array([data[bl] for bl in group])
                 
         # Number of fit parameters 
         ndim = spectral_filters.shape[1] * design_matrix.shape[-1]
@@ -711,27 +792,31 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
         if share_fg_model:
             # Compute the XTX and XTWy
             XTX = jnp.einsum("fm,afn,taf,fk,afj->mnkj", 
-                spectral_filters, design_matrix, wgts_arr, spectral_filters, design_matrix
+                spectral_filters, design_matrix, wgts_here, spectral_filters, design_matrix
             ).reshape(ndim, ndim)
             XTX[np.diag_indices_from(XTX)] += tol
-            XTWy = jnp.einsum("fm,afn,taf->mn", spectral_filters, design_matrix, data_arr * wgts_arr).reshape(ndim)
+            XTWy = jnp.einsum("fm,afn,taf->mn", spectral_filters, design_matrix, data_here * wgts_here).reshape(ndim)
 
-            # Solve for the model components
-            L = linalg.lu_factor(XTX)
-            beta = linalg.lu_solve(L, XTWy.T).T
+            # Solve for the foreground model components
+            beta = _linear_fit(XTX, XTWy, tol=tol, method=solver)
             beta = beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1])
-        else:
-            # Compute the XTX and XTWy
-            XTX = jnp.einsum("fm,afn,taf,fk,afj->tmnkj", 
-                spectral_filters, design_matrix, wgts_arr, spectral_filters, design_matrix
-            ).reshape(data_arr.shape[0], ndim, ndim)
-            XTX[np.diag_indices_from(XTX)] += tol
-            XTWy = jnp.einsum("fm,afn,taf->tmn", spectral_filters, design_matrix, data_arr * wgts_arr)
 
-            # Solve for the model components
-            L = linalg.lu_factor(XTX)
-            beta = linalg.lu_solve(L, XTWy.T).T
-            beta = beta.reshape(data_arr.shape[0], spectral_filters.shape[-1], design_matrix.shape[-1])
+        else:
+            beta = []
+
+            # Compute the XTX and XTWy
+            for i in range(data_here.shape[1]):
+                XTX = jnp.einsum("fm,afn,af,fk,afj->mnkj", 
+                    spectral_filters, design_matrix, wgts_arr[:, i, :], spectral_filters, design_matrix
+                ).reshape(data_arr.shape[0], ndim, ndim)
+                XTX[np.diag_indices_from(XTX)] += tol
+                XTWy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_arr[:, i, :] * wgts_arr[:, i, :]).reshape(ndim)
+
+                # Solve for the foreground model components
+                _beta = _linear_fit(XTX, XTWy, tol=tol, method=solver)
+                beta.append(_beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1]))
+            
+            beta = np.array(beta)
 
         model_comps[group[0]] = beta
                         
@@ -741,8 +826,10 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
         # Compute the foreground model 
         for group in radial_reds:
             for bl in group:
-                model[bl] = jnp.einsum("fm,fn,mn->f", spatial_filters[bl], spectral_filters, model_comps[group[0]])
-
+                if share_fg_model:
+                    model[bl] = jnp.einsum("fm,fn,mn->f", spatial_filters[bl], spectral_filters, model_comps[group[0]])
+                else:
+                    model[bl] = jnp.einsum("fm,fn,tmn->tf", spatial_filters[bl], spectral_filters, model_comps[group[0]])
         return model
 
 def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
@@ -783,7 +870,7 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
 
     return model_comps
 
-def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, share_fg_model=False, return_model_comps=True):
+def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, solver="lu_solve", share_fg_model=False, return_model_comps=True):
     """
     Fit a u-dependent foreground model to each radial spoke in the radial_reds. The model is fit using a set of 
     smooth PSWF eigenvectors. Returns the model components for the foreground model for each radial spoke if return_model_comps
@@ -801,6 +888,8 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, share_
     spatial_filters : dictionary
         Dictionary containing the spatial filters for each baseline. The spatial filters
         are a set of smooth PSWF eigenvectors which are fit to the data. 
+    solver : str, optional
+        Solver to use for linear fitting. Options are "lu_solve", "solver", "pinv", and "lstsq".
     share_fg_model : bool, optional
         If True, the foreground model for each radially-redundant group is shared across the time axis. 
         Otherwise, a nucal foreground will be independently computed for each frequency.
@@ -840,7 +929,7 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, share_
             Xy = jnp.einsum("afm,atf->tm", design_matrix, data_here * wgts_here)
 
         # Solve for model components
-        beta = np.linalg.solve(XTX, Xy)
+        beta = _linear_fit(XTX, Xy, solver=solver, tol=tol)
 
         # Expand the solution components along the time axis
         if share_fg_model:
