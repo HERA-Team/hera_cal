@@ -713,9 +713,23 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15):
 
 def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spectral_filters=None):
     """
+    Evaluates a foreground model using the model components, spatial filters, and spectral filters.
+    If the model components are time-dependent, the model is evaluated for each time sample in the data.
+    If the model components are not time-dependent, the model is evaluated once and then broadcast to
+    all time samples in the data.
+
+    Parameters:
+    ----------
+        radial_reds : RadialRedundancy object
+            List of lists of radially-redundant baseline tuples. 
+        fg_model_comps : dict
+            Dictionary mapping baseline tuples to model components.
     """
     # Determine whether to use spectral filters when evaluating the model
-    use_spectral_filters = spectral_filters is not None    
+    use_spectral_filters = spectral_filters is not None
+
+    # Check whether the model components are time-dependent
+    has_time_axis = spatial_filters[list(spatial_filters.keys())[0]].ndim == 3
 
     # Assert that the model components match the baselines in the radial_reds
     for group in radial_reds:
@@ -728,6 +742,25 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
                 f"The number of model components in fg_model_comps must match the number of \
                   eigenvectors in spatial_filters for baseline {group[0]}."
             )
+
+    # Initialize a dictionary to hold the model components
+    model = {}
+
+    if use_spectral_filters:
+        einsum_path = "fm,fn,mn->f" if has_time_axis else "fm,fn,tmn->tf"
+    else:
+        einsum_path = "fm,mn->f" if has_time_axis else "fm,tmn->tf"
+
+    # Loop over the groups in radial_reds
+    for group in radial_reds:
+        for bl in group:
+            # Compute the model components for this baseline
+            if use_spectral_filters:
+                model[bl] = jnp.einsum(einsum_path, spatial_filters[bl], spectral_filters, fg_model_comps[group[0]])
+            else:
+                model[bl] = jnp.einsum(einsum_path, spatial_filters[bl], fg_model_comps[group[0]])
+
+    return model
 
 
 def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters, tol=1e-15,
@@ -781,9 +814,9 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
     # Loop over radial groups
     for group in radial_reds:
         # Get the data and design matrix for this group
-        design_matrix = jnp.array([spatial_filters[bl] for bl in group])
-        wgts_here = jnp.array([data_wgts[bl] for bl in group])
-        data_here = jnp.array([data[bl] for bl in group])
+        design_matrix = np.array([spatial_filters[bl] for bl in group])
+        wgts_here = np.array([data_wgts[bl] for bl in group])
+        data_here = np.array([data[bl] for bl in group])
                 
         # Number of fit parameters 
         ndim = spectral_filters.shape[1] * design_matrix.shape[-1]
@@ -839,8 +872,8 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
 
     Parameters:
     -----------
-    u_model_comps : list of np.ndarray
-        List of u-model PSWF fit components to project on to the spectral axis. Each set of u-model components is a
+    u_model_comps : dictionary of np.ndarray
+        Dictionary of u-model PSWF fit components to project on to the spectral axis. Each set of u-model components is a
         either a 1D array with shape (Nfreqs) where Nfreqs in the number of frequencies in the data or a 2D array with 
         shape (Ntimes, Nfreqs) where Ntimes is the number of times in the data
     spectral_filters : np.ndarray
@@ -853,9 +886,6 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
         (Ntimes, Nfilters) where Ntimes is the number of times in the data and Nfilters is the number of DPSS
         eigenvectors.
     """
-    if not isinstance(u_model_comps, list):
-        u_model_comps = [u_model_comps]
-
     # Compute the magnitude of each eigenvector in spectral filters
     const_eigen_vals = np.sum(spectral_filters ** 2, axis=0, keepdims=True)
 
@@ -864,9 +894,9 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
         const_eigen_vals = np.expand_dims(const_eigen_vals, axis=0)
 
     # Project u-model components on to the spectral axis
-    model_comps = []
-    for u_comps in u_model_comps:
-        model_comps.append(np.dot(u_comps, spectral_filters) * const_eigen_vals)
+    model_comps = {}
+    for key in u_model_comps:
+        model_comps[key] = np.dot(u_model_comps[key], spectral_filters) * const_eigen_vals
 
     return model_comps
 
@@ -888,6 +918,8 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, solver
     spatial_filters : dictionary
         Dictionary containing the spatial filters for each baseline. The spatial filters
         are a set of smooth PSWF eigenvectors which are fit to the data. 
+    tol : float, optional
+        Tolerance for linear fitting.
     solver : str, optional
         Solver to use for linear fitting. Options are "lu_solve", "solver", "pinv", and "lstsq".
     share_fg_model : bool, optional
@@ -913,12 +945,13 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, solver
     ntimes = data[radial_reds[0][0]].shape[0]
 
     for group in radial_reds:
-        # Compute design matrix
+        # Get the number of model components
         ncomps = spatial_filters[group[0]].shape[1]
         
-        design_matrix = jnp.array([spatial_filters[bl] for bl in group])
-        data_here = jnp.array([data[bl] for bl in group])
-        wgts_here = jnp.array([data_wgts[bl] for bl in group])
+        # Pack data, weights, and filters into matrices
+        design_matrix = np.array([spatial_filters[bl] for bl in group])
+        data_here = np.array([data[bl] for bl in group])
+        wgts_here = np.array([data_wgts[bl] for bl in group])
 
         # Compute XTX and Xy
         if share_fg_model:
@@ -942,9 +975,4 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, solver
         return u_model_comps
 
     else:
-        # Compute the foreground model 
-        for group in radial_reds:
-            for bl in group:
-                model[bl] = jnp.einsum("fm,tm->tf", spatial_filters[bl], u_model_comps[group[0]])
-
-        return model
+        return evaluate_foreground_model(radial_reds, u_model_comps, spatial_filters)
