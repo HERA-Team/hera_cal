@@ -35,6 +35,10 @@ from pyuvdata import UVCal, UVData
 import linsolve
 import warnings
 
+import jax
+from jax import numpy as jnp
+jax.config.update("jax_enable_x64", True)
+
 from .apply_cal import calibrate_in_place
 from .smooth_cal import pick_reference_antenna, rephase_to_refant
 from .flag_utils import synthesize_ant_flags
@@ -1290,6 +1294,190 @@ def global_phase_slope_logcal(model, data, antpos, reds=None, solver='linfit', w
                                                  Phis, np.ones(data[keys[0]].shape[1])))
         return gains
 
+
+@jax.jit
+def _eval_Z(x, b_vecs, expi_delta, weights):
+    """
+    Computes a metric of how well the model and data can be made to match after abscal.
+    """
+    phase = jnp.sum(x * b_vecs, axis=1)
+    f = jnp.cos(phase) + 1j * jnp.sin(phase)
+    Z = jnp.mean(f * expi_delta * weights)
+
+    return Z
+
+@jax.jit
+def _grad_and_hess_real(x, b_vec, w_expi_psi):
+    """
+    Evaluates the gradient and hessian for a given set of input parameters, x.
+    """
+    x_dot_b = jnp.dot(b_vec, x)
+    cos_xb = jnp.cos(x_dot_b)
+    sin_xb = jnp.sin(x_dot_b)
+    w_cos_d = w_expi_psi.real
+    w_sin_d = w_expi_psi.imag
+    w_sin_d_xb = cos_xb * w_sin_d + sin_xb * w_cos_d
+    w_cos_d_xb = cos_xb * w_cos_d - sin_xb * w_sin_d
+    grad = -jnp.mean(w_sin_d_xb[..., None] * b_vec, axis=0)
+    hess = -jnp.mean(b_vec[:, None, :] * b_vec[..., None] * w_cos_d_xb[..., None, None], axis=0)
+    return grad, hess
+
+@jax.jit
+def _newton_solve_real(x0, transformed_b_vecs, normalized_data_model_ratio, weights, tol=1e-8, maxiter=25):
+    """
+    Refines a delay-slope solution (x0) to calibrate the phase slopes seen in normalized_data_model_ratio.
+    """
+    def inner_function(args):
+        """
+        Function evaluated on each iteration of the while loop
+        """
+        x, i, step_diff = args
+        grad, hess = _grad_and_hess_real(x, transformed_b_vecs, w_ndmr)
+        step = -1 * jnp.linalg.solve(hess, grad)
+        x += step
+        step_diff = jnp.sum(jnp.abs(step))
+        return x, i + 1, step_diff
+
+    def cond_function(args):
+        """
+        Conditional function evaluated prior to each loop iteration
+        """
+        x, i, step_diff = args
+        return (step_diff > tol) & (i < maxiter)
+   
+    w_ndmr = weights * normalized_data_model_ratio
+    x, i, _ = jax.lax.while_loop(cond_function, inner_function, (x0, 0, 1.))
+    return x, i
+
+def _phase_gradient_solution(normalized_data_model_ratio, transformed_b_vecs, weights, resolution_factor=2):
+    """
+    Finds the phase gradients along the dimensions of the transformed_b_vecs that calibrate the phase
+    slopes seen in normalized_data_model_ratio. First looks at the peak in Fourier space to find
+    a phase slope across the array for each dimension, then uses Newton's method to refine the solution.
+    """
+    Ntimes, Nfreqs, Ng = normalized_data_model_ratio.shape
+    Ndims = transformed_b_vecs.shape[1]
+    
+    Lambda_sol = np.zeros((Ntimes, Nfreqs, Ndims), dtype=float)
+    Z_sol = np.zeros((Ntimes, Nfreqs), dtype=complex)
+    
+    # largest integer lattice coordinate along each dimension - the fft
+    # grid needs to be twice this along each dimension
+    dim_maxes = np.array([np.max(np.abs(bk)) for bk in transformed_b_vecs.T])
+    Nk = 2*dim_maxes + 1
+    Nk_use = resolution_factor*Nk + 1 if resolution_factor > 1 else Nk
+    grid = np.zeros(tuple(Nk_use), dtype=np.complex64)    
+    ft_freqs = [-2*np.pi * np.fft.fftshift(np.fft.fftfreq(n)) for n in Nk_use]
+    
+    grid_indices = [tuple(ii for ii in transformed_b_vecs[nn]) for nn in range(Ng)]
+    
+    # loop over times and channels
+    for i_t in range(Ntimes):
+        for i_f in range(Nfreqs):
+            
+            # populate grid with weighted, normalized data/model ratios
+            nmdr_t_f = normalized_data_model_ratio[i_t, i_f, :]
+            weights_t_f = weights[i_t, i_f, :]            
+            for nn in range(Ng):
+                grid[grid_indices[nn]] = weights_t_f[nn] * nmdr_t_f[nn]
+                
+            # find grid point maximum in Fourier space corresponding to phase slope here 
+            grid_ft = np.fft.fftshift(np.fft.fftn(grid)) / Ng            
+            max_idx = np.unravel_index(np.argmax(np.real(grid_ft)), grid_ft.shape)
+            Lambda_init = np.array([ft_freqs[kk][ii] for kk,ii in enumerate(max_idx)])
+            
+            # refine solution with Newton's method
+            Lambda_t_f, niter = _newton_solve_real(Lambda_init, transformed_b_vecs, nmdr_t_f, weights_t_f, 1e-8)
+            
+            # store results
+            Lambda_sol[i_t, i_f] = Lambda_t_f
+            Z_sol[i_t, i_f] = _eval_Z(Lambda_t_f, transformed_b_vecs, nmdr_t_f, weights_t_f)
+    
+    return Lambda_sol, Z_sol
+
+def _put_transformed_array_on_integer_grid(transformed_antpos, tol=1e-8, max_numerator=100):
+    """
+    Multiplies an antenna position dictionary by a rational number to make all positions integers, up to tol.
+    Searches multipliers up to max_numerator, then looks for the largest denominator to compress the array.
+    """
+    # Loop through dimensions of the transformed antpos
+    for dim in range(len(list(transformed_antpos.values())[0])):
+        this_dim_positions = np.array([ap[dim] for ap in transformed_antpos.values()])
+        
+        # If any position not on integer grid
+        if np.max(np.abs(np.rint(this_dim_positions) - this_dim_positions)) > tol:
+            
+            # Look for multipliers that put every antenna on an integer grid
+            for numerator in range(2, max_numerator + 1):
+                if np.max(np.abs(np.rint(this_dim_positions * numerator) - this_dim_positions * numerator)) < tol:
+                    break
+                assert multiplier < max_numerator, 'Could not find a reasonable multiplier to put this array on an integer grid.'
+            
+            # Look for divisors compress the array but keep every antenna on an integer grid
+            for denominator in range(max_numerator, 0, -1):
+                if np.max(np.abs(np.rint(this_dim_positions * numerator / denominator) - this_dim_positions * numerator / denominator)) < tol:
+                    break
+            
+            # Apply ratio found
+            for ap in transformed_antpos:
+                transformed_antpos[ap][dim] *= (numerator / denominator)
+
+def complex_phase_abscal(data, model, reds, data_bls, model_bls):
+    '''Calculates gains that would absolute calibrate already redundantly-calibrated data.  
+    Only operates one polarization at a time. 
+    
+    Parameters:
+    ----------
+    data : DataContainer or RedDataContainer
+        Dictionary-like container mapping baselines to data visibilities to abscal
+    model : DataContainer or RedDataContainer
+        Dictionary-like container mapping baselines to model visibilities
+    reds : list of lists
+        List of list of redundant baselines tuples like (0, 1, 'ee')
+    data_bls : list of tuples
+        List of baselines in data to use.
+    model_bls : list of tuples
+        List of baselines in model to use. Must correspond the same physical separations as data_bls.
+        
+    Returns:
+    -------
+    meta : dictionary
+        Contains keys for 'Lambda_sol' (degneracy solutions) and 'Z_sol' (solution qualities)
+    delta_gains : dictionary
+        Dictionary mapping antenna keys like (0, 'Jee') to gains of the same shape of the data
+    '''
+    # Check that baselines selected are for the same polarization
+    pols = list(set([bl[2] for bls in (data_bls, model_bls) for bl in bls]))
+    assert len(pols) == 1, 'complex_phase_abscal() can only solve for one polarization at a time.'
+    
+    # Get transformed antenna positions and baselines
+    transformed_antpos = redcal.reds_to_antpos(reds)
+    _put_transformed_array_on_integer_grid(transformed_antpos)
+    transformed_b_vecs = np.rint([transformed_antpos[jj] - transformed_antpos[ii] for (ii,jj,pol) in data_bls]).astype(int)
+    
+    # Get number of baselines and times/freqs
+    Ngroups = len(data_bls)
+    Ntimes, Nfreqs = data[data_bls[0]].shape
+
+    # Get normalized data/model ratios and weights
+    normalized_data_model_ratio = np.zeros((Ntimes, Nfreqs, Ngroups), dtype=complex)
+    weights = np.ones((Ntimes, Nfreqs, Ngroups), dtype=float)
+    for nn in range(Ngroups):
+        Vhat_n = data[data_bls[nn]]
+        Vbar_n = model[model_bls[nn]]
+        r_n = Vhat_n / Vbar_n
+        normalized_data_model_ratio[:,:,nn] = r_n / np.abs(r_n)
+        weights[:,:,nn] = np.abs(Vbar_n * Vhat_n)
+
+    # Get solution for degenerate phase slopes
+    weights /= np.mean(weights, axis=-1, keepdims=True)
+    Lambda_sol, Z_sol = _phase_gradient_solution(normalized_data_model_ratio, transformed_b_vecs, weights)
+
+    # turn solution into per-antenna gains
+    phase_angle = {a : np.sum(Lambda_sol * r, axis=-1) for a,r in transformed_antpos.items()}
+    delta_gains = {(a, utils.split_pol(pols[0])[0]): np.exp(1j * (angle)) for a, angle in phase_angle.items()}
+    meta = {'Lambda_sol':  Lambda_sol, 'Z_sol': Z_sol}
+    return meta, delta_gains
 
 def merge_gains(gains, merge_shared=True):
     """
