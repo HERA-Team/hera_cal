@@ -29,7 +29,7 @@ import argparse
 import numpy as np
 import operator
 from functools import reduce
-from scipy import signal, interpolate, spatial, constants
+from scipy import signal, interpolate, spatial, constants, fft
 from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
 import linsolve
@@ -1421,6 +1421,7 @@ def _phase_gradient_solution(normalized_data_model_ratio, transformed_b_vecs, we
         Array of weights for each baseline. Shape (n_times, n_freqs, n_bls).
     resolution_factor : int
         Factor by which to increase the resolution of the FFT grid.
+    workers : int
     
     Returns:
     --------
@@ -1460,10 +1461,10 @@ def _phase_gradient_solution(normalized_data_model_ratio, transformed_b_vecs, we
             for nn in range(Ngroups):
                 grid[grid_indices[nn]] = weights_t_f[nn] * nmdr_t_f[nn]
                 
-            # Find grid point maximum in Fourier space corresponding to phase slope here 
-            grid_ft = np.fft.fftshift(np.fft.fftn(grid)) / Ngroups            
+            # Find grid point maximum in Fourier space corresponding to phase slope here
+            grid_ft = np.fft.fftshift(fft.fftn(grid, workers=-1)) / Ngroups            
             max_idx = np.unravel_index(np.argmax(np.real(grid_ft)), grid_ft.shape)
-            Lambda_init = np.array([ft_freqs[kk][ii] for kk,ii in enumerate(max_idx)])
+            Lambda_init = np.array([ft_freqs[kk][ii] for kk, ii in enumerate(max_idx)])
             
             # Refine solution with Newton's method
             Lambda_t_f, _ = _newton_solve_real(Lambda_init, transformed_b_vecs, nmdr_t_f, weights_t_f, 1e-8)
