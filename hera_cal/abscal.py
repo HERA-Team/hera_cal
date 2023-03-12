@@ -1448,7 +1448,7 @@ def _phase_gradient_solution(normalized_data_model_ratio, transformed_b_vecs, we
     ft_freqs = [-2*np.pi * np.fft.fftshift(np.fft.fftfreq(n)) for n in Nk_use]
     
     # Get the indices of the grid points corresponding to the transformed_b_vecs
-    grid_indices = [tuple(ii for ii in transformed_b_vecs[nn]) for nn in range(Ng)]
+    grid_indices = [tuple(ii for ii in transformed_b_vecs[nn]) for nn in range(Ngroups)]
     
     # Loop over times and channels
     for i_t in range(Ntimes):
@@ -1461,7 +1461,7 @@ def _phase_gradient_solution(normalized_data_model_ratio, transformed_b_vecs, we
                 grid[grid_indices[nn]] = weights_t_f[nn] * nmdr_t_f[nn]
                 
             # Find grid point maximum in Fourier space corresponding to phase slope here 
-            grid_ft = np.fft.fftshift(np.fft.fftn(grid)) / Ng            
+            grid_ft = np.fft.fftshift(np.fft.fftn(grid)) / Ngroups            
             max_idx = np.unravel_index(np.argmax(np.real(grid_ft)), grid_ft.shape)
             Lambda_init = np.array([ft_freqs[kk][ii] for kk,ii in enumerate(max_idx)])
             
@@ -1488,7 +1488,6 @@ def _put_transformed_array_on_integer_grid(transformed_antpos, tol=1e-8, max_num
         Tolerance for the positions to be considered integers.
     max_numerator: int
         Maximum numerator to search for a multiplier.
-    
     """
     # Loop through dimensions of the transformed antpos
     for dim in range(len(list(transformed_antpos.values())[0])):
@@ -1557,8 +1556,8 @@ def complex_phase_abscal(data, model, reds, data_bls, model_bls):
         Vhat_n = data[data_bls[nn]]
         Vbar_n = model[model_bls[nn]]
         r_n = Vhat_n / Vbar_n
-        normalized_data_model_ratio[:,:,nn] = r_n / np.abs(r_n)
-        weights[:,:,nn] = np.abs(Vbar_n * Vhat_n)
+        normalized_data_model_ratio[:, :, nn] = r_n / np.abs(r_n)
+        weights[:, :, nn] = np.abs(Vbar_n * Vhat_n)
 
     # Get solution for degenerate phase slopes
     weights /= np.mean(weights, axis=-1, keepdims=True)
