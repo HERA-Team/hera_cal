@@ -14,7 +14,7 @@ from pyuvdata import UVCal, UVData
 import warnings
 from hera_sim.antpos import hex_array, linear_array
 
-from .. import io, abscal, redcal, utils
+from .. import io, abscal, redcal, utils, apply_cal
 from ..data import DATA_PATH
 from ..datacontainer import DataContainer
 from ..utils import split_pol, reverse_bl, split_bl
@@ -660,6 +660,34 @@ class Test_Abscal_Solvers(object):
                                                          time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
             calibrate_in_place(data, gains)
         np.testing.assert_array_almost_equal(np.linalg.norm([data[bl] - model[bl] for bl in data]), 0, 5)
+
+    def test_complex_phase_abscal(self):
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos)
+        transformed_antpos = redcal.reds_to_antpos(reds)
+        abscal._put_transformed_array_on_integer_grid(transformed_antpos)
+
+        data_bls = model_bls = [group[0] for group in reds]
+        transformed_b_vecs = np.rint([transformed_antpos[jj] - transformed_antpos[ii] for (ii, jj, pol) in data_bls]).astype(int)
+
+        model, data = {}, {}
+        ntimes, nfreqs = 1, 2
+
+        # Test that the data is calibrated properly after being moved in phase
+        phase_deg = np.random.normal(0, 1, (ntimes, nfreqs, transformed_b_vecs.shape[-1]))
+        for bi, bls in enumerate(data_bls):
+            model[bls] = np.ones((ntimes, nfreqs))
+            data[bls] = model[bls] * np.exp(-1j * np.sum(transformed_b_vecs[bi][None, None, :] * phase_deg, axis=-1))
+
+        # Solve for the phase degeneracy
+        meta, delta_gains = abscal.complex_phase_abscal(data, model, reds, data_bls, model_bls)
+
+        # Apply calibration with new gains
+        apply_cal.calibrate_in_place(data, delta_gains)
+
+        # Test that the data is calibrated properly after being moved in phase
+        for k in data:
+            np.testing.assert_array_almost_equal(data[k], model[k])
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
