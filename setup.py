@@ -62,6 +62,7 @@ setup_args = {
         'aipy',
         "rich",
         "jax",
+        "jaxlib"
     ],
     'extras_require': {
          "all": [
