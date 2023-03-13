@@ -291,6 +291,53 @@ class Test_AbsCal_Funcs(object):
         np.testing.assert_array_almost_equal(phase_slopes_x - x_slope_est, 0, decimal=7)
         np.testing.assert_array_almost_equal(phase_slopes_y - y_slope_est, 0, decimal=7)
 
+    def test_put_transformed_array_on_integer_grid(self):
+        # Create a set of points that are not on an integer grid
+        np.random.seed(42)
+        antvec = np.random.uniform(0, 10, size=(5))
+        antpos = {i: np.array([antvec[i]]) for i in range(5)}
+
+        # Check that the function raises an error if the points are not on an integer grid
+        with pytest.raises(AssertionError):
+            abscal._put_transformed_array_on_integer_grid(antpos)
+
+        # Create a set of points that can be put on an integer grid
+        antvec = np.arange(0, 5, 0.5)
+        antpos = {i: np.array([antvec[i]]) for i in range(antvec.shape[0])}
+        abscal._put_transformed_array_on_integer_grid(antpos)
+
+        # Check that the points are now on an integer grid
+        for i in range(antvec.shape[0]):
+            assert np.isclose(antpos[i], i)
+
+    def test_grad_and_hess_real(self):
+        # Generate a set of baseline vectors
+        np.random.seed(42)
+        blvecs = np.column_stack([np.linspace(0, 5, 10), np.linspace(0, 2, 10)])
+        data = np.ones(10)
+        x = np.random.normal(2, 0.25, size=(2))
+        data = data * np.exp(-1j * np.dot(x, blvecs.T))
+
+        # Compute gradient and hessian
+        grad, _ = abscal._grad_and_hess_real(x, blvecs, data)
+        
+        # At global minimum, gradient should be zero
+        assert np.allclose(grad, np.zeros(2))
+
+    def test_eval_Z(self):
+        # Generate a simple set of data
+        blvecs = np.column_stack([np.linspace(0, 5, 10), np.linspace(0, 2, 10)])
+        data = np.ones(10)
+        x = np.random.normal(2, 0.25, size=(2))
+        data = data * np.exp(-1j * np.dot(x, blvecs.T))
+
+        # Compute Z
+        Z = abscal._eval_Z(x, blvecs, data, np.ones_like(data))
+
+        # At solution point Z should be 1 + 0j
+        np.testing.assert_array_almost_equal(Z.real, 1)
+        np.testing.assert_array_almost_equal(Z.imag, 0)
+
 
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
 @pytest.mark.filterwarnings("ignore:divide by zero encountered in true_divide")
@@ -688,6 +735,21 @@ class Test_Abscal_Solvers(object):
         # Test that the data is calibrated properly after being moved in phase
         for k in data:
             np.testing.assert_array_almost_equal(data[k], model[k])
+
+        # Test that function errors when polarizations are not the same
+        model, data = {}, {}
+        model_bls = [group[0] for group in reds]
+        data_bls = [group[0][:2] + ('ee', ) for group in reds]
+
+        # Test that the data is calibrated properly after being moved in phase
+        phase_deg = np.random.normal(0, 1, (ntimes, nfreqs, transformed_b_vecs.shape[-1]))
+        for bi, bls in enumerate(data_bls):
+            model[bls] = np.ones((ntimes, nfreqs))
+            data[bls[:2] + ('ee',)] = model[bls]
+
+        with pytest.raises(AssertionError):
+            meta, delta_gains = abscal.complex_phase_abscal(data, model, reds, data_bls, model_bls)
+
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")

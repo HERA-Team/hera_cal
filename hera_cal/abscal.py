@@ -1375,7 +1375,7 @@ def _newton_solve_real(x0, transformed_b_vecs, normalized_data_model_ratio, weig
 
     Returns:
     --------
-    x: np.ndarray or jnp.ndarray
+    x: jnp.ndarray
         Array of refined phase slopes.
     i: int
         Number of iterations performed by the Newton solver.
