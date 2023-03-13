@@ -1421,7 +1421,6 @@ def _phase_gradient_solution(normalized_data_model_ratio, transformed_b_vecs, we
         Array of weights for each baseline. Shape (n_times, n_freqs, n_bls).
     resolution_factor : int
         Factor by which to increase the resolution of the FFT grid.
-    workers : int
     
     Returns:
     --------
