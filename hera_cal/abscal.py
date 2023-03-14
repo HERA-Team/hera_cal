@@ -1354,6 +1354,7 @@ def _grad_and_hess(x, B_vecs, Z_coefficients):
     w_cos_d = Z_coefficients.real
     w_sin_d = Z_coefficients.imag
 
+    # avoid complex data/evaluating complex exponentials with a little trigonometry
     # w*sin(x+y) = w*cos(x)*sin(y) + w*sin(x)*cos(y)
     w_sin_d_xB = cos_xB * w_sin_d + sin_xB * w_cos_d
 
@@ -1487,7 +1488,7 @@ def _phase_gradient_solution(Z_coefficients, transformed_b_vecs, resolution_fact
 
     # Initialize the grid and the corresponding frequencies
     grid = np.zeros(tuple(Nk_use), dtype=np.complex64)
-    ft_freqs = [-2*np.pi * fft.fftshift(fft.fftfreq(n)) for n in Nk_use]
+    ft_freqs = [- 2 * np.pi * fft.fftshift(fft.fftfreq(n)) for n in Nk_use]
 
     # Get the indices of the grid points corresponding to the transformed_b_vecs
     grid_indices = [tuple(ii for ii in transformed_b_vecs[nn]) for nn in range(Ngroups)]
@@ -1595,7 +1596,7 @@ def complex_phase_abscal(data, model, reds, data_bls, model_bls):
     # Get transformed antenna positions and baselines
     transformed_antpos = redcal.reds_to_antpos(reds)
     _put_transformed_array_on_integer_grid(transformed_antpos)
-    transformed_b_vecs = np.rint([transformed_antpos[jj] - transformed_antpos[ii] for (ii,jj,pol) in data_bls]).astype(int)
+    transformed_b_vecs = np.rint([transformed_antpos[jj] - transformed_antpos[ii] for (ii, jj, pol) in data_bls]).astype(int)
 
     # Get number of baselines and times/freqs
     Ngroups = len(data_bls)
@@ -1614,9 +1615,9 @@ def complex_phase_abscal(data, model, reds, data_bls, model_bls):
     Lambda_sol, Z_sol, newton_iterations = _phase_gradient_solution(Z_coefficients, transformed_b_vecs)
 
     # turn solution into per-antenna gains
-    phase_angle = {a : np.sum(Lambda_sol * r, axis=-1) for a,r in transformed_antpos.items()}
+    phase_angle = {a: np.sum(Lambda_sol * r, axis=-1) for a, r in transformed_antpos.items()}
     delta_gains = {(a, utils.split_pol(pols[0])[0]): np.exp(1j * (angle)) for a, angle in phase_angle.items()}
-    meta = {'Lambda_sol':  Lambda_sol, 'Z_sol': Z_sol, 'newton_iterations': newton_iterations}
+    meta = {'Lambda_sol': Lambda_sol, 'Z_sol': Z_sol, 'newton_iterations': newton_iterations}
     return meta, delta_gains
 
 
