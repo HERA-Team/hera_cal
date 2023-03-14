@@ -228,8 +228,8 @@ class Test_AbsCal_Funcs(object):
         assert len(rf.keys()) == 21
 
     def test_match_times(self):
-        dfiles =[os.path.join(DATA_PATH, f'zen.2458043.{f}.xx.HH.uvORA') for f in (12552, 13298)]
-        mfiles =[os.path.join(DATA_PATH, f'zen.2458042.{f}.xx.HH.uvXA') for f in (12552, 13298)]
+        dfiles = [os.path.join(DATA_PATH, f'zen.2458043.{f}.xx.HH.uvORA') for f in (12552, 13298)]
+        mfiles = [os.path.join(DATA_PATH, f'zen.2458042.{f}.xx.HH.uvXA') for f in (12552, 13298)]
 
         # test basic execution
         relevant_mfiles = abscal.match_times(dfiles[0], mfiles, filetype='miriad')
@@ -310,7 +310,7 @@ class Test_AbsCal_Funcs(object):
         for i in range(antvec.shape[0]):
             assert np.isclose(antpos[i], i)
 
-    def test_grad_and_hess_real(self):
+    def test_grad_and_hess(self):
         # Generate a set of baseline vectors
         np.random.seed(42)
         blvecs = np.column_stack([np.linspace(0, 5, 10), np.linspace(0, 2, 10)])
@@ -319,8 +319,8 @@ class Test_AbsCal_Funcs(object):
         data = data * np.exp(-1j * np.dot(x, blvecs.T))
 
         # Compute gradient and hessian
-        grad, _ = abscal._grad_and_hess_real(x, blvecs, data)
-        
+        grad, _ = abscal._grad_and_hess(x, blvecs, data)
+
         # At global minimum, gradient should be zero
         assert np.allclose(grad, np.zeros(2))
 
@@ -332,7 +332,7 @@ class Test_AbsCal_Funcs(object):
         data = data * np.exp(-1j * np.dot(x, blvecs.T))
 
         # Compute Z
-        Z = abscal._eval_Z(x, blvecs, data, np.ones_like(data))
+        Z = abscal._eval_Z(x, blvecs, data)
 
         # At solution point Z should be 1 + 0j
         np.testing.assert_array_almost_equal(Z.real, 1)
@@ -749,7 +749,6 @@ class Test_Abscal_Solvers(object):
 
         with pytest.raises(AssertionError):
             meta, delta_gains = abscal.complex_phase_abscal(data, model, reds, data_bls, model_bls)
-
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
