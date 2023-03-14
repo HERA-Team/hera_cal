@@ -709,7 +709,8 @@ class Test_Abscal_Solvers(object):
         np.testing.assert_array_almost_equal(np.linalg.norm([data[bl] - model[bl] for bl in data]), 0, 5)
 
     def test_complex_phase_abscal(self):
-        antpos = hex_array(3, split_core=False, outriggers=0)
+        # with split_core=True this array will have 4 degenerate phase parameters to solve for
+        antpos = hex_array(3, split_core=True, outriggers=0)
         reds = redcal.get_reds(antpos)
         transformed_antpos = redcal.reds_to_antpos(reds)
         abscal._put_transformed_array_on_integer_grid(transformed_antpos)
