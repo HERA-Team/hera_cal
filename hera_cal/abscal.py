@@ -1296,87 +1296,109 @@ def global_phase_slope_logcal(model, data, antpos, reds=None, solver='linfit', w
 
 
 @jax.jit
-def _eval_Z(x, b_vecs, normalized_data_model_ratio, weights):
+def _eval_Z(x, B_vecs, Z_coefficients):
     """
-    Computes a metric of how well the model and data can be made to match after abscal.
+    Evaluates the Fourier series for the function Z at a point x. The real part
+    of Z is the objective function for the abscal phase solution - the optimal
+    phase gradient solution is defined by the location of the global maximum
+    of Re[Z] (up to periodicity).
 
     Parameters
     ----------
     x : np.ndarray or jnp.ndarray
-        Solution vector of the tip-tilt phase slopes. Shape (n_dims,).
-    b_vecs : np.ndarray or jnp.ndarray
+        Point in the domain of possible phase gradient solutions. Shape (n_dims,).
+    B_vecs : np.ndarray or jnp.ndarray
         Array of baseline vectors. Shape (n_bls, n_dims).
-    normalized_data_model_ratio : np.ndarray or jnp.ndarray
-        Array of normalized data/model ratios. Shape (n_bls,).
-    weights : np.ndarray or jnp.ndarray
-        Array of weights. Shape (n_bls,).
-    
+    Z_coefficients : np.ndarray or jnp.ndarray
+        Array of Fourier coefficients which are the products of the data and model
+        visibilities, correponding to the elements of B_vecs. Shape (n_bls,).
+
     Returns
     -------
-    Z : float
-        Metric of how well the model and data can be made to match after abscal.
+    Z : complex
+        Value of Z evaluated at the point x.
     """
-    phase = jnp.sum(x * b_vecs, axis=1)
+    phase = jnp.sum(x * B_vecs, axis=1)
     phasor = jnp.cos(phase) + 1j * jnp.sin(phase)
-    Z = jnp.mean(phasor * normalized_data_model_ratio * weights)
+    Z = jnp.sum(phasor * Z_coefficients) / jnp.sum(jnp.abs(Z_coefficients))
     return Z
 
+
 @jax.jit
-def _grad_and_hess_real(x, b_vec, w_expi_psi):
+def _grad_and_hess(x, B_vecs, Z_coefficients):
     """
-    Evaluates the gradient and hessian for a given set of input parameters, x.
+    Evaluates the gradient vector and hessian matrix of the objective function
+    Re[Z] at the point x. Used in the `_newton_solve` implementation of Newton's method.
 
     Parameters:
     -----------
     x : np.ndarray or jnp.ndarray
-        Solution vector of the tip-tilt phase slopes. Shape (n_dims,).
-    b_vec : np.ndarray or jnp.ndarray
+        Point in the domain of possible phase gradient solutions. Shape (n_dims,).
+    B_vecs : np.ndarray or jnp.ndarray
         Array of baseline vectors. Shape (n_bls, n_dims).
-    w_expi_psi : np.ndarray or jnp.ndarray
-        Array of weighted normalized data/model ratios. Shape (n_bls,).
+    Z_coefficients : np.ndarray or jnp.ndarray
+        Array of Fourier coefficients defining the objective function,
+        correponding to the elements of B_vecs. Shape (n_bls,).
 
     Returns:
     --------
     grad : np.ndarray or jnp.ndarray
-        Gradient of the objective function. Shape (n_dims,).
+        Gradient vector of the objective function at x. Shape (n_dims,).
     hess : np.ndarray or jnp.ndarray
-        Hessian of the objective function. Shape (n_dims, n_dims).
+        Hessian matrix of the objective function at x. Shape (n_dims, n_dims).
     """
-    x_dot_b = jnp.dot(b_vec, x)
-    cos_xb = jnp.cos(x_dot_b)
-    sin_xb = jnp.sin(x_dot_b)
-    w_cos_d = w_expi_psi.real
-    w_sin_d = w_expi_psi.imag
-    w_sin_d_xb = cos_xb * w_sin_d + sin_xb * w_cos_d
-    w_cos_d_xb = cos_xb * w_cos_d - sin_xb * w_sin_d
-    grad = -jnp.mean(w_sin_d_xb[..., None] * b_vec, axis=0)
-    hess = -jnp.mean(b_vec[:, None, :] * b_vec[..., None] * w_cos_d_xb[..., None, None], axis=0)
+    x_dot_B = jnp.dot(B_vecs, x)
+    cos_xB = jnp.cos(x_dot_B)
+    sin_xB = jnp.sin(x_dot_B)
+
+    w_cos_d = Z_coefficients.real
+    w_sin_d = Z_coefficients.imag
+
+    # w*sin(x+y) = w*cos(x)*sin(y) + w*sin(x)*cos(y)
+    w_sin_d_xB = cos_xB * w_sin_d + sin_xB * w_cos_d
+
+    # w*cos(x+y) = w*cos(x)*cos(y) - w*sin(x)*sin(y)
+    w_cos_d_xB = cos_xB * w_cos_d - sin_xB * w_sin_d
+
+    grad = -jnp.mean(w_sin_d_xB[..., None] * B_vecs, axis=0)
+    hess = -jnp.mean(B_vecs[:, None, :] * B_vecs[..., None] * w_cos_d_xB[..., None, None], axis=0)
     return grad, hess
 
+
 @jax.jit
-def _newton_solve_real(x0, transformed_b_vecs, normalized_data_model_ratio, weights, tol=1e-8, maxiter=25):
+def _newton_solve(x0, B_vecs, Z_coefficients, tol=1e-8, maxiter=15):
     """
-    Refines a delay-slope solution (x0) to calibrate the phase slopes seen in normalized_data_model_ratio.
+    Problem specific implementation of Newton's method to solve for the location
+    of a local extrema of the objective function Re[Z], where Z is the function
+    defined in `_eval_Z`. For the solution of this method to correspond to the
+    desired global maximum, the initial point x0 must be sufficiently close to that
+    global maximum. In the event that x0 is not close enough to the global maximum,
+    the sequence still tends to converge quickly, but to some other local minima
+    or maxima of the function Re[Z].
 
     Parameters:
     -----------
     x0: np.ndarray or jnp.ndarray
-        Initial guess for the phase slopes to be calibrated.
-    transformed_b_vecs: np.ndarray or jnp.ndarray
-        Array of baseline vectors in the transformed coordinate system.
-    normalized_data_model_ratio: np.ndarray or jnp.ndarray
-        Array of normalized data-model ratios.
-    weights: np.ndarray or jnp.ndarray
-        Array of weights for each baseline.
+        Initial point in the space of possible phase gradient solutions from
+        which the Newton steps will start. Must be sufficently close to the global
+        maximum for the iterates to converge to the desired abscal solution point.
+    B_vecs : np.ndarray or jnp.ndarray
+        Array of baseline vectors. Shape (n_bls, n_dims).
+    Z_coefficients : np.ndarray or jnp.ndarray
+        Array of Fourier coefficients defining the objective function,
+        correponding to the elements of B_vecs. Shape (n_bls,).
     tol: float
-        Tolerance for the convergence of the Newton solver.
+        Tolerance for the step size of an iteration. The sequence terminates
+        when the size of the next step is smaller in norm than this tolerance.
     maxiter: int
-        Maximum number of iterations for the Newton solver.
+        Maximum number of iterations allowed before automatic termination. Generally,
+        if this limit is reached the returned solution is unlikely to be valid.
 
     Returns:
     --------
     x: jnp.ndarray
-        Array of refined phase slopes.
+        Point in the space of possible phase gradient solutions at which the
+        Newton iterations terminated.
     i: int
         Number of iterations performed by the Newton solver.
     """
@@ -1385,7 +1407,7 @@ def _newton_solve_real(x0, transformed_b_vecs, normalized_data_model_ratio, weig
         Function evaluated on each iteration of the while loop
         """
         x, i, step_diff = args
-        grad, hess = _grad_and_hess_real(x, transformed_b_vecs, w_ndmr)
+        grad, hess = _grad_and_hess(x, B_vecs, Z_coefficients)
         step = -1 * jnp.linalg.solve(hess, grad)
         x += step
         step_diff = jnp.sum(jnp.abs(step))
@@ -1397,46 +1419,66 @@ def _newton_solve_real(x0, transformed_b_vecs, normalized_data_model_ratio, weig
         """
         _, i, step_diff = args
         return (step_diff > tol) & (i < maxiter)
-    
-    # Compute the weighted data-model ratio
-    w_ndmr = weights * normalized_data_model_ratio
 
     # Run the main solver loop
     x, i, _ = jax.lax.while_loop(conditional_function, inner_function, (x0, 0, 1.))
     return x, i
 
-def _phase_gradient_solution(normalized_data_model_ratio, transformed_b_vecs, weights, resolution_factor=2):
+
+def _phase_gradient_solution(Z_coefficients, transformed_b_vecs, resolution_factor=2, newton_maxiter=15):
     """
-    Finds the phase gradients along the dimensions of the transformed_b_vecs that calibrate the phase
-    slopes seen in normalized_data_model_ratio. First looks at the peak in Fourier space to find
-    a phase slope across the array for each dimension, then uses Newton's method to refine the solution.
+    Finds the phase gradient vector (generalized to arbitrary dimensions to handle
+    non-classically redundant arrays) that minimizes the phase differences between
+    redundantly calibrated data and a model in a least squares sense.
+    The solution is formally defined as the point that maximizes the objective
+    function Re[Z] (defined in `_eval_Z` and [FUTURE MEMO]). This solution is
+    obtained with two steps. First, the function Z is evaluated on a grid
+    of points using an FFT. Second, the point on this grid at which Re[Z] is maximal
+    is used as a starting point from which Newton's method is used to find the exact
+    maximum of Re[Z]. The resolution of the FFT grid must be sufficiently fine to allow Newton's
+    method to converge to the correct solution. Formal conditions on this resolution
+    have not been established, but probably could be given generic properties
+    of the objective function and input baseline lengths. The default resolution_factor=2
+    has thus far been sufficient in all testing where a good solution exists at all.
 
     Parameters:
     -----------
-    normalized_data_model_ratio : np.ndarray or jnp.ndarray
-        Array of normalized data/model ratios. Shape (n_times, n_freqs, n_bls).
+    Z_coefficients : np.ndarray or jnp.ndarray
+        Array of Fourier coefficients defining the objective function,
+        correponding to the elements of transformed_b_vecs. Shape (n_bls,).
     transformed_b_vecs : np.ndarray or jnp.ndarray
-        Array of baseline vectors in the transformed coordinate system. Shape (n_bls, n_dims).
-    weights : np.ndarray or jnp.ndarray
-        Array of weights for each baseline. Shape (n_times, n_freqs, n_bls).
+        Array of baseline vectors, which may be affine transformations of the physical
+        baseline vectors in such a way as to fully parameterize the phase degeneracies that
+        are unconstrained by redundant calibration. Shape (n_bls, n_dims).
     resolution_factor : int
-        Factor by which to increase the resolution of the FFT grid.
-    
+        Factor by which to increase the resolution of the FFT grid. The N-D FFT scales
+        approximately as resolution_factor**n_dims, so this parameter should be as small as possible.
+    newton_maxiter : int
+        Maximum number of iterations allowed in the Newton's method solver. Typical numbers
+        of required iterations are observed so far to be 4-12 when the solution
+        is correct - usually closer to 4 than 12. Higher numbers than this
+        warrent suspicion of the validity of the returned solution.
+
     Returns:
     --------
     Lambda_sol : np.ndarray or jnp.ndarray
-        Array of phase gradients along each dimension. Shape (n_times, n_freqs, n_dims).
+        Array of phase gradient vector solutions. Shape (n_times, n_freqs, n_dims).
     Z_sol : np.ndarray or jnp.ndarray
-        Array of quality metrics for the phase gradient solution. Shape (n_times, n_freqs).
+        Array of values of the complex objective function evaluated at the
+        solutions Lambda_sol. Shape (n_times, n_freqs).
+    newton_iterations : np.ndarray or jnp.ndarray
+        Array of number of newton's method iterations completed to obtain the
+        solutions Lambda_sol. Shape (n_times, n_freqs).
     """
-    # Get the shape of the data and number of tip-tilt dimensions
-    Ntimes, Nfreqs, Ngroups = normalized_data_model_ratio.shape
+    # Get the shape of the data and number of phase-gradient dimensions
+    Ntimes, Nfreqs, Ngroups = Z_coefficients.shape
     Ndims = transformed_b_vecs.shape[1]
-    
+
     # Initialize the solution arrays
     Lambda_sol = np.zeros((Ntimes, Nfreqs, Ndims), dtype=float)
     Z_sol = np.zeros((Ntimes, Nfreqs), dtype=complex)
-    
+    newton_iterations = np.zeros((Ntimes, Nfreqs), dtype=int)
+
     # Largest integer lattice coordinate along each dimension - the fft
     # grid needs to be twice this along each dimension
     dim_maxes = np.array([np.max(np.abs(bk)) for bk in transformed_b_vecs.T])
@@ -1444,35 +1486,41 @@ def _phase_gradient_solution(normalized_data_model_ratio, transformed_b_vecs, we
     Nk_use = resolution_factor * Nk + 1 if resolution_factor > 1 else Nk
 
     # Initialize the grid and the corresponding frequencies
-    grid = np.zeros(tuple(Nk_use), dtype=np.complex64)    
-    ft_freqs = [-2*np.pi * np.fft.fftshift(np.fft.fftfreq(n)) for n in Nk_use]
-    
+    grid = np.zeros(tuple(Nk_use), dtype=np.complex64)
+    ft_freqs = [-2*np.pi * fft.fftshift(fft.fftfreq(n)) for n in Nk_use]
+
     # Get the indices of the grid points corresponding to the transformed_b_vecs
     grid_indices = [tuple(ii for ii in transformed_b_vecs[nn]) for nn in range(Ngroups)]
-    
-    # Loop over times and channels
+
+    # Loop over times and frequency channels
     for i_t in range(Ntimes):
         for i_f in range(Nfreqs):
-            
-            # Populate grid with weighted, normalized data/model ratios
-            nmdr_t_f = normalized_data_model_ratio[i_t, i_f, :]
-            weights_t_f = weights[i_t, i_f, :]            
+
+            # Populate grid with Fourier coeffcients of the objective function
+            Z_coeffs_t_f = Z_coefficients[i_t, i_f]
             for nn in range(Ngroups):
-                grid[grid_indices[nn]] = weights_t_f[nn] * nmdr_t_f[nn]
-                
-            # Find grid point maximum in Fourier space corresponding to phase slope here
-            grid_ft = np.fft.fftshift(fft.fftn(grid, workers=-1)) / Ngroups            
+                grid[grid_indices[nn]] = Z_coeffs_t_f[nn]
+
+            # Evaluate the complex objective function Z on a grid of sample points
+            grid_ft = fft.fftshift(fft.fftn(grid, workers=-1)) / Ngroups
+
+            # Find the indices of the grid point with the largest value of the sampled objective function
             max_idx = np.unravel_index(np.argmax(np.real(grid_ft)), grid_ft.shape)
+
+            # Get the corresponding coordinates at that grid point
             Lambda_init = np.array([ft_freqs[kk][ii] for kk, ii in enumerate(max_idx)])
-            
-            # Refine solution with Newton's method
-            Lambda_t_f, _ = _newton_solve_real(Lambda_init, transformed_b_vecs, nmdr_t_f, weights_t_f, 1e-8)
-            
+
+            # Find the local maximum near that initial point, which should also
+            # be the global maximum, in which case it is the desired phase gradient solution
+            Lambda_t_f, niter_t_f = _newton_solve(Lambda_init, transformed_b_vecs, Z_coeffs_t_f, 1e-8, maxiter=newton_maxiter)
+
             # Store results
             Lambda_sol[i_t, i_f] = Lambda_t_f
-            Z_sol[i_t, i_f] = _eval_Z(Lambda_t_f, transformed_b_vecs, nmdr_t_f, weights_t_f)
-    
-    return Lambda_sol, Z_sol
+            Z_sol[i_t, i_f] = _eval_Z(Lambda_t_f, transformed_b_vecs, Z_coeffs_t_f)
+            newton_iterations[i_t, i_f] = niter_t_f
+
+    return Lambda_sol, Z_sol, newton_iterations
+
 
 def _put_transformed_array_on_integer_grid(transformed_antpos, tol=1e-8, max_numerator=100):
     """
@@ -1492,30 +1540,31 @@ def _put_transformed_array_on_integer_grid(transformed_antpos, tol=1e-8, max_num
     # Loop through dimensions of the transformed antpos
     for dim in range(len(list(transformed_antpos.values())[0])):
         this_dim_positions = np.array([ap[dim] for ap in transformed_antpos.values()])
-        
+
         # If any position not on integer grid
         if np.max(np.abs(np.rint(this_dim_positions) - this_dim_positions)) > tol:
-            
+
             # Look for multipliers that put every antenna on an integer grid
             for numerator in range(2, max_numerator + 1):
                 if np.max(np.abs(np.rint(this_dim_positions * numerator) - this_dim_positions * numerator)) < tol:
                     break
                 assert numerator < max_numerator, 'Could not find a reasonable multiplier to put this array on an integer grid.'
-            
+
             # Look for divisors compress the array but keep every antenna on an integer grid
             for denominator in range(max_numerator, 0, -1):
                 if np.max(np.abs(np.rint(this_dim_positions * numerator / denominator) - this_dim_positions * numerator / denominator)) < tol:
                     break
-            
+
             # Apply ratio found
             for ap in transformed_antpos:
                 transformed_antpos[ap][dim] *= (numerator / denominator)
 
+
 def complex_phase_abscal(data, model, reds, data_bls, model_bls):
     """
-    Calculates gains that would absolute calibrate already redundantly-calibrated data.  
-    Only operates one polarization at a time. 
-    
+    Calculates gains that would absolute calibrate the phase of already redundantly-calibrated data.
+    Only operates one polarization at a time.
+
     Parameters:
     ----------
     data : DataContainer or RedDataContainer
@@ -1523,51 +1572,53 @@ def complex_phase_abscal(data, model, reds, data_bls, model_bls):
     model : DataContainer or RedDataContainer
         Dictionary-like container mapping baselines to model visibilities
     reds : list of lists
-        List of list of redundant baselines tuples like (0, 1, 'ee')
+        List of lists of redundant baselines tuples like (0, 1, 'ee')
     data_bls : list of tuples
-        List of baselines in data to use.
+        List of baseline tuples in data to use.
     model_bls : list of tuples
-        List of baselines in model to use. Must correspond the same physical separations as data_bls.
-        
+        List of baseline tuples in model to use. Must correspond the same physical separations as data_bls.
+
     Returns:
     -------
     meta : dictionary
-        Contains keys for 'Lambda_sol' (degneracy solutions) and 'Z_sol' (solution qualities)
+        Contains keys for
+            'Lambda_sol' : phase gradient solutions,
+            'Z_sol' : value of the objective function at the solution,
+            'newton_iterations' : number of iterations completed by the Newton's method solver
     delta_gains : dictionary
         Dictionary mapping antenna keys like (0, 'Jee') to gains of the same shape of the data
     """
     # Check that baselines selected are for the same polarization
     pols = list(set([bl[2] for bls in (data_bls, model_bls) for bl in bls]))
     assert len(pols) == 1, 'complex_phase_abscal() can only solve for one polarization at a time.'
-    
+
     # Get transformed antenna positions and baselines
     transformed_antpos = redcal.reds_to_antpos(reds)
     _put_transformed_array_on_integer_grid(transformed_antpos)
     transformed_b_vecs = np.rint([transformed_antpos[jj] - transformed_antpos[ii] for (ii,jj,pol) in data_bls]).astype(int)
-    
+
     # Get number of baselines and times/freqs
     Ngroups = len(data_bls)
     Ntimes, Nfreqs = data[data_bls[0]].shape
 
-    # Get normalized data/model ratios and weights
-    normalized_data_model_ratio = np.zeros((Ntimes, Nfreqs, Ngroups), dtype=complex)
-    weights = np.ones((Ntimes, Nfreqs, Ngroups), dtype=float)
+    # Build up array of Fourier coefficients of the objective function
+    Z_coefficients = np.zeros((Ntimes, Nfreqs, Ngroups), dtype=complex)
     for nn in range(Ngroups):
+
         Vhat_n = data[data_bls[nn]]
         Vbar_n = model[model_bls[nn]]
-        r_n = Vhat_n / Vbar_n
-        normalized_data_model_ratio[:, :, nn] = r_n / np.abs(r_n)
-        weights[:, :, nn] = np.abs(Vbar_n * Vhat_n)
 
-    # Get solution for degenerate phase slopes
-    weights /= np.mean(weights, axis=-1, keepdims=True)
-    Lambda_sol, Z_sol = _phase_gradient_solution(normalized_data_model_ratio, transformed_b_vecs, weights)
+        Z_coefficients[:, :, nn] = Vhat_n * np.conj(Vbar_n)
+
+    # Get solution for degenerate phase gradient vectors
+    Lambda_sol, Z_sol, newton_iterations = _phase_gradient_solution(Z_coefficients, transformed_b_vecs)
 
     # turn solution into per-antenna gains
     phase_angle = {a : np.sum(Lambda_sol * r, axis=-1) for a,r in transformed_antpos.items()}
     delta_gains = {(a, utils.split_pol(pols[0])[0]): np.exp(1j * (angle)) for a, angle in phase_angle.items()}
-    meta = {'Lambda_sol':  Lambda_sol, 'Z_sol': Z_sol}
+    meta = {'Lambda_sol':  Lambda_sol, 'Z_sol': Z_sol, 'newton_iterations': newton_iterations}
     return meta, delta_gains
+
 
 def merge_gains(gains, merge_shared=True):
     """
