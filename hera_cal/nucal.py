@@ -11,13 +11,9 @@ from hera_filters import dspec
 import astropy.constants as const
 from scipy.cluster.hierarchy import fclusterdata
 
-try:
-    import jax
-    from jax import numpy as jnp
-    jax.config.update("jax_enable_x64", True)
-
-except:
-    warnings.warn('Jax is not installed. Some functionality may not be available')
+import jax
+from jax import numpy as jnp
+jax.config.update("jax_enable_x64", True)
 
 # Constants
 SPEED_OF_LIGHT = const.c.si.value
