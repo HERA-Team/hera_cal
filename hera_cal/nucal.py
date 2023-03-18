@@ -760,11 +760,12 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
 
 
 def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters, tol=1e-15,
-                               share_fg_model=False, return_model_comps=True):
+                               share_fg_model=False, return_model_comps=True, solver="lu_solve"):
     """
     Compute a foreground model for a set of radially redundant baselines. The model is computed by performing a linear
-    least-squares fit a set of spatial and spectral filters to model the TODO ADD MORE DOCUMENTATION. 
-    The model components for this fit are then returned.
+    least-squares fit using a set of spatial and spectral filters to model visibilities within a radially redundant group. 
+    The model components are return if return_model_comps is True. Otherwise, the model is evaluated using the model
+    components and the spatial and spectral filters, and the model visibilities are returned.
     
     Parameters:
     -----------
@@ -803,9 +804,8 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
         (Ntimes, Nfilters) where Ntimes is the number of times in the data and Nfilters is the number of DPSS
         eigenvectors.
     """        
-    # Create empty dictionary for model components and model visibilities
+    # Create empty dictionary for model components
     model_comps = {}
-    model = {}
 
     # Loop over radial groups
     for group in radial_reds:
@@ -823,43 +823,37 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
             XTX = jnp.einsum("fm,afn,taf,fk,afj->mnkj", 
                 spectral_filters, design_matrix, wgts_here, spectral_filters, design_matrix
             ).reshape(ndim, ndim)
-            XTX[np.diag_indices_from(XTX)] += tol
-            XTWy = jnp.einsum("fm,afn,taf->mn", spectral_filters, design_matrix, data_here * wgts_here).reshape(ndim)
+            Xy = jnp.einsum("fm,afn,taf->mn", spectral_filters, design_matrix, data_here * wgts_here).reshape(ndim)
 
             # Solve for the foreground model components
-            beta = _linear_fit(XTX, XTWy, tol=tol, method=solver)
+            beta = _linear_fit(XTX, Xy, tol=tol, method=solver)
             beta = beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1])
 
         else:
+            # Creat empty list to hold the model components for each time
             beta = []
 
             # Compute the XTX and XTWy
             for i in range(data_here.shape[1]):
                 XTX = jnp.einsum("fm,afn,af,fk,afj->mnkj", 
-                    spectral_filters, design_matrix, wgts_arr[:, i, :], spectral_filters, design_matrix
-                ).reshape(data_arr.shape[0], ndim, ndim)
-                XTX[np.diag_indices_from(XTX)] += tol
-                XTWy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_arr[:, i, :] * wgts_arr[:, i, :]).reshape(ndim)
+                    spectral_filters, design_matrix, wgts_here[:, i, :], spectral_filters, design_matrix
+                ).reshape(ndim, ndim)
+                Xy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_here[:, i, :] * wgts_here[:, i, :]).reshape(ndim)
 
                 # Solve for the foreground model components
-                _beta = _linear_fit(XTX, XTWy, tol=tol, method=solver)
+                _beta = _linear_fit(XTX, Xy, tol=tol, method=solver)
                 beta.append(_beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1]))
             
+            # Pack solution into an array
             beta = np.array(beta)
 
+        # Store the model components
         model_comps[group[0]] = beta
                         
     if return_model_comps:
         return model_comps
     else:
-        # Compute the foreground model 
-        for group in radial_reds:
-            for bl in group:
-                if share_fg_model:
-                    model[bl] = jnp.einsum("fm,fn,mn->f", spatial_filters[bl], spectral_filters, model_comps[group[0]])
-                else:
-                    model[bl] = jnp.einsum("fm,fn,tmn->tf", spatial_filters[bl], spectral_filters, model_comps[group[0]])
-        return model
+        return evaluate_foreground_model(radial_reds, model_comps, spatial_filters, spectral_filters)
 
 def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
     """
@@ -892,7 +886,7 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
     # Project u-model components on to the spectral axis
     model_comps = {}
     for key in u_model_comps:
-        model_comps[key] = np.dot(u_model_comps[key], spectral_filters) * const_eigen_vals
+        model_comps[key] = u_model_comps[key] * const_eigen_vals
 
     return model_comps
 
@@ -935,15 +929,11 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, solver
     """ 
     # Storage dictionaries for the u-model components and the model visibilities
     u_model_comps = {}
-    model = {}
 
     # Get number of times in the data
     ntimes = data[radial_reds[0][0]].shape[0]
 
     for group in radial_reds:
-        # Get the number of model components
-        ncomps = spatial_filters[group[0]].shape[1]
-        
         # Pack data, weights, and filters into matrices
         design_matrix = np.array([spatial_filters[bl] for bl in group])
         data_here = np.array([data[bl] for bl in group])
