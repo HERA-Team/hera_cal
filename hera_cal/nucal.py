@@ -742,10 +742,11 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
     for group in radial_reds:
         assert group[0] in fg_model_comps, "fg_model_comps must contain a model component for each baseline in radial_reds."
         if use_spectral_filters:
-            assert (fg_model_comps[group[0]].shape[1:] == (spectral_filters.shape[-1], spatial_filters[group[0]].shape[-1]), 
-                f"The number of model components must match filter shapes.")
+            assert fg_model_comps[group[0]].shape[1:] == (spectral_filters.shape[-1], spatial_filters[group[0]].shape[-1]), (
+                f"The number of model components must match filter shapes."
+            )
         else:
-            assert (fg_model_comps[group[0]].shape[-1] == spatial_filters[group[0]].shape[-1], 
+            assert fg_model_comps[group[0]].shape[-1] == spatial_filters[group[0]].shape[-1], (
                 f"The number of model components in fg_model_comps must match the number of \
                   eigenvectors in spatial_filters for baseline {group[0]}."
             )

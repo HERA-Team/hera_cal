@@ -365,23 +365,30 @@ def test_project_u_model_comps_on_spec_axis():
     # is the same as the projection of the data on the spectral axis
     antpos = linear_array(6, sep=5)
     radial_reds = nucal.RadialRedundancy(antpos)
+    freqs = np.linspace(50e6, 250e6, 200)
     spatial_filters = nucal.compute_spatial_filters(radial_reds, freqs)
-    data = []
-    design_matrix = []
+    spectral_filters = dspec.dpss_operator(freqs, [0], [1e-9], eigenval_cutoff=[1e-9])[0].real
+    data = {}
+    wgts = {}
     for rdgrp in radial_reds:
         for bl in rdgrp:
             blmag = np.linalg.norm(antpos[bl[1]] - antpos[bl[0]])
-            data.append(np.sin(freqs * blmag / 2.998e8))
-            design_matrix.append(spatial_filters[bl])
-    data = np.array(data)
-    design_matrix = np.array(design_matrix)
-    XTXinv = np.linalg.pinv(np.einsum('afm,afn->mn', design_matrix, design_matrix))
-    Xy = np.einsum('afm,af->m', design_matrix, data)
-    model = design_matrix @ (XTXinv @ Xy)
-    model = model.reshape(len(radial_reds), 4)
-    model_proj = nucal.project_u_model_comps_on_spec_axis(model, freqs)
-    data_proj = np.einsum('af,af->f', data, design_matrix)
-    np.allclose(model_proj, data_proj, atol=1e-6)
+            data[bl] = np.sin(freqs * blmag / 2.998e8)[None, :]
+            wgts[bl] = np.ones_like(data[bl])
+            
+    # Get model components for a u-dependent model
+    model_comps = nucal.fit_u_model(data, wgts, radial_reds, spatial_filters, solver='solve')
+
+    # Project the model components on the spectral axis
+    model_proj = nucal.project_u_model_comps_on_spec_axis(model_comps, spectral_filters)
+
+    # Get model for both cases
+    model1 = nucal.evaluate_foreground_model(radial_reds, model_comps, spatial_filters)
+    model2 = nucal.evaluate_foreground_model(radial_reds, model_proj, spatial_filters, spectral_filters)
+    
+    # Check that the two models are relatively close
+    for bl in data:
+        assert np.sqrt(np.square(model1[bl] - model2[bl]).mean()) < 1e-4
 
 def test_linear_fit():
     # Create a set of mock data to fit
@@ -438,3 +445,120 @@ def test_fit_u_model():
     # Check that the model is the same as the data
     for k in model:
         assert np.all(np.isclose(model[k], data[k], atol=1e-5))
+
+    # Generate mock data for multiple times
+    ntimes = 5
+    for rdgrp in radial_reds:
+        for bl in rdgrp:
+            blmag = np.linalg.norm(antpos[bl[1]] - antpos[bl[0]])
+            data[bl] = np.sin(freqs * blmag / 2.998e8) * np.ones((ntimes, 1))
+            data_wgts[bl] = np.ones_like(data[bl])
+
+    # Compute the model without sharing the foreground model across time
+    model = nucal.fit_u_model(data, data_wgts, radial_reds, spatial_filters, return_model_comps=False, share_fg_model=False)
+
+    for k in model:
+        assert model[k].shape == data[k].shape
+
+    # Compute the model while sharing sharing foreground model across time
+    model = nucal.fit_u_model(data, data_wgts, radial_reds, spatial_filters, return_model_comps=False, share_fg_model=True)
+
+    for k in model:
+        assert model[k].shape == (1, 200)
+
+    # Return the model components
+    model_comps = nucal.fit_u_model(data, data_wgts, radial_reds, spatial_filters, return_model_comps=True)
+
+    for k in model_comps:
+        assert model_comps[k].shape[0] == ntimes
+
+def test_evaluate_foreground_model():
+    antpos = linear_array(6, sep=5)
+    radial_reds = nucal.RadialRedundancy(antpos)
+    freqs = np.linspace(50e6, 250e6, 200)
+    spatial_filters = nucal.compute_spatial_filters(radial_reds, freqs)
+    spectral_filters = dspec.dpss_operator(freqs, [0], [1e-9], eigenval_cutoff=[1e-9])[0].real
+    data = {}
+    data_wgts = {}
+
+    # Generate mock data
+    for rdgrp in radial_reds:
+        for bl in rdgrp:
+            blmag = np.linalg.norm(antpos[bl[1]] - antpos[bl[0]])
+            data[bl] = np.sin(freqs * blmag / 2.998e8)[None, :]
+            data_wgts[bl] = np.ones_like(data[bl])
+
+    # Compute the model
+    model_comps = nucal.fit_u_model(data, data_wgts, radial_reds, spatial_filters, return_model_comps=True)
+
+    # Evaluate the model
+    model = nucal.evaluate_foreground_model(radial_reds, model_comps, spatial_filters)
+
+    # Check that the model has the same shape as the data
+    for k in model:
+        assert model[k].shape == data[k].shape
+
+    # Check that function raises AssertionError if spectral filters are provided
+    # but the model components are not projected on the spectral axis
+    with pytest.raises(AssertionError):
+        model = nucal.evaluate_foreground_model(radial_reds, model_comps, spatial_filters, spectral_filters=spectral_filters)
+
+    # Check that function raises AssertionError if spatial filters are the wrong shape
+    _spatial_filters = {k: spatial_filters[k][:, :-3] for k in spatial_filters}
+    with pytest.raises(AssertionError):
+        model = nucal.evaluate_foreground_model(radial_reds, model_comps, _spatial_filters)
+
+def test_fit_nucal_foreground_model():
+    antpos = linear_array(6, sep=5)
+    radial_reds = nucal.RadialRedundancy(antpos)
+    freqs = np.linspace(50e6, 250e6, 200)
+    spatial_filters = nucal.compute_spatial_filters(radial_reds, freqs)
+    spectral_filters = dspec.dpss_operator(freqs, [0], [5e-9], eigenval_cutoff=[1e-9])[0].real
+    data = {}
+    data_wgts = {}
+
+    # Generate mock data
+    for rdgrp in radial_reds:
+        for bl in rdgrp:
+            blmag = np.linalg.norm(antpos[bl[1]] - antpos[bl[0]])
+            data[bl] = np.sin(freqs * blmag / 2.998e8)[None, :]
+            data_wgts[bl] = np.ones_like(data[bl])
+
+    # Compute the model
+    model = nucal.fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters, return_model_comps=False)
+
+    # Check that the model has the same shape as the data and is close to the data
+    for k in model:
+        assert model[k].shape == data[k].shape
+        assert np.sqrt(np.square(data[k] - model[k]).mean()) < 1e-5
+
+    # Generate mock data for multiple times
+    ntimes = 5
+    for rdgrp in radial_reds:
+        for bl in rdgrp:
+            blmag = np.linalg.norm(antpos[bl[1]] - antpos[bl[0]])
+            data[bl] = np.sin(freqs * blmag / 2.998e8) * np.ones((ntimes, 1))
+            data_wgts[bl] = np.ones_like(data[bl])
+
+    # Compute a foreground model shared across time
+    model = nucal.fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters, return_model_comps=False, share_fg_model=True)
+
+    # Check that the model has the same shape as the data and is close to the data
+    for k in model:
+        assert model[k].shape == (1, 200)
+        assert np.sqrt(np.square(data[k] - model[k]).mean()) < 1e-5
+
+    # Compute a model not shared across time
+    model = nucal.fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters, return_model_comps=False, share_fg_model=False)
+
+    # Check that the model has the same shape as the data and is close to the data
+    for k in model:
+        assert model[k].shape == data[k].shape
+        assert np.sqrt(np.square(data[k] - model[k]).mean()) < 1e-5
+
+    # Return model components
+    model_comps = nucal.fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters, return_model_comps=True, share_fg_model=False)
+    
+    for k in model_comps:
+        assert model_comps[k].shape[0] == ntimes
+        assert model_comps[k].shape[1:] == (spectral_filters.shape[-1], spatial_filters[k].shape[-1])
