@@ -726,7 +726,7 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
         spatial_filters : dict
             Dictionary mapping baseline tuples to PSWF spatial filters.
         spectral_filters : np.ndarray, default=None
-            Array of shape (Nfreqs, Ndpss) containing spectral filters for modeling the frequency axis. 
+            Array of shape (Nfreqs, Nspec) containing spectral filters for modeling the frequency axis. 
             If None, the model components are assumed to be restricted to the spatial axis.
 
     Returns:
@@ -779,21 +779,19 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
     
     Parameters:
     -----------
-    data : DataContainer
-        DataContainer containing complex visibility data. Dictionary is of the form
-        {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])} where Ntimes is the number of 
-        times in the data and Nfreqs is the number of frequency channels.
-    data_wgts : DataContainer
-        DataContainer containing weights for each visibility. Dictionary is of the same form
-        as data.
+    data : dictionary, DataContainer
+        Data to be fit by u-model. This function assumes that visibilities redundantly-averaged
+        and will only use data from the first baseline in a spatially-redundant group.
+    data_wgts : dictionary, DataContainer
+        Weights associated with data
     radial_reds : RadialRedundancy, list of lists of tuples
         List of lists of redundant baseline tuples. Each list of redundant tuples represents a radial group of
         baselines.
     spatial_filters : dict
         Dictionary mapping baseline tuples to spatial filters. Dictionary is of the form {(ant1, ant2, pol):
-        np.array([Nfreqs, Nspatial_filters])} where Nspatial_filters is the number of spatial filters.
+        np.array([Nfreqs, Nspat])} where Nspat is the number of spatial filters.
     spectral_filters : np.ndarray
-        Array of DPSS filters with shape (Nfreqs, Nfilters) where Nfilters is the number of spectral DPSS filters.
+        Array of DPSS filters with shape (Nfreqs, Nspec) where Nspec is the number of spectral DPSS filters.
     solver : str, optional, Default is 'lu_solve'
         Solver to use for linear least-squares fit. Options are 'lu_solve', 'solve', 'pinv', and 'lstsq'.
     tol : float, optional, Default is 1e-15.
@@ -807,10 +805,15 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
     
     Returns:
     --------
-    model_comps : list of np.ndarray
-        List of model components projected on to the spectral axis. Each component is a 2D array with shape
-        (Ntimes, Nfilters) where Ntimes is the number of times in the data and Nfilters is the number of DPSS
-        eigenvectors.
+    if return_model_comps:
+        model_comps : list of np.ndarray
+            List of model components projected on to the spectral axis. Each component is a 2D array with shape
+            (Ntimes, Nspec, Nspat) where Ntimes is the number of times in the data, Nspec is the number of DPSS
+            eigenvectors along the spectral axis, and Nspat is the number of spatial filters.
+    else:
+        model : dictionary
+            Dictionary mapping baseline tuples to model visibilities. Dictionary is of the form
+            {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}.
     """        
     # Create empty dictionary for model components
     model_comps = {}
@@ -870,21 +873,22 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
 def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
     """
     Project u-model components on to the spectral axis using a pre-computed set of DPSS-filters for the spectral
-    axis. Can be used with the output of estimate_degenerate_parameters
+    axis. Can be used with the output of fit_u_model.
 
     Parameters:
     -----------
     u_model_comps : dictionary of np.ndarray
         Dictionary of u-model PSWF fit components to project on to the spectral axis. Each set of u-model components is a
-        either a 1D array with shape (Nfreqs) where Nfreqs in the number of frequencies in the data or a 2D array with 
-        shape (Ntimes, Nfreqs) where Ntimes is the number of times in the data
+        a 2D array with shape (Ntimes, Nspat) where Ntimes is the number of times in the data and Nspat is the number of
+        spatial filters.
     spectral_filters : np.ndarray
-        Array of DPSS filters with shape (Nfreqs, Nfilters) where Nfilters is the number of DPSS eigenvectors.
+        Array of DPSS filters with shape (Nfreqs, Nspec) where Nspec is the number of DPSS eigenvectors modeling the
+        spectral axis.
 
     Returns:
     --------
-    model_comps : list of np.ndarray
-        List of model components projected on to the spectral axis. Each component is a 2D array with shape
+    model_comps : dictionary of np.ndarray
+        Dictionary of model components projected on to the spectral axis. Each component is a 3D array with shape
         (Ntimes, Nfilters) where Ntimes is the number of times in the data and Nfilters is the number of DPSS
         eigenvectors.
     """
@@ -908,17 +912,18 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, solver
     Parameters:
     ----------
     data : dictionary, DataContainer
-        DataContainer of redundantly calibrated visibilities
+        Data to be fit by u-model. This function assumes that visibilities redundantly-averaged
+        and will only use data from the first baseline in a spatially-redundant group.
     data_wgts : dictionary, DataContainer
-        Weights associated with redudantly calibrated visibilities
+        Weights associated with data
     radial_reds : RadialRedundancy
-        RadialRedundancy object which contains of baseline tuple which are considered
+        RadialRedundancy object which contains of lists of baselines tuple which are considered
         to be radially redundant
     spatial_filters : dictionary
         Dictionary containing the spatial filters for each baseline. The spatial filters
         are a set of smooth PSWF eigenvectors which are fit to the data. 
     tol : float, optional
-        Tolerance for linear fitting.
+        Regularization tolerance for linear fitting.
     solver : str, optional
         Solver to use for linear fitting. Options are "lu_solve", "solver", "pinv", and "lstsq".
     share_fg_model : bool, optional
@@ -930,11 +935,14 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, solver
         
     Returns:
     -------
-    u_model_comps : dictionary
-        Compute a set of u-model components for each radially-redundant group in the data. 
-        The u-model components are a set of smooth PSWF eigenvectors which are fit to the
-        data. The u-model components are returned as a dictionary with keys corresponding
-        to the first baseline in each radially redundant group.
+    if return_model_comps:
+        u_model_comps : dictionary
+            Set of u-model components for each radially-redundant group in the data. 
+            The u-model components are returned as a dictionary with keys corresponding
+            to the first baseline in each radially redundant group.
+    else:
+        model : dictionary
+            Dictionary of model visibilities for each baseline in spatial_filters.
     """ 
     # Storage dictionaries for the u-model components and the model visibilities
     u_model_comps = {}
