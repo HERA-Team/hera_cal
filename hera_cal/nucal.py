@@ -887,8 +887,8 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
         (Ntimes, Nfilters) where Ntimes is the number of times in the data and Nfilters is the number of DPSS
         eigenvectors.
     """
-    # Compute the magnitude of each eigenvector in spectral filters
-    const_eigen_vals = np.sum(spectral_filters ** 2, axis=0, keepdims=True)
+    # Compute the sum of each eigenvector in spectral filters
+    const_eigen_vals = np.sum(spectral_filters, axis=0, keepdims=True)
     const_eigen_vals = np.expand_dims(const_eigen_vals, axis=-1)
 
     # Project u-model components on to the spectral axis
