@@ -677,10 +677,14 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15):
     # Assert that the regularization tolerance is non-negative
     assert tol >= 0.0, "tol must be non-negative."
 
-    if solver == 'lu_solve':
-        # Add regularization tolerance to the diagonal of XTX
+    # Add regularization tolerance to the diagonal of XTX
+    # If XTX is a jax array, use the jax array indexing syntax
+    if (solver == "lu_solve" or solver == "solve") and isinstance(XTX, jnp.ndarray):
+        XTX = XTX.at[np.diag_indices_from(XTX)].add(tol)
+    elif (solver == "lu_solve" or solver == "solve"):
         XTX[np.diag_indices_from(XTX)] += tol
 
+    if solver == 'lu_solve':
         # Factor XTX using scipy.linalg.lu_factor
         L = linalg.lu_factor(XTX)
 
@@ -688,9 +692,6 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15):
         beta = linalg.lu_solve(L, Xy)
         
     elif solver == 'solve':
-        # Add regularization tolerance to the diagonal of XTX
-        XTX[np.diag_indices_from(XTX)] += tol
-
         # Solve the linear system of equations using np.linalg.solve
         beta = np.linalg.solve(XTX, Xy)
 
@@ -719,20 +720,30 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
         radial_reds : RadialRedundancy object
             List of lists of radially-redundant baseline tuples. 
         fg_model_comps : dict
-            Dictionary mapping baseline tuples to model components.
+            Dictionary mapping baseline tuples to model components. Model components are fitted to the data
+            using the DPSS filters to model variations in the spatial and spectral axes. If spectral_filters
+            is None, the model components are assumed to be restricted to the spatial axis.
+        spatial_filters : dict
+            Dictionary mapping baseline tuples to PSWF spatial filters.
+        spectral_filters : np.ndarray, default=None
+            Array of shape (Nfreqs, Ndpss) containing spectral filters for modeling the frequency axis. 
+            If None, the model components are assumed to be restricted to the spatial axis.
+
+    Returns:
+    -------
+        model : dict
+            Dictionary mapping baseline tuples to model visibilities.
+
     """
     # Determine whether to use spectral filters when evaluating the model
     use_spectral_filters = spectral_filters is not None
-
-    # Check whether the model components are time-dependent
-    has_time_axis = spatial_filters[list(spatial_filters.keys())[0]].ndim == 3
 
     # Assert that the model components match the baselines in the radial_reds
     for group in radial_reds:
         assert group[0] in fg_model_comps, "fg_model_comps must contain a model component for each baseline in radial_reds."
         if use_spectral_filters:
-            assert (fg_model_comps[group[0]].shape[1:] == (spatial_filters[group[0]].shape[-1], spectral_filters.shape[-1]), 
-                f"The number of  must contain a spectral filter for each baseline in radial_reds.")
+            assert (fg_model_comps[group[0]].shape[1:] == (spectral_filters.shape[-1], spatial_filters[group[0]].shape[-1]), 
+                f"The number of model components must match filter shapes.")
         else:
             assert (fg_model_comps[group[0]].shape[-1] == spatial_filters[group[0]].shape[-1], 
                 f"The number of model components in fg_model_comps must match the number of \
@@ -742,17 +753,15 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
     # Initialize a dictionary to hold the model components
     model = {}
 
-    if use_spectral_filters:
-        einsum_path = "fm,fn,mn->f" if has_time_axis else "fm,fn,tmn->tf"
-    else:
-        einsum_path = "fm,mn->f" if has_time_axis else "fm,tmn->tf"
+    # Determine the einsum path to use for evaluating the model
+    einsum_path = "fm,fn,tmn->tf" if use_spectral_filters else "fm,tm->tf"
 
     # Loop over the groups in radial_reds
     for group in radial_reds:
         for bl in group:
             # Compute the model components for this baseline
             if use_spectral_filters:
-                model[bl] = jnp.einsum(einsum_path, spatial_filters[bl], spectral_filters, fg_model_comps[group[0]])
+                model[bl] = jnp.einsum(einsum_path, spectral_filters, spatial_filters[bl], fg_model_comps[group[0]])
             else:
                 model[bl] = jnp.einsum(einsum_path, spatial_filters[bl], fg_model_comps[group[0]])
 
@@ -771,25 +780,23 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
     -----------
     data : DataContainer
         DataContainer containing complex visibility data. Dictionary is of the form
-        {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])} where Ntimes is the number of times in the data and Nfreqs
-        is the number of frequency channels.
+        {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])} where Ntimes is the number of 
+        times in the data and Nfreqs is the number of frequency channels.
     data_wgts : DataContainer
-        DataContainer containing weights for each visibility. Dictionary is of the form
-        {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])} where Ntimes is the number of times in the data and Nfreqs
-        is the number of frequency channels.
+        DataContainer containing weights for each visibility. Dictionary is of the same form
+        as data.
     radial_reds : RadialRedundancy, list of lists of tuples
         List of lists of redundant baseline tuples. Each list of redundant tuples represents a radial group of
         baselines.
     spatial_filters : dict
         Dictionary mapping baseline tuples to spatial filters. Dictionary is of the form {(ant1, ant2, pol):
-        np.array([Ntimes, Nspatial_filters])} where Ntimes is the number of times in the data and Nspatial_filters
-        is the number of spatial filters.
+        np.array([Nfreqs, Nspatial_filters])} where Nspatial_filters is the number of spatial filters.
     spectral_filters : np.ndarray
-        Array of DPSS filters with shape (Nfreqs, Nfilters) where Nfilters is the number of DPSS eigenvectors.
-    solver : str, optional, Default is 'cholesky'
-        Solver to use for linear least-squares fit. Options are 'cholesky', 'solve', and ''.
+        Array of DPSS filters with shape (Nfreqs, Nfilters) where Nfilters is the number of spectral DPSS filters.
+    solver : str, optional, Default is 'lu_solve'
+        Solver to use for linear least-squares fit. Options are 'lu_solve', 'solve', 'pinv', and 'lstsq'.
     tol : float, optional, Default is 1e-15.
-        Tolerance for linear least-squares fit. 
+        Regularization tolerance for linear least-squares fit. 
     share_fg_model : bool, optional, Default is False.
         If True, the foreground model for each radially-redundant group is shared across the time axis. 
         Otherwise, a nucal foreground will be independently computed for each frequency.
@@ -820,28 +827,32 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
         # Compute the XTX
         if share_fg_model:
             # Compute the XTX and XTWy
-            XTX = jnp.einsum("fm,afn,taf,fk,afj->mnkj", 
+            XTX = jnp.einsum("fm,afn,atf,fk,afj->mnkj", 
                 spectral_filters, design_matrix, wgts_here, spectral_filters, design_matrix
             ).reshape(ndim, ndim)
-            Xy = jnp.einsum("fm,afn,taf->mn", spectral_filters, design_matrix, data_here * wgts_here).reshape(ndim)
+            Xy = jnp.einsum("fm,afn,atf->mn", spectral_filters, design_matrix, data_here * wgts_here).reshape(ndim)
 
             # Solve for the foreground model components
-            beta = _linear_fit(XTX, Xy, tol=tol, method=solver)
+            beta = _linear_fit(XTX, Xy, tol=tol, solver=solver)
             beta = beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1])
 
+            # Expand the model components to have time index
+            beta = np.expand_dims(beta, axis=0)
+
         else:
-            # Creat empty list to hold the model components for each time
+            # Create empty list to hold the model components for each time
             beta = []
 
-            # Compute the XTX and XTWy
+            # Loop over time
             for i in range(data_here.shape[1]):
+                # Compute the XTX and XTWy
                 XTX = jnp.einsum("fm,afn,af,fk,afj->mnkj", 
-                    spectral_filters, design_matrix, wgts_here[:, i, :], spectral_filters, design_matrix
+                    spectral_filters, design_matrix, wgts_here[:, i], spectral_filters, design_matrix
                 ).reshape(ndim, ndim)
-                Xy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_here[:, i, :] * wgts_here[:, i, :]).reshape(ndim)
-
+                Xy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_here[:, i] * wgts_here[:, i]).reshape(ndim)
+                
                 # Solve for the foreground model components
-                _beta = _linear_fit(XTX, Xy, tol=tol, method=solver)
+                _beta = _linear_fit(XTX, Xy, tol=tol, solver=solver)
                 beta.append(_beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1]))
             
             # Pack solution into an array
@@ -853,7 +864,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
     if return_model_comps:
         return model_comps
     else:
-        return evaluate_foreground_model(radial_reds, model_comps, spatial_filters, spectral_filters)
+        return evaluate_foreground_model(radial_reds, model_comps, spatial_filters=spatial_filters, spectral_filters=spectral_filters)
 
 def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
     """
@@ -878,15 +889,12 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
     """
     # Compute the magnitude of each eigenvector in spectral filters
     const_eigen_vals = np.sum(spectral_filters ** 2, axis=0, keepdims=True)
-
-    # Expand the shape of const_eigen_vals if necessary
-    if u_model_comps[0].ndim == 2:
-        const_eigen_vals = np.expand_dims(const_eigen_vals, axis=0)
+    const_eigen_vals = np.expand_dims(const_eigen_vals, axis=-1)
 
     # Project u-model components on to the spectral axis
     model_comps = {}
     for key in u_model_comps:
-        model_comps[key] = u_model_comps[key] * const_eigen_vals
+        model_comps[key] = np.expand_dims(u_model_comps[key], axis=1) * const_eigen_vals
 
     return model_comps
 
@@ -943,22 +951,29 @@ def fit_u_model(data, data_wgts, radial_reds, spatial_filters, tol=1e-15, solver
         if share_fg_model:
             XTX = jnp.einsum("afm,atf,afn->mn", design_matrix, wgts_here, design_matrix)
             Xy = jnp.einsum("afm,atf->m", design_matrix, data_here * wgts_here)
+
+            # Solve for model components
+            beta = _linear_fit(XTX, Xy, solver=solver, tol=tol)
+
+            # Expand the shape of beta to have time axis
+            beta = np.expand_dims(beta, axis=0)
         else:
-            XTX = jnp.einsum("afm,atf,afn->tmn", design_matrix, wgts_here, design_matrix)
-            Xy = jnp.einsum("afm,atf->tm", design_matrix, data_here * wgts_here)
+            beta = []
+            # Loop over time axis
+            for i in range(data_here.shape[1]):
+                XTX = jnp.einsum("afm,af,afn->mn", design_matrix, wgts_here[:, i], design_matrix)
+                Xy = jnp.einsum("afm,af->m", design_matrix, data_here[:, i] * wgts_here[:, i])
 
-        # Solve for model components
-        beta = _linear_fit(XTX, Xy, solver=solver, tol=tol)
+                # Solve for model components
+                beta.append(_linear_fit(XTX, Xy, solver=solver, tol=tol))
 
-        # Expand the solution components along the time axis
-        if share_fg_model:
-            beta = np.expand_dims(beta, axis=0) * np.ones((ntimes, 1))
+            # Store the model components
+            beta = np.array(beta)
 
         # Store the model components
         u_model_comps[group[0]] = beta 
     
     if return_model_comps:
         return u_model_comps
-
     else:
-        return evaluate_foreground_model(radial_reds, u_model_comps, spatial_filters)
+        return evaluate_foreground_model(radial_reds, u_model_comps, spatial_filters=spatial_filters)

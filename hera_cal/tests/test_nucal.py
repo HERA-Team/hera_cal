@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 from copy import deepcopy
+from hera_filters import dspec
 from hera_sim.antpos import linear_array, hex_array
 
 from .. import redcal
@@ -382,11 +383,40 @@ def test_project_u_model_comps_on_spec_axis():
     data_proj = np.einsum('af,af->f', data, design_matrix)
     np.allclose(model_proj, data_proj, atol=1e-6)
 
-def test_fit_nucal_foreground_model():
-    antpos = linear_array(6, sep=5)
-    radial_reds = nucal.RadialRedundancy(antpos)
-    spatial_filters = nucal.compute_spatial_filters(radial_reds, freqs)
-    
+def test_linear_fit():
+    # Create a set of mock data to fit
+    freqs = np.linspace(50e6, 250e6, 200)
+    y = np.sin(freqs * 100e-9)
+
+    # Create a design matrix
+    X = dspec.dpss_operator(freqs, [0], [100e-9], eigenval_cutoff=[1e-13])[0].real
+
+    # Compute XTX and Xy
+    XTX = np.dot(X.T, X)
+    Xy = np.dot(X.T, y)
+
+    # Test different modes
+    b1 = nucal._linear_fit(XTX, Xy, solver='lu_solve')
+    b2 = nucal._linear_fit(XTX, Xy, solver='solve')
+    b3 = nucal._linear_fit(XTX, Xy, solver='lstsq')
+    b4 = nucal._linear_fit(XTX, Xy, solver='pinv')
+
+    # Show that all modes give the same result
+    np.testing.assert_allclose(b1, b2, atol=1e-6)
+    np.testing.assert_allclose(b1, b3, atol=1e-6)
+    np.testing.assert_allclose(b1, b4, atol=1e-6)
+
+    # Test that the fit is correct
+    model = np.dot(X, b4)
+    np.testing.assert_allclose(model, y, atol=1e-6)
+
+    # Test that an error is raised if the solver is not defined
+    with pytest.raises(AssertionError):
+        b = nucal._linear_fit(XTX, Xy, solver='undefined_solver')
+
+    # Test that an error is raised if the tolerance is negative
+    with pytest.raises(AssertionError):
+        b = nucal._linear_fit(XTX, Xy, tol=-1)
 
 def test_fit_u_model():
     antpos = linear_array(6, sep=5)
