@@ -605,7 +605,7 @@ class RedSol():
             np.divide(data, gij, out=data, where=(gij != 0))
             return data
 
-    def update_vis_from_data(self, data, wgts={}, reds_to_update=None):
+    def update_vis_from_data(self, data, wgts=None, reds_to_update=None):
         '''Performs redundant averaging of data using reds and gains stored in this RedSol object and
            stores the result as the redundant solution.
 
@@ -613,6 +613,9 @@ class RedSol():
             data: DataContainer containing visibilities to redundantly average.
             wgts: optional DataContainer weighting visibilities in averaging.
                 If not provided, it is assumed that all data are uniformly weighted.
+                If provided, must include all keys in reds_to_update (or self.reds).
+                If weights add to 0, for any time/freq in any redundant group, all baselines
+                that are not flagged for all times and freqs are weighted equally.
             reds_to_update: list of reds to update, otherwise update all.
 
         Returns:
@@ -624,10 +627,22 @@ class RedSol():
             self.vis.build_red_keys(combine_reds(self.reds, reds_to_update))
             self.reds = self.vis.reds
         for grp in reds_to_update:
-            self.vis[grp[0]] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0,
-                                          weights=([wgts.get(bl, 1) for bl in grp] if len(wgts) > 0 else None))
+            wgts_here = ([wgts[bl] for bl in grp] if (wgts is not None) else None)
 
-    def extend_vis(self, data, wgts={}, reds_to_solve=None):
+            if wgts_here is not None:
+                if np.all([np.all(wgt == 0) for wgt in wgts_here]):
+                    # If the entire group has 0 weight, exclude this group from averaging
+                    continue
+
+            if np.any(np.sum(wgts_here, axis=0) == 0):
+                # If any time/freq is completely flagged, perform uniform averaging over not-completely flagged baselines
+                not_totally_flagged_bls = [bl for bl, wgt in zip(grp, wgts_here) if not np.all(wgt == 0)]
+                flag_waterfall = np.all([wgts[bl] == 0 for bl in not_totally_flagged_bls], axis=0)
+                wgts_here = [np.where(flag_waterfall, 1, wgts[bl]) if bl in not_totally_flagged_bls else wgts[bl] for bl in grp]
+
+            self.vis[grp[0]] = np.average([self.calibrate_bl(bl, data[bl]) for bl in grp], axis=0, weights=wgts_here)
+
+    def extend_vis(self, data, wgts=None, reds_to_solve=None):
         '''Performs redundant averaging of ubls not already solved for in RedSol.vis
         and adds them to RedSol.vis
 
@@ -635,6 +650,9 @@ class RedSol():
             data: DataContainer containing visibilities to redundantly average.
             wgts: optional DataContainer weighting visibilities in averaging.
                 If not provided, it is assumed that all data are uniformly weighted.
+                If provided, must include all keys in reds_to_update (or self.reds).
+                If weights add to 0, for any time/freq in any redundant group, all baselines
+                that are not flagged for all times and freqs are weighted equally.
             reds_to_solve: subset of reds to update, otherwise update all
 
         Returns:
@@ -1659,7 +1677,7 @@ def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=Non
             See normalized_chisq() for more info.
     '''
     while True:
-        bls_to_use = set([bl for red in expanded_reds for bl in red if ((red[0] in sol.vis)
+        bls_to_use = set([bl for red in expanded_reds for bl in red if (np.any([bl in sol.vis for bl in red])
                           and ((split_bl(bl)[0] not in sol.gains) ^ (split_bl(bl)[1] not in sol.gains)))])
         if len(bls_to_use) == 0:
             break  # iterate to also solve for ants only found in bls with other ex_ants
