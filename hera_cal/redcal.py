@@ -650,6 +650,9 @@ class RedSol():
             data: DataContainer containing visibilities to redundantly average.
             wgts: optional DataContainer weighting visibilities in averaging.
                 If not provided, it is assumed that all data are uniformly weighted.
+                If provided, must include all keys in reds_to_update (or self.reds).
+                If weights add to 0, for any time/freq in any redundant group, all baselines
+                that are not flagged for all times and freqs are weighted equally.
             reds_to_solve: subset of reds to update, otherwise update all
 
         Returns:
@@ -1674,7 +1677,7 @@ def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=Non
             See normalized_chisq() for more info.
     '''
     while True:
-        bls_to_use = set([bl for red in expanded_reds for bl in red if ((red[0] in sol.vis)
+        bls_to_use = set([bl for red in expanded_reds for bl in red if (np.any([bl in sol.vis for bl in red])
                           and ((split_bl(bl)[0] not in sol.gains) ^ (split_bl(bl)[1] not in sol.gains)))])
         if len(bls_to_use) == 0:
             break  # iterate to also solve for ants only found in bls with other ex_ants
