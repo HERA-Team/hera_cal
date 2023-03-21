@@ -44,7 +44,7 @@ setup_args = {
                 'scripts/time_average.py', 'scripts/tophat_frfilter_run.py', 'scripts/model_calibration_run.py',
                 'scripts/time_chunk_from_baseline_chunks_run.py', 'scripts/chunk_files.py', 'scripts/transfer_flags.py',
                 'scripts/flag_all.py', 'scripts/throw_away_flagged_antennas.py', 'scripts/select_spw_ranges.py',
-                'scripts/multiply_gains.py', 'scripts/lstbin_simple.py'],
+                'scripts/multiply_gains.py', 'scripts/lstbin_simple.py', 'scripts/subselect.py'],
     'package_data': {'hera_cal': data_files},
     'install_requires': [
         'numpy>=1.10',
@@ -60,12 +60,22 @@ setup_args = {
         'hera_filters',
         "line_profiler",
         'aipy',
+        "rich",
+        "jax",
+        "jaxlib"
     ],
-    # 'extras_require': {
-    #     "all": [
-    #         'aipy @ git+https://github.com/hera-team/aipy'
-    #     ]
-    # },
+    'extras_require': {
+         "all": [
+              'optax'
+         ],
+         'dev': [
+            "pytest",
+            "pre-commit",
+            "pytest-cov",
+            "hera_sim",
+            "pytest-xdist"
+         ]
+    },
     'zip_safe': False,
 }
 

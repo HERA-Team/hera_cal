@@ -127,6 +127,7 @@ import logging
 from argparse import ArgumentParser, Namespace
 import importlib
 from pathlib import Path
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -487,12 +488,14 @@ def _add_profile_funcs(profiler, profile_funcs):
     for fnc in profile_funcs.split(","):
         module = importlib.import_module(fnc.split(":")[0])
         _fnc = module
-        if ":" not in fnc:
-            profiler.add_module(_fnc)
-        else:
-            for att in fnc.split(":")[-1].split("."):
-                _fnc = getattr(_fnc, att)
-            profiler.add_function(_fnc)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning)
+            if ":" not in fnc:
+                profiler.add_module(_fnc)
+            else:
+                for att in fnc.split(":")[-1].split("."):
+                    _fnc = getattr(_fnc, att)
+                profiler.add_function(_fnc)
 
 def run_with_profiling(function: Callable, args: Namespace, *posargs, **kwargs):
     """Run a function with profiling if the user has requested it.
