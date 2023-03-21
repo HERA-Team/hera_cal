@@ -1199,7 +1199,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
         denom = old_gains
     relative_diff = {}
     for ant in new_gains:
-        assert ~np.any(denom[ant] == 0) or np.all(flags[np.isclose(np.abs(denom[ant]), 0.0)])
+        assert ~np.any(denom[ant] == 0) or np.all(np.where(np.isclose(np.abs(denom[ant]), 0.0), flags[ant], True))
         relative_diff[ant] = np.true_divide(np.abs(old_gains[ant] - new_gains[ant]), np.abs(denom[ant]),
                                             where=~np.isclose(np.abs(denom[ant]), 0))
 

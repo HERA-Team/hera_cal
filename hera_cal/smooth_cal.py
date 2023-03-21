@@ -640,11 +640,26 @@ def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None, blackl
     return wgts_grid
 
 
+def _to_antflags(flags, ants, antflag_thresh):
+    '''Converts flag dictionaries or data containers that are potentially
+    per-baseline or per antpol to per-antenna flags.'''
+    if np.all([isinstance(k, str) for k in flags]):
+        # per-antpol flag waterfalls need to be up-converted into per-antenna flags
+        return {ant: np.array(flags[ant[1]]) for ant in ants if ant[1] in flags}
+    elif np.all([len(k) == 2 for k in flags]):
+        # it already was per-antenna flags
+        return flags
+    else:
+        # per-baseline flags need to be down-converted into per-antenna flags
+        return flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
+
+
 class CalibrationSmoother():
 
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
-                 blacklist_wgt=0.0, pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, verbose=False):
+                 blacklist_wgt=0.0, pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0,
+                 ignore_calflags=False, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -656,9 +671,10 @@ class CalibrationSmoother():
 
         Arguments:
             calfits_list: list of string paths to calfits files containing calibration solutions and flags
-            flag_file_list: list of string paths to files containing flags as a function of baseline, times
-                and frequency. Must have all baselines for all times. Flags on baselines are broadcast to both
-                antennas involved, unless either antenna is completely flagged for all times and frequencies.
+            flag_file_list: list of string paths to files containing flags as a function of time, frequency, and
+                either baseline, antenna, or just antenna polarization. Must have all baselines/ants/pols for all times.
+                Flags on baselines are broadcast to both antennas involved, unless either antenna is completely flagged
+                for all times and frequencies.
             flag_filetype: filetype of flag_file_list to pass into io.load_flags. Either 'h5' (default) or legacy 'npz'.
             antflag_thresh: float, fraction of flagged pixels across all visibilities (with a common antenna)
                 needed to flag that antenna gain at a particular time and frequency. antflag_thresh=0.0 is
@@ -699,6 +715,8 @@ class CalibrationSmoother():
             ant_threshold: float. If, after time and freq thesholding and broadcasting, an antenna is left unflagged
                 for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that
                 antenna for all times and channels. Default 1.0 means no additional flagging.
+            ignore_calflags: bool, default False. If True, all times and frequencies with calibration files are assumed
+                to be unflagged unless overridden by external flags provided by flag_file_list.
             verbose: print status updates
         '''
         self.verbose = verbose
@@ -715,6 +733,8 @@ class CalibrationSmoother():
             if load_chisq:
                 chisq[cal] = total_qual
             self.cal_freqs[cal], self.cal_times[cal] = hc.freqs, hc.times
+        self.freqs = self.cal_freqs[self.cals[0]]
+        self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
 
         # load flag files
         self.flag_files = flag_file_list
@@ -723,7 +743,7 @@ class CalibrationSmoother():
             self.ext_flags, self.flag_freqs, self.flag_times = {}, {}, {}
             for ff in self.flag_files:
                 flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
-                self.ext_flags[ff] = flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
+                self.ext_flags[ff] = _to_antflags(flags, self.ants, antflag_thresh)
                 self.flag_freqs[ff] = meta['freqs']
                 self.flag_times[ff] = meta['times']
 
@@ -738,8 +758,6 @@ class CalibrationSmoother():
             self.flag_time_indices = {ff: np.searchsorted(self.time_grid, times) for ff, times in self.flag_times.items()}
 
         # build empty multi-file grids for each antenna's gains and flags (and optionally for cspa)
-        self.freqs = self.cal_freqs[self.cals[0]]
-        self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
         self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=complex) for ant in self.ants}
         self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
         if load_cspa:
@@ -749,7 +767,7 @@ class CalibrationSmoother():
             for cal in self.cals:
                 if ant in gains[cal]:
                     self.gain_grids[ant][self.time_indices[cal], :] = gains[cal][ant]
-                    self.flag_grids[ant][self.time_indices[cal], :] = cal_flags[cal][ant]
+                    self.flag_grids[ant][self.time_indices[cal], :] = (False if ignore_calflags else cal_flags[cal][ant])
                     if load_cspa:
                         self.cspa_grids[ant][self.time_indices[cal], :] = cspa[cal][ant]
             if len(self.flag_files) > 0:
@@ -797,8 +815,6 @@ class CalibrationSmoother():
                 '{} and {} have different frequencies.'.format(cal, self.cals[0])
         if len(self.flag_files) > 0:
             all_flag_time_indices = np.array([i for indices in self.flag_time_indices.values() for i in indices])
-            assert len(all_flag_time_indices) == len(np.unique(all_flag_time_indices)), \
-                'Multiple flag file integrations map to the same time index.'
             assert np.all(np.unique(all_flag_time_indices) == np.unique(all_time_indices)), \
                 'The number of unique indices for the flag files does not match the calibration files.'
             for ff in self.flag_files:
@@ -1046,5 +1062,5 @@ def smooth_cal_argparser():
                           Only used when method used is 'DPSS'")
     flt_opts.add_argument("--axis", default="both", type=str, help="smooth either in 'freq', or 'both' (time and freq) axes.")
     flt_opts.add_argument("--skip_wgt", default=0.1, type=float, help="skip if this fraction is flagged.")
-    
+
     return a

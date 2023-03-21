@@ -21,6 +21,7 @@ import pickle
 import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
+from pyuvdata.telescopes import KNOWN_TELESCOPES
 import argparse
 from hera_filters.dspec import place_data_on_uniform_grid
 from functools import lru_cache
@@ -37,10 +38,11 @@ from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
 from .utils import split_pol, conj_pol, split_bl, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
 
-# The following two functions are potentially called MANY times with 
+# The following two functions are potentially called MANY times with
 # the same arguments, so we cache them to speed things up.
 polnum2str = lru_cache(polnum2str)
 polstr2num = lru_cache(polstr2num)
+
 
 def _parse_input_files(inputs, name='input_data'):
     if isinstance(inputs, str):
@@ -624,7 +626,7 @@ class HERAData(UVData):
         elif len(key) == 3:  # asking for bl-pol
             try:
                 pidx = self.get_polstr_index(key[2])
-                if data_array.ndim == 4: # old shapes
+                if data_array.ndim == 4:  # old shapes
                     return np.array(
                         data_array[self._blt_slices[tuple(key[:2])], 0, :, pidx]
                     )
@@ -2339,7 +2341,7 @@ def load_cal(input_cal, return_meta=False):
         return gains, flags
 
 
-def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=None, antnums2antnames=None,
+def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, total_qual=None, antnums2antnames=None,
               write_file=True, return_uvc=True, outdir='./', overwrite=False, gain_convention='divide',
               history=' ', x_orientation="north", telescope_name='HERA', cal_style='redundant',
               zero_check=True, **kwargs):
@@ -2352,6 +2354,8 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
             along [0] axis and freq along [1] axis.
         freqs : type=ndarray, holds unique frequencies channels in Hz
         times : type=ndarray, holds unique times of integration centers in Julian Date
+        lsts : type=ndarray, holds unique lsts corresponding to the times. If None, converts
+            times to lsts using the default telescope coordinates given telescope_name.
         flags : type=dictionary, holds boolean flags (True if flagged) for gains.
             Must match shape of gains.
         quality : type=dictionary, holds "quality" of calibration solution. Must match
@@ -2402,6 +2406,11 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         integration_time = np.median(np.diff(time_array)) * 24. * 3600.
     else:
         integration_time = 0.0
+    lst_array = np.array(lsts, float)
+    if lsts is None:
+        tel = KNOWN_TELESCOPES[telescope_name]
+        lst_array = utils.JD2LST(times, latitude=(tel['latitude'] * 180 / np.pi),
+                                 longitude=(tel['longitude'] * 180 / np.pi), altitude=tel['altitude'])
 
     # get frequency info
     freq_array = np.array(freqs, float)
@@ -2456,18 +2465,12 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     # enforce 'gain' cal_type
     uvc.cal_type = "gain"
 
-    # optional calfits parameters to get overwritten via kwargs
-    telescope_location = None
-    antenna_positions = None
-    lst_array = None
-
     # create parameter list
     params = ["Nants_data", "Nants_telescope", "Nfreqs", "Ntimes", "Nspws", "Njones",
               "ant_array", "antenna_numbers", "antenna_names", "cal_style", "history",
               "channel_width", "flag_array", "gain_array", "quality_array", "jones_array",
-              "time_array", "spw_array", "freq_array", "history", "integration_time",
-              "time_range", "x_orientation", "telescope_name", "gain_convention", "total_quality_array",
-              "telescope_location", "antenna_positions", "lst_array"]
+              "time_array", "lst_array", "spw_array", "freq_array", "history", "integration_time",
+              "time_range", "x_orientation", "telescope_name", "gain_convention", "total_quality_array"]
 
     # create local parameter dict
     local_params = locals()
@@ -2478,6 +2481,9 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     # set parameters
     for p in params:
         uvc.__setattr__(p, local_params[p])
+
+    # set missing but required parameters to the default for the telescope name
+    uvc.set_telescope_params()
 
     # run check
     uvc.check()
