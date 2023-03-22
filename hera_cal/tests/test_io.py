@@ -753,6 +753,28 @@ class Test_HERAData(object):
         assert hc.total_quality_array is not None
         np.testing.assert_array_equal(hc.total_quality_array, 0)
 
+    def test_to_dataarray(self):
+        hd = HERAData(self.uvh5_1)
+        d, f, n = hd.read()
+
+        original_data_array = hd.data_array.copy()
+
+        data_array_copy = hd.set_data_array_with_datacontainer(d, hd.data_array.copy())
+        data_array_inplace = hd.set_data_array_with_datacontainer(d, hd.data_array)
+
+        assert np.all(data_array_copy == data_array_inplace)
+
+        data_array_inplace += 1
+
+        assert np.all(data_array_copy != data_array_inplace)
+        # Ensure that the data_array inside the instance is changed since we did no copy.
+        assert np.all(hd.data_array == original_data_array + 1)
+
+        flag_array = hd.set_data_array_with_datacontainer(f, hd.flag_array.copy())
+        assert flag_array.dtype == bool
+
+        nsample_array = hd.set_data_array_with_datacontainer(n, hd.nsample_array.copy())
+        assert nsample_array.dtype == n.dtype
 
 class Test_ReadHeraHdf5(object):
     def setup_method(self):
