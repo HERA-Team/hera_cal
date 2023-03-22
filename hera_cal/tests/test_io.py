@@ -759,8 +759,8 @@ class Test_HERAData(object):
 
         original_data_array = hd.data_array.copy()
 
-        data_array_copy = hd.datacontainer_to_data_array(d)
-        data_array_inplace = hd.datacontainer_to_data_array(d, hd.data_array)
+        data_array_copy = hd.set_data_array_with_datacontainer(d, hd.data_array.copy())
+        data_array_inplace = hd.set_data_array_with_datacontainer(d, hd.data_array)
 
         assert np.all(data_array_copy == data_array_inplace)
 
@@ -770,10 +770,10 @@ class Test_HERAData(object):
         # Ensure that the data_array inside the instance is changed since we did no copy.
         assert np.all(hd.data_array == original_data_array + 1)
 
-        flag_array = hd.datacontainer_to_data_array(f)
+        flag_array = hd.set_data_array_with_datacontainer(f, hd.flag_array.copy())
         assert flag_array.dtype == bool
 
-        nsample_array = hd.datacontainer_to_data_array(n)
+        nsample_array = hd.set_data_array_with_datacontainer(n, hd.nsample_array.copy())
         assert nsample_array.dtype == n.dtype
 
 class Test_ReadHeraHdf5(object):

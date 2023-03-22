@@ -886,14 +886,14 @@ class HERAData(UVData):
                 as the 1st dimension of the input gains/flags/nsamples.
         '''
         if data is not None:
-            self.datacontainer_to_data_array(data, self.data_array, tSlice=tSlice, fSlice=fSlice)
+            self.set_data_array_with_datacontainer(data, self.data_array, tSlice=tSlice, fSlice=fSlice)
         if flags is not None:
-            self.datacontainer_to_data_array(flags, self.flag_array, tSlice=tSlice, fSlice=fSlice)
+            self.set_data_array_with_datacontainer(flags, self.flag_array, tSlice=tSlice, fSlice=fSlice)
         if nsamples is not None:
-            self.datacontainer_to_data_array(nsamples, self.nsample_array, tSlice=tSlice, fSlice=fSlice)
+            self.set_data_array_with_datacontainer(nsamples, self.nsample_array, tSlice=tSlice, fSlice=fSlice)
         
-    def datacontainer_to_data_array(
-        self, dc: DataContainer, data_array = None, tSlice=None, fSlice=None
+    def set_data_array_with_datacontainer(
+        self, dc: DataContainer, data_array: np.ndarray, tSlice=None, fSlice=None
     ) -> np.ndarray:
         '''Convert a datacontainer to an array with uvdata format.
 
@@ -909,6 +909,9 @@ class HERAData(UVData):
             fSlice: Optional slice of indices of the freqs to update. Must have the same size
                 as the 1st dimension of the input gains/flags/nsamples.
         '''
+        if data_array.shape != self.data_array.shape:
+            raise ValueError(f"data_array must have shape {self.data_array.shape} (same as self.data_array)")
+
         # provide sensible defaults for tinds and finds
         update_full_waterfall = (tSlice is None) and (fSlice is None)
         if tSlice is None:
@@ -925,14 +928,6 @@ class HERAData(UVData):
                 full_waterfall = self._get_slice(data_array, bl)
                 full_waterfall[tSlice, fSlice] = this_waterfall
                 self._set_slice(data_array, bl, full_waterfall)
-
-        if data_array is None:
-            if dc.dtype != bool:
-                data_array = np.zeros_like(self.data_array, dtype=dc.dtype)  # nsamples or data
-            else:
-                data_array = np.ones_like(self.data_array, dtype=bool)  # flags
-        else:
-            assert data_array.shape == self.data_array.shape
 
         if dc is not None:
             for bl in dc.keys():
@@ -983,9 +978,9 @@ class HERAData(UVData):
             self.update(data=data, flags=flags, nsamples=nsamples)
             d, f, n = self.data_array, self.flag_array, self.nsample_array
         else:
-            d = self.datacontainer_to_data_array(data, self.data_array.copy())
-            f = self.datacontainer_to_data_array(flags, self.flag_array.copy())
-            n = self.datacontainer_to_data_array(nsamples, self.nsample_array.copy())
+            d = self.set_data_array_with_datacontainer(data, self.data_array.copy())
+            f = self.set_data_array_with_datacontainer(flags, self.flag_array.copy())
+            n = self.set_data_array_with_datacontainer(nsamples, self.nsample_array.copy())
 
         # else:  # make a copy of this object and then update the relevant arrays using DataContainers
         #     this = copy.deepcopy(self)
