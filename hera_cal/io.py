@@ -885,6 +885,33 @@ class HERAData(UVData):
             fSlice: Optional slice of indices of the freqs to update. Must have the same size
                 as the 1st dimension of the input gains/flags/nsamples.
         '''
+        if data is not None:
+            self.set_data_array_with_datacontainer(data, self.data_array, tSlice=tSlice, fSlice=fSlice)
+        if flags is not None:
+            self.set_data_array_with_datacontainer(flags, self.flag_array, tSlice=tSlice, fSlice=fSlice)
+        if nsamples is not None:
+            self.set_data_array_with_datacontainer(nsamples, self.nsample_array, tSlice=tSlice, fSlice=fSlice)
+        
+    def set_data_array_with_datacontainer(
+        self, dc: DataContainer, data_array: np.ndarray, tSlice=None, fSlice=None
+    ) -> np.ndarray:
+        '''Convert a datacontainer to an array with uvdata format.
+
+        Note that if ``data_array`` is not provided, and tSlice or fSlice are, then
+        the elements outside the slices will be returned as zeros.
+
+        Arguments:
+            dc: DataContainer to convert.
+            data_array: Optional array that will be updated in-place. Must have same
+                shape as the instance's data_array.
+            tSlice: Optional slice of indices of the times to update. Must have the same size
+                as the 0th dimension of the input gains/flags/nsamples.
+            fSlice: Optional slice of indices of the freqs to update. Must have the same size
+                as the 1st dimension of the input gains/flags/nsamples.
+        '''
+        if data_array.shape != self.data_array.shape:
+            raise ValueError(f"data_array must have shape {self.data_array.shape} (same as self.data_array)")
+
         # provide sensible defaults for tinds and finds
         update_full_waterfall = (tSlice is None) and (fSlice is None)
         if tSlice is None:
@@ -902,18 +929,14 @@ class HERAData(UVData):
                 full_waterfall[tSlice, fSlice] = this_waterfall
                 self._set_slice(data_array, bl, full_waterfall)
 
-        if data is not None:
-            for bl in data.keys():
-                _set_subslice(self.data_array, bl, data[bl])
-        if flags is not None:
-            for bl in flags.keys():
-                _set_subslice(self.flag_array, bl, flags[bl])
-        if nsamples is not None:
-            for bl in nsamples.keys():
-                _set_subslice(self.nsample_array, bl, nsamples[bl])
+        if dc is not None:
+            for bl in dc.keys():
+                _set_subslice(data_array, bl, dc[bl])
+
+        return data_array
 
     def partial_write(self, output_path, data=None, flags=None, nsamples=None,
-                      clobber=False, inplace=False, add_to_history='',
+                      clobber=False, inplace=False, add_to_history='', 
                       **kwargs):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
         call to HERAData.read() in this object. The overall file written matches the shape of the
@@ -950,13 +973,21 @@ class HERAData(UVData):
                 hd_writer.__setattr__(attribute, value)
             hd_writer.initialize_uvh5_file(output_path, clobber=clobber)  # Makes an empty file (called only once)
             self._writers[output_path] = hd_writer
+        
         if inplace:  # update this objects's arrays using DataContainers
-            this = self
-        else:  # make a copy of this object and then update the relevant arrays using DataContainers
-            this = copy.deepcopy(self)
-        this.update(data=data, flags=flags, nsamples=nsamples)
-        hd_writer.write_uvh5_part(output_path, this.data_array, this.flag_array,
-                                  this.nsample_array, **self.last_read_kwargs)
+            self.update(data=data, flags=flags, nsamples=nsamples)
+            d, f, n = self.data_array, self.flag_array, self.nsample_array
+        else:
+            d = self.set_data_array_with_datacontainer(data, self.data_array.copy())
+            f = self.set_data_array_with_datacontainer(flags, self.flag_array.copy())
+            n = self.set_data_array_with_datacontainer(nsamples, self.nsample_array.copy())
+
+        # else:  # make a copy of this object and then update the relevant arrays using DataContainers
+        #     this = copy.deepcopy(self)
+        
+        hd_writer.write_uvh5_part(output_path, d, f, n, 
+                                  run_check_acceptability=output_path in self._writers, 
+                                  **self.last_read_kwargs)
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
                          bl_error_tol=1.0, include_autos=True, frequencies=None):
