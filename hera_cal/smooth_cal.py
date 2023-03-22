@@ -975,6 +975,7 @@ class CalibrationSmoother():
                 See pyuvdata.UVCal documentation for more info.
         '''
         utils.echo('Now writing results to disk...', verbose=self.verbose)
+        print("ANTS: ", self.ants)
         for cal in self.cals:
             hc = io.HERACal(cal)
             gains, flags, _, _ = hc.read()
