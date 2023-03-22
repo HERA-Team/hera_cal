@@ -2990,280 +2990,280 @@ def throw_away_flagged_ants_parser():
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
 
-class FastUVH5Meta:
-    """
-    A fast read-only interface to UVH5 file metadata that makes some assumptions.
+# class FastUVH5Meta:
+#     """
+#     A fast read-only interface to UVH5 file metadata that makes some assumptions.
     
-    This class is just a really thin wrapper over a UVH5 file that makes it easier
-    to read in parts of the metadata at a time. This makes it much faster to perform
-    small tasks where simple metadata is required, rather than reading in the whole 
-    header.
+#     This class is just a really thin wrapper over a UVH5 file that makes it easier
+#     to read in parts of the metadata at a time. This makes it much faster to perform
+#     small tasks where simple metadata is required, rather than reading in the whole 
+#     header.
 
-    All metadata is available as attributes, through ``__getattr__`` magic. Thus, 
-    accessing eg. ``obj.freq_array`` will go and get the frequencies directly from the
-    file, and store them in memory. However, some attributes are made faster than the
-    default, by assumptions on the data shape -- in particular, times and baselines.
+#     All metadata is available as attributes, through ``__getattr__`` magic. Thus, 
+#     accessing eg. ``obj.freq_array`` will go and get the frequencies directly from the
+#     file, and store them in memory. However, some attributes are made faster than the
+#     default, by assumptions on the data shape -- in particular, times and baselines.
 
-    Anything that is read in is stored in memory so the second access is much faster.
-    However, the memory can be released simply by deleting the attribute (it can be
-    accessed again, and the data will be re-read).
+#     Anything that is read in is stored in memory so the second access is much faster.
+#     However, the memory can be released simply by deleting the attribute (it can be
+#     accessed again, and the data will be re-read).
 
-    This class assumes that each baseline has the same number of times.
-    """
-    def __init__(self, path: str | Path, time_first: bool | None = None):
-        self.path = Path(path)
+#     This class assumes that each baseline has the same number of times.
+#     """
+#     def __init__(self, path: str | Path, time_first: bool | None = None):
+#         self.path = Path(path)
 
-        # The assumption is that all baselines have the same number of times.
-        with self.header() as h:
-            self.n_blts = int(h['Nblts'][()])
-            self.n_times = int(h['Ntimes'][()])
-            self.n_pols = int(h['Npols'][()])
+#         # The assumption is that all baselines have the same number of times.
+#         with self.header() as h:
+#             self.n_blts = int(h['Nblts'][()])
+#             self.n_times = int(h['Ntimes'][()])
+#             self.n_pols = int(h['Npols'][()])
 
-        if self.n_blts % self.n_times:
-            raise NotImplementedError(
-                "The FastUVH5Meta class can only deal with files where each bl has "
-                f"the same number of times. Got nblts = {self.n_blts} and "
-                f"ntimes={self.n_times}, which is not divisible."
-            )
+#         if self.n_blts % self.n_times:
+#             raise NotImplementedError(
+#                 "The FastUVH5Meta class can only deal with files where each bl has "
+#                 f"the same number of times. Got nblts = {self.n_blts} and "
+#                 f"ntimes={self.n_times}, which is not divisible."
+#             )
 
-        self.n_bls = self.n_blts // self.n_times
-        self.__time_first = time_first
+#         self.n_bls = self.n_blts // self.n_times
+#         self.__time_first = time_first
 
-    @contextmanager
-    def header(self):
-        with h5py.File(self.path, 'r') as fl:
-            yield fl['Header']
+#     @contextmanager
+#     def header(self):
+#         with h5py.File(self.path, 'r') as fl:
+#             yield fl['Header']
 
-    @contextmanager
-    def datagrp(self):
-        with h5py.File(self.path, 'r') as fl:
-            yield fl['/Data']
+#     @contextmanager
+#     def datagrp(self):
+#         with h5py.File(self.path, 'r') as fl:
+#             yield fl['/Data']
 
-    @cached_property
-    def _time_first(self) -> bool:
-        if self.__time_first is not None:
-            return self.__time_first
+#     @cached_property
+#     def _time_first(self) -> bool:
+#         if self.__time_first is not None:
+#             return self.__time_first
 
-        with self.header() as h:
-            t = h['time_array'][:2]
-            return t[1] != t[0]
+#         with self.header() as h:
+#             t = h['time_array'][:2]
+#             return t[1] != t[0]
     
-    @cached_property
-    def times(self) -> np.ndarray:
-        with self.header() as h:
-            if self._time_first:        
-                return h['time_array'][:self.n_times]
-            else:
-                return h['time_array'][::self.n_bls]
+#     @cached_property
+#     def times(self) -> np.ndarray:
+#         with self.header() as h:
+#             if self._time_first:        
+#                 return h['time_array'][:self.n_times]
+#             else:
+#                 return h['time_array'][::self.n_bls]
 
-    @cached_property
-    def lsts(self) -> np.ndarray:
-        with self.header() as h:
-            if 'lst_array' in h:
-                if self._time_first:
-                    return h['lst_array'][:self.n_times]
-                else:
-                    return h['lst_array'][::self.n_bls]
+#     @cached_property
+#     def lsts(self) -> np.ndarray:
+#         with self.header() as h:
+#             if 'lst_array' in h:
+#                 if self._time_first:
+#                     return h['lst_array'][:self.n_times]
+#                 else:
+#                     return h['lst_array'][::self.n_bls]
 
-        # If lst_array not there, compute ourselves.
-        return JD2LST(self.times, self.latitude, self.longitude, self.altitude)
+#         # If lst_array not there, compute ourselves.
+#         return JD2LST(self.times, self.latitude, self.longitude, self.altitude)
     
-    @cached_property
-    def ant_1_array(self) -> np.ndarray:
-        with self.header() as h:
-            if self._time_first:
-                return h['ant_1_array'][::self.n_times]
-            else:
-                return h['ant_1_array'][:self.n_bls]
+#     @cached_property
+#     def ant_1_array(self) -> np.ndarray:
+#         with self.header() as h:
+#             if self._time_first:
+#                 return h['ant_1_array'][::self.n_times]
+#             else:
+#                 return h['ant_1_array'][:self.n_bls]
     
-    @cached_property
-    def ant_2_array(self) -> np.ndarray:
-        with self.header() as h:
-            if self._time_first:
-                return h['ant_2_array'][::self.n_times]
-            else:
-                return h['ant_2_array'][:self.n_bls]
+#     @cached_property
+#     def ant_2_array(self) -> np.ndarray:
+#         with self.header() as h:
+#             if self._time_first:
+#                 return h['ant_2_array'][::self.n_times]
+#             else:
+#                 return h['ant_2_array'][:self.n_bls]
     
-    @lru_cache
-    def get_antpairs(self) -> list[tuple[int, int]]:
-        return list(zip(self.ant_1_array, self.ant_2_array))
+#     @lru_cache
+#     def get_antpairs(self) -> list[tuple[int, int]]:
+#         return list(zip(self.ant_1_array, self.ant_2_array))
 
-    def has_key(self, key: tuple[int, int] | tuple[int, int, str]) -> bool:
-        antpairs = self.get_antpairs()  # cached so we can call it each time.
-        if len(key) == 2 and key in antpairs or (key[1], key[0]) in antpairs:
-            return True
-        elif len(key) == 3 and (
-            (key[:2] in antpairs and key[2] in self.pols) or
-            ((key[1], key[0]) in antpairs and key[2][::-1] in self.pols)
-        ):
-            return True
-        else:
-            return False
+#     def has_key(self, key: tuple[int, int] | tuple[int, int, str]) -> bool:
+#         antpairs = self.get_antpairs()  # cached so we can call it each time.
+#         if len(key) == 2 and key in antpairs or (key[1], key[0]) in antpairs:
+#             return True
+#         elif len(key) == 3 and (
+#             (key[:2] in antpairs and key[2] in self.pols) or
+#             ((key[1], key[0]) in antpairs and key[2][::-1] in self.pols)
+#         ):
+#             return True
+#         else:
+#             return False
 
-    def __getattr__(self, name: str) -> Any:
-        with self.header() as h:
-            if name not in h:
-                raise AttributeError(f"{name} not found in {self.path}")
-            self.__dict__[name] = h[name][()]
-            return self.__dict__[name]
+#     def __getattr__(self, name: str) -> Any:
+#         with self.header() as h:
+#             if name not in h:
+#                 raise AttributeError(f"{name} not found in {self.path}")
+#             self.__dict__[name] = h[name][()]
+#             return self.__dict__[name]
         
-    @cached_property
-    def freqs(self) -> np.ndarray:
-        with self.header() as h:
-            fq = h['freq_array'][:]
+#     @cached_property
+#     def freqs(self) -> np.ndarray:
+#         with self.header() as h:
+#             fq = h['freq_array'][:]
         
-        if fq.ndim == 2:
-            return fq[0]
-        else:
-            return fq
+#         if fq.ndim == 2:
+#             return fq[0]
+#         else:
+#             return fq
 
-    @cached_property
-    def x_orientation(self) -> str | None:
-        with self.header() as h:
-            if 'x_orientation' in h:
-                return bytes(h['x_orientation'][()]).decode('utf8')
-            else:
-                return None
+#     @cached_property
+#     def x_orientation(self) -> str | None:
+#         with self.header() as h:
+#             if 'x_orientation' in h:
+#                 return bytes(h['x_orientation'][()]).decode('utf8')
+#             else:
+#                 return None
 
-    @cached_property
-    def pols(self) -> list[str]:
-        return [
-            polnum2str(p, x_orientation=self.x_orientation) 
-            for p in self.polarization_array
-        ]
+#     @cached_property
+#     def pols(self) -> list[str]:
+#         return [
+#             polnum2str(p, x_orientation=self.x_orientation) 
+#             for p in self.polarization_array
+#         ]
 
-    @cached_property
-    def antpos(self) -> np.ndarray:
-        with self.header() as h:
-            XYZ = XYZ_from_LatLonAlt(
-                self.latitude * np.pi / 180, 
-                self.longitude * np.pi / 180, 
-                self.altitude
-            )
-            return ENU_from_ECEF(
-                self.antenna_positions + XYZ,
-                self.latitude * np.pi / 180, 
-                self.longitude, 
-                self.altitude
-            )
+#     @cached_property
+#     def antpos(self) -> np.ndarray:
+#         with self.header() as h:
+#             XYZ = XYZ_from_LatLonAlt(
+#                 self.latitude * np.pi / 180, 
+#                 self.longitude * np.pi / 180, 
+#                 self.altitude
+#             )
+#             return ENU_from_ECEF(
+#                 self.antenna_positions + XYZ,
+#                 self.latitude * np.pi / 180, 
+#                 self.longitude, 
+#                 self.altitude
+#             )
         
-    @lru_cache
-    def get_blt_indices(self, times: tuple[float] | None = None) -> dict[tuple[int, int], np.ndarray]:
-        """Get the indices for each baseline."""
-        bls = self.get_antpairs()
+#     @lru_cache
+#     def get_blt_indices(self, times: tuple[float] | None = None) -> dict[tuple[int, int], np.ndarray]:
+#         """Get the indices for each baseline."""
+#         bls = self.get_antpairs()
         
-        if times is None:
-            tdx = np.arange(self.n_times)
-        else:
-            tdx = np.array([i for i, t in enumerate(times) if t in self.times])
+#         if times is None:
+#             tdx = np.arange(self.n_times)
+#         else:
+#             tdx = np.array([i for i, t in enumerate(times) if t in self.times])
         
-        if self._time_first:    
-            return {bl: tdx + i*self.n_times for i, bl in enumerate(bls)}
-        else:
-            return {bl: tdx*self.n_bls + i for i, bl in enumerate(bls)}
+#         if self._time_first:    
+#             return {bl: tdx + i*self.n_times for i, bl in enumerate(bls)}
+#         else:
+#             return {bl: tdx*self.n_bls + i for i, bl in enumerate(bls)}
 
-    @lru_cache
-    def get_antpair_indices(self):
-        return {bl: i for i, bl in enumerate(self.get_antpairs())}
+#     @lru_cache
+#     def get_antpair_indices(self):
+#         return {bl: i for i, bl in enumerate(self.get_antpairs())}
 
-    def get_datacontainer(
-        self, 
-        key: Literal['data', 'visdata', 'nsamples', 'flags'],
-        bls: list[tuple[int, int]] | None = None,
-        pols: list[str] | None = None,
-        times: list[float] | None = None,
-        time_idx: list[int] | slice | None = None,
-        full_read_thresh: float = 0.002,
-    ) -> DataContainer:
-        """Get a DataContainer with the data from the file."""
-        if key == 'data':
-            key = 'visdata'
+#     def get_datacontainer(
+#         self, 
+#         key: Literal['data', 'visdata', 'nsamples', 'flags'],
+#         bls: list[tuple[int, int]] | None = None,
+#         pols: list[str] | None = None,
+#         times: list[float] | None = None,
+#         time_idx: list[int] | slice | None = None,
+#         full_read_thresh: float = 0.002,
+#     ) -> DataContainer:
+#         """Get a DataContainer with the data from the file."""
+#         if key == 'data':
+#             key = 'visdata'
 
-        if bls is None:
-            bls = self.get_antpairs()
+#         if bls is None:
+#             bls = self.get_antpairs()
 
-        if pols is None:
-            pols = self.pols            
+#         if pols is None:
+#             pols = self.pols            
         
-        pol_indices = {p: i for i, p in enumerate(self.pols)}
+#         pol_indices = {p: i for i, p in enumerate(self.pols)}
 
-        if time_idx is None:
-            if times is None:
-                time_idx = slice(None)
-                times = self.times
-            else:
-                time_idx = [i for i, t in enumerate(times) if t in self.times]
-        else:
-            times = self.times[time_idx]
+#         if time_idx is None:
+#             if times is None:
+#                 time_idx = slice(None)
+#                 times = self.times
+#             else:
+#                 time_idx = [i for i, t in enumerate(times) if t in self.times]
+#         else:
+#             times = self.times[time_idx]
 
-        full_read = len(bls)*len(pols)*len(times) >= full_read_thresh * self.n_bls * self.n_pols * self.n_times
+#         full_read = len(bls)*len(pols)*len(times) >= full_read_thresh * self.n_bls * self.n_pols * self.n_times
         
-        bl_inds = self.get_antpair_indices(tuple(times))
+#         bl_inds = self.get_antpair_indices(tuple(times))
 
-        out = {}
-        with self.datagrp() as fl:
-            d = fl[key]  # data not read yet
+#         out = {}
+#         with self.datagrp() as fl:
+#             d = fl[key]  # data not read yet
 
-            if full_read:
-                # If we read the full dataset in, it's much easier to index,
-                # because we can just reshape the bls and times out, and use numpy indexing.
-                d = d[()]  # reads data
+#             if full_read:
+#                 # If we read the full dataset in, it's much easier to index,
+#                 # because we can just reshape the bls and times out, and use numpy indexing.
+#                 d = d[()]  # reads data
 
-                d = np.squeeze(d)  # Remove potential spw-axis of size 1.
-                blps = [(i, j, p) for i, j in bls for p in pols]
+#                 d = np.squeeze(d)  # Remove potential spw-axis of size 1.
+#                 blps = [(i, j, p) for i, j in bls for p in pols]
 
-                if self._time_first:
-                    d.shape = (self.n_bls, self.n_times, ) + d.shape[1:]
-                    if d.shape[-1] == len(self.freqs):
-                        for i,j,p in blps:
-                            out[(i,j,p)] = d[bl_inds[i,j], time_idx, pol_indices[p]]
-                    else:
-                        for i,j,p in blps:
-                            out[(i,j,p)] = d[bl_inds[i,j], time_idx, :, pol_indices[p]]
-                else:
-                    d.shape = (self.n_times, self.n_bls, ) + d.shape[1:]
-                    if d.shape[-1] == len(self.freqs):
-                        for i,j,p in blps:
-                            out[(i,j,p)] = d[time_idx, bl_inds[i,j], pol_indices[p]]
-                    else:
-                        for i,j,p in blps:
-                            out[(i,j,p)] = d[time_idx, bl_inds[i,j], :, pol_indices[p]]
+#                 if self._time_first:
+#                     d.shape = (self.n_bls, self.n_times, ) + d.shape[1:]
+#                     if d.shape[-1] == len(self.freqs):
+#                         for i,j,p in blps:
+#                             out[(i,j,p)] = d[bl_inds[i,j], time_idx, pol_indices[p]]
+#                     else:
+#                         for i,j,p in blps:
+#                             out[(i,j,p)] = d[bl_inds[i,j], time_idx, :, pol_indices[p]]
+#                 else:
+#                     d.shape = (self.n_times, self.n_bls, ) + d.shape[1:]
+#                     if d.shape[-1] == len(self.freqs):
+#                         for i,j,p in blps:
+#                             out[(i,j,p)] = d[time_idx, bl_inds[i,j], pol_indices[p]]
+#                     else:
+#                         for i,j,p in blps:
+#                             out[(i,j,p)] = d[time_idx, bl_inds[i,j], :, pol_indices[p]]
 
-            else:
-                # If we don't read the full dataset in, we can't reshape a HDF5 Group.
+#             else:
+#                 # If we don't read the full dataset in, we can't reshape a HDF5 Group.
 
-                # Support old array shapes
-                if len(d.shape) == 4:
-                    # Support polarization-transposed arrays
-                    if d.shape[-1] == len(self.freqs):
-                        def index_exp(i, j, p):
-                            return np.index_exp[inds[i, j], 0, pol_indices[p]]
-                    else:
-                        def index_exp(i, j, p):
-                            return np.index_exp[inds[i, j], 0, :, pol_indices[p]]
-                # Support new array shapes
-                elif len(d.shape) == 3:
-                    # Support polarization-transposed arrays
-                    if d.shape[-1] == len(self.freqs):
-                        def index_exp(i, j, p):
-                            return np.index_exp[inds[i, j], pol_indices[p]]
-                    else:
-                        def index_exp(i, j, p):
-                            return np.index_exp[inds[i, j], :, pol_indices[p]]
+#                 # Support old array shapes
+#                 if len(d.shape) == 4:
+#                     # Support polarization-transposed arrays
+#                     if d.shape[-1] == len(self.freqs):
+#                         def index_exp(i, j, p):
+#                             return np.index_exp[inds[i, j], 0, pol_indices[p]]
+#                     else:
+#                         def index_exp(i, j, p):
+#                             return np.index_exp[inds[i, j], 0, :, pol_indices[p]]
+#                 # Support new array shapes
+#                 elif len(d.shape) == 3:
+#                     # Support polarization-transposed arrays
+#                     if d.shape[-1] == len(self.freqs):
+#                         def index_exp(i, j, p):
+#                             return np.index_exp[inds[i, j], pol_indices[p]]
+#                     else:
+#                         def index_exp(i, j, p):
+#                             return np.index_exp[inds[i, j], :, pol_indices[p]]
 
-                # handle HERA's raw (int) and calibrated (complex) file formats
-                if key == 'visdata' and not np.iscomplexobj(d):
-                    for i, j, p in blps:
-                        _d = d[index_exp(i, j, p)]
-                        out[(i, j, p)] = _d['r'] + _d['i']*1j
-                else:
-                    for i, j, p in blps:
-                        out[i, j, p] = d[index_exp(i, j, p)]
+#                 # handle HERA's raw (int) and calibrated (complex) file formats
+#                 if key == 'visdata' and not np.iscomplexobj(d):
+#                     for i, j, p in blps:
+#                         _d = d[index_exp(i, j, p)]
+#                         out[(i, j, p)] = _d['r'] + _d['i']*1j
+#                 else:
+#                     for i, j, p in blps:
+#                         out[i, j, p] = d[index_exp(i, j, p)]
 
-        # construct datacontainer with whatever metadata is available
-        dc = DataContainer(out)
-        for meta in HERAData.HERAData_metas:
-            if hasattr(self, meta) and meta not in ['pols', 'antpairs', 'bls']:  # these are functions on datacontainers
-                setattr(dc, meta, getattr(self, meta))
+#         # construct datacontainer with whatever metadata is available
+#         dc = DataContainer(out)
+#         for meta in HERAData.HERAData_metas:
+#             if hasattr(self, meta) and meta not in ['pols', 'antpairs', 'bls']:  # these are functions on datacontainers
+#                 setattr(dc, meta, getattr(self, meta))
 
-        return dc
+#         return dc

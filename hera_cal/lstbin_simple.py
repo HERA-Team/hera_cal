@@ -17,6 +17,7 @@ from hera_qm.metrics_io import read_a_priori_ant_flags
 from . import apply_cal
 from typing import Sequence
 import argparse
+from pyuvdata.uvdata.uvh5 import FastUVH5Meta
 
 try:
     profile
@@ -328,7 +329,7 @@ def lst_average(
 
 
 def lst_bin_files_for_baselines(
-    data_files: list[Path | io.FastUVH5Meta], 
+    data_files: list[Path | FastUVH5Meta], 
     lst_bin_edges: np.ndarray, 
     baselines, 
     freqs: np.ndarray | None = None, 
@@ -342,15 +343,15 @@ def lst_bin_files_for_baselines(
     lsts: np.ndarray | None = None,
     assume_time_first = None,
 ):
-    metas = [fl if isinstance(fl, io.FastUVH5Meta) else io.FastUVH5Meta(fl) for fl in data_files]
+    metas = [fl if isinstance(fl, FastUVH5Meta) else FastUVH5Meta(fl, blts_are_rectangular=True) for fl in data_files]
     
     if assume_time_first is None:
-        assume_time_first = metas[0]._time_first
+        assume_time_first = metas[0].time_axis_faster_than_bls
 
     lst_bin_edges = np.array(lst_bin_edges)
 
     if freqs is None:
-        freqs = metas[0].freqs
+        freqs = np.squeeze(metas[0].freq_array)
     if pols is None:
         pols = metas[0].pols
 
@@ -390,23 +391,22 @@ def lst_bin_files_for_baselines(
         ntimes_so_far += len(tarr)
 
         #hd = io.HERAData(str(fl.path), filetype='uvh5')
-        antpairs = meta.get_antpairs()
+        antpairs = meta.antpairs
         bls_to_load = [bl for bl in baselines if bl in antpairs or bl[::-1] in antpairs]
 
         if not bls_to_load:
             # If none of the requested baselines are in this file, then just 
             # set stuff as nan and go to next file. 
             logger.info("None of the baselines are in this file. Skipping.")
-            data[slc, :, :, :] = np.nan
-            flags[slc, :, :, :] = True
-            nsamples[slc, :, :, :] = 0
+            data[slc] = np.nan
+            flags[slc] = True
+            nsamples[slc] = 0
             continue
 
         # TODO: use Fast readers here instead.
         _data, _flags, _nsamples = io.HERAData(meta.path).read(
             bls=bls_to_load, times=tarr
         )
-        
         # _data = meta.get_datacontainer('data', bls = bls_to_load, times=tarr)
         # _flags = meta.get_datacontainer('flags', bls = bls_to_load, times=tarr)
         # _nsamples = meta.get_datacontainer('nsamples', bls = bls_to_load, times=tarr)
@@ -429,10 +429,11 @@ def lst_bin_files_for_baselines(
 
         for i, bl in enumerate(baselines):
             for j, pol in enumerate(pols):
-                if bl + (pol,) in _data:  # DataContainer takes care of conjugates.
-                    data[slc, i, :, j] = _data[bl+(pol,)]
-                    flags[slc, i, :, j] = _flags[bl+(pol,)]
-                    nsamples[slc, i, :, j] = _nsamples[bl+(pol,)]
+                blpol = bl + (pol,)
+                if blpol in _data:  # DataContainer takes care of conjugates.
+                    data[slc, i, :, j] = _data[blpol]
+                    flags[slc, i, :, j] = _flags[blpol]
+                    nsamples[slc, i, :, j] = _nsamples[blpol]
                 else:
                     # This baseline+pol doesn't exist in this file. That's
                     # OK, we don't assume all baselines are in every file.
@@ -591,7 +592,7 @@ def lst_bin_files(
     for dflist in data_files:
         logger.info(f"{dflist[0].split('/')[-1]}: {len(dflist)}")
 
-    data_metas = [[io.FastUVH5Meta(df) for df in dflist] for dflist in data_files]
+    data_metas = [[FastUVH5Meta(df, blts_are_rectangular=True) for df in dflist] for dflist in data_files]
 
     # get file lst arrays
     _, dlst, file_lsts, _, lst_arrs, time_arrs = config_lst_bin_files(
@@ -640,8 +641,7 @@ def lst_bin_files(
     x_orientation = meta.x_orientation
 
     # get metadata
-    freq_array = meta.freqs
-    antpos = meta.antpos
+    freq_array = np.squeeze(meta.freq_array)
     times = meta.times
     start_jd = np.floor(times.min())
     integration_time = np.median(meta.integration_time)
@@ -666,7 +666,7 @@ def lst_bin_files(
     bl_chunks = [all_baselines[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(n_bl_chunks)]
     bl_chunks = [blg for blg in bl_chunks if len(blg) > 0]
 
-    time_first_ordering = data_metas[0][0]._time_first
+    time_first_ordering = data_metas[0][0].time_axis_faster_than_bls
 
     # iterate over output LST files
     for i, outfile_lsts in enumerate(file_lsts):
@@ -908,7 +908,7 @@ def lst_bin_files(
 
 @profile
 def get_all_unflagged_baselines(
-    data_files: list[list[str | Path | io.FastUVH5Meta]], 
+    data_files: list[list[str | Path | FastUVH5Meta]], 
     ex_ant_yaml_files: list[str] | None = None,
     include_autos: bool = True,
     ignore_ants: tuple[int] = (),
@@ -928,7 +928,7 @@ def get_all_unflagged_baselines(
         A list of all polarizations in the files in the given list, as strings like 
         'ee' and 'nn' (i.e. with x_orientation information).
     """
-    data_files = [[fl if isinstance(fl, io.FastUVH5Meta) else io.FastUVH5Meta(fl) for fl in fl_list] for fl_list in data_files]
+    data_files = [[fl if isinstance(fl, FastUVH5Meta) else FastUVH5Meta(fl, blts_are_rectangular=True) for fl in fl_list] for fl_list in data_files]
     
     pols = None
     xorient = None
@@ -949,7 +949,7 @@ def get_all_unflagged_baselines(
             fl_list = fl_list[-1:]
 
         for fl in fl_list:
-            antpairs = fl.get_antpairs()
+            antpairs = fl.antpairs
             
             if pols is not None and not np.all(pols == fl.polarization_array):
                 raise ValueError(
@@ -986,7 +986,7 @@ def get_all_unflagged_baselines(
 
 
 def get_all_antpos_from_files(
-    data_files: list[io.FastUVH5Meta], 
+    data_files: list[FastUVH5Meta], 
     all_baselines: list[tuple[int, int]]
 ) -> dict[tuple[int, int], np.ndarray]:
 
@@ -994,16 +994,16 @@ def get_all_antpos_from_files(
     
     # ants will be a set of integers antenna numbers.
     ants = set(sum(all_baselines, start=()))
+    nants = len(ants)
 
     for fl in data_files:
-        # unfortunately, we're reading in way more than we need to here,
-        # because the conversion from the antpos in the file to the ENU antpos is 
-        # non trivial and hard to trace in uvdata.
-        hd = io.HERAData(str(fl.path))
-
-        for ant in ants:
-            if ant in hd.antpos and ant not in antpos_out:
-                antpos_out[ant] = hd.antpos[ant]
+        for i, ant in enumerate(fl.antenna_numbers):
+            if ant in ants and ant not in antpos_out:
+                # We only access antpos_enu inside hte conditional, because it has
+                # computation to do, and we don't want to do it if we don't need to.
+                antpos_out[ant] = fl.antpos_enu[i]
+        if len(antpos_out) == nants:
+            break
 
     return antpos_out
 

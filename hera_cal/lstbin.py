@@ -20,6 +20,7 @@ from . import redcal
 from . import apply_cal
 from .datacontainer import DataContainer
 import logging
+from pyuvdata.uvdata.uvh5 import FastUVH5Meta
 
 try:
     profile
@@ -559,7 +560,7 @@ def lst_bin_arg_parser():
 
 
 def config_lst_bin_files(
-    data_files: list[list[str | io.FastUVH5Meta]], 
+    data_files: list[list[str | FastUVH5Meta]], 
     dlst: float | None=None, 
     atol: float=1e-10, 
     lst_start: float | None=None, 
@@ -603,7 +604,7 @@ def config_lst_bin_files(
     logger.info("Configuring lst_grid")
     
     # Make the data files into FastUVH5Meta objects
-    data_files = [[df if isinstance(df, io.FastUVH5Meta) else io.FastUVH5Meta(df) for df in dfs ] for dfs in data_files]
+    data_files = [[df if isinstance(df, FastUVH5Meta) else FastUVH5Meta(df) for df in dfs ] for dfs in data_files]
 
     # get dlst from first data file if None
     if dlst is None:
