@@ -411,6 +411,22 @@ class TestRedSol(object):
         for red in reds:
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
+        # try with all 0s for weights:
+        sol.update_vis_from_data(DataContainer(d), wgts={bl: 0 for i, bl in enumerate(d)})
+        for red in reds:
+            for bl in red:
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
+        # try with all 0s for weights:
+        wgts = DataContainer({bl: np.ones_like(d[bl]) for i, bl in enumerate(d)})
+        d[reds[0][0]] *= 2
+        wgts[reds[0][0]] *= 0
+        for bl in reds[0]:
+            wgts[bl][3, 7] = 0
+        sol.update_vis_from_data(DataContainer(d), wgts=wgts)
+        for red in reds:
+            for bl in red:
+                np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
+        d[reds[0][0]] /= 2
         # try incrementally with subsets of reds
         sol = om.RedSol(reds[:-1], gains=gains)
         sol.update_vis_from_data(DataContainer(d))
