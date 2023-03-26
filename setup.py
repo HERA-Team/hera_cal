@@ -61,10 +61,11 @@ setup_args = {
         "line_profiler",
         'aipy',
         "rich",
+        "jax",
+        "jaxlib"
     ],
     'extras_require': {
          "all": [
-              'jax',
               'optax'
          ],
          'dev': [

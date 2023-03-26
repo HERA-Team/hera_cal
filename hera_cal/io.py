@@ -21,6 +21,7 @@ import pickle
 import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
+from pyuvdata.telescopes import KNOWN_TELESCOPES
 import argparse
 from hera_filters.dspec import place_data_on_uniform_grid
 from functools import lru_cache
@@ -37,10 +38,11 @@ from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
 from .utils import split_pol, conj_pol, split_bl, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
 
-# The following two functions are potentially called MANY times with 
+# The following two functions are potentially called MANY times with
 # the same arguments, so we cache them to speed things up.
 polnum2str = lru_cache(polnum2str)
 polstr2num = lru_cache(polstr2num)
+
 
 def _parse_input_files(inputs, name='input_data'):
     if isinstance(inputs, str):
@@ -624,7 +626,7 @@ class HERAData(UVData):
         elif len(key) == 3:  # asking for bl-pol
             try:
                 pidx = self.get_polstr_index(key[2])
-                if data_array.ndim == 4: # old shapes
+                if data_array.ndim == 4:  # old shapes
                     return np.array(
                         data_array[self._blt_slices[tuple(key[:2])], 0, :, pidx]
                     )
@@ -883,6 +885,33 @@ class HERAData(UVData):
             fSlice: Optional slice of indices of the freqs to update. Must have the same size
                 as the 1st dimension of the input gains/flags/nsamples.
         '''
+        if data is not None:
+            self.set_data_array_with_datacontainer(data, self.data_array, tSlice=tSlice, fSlice=fSlice)
+        if flags is not None:
+            self.set_data_array_with_datacontainer(flags, self.flag_array, tSlice=tSlice, fSlice=fSlice)
+        if nsamples is not None:
+            self.set_data_array_with_datacontainer(nsamples, self.nsample_array, tSlice=tSlice, fSlice=fSlice)
+        
+    def set_data_array_with_datacontainer(
+        self, dc: DataContainer, data_array: np.ndarray, tSlice=None, fSlice=None
+    ) -> np.ndarray:
+        '''Convert a datacontainer to an array with uvdata format.
+
+        Note that if ``data_array`` is not provided, and tSlice or fSlice are, then
+        the elements outside the slices will be returned as zeros.
+
+        Arguments:
+            dc: DataContainer to convert.
+            data_array: Optional array that will be updated in-place. Must have same
+                shape as the instance's data_array.
+            tSlice: Optional slice of indices of the times to update. Must have the same size
+                as the 0th dimension of the input gains/flags/nsamples.
+            fSlice: Optional slice of indices of the freqs to update. Must have the same size
+                as the 1st dimension of the input gains/flags/nsamples.
+        '''
+        if data_array.shape != self.data_array.shape:
+            raise ValueError(f"data_array must have shape {self.data_array.shape} (same as self.data_array)")
+
         # provide sensible defaults for tinds and finds
         update_full_waterfall = (tSlice is None) and (fSlice is None)
         if tSlice is None:
@@ -900,18 +929,14 @@ class HERAData(UVData):
                 full_waterfall[tSlice, fSlice] = this_waterfall
                 self._set_slice(data_array, bl, full_waterfall)
 
-        if data is not None:
-            for bl in data.keys():
-                _set_subslice(self.data_array, bl, data[bl])
-        if flags is not None:
-            for bl in flags.keys():
-                _set_subslice(self.flag_array, bl, flags[bl])
-        if nsamples is not None:
-            for bl in nsamples.keys():
-                _set_subslice(self.nsample_array, bl, nsamples[bl])
+        if dc is not None:
+            for bl in dc.keys():
+                _set_subslice(data_array, bl, dc[bl])
+
+        return data_array
 
     def partial_write(self, output_path, data=None, flags=None, nsamples=None,
-                      clobber=False, inplace=False, add_to_history='',
+                      clobber=False, inplace=False, add_to_history='', 
                       **kwargs):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
         call to HERAData.read() in this object. The overall file written matches the shape of the
@@ -948,13 +973,21 @@ class HERAData(UVData):
                 hd_writer.__setattr__(attribute, value)
             hd_writer.initialize_uvh5_file(output_path, clobber=clobber)  # Makes an empty file (called only once)
             self._writers[output_path] = hd_writer
+        
         if inplace:  # update this objects's arrays using DataContainers
-            this = self
-        else:  # make a copy of this object and then update the relevant arrays using DataContainers
-            this = copy.deepcopy(self)
-        this.update(data=data, flags=flags, nsamples=nsamples)
-        hd_writer.write_uvh5_part(output_path, this.data_array, this.flag_array,
-                                  this.nsample_array, **self.last_read_kwargs)
+            self.update(data=data, flags=flags, nsamples=nsamples)
+            d, f, n = self.data_array, self.flag_array, self.nsample_array
+        else:
+            d = self.set_data_array_with_datacontainer(data, self.data_array.copy())
+            f = self.set_data_array_with_datacontainer(flags, self.flag_array.copy())
+            n = self.set_data_array_with_datacontainer(nsamples, self.nsample_array.copy())
+
+        # else:  # make a copy of this object and then update the relevant arrays using DataContainers
+        #     this = copy.deepcopy(self)
+        
+        hd_writer.write_uvh5_part(output_path, d, f, n, 
+                                  run_check_acceptability=output_path in self._writers, 
+                                  **self.last_read_kwargs)
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
                          bl_error_tol=1.0, include_autos=True, frequencies=None):
@@ -2303,7 +2336,7 @@ def load_cal(input_cal, return_meta=False):
         return gains, flags
 
 
-def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=None, antnums2antnames=None,
+def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, total_qual=None, antnums2antnames=None,
               write_file=True, return_uvc=True, outdir='./', overwrite=False, gain_convention='divide',
               history=' ', x_orientation="north", telescope_name='HERA', cal_style='redundant',
               zero_check=True, **kwargs):
@@ -2316,6 +2349,8 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
             along [0] axis and freq along [1] axis.
         freqs : type=ndarray, holds unique frequencies channels in Hz
         times : type=ndarray, holds unique times of integration centers in Julian Date
+        lsts : type=ndarray, holds unique lsts corresponding to the times. If None, converts
+            times to lsts using the default telescope coordinates given telescope_name.
         flags : type=dictionary, holds boolean flags (True if flagged) for gains.
             Must match shape of gains.
         quality : type=dictionary, holds "quality" of calibration solution. Must match
@@ -2366,6 +2401,11 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         integration_time = np.median(np.diff(time_array)) * 24. * 3600.
     else:
         integration_time = 0.0
+    lst_array = np.array(lsts, float)
+    if lsts is None:
+        tel = KNOWN_TELESCOPES[telescope_name]
+        lst_array = utils.JD2LST(times, latitude=(tel['latitude'] * 180 / np.pi),
+                                 longitude=(tel['longitude'] * 180 / np.pi), altitude=tel['altitude'])
 
     # get frequency info
     freq_array = np.array(freqs, float)
@@ -2420,18 +2460,12 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     # enforce 'gain' cal_type
     uvc.cal_type = "gain"
 
-    # optional calfits parameters to get overwritten via kwargs
-    telescope_location = None
-    antenna_positions = None
-    lst_array = None
-
     # create parameter list
     params = ["Nants_data", "Nants_telescope", "Nfreqs", "Ntimes", "Nspws", "Njones",
               "ant_array", "antenna_numbers", "antenna_names", "cal_style", "history",
               "channel_width", "flag_array", "gain_array", "quality_array", "jones_array",
-              "time_array", "spw_array", "freq_array", "history", "integration_time",
-              "time_range", "x_orientation", "telescope_name", "gain_convention", "total_quality_array",
-              "telescope_location", "antenna_positions", "lst_array"]
+              "time_array", "lst_array", "spw_array", "freq_array", "history", "integration_time",
+              "time_range", "x_orientation", "telescope_name", "gain_convention", "total_quality_array"]
 
     # create local parameter dict
     local_params = locals()
@@ -2442,6 +2476,9 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     # set parameters
     for p in params:
         uvc.__setattr__(p, local_params[p])
+
+    # set missing but required parameters to the default for the telescope name
+    uvc.set_telescope_params()
 
     # run check
     uvc.check()

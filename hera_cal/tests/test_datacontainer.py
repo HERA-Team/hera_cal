@@ -36,6 +36,11 @@ class TestDataContainer(object):
         for pol in self.pols:
             for bl in self.antpairs:
                 self.bools[bl + (pol,)] = np.array([True])
+        self.blpolarr = {}
+        for bl in self.antpairs:
+            self.blpolarr[bl] = {}
+            for pol in self.pols:
+                self.blpolarr[bl][pol] = np.array([1j])
 
     def test_init(self):
         dc = datacontainer.DataContainer(self.blpol)
@@ -295,6 +300,34 @@ class TestDataContainer(object):
         assert dc[(2, 1, 'xx')] == np.array([True])
         assert dc[(2, 1, 'xx')].dtype == bool
 
+    def test_dtype(self):
+        dc = datacontainer.DataContainer({})
+        assert dc.dtype is None
+        dc = datacontainer.DataContainer({(1, 2): {'xx': 2}})
+        assert dc.dtype is None
+        
+        dc = datacontainer.DataContainer(self.blpolarr)
+        assert dc.dtype == complex
+        dc = datacontainer.DataContainer(self.bools)
+        assert dc.dtype == bool
+
+    def test_setting_attrs(self):
+        """A dumb little test that makes sure if a weird dict-like object is passed in, it still works."""
+        class SmallDataContainer:
+            def __init__(self, d: dict):
+                self._data = deepcopy(d)
+                self.ants = set(sum(self._data.keys(), ()))
+            
+            def __getitem__(self, key):
+                return self._data[key]
+            
+            def keys(self):
+                return self._data.keys()
+            
+        blpol = SmallDataContainer(self.blpol)
+        
+        dc = datacontainer.DataContainer(blpol)
+        assert dc.ants == blpol.ants
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class TestDataContainerWithRealData(object):
