@@ -53,7 +53,7 @@ setup_args = {
         'hdf5plugin',
         'astropy',
         'astropy-healpix',
-        'pyuvdata @ git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata.git@master',
+        'pyuvdata @ git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata',
         'linsolve',
         'hera_qm',
         'scikit-learn',
