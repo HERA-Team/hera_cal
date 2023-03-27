@@ -65,16 +65,16 @@ setup_args = {
         "jaxlib"
     ],
     'extras_require': {
-         "all": [
-              'optax'
-         ],
-         'dev': [
+        "all": [
+            'optax'
+        ],
+        'dev': [
             "pytest",
             "pre-commit",
             "pytest-cov",
             "hera_sim",
             "pytest-xdist"
-         ]
+        ]
     },
     'zip_safe': False,
 }
