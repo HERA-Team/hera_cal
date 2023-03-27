@@ -23,7 +23,7 @@ from ..datacontainer import DataContainer
 from ..utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, split_bl
 from ..data import DATA_PATH
 from hera_qm.data import DATA_PATH as QM_DATA_PATH
-
+from pyuvdata.uvdata import FastUVH5Meta
 
 class Test_HERACal(object):
     def setup_method(self):
@@ -261,6 +261,25 @@ class Test_HERAData(object):
         with pytest.raises(ValueError):
             hd = HERAData(self.uvh5_bda, upsample=True, downsample=True)
 
+    def test_from_fastuvh5(self):
+        uvh5 = FastUVH5Meta(self.uvh5_1)
+        hd = HERAData(uvh5)
+        hdx = HERAData(self.uvh5_1)
+
+        assert hd.filepaths == [uvh5]
+        assert not hd.upsample
+        assert not hd.downsample
+        
+        for meta in hd.HERAData_metas:
+            hdm = getattr(hd, meta)
+            hdxm = getattr(hdx, meta)
+            if isinstance(hdm, dict):
+                for k in hdm:
+                    assert np.allclose(hdm[k], hdxm[k])
+            elif isinstance(hdm, np.ndarray):
+                assert np.allclose(hdm, hdxm)
+    
+    
     def test_add(self):
         hd = HERAData(self.uvh5_1)
         hd.read()

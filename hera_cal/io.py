@@ -25,6 +25,8 @@ from pyuvdata.telescopes import KNOWN_TELESCOPES
 import argparse
 from hera_filters.dspec import place_data_on_uniform_grid
 from functools import lru_cache
+from pyuvdata.uvdata.uvh5 import FastUVH5Meta
+from pathlib import Path
 
 try:
     import aipy
@@ -38,24 +40,18 @@ from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
 from .utils import split_pol, conj_pol, split_bl, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
 
-# The following two functions are potentially called MANY times with
-# the same arguments, so we cache them to speed things up.
-polnum2str = lru_cache(polnum2str)
-polstr2num = lru_cache(polstr2num)
-
-
-def _parse_input_files(inputs, name='input_data'):
-    if isinstance(inputs, str):
+def _parse_input_files(inputs: str | Path | FastUVH5Meta | Iterable[str | Path | FastUVH5Meta], name='input_data'):
+    if isinstance(inputs, (str, Path, FastUVH5Meta)):
         filepaths = [inputs]
     elif isinstance(inputs, Iterable):  # List loading
-        if np.all([isinstance(i, str) for i in inputs]):  # List of visibility data paths
+        if all(isinstance(fl, (str, Path, FastUVH5Meta)) for fl in inputs):  # List of visibility data paths
             filepaths = list(inputs)
         else:
-            raise TypeError(f'If {name} is a list, it must be a list of strings.')
+            raise TypeError(f'If {name} is a list, it must be a list of strings, Paths or FastUVH5Meta objects.')
     else:
-        raise ValueError(f'{name} must be a string or a list of strings.')
+        raise ValueError(f'{name} must be a string, Path, FastUVH5Meta or a list of such.')
     for f in filepaths:
-        if not os.path.exists(f):
+        if not isinstance(f, FastUVH5Meta) and not os.path.exists(f):
             raise IOError('Cannot find file ' + f)
     return filepaths
 
@@ -446,6 +442,23 @@ def get_blt_slices(uvo, tried_to_reorder=False):
             blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
     return blt_slices
 
+def hera_nbl_function(meta):
+    """Fix old HERA files.
+    
+    Old HERA UVH5 files (up to ~Feb 2023) have the wrong Nbls written into them. 
+    New pyuvdata (>2.3.0) will raise an error on these files, so use this function when
+    reading HERA files (it is safe for newer files).
+    """
+    nbls_fl = int(meta.header['Nbls'][()])
+    if nbls_fl == meta.Nblts and meta.Ntimes != 1:
+        # HERA was writing files where Nbls == Nblts, instead of the actual
+        # unique number of baselines. These old HERA files are all rectangular,
+        # i.e. Nblts == Nbls * Ntimes. Putting in this check avoids mis-reading
+        # non-hera files.
+        return meta.Nblts // meta.Ntimes
+    else:
+        return nbls_fl
+
 
 class HERAData(UVData):
     '''HERAData is a subclass of pyuvdata.UVData meant to serve as an interface between
@@ -770,7 +783,7 @@ class HERAData(UVData):
                     super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
                                  times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
-                                 run_check_acceptability=run_check_acceptability, **kwargs)
+                                 run_check_acceptability=run_check_acceptability, nbl_function=hera_nbl_function, **kwargs)
                     self.use_future_array_shapes()
                     if self.filetype == 'uvfits':
                         self.unphase_to_drift()
