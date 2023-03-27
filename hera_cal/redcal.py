@@ -1704,7 +1704,13 @@ def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=Non
             predicted_chisq_per_ant = predict_chisq_per_ant(reds_for_chisq)
 
         # expand gains
-        sol.extend_gains(data_subset, wgts=data_wgts, extended_reds=filter_reds(expanded_reds, bls=bls_to_use))
+        extended_reds = filter_reds(expanded_reds, bls=bls_to_use)
+        sol.extend_gains(data_subset, wgts=data_wgts, extended_reds=extended_reds)
+
+        # Need to update which baselines are in sol.vis, because we may have added/removed
+        # gain solutions
+        extended_reds = filter_reds(extended_reds, ants=list(sol.gains.keys()))
+        sol.vis.build_red_keys(extended_reds)
 
         # update chi^2 if desired
         if chisq_per_ant is not None:
