@@ -35,11 +35,10 @@ from hera_cal import lstbin_simple as lstbin
 import sys
 import glob
 import json
-from hera_cal._cli_tools import setup_logger, parse_args, filter_kwargs
+from hera_cal._cli_tools import setup_logger, parse_args, filter_kwargs, run_with_profiling
 import logging
 import importlib
 from pathlib import Path
-from hera_cal.profiling_utils import add_profiling_args, run_with_profiling
 
 a = lstbin.lst_bin_arg_parser()
 args = parse_args(a)
