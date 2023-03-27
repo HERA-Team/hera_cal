@@ -22,10 +22,14 @@ import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
 from pyuvdata.telescopes import KNOWN_TELESCOPES
+from pyuvdata import __version__ as uvd_version
+
 import argparse
 from hera_filters.dspec import place_data_on_uniform_grid
 from functools import lru_cache
-from pyuvdata.uvdata.uvh5 import FastUVH5Meta
+if uvd_version > '2.3.0':
+    from pyuvdata.uvdata.uvh5 import FastUVH5Meta
+
 from pathlib import Path
 
 try:
@@ -40,18 +44,25 @@ from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
 from .utils import split_pol, conj_pol, split_bl, LST2JD, JD2LST, HERA_TELESCOPE_LOCATION
 
-def _parse_input_files(inputs: str | Path | FastUVH5Meta | Iterable[str | Path | FastUVH5Meta], name='input_data'):
-    if isinstance(inputs, (str, Path, FastUVH5Meta)):
+if uvd_version > '2.3.0':
+    fltypes = str | Path | FastUVH5Meta
+    flcls = (str, Path, FastUVH5Meta)
+else:
+    fltypes = str | Path
+    flcls = (str, Path)
+
+def _parse_input_files(inputs: fltypes | Iterable[fltypes], name='input_data'):
+    if isinstance(inputs, flcls):
         filepaths = [inputs]
     elif isinstance(inputs, Iterable):  # List loading
-        if all(isinstance(fl, (str, Path, FastUVH5Meta)) for fl in inputs):  # List of visibility data paths
+        if all(isinstance(fl, flcls) for fl in inputs):  # List of visibility data paths
             filepaths = list(inputs)
         else:
             raise TypeError(f'If {name} is a list, it must be a list of strings, Paths or FastUVH5Meta objects.')
     else:
         raise ValueError(f'{name} must be a string, Path, FastUVH5Meta or a list of such.')
     for f in filepaths:
-        if not isinstance(f, FastUVH5Meta) and not os.path.exists(f):
+        if isinstance(f, (str, Path)) and not os.path.exists(f):
             raise IOError('Cannot find file ' + f)
     return filepaths
 
@@ -772,6 +783,9 @@ class HERAData(UVData):
         partials = ['bls', 'polarizations', 'times', 'time_range', 'lsts', 'lst_range', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
 
+        if uvd_version > '2.3.0':
+            kwargs['nbl_function'] = hera_nbl_function
+
         # if filepaths is None, this was converted to HERAData
         # from a different pre-loaded object with no history of filepath
         if self.filepaths is not None:
@@ -783,8 +797,8 @@ class HERAData(UVData):
                     super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
                                  times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
-                                 run_check_acceptability=run_check_acceptability, nbl_function=hera_nbl_function, **kwargs)
-                    self.use_future_array_shapes()
+                                 run_check_acceptability=run_check_acceptability, **kwargs)
+                    self.use_future_array_shapes() 
                     if self.filetype == 'uvfits':
                         self.unphase_to_drift()
                 else:
