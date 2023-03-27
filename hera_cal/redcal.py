@@ -699,6 +699,7 @@ class RedSol():
                     if len(wgts) > 0:
                         _gsum *= wgts[bl]
                         _gwgt *= wgts[bl]
+                    
                     gsum[a_i] = gsum.get(a_i, 0) + _gsum
                     gwgt[a_i] = gwgt.get(a_i, 0) + _gwgt
                 elif a_j not in self.gains:
@@ -709,8 +710,12 @@ class RedSol():
                         _gwgt *= wgts[bl]
                     gsum[a_j] = gsum.get(a_j, 0) + _gsum
                     gwgt[a_j] = gwgt.get(a_j, 0) + _gwgt
+        
         for k in gsum.keys():
-            self[k] = np.divide(gsum[k], gwgt[k], where=(gwgt[k] > 0))
+            if np.all(gsum[k] != 0):
+                # It's possible to have the visibility data itself be all zeros for a 
+                # particular baseline, resulting in zero-gains, which screws things up
+                self[k] = np.divide(gsum[k], gwgt[k], where=(gwgt[k] > 0))
 
     def chisq(self, data, data_wgts, gain_flags=None):
         """Computes chi^2 defined as: chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)|^2 * wgts_ij)
