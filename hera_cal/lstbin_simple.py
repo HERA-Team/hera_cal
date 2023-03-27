@@ -829,8 +829,10 @@ def lst_bin_files(
         fkwargs['type'] = 'STD'
         std_file = f"zen.{file_ext.format(**fkwargs)}"
 
+        logger.info(f"Writing {bin_file} and {std_file} to {outdir}")
+
         # check for overwrite
-        if os.path.exists(bin_file) and not overwrite:
+        if os.path.exists(os.path.join(outdir, bin_file)) and not overwrite:
             logger.warning(f"{bin_file} exists, not overwriting")
             continue
 
