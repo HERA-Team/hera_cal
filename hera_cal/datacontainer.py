@@ -139,6 +139,7 @@ class DataContainer:
                         else:
                             return self._data[reverse_bl(bl)]
                     except(KeyError):
+                        print('keys are: {}'.format(self.keys()))
                         raise KeyError('Cannot find either {} or {} in this DataContainer.'.format(key, reverse_bl(key)))
 
     def __setitem__(self, key, value):
@@ -201,18 +202,12 @@ class DataContainer:
                 if d.shape[0] != self.shape[0]:
                     raise ValueError("[0] axis of dictionary values aren't identical in length")
 
-        # start new object
-        newD = odict()
-
         # get shared keys
-        keys = set()
-        for d in D:
-            keys.update(d.keys())
+        keys = set(sum((list(d.keys()) for d in D), []))
+        keys = [k for k in keys if k in self]
 
         # iterate over D keys
-        for k in enumerate(keys):
-            if self.__contains__(k):
-                newD[k] = np.concatenate([self.__getitem__(k)] + [d[k] for d in D], axis=axis)
+        newD = {k: np.concatenate([self[k]] + [d[k] for d in D], axis=axis) for k in keys}
 
         return DataContainer(newD)
 

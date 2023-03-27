@@ -924,19 +924,13 @@ class Test_HERADataFastReader:
         'infile', (['uvh5_1'], ['uvh5_1', 'uvh5_2'], 'uvh5_h4c')
     )
     @pytest.mark.parametrize(
-        'bls', (None, 'first10', 'conjugated')
+        'bls', (None, )
     )
     @pytest.mark.parametrize(
-        'pols', (None, ['ee'], ['yy'])
+        'pols', (None, ['ee'])
     )
-    @pytest.mark.parametrize(
-        'times', (None, 'first3', 'reverse')
-    )
-    def test_comp_to_HERAData_dc(self, infile, bls, pols, times):
+    def test_comp_to_HERAData_dc(self, infile, bls, pols):
         # This just turns the strings from the parametrize into actual objects
-        if (isinstance(infile, list) and len(infile) > 1 and times is not None):
-            pytest.skip("HERAData doesn't support partial times with multiple files that have different times.")
-
         if isinstance(infile, list):
             indata = [getattr(self, f) for f in infile]
         else:
@@ -950,33 +944,15 @@ class Test_HERADataFastReader:
         elif bls == "conjugated":
             bls = hd2.get_antpairs()[:15]
             bls = [(b, a) for a, b in bls]
-        if times == "first3":
-            if isinstance(hd2.times, np.ndarray):
-                times = hd2.times[:3]
-            else:
-                # mulptiple files means that "times" is a dict, one for each file.
-                times = np.concatenate([t[:3] for t in hd2.times.values()])
-        elif times == 'reverse':
-            times = hd2.times[::-1]
 
-        d, f, n = hd.read(check=True,bls=bls, pols=pols, keep_times=times)
-        d2, f2, n2 = hd2.read(bls=bls, polarizations=pols, times=times)
+        d, f, n = hd.read(check=True,bls=bls, pols=pols)
+        d2, f2, n2 = hd2.read(bls=bls, polarizations=pols)
         print(d.antpairs())
         print(d.times_by_bl.keys())
         # compare all data and metadata
         for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
             self.compare_datacontainers(dc1, dc2, allow_close=infile != 'uvh5_h4c')              
 
-    def test_partial_times_multiple_files(self):
-        """Test that partial times works with multiple files that have different times."""
-        hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
-        times = hd.times[:-1]
-
-        d, f, n = hd.read(check=True, keep_times=times)
-        d2, f2, n2 = hd.read(check=True)
-
-        for key, val in d.items():
-            np.testing.assert_array_equal(val, d2[key][:-1])
 
     @pytest.mark.parametrize(
         'infile', (['uvh5_1'], 'uvh5_h4c')

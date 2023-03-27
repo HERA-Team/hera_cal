@@ -1176,11 +1176,9 @@ class HERAData(UVData):
         self.nsample_array = (np.zeros_like(self.nsample_array) if self.nsample_array is not None else None)
 
 
-def read_hera_hdf5(
-    filenames, bls=None, pols=None, keep_times: list[float] | None=None, full_read_thresh=0.002,
-    read_data=True, read_flags=False, read_nsamples=False,
-    check=False, dtype=np.complex128, verbose=False
-):
+def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
+                   read_data=True, read_flags=False, read_nsamples=False,
+                   check=False, dtype=np.complex128, verbose=False):
     '''A potentially faster interface for reading HERA HDF5 files. Only concatenates
     along time axis. Puts times in ascending order, but does not check that
     files are contiguous. Currently not BDA compatible.
@@ -1190,9 +1188,6 @@ def read_hera_hdf5(
              Default: all bls common to all files.
         pols: list of pol strings to read out of files. Default: all, but is
               superceded by any polstrs listed in bls.
-        keep_times: list of times to read out of files. Default: all. Note: all times 
-              are always read from the files, setting this only down-filters times
-              after reading.
         full_read_thresh (0.002): fractional threshold for reading whole file
                                   instead of baseline by baseline.
         read_data (bool, True): read data
@@ -1218,12 +1213,6 @@ def read_hera_hdf5(
     inds = {}
     # Read file metadata to size up arrays and sort times
     filenames = _parse_input_files(filenames, name='input_data')
-    
-    if bls is not None:
-        antpairs = [bl[:2] for bl in bls]
-    else:
-        antpairs = None
-    
     for filename in filenames:
         if verbose:
             print(f'Reading header of {filename}')
@@ -1239,20 +1228,12 @@ def read_hera_hdf5(
                     info['freqs'] = h['freq_array'][()]  # make 1D instead of 2D
                 nfreqs = info['freqs'].size
                 pol_array = h['polarization_array'][()]
-
                 npols = pol_array.size
                 # the following errors if x_orientation not set in this hdf5
                 x_orient = str(h['x_orientation'][()], encoding='utf-8')
-
-                pol_indices = {
-                    uvutils.parse_polstr(POL_NUM2STR_DICT[n], x_orientation=x_orient): cnt
-                    for cnt, n in enumerate(pol_array)
-                }
-                if pols is not None:
-                    pols = [uvutils.parse_polstr(p, x_orientation=x_orient) for p in pols]
-
+                pol_indices = {uvutils.parse_polstr(POL_NUM2STR_DICT[n], x_orientation=x_orient): cnt
+                               for cnt, n in enumerate(pol_array)}
                 info['pols'] = list(pol_indices.keys())
-                info['x_orientation'] = x_orient
                 info['ants'] = antenna_numbers = h['antenna_numbers'][()]
                 info['antpos'] = dict(zip(antenna_numbers, h['antenna_positions'][()]))
                 for coord in ['latitude', 'longitude', 'altitude']:
@@ -1280,34 +1261,27 @@ def read_hera_hdf5(
             data_ants.update(set(ant2_array))
             _hash = hash((ant1_array.tobytes(), ant2_array.tobytes(), time_first, ntimes))
             # map baselines to array indices for each unique antenna order
-            data_bls = list(zip(ant1_array, ant2_array))
-            
             if _hash not in inds:
-                inds[_hash] = {}
-
                 if time_first:
-                    for n, (i, j) in  enumerate(data_bls):
-                        slc = slice(n * ntimes, (n + 1) * ntimes)
-                        inds[_hash][(i, j)] = slc
+                    inds[_hash] = {(i, j): slice(n * ntimes, (n + 1) * ntimes)
+                                   for n, (i, j) in enumerate(zip(ant1_array,
+                                                                  ant2_array))}
                 else:
-                    for n, (i, j) in  enumerate(data_bls):
-                        slc = slice(n, None, nbls)
-                        inds[_hash][(i, j)] = slc
-
-                if antpairs is not None:
+                    inds[_hash] = {(i, j): slice(n, None, nbls)
+                                   for n, (i, j) in enumerate(zip(ant1_array,
+                                                                  ant2_array))}
+                if bls is not None:
                     # Make sure our baselines of interest are in this file
-                    missing_bls = [(i,j) for (i,j) in antpairs if not ((i,j) in inds[_hash] or (j,i) in inds[_hash])]
-                    if missing_bls:
+                    if not all([bl[:2] in inds[_hash] for bl in bls]):
+                        missing_bls = [bl for bl in bls if bl[:2] not in inds[_hash]]
                         raise ValueError(f'File {filename} missing:' + str(missing_bls))
-
-                # Use intersection of bls across files.
+                        assert bl[:2] in inds[_hash]
                 if 'bls' not in info:
-                    info['bls'] = set(existing_bls)
+                    info['bls'] = set(inds[_hash].keys())
                     info['data_ants'] = data_ants
                 else:
-                    info['bls'] &= set(inds[_hash].keys())
-                    info['data_ants'] &= data_ants
-
+                    info['bls'].intersection_update(set(inds[_hash].keys()))
+                    info['data_ants'].intersection_update(data_ants)
             bl2ind[filename] = inds[_hash]
 
     if bls is None:
@@ -1324,13 +1298,8 @@ def read_hera_hdf5(
                 pols = list(pol_indices.keys())
             bls = set(bl for bl in bls if len(bl) == 3)
             bls = bls.union([bl + (p,) for bl in bls_len2 for p in pols])
-        
-        # now, conjugate them if they're not in the data
-        bls = {(i, j, p) if (i, j) in info['bls'] else (j, i, utils.conj_pol(p)) for (i, j, p) in bls}
-
         # record polarizations as total of ones indexed in bls
         pols = set(bl[2] for bl in bls)
-
     # sort files by time of first integration
     times.sort(key=lambda x: x[0][0])
     info['times'] = np.concatenate([t[0] for t in times], axis=0)
@@ -1347,7 +1316,7 @@ def read_hera_hdf5(
     # bail here if all we wanted was the info
     if len(rv) == 0:
         return {'info': info}
-    
+
     t = 0
     for _times, filename, _info in times:
         inds = bl2ind[filename]
@@ -1398,40 +1367,20 @@ def read_hera_hdf5(
                     for i, j, p in bls:
                         _d = d[index_exp(i, j, p)]
                         data[i, j, p][t:t + ntimes].real = _d['r']
-                        if (i,j) in info['bls']:
-                            data[i, j, p][t:t + ntimes].imag = _d['i']
-                        else:  # conjugate
-                            data[i, j, p][t:t + ntimes].imag = -_d['i']
+                        data[i, j, p][t:t + ntimes].imag = _d['i']
                 else:
                     for i, j, p in bls:
                         data[i, j, p][t:t + ntimes] = d[index_exp(i, j, p)]
-            t += ntimes
-    
-    # Now subselect the times. 
-    if keep_times is not None:
-        time_mask = np.array([t in keep_times for t in info['times']])
-        info['times'] = info['times'][time_mask]
-        for key in ['visdata', 'flags', 'nsamples']:
-            if key in rv:
-                for bl in rv[key]:
-                    rv[key][bl] = rv[key][bl][time_mask]
 
+            t += ntimes
     # Quick renaming of data key for niceness
     if 'visdata' in rv:
         rv['data'] = rv.pop('visdata', [])
-    
-    # Ensure info['bls'] matches input bls.
-    if antpairs is not None:
-        info['bls'] = {bl[:2] for bl in bls}
-
-    info['data_ants'] = set()
-    for bl in info['bls']:
-        info['data_ants'].add(bl[0])
-        info['data_ants'].add(bl[1])
-
+    info['data_ants'] = np.array(sorted(info['data_ants']))
     rv['info'] = info
     return rv
 
+    
 class HERADataFastReader():
     '''Wrapper class around read_hera_hdf5 meant to mimic the functionality of HERAData for drop-in replacement.'''
 
