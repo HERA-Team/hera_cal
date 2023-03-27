@@ -138,9 +138,8 @@ class DataContainer:
                             return np.conj(self._data[reverse_bl(bl)])
                         else:
                             return self._data[reverse_bl(bl)]
-                    except(KeyError):
-                        print('keys are: {}'.format(self.keys()))
-                        raise KeyError('Cannot find either {} or {} in this DataContainer.'.format(key, reverse_bl(key)))
+                    except KeyError:
+                        raise KeyError(f'Cannot find either {key} or {reverse_bl(key)} in this DataContainer.')
 
     def __setitem__(self, key, value):
         '''Sets the data corresponding to the key. Only supports the form (0,1,'nn').
