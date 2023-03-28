@@ -53,7 +53,7 @@ setup_args = {
         'hdf5plugin',
         'astropy',
         'astropy-healpix',
-        'pyuvdata<=2.2.12',
+        'pyuvdata',
         'linsolve',
         'hera_qm',
         'scikit-learn',
@@ -65,16 +65,16 @@ setup_args = {
         "jaxlib"
     ],
     'extras_require': {
-         "all": [
-              'optax'
-         ],
-         'dev': [
+        "all": [
+            'optax'
+        ],
+        'dev': [
             "pytest",
             "pre-commit",
             "pytest-cov",
             "hera_sim",
             "pytest-xdist"
-         ]
+        ]
     },
     'zip_safe': False,
 }
