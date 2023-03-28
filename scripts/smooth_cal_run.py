@@ -38,18 +38,19 @@ def run():
                                 chan_blacklists=a.chan_blacklists, pick_refant=a.pick_refant, freq_threshold=a.freq_threshold,
                                 time_threshold=a.time_threshold, ant_threshold=a.ant_threshold, verbose=a.verbose)
         if a.axis == 'both':
-            if a.freq_scale > 0 and a.time_scale > 0:
-                cs.time_freq_2D_filter(freq_scale=a.freq_scale, time_scale=a.time_scale, tol=a.tol,
-                                    filter_mode=a.filter_mode, window=a.window, maxiter=a.maxiter, method=a.method, **filter_kwargs)
-        elif a.freq_scale > 0:
+            cs.time_freq_2D_filter(freq_scale=a.freq_scale, time_scale=a.time_scale, tol=a.tol,
+                                filter_mode=a.filter_mode, window=a.window, maxiter=a.maxiter, method=a.method, **filter_kwargs)
+        elif a.axis == 'freq':
             cs.filter_1d(filter_scale=a.freq_scale, tol=a.tol, skip_wgt=a.skip_wgt, mode=a.method, ax=a.axis,
                         **filter_kwargs)
-        else:
+        elif a.axis == 'none':
             warnings.warn(
                 "No smoothing performed, but files still being written. Set freq_scale "
                 "to a positive value to smooth in frequency."
             )
-            
+        else:
+            raise ValueError(f"Unrecognized axis: {a.axis}")
+
         cs.write_smoothed_cal(output_replace=(a.infile_replace, a.outfile_replace),
                             add_to_history=' '.join(sys.argv), clobber=a.clobber)
     else:
