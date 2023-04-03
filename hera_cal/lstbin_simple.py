@@ -4,6 +4,8 @@ An attempt at a simpler LST binner that makes more assumptions but runs faster.
 In particular, we assume that all baselines have the same time array and frequency array,
 and that each is present throughout the data array. This allows a vectorization.
 """
+from __future__ import annotations
+
 import numpy as np
 from . import utils
 import warnings
