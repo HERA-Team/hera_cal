@@ -878,9 +878,9 @@ def lst_rephase_vectorized(
     Parameters
     ----------
     data
-        The complex visibility data, with shape (ntimes, nbaselines, nfreqs, npols)
+        The complex visibility data, with shape (ntimes, nbaselines,nfreqs, npols)
     bls:
-        Array of baseline vectors (3D) in ENU, shape (nbalines, 3).
+        Array of baseline vectors (3D) in ENU, shape (nbaselines, 3).
     freqs
         Frequency array of data [Hz]
     dlst
@@ -938,7 +938,6 @@ def lst_rephase_vectorized(
     # output has shape (len(dlst), len(bl))
     tau = np.einsum("...i,ki->...k", s_diff, blvecs)
 
-    #print("TAU: ", tau[:, 0], blvecs[0])
     # reshape tau
     if tau.ndim != 2:
         tau = tau[None, :]

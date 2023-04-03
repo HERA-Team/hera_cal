@@ -420,40 +420,39 @@ def test_lst_rephase_vectorized():
     dlst = np.median(np.diff(lsts))
     blvec = [antpos[k[0]] - antpos[k[1]] for k in antpairs]
 
-    data_drift = np.zeros((data.shape[0], len(data.bls()), len(data._pols), data.shape[1]), dtype=complex)
-    
+    data_drift = np.zeros((data.shape[0], len(data.bls()), data.shape[1], len(data._pols)), dtype=complex)
     for i, antpair in enumerate(antpairs):
         for j, pol in enumerate(pols):
-            data_drift[:, i, j] = data[antpair + (pol,)].copy()
+            data_drift[:, i, :, j] = data[antpair + (pol,)].copy()
     
     # basic test: single dlst for all integrations
     _data = utils.lst_rephase_vectorized(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)    
     
     # check error at transit
-    phs_err = np.angle(_data[itime, ibl, ipol, ifreq] / data_drift[itime+1, ibl, ipol, ifreq])
+    phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime+1, ibl, ifreq, ipol])
     assert np.isclose(phs_err, 0, atol=1e-7)
     # check error across file
-    phs_err = np.angle(_data[:-1, ibl, ipol, ifreq] / data_drift[1:, ibl, ipol, ifreq])
+    phs_err = np.angle(_data[:-1, ibl, ifreq, ipol] / data_drift[1:, ibl, ifreq, ipol])
     assert np.abs(phs_err).max() < 1e-4
 
     # multiple phase term test: dlst per integration
     dlst = np.array([np.median(np.diff(lsts))] * data.shape[0])
     _data = utils.lst_rephase_vectorized(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
     # check error at transit
-    phs_err = np.angle(_data[itime, ibl, ipol, ifreq] / data_drift[itime+1, ibl, ipol, ifreq])
+    phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime+1, ibl, ifreq, ipol])
     assert np.isclose(phs_err, 0, atol=1e-7)
     # check err across file
-    phs_err = np.angle(_data[:-1, ibl, ipol, ifreq] / data_drift[1:, ibl, ipol, ifreq])
+    phs_err = np.angle(_data[:-1, ibl, ifreq, ipol] / data_drift[1:, ibl, ifreq, ipol])
     assert np.abs(phs_err).max() < 1e-4
 
     # phase all integrations to a single integration
     dlst = lsts[50] - lsts
     _data = utils.lst_rephase_vectorized(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
     # check error at transit
-    phs_err = np.angle(_data[itime, ibl, ipol, ifreq] / data_drift[itime, ibl, ipol, ifreq])
+    phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime, ibl, ifreq, ipol])
     assert np.isclose(phs_err, 0, atol=1e-7)
     # check error across file
-    phs_err = np.angle(_data[:, ibl, ipol, ifreq] / data_drift[50, ibl, ipol, ifreq])
+    phs_err = np.angle(_data[:, ibl, ifreq, ipol] / data_drift[50, ibl, ifreq, ipol])
     assert np.abs(phs_err).max() < 1e-4
 
 def test_lst_rephase():
