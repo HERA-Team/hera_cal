@@ -106,7 +106,7 @@ def simple_lst_bin(
 
     if flags.shape != data.shape:
         raise ValueError(
-            f"flags should have shape {data.sahpe} but got {flags.shape}"
+            f"flags should have shape {data.shape} but got {flags.shape}"
         )
 
     if nsamples is None:
@@ -314,14 +314,10 @@ def lst_average(
     nsamples[flags] = 0
     norm = np.sum(nsamples, axis=0)  # missing a "clip" between 1e-99 and inf here...
     
-    if median:
-        logger.info("Calculating median")
-        data = np.nanmedian(data, axis=0)
-    else:
-        logger.info("Calculating mean")
-        data = np.nansum(data * nsamples, axis=0)
-        data[norm>0] /= norm[norm>0]
-        data[norm<=0] = 1  # any value, it's flagged anyway
+    logger.info("Calculating mean")
+    data = np.nansum(data * nsamples, axis=0)
+    data[norm>0] /= norm[norm>0]
+    data[norm<=0] = 1  # any value, it's flagged anyway
         
     f_min = np.all(flags, axis=0)
     std[f_min] = 1.0
@@ -470,6 +466,31 @@ def lst_bin_files_for_baselines(
 
     return bin_lst, data, flags, nsamples, times_in_bins
 
+def apply_calfile_rules(
+        data_files: list[list[str]], 
+        calfile_rules: list[tuple[str, str]],
+        ignore_missing: bool
+) -> tuple[list[list[str]], list[list[str]]]:
+    input_cals = []
+    for night, dflist in enumerate(data_files):
+        this = []
+        input_cals.append(this)
+        missing = []
+        for df in dflist:
+            cf = df
+            for rule in calfile_rules:
+                cf = cf.replace(rule[0], rule[1]) 
+
+            if os.path.exists(cf):
+                this.append(cf)
+            elif ignore_missing:
+                warnings.warn(f"Calibration file {cf} does not exist")
+                missing.append(df)
+            else:
+                raise IOError(f"Calibration file {cf} does not exist")
+        data_files[night] = [df for df in dflist if df not in missing]
+    return data_files, input_cals
+
 @profile
 def lst_bin_files(
     data_files: list[list[str]], 
@@ -565,25 +586,7 @@ def lst_bin_files(
 
     input_cals = input_cals or []
     if not input_cals and calfile_rules:
-            
-        for night, dflist in enumerate(data_files):
-            this = []
-            input_cals.append(this)
-            missing = []
-            for df in dflist:
-                cf = df
-                for rule in calfile_rules:
-                    cf = cf.replace(rule[0], rule[1]) 
-
-                if os.path.exists(cf):
-                    this.append(cf)
-                elif ignore_missing_calfiles:
-                    warnings.warn(f"Calibration file {cf} does not exist")
-                    missing.append(df)
-                else:
-                    raise IOError(f"Calibration file {cf} does not exist")
-            data_files[night] = [df for df in dflist if df not in missing]
-
+        data_files, input_cals = apply_calfile_rules(data_files, calfile_rules, ignore_missing=ignore_missing_calfiles)            
 
     # Prune empty nights (some nights start with files, but have files removed because
     # they have no associated calibration)

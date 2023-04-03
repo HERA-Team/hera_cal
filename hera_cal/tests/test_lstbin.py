@@ -13,7 +13,7 @@ from .. import io, lstbin, utils, redcal, lstbin_simple
 from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 import shutil
-
+from pathlib import Path
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:Degrees of freedom <= 0 for slice")
@@ -947,3 +947,210 @@ class Test_lstbin(object):
         for of in output_files:
             if os.path.exists(of):
                 os.remove(of)
+
+class Test_LSTBinSimple:
+    def setup_method(self):
+        self.ntimes = 10
+
+        self.nbls = 12
+        self.nfreqs = 5
+        self.npols = 4
+
+        self.shape = (self.ntimes, self.nbls, self.nfreqs, self.npols)
+
+        # Set up some fake random data. Not really important what it is here.
+        self.data = (
+            np.random.normal(size=self.shape) + 1j*np.random.normal(size=self.shape)
+        )
+
+        # LST bins -- each includes one data LST.
+        self.lst_bin_edges = np.linspace(
+            0, 2*np.pi,
+            self.ntimes + 1
+        )
+        dlst = self.lst_bin_edges[1] - self.lst_bin_edges[0]
+        
+        self.data_lsts = np.linspace(dlst/2, 2*np.pi - dlst/2, self.ntimes)
+
+        self.baselines = list(zip(np.arange(self.nbls), np.arange(self.nbls)))  # only autos for now        
+        self.freq_array = np.linspace(100e6, 200e6, self.nfreqs)
+        self.flags = np.zeros(self.shape, dtype=bool)
+        self.nsamples = np.ones(self.shape, dtype=int)
+
+    def test_simple_lst_bin_bad_inputs(self):
+        # Test that we get the right errors for bad inputs
+        data = np.ones((self.ntimes, self.nbls, self.nfreqs, self.npols+1)) 
+        with pytest.raises(ValueError, match="data has more than 4 pols"):
+            lstbin_simple.simple_lst_bin(
+                data=data, 
+                data_lsts=self.data_lsts, 
+                lst_bin_edges=self.lst_bin_edges, 
+                baselines=self.baselines, 
+                freq_array=self.freq_array
+            )
+
+        with pytest.raises(ValueError, match=f"data should have shape"):
+            lstbin_simple.simple_lst_bin(
+                data=self.data, 
+                data_lsts=self.data_lsts, 
+                lst_bin_edges=self.lst_bin_edges, 
+                baselines=self.baselines, 
+                freq_array=self.freq_array[:-1]
+            )
+
+        with pytest.raises(ValueError, match=f"flags should have shape"):
+            lstbin_simple.simple_lst_bin(
+                data=self.data, 
+                data_lsts=self.data_lsts, 
+                lst_bin_edges=self.lst_bin_edges, 
+                baselines=self.baselines, 
+                freq_array=self.freq_array,
+                flags=self.flags[:-1]
+            )
+
+        # Make a wrong-shaped nsample array.
+        nsamples = np.ones((self.ntimes, self.nbls, self.nfreqs+1, self.npols), dtype=int)
+        with pytest.raises(ValueError, match=f"nsamples should have shape"):
+            lstbin_simple.simple_lst_bin(
+                data=self.data, 
+                data_lsts=self.data_lsts, 
+                lst_bin_edges=self.lst_bin_edges, 
+                baselines=self.baselines, 
+                freq_array=self.freq_array,
+                flags=self.flags,
+                nsamples=self.nsamples[:-1]
+            )
+
+        # Use only one bin edge
+        with pytest.raises(ValueError, match="lst_bin_edges must have at least 2 elements"):
+            lstbin_simple.simple_lst_bin(
+                data=self.data, 
+                data_lsts=self.data_lsts, 
+                lst_bin_edges=self.lst_bin_edges[:1], 
+                baselines=self.baselines, 
+                freq_array=self.freq_array,
+            )
+
+        # Try rephasing without freq_array or antpos
+        with pytest.raises(ValueError, match="freq_array and antpos is needed for rephase"):
+            lstbin_simple.simple_lst_bin(
+                data=self.data, 
+                data_lsts=self.data_lsts, 
+                lst_bin_edges=self.lst_bin_edges, 
+                baselines=self.baselines, 
+                freq_array=self.freq_array,
+                antpos=None,
+                rephase=True
+            )
+
+    def test_lst_bin_simple_defaults(self):
+        bins, d, f, n = lstbin_simple.simple_lst_bin(
+                data=self.data, 
+                data_lsts=self.data_lsts, 
+                lst_bin_edges=self.lst_bin_edges, 
+                baselines=self.baselines, 
+                freq_array=self.freq_array,
+                nsamples = self.nsamples,  # nsamples is all ones anyway
+                flags=self.flags,          # flags is all false anyway 
+                rephase=False,
+            )
+        
+        bins2, d2, f2, n2 = lstbin_simple.simple_lst_bin(
+                data=self.data, 
+                data_lsts=self.data_lsts, 
+                lst_bin_edges=self.lst_bin_edges, 
+                baselines=self.baselines, 
+                freq_array=self.freq_array,
+                rephase=False,
+            )
+        
+        assert all(np.all(dd==dd2) for dd, dd2 in zip(d, d2))
+        assert all(np.all(dd==dd2) for dd, dd2 in zip(f, f2))
+        assert all(np.all(dd==dd2) for dd, dd2 in zip(n, n2))
+
+    def test_lst_bin_simple_happy_path(self):
+        bins, d, f, n = lstbin_simple.simple_lst_bin(
+                data=self.data, 
+                data_lsts=self.data_lsts, 
+                lst_bin_edges=self.lst_bin_edges, 
+                baselines=self.baselines, 
+                freq_array=self.freq_array,
+                rephase=False
+            )
+        
+        # Check that the bins are what we expect
+        assert np.all(bins == self.lst_bin_edges[:-1] + np.diff(self.lst_bin_edges)/2)
+
+        # In this case, we set it up so that each bin should have only one time in it,
+        # so that d, f, and n should be the same as self.data, self.flags, and self.nsamples
+
+        d = np.squeeze(np.array(d))
+        f = np.squeeze(np.array(f))
+        n = np.squeeze(np.array(n))
+
+        # Check that the data is what we expect
+        np.testing.assert_allclose(d, self.data)
+        np.testing.assert_allclose(f, self.flags)
+        np.testing.assert_allclose(n, self.nsamples)
+
+    def test_reduce_lst_bins_no_out(self):
+        bins, d, f, n = lstbin_simple.simple_lst_bin(
+                data=self.data, 
+                data_lsts=self.data_lsts, 
+                lst_bin_edges=self.lst_bin_edges, 
+                baselines=self.baselines, 
+                freq_array=self.freq_array,
+                rephase=False
+            )
+        
+        dd, ff, std, nn = lstbin_simple.reduce_lst_bins(d, f, n)
+
+        assert dd.shape == ff.shape == std.shape == nn.shape
+
+        # reduce_data swaps the order of bls/times
+        dd = dd.swapaxes(0, 1)
+        ff = ff.swapaxes(0, 1)
+        nn = nn.swapaxes(0, 1)
+
+        assert np.all(dd == self.data)
+        assert np.all(ff == self.flags)
+        assert np.all(nn == self.nsamples)
+
+    def test_argparser_returns(self):
+        args = lstbin_simple.lst_bin_arg_parser()
+        assert args is not None
+
+    def test_apply_calfile_rules(self, tmpdir_factory):
+        direc = tmpdir_factory.mktemp("test_apply_calfile_rules")
+
+        datas = [Path(direc / f"data{i}.uvh5") for i in range(3)]
+        for d in datas:
+            d.touch()
+
+        cals = [Path(direc / f"data{i}.calfile") for i in range(3)]
+        for c in cals:
+            c.touch()
+        
+        data_files, calfiles = lstbin_simple.apply_calfile_rules(
+            [[str(d) for d in datas]],
+            calfile_rules = [('.uvh5', '.calfile')],
+            ignore_missing=False
+        )
+        assert len(data_files[0]) == 3
+        assert len(calfiles[0]) == 3
+
+        cals[-1].unlink()
+        with pytest.raises(IOError, match="does not exist"):
+            lstbin_simple.apply_calfile_rules(
+                [[str(d) for d in datas]],
+                calfile_rules = [('.uvh5', '.calfile')],
+                ignore_missing=False
+            )
+
+        data_files, calfiles = lstbin_simple.apply_calfile_rules(
+            [[str(d) for d in datas]],
+            calfile_rules = [('.uvh5', '.calfile')],
+            ignore_missing=True
+        )
+        assert len(data_files[0]) == 2
+        assert len(calfiles[0]) == 2
