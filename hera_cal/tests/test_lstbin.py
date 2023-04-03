@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
 import pytest
 import os
 import numpy as np
@@ -666,6 +665,7 @@ class Test_lstbin(object):
     def test_simpler_lst_bin_files(self):
         # basic execution
         file_ext = self.file_ext
+
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
             file_ext=file_ext, ignore_flags=True
@@ -811,6 +811,7 @@ class Test_lstbin(object):
         # test input_cal
         uvc = UVCal()
         uvc.read_calfits(os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits'))
+        uvc.use_future_array_shapes()
         uvc.flag_array[uvc.ant_array.tolist().index(24)] = True
         uvc.gain_array[uvc.ant_array.tolist().index(25)] = 1e10
         input_cals = []
