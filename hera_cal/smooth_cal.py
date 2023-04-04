@@ -707,7 +707,7 @@ class CalibrationSmoother():
             propagate_refant_flags: Default False. If True, update flags so that all antennas are flagged
                 at the specific frequencies and times that the reference antenna is also flagged. If False and
                 there exists times and frequencies where the reference antenna is flagged but another antenna
-                is not flagged, a ValueError will be raised.
+                is not flagged, a ValueError will be raised. Ignored if pick_refant is False.
             freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
                 for all channels. If the ratio of of such times for a given channel compared to all times that are not
                 completely flagged is greater than freq_threshold, flag the entire channel for all antennas.
@@ -804,7 +804,7 @@ class CalibrationSmoother():
             self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=True)
             utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.'
                                   for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
-            self.rephase_to_refant()
+            self.rephase_to_refant(propagate_refant_flags=propagate_refant_flags)
 
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag files).
