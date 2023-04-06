@@ -514,10 +514,11 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
     freqs : np.ndarray
         Array of frequencies in Hz
     bls_lengths : dict
-        Dictionary of baseline lengths in meters
+        Dictionary of baseline lengths in meters where keys are baseline tuples
     spatial_filter_half_width : float, optional, default=1
-        Fourier half width of the spatial filter. Default is 1, which is equivalent to a
-        modeling foreground power out to the horizon.
+        Fourier half width of the spatial filter. Value corresponds to the sine of the angle from 
+        zenith in terms of sky-coordinate (l, m) where the default, 1, is equivalent to a modeling 
+        foregrounds out to the horizon, and allowing the uv-plane to be modeled at half-wavelength scales.
     eigenval_cutoff : float
         Cutoff for the eigenvalues of the PSWF filter
     
@@ -816,19 +817,19 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
     Compute a foreground model for a set of radially redundant baselines. The model is computed by performing a linear
     least-squares fit using a set of DPSS filters to model visibilities within a radially redundant group. If only spatial
     filters are provided, the model is restricted to the spatial axis. If spectral filters are also provided, the model is fit
-    allowing spectral variation at a fixed spatial scale. The model components are return if return_model_comps is True. 
+    allowing spectral variation at a fixed spatial scale. The model components are returned if return_model_comps is True. 
     Otherwise, the model is evaluated using the model components and the spatial filters (and spectral filters if provided),
     and the model visibilities are returned.
     
     Parameters:
     -----------
     data : dictionary, DataContainer
-        Data to be fit by u-model. This function assumes that visibilities redundantly-averaged
+        Data to be fit by u-model. This function assumes that visibilities are redundantly-averaged
         and will only use data from the first baseline in a spatially-redundant group.
     data_wgts : dictionary, DataContainer
         Weights associated with data
     radial_reds : RadialRedundancy, list of lists of tuples
-        List of lists of redundant baseline tuples. Each list of redundant tuples represents a radial group of
+        List of lists of radially redundant baseline tuples. Each list of redundant tuples represents a radial group of
         baselines.
     spatial_filters : dict
         Dictionary mapping baseline tuples to spatial filters. Dictionary is of the form {(ant1, ant2, pol):
@@ -842,7 +843,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
         Regularization tolerance for linear least-squares fit. 
     share_fg_model : bool, optional, Default is False.
         If True, the foreground model for each radially-redundant group is shared across the time axis. 
-        Otherwise, a nucal foreground will be independently computed for each frequency.
+        Otherwise, a nucal foreground will be independently computed for each time integration individually.
     return_model_comps: bool, optional, Default is False.
         If True, the model components for the foreground model are returned. Otherwise, only the model visibilities
         are returned. 
@@ -869,13 +870,15 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
         wgts_here = np.array([data_wgts[bl] for bl in group])
         data_here = np.array([data[bl] for bl in group])
                 
-        # Get number of fit parameters
+        # Get number of fit parameters - this is the number of spectral filters times the number of spatial filters
         if spectral_filters is not None:
             ndim = spectral_filters.shape[1] * design_matrix.shape[-1]
 
         # Compute the XTX
         if share_fg_model:
             # Compute the XTX and XTWy
+            # Below the indices "a" corresponds to the baseline axis, "f" corresponds to the frequency axis,
+            # and "t" corresponds to the time axis. The indices "m" and "n" correspond to the model components.
             if spectral_filters is None:
                 XTX = jnp.einsum("afm,atf,afn->mn", design_matrix, wgts_here, design_matrix)
                 Xy = jnp.einsum("afm,atf->m", design_matrix, data_here * wgts_here)
