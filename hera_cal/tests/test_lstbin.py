@@ -14,6 +14,9 @@ from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 import shutil
 from pathlib import Path
+from astropy.coordinates import EarthLocation
+from itertools import combinations_with_replacement
+from pyuvdata import utils as uvutils
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:Degrees of freedom <= 0 for slice")
@@ -948,11 +951,71 @@ class Test_lstbin(object):
             if os.path.exists(of):
                 os.remove(of)
 
+
+@pytest.fixture(scope="function")
+def uvd():
+    hera_loc = EarthLocation.from_geodetic(
+        lat=-30.721526120690307, 
+        lon=21.428303826863015, 
+        height=1051.690000070259
+    )
+
+    # build a UVData object that knows about 5 antennas, but only uses 3 of them 
+    # in baselines.
+    uvd = UVData.new(
+        freq_array= np.linspace(150e8, 160e8, 100),
+        polarization_array= ["xx", "yy"],
+        antenna_positions= {
+            0: [0.0, 0.0, 0.0],
+            1: [0.0, 0.0, 1.0],
+            2: [0.0, 0.0, 2.0],
+            127: [0.0, 0.0, 127.0],
+            128: [0.0, 0.0, 128.0],
+        },
+        antpairs= list(combinations_with_replacement(range(3), 2)),
+        telescope_location= hera_loc,
+        telescope_name= "HERA",
+        times= np.linspace(2459855, 2459855.1, 20),
+        x_orientation='n',
+        empty=True
+    )
+
+    uvd.data_array += 1.0
+    return uvd
+
+@pytest.fixture(scope="function")
+def uvc(uvd):
+    return UVCal.from_uvdata(
+        uvd,
+        cal_style = "redundant",
+        gain_convention = "multiply",
+        jones_array = "linear",
+        cal_type = "gain",
+        empty=True
+    )
+
+@pytest.fixture(scope="function")
+def uvd_file(uvd, tmpdir_factory):
+    # Write to file, so we can run lst_bin_files
+    tmp = tmpdir_factory.mktemp("test_partial_times")
+    uvd.write_uvh5(str(tmp / 'mock.uvh5'), clobber=True)
+    return str(tmp / 'mock.uvh5')
+
+@pytest.fixture(scope="function")
+def uvc_file(uvc, uvd_file):
+    # Write to file, so we can run lst_bin_files
+    tmp = os.path.dirname(uvd_file)
+    fl = f'{tmp}/mock.calfits'
+    uvc.write_calfits(fl, clobber=True)
+    return fl
+
 class Test_LSTBinSimple:
     def setup_method(self):
         self.ntimes = 10
-
-        self.nbls = 12
+        self.nants = 4
+        self.ants = np.arange(self.nants)
+        self.baselines = list(combinations_with_replacement(self.ants, 2))
+        self.nbls = len(self.baselines)
         self.nfreqs = 5
         self.npols = 4
 
@@ -971,112 +1034,72 @@ class Test_LSTBinSimple:
         dlst = self.lst_bin_edges[1] - self.lst_bin_edges[0]
         
         self.data_lsts = np.linspace(dlst/2, 2*np.pi - dlst/2, self.ntimes)
+        self.ants = np.arange(self.nbls)
 
-        self.baselines = list(zip(np.arange(self.nbls), np.arange(self.nbls)))  # only autos for now        
         self.freq_array = np.linspace(100e6, 200e6, self.nfreqs)
         self.flags = np.zeros(self.shape, dtype=bool)
         self.nsamples = np.ones(self.shape, dtype=int)
+        self.antpos = {ant: np.random.normal(loc=0, scale=30, size=3) for ant in self.ants}
 
+    def simple_lst_bin(self, **kwargs):
+        if "data" not in kwargs:
+            kwargs["data"] = self.data
+        if "data_lsts" not in kwargs:
+            kwargs["data_lsts"] = self.data_lsts
+        if "lst_bin_edges" not in kwargs:
+            kwargs["lst_bin_edges"] = self.lst_bin_edges
+        if "baselines" not in kwargs:
+            kwargs["baselines"] = self.baselines
+        if "freq_array" not in kwargs:
+            kwargs["freq_array"] = self.freq_array
+        if "antpos" not in kwargs:
+            kwargs["antpos"] = self.antpos
+        
+        return lstbin_simple.simple_lst_bin(**kwargs)
+    
     def test_simple_lst_bin_bad_inputs(self):
         # Test that we get the right errors for bad inputs
         data = np.ones((self.ntimes, self.nbls, self.nfreqs, self.npols+1)) 
         with pytest.raises(ValueError, match="data has more than 4 pols"):
-            lstbin_simple.simple_lst_bin(
-                data=data, 
-                data_lsts=self.data_lsts, 
-                lst_bin_edges=self.lst_bin_edges, 
-                baselines=self.baselines, 
-                freq_array=self.freq_array
-            )
+            self.simple_lst_bin(data=data)
 
         with pytest.raises(ValueError, match=f"data should have shape"):
-            lstbin_simple.simple_lst_bin(
-                data=self.data, 
-                data_lsts=self.data_lsts, 
-                lst_bin_edges=self.lst_bin_edges, 
-                baselines=self.baselines, 
-                freq_array=self.freq_array[:-1]
-            )
+            self.simple_lst_bin(freq_array=self.freq_array[:-1])
 
         with pytest.raises(ValueError, match=f"flags should have shape"):
-            lstbin_simple.simple_lst_bin(
-                data=self.data, 
-                data_lsts=self.data_lsts, 
-                lst_bin_edges=self.lst_bin_edges, 
-                baselines=self.baselines, 
-                freq_array=self.freq_array,
-                flags=self.flags[:-1]
-            )
+            self.simple_lst_bin(flags=self.flags[:-1])
 
         # Make a wrong-shaped nsample array.
-        nsamples = np.ones((self.ntimes, self.nbls, self.nfreqs+1, self.npols), dtype=int)
         with pytest.raises(ValueError, match=f"nsamples should have shape"):
-            lstbin_simple.simple_lst_bin(
-                data=self.data, 
-                data_lsts=self.data_lsts, 
-                lst_bin_edges=self.lst_bin_edges, 
-                baselines=self.baselines, 
-                freq_array=self.freq_array,
-                flags=self.flags,
-                nsamples=self.nsamples[:-1]
-            )
+            self.simple_lst_bin(nsamples=self.nsamples[:-1])
 
         # Use only one bin edge
         with pytest.raises(ValueError, match="lst_bin_edges must have at least 2 elements"):
-            lstbin_simple.simple_lst_bin(
-                data=self.data, 
-                data_lsts=self.data_lsts, 
-                lst_bin_edges=self.lst_bin_edges[:1], 
-                baselines=self.baselines, 
-                freq_array=self.freq_array,
-            )
+            self.simple_lst_bin(lst_bin_edges=self.lst_bin_edges[:1])
 
         # Try rephasing without freq_array or antpos
         with pytest.raises(ValueError, match="freq_array and antpos is needed for rephase"):
-            lstbin_simple.simple_lst_bin(
-                data=self.data, 
-                data_lsts=self.data_lsts, 
-                lst_bin_edges=self.lst_bin_edges, 
-                baselines=self.baselines, 
-                freq_array=self.freq_array,
-                antpos=None,
-                rephase=True
-            )
+            self.simple_lst_bin(rephase=True, antpos=None)
 
     def test_lst_bin_simple_defaults(self):
-        bins, d, f, n = lstbin_simple.simple_lst_bin(
-                data=self.data, 
-                data_lsts=self.data_lsts, 
-                lst_bin_edges=self.lst_bin_edges, 
-                baselines=self.baselines, 
-                freq_array=self.freq_array,
-                nsamples = self.nsamples,  # nsamples is all ones anyway
-                flags=self.flags,          # flags is all false anyway 
-                rephase=False,
-            )
-        
-        bins2, d2, f2, n2 = lstbin_simple.simple_lst_bin(
-                data=self.data, 
-                data_lsts=self.data_lsts, 
-                lst_bin_edges=self.lst_bin_edges, 
-                baselines=self.baselines, 
-                freq_array=self.freq_array,
-                rephase=False,
-            )
+        bins, d, f, n = self.simple_lst_bin(
+            nsamples = self.nsamples,  # nsamples is all ones anyway
+            flags=self.flags,          # flags is all false anyway 
+            rephase=False,
+        )
+    
+        bins2, d2, f2, n2 = self.simple_lst_bin(
+            rephase=False,
+        )
         
         assert all(np.all(dd==dd2) for dd, dd2 in zip(d, d2))
         assert all(np.all(dd==dd2) for dd, dd2 in zip(f, f2))
         assert all(np.all(dd==dd2) for dd, dd2 in zip(n, n2))
 
     def test_lst_bin_simple_happy_path(self):
-        bins, d, f, n = lstbin_simple.simple_lst_bin(
-                data=self.data, 
-                data_lsts=self.data_lsts, 
-                lst_bin_edges=self.lst_bin_edges, 
-                baselines=self.baselines, 
-                freq_array=self.freq_array,
-                rephase=False
-            )
+        bins, d, f, n = self.simple_lst_bin(
+            rephase=False
+        )
         
         # Check that the bins are what we expect
         assert np.all(bins == self.lst_bin_edges[:-1] + np.diff(self.lst_bin_edges)/2)
@@ -1093,16 +1116,30 @@ class Test_LSTBinSimple:
         np.testing.assert_allclose(f, self.flags)
         np.testing.assert_allclose(n, self.nsamples)
 
-    def test_reduce_lst_bins_no_out(self):
-        bins, d, f, n = lstbin_simple.simple_lst_bin(
-                data=self.data, 
-                data_lsts=self.data_lsts, 
-                lst_bin_edges=self.lst_bin_edges, 
-                baselines=self.baselines, 
-                freq_array=self.freq_array,
-                rephase=False
-            )
+    def test_lst_bin_simple_rephase(self):
+        bins, d0, f0, n0 = self.simple_lst_bin(rephase=True,)
+        bins, d, f, n = self.simple_lst_bin(rephase=False)
+        np.testing.assert_allclose(d, d0)
+
+    def test_lst_bin_simple_lstbinedges(self):
+        lst_bin_edges = self.lst_bin_edges.copy()
+        lst_bin_edges -= 4*np.pi
+
+        bins, d0, f0, n0 = self.simple_lst_bin(lst_bin_edges=lst_bin_edges)
+
+        lst_bin_edges = self.lst_bin_edges.copy()
+        lst_bin_edges += 4*np.pi
+    
+        bins, d, f, n = self.simple_lst_bin(lst_bin_edges=lst_bin_edges)
         
+        np.testing.assert_allclose(d, d0)
+
+        with pytest.raises(ValueError, match="lst_bin_edges must be monotonically increasing."):
+            self.simple_lst_bin(lst_bin_edges=lst_bin_edges[::-1])    
+
+        
+    def test_reduce_lst_bins_no_out(self):
+        bins, d, f, n = self.simple_lst_bin()
         dd, ff, std, nn = lstbin_simple.reduce_lst_bins(d, f, n)
 
         assert dd.shape == ff.shape == std.shape == nn.shape
@@ -1112,9 +1149,9 @@ class Test_LSTBinSimple:
         ff = ff.swapaxes(0, 1)
         nn = nn.swapaxes(0, 1)
 
-        assert np.all(dd == self.data)
+        np.testing.assert_allclose(dd, self.data)
         assert np.all(ff == self.flags)
-        assert np.all(nn == self.nsamples)
+        np.testing.assert_allclose(nn, self.nsamples)
 
     def test_argparser_returns(self):
         args = lstbin_simple.lst_bin_arg_parser()
@@ -1154,3 +1191,158 @@ class Test_LSTBinSimple:
         )
         assert len(data_files[0]) == 2
         assert len(calfiles[0]) == 2
+
+    def test_lst_bin_files_withcal(self, uvd, uvd_file, uvc_file):
+        # Make a mock data file with partial times
+
+        # Make sure that using a calfile with all ones doesn't change the data
+        nocal_fnames = lstbin_simple.lst_bin_files(
+            data_files=[[uvd_file]],
+            dlst=uvd.lst_array[1] - uvd.lst_array[0],
+            n_lstbins_per_outfile=len(uvd.lst_array),
+            outdir=os.path.dirname(uvd_file),
+            lst_start=uvd.lst_array[0],
+        )
+
+        withcal_fnames = lstbin_simple.lst_bin_files(
+            data_files=[[uvd_file]],
+            input_cals=[[uvc_file]],
+            dlst=uvd.lst_array[1] - uvd.lst_array[0],
+            n_lstbins_per_outfile=len(uvd.lst_array),
+            outdir=os.path.dirname(uvd_file),
+            lst_start=uvd.lst_array[0],
+        )
+
+        uvd_nocal = UVData.from_file(nocal_fnames[0], read_data=True)
+        uvd_withcal = UVData.from_file(withcal_fnames[0], read_data=True)
+
+        np.testing.assert_allclose(uvd_nocal.data_array, uvd_withcal.data_array)
+        
+
+    def test_lst_average_sigma_clip(self):
+        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+            data=self.data,
+            nsamples=self.nsamples,
+            flags=self.flags,
+            sigma_clip_thresh=0.0,
+        )
+
+        data, flg, std, norm = lstbin_simple.lst_average(
+            data=self.data,
+            nsamples=self.nsamples,
+            flags=self.flags,
+            sigma_clip_thresh=10.0,
+        )
+
+        assert data.shape == flg.shape == std.shape == norm.shape == self.data.shape[1:]
+        assert np.all(data == data_n)
+
+    def test_lst_bin_files_for_baselines_defaults(self, uvd, uvd_file):
+        lstbins, d0, f0, n0, times0 = lstbin_simple.lst_bin_files_for_baselines(
+            data_files=[uvd_file],
+            lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()+0.01],
+            antpairs=uvd.get_antpairs(),
+            rephase=False
+        )
+
+        lstbins, d, f, n, times = lstbin_simple.lst_bin_files_for_baselines(
+            data_files=[uvd_file],
+            lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()+0.01],
+            antpairs=uvd.get_antpairs(),
+            freqs=uvd.freq_array,
+            pols=uvd.polarization_array,
+            antpos = uvd.antenna_positions,
+            time_idx = [np.ones(uvd.Ntimes, dtype=bool)],
+            time_arrays=[np.unique(uvd.time_array)],
+            lsts = np.unique(uvd.lst_array),
+            rephase=False
+        )
+
+        np.testing.assert_allclose(d0, d)
+        np.testing.assert_allclose(f0, f)
+        np.testing.assert_allclose(n0, n)
+        np.testing.assert_allclose(times0, times)
+
+    def test_lst_bin_files_for_baselines_empty(self, uvd, uvd_file):
+        lstbins, d0, f0, n0, times0 = lstbin_simple.lst_bin_files_for_baselines(
+            data_files=[uvd_file],
+            lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
+            antpairs=[(127, 128)],
+            rephase=True
+        )
+
+        assert np.all(f0)
+
+    def test_lst_bin_files_for_baselines_extra(self, uvd, uvd_file):
+        # Providing baselines that don't exist in the file is fine, they're just ignored.
+        lstbins, d0, f0, n0, times0 = lstbin_simple.lst_bin_files_for_baselines(
+            data_files=[uvd_file],
+            lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
+            antpairs=uvd.get_antpairs() + [(127, 128)],
+            rephase=True
+        )
+
+        print(len(f0), f0[0].shape)
+        assert np.all(f0[0][:, -1])  # last baseline is the extra one that's all flagged.
+
+    def test_lst_bin_files_output_select(self, uvd, uvd_file):
+        with pytest.warns(UserWarning, match="One or more indices in output_file_select"):
+            # Output file doesn't exist. This just warns instead of erroring, but does
+            # exit the function. Not really sure why.
+            lsts = np.sort(np.unique(uvd.lst_array))
+            dlst = lsts[1] - lsts[0]
+
+            lstbin_simple.lst_bin_files(
+                data_files=[[uvd_file]],
+                dlst=dlst,
+                n_lstbins_per_outfile=len(uvd.lst_array),
+                outdir=os.path.dirname(uvd_file),
+                lst_start=lsts[0] - dlst/2,
+                lst_width=lsts.max() - lsts.min() + dlst,
+                output_file_select=6,
+            )
+
+        uvd1 = UVData.from_file(uvd_file, read_data=True)
+        fnames = lstbin_simple.lst_bin_files(
+            data_files=[[uvd_file]],
+            dlst=dlst,
+            n_lstbins_per_outfile=len(uvd.lst_array),
+            outdir=os.path.dirname(uvd_file),
+            lst_start=lsts.min() - dlst/2,
+            lst_width=lsts.max() - lsts.min() + dlst,
+            output_file_select=0,
+        )
+
+        uvd_nocal = UVData.from_file(fnames[0], read_data=True)
+        assert uvd_nocal.Ntimes == uvd.Ntimes
+
+
+    def test_lst_bin_files_calfiles(self, uvd, uvd_file, uvc_file):
+        """Test that providing calfiles and using calfile_rules give the same thing."""
+        lsts = np.sort(np.unique(uvd.lst_array))
+        dlst = lsts[1] - lsts[0]
+
+        fnames = lstbin_simple.lst_bin_files(
+            data_files=[[uvd_file]],
+            dlst=dlst,
+            n_lstbins_per_outfile=len(uvd.lst_array),
+            outdir=os.path.dirname(uvd_file),
+            lst_start=lsts[0] - dlst/2,
+            lst_width=lsts.max() - lsts.min() + dlst,
+            input_cals=[[uvc_file]],
+        )
+
+        uvd = UVData.from_file(fnames[0], read_data=True)
+
+        fnames_rules = lstbin_simple.lst_bin_files(
+            data_files=[[uvd_file]],
+            dlst=dlst,
+            n_lstbins_per_outfile=len(uvd.lst_array),
+            outdir=os.path.dirname(uvd_file),
+            lst_start=lsts[0] - dlst/2,
+            lst_width=lsts.max() - lsts.min() + dlst,
+            calfile_rules=[(".uvh5", ".calfits")],
+        )
+        uvd_rules = UVData.from_file(fnames_rules[0], read_data=True)
+
+        np.testing.assert_allclose(uvd.data_array, uvd_rules.data_array)
