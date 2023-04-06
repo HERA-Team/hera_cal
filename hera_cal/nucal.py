@@ -516,9 +516,10 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
     bls_lengths : dict
         Dictionary of baseline lengths in meters where keys are baseline tuples
     spatial_filter_half_width : float, optional, default=1
-        Fourier half width of the spatial filter. Value corresponds to the sine of the angle from 
-        zenith in terms of sky-coordinate (l, m) where the default, 1, is equivalent to a modeling 
-        foregrounds out to the horizon, and allowing the uv-plane to be modeled at half-wavelength scales.
+        Fourier half width of the spatial filter. Value corresponds to maximum value from 
+        zenith where foregrounds are found in terms of the sky-coordinates (l, m). Here the 
+        default, 1, is equivalent to a modeling foregrounds out to the horizon, and allowing 
+        the uv-plane to be modeled at half-wavelength scales.
     eigenval_cutoff : float
         Cutoff for the eigenvalues of the PSWF filter
     
