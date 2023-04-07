@@ -501,14 +501,17 @@ def lst_bin_files_for_baselines(
         adjust_lst_bin_edges(lst_bin_edges)        
         lst_bin_edges %= 2*np.pi
         op = np.logical_and if lst_bin_edges[0] < lst_bin_edges[-1] else np.logical_or
-        time_idx = [op(obj.lsts >= lst_bin_edges[0], obj.lsts < lst_bin_edges[-1]) for obj in metas]
+        time_idx = []
+        for meta in metas:
+            lsts = meta.get_transactional('lsts')
+            time_idx.append(op(lsts >= lst_bin_edges[0], lsts < lst_bin_edges[-1]))
 
     if time_arrays is None:
-        time_arrays = [obj.times[idx] for obj, idx in zip(metas, time_idx)]
+        time_arrays = [meta.get_transactional('times')[idx] for meta, idx in zip(metas, time_idx)]
 
     if lsts is None:
         lsts = np.concatenate(
-            [obj.lsts[idx] for obj, idx in zip(metas, time_idx)]
+            [meta.get_transactional('lsts')[idx] for meta, idx in zip(metas, time_idx)]
         )            
 
     # Now we can set up our master arrays of data. 
@@ -529,7 +532,7 @@ def lst_bin_files_for_baselines(
         ntimes_so_far += len(tarr)
 
         #hd = io.HERAData(str(fl.path), filetype='uvh5')
-        data_antpairs = meta.antpairs
+        data_antpairs = meta.get_transactional('antpairs')
         bls_to_load = [bl for bl in antpairs if bl in data_antpairs or bl[::-1] in data_antpairs]
 
         if not bls_to_load:
@@ -1136,19 +1139,19 @@ def get_all_unflagged_baselines(
         if only_last_file_per_night:
             fl_list = fl_list[-1:]
 
-        for fl in fl_list:
-            antpairs = fl.antpairs
+        for meta in fl_list:
+            antpairs = meta.get_transactional('antpairs')
             
-            if pols is not None and not np.all(pols == fl.polarization_array):
+            if pols is not None and not np.all(pols == meta.get_transactional('polarization_array')):
                 raise ValueError(
                     f"The polarizations in {fl} are not the same as in {fl_list[0]}"
                 )
-            pols = fl.polarization_array
+            pols = meta.get_transactional('polarization_array')
 
-            if xorient is not None and fl.x_orientation != xorient:
+            if xorient is not None and meta.get_transactional('x_orientation') != xorient:
                 raise ValueError("Not all input files have the same x_orientation!")
 
-            xorient = fl.x_orientation
+            xorient = meta.get_transactional('x_orientation')
 
             for a1, a2 in antpairs:
                 if (
@@ -1164,13 +1167,13 @@ def get_all_unflagged_baselines(
 
                     if a1 not in unique_ants:
                         unique_ants.add(a1)
-                        files_with_ants.add(fl)
+                        files_with_ants.add(meta)
                     if a2 not in unique_ants:
                         unique_ants.add(a2)
-                        files_with_ants.add(fl)
+                        files_with_ants.add(meta)
                     
 
-    return all_baselines, fl.pols, files_with_ants
+    return all_baselines, meta.get_transactional('pols'), files_with_ants
 
 
 def get_all_antpos_from_files(
@@ -1185,11 +1188,13 @@ def get_all_antpos_from_files(
     nants = len(ants)
 
     for fl in data_files:
-        for i, ant in enumerate(fl.antenna_numbers):
+        antnums = fl.get_transactional('antenna_numbers')
+        antpos = fl.get_transactional('antpos_enu')
+        for i, ant in enumerate(antnums):
             if ant in ants and ant not in antpos_out:
                 # We only access antpos_enu inside hte conditional, because it has
                 # computation to do, and we don't want to do it if we don't need to.
-                antpos_out[ant] = fl.antpos_enu[i]
+                antpos_out[ant] = antpos[i]
         if len(antpos_out) == nants:
             break
 

@@ -23,7 +23,7 @@ from pyuvdata import utils as uvutils
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in greater")
-class Test_lstbin(object):
+class Test_lstbin:
     def setup_method(self):
         # load data
         np.random.seed(0)
@@ -61,13 +61,13 @@ class Test_lstbin(object):
         self.file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
 
     def test_make_lst_grid(self):
-        lst_grid = lstbin.make_lst_grid(0.01, begin_lst=None, verbose=False)
+        lst_grid = lstbin.make_lst_grid(0.01, begin_lst=None)
         assert len(lst_grid) == 628
         assert np.isclose(lst_grid[0], 0.0050025360725952121)
-        lst_grid = lstbin.make_lst_grid(0.01, begin_lst=np.pi, verbose=False)
+        lst_grid = lstbin.make_lst_grid(0.01, begin_lst=np.pi)
         assert len(lst_grid) == 628
         assert np.isclose(lst_grid[0], 3.1365901175171982)
-        lst_grid = lstbin.make_lst_grid(0.01, begin_lst=-np.pi, verbose=False)
+        lst_grid = lstbin.make_lst_grid(0.01, begin_lst=-np.pi)
         assert len(lst_grid) == 628
         assert np.isclose(lst_grid[0], 3.1365901175171982)
 
@@ -79,7 +79,7 @@ class Test_lstbin(object):
             lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays = lstbin.config_lst_bin_files(data_files, ntimes_per_file=60)
             np.testing.assert_allclose(dlst, 0.0007830490163485138)
             # test that lst_grid is reasonable
-            assert np.median(np.diff(lst_grid)) == dlst
+            assert np.isclose(np.median(np.diff(lst_grid)), dlst)
             for fla in file_lsts:
                 for fl in fla:
                     assert fl in lst_grid

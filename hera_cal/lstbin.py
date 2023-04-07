@@ -145,7 +145,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         dlst = np.median(np.diff(lst_list[0]))
 
     # construct lst_grid
-    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
+    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst)
     dlst = np.median(np.diff(lst_grid))
 
     # test for special case of lst grid restriction
@@ -501,7 +501,7 @@ def lst_align(data, data_lsts, flags=None, dlst=None,
 
     # make lst_grid
     begin_lst = np.max([data_lsts[0] - 1e-5, 0])
-    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
+    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst)
 
     # get frequency info
     Nfreqs = data[list(data.keys())[0]].shape[1]
@@ -607,13 +607,21 @@ def config_lst_bin_files(
     # Make the data files into FastUVH5Meta objects
     data_files = [[df if isinstance(df, FastUVH5Meta) else FastUVH5Meta(df) for df in dfs ] for dfs in data_files]
 
+    df0 = data_files[0][0]
+    if not isinstance(df0, FastUVH5Meta):
+        df0 = FastUVH5Meta(df0, blts_are_rectangular=True)
+
     # get dlst from first data file if None
     if dlst is None:
         dlst = data_files[0][0].lsts[1] - data_files[0][0].lsts[0]
 
-    # get time arrays for each file
-    lst_arrays = [[df.lsts for df in dfs] for dfs in data_files]
-    time_arrays = [[df.times for df in dfs] for dfs in data_files]
+    # Grab the LST and time arrays from each file. Using the FastUVH5Meta
+    # objects to do this is much faster than using the UVData objects, because we only
+    # need the LSTs and times, and we don't need to read in any other metadata.
+    # However, we need to be careful to open and close each file one at a time here
+    # because HDF5 can only have so many files open at a time.
+    lst_arrays = [[df.get_transactional('lsts') for df in dflist] for dflist in data_files]
+    time_arrays = [[df.get_transactional('times') for df in dflist] for dflist in data_files]
 
     # get begin_lst from lst_start or from the first JD in the data_files
     if lst_start is None:
@@ -623,16 +631,16 @@ def config_lst_bin_files(
     begin_lst = lst_start
 
     # make 24 hour LST grid
-    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, lst_width=lst_width, verbose=verbose)
-    dlst = np.median(np.diff(lst_grid))
+    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, lst_width=lst_width)
+    dlst = lst_grid[1] - lst_grid[0]
+
+    grid_range = (lst_grid[0] - dlst/2, lst_grid[-1] + dlst/2)
 
     # enforce that lst_arrays are in the same range as the lst_grid
     for larrs in lst_arrays:
         for larr in larrs:
-            while np.any(larr < np.min(lst_grid)):
-                larr[larr < np.min(lst_grid)] += 2 * np.pi
-            while np.any(larr > np.max(lst_grid)):
-                larr[larr > np.max(lst_grid)] -= 2 * np.pi
+            larr[larr < grid_range[0]] += 2 * np.pi
+            larr[larr >= grid_range[1]] -= 2 * np.pi
 
     # get number of output files
     nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
@@ -641,7 +649,10 @@ def config_lst_bin_files(
     flat_lsts = [lst for larrs in lst_arrays for larr in larrs for lst in larr]
 
     # get output file lsts that are not empty
-    all_file_lsts = [lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
+    all_file_lsts = [
+        lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] 
+        for i in range(nfiles)
+    ]
     file_lsts = []
     for f_lst in all_file_lsts:
         fmin = f_lst[0] - (dlst / 2 + atol)
@@ -985,36 +996,54 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         garbage_collector.collect()
 
 
-def make_lst_grid(dlst, begin_lst=None, lst_width: float = 2*np.pi, verbose: bool=True):
+def make_lst_grid(
+    dlst: float, 
+    begin_lst: float | None = None, 
+    lst_width: float = 2*np.pi, 
+) -> np.ndarray:
     """
-    Make a uniform grid in local sidereal time spanning 2pi radians.
+    Make a uniform grid in local sidereal time.
+
+    By default, this grid will span 2pi radians, starting at zero radians. Even if
+    the ``lst_width`` is not 2pi, we enforce that the grid equally divides 2pi, so
+    that it can wrap around if later the width is increased and the same dlst is used.
 
     Parameters:
     -----------
-    dlst : type=float, delta-LST: width of a single LST bin in radians. 2pi must be equally divisible
-                by dlst. If not, will default to the closest dlst that satisfies this criterion that
-                is also greater than the input dlst. There is a minimum allowed dlst of 6.283e-6 radians,
-                or .0864 seconds.
-
-    begin_lst : type=float, beginning point for lst_grid, which extends out 2pi from begin_lst.
-                begin_lst must fall exactly on an LST bin given a dlst, within 0-2pi. If not, it is
-                replaced with the closest bin. Default is zero radians.
+    dlst : 
+        The width of a single LST bin in radians. 2pi must be equally divisible
+        by dlst. If not, will default to the closest dlst that satisfies this criterion that
+        is also greater than the input dlst. There is a minimum allowed dlst of 6.283e-6 radians,
+        or .0864 seconds.
+    begin_lst
+        Beginning point for lst_grid. ``begin_lst`` must fall exactly on an LST bin 
+        given a dlst, within 0-2pi. If not, it is replaced with the closest bin. 
+        Default is zero radians.
 
     Output:
     -------
-    lst_grid : type=ndarray, dtype=float, uniform LST grid marking the center of each LST bin
+    lst_grid
+        Uniform LST grid marking the center of each LST bin
     """
+    assert dlst >= 6.283e-6, "dlst must be greater than 6.283e-6 radians, or .0864 seconds."
+    assert dlst < 2 * np.pi, "dlst must be less than 2pi radians, or 24 hours."
+
     # check 2pi is equally divisible by dlst
-    if not np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5) and not np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5):
+    if not (
+        np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5) 
+        or np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5)
+    ):
         # generate array of appropriate dlsts
-        dlsts = 2 * np.pi / np.arange(1, 1000000).astype(float)
+        dlsts = 2 * np.pi / np.arange(1, 1000000)
 
         # get dlsts closest to dlst, but also greater than dlst
         dlst_diff = dlsts - dlst
         dlst_diff[dlst_diff < 0] = 10
         new_dlst = dlsts[np.argmin(dlst_diff)]
-        utils.echo("2pi is not equally divisible by input dlst ({:.16f}) at 1 part in 1e7.\n"
-                   "Using {:.16f} instead.".format(dlst, new_dlst), verbose=verbose)
+        logger.warning(
+            f"2pi is not equally divisible by input dlst ({dlst:.16f}) at 1 part in 1e7.\n"
+            f"Using {new_dlst:.16f} instead."
+        )
         dlst = new_dlst
 
     # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
@@ -1024,11 +1053,14 @@ def make_lst_grid(dlst, begin_lst=None, lst_width: float = 2*np.pi, verbose: boo
     if begin_lst is not None:
         # enforce begin_lst to be within 0-2pi
         if begin_lst < 0 or begin_lst >= 2 * np.pi:
-            utils.echo("begin_lst was < 0 or >= 2pi, taking modulus with (2pi)", verbose=verbose)
+            logger.warning("begin_lst was < 0 or >= 2pi, taking modulus with (2pi)")
             begin_lst = begin_lst % (2 * np.pi)
         begin_lst = lst_grid[np.argmin(np.abs(lst_grid - begin_lst))] - dlst / 2
         lst_grid += begin_lst
-        lst_grid = lst_grid[lst_grid < (begin_lst + lst_width)]
+    else:
+        begin_lst = 0.0
+
+    lst_grid = lst_grid[lst_grid < (begin_lst + lst_width)]
     
     return lst_grid
 
