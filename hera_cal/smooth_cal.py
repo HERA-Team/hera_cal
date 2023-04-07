@@ -658,8 +658,8 @@ class CalibrationSmoother():
 
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
-                 blacklist_wgt=0.0, pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0,
-                 ignore_calflags=False, verbose=False):
+                 blacklist_wgt=0.0, pick_refant=False, propagate_refant_flags=False, freq_threshold=1.0, time_threshold=1.0,
+                 ant_threshold=1.0, ignore_calflags=False, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -704,6 +704,10 @@ class CalibrationSmoother():
                 problems at edge times and frequencies when using DPSS filtering.
             pick_refant: if True, automatically picks one reference anteanna per polarization. The refants chosen have the
                 fewest total flags and causes the least noisy phases on other antennas when made the phase reference.
+            propagate_refant_flags: Default False. If True, update flags so that all antennas are flagged
+                at the specific frequencies and times that the reference antenna is also flagged. If False and
+                there exists times and frequencies where the reference antenna is flagged but another antenna
+                is not flagged, a ValueError will be raised. Ignored if pick_refant is False.
             freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
                 for all channels. If the ratio of of such times for a given channel compared to all times that are not
                 completely flagged is greater than freq_threshold, flag the entire channel for all antennas.
@@ -800,7 +804,7 @@ class CalibrationSmoother():
             self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=True)
             utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.'
                                   for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
-            self.rephase_to_refant()
+            self.rephase_to_refant(propagate_refant_flags=propagate_refant_flags)
 
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag files).
@@ -821,11 +825,11 @@ class CalibrationSmoother():
                 assert np.all(np.abs(self.flag_freqs[ff] - self.freqs) < 1e-4), \
                     '{} and {} have different frequencies.'.format(ff, self.cals[0])
 
-    def rephase_to_refant(self, warn=True):
+    def rephase_to_refant(self, warn=True, propagate_refant_flags=False):
         '''If the CalibrationSmoother object has a refant attribute, this function rephases the
         filtered gains to it.'''
         if hasattr(self, 'refant'):
-            rephase_to_refant(self.gain_grids, self.refant, flags=self.flag_grids)
+            rephase_to_refant(self.gain_grids, self.refant, flags=self.flag_grids, propagate_refant_flags=propagate_refant_flags)
         elif warn:
             warnings.warn('No rephasing done because self.refant has not been set.', RuntimeWarning)
 
@@ -1060,7 +1064,7 @@ def smooth_cal_argparser():
                           Only used when the filtering method is 'DPSS'")
     flt_opts.add_argument("--dont_skip_flagged_edges", action="store_true", default=False, help="if True, use DPSS over integrations with flagged edge channels.\
                           Only used when method used is 'DPSS'")
-    flt_opts.add_argument("--axis", default="both", type=str, help="smooth either in 'freq', or 'both' (time and freq) axes.")
+    flt_opts.add_argument("--axis", default="both", type=str, help="smooth either in 'freq', 'both' (time and freq) axes or 'none' (no smoothing, just picking a refant and writing output).")
     flt_opts.add_argument("--skip_wgt", default=0.1, type=float, help="skip if this fraction is flagged.")
 
     return a

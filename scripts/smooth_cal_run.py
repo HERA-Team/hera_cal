@@ -40,9 +40,17 @@ def run():
         if a.axis == 'both':
             cs.time_freq_2D_filter(freq_scale=a.freq_scale, time_scale=a.time_scale, tol=a.tol,
                                 filter_mode=a.filter_mode, window=a.window, maxiter=a.maxiter, method=a.method, **filter_kwargs)
-        else:
+        elif a.axis == 'freq':
             cs.filter_1d(filter_scale=a.freq_scale, tol=a.tol, skip_wgt=a.skip_wgt, mode=a.method, ax=a.axis,
                         **filter_kwargs)
+        elif a.axis == 'none':
+            warnings.warn(
+                "No smoothing performed, but files still being written. Set freq_scale "
+                "to a positive value to smooth in frequency."
+            )
+        else:
+            raise ValueError(f"Unrecognized axis: {a.axis}")
+
         cs.write_smoothed_cal(output_replace=(a.infile_replace, a.outfile_replace),
                             add_to_history=' '.join(sys.argv), clobber=a.clobber)
     else:
