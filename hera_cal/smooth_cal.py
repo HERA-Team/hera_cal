@@ -654,6 +654,15 @@ def _to_antflags(flags, ants, antflag_thresh):
         return flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
 
 
+def _check_finite_gains(gains, flags):
+    '''Make sure there are no unflagged infs or nans in gains, replace flagged ones with 1.0s.'''
+    not_finite = ~np.isfinite(gains)
+    if np.any(not_finite):
+        if not np.all(flags[not_finite]):
+            raise ValueError('There exist unflagged gains that are not finite.')
+        gains[not_finite] = 1.0
+
+
 class CalibrationSmoother():
 
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
@@ -778,12 +787,8 @@ class CalibrationSmoother():
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
                         self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
-            # make sure there are no unflagged infs or nans
-            not_finite = ~np.isfinite(self.gain_grids[ant])
-            if np.any(not_finite):
-                assert np.all(self.flag_grids[ant][not_finite]), 'All unflagged gains must be finite.'
-                # replace infs/nans with flagged 1s.
-                self.flag_grids[ant][not_finite] = 1.0
+            # make sure there are no unflagged infs or nans, replace flagged ones with 1.0s
+            _check_finite_gains(self.gain_grids[ant], self.flag_grids[ant])
 
         # Now build grid and fill it for chisq_grid, if desired
         if load_chisq:
