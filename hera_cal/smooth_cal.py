@@ -535,7 +535,7 @@ def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
             is not flagged, a ValueError will be raised.
     '''
     for pol, ref in (refant.items() if not isinstance(refant, tuple) else [(None, refant)]):
-        refant_phasor = gains[ref] / np.abs(gains[ref])
+        refant_phasor = np.exp(-1.0j * np.angle(gains[ref]))
         for ant in gains.keys():
             if ((pol is None) or (ant[1] == pol)):
                 if flags is not None:
@@ -544,7 +544,7 @@ def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
                     elif np.any(flags[ref][np.logical_not(flags[ant])]):
                         raise ValueError('The chosen reference antenna', refant, 'is flagged in at least one place where antenna',
                                          ant, 'is not, so automatic reference antenna selection has failed.')
-                gains[ant] = gains[ant] / refant_phasor
+                gains[ant] = gains[ant] * refant_phasor
 
 
 def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, telescope_name='HERA'):
@@ -652,6 +652,15 @@ def _to_antflags(flags, ants, antflag_thresh):
     else:
         # per-baseline flags need to be down-converted into per-antenna flags
         return flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
+
+
+def _check_finite_gains(gains, flags):
+    '''Make sure there are no unflagged infs or nans in gains, replace flagged ones with 1.0s.'''
+    not_finite = ~np.isfinite(gains)
+    if np.any(not_finite):
+        if not np.all(flags[not_finite]):
+            raise ValueError('There exist unflagged gains that are not finite.')
+        gains[not_finite] = 1.0
 
 
 class CalibrationSmoother():
@@ -778,6 +787,8 @@ class CalibrationSmoother():
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
                         self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
+            # make sure there are no unflagged infs or nans, replace flagged ones with 1.0s
+            _check_finite_gains(self.gain_grids[ant], self.flag_grids[ant])
 
         # Now build grid and fill it for chisq_grid, if desired
         if load_chisq:
