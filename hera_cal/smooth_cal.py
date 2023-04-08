@@ -535,7 +535,7 @@ def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
             is not flagged, a ValueError will be raised.
     '''
     for pol, ref in (refant.items() if not isinstance(refant, tuple) else [(None, refant)]):
-        refant_phasor = gains[ref] / np.abs(gains[ref])
+        refant_phasor = np.exp(-1.0j * np.angle(gains[ref]))
         for ant in gains.keys():
             if ((pol is None) or (ant[1] == pol)):
                 if flags is not None:
@@ -544,7 +544,7 @@ def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
                     elif np.any(flags[ref][np.logical_not(flags[ant])]):
                         raise ValueError('The chosen reference antenna', refant, 'is flagged in at least one place where antenna',
                                          ant, 'is not, so automatic reference antenna selection has failed.')
-                gains[ant] = gains[ant] / refant_phasor
+                gains[ant] = gains[ant] * refant_phasor
 
 
 def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, telescope_name='HERA'):
