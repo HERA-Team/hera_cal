@@ -778,6 +778,12 @@ class CalibrationSmoother():
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
                         self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
+            # make sure there are no unflagged infs or nans
+            not_finite = ~np.isfinite(self.gain_grids[ant])
+            if np.any(not_finite):
+                assert np.all(self.flag_grids[ant][not_finite]), 'All unflagged gains must be finite.'
+                # replace infs/nans with flagged 1s.
+                self.flag_grids[ant][not_finite] = 1.0
 
         # Now build grid and fill it for chisq_grid, if desired
         if load_chisq:
