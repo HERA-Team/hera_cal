@@ -2023,7 +2023,9 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         output will trim the extra frequencies in the time_chunk and write out trimmed freqs. The same is true
         for polarizations.
     baseline_chunk_files : list of strings
-        list of paths to baseline-chunk files to select time-chunk file from.
+        list of paths to baseline-chunk files to select time-chunk file from. If the files have "_interleave" in their title then
+        the method will automatically identify the number of unique interleaves, chunk the file list up into interleaved sets and
+        retrieve integrations based on the time in the first file. 
     outfilename : string
         name of the output file to write.
     clobber : bool optional.
@@ -2040,11 +2042,36 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
     -------
         Nothing
     """
+    # check whether "interleave" is in baseline chunk filenames. If so, make sure that they all have "interleave",
+    # split them into sets, and make sure that the sets all have the same number of files.
+    interleave_mode = "interleave" in baseline_chunk_files[0]
+    
+    for fname in baseline_chunk_files:
+        if "interleave" not in fname and interleave_mode or \
+           "interleave" in fname and not interleave_mode:
+            raise ValueError("must not have a subset of files with 'interleave' in name.")
+    if interleave_mode:
+        interleave_indices = np.unique([int(re.findall(fname, "interleave_[0-9]\{1, 10\}")[0][11:]) for fname in baseline_chunk_files])
+        ninterleave = length(interleave_indices)
+        interleave_sets = {inum: [] for inum in interleave_indices}
+        for inum, interleave in enumerate(interleave_indices):
+            interleave_sets[inum] = sorted([fname for fname in baseline_chunk_files if f'interleave_{inum}' in fname])
+        # check that all interleave sets have the same length.
+        if length(np.unique([length(iset) for iset in interleave_sets])) > 1:
+            raise ValueError("If you are providing interleaved files, each interleaved set must have the same number of files in it!")
+        
+        
+        
+
+    
     hd_time_chunk = io.HERAData(time_chunk_template)
     hd_baseline_chunk = io.HERAData(baseline_chunk_files[0])
     times = hd_time_chunk.times
     freqs = hd_baseline_chunk.freqs
     polarizations = hd_baseline_chunk.pols
+    
+    
+    
     # read in the template file, but only include polarizations, frequencies
     # from the baseline_chunk_file files.
     if not time_bounds:
