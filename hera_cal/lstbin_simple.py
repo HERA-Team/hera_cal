@@ -1144,7 +1144,7 @@ def get_all_unflagged_baselines(
             
             if pols is not None and not np.all(pols == meta.get_transactional('polarization_array')):
                 raise ValueError(
-                    f"The polarizations in {fl} are not the same as in {fl_list[0]}"
+                    f"The polarizations in {meta} are not the same as in {fl_list[0]}"
                 )
             pols = meta.get_transactional('polarization_array')
 
