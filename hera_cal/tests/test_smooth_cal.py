@@ -381,6 +381,17 @@ class Test_Smooth_Cal_Helper_Functions(object):
         assert (54, 'Jee') in smooth_cal._to_antflags(io.load_flags(uvflag_file), [(54, 'Jee')], 0)
         os.remove(uvflag_file)
 
+    def test_check_finite_gains(self):
+        flags = np.array([True, False, False])
+        gains = np.array([np.nan, np.inf, 1.0])
+        with pytest.raises(ValueError):
+            smooth_cal._check_finite_gains(gains, flags)
+
+        flags = np.array([True, True, False])
+        gains = np.array([np.nan, np.inf, 1.0])
+        smooth_cal._check_finite_gains(gains, flags)
+        assert np.all(gains == 1.0)
+
 
 class Test_Calibration_Smoother(object):
 
