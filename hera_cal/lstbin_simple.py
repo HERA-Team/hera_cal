@@ -1142,16 +1142,23 @@ def get_all_unflagged_baselines(
         for meta in fl_list:
             antpairs = meta.get_transactional('antpairs')
             
-            if pols is not None and not np.all(pols == meta.get_transactional('polarization_array')):
+            thispols = meta.get_transactional('polarization_array')
+            if pols is not None and not np.all(pols == thispols):
                 raise ValueError(
-                    f"The polarizations in {meta.path} are not the same as in {fl_list[0].path}"
+                    f"The polarizations in {meta.path} are not the same as in "
+                    f"{fl_list[0].path}. Got {thispols} "
+                    f"instead of {pols}."
                 )
-            pols = meta.get_transactional('polarization_array')
+            pols = thispols
 
-            if xorient is not None and meta.get_transactional('x_orientation') != xorient:
-                raise ValueError("Not all input files have the same x_orientation!")
+            this_xorient = meta.get_transactional('x_orientation')
+            if xorient is not None and this_xorient != xorient:
+                raise ValueError(
+                    f"Not all files have the same xorientation! The x_orientation in {meta.path} "
+                    f"is {this_xorient}, but in {fl_list[0].path} it is {xorient}."
+                )
 
-            xorient = meta.get_transactional('x_orientation')
+            xorient = this_xorient
 
             for a1, a2 in antpairs:
                 if (
