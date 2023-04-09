@@ -1104,6 +1104,7 @@ def get_all_unflagged_baselines(
     include_autos: bool = True,
     ignore_ants: tuple[int] = (),
     only_last_file_per_night: bool = False,
+    reds: list[list[tuple[int, int]]] | None = None,
 ) -> tuple[set[tuple[int, int]], list[str]]:
     """Generate a set of all antpairs that have at least one un-flagged entry.
     
@@ -1119,11 +1120,12 @@ def get_all_unflagged_baselines(
         A list of all polarizations in the files in the given list, as strings like 
         'ee' and 'nn' (i.e. with x_orientation information).
     """
-    data_files = [[fl if isinstance(fl, FastUVH5Meta) else FastUVH5Meta(fl, blts_are_rectangular=True) for fl in fl_list] for fl_list in data_files]
+    data_files = [
+        [fl if isinstance(fl, FastUVH5Meta) else FastUVH5Meta(fl, blts_are_rectangular=True) 
+         for fl in fl_list] 
+         for fl_list in data_files
+    ]
     
-    pols = None
-    xorient = None
-
     all_baselines = set()
     all_pols = set()
     files_with_ants = set()
