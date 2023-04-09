@@ -618,8 +618,6 @@ class RedDataContainer(DataContainer):
 
     def __getitem__(self, key):
         '''Returns data corresponding to the unique baseline that key is a member of.'''
-        # Note: we can't use self.reds.get_red(key) here because that would point to
-        # the fundamental red key of the array, not the key that is actually in the data.
         return super().__getitem__(self._bl_to_red_key[key])
 
     def __setitem__(self, key, value):
