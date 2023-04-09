@@ -6,8 +6,9 @@ import numpy as np
 from collections import OrderedDict as odict
 import copy
 
+from typing import Sequence
 from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
-
+from .red_groups import RedundantGroups, Baseline, AntPair
 
 class DataContainer:
     """Dictionary-like object that abstracts away the pol/ant pair ordering of data
@@ -517,19 +518,30 @@ class RedDataContainer(DataContainer):
     '''Structure for containing redundant visibilities that can be accessed by any
         one of the redundant baseline keys (or their conjugate).'''
 
-    def __init__(self, data, reds=None, antpos=None, bl_error_tol=1.0):
+    def __init__(self, data, reds: Sequence[Sequence[Baseline | AntPair]]=None, antpos: dict[int, np.ndarray] | None=None, bl_error_tol: float=1.0):
         '''Creates a RedDataContainer.
 
-        Arguments:
-            data: DataContainer or dictionary of visibilities, just as one would pass into DataContainer().
-                Will error if multiple baselines are part of the same redundant group.
-            reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol).
-            antpos: dictionary of antenna positions in the form {ant_index: np.array([x, y, z])}.
-                Will error if one tries to provide both reds and antpos. If neither is provided,
-                will try to to use data.antpos (which it might have if its is a DataContainer).
-            bl_error_tol: the largest allowable difference between baselines in a redundant group
-                (in the same units as antpos). Normally, this is up to 4x the largest antenna position
-                error. Will only be used if reds is inferred from antpos.
+        Parameters
+        ----------
+        data: DataContainer or dictionary of visibilities, just as one would pass into DataContainer().
+            Will error if multiple baselines are part of the same redundant group.
+        reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol).
+        antpos: dictionary of antenna positions in the form {ant_index: np.array([x, y, z])}.
+            Will error if one tries to provide both reds and antpos. If neither is provided,
+            will try to to use data.antpos (which it might have if its is a DataContainer).
+        bl_error_tol : float
+            the largest allowable difference between baselines in a redundant group
+            (in the same units as antpos). Normally, this is up to 4x the largest antenna position
+            error. Will only be used if reds is inferred from antpos.
+
+        Attributes
+        ----------
+        reds 
+            list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol).
+        red_groups
+            A :class:`RedundantGroups` object that contains the redundant groups for 
+            the entire array, and methods to manipulate them. 
+            When possible, you should use this object instead of the reds attribute.
         '''
         if reds is not None and antpos is not None:
             raise ValueError('Can only provide reds or antpos, not both.')
@@ -545,11 +557,14 @@ class RedDataContainer(DataContainer):
                 reds = get_reds(self.antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
             else:
                 raise ValueError('Must provide reds, antpos, or have antpos available at data.antpos')
+            
         self.build_red_keys(reds)
 
     def _add_red(self, ubl_key, red):
         '''Updates internal dictionaries with a new redundant group.'''
         self.reds.append(red)
+        self.red_groups = self.red_groups.with_new_red(red)
+
         self._red_key_to_bls[ubl_key] = []
         self._red_key_to_bls[reverse_bl(ubl_key)] = []
         for bl in red:
@@ -558,14 +573,22 @@ class RedDataContainer(DataContainer):
             self._red_key_to_bls[ubl_key].append(bl)
             self._red_key_to_bls[reverse_bl(ubl_key)].append(reverse_bl(bl))
 
-    def build_red_keys(self, reds):
+    def build_red_keys(self, reds: RedundantGroups | list[list[Baseline]]):
         '''Build the dictionaries that map baselines to redundant keys.
 
         Arguments:
             reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol).
         '''
         # Map all redundant keys to the same underlying data
+        self._red_key_to_bls = {}
+        self._bl_to_red_key = {}
+        
         self.reds = []
+        if isinstance(reds, RedundantGroups):
+            self.red_groups = reds
+        else:
+            self.red_groups = RedundantGroups(red_list=reds, antpos=getattr(self, 'antpos', None))
+        
         self._bl_to_red_key = {}
         self._red_key_to_bls = {}
         for red in copy.deepcopy(reds):
@@ -582,15 +605,21 @@ class RedDataContainer(DataContainer):
         del self[[k for k in self._data if k not in self._bl_to_red_key]]
 
     def get_ubl_key(self, key):
-        '''Returns the key used interally denote the data stored. Useful for del'''
+        '''Returns the key used to internally denote the data stored.'''
         return self._bl_to_red_key[key]
 
     def get_red(self, key):
-        '''Returns the list of baselines redundant with this key.'''
+        '''Returns the list of baselines in the array redundant with this key.
+        
+        Note: this is not just baselines existing in the data itself, but in the 
+              entire array.
+        '''
         return self._red_key_to_bls[self._bl_to_red_key[key]]
 
     def __getitem__(self, key):
         '''Returns data corresponding to the unique baseline that key is a member of.'''
+        # Note: we can't use self.reds.get_red(key) here because that would point to
+        # the fundamental red key of the array, not the key that is actually in the data.
         return super().__getitem__(self._bl_to_red_key[key])
 
     def __setitem__(self, key, value):
@@ -604,3 +633,4 @@ class RedDataContainer(DataContainer):
     def __contains__(self, key):
         '''Returns true if the baseline redundant with the key is in the data.'''
         return (key in self._bl_to_red_key) and (super().__contains__(self._bl_to_red_key[key]))
+        
