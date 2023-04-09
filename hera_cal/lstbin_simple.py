@@ -21,6 +21,7 @@ from typing import Sequence
 import argparse
 from pyuvdata.uvdata.uvh5 import FastUVH5Meta
 from pyuvdata import utils as uvutils
+from .red_groups import RedundantGroups
 
 try:
     profile
@@ -495,7 +496,11 @@ def lst_bin_files_for_baselines(
         raise ValueError("pols must be a sequence of strings, e.g. ('xx', 'yy', 'xy', 'yx')")
     
     if antpos is None and rephase:
-        antpos = get_all_antpos_from_files(metas, antpairs)
+        warnings.warn(
+            "Getting antpos from the first file only. This is almost always correct, "
+            "but will be wrong if different files have different antenna_position arrays."
+        )
+        antpos = dict(zip(metas[0].antenna_numbers, metas[0].antpos_enu))
 
     if time_idx is None:
         adjust_lst_bin_edges(lst_bin_edges)        
@@ -834,7 +839,7 @@ def lst_bin_files(
         raise ValueError('All integrations must be of equal length (BDA not supported)')
 
     logger.info("Compiling all unflagged baselines...")
-    all_baselines, all_pols, fls_with_ants = get_all_unflagged_baselines(
+    all_baselines, all_pols = get_all_unflagged_baselines(
         data_metas, 
         ex_ant_yaml_files, 
         include_autos=include_autos, 
@@ -842,7 +847,23 @@ def lst_bin_files(
     )
     all_baselines = sorted(all_baselines)
 
-    antpos = get_all_antpos_from_files(fls_with_ants, all_baselines)
+    nants0 = meta.header['antenna_numbers'].size
+
+    # Do a quick check to make sure all nights at least have the same number of Nants
+    for dflist in data_metas:
+        _nants = dflist[0].header['antenna_numbers'].size
+        dflist[0].close()
+        if _nants != nants0:
+            raise ValueError(
+                f"Not all nights have the same number of antennas! Got {_nants} for "
+                f"{dflist[0].path} and {nants0} for {meta.path} for {meta.path}"
+            )
+    
+    # This assumes that all nights have the same antennas and antenna positions
+    # This is almost always true, because they're supposed to represent the whole array
+    # not just the baselines in the data.
+    antpos = dict(zip(meta.antenna_numbers, meta.antpos_enu))
+    
     # Split up the baselines into chunks that will be LST-binned together.
     # This is just to save on RAM.
     if Nbls_to_load is None:
@@ -921,8 +942,6 @@ def lst_bin_files(
         bins = bins[mask]
         golden_data, golden_flags, golden_nsamples = [], [], []
         logger.info(f"golden_lsts bins in this output file: {bins}, lst_bin_edges={lst_bin_edges}, {len(lst_bin_edges)}")
-
-        
 
         for bi, bl_chunk in enumerate(bl_chunks):
             logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
@@ -1104,7 +1123,7 @@ def get_all_unflagged_baselines(
     include_autos: bool = True,
     ignore_ants: tuple[int] = (),
     only_last_file_per_night: bool = False,
-    reds: list[list[tuple[int, int]]] | None = None,
+    redundantly_averaged: bool | None = None
 ) -> tuple[set[tuple[int, int]], list[str]]:
     """Generate a set of all antpairs that have at least one un-flagged entry.
     
@@ -1112,6 +1131,10 @@ def get_all_unflagged_baselines(
     individual uvh5 files. Each UVH5 file is *assumed* to have the same set of times
     for each baseline internally (different nights obviously have different times).
     
+    If ``reds`` is provided, then any baseline found is mapped back to the first 
+    baseline in the redundant group it appears in. This *must* be set if 
+
+
     Returns
     -------
     all_baselines
@@ -1126,14 +1149,40 @@ def get_all_unflagged_baselines(
          for fl_list in data_files
     ]
     
+
     all_baselines = set()
     all_pols = set()
-    files_with_ants = set()
-    unique_ants = set()
 
     meta0 = data_files[0][0]
     x_orientation = meta0.get_transactional('x_orientation')
 
+    # reds will contain all of the redundant groups for the whole array, because
+    # all the antenna positions are included in every file.
+    reds = RedundantGroups(
+        antpos=dict(zip(meta0.antenna_numbers, meta0.antpos_enu))
+    )
+    if redundantly_averaged is None:
+        # Try to work out if the files are redundantly averaged.
+        # just look at the middle file from each night.
+        for fl_list in data_files:
+            meta = fl_list[len(fl_list)//2]
+            antpairs = meta.get_transactional("antpairs")
+            ubls = set(reds.get_ubl_key(ap) for ap in antpairs)
+            if len(ubls) != len(antpairs):
+                # At least two of the antpairs are in the same redundant group. 
+                redundantly_averaged = False
+                break
+    
+    if redundantly_averaged:
+        if ignore_ants:
+            raise ValueError(
+                "Cannot ignore antennas if the files are redundantly averaged."
+            )
+        if ex_ant_yaml_files:
+            raise ValueError(
+                "Cannot exclude antennas if the files are redundantly averaged."
+            )
+        
     for night, fl_list in enumerate(data_files):
         if ex_ant_yaml_files:
             a_priori_antenna_flags = read_a_priori_ant_flags(
@@ -1157,6 +1206,9 @@ def get_all_unflagged_baselines(
                 )
 
             for a1, a2 in antpairs:
+                if redundantly_averaged:
+                    a1, a2 = reds.get_ubl_key((a1, a2))
+
                 if (
                     (a1, a2) not in all_baselines and # Do this first because after the
                     (a2, a1) not in all_baselines and # first file it often triggers.
@@ -1167,41 +1219,10 @@ def get_all_unflagged_baselines(
                     a2 not in a_priori_antenna_flags
                 ):
                     all_baselines.add((a1, a2))
-
-                    if a1 not in unique_ants:
-                        unique_ants.add(a1)
-                        files_with_ants.add(meta)
-                    if a2 not in unique_ants:
-                        unique_ants.add(a2)
-                        files_with_ants.add(meta)
                     
 
-    return all_baselines, all_pols, files_with_ants
+    return all_baselines, all_pols
 
-
-def get_all_antpos_from_files(
-    data_files: list[FastUVH5Meta], 
-    all_baselines: list[tuple[int, int]]
-) -> dict[tuple[int, int], np.ndarray]:
-
-    antpos_out = {}
-    
-    # ants will be a set of integers antenna numbers.
-    ants = set(sum(all_baselines, start=()))
-    nants = len(ants)
-
-    for fl in data_files:
-        antnums = fl.get_transactional('antenna_numbers')
-        antpos = fl.get_transactional('antpos_enu')
-        for i, ant in enumerate(antnums):
-            if ant in ants and ant not in antpos_out:
-                # We only access antpos_enu inside hte conditional, because it has
-                # computation to do, and we don't want to do it if we don't need to.
-                antpos_out[ant] = antpos[i]
-        if len(antpos_out) == nants:
-            break
-
-    return antpos_out
 
 def lst_bin_arg_parser():
     """
