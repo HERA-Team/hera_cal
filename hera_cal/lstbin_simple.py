@@ -1125,8 +1125,12 @@ def get_all_unflagged_baselines(
     xorient = None
 
     all_baselines = set()
+    all_pols = set()
     files_with_ants = set()
     unique_ants = set()
+
+    meta0 = data_files[0][0]
+    x_orientation = meta0.get_transactional('x_orientation')
 
     for night, fl_list in enumerate(data_files):
         if ex_ant_yaml_files:
@@ -1141,24 +1145,14 @@ def get_all_unflagged_baselines(
 
         for meta in fl_list:
             antpairs = meta.get_transactional('antpairs')
+            all_pols.update(set(meta.get_transactional("pols")))        
             
-            thispols = meta.get_transactional('polarization_array')
-            if pols is not None and not np.all(pols == thispols):
-                raise ValueError(
-                    f"The polarizations in {meta.path} are not the same as in "
-                    f"{fl_list[0].path}. Got {thispols} "
-                    f"instead of {pols}."
-                )
-            pols = thispols
-
             this_xorient = meta.get_transactional('x_orientation')
-            if xorient is not None and this_xorient != xorient:
+            if this_xorient != x_orientation:
                 raise ValueError(
                     f"Not all files have the same xorientation! The x_orientation in {meta.path} "
-                    f"is {this_xorient}, but in {fl_list[0].path} it is {xorient}."
+                    f"is {this_xorient}, but in {meta0.path} it is {x_orientation}."
                 )
-
-            xorient = this_xorient
 
             for a1, a2 in antpairs:
                 if (
@@ -1180,7 +1174,7 @@ def get_all_unflagged_baselines(
                         files_with_ants.add(meta)
                     
 
-    return all_baselines, meta.get_transactional('pols'), files_with_ants
+    return all_baselines, all_pols, files_with_ants
 
 
 def get_all_antpos_from_files(
