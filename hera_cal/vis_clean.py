@@ -794,8 +794,7 @@ class VisClean(object):
             # get filter properties
             mfrate = max_frate[k] if max_frate is not None else None
             filter_centers, filter_half_widths = gen_filter_properties(ax=ax, horizon=horizon,
-                                                                       standoff=standoff, min_dly=min_dly,
-                                                                       bl_len=self.bllens[k[:2]], max_frate=mfrate)
+            standoff=standoff, min_dly=min_dly,                                                                    bl_len=self.bllens[k[:2]], max_frate=mfrate)
             if mode != 'clean':
                 suppression_factors = [[tol], [tol]] if ax == 'both' else [tol]
                 self.fourier_filter(filter_centers=filter_centers, filter_half_widths=filter_half_widths,
@@ -2063,19 +2062,20 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
             raise ValueError("If you are providing interleaved files, each interleaved set must have the same number of files in it!")
     else:
        ninterleave = 1
-       interleave_sets = baseline_chunk_files
+       interleave_sets = {0: baseline_chunk_files}
        interleave_index_dict = {0: 0}
         
     hd_time_chunk = io.HERAData(time_chunk_template)
     times = hd_time_chunk.times
-    freqs = hd_baseline_chunk.freqs
-    polarizations = hd_baseline_chunk.pols
+    
         
     
     # read in the template file, but only include polarizations, frequencies
     # from the baseline_chunk_file files.
     if not time_bounds:
         hd_baseline_chunk = io.HERAData(baseline_chunk_files[0])
+        freqs = hd_baseline_chunk.freqs
+        polarizations = hd_baseline_chunk.pols
         hd_time_chunk.read(times=times, frequencies=freqs, polarizations=polarizations)
         # set the all data to zero, flags to True, and nsamples to zero.
         hd_time_chunk.nsample_array[:] = 0.0
@@ -2102,9 +2102,11 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         dt_time_chunk = np.median(np.diff(hd_time_chunk.times)) / 2.
         tmax = hd_time_chunk.times.max() + dt_time_chunk
         tmin = hd_time_chunk.times.min() - dt_time_chunk
-        for inum in interleaved_sets:
-            hd_combined = io.HERAData(interleaved_sets[inum])
-            hd_baseline_chunk = io.HERAData(interleaved_sets[inum][0])
+        for inum in interleave_sets:
+            hd_combined = io.HERAData(interleave_sets[inum])
+            hd_baseline_chunk = io.HERAData(interleave_sets[inum][0])
+            freqs = hd_baseline_chunk.freqs
+            polarizations = hd_baseline_chunk.pols
             if inum == 0:
                 # use same time selection for all interleaves even though the times don't line
                 # up. We need the indices too.
