@@ -120,10 +120,14 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cac
             obtained from hera_cal.smooth_cal.dpss_filters
         freq_filters: DPSS filtering vectors along the frequency axis, (Nfreqs, N_freq_vectors)
             obtained from hera_cal.smooth_cal.dpss_filters
-        method: method to use for solving the linear least squares problem. Options are 'pinv', 'lstsq', 'lu_solve'.
+        method: method to use for solving the linear least squares problem. Options are 'pinv', 'lstsq', 'lu_solve', and 'solve'.
+            'pinv' uses np.linalg.pinv to compute the least squares solution and tends to be the most reliable. 'lu_solve'
+            uses scipy.linalg.lu_solve to compute the least squares solution and tends to be the fastest. 
+            'solve' uses np.linalg.solve and 'lstsq' uses np.linalg.lstsq and have comparable results.
         cached_input: Matrix of (X^T W X)^{-1} for the input DPSS filters and weights. Useful for filtering
             many gain grids with similar flagging patterns. np.ndarray of shape (N_time_vectors * N_freq_vectors,
-            N_time_vectors * N_freq_vectors)
+            N_time_vectors * N_freq_vectors). Can be obtained using the 'cached_output' return value from a
+            previous call to this function.
         XTXinv: Matrix of (X^T W X)^{-1} for the input DPSS filters and weights. 
             Warning: This is deprecated and will be removed in a future version. Use cached_input instead.
 
