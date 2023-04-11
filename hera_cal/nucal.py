@@ -981,3 +981,118 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
 
     return model_comps
 
+
+@jax.jit
+def _mean_squared_error_no_amp(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
+    """
+    """
+    # Dot baseline vector into tip-tilt parameters
+    phase = jnp.einsum('bn,ntf->btf', blvecs, params["Phi"])
+
+    # Compute model from foreground estimates and amplitude
+    model_r = (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
+    model_i = (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
+    
+    # Compute loss using weights and foreground model
+    return jnp.mean((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
+
+@jax.jit
+def _foreground_model(params, spectral_filters, spatial_filters):
+    """
+    """
+    model_r, model_i = [], []
+    for sf, fgr, fgi in zip(spatial_filters, params['fg_r'], params['fg_i']):
+        model_r.append(jnp.einsum('fm,afn,mn->af', spectral_filters, sf, fgr))
+        model_i.append(jnp.einsum('fm,afn,mn->af', spectral_filters, sf, fgi))
+
+    return jnp.expand_dims(jnp.vstack(model_r), axis=1), jnp.expand_dims(jnp.vstack(model_i), axis=1)
+
+@jax.jit
+def _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
+    """
+    """
+    # Dot baseline vector into tip-tilt parameters
+    phase = jnp.einsum('bn,ntf->btf', blvecs, params["Phi"])
+
+    # Compute model from foreground estimates and amplitude
+    model_r = params["A"] * (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
+    model_i = params["A"] * (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
+    
+    # Compute loss using weights and foreground model
+    return jnp.mean((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
+
+@jax.jit
+def _loss_function_no_amp(params, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs):
+    """
+    """
+    fg_model_r, fg_model_i = _foreground_model(params, spectral_filters, spatial_filters)
+    loss = _mean_squared_error_no_amp(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
+    return loss
+
+@jax.jit
+def _loss_function_minor_no_amp(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
+    """
+    """
+    loss = _mean_squared_error_no_amp(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
+    return loss
+
+@jax.jit
+def _loss_function(params, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs):
+    """
+    """
+    fg_model_r, fg_model_i = _foreground_model(params, spectral_filters, spatial_filters)
+    loss = _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
+    return loss
+
+@jax.jit
+def _loss_function_minor(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
+    """
+    """
+    loss = _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
+    return loss
+
+def gradient_descent(data_r, data_i, wgts, params, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
+                     maxiter=100, tol=1e-10, nminor_cycle=10, print_step=5):
+    """
+    Function to perform frequency redundant calibration using gradient descent.
+    """
+    # Initialize optimizer state using parameter guess
+    opt_state = optimizer.init(params)
+
+    # Initialize variables used in calibration loop
+    losses = []
+    
+    # Check if amplitude is being calibrated
+    if 'A' not in params:
+        loss_function = _loss_function_no_amp
+        loss_minor_cycle = _loss_function_minor_no_amp    
+    else:
+        loss_function = _loss_function
+        loss_minor_cycle = _loss_function_minor
+
+    # Start gradient descent
+    for step in range(maxiter):
+        # Compute loss and gradient
+        loss, gradient = jax.value_and_grad(loss_function)(
+            params, data_r, data_i, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs
+        )
+        updates, opt_state = optimizer.update(gradient, opt_state, params)
+        params = optax.apply_updates(params, updates)
+        
+        if nminor_cycle > 0:
+            fg_model_r, fg_model_i = _foreground_model(params, spectral_filters, spatial_filters)
+            for _ in range(nminor_cycle):
+                loss, gradient = jax.value_and_grad(loss_minor_cycle)(
+                    params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs=idealized_blvecs
+                )
+                updates, opt_state = optimizer.update(gradient, opt_state, params)
+                params = optax.apply_updates(params, updates)
+        
+        # Store loss values
+        losses.append(loss)
+
+        # Stop if subsequent losses are within tolerance
+        if step >= 1 and np.abs(losses[-1] - losses[-2]) < tol:
+            break
+
+    return params, {"loss": losses[-1], "niter": step + 1, "loss_history": losses}
