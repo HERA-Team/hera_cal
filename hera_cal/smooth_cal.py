@@ -377,12 +377,13 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         if filter_mode == 'rect':
             # Generate filters if not provided
             if dpss_vectors is None:
-                time_filters, freq_filters = dpss_filters(
+                dpss_vectors = dpss_filters(
                     freqs=xout[1], times=xout[0], freq_scale=freq_scale, time_scale=time_scale,
                     eigenval_cutoff=eigenval_cutoff
                 )
-            else:
-                time_filters, freq_filters = dpss_vectors
+            
+            # Unpack DPSS vectors
+            time_filters, freq_filters = dpss_vectors
 
             # Filter gain solutions
             filtered, cached_output = solve_2D_DPSS(
