@@ -297,7 +297,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
-                        dpss_vectors=None, cached_input={}, eigenval_cutoff=1e-9, skip_flagged_edges=True,
+                        dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9, skip_flagged_edges=True,
                         **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
@@ -326,8 +326,9 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
             'CLEAN': uses the CLEAN algorithm to smooth calibration solutions
             'DPSS': uses discrete prolate spheroidal sequences (DPSS) to filter calibration solutions
-        fit_method: Method used to fit the DPSS model to the data. Either 'lstsq', 'pinv', or 'lu_solve'.
-            Only used when the filtering method is 'DPSS'.
+        fit_method: Method used to fit the DPSS model to the data. Either 'lstsq', 'pinv', 'lu_solve', or 'solve'.
+            Only used when the filtering method is 'DPSS'. 'lu_solve' tends to be the fastest, but 'pinv' is more
+            stable.
         dpss_vectors: Tuple of 2 1D DPSS filters, one for the time axis and one for the frequency axis
             that form the least squares design matrix, X, when the outer product of the two is taken.
             If dpss_vectors is not provided, one will be calculated using smooth_cal.dpss_filters and the
@@ -379,10 +380,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             else:
                 time_filters, freq_filters = dpss_vectors
 
-            fit_method = method.split("_")[-1]
-
             # Filter gain solutions
-            filtered, fit_info = solve_2D_DPSS(
+            filtered, cached_output = solve_2D_DPSS(
                 gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, method=fit_method, 
                 cached_input=cached_input
             )
@@ -397,7 +396,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                 filtered[mask] = gains[mask]
 
             # Store design matrices and cached matrices for computational speed-up
-            info['cached_input'] = fit_info['cached_input']
+            info['cached_input'] = cached_output
             info['dpss_vectors'] = dpss_vectors
 
         elif filter_mode == 'plus':
@@ -949,6 +948,7 @@ class CalibrationSmoother():
                 'DPSS': uses discrete prolate spheroidal sequences to filter calibration solutions
             fit_method: Linear least-squares method used to fit the DPSS model to the data. 
                 Either 'pinv', 'lstsq', 'solve', or 'lu_solve'. Only used when the method is 'DPSS'
+                'lu_solve' is the fastest. 'pinv' tends to be more stable.
             skip_flagged_edges : if True, do not filter over flagged edge times (filter over sub-region)
                 Default is True, only used when method='DPSS'
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
