@@ -688,7 +688,7 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
 
     return wgts
 
-def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15):
+def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
     """
     Solves a linear system of equations using a variety of methods. This is a light wrapper
     around np.linalg.solve, np.linalg.lstsq, and scipy.linalg.lu_solve which helps fit nucal
@@ -708,14 +708,27 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15):
         tol : float, default=1e-15
             Tolerance to use for regularization. If method is 'lu_solve' or 'solve', this is added to the diagonal of XTX. 
             If method is 'pinv' or 'lstsq', this is used as the rcond parameter for np.linalg.pinv and np.linalg.lstsq respectively.
+        cached_input : dictionary, default={}
+            Dictionary used to speed-up computation of linear fits for the 'lu_solve' and 'pinv' solvers. 
+            WARNING: Solvers will use cached_input if one is provided
     
     Returns:
     -------
         beta : np.ndarray
             Array of shape (N) where N is the number of parameters in the model.
+        cached_output: dictionary
+            Dictionary for storing computed results from the linear fit solvers which can
+            speed-up computation if reused with the same XTX input. Dictionary is empty if
+            solver method is 'lstsq' or 'solve'. Contains the matrix inverse (key 'XTXinv') 
+            for 'pinv' method and lu-decomposition for (key 'LU').
     """
     # Assert that the method is valid
-    assert solver in ['lu_solve', 'solve', 'pinv', 'lstsq'], "method must be one of {}".format(['lu_solve', 'solve', 'pinv', 'lstsq'])
+    assert solver in [
+        "lu_solve",
+        "solve",
+        "pinv",
+        "lstsq",
+    ], "method must be one of {}".format(["lu_solve", "solve", "pinv", "lstsq"])
 
     # Assert that the regularization tolerance is non-negative
     assert tol >= 0.0, "tol must be non-negative."
@@ -724,32 +737,49 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15):
     # If XTX is a jax array, use the jax array indexing syntax
     if (solver == "lu_solve" or solver == "solve") and isinstance(XTX, jnp.ndarray):
         XTX = XTX.at[np.diag_indices_from(XTX)].add(tol)
-    elif (solver == "lu_solve" or solver == "solve"):
+    elif solver == "lu_solve" or solver == "solve":
         XTX[np.diag_indices_from(XTX)] += tol
 
-    if solver == 'lu_solve':
+    if solver == "lu_solve":
         # Factor XTX using scipy.linalg.lu_factor
-        L = linalg.lu_factor(XTX)
+        if "LU" in cached_input:
+            L = cached_input.get('LU')
+        else:
+            L = linalg.lu_factor(XTX)
 
         # Solve the linear system of equations using scipy.linalg.lu_solve
         beta = linalg.lu_solve(L, Xy)
         
-    elif solver == 'solve':
+        # Save info
+        cached_output = {'LU': L}
+
+    elif solver == "solve":
         # Solve the linear system of equations using np.linalg.solve
         beta = np.linalg.solve(XTX, Xy)
+        
+        # Save info
+        cached_output = {}
 
-    elif solver == 'pinv':
+    elif solver == "pinv":
         # Compute the pseudo-inverse of XTX using np.linalg.pinv
-        XTXinv = np.linalg.pinv(XTX, rcond=tol)
+        if "XTXinv" in cached_input:
+            XTXinv = cached_input.get('XTXinv')
+        else:
+            XTXinv = np.linalg.pinv(XTX, rcond=tol)
 
         # Compute the model parameters using the pseudo-inverse
         beta = np.dot(XTXinv, Xy)
+        
+        cached_output = {'XTXinv': XTXinv}
 
-    elif solver == 'lstsq':
+    elif solver == "lstsq":
         # Compute the model parameters using np.linalg.lstsq
-        beta = np.linalg.lstsq(XTX, Xy, rcond=tol)[0]
+        beta, res, rank, s = np.linalg.lstsq(XTX, Xy, rcond=tol)
+        
+        # Save info
+        cached_output = {}
 
-    return beta
+    return beta, cached_output
 
 def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spectral_filters=None):
     """
@@ -885,7 +915,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                 Xy = jnp.einsum("afm,atf->m", design_matrix, data_here * wgts_here)
 
                 # Solve for model components
-                beta = _linear_fit(XTX, Xy, solver=solver, tol=tol)
+                beta, _ = _linear_fit(XTX, Xy, solver=solver, tol=tol)
             else:
                 XTX = jnp.einsum("fm,afn,atf,fk,afj->mnkj", 
                     spectral_filters, design_matrix, wgts_here, spectral_filters, design_matrix
@@ -893,7 +923,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                 Xy = jnp.einsum("fm,afn,atf->mn", spectral_filters, design_matrix, data_here * wgts_here).reshape(ndim)
 
                 # Solve for the foreground model components
-                beta = _linear_fit(XTX, Xy, tol=tol, solver=solver)
+                beta, _ = _linear_fit(XTX, Xy, tol=tol, solver=solver)
                 beta = beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1])
 
             # Expand the model components to have time index
@@ -911,7 +941,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                     Xy = jnp.einsum("afm,af->m", design_matrix, data_here[:, i] * wgts_here[:, i])
 
                     # Solve for model components
-                    beta.append(_linear_fit(XTX, Xy, solver=solver, tol=tol))
+                    beta.append(_linear_fit(XTX, Xy, solver=solver, tol=tol)[0])
 
                 else:
                     XTX = jnp.einsum("fm,afn,af,fk,afj->mnkj", 
@@ -920,7 +950,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                     Xy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_here[:, i] * wgts_here[:, i]).reshape(ndim)
                     
                     # Solve for the foreground model components
-                    _beta = _linear_fit(XTX, Xy, tol=tol, solver=solver)
+                    _beta, _ = _linear_fit(XTX, Xy, tol=tol, solver=solver)
                     beta.append(_beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1]))
             
             # Pack solution into an array

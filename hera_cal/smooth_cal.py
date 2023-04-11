@@ -22,6 +22,11 @@ from . import utils
 from . import flag_utils
 from .vis_clean import truncate_flagged_edges, restore_flagged_edges
 from .noise import interleaved_noise_variance_estimate
+from .nucal import _linear_fit
+
+import jax
+from jax import numpy as jnp
+jax.config.update("jax_enable_x64", True)
 
 
 def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
@@ -86,25 +91,18 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
     fringe_scale = (time_scale) ** -1  # fringe scale in Hz
     time_in_seconds = (times - times.min()) * 60 * 60 * 24  # time array in seconds
 
-    dpss_windows = []
+    # Compute the time and frequency filters using hera_filters
+    time_filters = hera_filters.dspec.dpss_operator(
+        time_in_seconds, [0], [fringe_scale], eigenval_cutoff=[eigenval_cutoff]
+    )[0].real
+    freq_filters = hera_filters.dspec.dpss_operator(
+        freqs, [0], [delay_scale], eigenval_cutoff=[eigenval_cutoff]
+    )[0].real
 
-    for x0, fw in zip([time_in_seconds, freqs], [fringe_scale, delay_scale]):
-        nf = x0.shape[0]
-        df = np.abs(x0[1] - x0[0])
-        W = nf * fw * df
-
-        # Estimate the number of eigenvalues > eigenval_cutoff - Slepian 1978 + Karnik 2020
-        Nw = 2 * W + 2 / np.pi ** 2 * np.log(4 * nf) * np.log(4 / (eigenval_cutoff * (1 - eigenval_cutoff)))
-
-        # Generate DPSS vectors and keep vectors with eigenvalues greater than eigenval_cutoff
-        windows, eigvals = hera_filters.dspec.windows.dpss(nf, W, int(min(Nw, nf)), return_ratios=True)
-        windows = windows[eigvals > eigenval_cutoff].T
-        dpss_windows.append(windows)
-
-    return dpss_windows[0], dpss_windows[1]
+    return time_filters, freq_filters
 
 
-def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
+def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cached_input={}, XTXinv=None):
     """
     Filters gain solutions by solving the weighted linear least squares problem
     for a design matrix that can be factored by a kronecker product in the following way
@@ -122,42 +120,49 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=None):
             obtained from hera_cal.smooth_cal.dpss_filters
         freq_filters: DPSS filtering vectors along the frequency axis, (Nfreqs, N_freq_vectors)
             obtained from hera_cal.smooth_cal.dpss_filters
-        XTXinv: Matrix of (X^T W X)^{-1} for the input DPSS filters and weights. Useful for filtering
+        method: method to use for solving the linear least squares problem. Options are 'pinv', 'lstsq', 'lu_solve'.
+        cached_input: Matrix of (X^T W X)^{-1} for the input DPSS filters and weights. Useful for filtering
             many gain grids with similar flagging patterns. np.ndarray of shape (N_time_vectors * N_freq_vectors,
             N_time_vectors * N_freq_vectors)
+        XTXinv: Matrix of (X^T W X)^{-1} for the input DPSS filters and weights. 
+            Warning: This is deprecated and will be removed in a future version. Use cached_input instead.
 
     Returns:
         filtered: filtered gain grids from least squares fit, np.ndarray with the
             same shape as the input gain grid
-        info: dictionary containing fit components and XTXinv
+        cached_output: dictionary containing intermediated cached products for linear fitting. Useful
+            for use in subsequent filtering if the input gains have the same flagging pattern previous input gains.
     """
-    # If (X^T W X)^-1 is not precalculated, calculate it
-    if XTXinv is None:
-        # Make sure data types between weights and filters are compatible for einsum optimization
-        weights = weights.astype(time_filters.dtype)
-
-        # Use einsum to calculate (X^T W X) in a memory efficient way
-        XTX = np.einsum(
-            "ij,kl,jl,jm,ln->ikmn", np.transpose(time_filters), np.transpose(freq_filters),
-            weights, time_filters, freq_filters, optimize=True
+    # Check for deprecated XTXinv argument
+    if XTXinv is not None:
+        warnings.warn(
+            "The XTXinv argument is deprecated and will be removed in a future version. Use cached_input instead.",
+            DeprecationWarning,
         )
-        ncomps = time_filters.shape[1] * freq_filters.shape[1]
-        XTX = np.reshape(XTX, (ncomps, ncomps))
-        XTXinv = np.linalg.pinv(XTX)
+    # Make sure data types between weights and filters are compatible for einsum optimization
+    weights = weights.astype(time_filters.dtype)
 
+    # Calculate the number of components in the design matrix
+    ncomps = time_filters.shape[1] * freq_filters.shape[1]
+
+    # Use jax einsum to calculate (X^T W X) in a memory efficient way
+    XTX = jnp.einsum(
+        "ij,kl,jl,jm,ln->ikmn", np.transpose(time_filters), np.transpose(freq_filters),
+        weights, time_filters, freq_filters, optimize=True
+    )
+    XTX = np.reshape(XTX, (ncomps, ncomps))
+        
     # Calculate X^T W y using the property (A \otimes B) vec(y) = (A Y B)
-    XTWy = np.ravel(np.transpose(time_filters) @ (gains * weights) @ freq_filters)
+    XTWy = np.ravel(np.dot(np.dot(np.transpose(time_filters), (gains * weights)), freq_filters))
 
-    # Calculate beta
-    beta = np.reshape(XTXinv @ XTWy, (time_filters.shape[1], freq_filters.shape[1]))
+    # Compute beta and reshape into a 2D array
+    beta, cached_output = _linear_fit(XTX, XTWy, solver=method, cached_input=cached_input)
+    beta = np.reshape(beta, (time_filters.shape[1], freq_filters.shape[1]))
 
     # Produce an estimate of the filtered gains
-    filtered = time_filters @ beta @ np.transpose(freq_filters)
-
-    # Dictionary for storing fitting information
-    info = {"beta": beta, "XTXinv": XTXinv}
-
-    return filtered, info
+    filtered = np.dot(np.dot(time_filters, beta), np.transpose(freq_filters))
+    
+    return filtered, cached_output
 
 
 def filter_1d(gains, wgts, xvals, filter_scale=None, skip_wgt=0.1, ax='freq',
@@ -292,7 +297,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
-                        dpss_vectors=None, XTXinv=None, eigenval_cutoff=1e-9, skip_flagged_edges=True,
+                        dpss_vectors=None, cached_input={}, eigenval_cutoff=1e-9, skip_flagged_edges=True,
                         **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
@@ -321,6 +326,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
             'CLEAN': uses the CLEAN algorithm to smooth calibration solutions
             'DPSS': uses discrete prolate spheroidal sequences (DPSS) to filter calibration solutions
+        fit_method: Method used to fit the DPSS model to the data. Either 'lstsq', 'pinv', or 'lu_solve'.
+            Only used when the filtering method is 'DPSS'.
         dpss_vectors: Tuple of 2 1D DPSS filters, one for the time axis and one for the frequency axis
             that form the least squares design matrix, X, when the outer product of the two is taken.
             If dpss_vectors is not provided, one will be calculated using smooth_cal.dpss_filters and the
@@ -365,16 +372,19 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         if filter_mode == 'rect':
             # Generate filters if not provided
             if dpss_vectors is None:
-                dpss_vectors = dpss_filters(
+                time_filters, freq_filters = dpss_filters(
                     freqs=xout[1], times=xout[0], freq_scale=freq_scale, time_scale=time_scale,
                     eigenval_cutoff=eigenval_cutoff
                 )
+            else:
+                time_filters, freq_filters = dpss_vectors
 
-            time_filters, freq_filters = dpss_vectors
+            fit_method = method.split("_")[-1]
 
             # Filter gain solutions
             filtered, fit_info = solve_2D_DPSS(
-                gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, XTXinv=XTXinv
+                gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, method=fit_method, 
+                cached_input=cached_input
             )
 
             if skip_flagged_edges:
@@ -386,8 +396,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                 filtered = restore_flagged_edges(filtered, chunks, edges, ax='both')
                 filtered[mask] = gains[mask]
 
-            # Store design matrices and XTXinv for computational speed-up
-            info['XTXinv'] = fit_info['XTXinv']
+            # Store design matrices and cached matrices for computational speed-up
+            info['cached_input'] = fit_info['cached_input']
             info['dpss_vectors'] = dpss_vectors
 
         elif filter_mode == 'plus':
@@ -914,8 +924,8 @@ class CalibrationSmoother():
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
-                            window='tukey', maxiter=100, method="CLEAN", eigenval_cutoff=1e-9, skip_flagged_edges=True,
-                            **win_kwargs):
+                            window='tukey', maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9, 
+                            skip_flagged_edges=True, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -937,6 +947,8 @@ class CalibrationSmoother():
             method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
                 'CLEAN': uses the CLEAN algorithm to
                 'DPSS': uses discrete prolate spheroidal sequences to filter calibration solutions
+            fit_method: Linear least-squares method used to fit the DPSS model to the data. 
+                Either 'pinv', 'lstsq', 'solve', or 'lu_solve'. Only used when the method is 'DPSS'
             skip_flagged_edges : if True, do not filter over flagged edge times (filter over sub-region)
                 Default is True, only used when method='DPSS'
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
@@ -947,9 +959,9 @@ class CalibrationSmoother():
             edges_old = None
 
         # Create default variables to be passed in to time_freq_2D_filter
-        info = {'dpss_vectors': None, 'XTXinv': None}
+        info = {'dpss_vectors': None, 'cached_input': None}
         dpss_vectors = None
-        XTXinv = None
+        cached_input = {}
         wgts_old = np.zeros(1)
 
         # loop over all antennas that are not completely flagged and filter
@@ -960,7 +972,7 @@ class CalibrationSmoother():
 
                 # If the weights grid is the same as the previous, the solution matrix can be reused to speed up computation
                 if method == 'DPSS' or method == 'dpss_leastsq':
-                    XTXinv = info['XTXinv'] if np.allclose(wgts_grid, wgts_old) else None
+                    cached_input = info['cached_input'] if np.allclose(wgts_grid, wgts_old) else {}
                     wgts_old = np.copy(wgts_grid)
 
                     # Check to see if the grid size changes after removing the flagged edges
@@ -971,7 +983,8 @@ class CalibrationSmoother():
                         edges_old = deepcopy(edges)
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
-                                                     window=window, dpss_vectors=dpss_vectors, method=method, XTXinv=XTXinv,
+                                                     window=window, dpss_vectors=dpss_vectors, eigenval_cutoff=eigenval_cutoff,
+                                                     method=method, fit_method=fit_method, cached_input=cached_input, 
                                                      skip_flagged_edges=skip_flagged_edges, **win_kwargs)
 
                 self.gain_grids[ant] = filtered
