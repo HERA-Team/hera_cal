@@ -15,6 +15,20 @@ import jax
 from jax import numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
+# Optional import of Optax library for optimization
+try:
+    import optax
+
+    # Approved Optax Optimizers
+    OPTIMIZERS = {
+        'adabelief': optax.adabelief, 'adafactor': optax.adafactor, 'adagrad': optax.adagrad, 'adam': optax.adam,
+        'adamw': optax.adamw, 'fromage': optax.fromage, 'lamb': optax.lamb, 'lars': optax.lars,
+        'noisy_sgd': optax.noisy_sgd, 'dpsgd': optax.dpsgd, 'radam': optax.radam, 'rmsprop': optax.rmsprop,
+        'sgd': optax.sgd, 'sm3': optax.sm3, 'yogi': optax.yogi
+    }
+except:
+    warnings.warn('Optax is not installed. Some functionality may not be available')
+
 # Constants
 SPEED_OF_LIGHT = const.c.si.value
 
@@ -966,3 +980,4 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
         model_comps[key] = np.expand_dims(u_model_comps[key], axis=1) * const_eigen_vals
 
     return model_comps
+
