@@ -31,6 +31,11 @@ class RedundantGroups:
     directly mutating it. Instead, use the methods provided, including the `.append`
     method, which is able to add a new redundant group to the object. 
 
+    None of the mutating methods on the object will ever mutate the antpos, only the
+    redundant baseline group lists. The idea here is that the antpos are meant to be
+    *fixed* to the full array antpos, but you may consider subsets of the baselines.
+
+
     Parameters
     ----------
     antpos : dict[int, np.ndarray]
@@ -62,13 +67,13 @@ class RedundantGroups:
                 3: np.array([0, 0, 3]), 
                 4: np.array([0, 0, 4])
             }
-        >>> rg = RedundantGroups(antpos=antpos)
+        >>> rg = RedundantGroups.from_antpos(antpos=antpos)
 
     The RedundantGroups object "feels" like a list-of-lists, so it can be iterated over::
 
         >>> for red in rg:
-        ...     for antpair in red:
-        ...         print(antpair)
+        ...     for bl in red:
+        ...         print(bl)
 
     You can also index into it and get its length::
 
@@ -88,15 +93,39 @@ class RedundantGroups:
 
         >>> print(rg.get_ubl_key((0, 1, 'nn')))
 
-    Both the dictionary-like indexing and the `.get_ubl_key` method are able to handle
-    either antenna pairs or baselines, and will return the same type of key that was
-    provided.
 
-    Finally, you can form new RedundantGroups objects from existing ones, appending
-    new antenna position::
+    You may add together two RedundantGroups objects, which will combine their redundant
+    baseline groups and their antennas (as found in ``antpos``)::
 
-        >>> rg2 = rg.with_new_antpos({5: np.array([0, 0, 5]), 6: np.array([0, 0, 6])})
+        >>> rg2 = rg + rg
+        >>> rg2.data_bls == rg.data_bls
+        True
+    
+    To filter out baselines for a specific purpose (but keeping the full antpos array)::
 
+        >>> filtered = rg.filtered(bls=[(0, 1), (1, 2), (2, 3)])
+    
+    The "unique key" returned by the `.get_ubl_key` method can be changed by setting the
+    `key_chooser` attribute. This is a callable that takes a list of baselines and returns
+    a single baseline from that list. By default, it returns the first baseline in the 
+    list. Examples of other useful choices might be the last baseline::
+
+        >>> rg_reverse = attrs.evolve(rg, key_chooser=lambda x: x[-1])
+    
+    A particularly useful example is to key on the first baseline that appears in a 
+    given set of baselines (eg. if you have a data file that doesn't have all the 
+    possible baselines in it, and want to be able to key only to baselines in that file).
+    Since this is a common use case, we provide a convenience function for it::
+
+        >>> rg_data_keys = rg.keyed_on_bls([(1, 2)])
+    
+    If you really need to a new object with extra antennas, you can do so by 
+    adding two objects, where the second object has an empty `red_list`::
+
+        >>> rg2 = rg + RedundantGroups(
+                antpos={5: np.array([0, 0, 5]), 6: np.array([0, 0, 6])},
+                red_list=[]
+            )
     """
 
     _red_list: list[list[AntPair | Baseline]] = attrs.field(converter=_convert_red_list)
