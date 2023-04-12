@@ -215,7 +215,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
         else:
             ex_ubls = set()
         reds = [gp for i, gp in enumerate(reds) if i in ubls and i not in ex_ubls]
-    if bls:
+    if bls is not None:
         bls = expand_bls(bls)
     else:  # default to set of all baselines
         bls = set(key for gp in reds for key in gp)
@@ -1887,8 +1887,11 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             # try to solve for gains on antennas excluded from calibration, but keep them flagged
             expand_omni_gains(sol, all_reds_this_pol, data, nsamples, chisq_per_ant=meta['chisq_per_ant'])
 
-            # try one more time to expand visibilities, keeping new ones flagged, but don't update chisq or chisq_per_ant
+            # try one more time to expand visibilities, keeping new ones flagged, but 
+            # don't update chisq or chisq_per_ant
             expand_omni_vis(sol, all_reds_this_pol, data, nsamples)
+            print(sol.vis.bls())
+            print(type(sol.vis))
             sol.make_sol_finite()
 
             # update various objects containing information about the full file
