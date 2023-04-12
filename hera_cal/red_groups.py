@@ -335,9 +335,6 @@ class RedundantGroups:
 
         """
         new_reds = redcal.filter_reds(copy.deepcopy(self), **kwargs)
-        print("OLD REDS: ", self._red_list)
-        print(kwargs)
-        print("NEW REDS: ", new_reds)
         return attrs.evolve(self, red_list=new_reds)
     
     def extend(self, reds: Sequence[Sequence[AntPair | Baseline]], inplace: bool = True) -> None:
@@ -399,13 +396,11 @@ class RedundantGroups:
     def keyed_on_bls(self, bls: Sequence[AntPair | Baseline]) -> RedundantGroups:
         """Return a new RedundantGroups object keyed on the given baselines."""
         out = attrs.evolve(self, key_chooser=partial(_choose_key, bls=bls, key_chooser=self.key_chooser))
-        print("_bl_to_red_map:", "_bl_to_red_map" in out.__dict__)
         return out
 
 def _choose_key(red, bls, key_chooser):
             
     filtered_red = [bl for bl in red if bl in bls]
-    #print("in key:", red, bls, filtered_red)
     if filtered_red:
         return key_chooser(filtered_red)
     else:
