@@ -666,6 +666,7 @@ def lst_bin_files(
     golden_lsts: tuple[int] = (),
     sigma_clip_thresh: float = 0.0,
     sigma_clip_min_N: int = 4,
+    redundantly_averaged: bool | None = None,
 ) -> list[str]:
     """
     LST bin a series of UVH5 files.
@@ -753,7 +754,10 @@ def lst_bin_files(
         for each baseline, frequency and polarization.
     sigma_clip_min_N
         The minimum number of points required to perform sigma clipping.
-    
+    redundantly_averaged
+        If True, the input data is assumed to be redundantly averaged. By default
+        the value is inferred by looking at metadata from the central file of each 
+        night.
 
     Result
     ------
@@ -843,7 +847,8 @@ def lst_bin_files(
         data_metas, 
         ex_ant_yaml_files, 
         include_autos=include_autos, 
-        ignore_ants=ignore_ants
+        ignore_ants=ignore_ants,
+        redundantly_averaged=redundantly_averaged,
     )
     all_baselines = sorted(all_baselines)
 
@@ -1158,7 +1163,7 @@ def get_all_unflagged_baselines(
 
     # reds will contain all of the redundant groups for the whole array, because
     # all the antenna positions are included in every file.
-    reds = RedundantGroups(
+    reds = RedundantGroups.from_antpos(
         antpos=dict(zip(meta0.antenna_numbers, meta0.antpos_enu))
     )
     if redundantly_averaged is None:
@@ -1171,8 +1176,12 @@ def get_all_unflagged_baselines(
             if len(ubls) != len(antpairs):
                 # At least two of the antpairs are in the same redundant group. 
                 redundantly_averaged = False
+                logger.info("Inferred that files are not redundantly averaged.")
                 break
-    
+        else:
+            redundantly_averaged = True
+            logger.info("Inferred that files are redundantly averaged.")
+
     if redundantly_averaged:
         if ignore_ants:
             raise ValueError(
@@ -1267,4 +1276,5 @@ def lst_bin_arg_parser():
     a.add_argument("--save-channels", type=str, help="integer channels separated by commas to save longitudinal data for")
     a.add_argument("--sigma-clip-thresh", type=float, help="sigma clip threshold for flagging data in an LST bin over time. Zero means no clipping.", default=0.0)
     a.add_argument("--sigma-clip-min-N", type=int, help="number of unflagged data points over time to require before considering sigma clipping", default=4)
+    a.add_argument("--redundantly-averaged", action='store_true', default=None, help="if true, assume input files are redundantly averaged")
     return a
