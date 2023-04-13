@@ -38,23 +38,33 @@ class RedundantGroups:
 
     Parameters
     ----------
+    red_list : list[list[tuple[int, int]]]
+        List of redundant baseline groups. Each group is a list of antenna pairs or 
+        antenna-pair-pols (eg. (0, 1, 'xx')). If provided, ``antpos`` is not required.
+        All elements must be of the same type (either all antenna pairs or all
+        antenna-pair-pols).
     antpos : dict[int, np.ndarray]
         Dictionary mapping antenna number to antenna position in ENU frame.
         Not required if ``red_list`` is provided, but highly encouraged even if so.
-    bl_error_tol : float
-        Baseline length error tolerance in meters.
-    include_autos : bool
-        Whether to include autocorrelations in the redundant baseline groups.
-    red_list : list[list[tuple[int, int]]]
-        List of redundant baseline groups. Each group is a list of antenna pairs.
-
+        The ``antpos`` are meant to convey the full array layout, and so all antennas,
+        even those not represented in the redundant baseline groups, should be present
+        (i.e. use ``hd.antpos``, not ``hd.data_antpos``).
+    key_chooser : callable
+        Callable that takes a list of baselines and returns a single baseline from that
+        list. This is used to determine the "unique key" for a given redundant baseline
+        group. By default, it returns the first baseline in the list.
+        
     Examples
     --------
     You can create a RedundantGroups object from a list of redundant baseline groups::
 
         >>> from hera_cal.red_groups import RedundantGroups
         >>> reds = [[(0, 1), (1, 2), (2, 3)], [(0, 2), (1, 3), (2, 4)]]
-        >>> rg = RedundantGroups(red_list=reds)
+        >>> rg = RedundantGroups(reds)
+        >>> for red in rg:
+        ...     print(red)
+        [(0, 1), (1, 2), (2, 3)]
+        [(0, 2), (1, 3), (2, 4)]
 
     You can also create a RedundantGroups object from a dictionary of antenna positions
     (in fact, we encourage you to do it this way if possible)::
@@ -67,32 +77,48 @@ class RedundantGroups:
                 3: np.array([0, 0, 3]), 
                 4: np.array([0, 0, 4])
             }
-        >>> rg = RedundantGroups.from_antpos(antpos=antpos)
+        >>> rg = RedundantGroups.from_antpos(antpos, pols=('nn',))
+        >>> for red in rg:
+        ...     print(red)
+        [(0, 1, 'nn'), (1, 2, 'nn'), (2, 3, 'nn'), (3, 4, 'nn')]
+        [(0, 2, 'nn'), (1, 3, 'nn'), (2, 4, 'nn')]
+        [(0, 3, 'nn'), (1, 4, 'nn')]
+        [(0, 4, 'nn')]
+
 
     The RedundantGroups object "feels" like a list-of-lists, so it can be iterated over::
 
         >>> for red in rg:
-        ...     for bl in red:
-        ...         print(bl)
+        ...     print(len(red)):
+        4
+        3
+        2
+        1
 
     You can also index into it and get its length::
 
         >>> print(rg[0])
+        [(0, 1, 'nn'), (1, 2, 'nn'), (2, 3, 'nn'), (3, 4, 'nn')]
         >>> print(len(rg))
+        4
 
     You can also "append" to it, which will add a new redundant group to the object::
 
-        >>> rg.append([(0, 4), (1, 5), (2, 6)])
+        >>> rg.append([(0, 4, 'ee'), (1, 5, 'ee'), (2, 6, 'ee')])
+        >>> print(rg[4])
+        [(0, 4, 'ee'), (1, 5, 'ee'), (2, 6, 'ee')]
 
-    The RedundantGroups object also "feels" like a dictionary. You can index into it::
+    The RedundantGroups object also "feels" like a dictionary. You can index into it,
+    which will return the list of baselines redundant with the antpair provided::
 
-        >>> print(rg[(0, 1)])
+        >>> print(rg[(0, 1, 'nn')])
+        [(0, 1, 'nn'), (1, 2, 'nn'), (2, 3, 'nn'), (3, 4, 'nn')]
 
-    Which will return the list of baselines redundant with the antpair provided. You can
-    also retrieve the "primary baseline" (the first in the list) for a given baseline::
+    You can also retrieve the "primary baseline" (or "unique" or "keyed" baseline) for a 
+    given baseline::
 
-        >>> print(rg.get_ubl_key((0, 1, 'nn')))
-
+        >>> print(rg.get_ubl_key((1,2,'nn')))
+        (0, 1, 'nn')
 
     You may add together two RedundantGroups objects, which will combine their redundant
     baseline groups and their antennas (as found in ``antpos``)::
@@ -101,9 +127,16 @@ class RedundantGroups:
         >>> rg2.data_bls == rg.data_bls
         True
     
-    To filter out baselines for a specific purpose (but keeping the full antpos array)::
+    To filter out baselines for a specific purpose (but keeping the full antpos array), 
+    the ``filtered`` method can be used. This will return a *new* RedundantGroups object
+    with the same ``antpos`` (as these are considered fixed for the array) but fewer
+    baselines. All arguments to :func:`hera_cal.redcal.filter_reds` are supported::
 
-        >>> filtered = rg.filtered(bls=[(0, 1), (1, 2), (2, 3)])
+        >>> filtered = rg.filtered(bls=[(0, 1,'nn'), (1, 2,'nn'), (2, 3,'nn')])
+        >>> print(filtered[0])
+        [(0, 1, 'nn'), (1, 2, 'nn'), (2, 3, 'nn')]
+        >>> print(len(filtered))
+        1
     
     The "unique key" returned by the `.get_ubl_key` method can be changed by setting the
     `key_chooser` attribute. This is a callable that takes a list of baselines and returns
@@ -111,14 +144,17 @@ class RedundantGroups:
     list. Examples of other useful choices might be the last baseline::
 
         >>> rg_reverse = attrs.evolve(rg, key_chooser=lambda x: x[-1])
-    
+        >>> print(rg_reverse.get_ubl_key((1, 2, 'nn')))
+        (3, 4, 'nn')
+
     A particularly useful example is to key on the first baseline that appears in a 
     given set of baselines (eg. if you have a data file that doesn't have all the 
     possible baselines in it, and want to be able to key only to baselines in that file).
     Since this is a common use case, we provide a convenience function for it::
 
-        >>> rg_data_keys = rg.keyed_on_bls([(1, 2)])
-    
+        >>> rg_data_keys = rg.keyed_on_bls([(1, 2, 'nn')])
+        >>> print(rg_data_keys.get_ubl_key((3, 4, 'nn')))
+
     If you really need to a new object with extra antennas, you can do so by 
     adding two objects, where the second object has an empty `red_list`::
 
@@ -131,18 +167,10 @@ class RedundantGroups:
     _red_list: list[list[AntPair | Baseline]] = attrs.field(converter=_convert_red_list)
     _antpos: frozendict[int, np.ndarray] | None = attrs.field(
         default=None, 
-        converter=attrs.converters.optional(frozendict)
+        converter=attrs.converters.optional(frozendict),
+        kw_only=True
     )
-    key_chooser: callable = attrs.field(default=lambda x: x[0])
-
-    def _mutator(meth):
-        """Decorator to clear the cache when a mutator method is called."""
-        @wraps(meth)
-        def wrapper(self, *args, **kwargs):
-            out = meth(self, *args, **kwargs)
-            self.clear_cache()
-
-        return wrapper
+    key_chooser: callable = attrs.field(default=lambda x: x[0], kw_only=True)
      
     @property
     def antpos(self) -> frozendict | None:
@@ -150,7 +178,16 @@ class RedundantGroups:
         # We make this a property with the actual data as a private attribute
         # to make it less likely that a user will accidentally mutate it.
         return self._antpos
-         
+
+    @_red_list.validator
+    def _red_list_vld(self, att, val):
+        if val and val[0]:
+            tp = len(val[0][0])
+            for red in val:
+                for bl in red:
+                    if len(bl) != tp:
+                        raise ValueError("All baselines must have the same type, got an AntPair and a Baseline")
+                         
     @classmethod
     def from_antpos(
         cls, 
@@ -161,11 +198,35 @@ class RedundantGroups:
         pol_mode: str='1pol',
         **kwargs
     ) -> RedundantGroups:
-        """Create a RedundantGroups object from an antpos dictionary."""
+        """Create a RedundantGroups object from an antpos dictionary.
+
+        Parameters
+        ----------
+        antpos
+            A dictionary mapping antenna numbers to their positions in the array. 
+            The positions should be 3-element arrays of floats in ENU coordinates in 
+            meters. Provide all antennas in the array, even if they are not present
+            in the baselines you want to use in the end. You can always use `.filtered`
+            on the resulting object to remove baselines you don't want.
+        pols
+            A list of polarizations to include in the redundant groups. If empty,
+            simply use antpairs instead of baselines as keys. All antpairs with all pols 
+            will be included in the resulting object.
+        include_autos
+            Whether to include autocorrelations in the redundant groups.
+        bl_error_tol
+            The maximum error in baseline length (in meters) to allow when grouping
+            baselines into redundant groups.
+        pol_mode
+            The polarization mode to use when grouping baselines into redundant groups.
+            See :func:`hera_cal.redcal.get_reds` for details.
+        **kwargs
+            Additional keyword arguments to pass to the RedundantGroups constructor.
+        """
         if pols:
             reds = redcal.get_reds(
                 antpos, 
-                pols=pols, # we end up removing the pols anyway.
+                pols=pols,
                 bl_error_tol=bl_error_tol, 
                 include_autos=include_autos,
                 pol_mode=pol_mode,
@@ -180,39 +241,36 @@ class RedundantGroups:
     
     @cached_property
     def data_ants(self) -> frozenset[int]:
-        """The list of antennas that have are in the baseline groups."""    
-        out = set()
-        for red in self._red_list:
-            for ap in red:
-                out.add(ap[0])
-                out.add(ap[1])
-        return out
+        """The list of antennas that are in the baseline groups."""    
+        return {ant for red in self._red_list for ap in red for ant in ap[:2]}
+       
 
     @cached_property
     def data_bls(self) -> frozenset[Baseline | AntPair]:
         """The list of baselines in the baseline groups."""
-        return set(self._bl_to_red_map.keys())
+        return frozenset(self._bl_to_red_map.keys())
 
     @cached_property
-    def _red_key_to_bls_map(self) -> dict[AntPair, tuple[AntPair]]:
+    def _red_key_to_bls_map(self) -> dict[AntPair, list[AntPair]]:
         out = {}
         for red in self._red_list:
             out[self.key_chooser(red)] = red
-            out[reverse_bl(self.key_chooser(red))] = tuple(reverse_bl(r) for r in red)
+            out[reverse_bl(self.key_chooser(red))] = [reverse_bl(r) for r in red]
         return out
     
     @cached_property
     def _bl_to_red_map(self):
         out = {}
         for red in self._red_list:
-            rev = reverse_bl(self.key_chooser(red))
+            ubl = self.key_chooser(red)
+            rev = reverse_bl(ubl)
             for bl in red:
-                out[bl] = self.key_chooser(red)
+                out[bl] = ubl
                 out[reverse_bl(bl)] = rev 
         return out
     
     def get_ubl_key(self, key: AntPair | Baseline) -> AntPair | Baseline:
-        '''Returns the key used interally denote the data stored. Useful for del'''
+        '''Returns the unique baseline representing the group the key is in.'''
         return self._bl_to_red_map[key]
         
     def get_red(self, key: AntPair | Baseline) -> tuple[AntPair | Baseline]:
@@ -330,15 +388,16 @@ class RedundantGroups:
         """Return the index of a redundant group."""
         return list(self._red_key_to_bls_map.keys()).index(self.get_ubl_key(key))
     
-    def filtered(self, **kwargs) -> RedundantGroups:
+    def filter_reds(self, *, inplace: bool=False, **kwargs) -> RedundantGroups:
         """Return a new RedundantGroups object with baselines filtered out.
 
         """
-        new_reds = redcal.filter_reds(copy.deepcopy(self), **kwargs)
-        print("OLD REDS: ", self._red_list)
-        print(kwargs)
-        print("NEW REDS: ", new_reds)
-        return attrs.evolve(self, red_list=new_reds)
+        new_reds = redcal.filter_reds(copy.deepcopy(self), antpos=self.antpos, **kwargs)
+        if inplace:
+            self._red_list = new_reds
+            self.clear_cache()
+        else:
+            return attrs.evolve(self, red_list=new_reds)
     
     def extend(self, reds: Sequence[Sequence[AntPair | Baseline]], inplace: bool = True) -> None:
         """In-place extend the list of redundant groups with another list of redundant groups.
@@ -379,34 +438,31 @@ class RedundantGroups:
             else:
                 pols = tuple({bl[2] for bl in self._red_key_to_bls_map.keys()})
 
-        if pols:
-            reds = redcal.get_reds(
-                self.antpos, 
-                pols=pols, # we end up removing the pols anyway.
-                bl_error_tol=bl_error_tol, 
-                include_autos=include_autos,
-                pol_mode=pol_mode,
-            )
-        else:
-            reds = redcal.get_pos_reds(
-                self.antpos, 
-                bl_error_tol=bl_error_tol, 
-                include_autos=include_autos
-            )
+        return self.from_antpos(
+            antpos=self.antpos,
+            pols=pols, # we end up removing the pols anyway.
+            bl_error_tol=bl_error_tol, 
+            include_autos=include_autos,
+            pol_mode=pol_mode,
+        )
 
-        return attrs.evolve(self, red_list=reds)
     
     def keyed_on_bls(self, bls: Sequence[AntPair | Baseline]) -> RedundantGroups:
-        """Return a new RedundantGroups object keyed on the given baselines."""
-        out = attrs.evolve(self, key_chooser=partial(_choose_key, bls=bls, key_chooser=self.key_chooser))
-        print("_bl_to_red_map:", "_bl_to_red_map" in out.__dict__)
-        return out
-
-def _choose_key(red, bls, key_chooser):
-            
+        """Return a new RedundantGroups object keyed on the given baselines.
+        
+        The returned object will have the same redundant groups as this object, but
+        the unique key for each group will be gotten from applying ``key_chooser`` to 
+        the subset of baselines in the group that are also in ``bls``. If no baselines
+        in the group are in ``bls``, then the key will be gotten from applying
+        ``key_chooser`` to the entire group (as usual).
+        """
+        return attrs.evolve(
+            self, key_chooser=partial(
+                _choose_key_in_bls, bls=bls, key_chooser=self.key_chooser
+            )
+        )
+        
+def _choose_key_in_bls(red, bls, key_chooser):
     filtered_red = [bl for bl in red if bl in bls]
-    #print("in key:", red, bls, filtered_red)
-    if filtered_red:
-        return key_chooser(filtered_red)
-    else:
-        return key_chooser(red)
+    return key_chooser(filtered_red) if filtered_red else key_chooser(red)
+    

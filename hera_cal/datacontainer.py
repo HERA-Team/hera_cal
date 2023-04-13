@@ -576,7 +576,7 @@ class RedDataContainer(DataContainer):
         '''Build the dictionaries that map baselines to redundant keys.
 
         Arguments:
-            reds: list of lists of redundant baselin1e tuples, e.g. (ind1, ind2, pol).
+            reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol).
         '''
         
         if isinstance(reds, RedundantGroups):
@@ -584,9 +584,9 @@ class RedDataContainer(DataContainer):
         else:
             self.reds = RedundantGroups(red_list=reds, antpos=getattr(self, 'antpos', None))
                 
-        self._data_reds = self.reds.filtered(bls=self.bls())
+        self._data_reds = self.reds.filter_reds(bls=self.bls())
         self._reds_keyed_on_data = self.reds.keyed_on_bls(bls=self.bls())
-        print(self.bls())
+        
         # Check that the data only has one baseline per redundant group
         for red in self._data_reds:
             if len(red) > 1:        
@@ -594,16 +594,6 @@ class RedDataContainer(DataContainer):
                     'RedDataContainer can only be constructed with (at most) one baseline per group, '
                     f'but this data has the following redundant baselines: {red}'
                 )
-        
-        # for red in reds:
-        #     bls_in_data = [bl for bl in red if self.has_key(bl)]
-        #     if len(bls_in_data) > 1:
-        #         raise ValueError('RedDataContainer can only be constructed with (at most) one baseline per group, '
-        #                          + f'but this data has the following redundant baselines: {bls_in_data}')
-        #     if len(bls_in_data) == 0:
-        #         self._add_red(red[0], red)
-        #     elif len(bls_in_data) > 0:
-        #         self._add_red(bls_in_data[0], red)
 
         # delete unused data to avoid leaking memory
         del self[[k for k in self._data if k not in self.reds]]
@@ -627,11 +617,6 @@ class RedDataContainer(DataContainer):
 
     def __getitem__(self, key):
         '''Returns data corresponding to the unique baseline that key is a member of.'''
-        if self.get_ubl_key(key) == (1, 12, 'ee'):
-            print(self._data_reds)
-            print(self._reds_keyed_on_data)
-            #print(self._reds_keyed_on_data)
-            print(key, self.get_ubl_key(key))
         return super().__getitem__(self.get_ubl_key(key))
 
     def __setitem__(self, key, value):
