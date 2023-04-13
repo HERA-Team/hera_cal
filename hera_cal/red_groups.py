@@ -181,11 +181,12 @@ class RedundantGroups:
 
     @_red_list.validator
     def _red_list_vld(self, att, val):
-        tp = len(val[0][0])
-        for red in val:
-            for bl in red:
-                if len(bl) != tp:
-                    raise ValueError("All baselines must have the same type, got an AntPair and a Baseline")
+        if val and val[0]:
+            tp = len(val[0][0])
+            for red in val:
+                for bl in red:
+                    if len(bl) != tp:
+                        raise ValueError("All baselines must have the same type, got an AntPair and a Baseline")
                          
     @classmethod
     def from_antpos(

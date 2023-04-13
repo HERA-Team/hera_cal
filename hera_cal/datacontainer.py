@@ -586,7 +586,7 @@ class RedDataContainer(DataContainer):
         else:
             self.reds = RedundantGroups(red_list=reds, antpos=getattr(self, 'antpos', None))
                 
-        self._data_reds = self.reds.filtered(bls=self.bls())
+        self._data_reds = self.reds.filter_reds(bls=self.bls())
         self._reds_keyed_on_data = self.reds.keyed_on_bls(bls=self.bls())
         
         # Check that the data only has one baseline per redundant group
