@@ -9,12 +9,12 @@ import copy
 from functools import cached_property, wraps, partial
 from frozendict import frozendict
 
-from typing import Sequence
+from typing import Sequence, Tuple, List
 
-AntPair = tuple[int, int]
-Baseline = tuple[int, int, str]
+AntPair = Tuple[int, int]
+Baseline = Tuple[int, int, str]
 
-def _convert_red_list(red_list: Sequence[Sequence[AntPair | Baseline]]) -> list[list[AntPair | Baseline]]:
+def _convert_red_list(red_list: Sequence[Sequence[AntPair | Baseline]]) -> List[List[AntPair | Baseline]]:
     """Convert a list of redundant baseline groups to a list of lists of antenna pairs."""
     return [list(bls) for bls in red_list]
 
@@ -38,7 +38,7 @@ class RedundantGroups:
 
     Parameters
     ----------
-    red_list : list[list[tuple[int, int]]]
+    red_list : List[List[tuple[int, int]]]
         List of redundant baseline groups. Each group is a list of antenna pairs or 
         antenna-pair-pols (eg. (0, 1, 'xx')). If provided, ``antpos`` is not required.
         All elements must be of the same type (either all antenna pairs or all
@@ -164,7 +164,7 @@ class RedundantGroups:
             )
     """
 
-    _red_list: list[list[AntPair | Baseline]] = attrs.field(converter=_convert_red_list)
+    _red_list: List[List[AntPair | Baseline]] = attrs.field(converter=_convert_red_list)
     _antpos: frozendict[int, np.ndarray] | None = attrs.field(
         default=None, 
         converter=attrs.converters.optional(frozendict),
@@ -251,7 +251,7 @@ class RedundantGroups:
         return frozenset(self._bl_to_red_map.keys())
 
     @cached_property
-    def _red_key_to_bls_map(self) -> dict[AntPair, list[AntPair]]:
+    def _red_key_to_bls_map(self) -> dict[AntPair, List[AntPair]]:
         out = {}
         for red in self._red_list:
             out[self.key_chooser(red)] = red
@@ -273,7 +273,7 @@ class RedundantGroups:
         '''Returns the unique baseline representing the group the key is in.'''
         return self._bl_to_red_map[key]
         
-    def get_red(self, key: AntPair | Baseline) -> tuple[AntPair | Baseline]:
+    def get_red(self, key: AntPair | Baseline) -> Tuple[AntPair | Baseline]:
         '''Returns the tuple of baselines redundant with this key.'''
         return self._red_key_to_bls_map[self.get_ubl_key(key)]
         
@@ -365,15 +365,15 @@ class RedundantGroups:
     def __iter__(self):
         return iter(self._red_list)
     
-    def __getitem__(self, key: int | AntPair | Baseline) -> list[AntPair | Baseline]:
+    def __getitem__(self, key: int | AntPair | Baseline) -> List[AntPair | Baseline]:
         if isinstance(key, int):
-            return self._red_list[key]
+            return self._red_List[key]
         else:
             return self.get_red(key)
         
-    def __setitem__(self, key: int | AntPair | Baseline, value: list[AntPair | Baseline]):
+    def __setitem__(self, key: int | AntPair | Baseline, value: List[AntPair | Baseline]):
         if isinstance(key, int):
-            self._red_list[key] = value
+            self._red_List[key] = value
         elif key in self:
             ukey = self.get_ubl_key(key)
             self._red_list = [value if red[0]==ukey else red for red in self._red_list]
