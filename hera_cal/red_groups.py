@@ -128,11 +128,11 @@ class RedundantGroups:
         True
     
     To filter out baselines for a specific purpose (but keeping the full antpos array), 
-    the ``filtered`` method can be used. This will return a *new* RedundantGroups object
+    the ``filter_reds`` method can be used. This will return a RedundantGroups object
     with the same ``antpos`` (as these are considered fixed for the array) but fewer
     baselines. All arguments to :func:`hera_cal.redcal.filter_reds` are supported::
 
-        >>> filtered = rg.filtered(bls=[(0, 1,'nn'), (1, 2,'nn'), (2, 3,'nn')])
+        >>> filtered = rg.filter_reds(bls=[(0, 1,'nn'), (1, 2,'nn'), (2, 3,'nn')])
         >>> print(filtered[0])
         [(0, 1, 'nn'), (1, 2, 'nn'), (2, 3, 'nn')]
         >>> print(len(filtered))
@@ -206,8 +206,8 @@ class RedundantGroups:
             A dictionary mapping antenna numbers to their positions in the array. 
             The positions should be 3-element arrays of floats in ENU coordinates in 
             meters. Provide all antennas in the array, even if they are not present
-            in the baselines you want to use in the end. You can always use `.filtered`
-            on the resulting object to remove baselines you don't want.
+            in the baselines you want to use in the end. You can always use 
+            `.filter_reds` on the resulting object to remove baselines you don't want.
         pols
             A list of polarizations to include in the redundant groups. If empty,
             simply use antpairs instead of baselines as keys. All antpairs with all pols 
