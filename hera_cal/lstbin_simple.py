@@ -408,6 +408,8 @@ def lst_bin_files_for_baselines(
     rephase: bool = True,
     antpos: dict[int, np.ndarray] | None = None,
     lsts: np.ndarray | None = None,
+    redundantly_averaged: bool = False,
+    reds: RedundantGroups | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[np.ndarray]]:
     """Produce a set of LST-binned (but not averaged) data for a set of baselines.
 
@@ -529,6 +531,11 @@ def lst_bin_files_for_baselines(
     if cal_files is None:
         cal_files = [None] * len(metas)
 
+    if redundantly_averaged and reds is None:
+        raise ValueError("reds must be provided if redundantly_averaged is True")
+    if redundantly_averaged and any(c is not None for c in cal_files):
+        raise ValueError("Cannot apply calibration if redundantly_averaged is True")
+    
     # This loop actually reads the associated data in this LST bin.
     ntimes_so_far = 0
     for meta, calfl, tind, tarr in zip(metas, cal_files, time_idx, time_arrays):
@@ -538,7 +545,11 @@ def lst_bin_files_for_baselines(
 
         #hd = io.HERAData(str(fl.path), filetype='uvh5')
         data_antpairs = meta.get_transactional('antpairs')
-        bls_to_load = [bl for bl in antpairs if bl in data_antpairs or bl[::-1] in data_antpairs]
+
+        if redundantly_averaged:
+            bls_to_load = [bl for bl in data_antpairs if reds.get_ubl_key(bl) in antpairs]
+        else:
+            bls_to_load = [bl for bl in antpairs if bl in data_antpairs or bl[::-1] in data_antpairs]
 
         if not bls_to_load:
             # If none of the requested baselines are in this file, then just 
@@ -553,6 +564,8 @@ def lst_bin_files_for_baselines(
         _data, _flags, _nsamples = io.HERAData(meta.path).read(
             bls=bls_to_load, times=tarr
         )
+        keyed = reds.keyed_on_bls(_data.antpairs())
+
         # _data = meta.get_datacontainer('data', bls = bls_to_load, times=tarr)
         # _flags = meta.get_datacontainer('flags', bls = bls_to_load, times=tarr)
         # _nsamples = meta.get_datacontainer('nsamples', bls = bls_to_load, times=tarr)
@@ -574,6 +587,8 @@ def lst_bin_files_for_baselines(
             )
 
         for i, bl in enumerate(antpairs):
+            if redundantly_averaged:
+                bl = keyed.get_ubl_key(bl)
             for j, pol in enumerate(pols):
                 blpol = bl + (pol,)
                 if blpol in _data:  # DataContainer takes care of conjugates.
@@ -842,6 +857,27 @@ def lst_bin_files(
     if not  np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6):
         raise ValueError('All integrations must be of equal length (BDA not supported)')
 
+    # reds will contain all of the redundant groups for the whole array, because
+    # all the antenna positions are included in every file.
+    reds = RedundantGroups.from_antpos(
+        antpos=dict(zip(meta.antenna_numbers, meta.antpos_enu)), include_autos=include_autos
+    )
+    if redundantly_averaged is None:
+        # Try to work out if the files are redundantly averaged.
+        # just look at the middle file from each night.
+        for fl_list in data_metas:
+            meta = fl_list[len(fl_list)//2]
+            antpairs = meta.get_transactional("antpairs")
+            ubls = set(reds.get_ubl_key(ap) for ap in antpairs)
+            if len(ubls) != len(antpairs):
+                # At least two of the antpairs are in the same redundant group. 
+                redundantly_averaged = False
+                logger.info("Inferred that files are not redundantly averaged.")
+                break
+        else:
+            redundantly_averaged = True
+            logger.info("Inferred that files are redundantly averaged.")
+
     logger.info("Compiling all unflagged baselines...")
     all_baselines, all_pols = get_all_unflagged_baselines(
         data_metas, 
@@ -849,6 +885,7 @@ def lst_bin_files(
         include_autos=include_autos, 
         ignore_ants=ignore_ants,
         redundantly_averaged=redundantly_averaged,
+        reds=reds,
     )
     all_baselines = sorted(all_baselines)
 
@@ -876,8 +913,6 @@ def lst_bin_files(
     n_bl_chunks = len(all_baselines) // Nbls_to_load + 1
     bl_chunks = [all_baselines[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(n_bl_chunks)]
     bl_chunks = [blg for blg in bl_chunks if len(blg) > 0]
-
-    time_first_ordering = data_metas[0][0].time_axis_faster_than_bls
 
     # iterate over output LST files
     outfnames = []
@@ -965,6 +1000,8 @@ def lst_bin_files(
                 rephase=rephase,
                 antpos=antpos,
                 lsts=all_lsts,
+                redundantly_averaged=redundantly_averaged,
+                reds=reds,
             )
 
             slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))
@@ -1128,7 +1165,8 @@ def get_all_unflagged_baselines(
     include_autos: bool = True,
     ignore_ants: tuple[int] = (),
     only_last_file_per_night: bool = False,
-    redundantly_averaged: bool | None = None
+    redundantly_averaged: bool | None = None,
+    reds: RedundantGroups | None = None,
 ) -> tuple[set[tuple[int, int]], list[str]]:
     """Generate a set of all antpairs that have at least one un-flagged entry.
     
@@ -1163,9 +1201,11 @@ def get_all_unflagged_baselines(
 
     # reds will contain all of the redundant groups for the whole array, because
     # all the antenna positions are included in every file.
-    reds = RedundantGroups.from_antpos(
-        antpos=dict(zip(meta0.antenna_numbers, meta0.antpos_enu))
-    )
+    if reds is None:
+        reds = RedundantGroups.from_antpos(
+            antpos=dict(zip(meta0.antenna_numbers, meta0.antpos_enu)), include_autos=True
+        )
+
     if redundantly_averaged is None:
         # Try to work out if the files are redundantly averaged.
         # just look at the middle file from each night.
