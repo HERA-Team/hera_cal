@@ -1890,8 +1890,6 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             # try one more time to expand visibilities, keeping new ones flagged, but 
             # don't update chisq or chisq_per_ant
             expand_omni_vis(sol, all_reds_this_pol, data, nsamples)
-            print(sol.vis.bls())
-            print(type(sol.vis))
             sol.make_sol_finite()
 
             # update various objects containing information about the full file

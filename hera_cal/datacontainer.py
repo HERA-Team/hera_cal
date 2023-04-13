@@ -578,7 +578,7 @@ class RedDataContainer(DataContainer):
         '''Build the dictionaries that map baselines to redundant keys.
 
         Arguments:
-            reds: list of lists of redundant baselin1e tuples, e.g. (ind1, ind2, pol).
+            reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol).
         '''
         
         if isinstance(reds, RedundantGroups):
