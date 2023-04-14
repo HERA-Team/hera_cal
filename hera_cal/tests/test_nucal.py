@@ -405,6 +405,9 @@ def test_linear_fit():
     # Test different modes
     b1, cached_input = nucal._linear_fit(XTX, Xy, solver='lu_solve')
     assert cached_input.get('LU') is not None
+    b1_cached, _ = nucal._linear_fit(XTX, Xy, solver='lu_solve', cached_input=cached_input)
+    # Show that the cached result is the same as the original
+    np.testing.assert_allclose(b1, b1_cached)
     b2, _ = nucal._linear_fit(XTX, Xy, solver='solve')
     b3, _ = nucal._linear_fit(XTX, Xy, solver='lstsq')
     b4, cached_input = nucal._linear_fit(XTX, Xy, solver='pinv')

@@ -94,10 +94,6 @@ class Test_Smooth_Cal_Helper_Functions(object):
         fit_lsq = X @ np.linalg.pinv((X.T * weights.ravel()) @ X) @ (X.T * weights.ravel()) @ gains.ravel()
         np.testing.assert_array_almost_equal(fit_lsq, fit2.ravel())
 
-        # Check that warning is raised when XTXinv is provided
-        with pytest.deprecated_call():
-            smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=cached_output['XTXinv']) 
-
     def test_time_filter(self):
         gains = np.ones((10, 10), dtype=complex)
         gains[3, 5] = 10.0
