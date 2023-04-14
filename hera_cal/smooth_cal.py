@@ -102,7 +102,7 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
     return time_filters, freq_filters
 
 
-def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cached_input={}, XTXinv=None):
+def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cached_input={}):
     """
     Filters gain solutions by solving the weighted linear least squares problem
     for a design matrix that can be factored by a kronecker product in the following way
@@ -124,40 +124,42 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cac
             'pinv' uses np.linalg.pinv to compute the least squares solution and tends to be the most reliable. 'lu_solve'
             uses scipy.linalg.lu_solve to compute the least squares solution and tends to be the fastest. 
             'solve' uses np.linalg.solve and 'lstsq' uses np.linalg.lstsq and have comparable results.
-        cached_input: Matrix of (X^T W X)^{-1} for the input DPSS filters and weights. Useful for filtering
-            many gain grids with similar flagging patterns. np.ndarray of shape (N_time_vectors * N_freq_vectors,
-            N_time_vectors * N_freq_vectors). Can be obtained using the 'cached_output' return value from a
-            previous call to this function.
-        XTXinv: Matrix of (X^T W X)^{-1} for the input DPSS filters and weights. 
-            Warning: This is deprecated and will be removed in a future version. Use cached_input instead.
+        cached_input: Dictionary of intermediate products computed when performing linear least-squares with the DPSS basis vectors.
+            Useful for filtering many gain grids with similar flagging patterns. Can be obtained using 
+            the 'cached_output' return value from a previous call to this function, 'cached_output'. If method is 'lu_solve',
+            cached_input will have an additional key 'LU' which is the output of scipy.linalg.lu_factor. If method
+            is 'pinv', cached_input will have an additional key 'XTXinv' which is the output of np.linalg.pinv. If
+            other methods are used, nucal._linear_fit will not use cached_input.
 
     Returns:
         filtered: filtered gain grids from least squares fit, np.ndarray with the
             same shape as the input gain grid
         cached_output: dictionary containing intermediated cached products for linear fitting. Useful
             for use in subsequent filtering if the input gains have the same flagging pattern previous input gains.
+            Keys are 'XTXinv' and 'LU' for 'pinv' and 'lu_solve' methods respectively, where 'XTXinv' is the pinv of the
+            design matrix and 'LU' is the output of scipy.linalg.lu_factor. If other methods are used, cached_output
+            will be an empty dictionary.
     """
-    # Check for deprecated XTXinv argument
-    if XTXinv is not None:
-        warnings.warn(
-            "The XTXinv argument is deprecated and will be removed in a future version. Use cached_input instead.",
-            DeprecationWarning,
-        )
     # Make sure data types between weights and filters are compatible for einsum optimization
     weights = weights.astype(time_filters.dtype)
 
     # Calculate the number of components in the design matrix
     ncomps = time_filters.shape[1] * freq_filters.shape[1]
 
-    # Use jax einsum to calculate (X^T W X) in a memory efficient way
-    XTX = jnp.einsum(
-        "ij,kl,jl,jm,ln->ikmn", np.transpose(time_filters), np.transpose(freq_filters),
-        weights, time_filters, freq_filters, optimize=True
-    )
-    XTX = np.reshape(XTX, (ncomps, ncomps))
+    if ("LU" in cached_input and method == "lu_solve") or ("XTXinv" in cached_input and method == "pinv"):
+        # If cached_input is provided and method is 'lu_solve' or 'pinv', create a dummy variable to pass to _linear_fit
+        XTX = np.zeros((1, 1))
+    else:
+        # Use jax einsum to calculate (X^T W X) in a memory efficient way
+        # einsum indices are (t -> time, f -> freq, i > time filter index, j -> freq filter index, m -> 
+        # time filter index, n -> freq filter index)
+        XTX = jnp.einsum(
+            "ti,fj,tf,tm,fn->ijmn", time_filters, freq_filters, weights, time_filters, freq_filters, optimize=True
+        )
+        XTX = np.reshape(XTX, (ncomps, ncomps))
         
     # Calculate X^T W y using the property (A \otimes B) vec(y) = (A Y B)
-    XTWy = np.ravel(np.dot(np.dot(np.transpose(time_filters), (gains * weights)), freq_filters))
+    XTWy = jnp.ravel(jnp.dot(jnp.dot(jnp.transpose(time_filters), (gains * weights)), freq_filters))
 
     # Compute beta and reshape into a 2D array
     beta, cached_output = _linear_fit(XTX, XTWy, solver=method, cached_input=cached_input)
@@ -330,16 +332,19 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
             'CLEAN': uses the CLEAN algorithm to smooth calibration solutions
             'DPSS': uses discrete prolate spheroidal sequences (DPSS) to filter calibration solutions
-        fit_method: Method used to fit the DPSS model to the data. Either 'lstsq', 'pinv', 'lu_solve', or 'solve'.
-            Only used when the filtering method is 'DPSS'. 'lu_solve' tends to be the fastest, but 'pinv' is more
-            stable.
         dpss_vectors: Tuple of 2 1D DPSS filters, one for the time axis and one for the frequency axis
             that form the least squares design matrix, X, when the outer product of the two is taken.
             If dpss_vectors is not provided, one will be calculated using smooth_cal.dpss_filters and the
             time and frequency scale. Only used when the method is 'DPSS'
-        XTXinv: Matrix operation of (X^T W X)^{-1} where X are the set of 2D DPSS vectors and W is the
-            wgts grid. Useful when filtering many gain grids where wgts grid is the same between two or more
-            gain solutions. Only used when the filtering method is 'DPSS'
+        fit_method: Method used to fit the DPSS model to the data. Either 'lstsq', 'pinv', 'lu_solve', or 'solve'.
+            Only used when the filtering method is 'DPSS'. 'lu_solve' tends to be the fastest, but 'pinv' is more
+            stable.
+        cached_input: Dictionary of intermediate products computed when performing linear least-squares with the DPSS basis vectors.
+            Useful for filtering many gain grids with similar flagging patterns. Can be obtained using 
+            the 'cached_output' return value from a previous call to the solve_2D_DPSS function and can also be found the 'info' dictionary
+            returned by this function. If method is 'lu_solve', cached_input will have a key 'LU' which is the output of scipy.linalg.lu_factor. 
+            If method is 'pinv', cached_input will have a key 'XTXinv' which is the output of np.linalg.pinv. If
+            other methods are used, nucal._linear_fit will not use cached_input.
         eigenval_cutoff: sinc_matrix eigenvalue cutoffs to use for included dpss modes.
             Only used when the filtering method is 'DPSS'
         skip_flagged_edges : bool, optional
@@ -969,8 +974,14 @@ class CalibrationSmoother():
         cached_input = {}
         wgts_old = np.zeros(1)
 
+        # Sort antennas by number of flagged times/freqs to increase chances of reusing cached input
+        idx = np.argsort([self.flag_grids[ant].sum() for ant in self.gain_grids])
+        ant_keys = [ant for ant in self.gain_grids]
+        ordered_ant_keys = [ant_keys[i] for i in idx]
+
         # loop over all antennas that are not completely flagged and filter
-        for ant, gain_grid in self.gain_grids.items():
+        for ant in ordered_ant_keys:
+            gain_grid = self.gain_grids[ant]
             if not np.all(self.flag_grids[ant]):
                 utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
                 wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist, self.blacklist_wgt)
