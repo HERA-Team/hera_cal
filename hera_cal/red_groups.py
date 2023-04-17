@@ -420,9 +420,9 @@ class RedundantGroups:
         if not inplace:
             return out
     
-    def sort(self):
+    def sort(self, **kwargs):
         """Sort the redundant groups in-place."""
-        self._red_list.sort()
+        self._red_list.sort(**kwargs)
         self.clear_cache()
 
     def clear_cache(self):
