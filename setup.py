@@ -53,7 +53,7 @@ setup_args = {
         'hdf5plugin',
         'astropy',
         'astropy-healpix',
-        'pyuvdata',
+        'pyuvdata>=2.3.1',
         'linsolve',
         'hera_qm',
         'scikit-learn',
