@@ -186,7 +186,7 @@ class RedundantGroups:
             for red in val:
                 for bl in red:
                     if len(bl) != tp:
-                        raise ValueError("All baselines must have the same type, got an AntPair and a Baseline")
+                        raise TypeError("All baselines must have the same type, got an AntPair and a Baseline")
                          
     @classmethod
     def from_antpos(
@@ -248,7 +248,7 @@ class RedundantGroups:
     @cached_property
     def data_bls(self) -> frozenset[Baseline | AntPair]:
         """The list of baselines in the baseline groups."""
-        return frozenset(self._bl_to_red_map.keys())
+        return frozenset(sum(self._red_list, []))
 
     @cached_property
     def _red_key_to_bls_map(self) -> dict[AntPair, List[AntPair]]:
@@ -296,11 +296,11 @@ class RedundantGroups:
             )
         
         if self.antpos is None:
-            return self.append(other._red_list, inplace=False)
+            return self.extend(other._red_list, inplace=False)
         else:
             new_antpos = {**self.antpos, **other.antpos}
             new = attrs.evolve(self, antpos=new_antpos)
-            return new.append(other._red_list, inplace=False)            
+            return new.extend(other._red_list, inplace=False)            
         
     def append(self, red: Sequence[AntPair | Baseline], inplace: bool=True, pos: int | None = None) -> None:
         """In-place append a new redundant group to the list of redundant groups.
@@ -313,9 +313,9 @@ class RedundantGroups:
             # Ensure that all the ants in the new reds exist in the antpos
             for bl in red:
                 if bl[0] not in self.antpos:
-                    raise ValueError(f"Antenna {bl[0]} not in antpos (valid ants: {self._bl_to_red_map.keys()}).")
+                    raise ValueError(f"Antenna {bl[0]} not in antpos (valid ants: {self.antpos.keys()}).")
                 if bl[1] not in self.antpos:
-                    raise ValueError(f"Antenna {bl[1]} not in antpos (valid ants: {self._bl_to_red_map.keys()}).")
+                    raise ValueError(f"Antenna {bl[1]} not in antpos (valid ants: {self.antpos.keys()}).")
 
         ubls = {r: self.get_ubl_key(r) for r in red if r in self}
 
@@ -367,13 +367,13 @@ class RedundantGroups:
     
     def __getitem__(self, key: int | AntPair | Baseline) -> List[AntPair | Baseline]:
         if isinstance(key, int):
-            return self._red_List[key]
+            return self._red_list[key]
         else:
             return self.get_red(key)
         
     def __setitem__(self, key: int | AntPair | Baseline, value: List[AntPair | Baseline]):
         if isinstance(key, int):
-            self._red_List[key] = value
+            self._red_list[key] = value
         elif key in self:
             ukey = self.get_ubl_key(key)
             self._red_list = [value if red[0]==ukey else red for red in self._red_list]
@@ -381,6 +381,16 @@ class RedundantGroups:
             # We're setting a new redundant group
             self.append(value)
 
+        # Reset the maps
+        self.clear_cache()
+
+    def __delitem__(self, key: int | AntPair | Baseline):
+        if isinstance(key, int):
+            del self._red_list[key]
+        else:
+            ukey = self.get_ubl_key(key)
+            self._red_list = [red for red in self._red_list if red[0] != ukey]
+        
         # Reset the maps
         self.clear_cache()
 
@@ -405,7 +415,10 @@ class RedundantGroups:
         This maintains the list-of-lists duck-typing of the redundant groups.
         """
         for red in reds:
-            self.append(red, inplace)
+            out = self.append(red, inplace)
+
+        if not inplace:
+            return out
     
     def sort(self):
         """Sort the redundant groups in-place."""
@@ -415,15 +428,13 @@ class RedundantGroups:
     def clear_cache(self):
         """Clear the cached maps."""
         for att in (
-            self._bl_to_red_map,
-            self._red_key_to_bls_map,
-            self.data_ants,
-            self.data_bls,
+            "_bl_to_red_map",
+            "_red_key_to_bls_map",
+            "data_ants",
+            "data_bls",
         ):
-            try:
-                del att
-            except AttributeError:
-                pass
+            if att in self.__dict__:
+                del self.__dict__[att]
 
     def get_full_redundancies(
         self, pols: Sequence[str] | None = None, 
