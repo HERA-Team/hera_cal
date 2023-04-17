@@ -34,6 +34,7 @@ from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
 import linsolve
 import warnings
+from .utils import match_times
 
 import jax
 from jax import numpy as jnp
@@ -2413,42 +2414,6 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
 
     return DataContainer(red_data)
 
-
-def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
-    """
-    Match start and end LST of datafile to modelfiles. Each file in modelfiles needs
-    to have the same integration time.
-
-    Args:
-        datafile : type=str, path to data file
-        modelfiles : type=list of str, list of filepaths to model files ordered according to file start time
-        filetype : str, options=['uvh5', 'miriad']
-
-    Returns:
-        matched_modelfiles : type=list, list of modelfiles that overlap w/ datafile in LST
-    """
-    # get lst arrays
-    data_dlst, data_dtime, data_lsts, data_times = io.get_file_times(datafile, filetype=filetype)
-    model_dlsts, model_dtimes, model_lsts, model_times = io.get_file_times(modelfiles, filetype=filetype)
-
-    # shift model files relative to first file & first index if needed
-    for ml in model_lsts:
-        ml[ml < model_lsts[0][0]] += 2 * np.pi
-        # also ensure that ml is increasing
-        ml[ml < ml[0]] += 2 * np.pi
-    # get model start and stop, buffering by dlst / 2
-    model_starts = np.asarray([ml[0] - md / 2.0 for ml, md in zip(model_lsts, model_dlsts)])
-    model_ends = np.asarray([ml[-1] + md / 2.0 for ml, md in zip(model_lsts, model_dlsts)])
-
-    # shift data relative to model if needed
-    data_lsts[data_lsts < model_starts[0]] += 2 * np.pi
-    # make sure monotonically increasing.
-    data_lsts = np.unwrap(data_lsts)
-    # select model files
-    match = np.asarray(modelfiles)[(model_starts < data_lsts[-1] + atol)
-                                   & (model_ends > data_lsts[0] - atol)]
-
-    return match
 
 
 def cut_bls(datacontainer, bls=None, min_bl_cut=None, max_bl_cut=None, inplace=False):

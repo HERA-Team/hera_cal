@@ -14,11 +14,16 @@ import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT, _x_orientation_rep_dict
+from pyuvdata.uvdata import FastUVH5Meta
+from typing import Sequence, List, Tuple
+from pathlib import Path
+
 import sklearn.gaussian_process as gp
 import warnings
 import argparse
 import inspect
 from . import __version__
+from . import io
 
 try:
     AIPY = True
@@ -1398,6 +1403,143 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             return data
 
 
+def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
+    """
+    Match start and end LST of datafile to modelfiles. Each file in modelfiles needs
+    to have the same integration time.
+
+    Args:
+        datafile : type=str, path to data file
+        modelfiles : type=list of str, list of filepaths to model files ordered according to file start time
+        filetype : str, options=['uvh5', 'miriad']
+
+    Returns:
+        matched_modelfiles : type=list, list of modelfiles that overlap w/ datafile in LST
+    """
+    # get lst arrays
+    data_dlst, data_dtime, data_lsts, data_times = io.get_file_times(datafile, filetype=filetype)
+    model_dlsts, model_dtimes, model_lsts, model_times = io.get_file_times(modelfiles, filetype=filetype)
+
+    # shift model files relative to first file & first index if needed
+    for ml in model_lsts:
+        ml[ml < model_lsts[0][0]] += 2 * np.pi
+        # also ensure that ml is increasing
+        ml[ml < ml[0]] += 2 * np.pi
+    # get model start and stop, buffering by dlst / 2
+    model_starts = np.asarray([ml[0] - md / 2.0 for ml, md in zip(model_lsts, model_dlsts)])
+    model_ends = np.asarray([ml[-1] + md / 2.0 for ml, md in zip(model_lsts, model_dlsts)])
+
+    # shift data relative to model if needed
+    data_lsts[data_lsts < model_starts[0]] += 2 * np.pi
+    # make sure monotonically increasing.
+    data_lsts = np.unwrap(data_lsts)
+    # select model files
+    match = np.asarray(modelfiles)[(model_starts < data_lsts[-1] + atol)
+                                   & (model_ends > data_lsts[0] - atol)]
+
+    return match
+
+def match_lsts_regular(
+        lst_range: tuple[float], 
+        file_list: Sequence[str | Path | FastUVH5Meta],
+        files_sorted: bool = False,
+    ) -> list[FastUVH5Meta]:
+    """For a given input file, find all files in a list that overlap in lst.
+
+    This function is faster than match_times for a large ``file_list`` because it
+    assumes that the lsts are regularly spaced over the whole list. If the files are
+    not contiguous, bad things might happen.
+
+    Parameters
+    ----------
+    lst_range
+        The lst range to match. This is a tuple of (start, stop) lsts in radians.
+    file_list
+        A list of files to match against. This can be a list of strings, a list of
+        pathlib.Path objects, or a list of FastUVH5Meta objects.
+    sorted
+        If True, assume that the file_list is already sorted by time. If False, sort
+        the file_list by time within the function.
+
+    Returns
+    -------
+    list of FastUVH5Meta
+        The list of FastUVH5Meta file objects that have lsts that fall into the given
+        LST range.
+    """
+    # look for the one file matching our main lst
+    file_list = [fl if isinstance(fl, FastUVH5Meta) else FastUVH5Meta(fl) for fl in file_list]
+
+    if not files_sorted:
+        file_list = sorted(file_list, key=lambda x: x.path)
+
+    start, stop = lst_range
+
+    index = 0
+    meta = file_list[0]
+    lsts = meta.lsts
+
+    # The files in the list MUST NOT wrap around in LST, i.e.
+    # there is 24 hours or less of time in the files. 
+    if file_list[-1].times[-1] < start.times[0]: 
+        raise ValueError("After sorting, the last file in the list is is before the first.")
+
+    if file_list[-1].times[-1] > start.times[0] + 1.0:
+        raise ValueError("The input files span greater than 24 hours, cannot use this function. Use match_times instead.")
+    
+    fundamental_lst = lsts[0]
+    lstbinsize = lsts[1] - lsts[0]
+    start = (start - fundamental_lst) % (2*np.pi)
+    stop = (stop - fundamental_lst) % (2*np.pi)
+    lsts =  lsts - fundamental_lst
+    lsts %= (2*np.pi)
+    
+    # Assume that each file has the same dlst and same number of files.
+    ntimes_per_file = len(lsts)
+
+    end_lsts = file_list[-1].lsts - fundamental_lst
+    end_lsts %= (2*np.pi)
+    
+    if end_lsts[-1] < start:
+        return []
+    if lsts[0] >= stop:
+        return []
+    
+    indices_tried = set()
+
+    while lsts[0] > stop or lsts[1] < start:
+        if index in indices_tried:
+            return []
+        
+        diff = (start - lsts[0])
+        nfiles = int(diff / (lstbinsize*ntimes_per_file))
+
+        if nfiles == 0:
+            # Never move by 0 files
+            nfiles = int(1 * np.sign(diff))
+            
+        meta = file_list[index + nfiles]
+        lsts = meta.lsts - fundamental_lst
+        lsts %= (2*np.pi)
+
+        index += nfiles
+        indices_tried.add(index)
+
+    # Now we have the first file that overlaps with the lst range.
+    npossible_overlaps = int(np.ceil((stop - start) / (lstbinsize*ntimes_per_file)))
+    try_indices = range(index - npossible_overlaps + 1, index + npossible_overlaps)
+    matched_files = []
+    for indx in try_indices:
+        if indx < 0 or indx >= len(file_list):
+            continue
+        meta = file_list[indx]
+        lsts = meta.lsts - fundamental_lst
+        lsts %= (2*np.pi)
+        if lsts[0] < stop or lsts[-1] > start:
+            matched_files.append(file_list[indx])
+
+    return matched_files
+        
 def eq2top_m(ha, dec):
     """Return the 3x3 matrix converting equatorial coordinates to topocentric
     at the given hour angle (ha) and declination (dec).
