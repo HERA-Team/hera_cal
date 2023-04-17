@@ -2450,7 +2450,6 @@ def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
 
     return match
 
-
 def cut_bls(datacontainer, bls=None, min_bl_cut=None, max_bl_cut=None, inplace=False):
     """
     Cut visibility data based on min and max baseline length.
