@@ -1349,4 +1349,6 @@ def lst_bin_arg_parser():
     a.add_argument("--sigma-clip-thresh", type=float, help="sigma clip threshold for flagging data in an LST bin over time. Zero means no clipping.", default=0.0)
     a.add_argument("--sigma-clip-min-N", type=int, help="number of unflagged data points over time to require before considering sigma clipping", default=4)
     a.add_argument("--redundantly-averaged", action='store_true', default=None, help="if true, assume input files are redundantly averaged")
+    a.add_argument("--blts-are-rectangular", action='store_true', default=None, help="if true, assume input files have rectangular blts axis")
+    a.add_argument("--time-axis-faster-than-bls", action='store_true', default=None, help="if true, assume input files have time axis that is faster than bls axis (only if rectangular)")
     return a
