@@ -1351,4 +1351,5 @@ def lst_bin_arg_parser():
     a.add_argument("--redundantly-averaged", action='store_true', default=None, help="if true, assume input files are redundantly averaged")
     a.add_argument("--blts-are-rectangular", action='store_true', default=None, help="if true, assume input files have rectangular blts axis")
     a.add_argument("--time-axis-faster-than-bls", action='store_true', default=None, help="if true, assume input files have time axis that is faster than bls axis (only if rectangular)")
+    a.add_argument("--only-last-file-per-night", action='store_true', default=False, help="if true, only use the first and last file every night to obtain antpairs")
     return a
