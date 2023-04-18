@@ -682,6 +682,8 @@ def lst_bin_files(
     sigma_clip_thresh: float = 0.0,
     sigma_clip_min_N: int = 4,
     redundantly_averaged: bool | None = None,
+    blts_are_rectangular: bool | None = None,
+    time_axis_faster_than_bls: bool | None = None,
 ) -> list[str]:
     """
     LST bin a series of UVH5 files.
@@ -802,7 +804,20 @@ def lst_bin_files(
     for dflist in data_files:
         logger.info(f"{dflist[0].split('/')[-1]}: {len(dflist)}")
 
-    data_metas = [[FastUVH5Meta(df, blts_are_rectangular=True) for df in dflist] for dflist in data_files]
+    if blts_are_rectangular is None:
+        meta0 = FastUVH5Meta(data_files[0][0])
+        blts_are_rectangular = meta0.blts_are_rectangular
+        time_axis_faster_than_bls = meta0.time_axis_faster_than_bls
+
+    data_metas = [[
+        FastUVH5Meta(
+            df, 
+            blts_are_rectangular=blts_are_rectangular, 
+            time_axis_faster_than_bls=time_axis_faster_than_bls
+        ) for df in dflist
+        ] 
+        for dflist in data_files
+    ]
 
     # get file lst arrays
     _, dlst, file_lsts, _, lst_arrs, time_arrs = config_lst_bin_files(
@@ -855,7 +870,9 @@ def lst_bin_files(
     start_jd = np.floor(times.min())
     integration_time = np.median(meta.integration_time)
     if not  np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6):
-        raise ValueError('All integrations must be of equal length (BDA not supported)')
+        raise ValueError(
+            f'All integrations must be of equal length (BDA not supported), got diffs: {np.diff(times)}'
+        )
 
     # reds will contain all of the redundant groups for the whole array, because
     # all the antenna positions are included in every file.
@@ -1167,6 +1184,8 @@ def get_all_unflagged_baselines(
     only_last_file_per_night: bool = False,
     redundantly_averaged: bool | None = None,
     reds: RedundantGroups | None = None,
+    blts_are_rectangular: bool | None = None,
+    time_axis_faster_than_bls: bool | None = None,
 ) -> tuple[set[tuple[int, int]], list[str]]:
     """Generate a set of all antpairs that have at least one un-flagged entry.
     
@@ -1177,7 +1196,6 @@ def get_all_unflagged_baselines(
     If ``reds`` is provided, then any baseline found is mapped back to the first 
     baseline in the redundant group it appears in. This *must* be set if 
 
-
     Returns
     -------
     all_baselines
@@ -1186,10 +1204,19 @@ def get_all_unflagged_baselines(
         A list of all polarizations in the files in the given list, as strings like 
         'ee' and 'nn' (i.e. with x_orientation information).
     """
+    if blts_are_rectangular is None and not isinstance(data_files[0][0], FastUVH5Meta):
+        meta0 = FastUVH5Meta(data_files[0][0])
+        blts_are_rectangular = meta0.blts_are_rectangular
+        time_axis_faster_than_bls = meta0.time_axis_faster_than_bls
+
     data_files = [
-        [fl if isinstance(fl, FastUVH5Meta) else FastUVH5Meta(fl, blts_are_rectangular=True) 
-         for fl in fl_list] 
-         for fl_list in data_files
+        [
+        fl if isinstance(fl, FastUVH5Meta) else 
+        FastUVH5Meta(
+            fl, blts_are_rectangular=blts_are_rectangular, 
+            time_axis_faster_than_bls=time_axis_faster_than_bls
+        )  for fl in fl_list
+        ] for fl_list in data_files
     ]
     
 
@@ -1241,13 +1268,18 @@ def get_all_unflagged_baselines(
             a_priori_antenna_flags = set()
 
         if only_last_file_per_night:
-            fl_list = fl_list[-1:]
+            # Actually, use first AND last, just to be cautious
+            fl_list = [fl_list[0], fl_list[-1]]
 
         for meta in fl_list:
-            antpairs = meta.get_transactional('antpairs')
-            all_pols.update(set(meta.get_transactional("pols")))        
+            antpairs = meta.antpairs
+            all_pols.update(set(meta.pols))
+            this_xorient = meta.x_orientation
             
-            this_xorient = meta.get_transactional('x_orientation')
+            # Clear the cache to save memory.
+            meta.close()
+            del meta.antpairs
+
             if this_xorient != x_orientation:
                 raise ValueError(
                     f"Not all files have the same xorientation! The x_orientation in {meta.path} "

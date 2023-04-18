@@ -21,8 +21,8 @@ from . import redcal
 from . import apply_cal
 from .datacontainer import DataContainer
 import logging
-from pyuvdata.uvdata.uvh5 import FastUVH5Meta
-
+from pyuvdata.uvdata import FastUVH5Meta
+from pyuvdata.utils import get_lst_for_time
 try:
     profile
 except NameError:
@@ -567,7 +567,9 @@ def config_lst_bin_files(
     lst_start: float | None=None, 
     lst_width: float = 2*np.pi,
     verbose: bool=True, 
-    ntimes_per_file: int=60
+    ntimes_per_file: int=60,
+    blts_are_rectangular: bool | None = None,
+    time_axis_faster_than_bls: bool | None = None,
 ):
     """
     Configure data for LST binning.
@@ -605,28 +607,52 @@ def config_lst_bin_files(
     logger.info("Configuring lst_grid")
     
     # Make the data files into FastUVH5Meta objects
-    data_files = [[df if isinstance(df, FastUVH5Meta) else FastUVH5Meta(df) for df in dfs ] for dfs in data_files]
+    data_files = [
+        [
+        df if isinstance(df, FastUVH5Meta) else 
+        FastUVH5Meta(
+            df, 
+            blts_are_rectangular=blts_are_rectangular, 
+            time_axis_faster_than_bls=time_axis_faster_than_bls
+        ) 
+        for df in dfs 
+        ] for dfs in data_files
+    ]
 
     df0 = data_files[0][0]
-    if not isinstance(df0, FastUVH5Meta):
-        df0 = FastUVH5Meta(df0, blts_are_rectangular=True)
 
     # get dlst from first data file if None
     if dlst is None:
-        dlst = data_files[0][0].lsts[1] - data_files[0][0].lsts[0]
+        dlst, _, _, _ = io.get_file_times(str(df0.path), filetype='uvh5')
 
+    has_lst_arrays = 'lst_array' in df0.header
+    
     # Grab the LST and time arrays from each file. Using the FastUVH5Meta
     # objects to do this is much faster than using the UVData objects, because we only
     # need the LSTs and times, and we don't need to read in any other metadata.
     # However, we need to be careful to open and close each file one at a time here
     # because HDF5 can only have so many files open at a time.
-    lst_arrays = [[df.get_transactional('lsts') for df in dflist] for dflist in data_files]
     time_arrays = [[df.get_transactional('times') for df in dflist] for dflist in data_files]
-
+    nt = df0.Ntimes
+    
+    if has_lst_arrays:
+        lst_arrays = [[df.get_transactional('lsts') for df in dflist] for dflist in data_files]
+    else:
+        all_times = np.array([time for tarrs in time_arrays for tarr in tarrs for time in tarr])
+        all_lsts = get_lst_for_time(all_times, *df0.telescope_location_lat_lon_alt_degrees)
+        lst_arrays = []
+        n = 0
+        for night, tarrs in enumerate(time_arrays):
+            lst_arrays.append([])
+            for fl, tarr in enumerate(tarrs):
+                lst_arrays[-1].append(all_lsts[n:n+nt])
+                n += nt
+                
     # get begin_lst from lst_start or from the first JD in the data_files
     if lst_start is None:
-        all_lsts = [lst for larrs in lst_arrays for larr in larrs for lst in larr]
-        all_times = [time for tarrs in time_arrays for tarr in tarrs for time in tarr]
+        if has_lst_arrays:
+            all_lsts = [lst for larrs in lst_arrays for larr in larrs for lst in larr]
+            all_times = [time for tarrs in time_arrays for tarr in tarrs for time in tarr]
         lst_start = all_lsts[np.argmin(all_times)]
     begin_lst = lst_start
 
