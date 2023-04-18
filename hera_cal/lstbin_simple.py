@@ -410,6 +410,8 @@ def lst_bin_files_for_baselines(
     lsts: np.ndarray | None = None,
     redundantly_averaged: bool = False,
     reds: RedundantGroups | None = None,
+    freq_min: float | None = None,
+    freq_max: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[np.ndarray]]:
     """Produce a set of LST-binned (but not averaged) data for a set of baselines.
 
@@ -465,7 +467,10 @@ def lst_bin_files_for_baselines(
     lsts
         A list of LST arrays for each file. If not provided, will be read from the
         files. If provided, must be the same length as ``data_files``.
-    
+    freq_min, freq_max
+        Minimum and maximum frequencies to include in the data. If not provided,
+        all frequencies will be included.
+        
     Returns
     -------
     bin_lst
@@ -488,6 +493,19 @@ def lst_bin_files_for_baselines(
     if freqs is None:
         freqs = np.squeeze(metas[0].freq_array)
     
+    if freq_min is None and freq_max is None:
+        freq_chans = None
+    else:
+        freq_chans = np.arange(len(freqs))
+        if freq_min is not None:
+            mask = freqs >= freq_min
+            freqs = freqs[mask]
+            freq_chans = freq_chans[mask]
+        if freq_max is not None:
+            mask = freqs <= freq_max
+            freqs = freqs[mask]
+            freq_chans = freq_chans[mask]
+
     if pols is None:
         pols = metas[0].pols
 
@@ -562,13 +580,10 @@ def lst_bin_files_for_baselines(
 
         # TODO: use Fast readers here instead.
         _data, _flags, _nsamples = io.HERAData(meta.path).read(
-            bls=bls_to_load, times=tarr
+            bls=bls_to_load, times=tarr, freq_chans=freq_chans, polarizations=pols,
         )
-        keyed = reds.keyed_on_bls(_data.antpairs())
-
-        # _data = meta.get_datacontainer('data', bls = bls_to_load, times=tarr)
-        # _flags = meta.get_datacontainer('flags', bls = bls_to_load, times=tarr)
-        # _nsamples = meta.get_datacontainer('nsamples', bls = bls_to_load, times=tarr)
+        if redundantly_averaged:
+            keyed = reds.keyed_on_bls(_data.antpairs())
         
         # load calibration
         if calfl is not None:
@@ -685,6 +700,8 @@ def lst_bin_files(
     blts_are_rectangular: bool | None = None,
     time_axis_faster_than_bls: bool | None = None,
     only_last_file_per_night: bool = False,
+    freq_min: float | None = None,
+    freq_max: float | None = None,
 ) -> list[str]:
     """
     LST bin a series of UVH5 files.
@@ -776,6 +793,17 @@ def lst_bin_files(
         If True, the input data is assumed to be redundantly averaged. By default
         the value is inferred by looking at metadata from the central file of each 
         night.
+    blts_are_rectangular
+        If True, the input data is assumed to be rectangular. By default the value
+        is inferred by looking at metadata from the first file of the first night.
+    time_axis_faster_than_bls
+        If True, the input data is assumed to have the time axis faster than the
+        baseline axis. By default the value is inferred by looking at metadata from
+        the first file of the first night.
+    freq_min, freq_max
+        The min/max frequency to include in the output files. If None, use all 
+        frequencies.
+
 
     Result
     ------
@@ -794,7 +822,9 @@ def lst_bin_files(
 
     input_cals = input_cals or []
     if not input_cals and calfile_rules:
-        data_files, input_cals = apply_calfile_rules(data_files, calfile_rules, ignore_missing=ignore_missing_calfiles)            
+        data_files, input_cals = apply_calfile_rules(
+            data_files, calfile_rules, ignore_missing=ignore_missing_calfiles
+        )    
 
     # Prune empty nights (some nights start with files, but have files removed because
     # they have no associated calibration)
@@ -1021,6 +1051,8 @@ def lst_bin_files(
                 lsts=all_lsts,
                 redundantly_averaged=redundantly_averaged,
                 reds=reds,
+                freq_min=freq_min,
+                freq_max=freq_max,
             )
 
             slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))
@@ -1405,4 +1437,6 @@ def lst_bin_arg_parser():
     a.add_argument("--blts-are-rectangular", action='store_true', default=None, help="if true, assume input files have rectangular blts axis")
     a.add_argument("--time-axis-faster-than-bls", action='store_true', default=None, help="if true, assume input files have time axis that is faster than bls axis (only if rectangular)")
     a.add_argument("--only-last-file-per-night", action='store_true', default=False, help="if true, only use the first and last file every night to obtain antpairs")
+    a.add_argument("--freq-min", type=float, default=None, help="minimum frequency to include in lstbinning")
+    a.add_argument("--freq-max", type=float, default=None, help="maximum frequency to include in lstbinning")
     return a
