@@ -684,6 +684,7 @@ def lst_bin_files(
     redundantly_averaged: bool | None = None,
     blts_are_rectangular: bool | None = None,
     time_axis_faster_than_bls: bool | None = None,
+    only_last_file_per_night: bool = False,
 ) -> list[str]:
     """
     LST bin a series of UVH5 files.
@@ -903,6 +904,7 @@ def lst_bin_files(
         ignore_ants=ignore_ants,
         redundantly_averaged=redundantly_averaged,
         reds=reds,
+        only_last_file_per_night=only_last_file_per_night,
     )
     all_baselines = sorted(all_baselines)
 
@@ -1304,6 +1306,57 @@ def get_all_unflagged_baselines(
 
     return all_baselines, all_pols
 
+def get_nlstbind_matching_files(
+    data_files: list[list[str | FastUVH5Meta]], 
+    dlst: float | None=None, 
+    atol: float=1e-10, 
+    lst_start: float =0., 
+    lst_width: float = 2*np.pi,
+    verbose: bool=True, 
+    ntimes_per_file: int=60,
+    blts_are_rectangular: bool | None = None,
+    time_axis_faster_than_bls: bool | None = None
+):
+    """Get the number of LST-bin files required for a set of data files."""
+    # Make the data files into FastUVH5Meta objects
+    data_files = [
+        [
+        df if isinstance(df, FastUVH5Meta) else 
+        FastUVH5Meta(
+            df, 
+            blts_are_rectangular=blts_are_rectangular, 
+            time_axis_faster_than_bls=time_axis_faster_than_bls
+        ) 
+        for df in dfs 
+        ] for dfs in data_files
+    ]
+
+    df0 = data_files[0][0]
+
+    # get dlst from first data file if None
+    if dlst is None:
+        dlst, _, _, _ = io.get_file_times(str(df0.path), filetype='uvh5')
+
+    has_lst_arrays = 'lst_array' in df0.header
+
+    # make 24 hour LST grid
+    lst_grid = make_lst_grid(dlst, begin_lst=lst_start, lst_width=lst_width)
+    dlstbin = lst_grid[1] - lst_grid[0]
+
+    nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
+    all_file_lsts = [
+        lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] 
+        for i in range(nfiles)
+    ]
+    required_lsts = 0
+    for f_lst in all_file_lsts:
+        edges = [f_lst[0] - dlstbin/2, f_lst[-1] + dlstbin/2]
+        for flist in data_files:
+            outfiles = utils.match_lsts_regular(edges, flist)
+            if outfiles:
+                required_lsts += 1
+                break
+    return required_lsts
 
 def lst_bin_arg_parser():
     """
