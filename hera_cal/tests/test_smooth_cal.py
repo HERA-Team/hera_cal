@@ -68,13 +68,26 @@ class Test_Smooth_Cal_Helper_Functions(object):
         freq_filters = np.random.uniform(0, 1, size=(40, 5))
         weights = np.random.uniform(0, 1, size=(50, 40))
         gains = np.random.uniform(0, 1, size=(50, 40))
-        fit1, info = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters)
+        fit1, cached_output = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters)
         assert fit1.shape == gains.shape
 
-        # Check XTXinv
-        fit2, info = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters, XTXinv=info['XTXinv'])
+        # Check that the cached filtering provides the same result
+        fit2, _ = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cached_input=cached_output)
         assert fit1.shape == fit2.shape
-        np.testing.assert_array_equal(fit1, fit2)
+        np.testing.assert_array_almost_equal(fit1, fit2)
+
+        # Check that the other filtering methods provide the same result
+        fit3, _ = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="lu_solve")
+        assert fit1.shape == fit3.shape
+        np.testing.assert_array_almost_equal(fit1, fit3)
+        # np.linalg.lstsq
+        fit4, _ = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="lstsq")
+        assert fit1.shape == fit4.shape
+        np.testing.assert_array_almost_equal(fit1, fit4)
+        # np.linalg.solve
+        fit5, _ = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="solve")
+        assert fit1.shape == fit5.shape
+        np.testing.assert_array_almost_equal(fit1, fit5)
 
         # Check to see that this function matches the true result
         X = np.kron(time_filters, freq_filters)

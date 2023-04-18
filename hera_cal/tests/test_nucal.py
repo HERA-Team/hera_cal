@@ -403,10 +403,15 @@ def test_linear_fit():
     Xy = np.dot(X.T, y)
 
     # Test different modes
-    b1 = nucal._linear_fit(XTX, Xy, solver='lu_solve')
-    b2 = nucal._linear_fit(XTX, Xy, solver='solve')
-    b3 = nucal._linear_fit(XTX, Xy, solver='lstsq')
-    b4 = nucal._linear_fit(XTX, Xy, solver='pinv')
+    b1, cached_input = nucal._linear_fit(XTX, Xy, solver='lu_solve')
+    assert cached_input.get('LU') is not None
+    b1_cached, _ = nucal._linear_fit(XTX, Xy, solver='lu_solve', cached_input=cached_input)
+    # Show that the cached result is the same as the original
+    np.testing.assert_allclose(b1, b1_cached)
+    b2, _ = nucal._linear_fit(XTX, Xy, solver='solve')
+    b3, _ = nucal._linear_fit(XTX, Xy, solver='lstsq')
+    b4, cached_input = nucal._linear_fit(XTX, Xy, solver='pinv')
+    assert cached_input.get('XTXinv') is not None
 
     # Show that all modes give the same result
     np.testing.assert_allclose(b1, b2, atol=1e-6)
@@ -436,7 +441,7 @@ def test_compute_spectral_filters():
     # Compute XTX and Xy
     XTX = np.dot(spectral_filters.T, spectral_filters)
     Xy = np.dot(spectral_filters.T, y)
-    model = spectral_filters @ nucal._linear_fit(XTX, Xy, solver='solve')
+    model = spectral_filters @ nucal._linear_fit(XTX, Xy, solver='solve')[0]
 
     # Test that the spectral filters are correct
     np.testing.assert_allclose(y, model, atol=1e-6)
