@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
+from __future__ import annotations
 
 import numpy as np
 from collections import OrderedDict as odict
 import copy
 
+from typing import Sequence
 from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
-
+from .red_groups import RedundantGroups, Baseline, AntPair
 
 class DataContainer:
     """Dictionary-like object that abstracts away the pol/ant pair ordering of data
@@ -517,19 +519,36 @@ class RedDataContainer(DataContainer):
     '''Structure for containing redundant visibilities that can be accessed by any
         one of the redundant baseline keys (or their conjugate).'''
 
-    def __init__(self, data, reds=None, antpos=None, bl_error_tol=1.0):
+    def __init__(
+            self, 
+            data: DataContainer | dict[Baseline, np.ndarray], 
+            reds: RedundantGroups | Sequence[Sequence[Baseline | AntPair]] | None=None, 
+            antpos: dict[int, np.ndarray] | None=None, 
+            bl_error_tol: float=1.0
+        ):
         '''Creates a RedDataContainer.
 
-        Arguments:
-            data: DataContainer or dictionary of visibilities, just as one would pass into DataContainer().
-                Will error if multiple baselines are part of the same redundant group.
-            reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol).
-            antpos: dictionary of antenna positions in the form {ant_index: np.array([x, y, z])}.
-                Will error if one tries to provide both reds and antpos. If neither is provided,
-                will try to to use data.antpos (which it might have if its is a DataContainer).
-            bl_error_tol: the largest allowable difference between baselines in a redundant group
-                (in the same units as antpos). Normally, this is up to 4x the largest antenna position
-                error. Will only be used if reds is inferred from antpos.
+        Parameters
+        ----------
+        data : DataContainer or dictionary of visibilities, just as one would pass into DataContainer().
+            Will error if multiple baselines are part of the same redundant group.
+        reds : :class:`RedundantGroups` object, or list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol).
+            These are the redundant groups of baselines. If not provided, will try to 
+            infer them from antpos.
+        antpos: dictionary of antenna positions in the form {ant_index: np.array([x, y, z])}.
+            Will error if one tries to provide both reds and antpos. If neither is provided,
+            will try to to use data.antpos (which it might have if its is a DataContainer).
+        bl_error_tol : float
+            the largest allowable difference between baselines in a redundant group
+            (in the same units as antpos). Normally, this is up to 4x the largest antenna position
+            error. Will only be used if reds is inferred from antpos.
+
+        Attributes
+        ----------
+        reds 
+            A :class:`RedundantGroups` object that contains the redundant groups for 
+            the entire array, and methods to manipulate them. 
+            
         '''
         if reds is not None and antpos is not None:
             raise ValueError('Can only provide reds or antpos, not both.')
@@ -540,67 +559,84 @@ class RedDataContainer(DataContainer):
         if reds is None:
             from .redcal import get_reds
             if antpos is not None:
-                reds = get_reds(antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
+                reds = RedundantGroups.from_antpos(
+                    antpos=antpos, pols=self.pols(), bl_error_tol=bl_error_tol, include_autos=False
+                )
             elif hasattr(self, 'antpos') and self.antpos is not None:
-                reds = get_reds(self.antpos, pols=self.pols(), bl_error_tol=bl_error_tol)
+                reds = RedundantGroups.from_antpos(
+                    antpos=self.antpos, pols=self.pols(), bl_error_tol=bl_error_tol, include_autos=False
+                )
             else:
                 raise ValueError('Must provide reds, antpos, or have antpos available at data.antpos')
+        
+        if not isinstance(reds, RedundantGroups):
+            reds = RedundantGroups(red_list=reds, antpos=self.antpos)
+
         self.build_red_keys(reds)
 
-    def _add_red(self, ubl_key, red):
-        '''Updates internal dictionaries with a new redundant group.'''
-        self.reds.append(red)
-        self._red_key_to_bls[ubl_key] = []
-        self._red_key_to_bls[reverse_bl(ubl_key)] = []
-        for bl in red:
-            self._bl_to_red_key[bl] = ubl_key
-            self._bl_to_red_key[reverse_bl(bl)] = reverse_bl(ubl_key)
-            self._red_key_to_bls[ubl_key].append(bl)
-            self._red_key_to_bls[reverse_bl(ubl_key)].append(reverse_bl(bl))
 
-    def build_red_keys(self, reds):
+    def build_red_keys(self, reds: RedundantGroups | list[list[Baseline]]):
         '''Build the dictionaries that map baselines to redundant keys.
 
         Arguments:
             reds: list of lists of redundant baseline tuples, e.g. (ind1, ind2, pol).
         '''
-        # Map all redundant keys to the same underlying data
-        self.reds = []
-        self._bl_to_red_key = {}
-        self._red_key_to_bls = {}
-        for red in copy.deepcopy(reds):
-            bls_in_data = [bl for bl in red if self.has_key(bl)]
-            if len(bls_in_data) > 1:
-                raise ValueError('RedDataContainer can only be constructed with (at most) one baseline per group, '
-                                 + f'but this data has the following redundant baselines: {bls_in_data}')
-            if len(bls_in_data) == 0:
-                self._add_red(red[0], red)
-            elif len(bls_in_data) > 0:
-                self._add_red(bls_in_data[0], red)
+        
+        if isinstance(reds, RedundantGroups):
+            self.reds = reds
+        else:
+            self.reds = RedundantGroups(red_list=reds, antpos=getattr(self, 'antpos', None))
+                
+        self._data_reds = self.reds.filter_reds(bls=self.bls())
+        self._reds_keyed_on_data = self.reds.keyed_on_bls(bls=self.bls())
+        
+        # Check that the data only has one baseline per redundant group
+        for red in self._data_reds:
+            if len(red) > 1:        
+                raise ValueError(
+                    'RedDataContainer can only be constructed with (at most) one baseline per group, '
+                    f'but this data has the following redundant baselines: {red}'
+                )
 
         # delete unused data to avoid leaking memory
-        del self[[k for k in self._data if k not in self._bl_to_red_key]]
+        del self[[k for k in self._data if k not in self.reds]]
 
-    def get_ubl_key(self, key):
-        '''Returns the key used interally denote the data stored. Useful for del'''
-        return self._bl_to_red_key[key]
-
+    def get_ubl_key(self, bl):
+        '''Returns the blkey used to internally denote the data stored.
+        
+        If this bl is in a redundant group present in the data, this will return the
+        blkey that exists in the data. Otherwise, it will return the array-wide blkey
+        representing this group.
+        '''
+        return self._reds_keyed_on_data.get_ubl_key(bl)
+        
     def get_red(self, key):
-        '''Returns the list of baselines redundant with this key.'''
-        return self._red_key_to_bls[self._bl_to_red_key[key]]
+        '''Returns the list of baselines in the array redundant with this key.
+        
+        Note: this is not just baselines existing in the data itself, but in the 
+              entire array.
+        '''
+        return self.reds[key]
 
     def __getitem__(self, key):
         '''Returns data corresponding to the unique baseline that key is a member of.'''
-        return super().__getitem__(self._bl_to_red_key[key])
+        return super().__getitem__(self.get_ubl_key(key))
 
     def __setitem__(self, key, value):
-        '''Sets data for to unique baseline that the key is a member of.'''
-        ubl_key = self._bl_to_red_key.get(key, None)
-        if ubl_key is None:
-            self._add_red(key, [key])  # treat this as a new baseline not redundant with anything
+        '''Sets data for unique baseline that the key is a member of.'''
+        if key in self.reds:
+            ubl_key = self.get_ubl_key(key)
+        else:
+            # treat this as a new baseline not redundant with anything
+            self.reds.append([key])
             ubl_key = key
+
         super().__setitem__(ubl_key, value)
+
+        # Re-key because we've added a new baseline to the data itself.
+        self._reds_keyed_on_data = self.reds.keyed_on_bls(bls=self.bls())
 
     def __contains__(self, key):
         '''Returns true if the baseline redundant with the key is in the data.'''
-        return (key in self._bl_to_red_key) and (super().__contains__(self._bl_to_red_key[key]))
+        return (key in self.reds) and (super().__contains__(self.get_ubl_key(key)))
+        

@@ -62,7 +62,9 @@ setup_args = {
         'aipy',
         "rich",
         "jax",
-        "jaxlib"
+        "jaxlib",
+        'attrs',
+        'frozendict',
     ],
     'extras_require': {
         "all": [
