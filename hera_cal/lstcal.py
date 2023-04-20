@@ -388,8 +388,8 @@ def modified_zscore(data, flags, nsamples, sigma=5.0, axis=-1):
     _data[flags] = np.nan
 
     # Compute the modified z-score
-    med_data = np.nanmedian(data, axis=axis, keepdims=True)
-    d_rs = data - med_data
+    med_data = np.nanmedian(_data, axis=axis, keepdims=True)
+    d_rs = _data - med_data
     d_sq = np.abs(d_rs) ** 2
     sig = np.sqrt(np.nanmedian(d_sq, axis=axis, keepdims=True) / 0.456)
     zscore = robust_divide(d_rs, sig)
