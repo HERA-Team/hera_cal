@@ -334,9 +334,36 @@ def amplitude_calibration(data, flags, nsamples, antpairs):
 
     return sol, wgts
 
-def identify_outliers(data, flags, nsamples, freqs, sigma=5.0, axis=0):
+def robust_divide(num, den):
+    """Prevent division by zero.
+
+    This function will compute division between two array-like objects by setting
+    values to infinity when the denominator is small for the given data type. This
+    avoids floating point exception warnings that may hide genuine problems
+    in the data.
+
+    Parameters
+    ----------
+    num : array
+        The numerator.
+    den : array
+        The denominator.
+
+    Returns
+    -------
+    out : array
+        The result of dividing num / den. Elements where b is small (or zero) are set
+        to infinity.
+
     """
-    Identify outliers in an LST-bin.
+    thresh = np.finfo(den.dtype).eps
+    out = np.true_divide(num, den, where=(np.abs(den) > thresh))
+    out = np.where(np.abs(den) > thresh, out, np.inf)
+    return out
+
+def modified_zscore(data, flags, nsamples, sigma=5.0, axis=-1):
+    """
+    Identify outliers in an LST-bin by computing the modified z-score.
 
     Parameters:
     -----------
@@ -346,14 +373,49 @@ def identify_outliers(data, flags, nsamples, freqs, sigma=5.0, axis=0):
         Shape (Ntimes, Nbls, Nfreqs, Npols) of boolean flags.
     nsamples : np.ndarray
         Number of samples in each time-frequency bin. Shape (Ntimes, Nbls, Nfreqs, Npols).
-    freqs : np.ndarray
-        Frequency array in Hz.
     sigma : float, default=5.0
         Number of standard deviations to use for outlier rejection.
+    axis : int, default=-1
+        Axis along which to compute the modified z-score.
 
     Returns:
     --------
     outlier_flags : np.ndarray
         Shape (Ntimes, Nbls, Nfreqs, Npols) of boolean flags.
+    """
+    # Make a copy of the data and set flags to NaN
+    _data = np.copy(data)
+    _data[flags] = np.nan
+
+    # Compute the modified z-score
+    med_data = np.nanmedian(data, axis=axis, keepdims=True)
+    d_rs = data - med_data
+    d_sq = np.abs(d_rs) ** 2
+    sig = np.sqrt(np.nanmedian(d_sq, axis=axis, keepdims=True) / 0.456)
+    zscore = robust_divide(d_rs, sig)
+    return np.abs(zscore) > sigma
+
+def flag_lst_data_products(data, flags, nsamples, inplace=True):
+    """
+    Flag data products in an LST-bin.
+
+    Parameters:
+    -----------
+    data : np.ndarray
+        Shape (Ntimes, Nbls, Nfreqs, Npols) of complex data.
+    flags : np.ndarray
+        Shape (Ntimes, Nbls, Nfreqs, Npols) of boolean flags.
+    nsamples : np.ndarray
+        Number of samples in each time-frequency bin. Shape (Ntimes, Nbls, Nfreqs, Npols).
+
+    Returns:
+    --------
+    if inplace:
+        None
+    else:
+        flagged_data : np.ndarray
+            Shape (Ntimes, Nbls, Nfreqs, Npols) of complex data.
+        flags : np.ndarray
+            Shape (Ntimes, Nbls, Nfreqs, Npols) of boolean flags.
     """
     pass
