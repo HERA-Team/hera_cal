@@ -30,6 +30,7 @@ from functools import cached_property
 from astropy.time import Time
 from contextlib import contextmanager
 from functools import lru_cache
+from pyuvdata.uvdata import FastUVH5Meta
 
 try:
     import aipy
@@ -2954,3 +2955,97 @@ def throw_away_flagged_ants_parser():
                     help="Also throw away baselines that have all channels and integrations flagged.")
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
+
+def uvdata_from_fastuvh5(
+    meta: FastUVH5Meta, 
+    antpairs: list[tuple[int, int]] | None = None,
+    times: np.ndarray | None = None,
+    lsts: np.ndarray | None = None,
+    start_jd: float | None = None,
+    lst_branch_cut: float = 0.0,
+    **kwargs) -> UVData:
+    """Convert a FastUVH5Meta object to a UVData object.
+
+    This is a convenience function to convert a FastUVH5Meta object to a UVData
+    object, and update some of the metadata.
+
+    Parameters
+    ----------
+    meta : FastUVH5Meta
+        The metadata object to convert.
+
+    Returns
+    -------
+    UVData
+        The UVData object.
+    """
+    uvd = meta.to_uvdata()
+    
+    if not meta.blts_are_rectangular:
+        raise NotImplementedError("Cannot convert non-rectangular blts to UVData.")
+    
+    if times is None and lsts is None:
+        times = meta.times
+        lsts = meta.lsts
+    elif times is None:
+        # DO STUFF
+        if start_jd is None:
+            raise AttributeError("if times is not given, start_jd must be given")
+        times = LST2JD(
+            lsts, start_jd=start_jd, allow_other_jd=True, lst_branch_cut=lst_branch_cut,
+            latitude=meta.telescope_location_lat_lon_alt_degrees[0],
+            longitude=meta.telescope_location_lat_lon_alt_degrees[1],
+            altitude=meta.telescope_location_lat_lon_alt_degrees[2],
+            
+        )
+    elif lsts is None:
+        # DO STUFF
+        lsts = JD2LST(times, *meta.telescope_location_lat_lon_alt_degrees)
+
+    else:
+        assert len(times) == len(lsts)
+
+    if antpairs is None:
+        antpairs = meta.antpairs
+
+    timefirst = kwargs.get("time_axis_faster_than_bls", meta.time_axis_faster_than_bls)
+
+    if not timefirst:
+        uvd.time_array = np.repeat(times, len(antpairs))
+        uvd.lst_array = np.repeat(lsts, len(antpairs))
+        uvd.ant_1_array = np.tile(np.array([antpair[0] for antpair in antpairs]), len(times))
+        uvd.ant_2_array = np.tile(np.array([antpair[1] for antpair in antpairs]), len(times))    
+    else:
+        uvd.time_array = np.tile(times, len(antpairs))
+        uvd.lst_array = np.tile(lsts, len(antpairs))
+        uvd.ant_1_array = np.repeat(np.array([antpair[0] for antpair in antpairs]), len(times))
+        uvd.ant_2_array = np.repeat(np.array([antpair[1] for antpair in antpairs]), len(times))
+
+    uvd.Nblts = len(uvd.time_array)
+    uvd.Nbls = len(antpairs)
+    uvd.Ntimes = len(times)
+
+    uvd.integration_time = np.median(meta.integration_time) * np.ones(uvd.Nblts)
+    uvd.baseline_array = uvutils.antnums_to_baseline(
+        uvd.ant_1_array, uvd.ant_2_array, Nants_telescope=uvd.Nants_telescope
+    )
+    uvd.phase_center_id_array = np.zeros(uvd.Nblts, dtype=int)
+    
+    uvd._set_app_coords_helper()
+    uvd.extra_keywords = meta.extra_keywords
+    
+    uvd.set_uvws_from_antenna_positions()
+    # Overwrite some of the metadata.
+    for key, value in kwargs.items():
+        setattr(uvd, key, value)
+
+    # For dependent metadata, reset it to be consistent with the new metadata.
+    uvd.Nfreqs = uvd.freq_array.size
+    uvd.Npols = len(uvd.polarization_array)
+    uvd.spw_array = np.unique(uvd.flex_spw_id_array)
+    uvd.Nspws = len(uvd.spw_array)
+    uvd.Nants_data = len(np.unique(np.concatenate((uvd.ant_1_array, uvd.ant_2_array))))
+    uvd.Nants_telescope = len(uvd.antenna_numbers)
+    uvd.blts_are_rectangular = True
+    uvd.time_axis_faster_than_bls = timefirst
+    return uvd

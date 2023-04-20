@@ -59,6 +59,7 @@ class Test_lstbin:
         self.lst_list = [self.lsts1, self.lsts2, self.lsts3]
         self.nsmp_list = [self.nsmps1, self.nsmps2, self.nsmps3]
         self.file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
+        self.fname_format = "zen.{pol}.{kind}.{lst:7.5f}.uvh5"
 
     def test_make_lst_grid(self):
         lst_grid = lstbin.make_lst_grid(0.01, begin_lst=None)
@@ -626,9 +627,10 @@ class Test_lstbin:
     def test_simpler_lst_bin_vs_old(self, rephase):
         # basic execution
         file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
+        fname_format = self.fname_format
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
-            file_ext=file_ext, ignore_flags=True, rephase=rephase
+            fname_format=fname_format, ignore_flags=True, rephase=rephase
         )
         output_lst_file = "./zen.ee.LST.0.20124.uvh5"
         output_std_file = "./zen.ee.STD.0.20124.uvh5"
@@ -659,7 +661,8 @@ class Test_lstbin:
         uv2.antenna_positions = uv1.antenna_positions
         uv2.Nants_telescope = uv1.Nants_telescope
         uv2.uvw_array = uv1.uvw_array
-
+        uv2.extra_keywords = uv1.extra_keywords
+        uv2.phase_center_catalog[0]['cat_name'] = 'zenith'
         assert uv1 == uv2
 
 
@@ -668,10 +671,10 @@ class Test_lstbin:
     def test_simpler_lst_bin_files(self):
         # basic execution
         file_ext = self.file_ext
-
+        fname_format = self.fname_format
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
-            file_ext=file_ext, ignore_flags=True
+            fname_format=fname_format, ignore_flags=True
         )
         output_lst_file = "./zen.ee.LST.0.20124.uvh5"
         output_std_file = "./zen.ee.STD.0.20124.uvh5"
@@ -691,7 +694,7 @@ class Test_lstbin:
         # There are 28 baselines in the files.
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
-            file_ext=file_ext, Nbls_to_load=10, ignore_flags=True
+            fname_format=fname_format, Nbls_to_load=10, ignore_flags=True
         )
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
@@ -704,7 +707,7 @@ class Test_lstbin:
         # test rephase
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
-            rephase=True, file_ext=file_ext
+            rephase=True, fname_format=fname_format
         )
         output_lst_file = "./zen.ee.LST.0.20124.uvh5"
         output_std_file = "./zen.ee.STD.0.20124.uvh5"
@@ -718,7 +721,7 @@ class Test_lstbin:
                       [sorted(glob.glob(DATA_PATH + '/zen.2458045.*XRAA.uvh5'))[-1]]]
         lstbin_simple.lst_bin_files(
             data_files, n_lstbins_per_outfile=30, outdir="./", overwrite=True,
-            file_ext=file_ext
+            fname_format=fname_format
         )
         output_lst_files = ['./zen.ee.LST.0.20124.uvh5', './zen.ee.LST.0.31870.uvh5', './zen.ee.LST.0.36568.uvh5']
         assert os.path.exists(output_lst_files[0])
@@ -733,7 +736,7 @@ class Test_lstbin:
         # test smaller ntimes file output, sweeping through f_select
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True,
-            write_kwargs={'vis_units': 'Jy'}, file_ext=file_ext)
+            write_kwargs={'vis_units': 'Jy'}, fname_format=fname_format)
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         # load a file
         uvd1 = UVData()
@@ -750,7 +753,7 @@ class Test_lstbin:
         # test output_file_select
         lstbin_simple.lst_bin_files(
             self.data_files,n_lstbins_per_outfile=80, outdir="./", overwrite=True, 
-            output_file_select=1, write_kwargs={'vis_units': 'Jy'}, file_ext=file_ext
+            output_file_select=1, write_kwargs={'vis_units': 'Jy'}, fname_format=fname_format
         )
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         # load a file
@@ -771,7 +774,7 @@ class Test_lstbin:
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True, 
             output_file_select=100,
-            file_ext=file_ext
+            fname_format=fname_format
         )
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         assert len(output_files) == 0
@@ -779,7 +782,7 @@ class Test_lstbin:
         # test fixed start
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
-            lst_start=0.18, file_ext=file_ext
+            lst_start=0.18, fname_format=fname_format,
         )
         output_lst_file = "./zen.ee.LST.0.17932.uvh5"
         output_std_file = "./zen.ee.STD.0.17932.uvh5"
@@ -796,7 +799,7 @@ class Test_lstbin:
          # test sigma-clip
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
-            lst_start=0.18, file_ext=file_ext, sigma_clip_thresh=4.0, sigma_clip_min_N=4
+            lst_start=0.18, fname_format=fname_format, sigma_clip_thresh=4.0, sigma_clip_min_N=4
         )
         output_lst_file = "./zen.ee.LST.0.17932.uvh5"
         output_std_file = "./zen.ee.STD.0.17932.uvh5"
@@ -823,7 +826,7 @@ class Test_lstbin:
 
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
-            input_cals=input_cals, file_ext=file_ext)
+            input_cals=input_cals, fname_format=fname_format)
 
         output_lst_file = "./zen.ee.LST.0.20124.uvh5"
         output_std_file = "./zen.ee.STD.0.20124.uvh5"
@@ -838,7 +841,7 @@ class Test_lstbin:
             input_cals.append([uvc.select(times=uvc.time_array[:1], inplace=False) for df in dfiles])
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
-            input_cals=input_cals, file_ext=file_ext
+            input_cals=input_cals, fname_format=fname_format
         )
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
@@ -854,7 +857,7 @@ class Test_lstbin:
         # test removing antennas in a flag yaml
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
-            input_cals=input_cals, file_ext=file_ext,
+            input_cals=input_cals, fname_format=fname_format,
             ex_ant_yaml_files=self.ant_yamls
         )
         lstb = UVData()
@@ -869,7 +872,7 @@ class Test_lstbin:
         # test smaller ntimes file output, sweeping through f_select
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True,
-            write_kwargs={'vis_units': 'Jy'}, file_ext=self.file_ext)
+            write_kwargs={'vis_units': 'Jy'}, fname_format=self.fname_format)
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         # load a file
         uvd1 = UVData()
@@ -887,7 +890,8 @@ class Test_lstbin:
         # test golden_lsts
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True, 
-            output_file_select=1, write_kwargs={'vis_units': 'Jy'}, file_ext=self.file_ext,
+            output_file_select=1, write_kwargs={'vis_units': 'Jy'}, 
+            fname_format=self.fname_format,
             golden_lsts=(0.265,)
         )
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
@@ -909,7 +913,7 @@ class Test_lstbin:
         # test smaller ntimes file output, sweeping through f_select
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True,
-            write_kwargs={'vis_units': 'Jy'}, file_ext=self.file_ext)
+            write_kwargs={'vis_units': 'Jy'}, fname_format=self.fname_format)
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         # load a file
         uvd1 = UVData()
@@ -927,7 +931,8 @@ class Test_lstbin:
         # test golden_lsts
         lstbin_simple.lst_bin_files(
             self.data_files, n_lstbins_per_outfile=80, outdir="./", overwrite=True, 
-            output_file_select=1, write_kwargs={'vis_units': 'Jy'}, file_ext=self.file_ext,
+            output_file_select=1, write_kwargs={'vis_units': 'Jy'}, 
+            fname_format=self.fname_format,
             save_channels=(32,)
         )
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))

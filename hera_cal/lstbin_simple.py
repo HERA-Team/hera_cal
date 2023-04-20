@@ -22,6 +22,8 @@ import argparse
 from pyuvdata.uvdata.uvh5 import FastUVH5Meta
 from pyuvdata import utils as uvutils
 from .red_groups import RedundantGroups
+import h5py
+from functools import partial
 
 try:
     profile
@@ -676,7 +678,7 @@ def lst_bin_files(
     input_cals: tuple[list[str]] | None = (),
     dlst: float | None=None, 
     n_lstbins_per_outfile: int=60,
-    file_ext: str="{type}.{time:7.5f}.uvh5", 
+    fname_format: str="zen.{kind}.{lst:7.5f}.uvh5", 
     outdir: str | Path | None=None, 
     overwrite: bool=False, 
     history: str='', 
@@ -693,7 +695,7 @@ def lst_bin_files(
     write_kwargs: dict | None = None,
     ignore_missing_calfiles: bool = False,
     save_channels: tuple[int] = (),
-    golden_lsts: tuple[int] = (),
+    golden_lsts: tuple[float] = (),
     sigma_clip_thresh: float = 0.0,
     sigma_clip_min_N: int = 4,
     redundantly_averaged: bool | None = None,
@@ -732,11 +734,11 @@ def lst_bin_files(
         interval between the first two LSTs in the first data file on the first night.
     n_lstbins_per_outfile
         The number of LST bins to put in each output file.
-    file_ext
-        The extension to "zen." for output files. This must have at least a ".{type}." field
-        where either "LST" or "STD" is inserted for data average or data standard dev., and also a ".{time:7.5f}"
-        field where the starting time of the data file is inserted. If this also has a ".{pol}." field, then
-        the polarizations of data is also inserted. Example: "{type}.{time:7.5f}.uvh5"
+    fname_format
+        A formatting string to use to write the output file. This can have the following
+        fields: "kind" (which will evaluate to one of 'LST', 'STD', 'GOLDEN' or 'REDUCEDCHAN'),
+        "lst" (which will evaluate to the LST of the bin), and "pol" (which will evaluate
+        to the polarization of the data). Example: "zen.{kind}.{lst:7.5f}.uvh5"
     outdir
         The output directory. If not provided, this is set to the lowest-level common
         directory for all data files.
@@ -869,6 +871,10 @@ def lst_bin_files(
     if 'lst_branch_cut' not in write_kwargs and lst_start is not None:
         write_kwargs['lst_branch_cut'] = file_lsts[0][0]
 
+    # get outdir
+    if outdir is None:
+        outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
+
     # select file_lsts
     if output_file_select is not None:
         if isinstance(output_file_select, (int, np.integer)):
@@ -888,10 +894,6 @@ def lst_bin_files(
     zeroth_file_on_last_day_index = np.argmin([np.min(tarr) for tarr in time_arrs[last_day_index]])
 
     logger.info("Getting metadata from last data...")
-    
-    # TODO: since hd is only used for metadata, we could use the FastUVH5Meta class.
-    #       However, we need to figure out how to read the antpos properly first.
-    #hd = io.HERAData(str(data_files[last_day_index][zeroth_file_on_last_day_index]))
     meta = data_metas[last_day_index][zeroth_file_on_last_day_index]
     x_orientation = meta.x_orientation
 
@@ -1010,28 +1012,52 @@ def lst_bin_files(
         if len(all_lsts) == 0:
             continue
 
-        # iterate over baseline groups (for memory efficiency)
-        out_data, out_flags, out_nsamples = _allocate_dnf(
-            (len(all_baselines), len(outfile_lsts), len(freq_array), len(all_pols)),
-        )
-        out_stds = np.zeros_like(out_data)
-
-        nbls_so_far = 0
         lst_bin_edges = np.array(
             [x - dlst/2 for x in outfile_lsts] + [outfile_lsts[-1] + dlst/2]
         )
-        
+
         # The "golden" data is the full data over all days for a small subset of LST
         # bins. This works best if the LST bins are small (similar to the size of the
         # raw integrations). Usually, the length of "bins" will be zero.
         # NOTE: we work under the assumption that the LST bins are small, so that 
         # each night only gets one integration in each LST bin. If there are *more*
         # than one integration in the bin, we take the first one only.
-        bins, _, mask = get_lst_bins(golden_lsts, lst_bin_edges)
-        bins = bins[mask]
-        golden_data, golden_flags, golden_nsamples = [], [], []
-        logger.info(f"golden_lsts bins in this output file: {bins}, lst_bin_edges={lst_bin_edges}, {len(lst_bin_edges)}")
+        golden_bins, _, mask = get_lst_bins(golden_lsts, lst_bin_edges)
+        golden_bins = golden_bins[mask]
+        logger.info(
+            f"golden_lsts bins in this output file: {golden_bins}, "
+            f"lst_bin_edges={lst_bin_edges}"
+        )
 
+        # make it a bit easier to create the outfiles
+        create_outfile = partial(
+            create_lstbin_output_file, 
+            outdir = outdir, 
+            pols=all_pols,
+            file_list=file_list,
+            history=history,
+            fname_format=fname_format,
+            overwrite=overwrite,
+            antpairs=all_baselines,
+            start_jd=start_jd,
+            freq_min=freq_min,
+            freq_max=freq_max,
+        )
+        out_files = {}
+        for kind in ['LST', 'STD']:
+            # Create the files we'll write to
+            try:
+                out_files[kind] = create_outfile(
+                    kind = kind,
+                    lst=lst_bin_edges[0],
+                    lsts=outfile_lsts,
+                )
+            except FileExistsError as e:
+                logger.warning(str(e))
+                continue
+
+        print("OUT_FILES: ", out_files)
+        nbls_so_far = 0
         for bi, bl_chunk in enumerate(bl_chunks):
             logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
             # data/flags/nsamples are *lists*, with nlst_bins entries, each being an
@@ -1056,156 +1082,69 @@ def lst_bin_files(
             )
 
             slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))
-            reduce_lst_bins(
+            out_data, out_flags, out_std, out_nsamples = reduce_lst_bins(
                 data, flags, nsamples,
-                out_nsamples=out_nsamples[slc],
-                out_data=out_data[slc],
-                out_flags=out_flags[slc],
-                out_std=out_stds[slc],
                 sigma_clip_thresh = sigma_clip_thresh,
                 sigma_clip_min_N = sigma_clip_min_N,
             )
 
-            if len(bins):
-                for nbin, b in enumerate(bins):
-                    if bi == 0:
-                        logger.info(f"length of data: {len(data)}")
-                        nt, _, nf, npol = data[b].shape
-                        d, f, n = _allocate_dnf(
-                            (len(all_baselines), nt, nf, npol)
-                        )
-                        golden_data.append(d)
-                        golden_flags.append(f)
-                        golden_nsamples.append(n)
-                    
-                    golden_data[nbin][slc] = data[b].transpose((1,0,2,3))
-                    golden_flags[nbin][slc] = flags[b].transpose((1,0,2,3))
-                    golden_nsamples[nbin][slc] = nsamples[b].transpose((1,0,2,3))
+            write_baseline_slc_to_file(
+                fl=out_files['LST'],
+                slc=slc,
+                data=out_data,
+                flags=out_flags,
+                nsamples=out_nsamples,
+            )
+            write_baseline_slc_to_file(
+                fl=out_files['STD'],
+                slc=slc,
+                data=out_std,
+                flags=out_flags,
+                nsamples=out_nsamples,
+            )
 
-            if len(save_channels):
-                if bi == 0:
-                    # The "chan" data is a subset of the full data, taking days, baselines
-                    # and pols, but only a small subset of frequencies. We do this for the first 
-                    # LST bin in each output file.
-                    chan_data, chan_flags, chan_nsamples = _allocate_dnf(
-                        (len(all_baselines), data[0].shape[0], len(save_channels), len(all_pols))
+            if bi == 0:
+                # On the first baseline chunk, create the output file
+                out_files['GOLDEN'] = []
+                for ibin, nbin in enumerate(golden_bins):
+                    out_files["GOLDEN"].append(
+                        create_outfile(
+                            kind = 'GOLDEN',
+                            lst=lst_bin_edges[nbin],
+                            times=binned_times[ibin],
+                        )
                     )
 
-                for ichan, chan in enumerate(save_channels):
-                    chan_data[slc, :, ichan] = data[0][:, :, chan].transpose((1, 0, 2))
-                    chan_flags[slc, :, ichan] = flags[0][:, :, chan].transpose((1, 0, 2))
-                    chan_nsamples[slc, :, ichan] = nsamples[0][:, :, chan].transpose((1, 0, 2))
+                if save_channels:
+                    out_files['REDUCEDCHAN'] = create_outfile(
+                        kind = 'REDUCEDCHAN',
+                        lst=lst_bin_edges[0],
+                        times=binned_times[0],
+                        channels=save_channels
+                    )
+
+            if len(golden_bins)>0:
+                for nbin, b in enumerate(golden_bins):
+                    write_baseline_slc_to_file(
+                        fl = out_files['GOLDEN'][nbin],
+                        slc=slc,
+                        data=data[b].transpose((1, 0, 2, 3)),
+                        flags=flags[b].transpose((1, 0, 2, 3)),
+                        nsamples=nsamples[b].transpose((1, 0, 2, 3)),
+                    )
+
+            if len(save_channels):
+                write_baseline_slc_to_file(
+                    fl = out_files['REDUCEDCHAN'],
+                    slc=slc,
+                    data=data[0][:, :, save_channels].transpose((1, 0, 2, 3)),
+                    flags=flags[0][:, :, save_channels].transpose((1, 0, 2, 3)),
+                    nsamples=nsamples[0][:, :, save_channels].transpose((1, 0, 2, 3)),
+                )
 
             nbls_so_far += len(bl_chunk)
 
         logger.info("Writing output files")
-
-        # get outdir
-        if outdir is None:
-            outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
-
-        # update kwrgs
-        # update history
-        file_list_str = "-".join(os.path.basename(ff.path)for ff in file_list)
-        file_history = f"{history} Input files: {file_list_str}"
-        _history = file_history + utils.history_string()
-
-        # form integration time array
-        integration_time = integration_time*np.ones(
-            len(bin_lst) * len(all_baselines), 
-            dtype=np.float64
-        )
-
-        # file in data ext
-        fkwargs = {"type": "LST", "time": bin_lst[0] - dlst / 2.0}
-        
-        if "{pol}" in file_ext:
-            fkwargs['pol'] = '.'.join(all_pols)
-
-        # configure filenames
-        bin_file = f"zen.{file_ext.format(**fkwargs)}"
-        outfnames.append(os.path.join(outdir, bin_file))
-        fkwargs['type'] = 'STD'
-        std_file = f"zen.{file_ext.format(**fkwargs)}"
-
-        logger.info(f"Writing {bin_file} and {std_file} to {outdir}")
-
-        # check for overwrite
-        if os.path.exists(os.path.join(outdir, bin_file)) and not overwrite:
-            logger.warning(f"{bin_file} exists, not overwriting")
-            continue
-
-        write_kwargs.update(
-            lst_array=bin_lst,
-            freq_array=freq_array,
-            antpos=antpos,
-            pols=all_pols,
-            antpairs=all_baselines,
-            flags=out_flags,
-            nsamples=out_nsamples,
-            x_orientation=x_orientation,
-            integration_time=integration_time,
-            history=_history,
-            start_jd=start_jd,
-        )
-        uvd_data = io.create_uvd_from_hera_data(data = out_data, **write_kwargs)
-        uvd_data.write_uvh5(os.path.join(outdir, bin_file), clobber=overwrite)
-
-        uvd_data = io.create_uvd_from_hera_data(data = out_stds, **write_kwargs)
-        uvd_data.write_uvh5(os.path.join(outdir, std_file), clobber=overwrite)
-
-        # Now write out the golden lsts
-        for gd, gn, gf, bt, ib in zip(golden_data, golden_nsamples, golden_flags, binned_times, bins):
-            fkwargs['type'] = 'GOLDEN'
-            fkwargs['time'] = lst_bin_edges[ib]
-            filename = f"zen.{file_ext.format(**fkwargs)}"
-
-            guvd = io.create_uvd_from_hera_data(
-                data = gd,
-                time_array = bt,
-                freq_array=freq_array,
-                antpos=antpos,
-                pols=all_pols,
-                antpairs=all_baselines,
-                flags=gf,
-                nsamples=gn,
-                x_orientation=x_orientation,
-                integration_time=integration_time[0],
-                history=_history,
-            )
-            # Don't check autos because we've set flagged stuff to NaN and that fails.
-            guvd.write_uvh5(
-                os.path.join(outdir, filename), clobber=overwrite, 
-                check_autos=False, fix_autos=False
-            )
-
-        # Now write out reduced-channel data
-        if save_channels:
-            fkwargs['type'] = 'REDUCEDCHAN'
-            fkwargs['time'] = bin_lst[0] - dlst / 2.0
-            filename = f"zen.{file_ext.format(**fkwargs)}"
-            guvd = io.create_uvd_from_hera_data(
-                data = chan_data,
-                time_array = binned_times[0],
-                freq_array=freq_array[list(save_channels)],
-                antpos=antpos,
-                pols=all_pols,
-                antpairs=all_baselines,
-                flags=chan_flags,
-                nsamples=chan_nsamples,
-                x_orientation=x_orientation,
-                integration_time=integration_time[0],
-                history=_history,
-            )
-            logger.info(f"BINNED TIMES: {binned_times[0]}")
-            logger.info(f"REDUCEDCHAN DATA SHAPE: {guvd.data_array.shape}")
-            logger.info(f"Ntimes: {guvd.Ntimes}")
-
-            # Don't check autos because we've set flagged stuff to NaN and that fails.
-            guvd.write_uvh5(
-                os.path.join(outdir, filename), clobber=overwrite, 
-                check_autos=False, fix_autos=False
-            )
 
     return outfnames
 
@@ -1389,6 +1328,82 @@ def get_nlstbind_matching_files(
                 required_lsts += 1
                 break
     return required_lsts
+
+def create_lstbin_output_file(
+    outdir: Path,
+    kind: str, 
+    lst: float,
+    pols: list[str],
+    file_list: list[FastUVH5Meta],
+    start_jd: float,
+    times: np.ndarray | None = None,
+    lsts: np.ndarray | None = None,
+    history: str  = "",
+    fname_format: str="zen.{kind}.{lst:7.5f}.uvh5", 
+    overwrite: bool = False,
+    antpairs: list[tuple[int, int]] | None = None,
+    freq_min: float | None = None,
+    freq_max: float | None = None,
+    channels: np.ndarray | list[int] | None = None
+    
+) -> Path:
+    outdir = Path(outdir)
+    # pols = set(pols)
+    # update history
+    file_list_str = "-".join(ff.path.name for ff in file_list)
+    file_history = f"{history} Input files: {file_list_str}"
+    _history = file_history + utils.history_string()
+
+    fname = outdir / fname_format.format(kind=kind, lst=lst, pol=''.join(pols))
+
+    logger.info(f"Initializing {fname}")
+
+    # check for overwrite
+    if fname.exists() and not overwrite:
+        raise FileExistsError(f"{fname} exists, not overwriting")
+
+    freqs = np.squeeze(file_list[0].freq_array)
+    if freq_min:
+        freqs = freqs[freqs >= freq_min]
+    if freq_max:
+        freqs = freqs[freqs <= freq_max]
+    if channels:
+        freqs = freqs[channels]
+
+    uvd_template = io.uvdata_from_fastuvh5(
+        meta=file_list[0],
+        antpairs=antpairs,
+        pols=pols,
+        lsts=lsts,
+        times=times,
+        history=_history,
+        freq_array=freqs,
+        start_jd=start_jd,
+        time_axis_faster_than_bls = True,
+        vis_units="Jy",
+    )
+    uvd_template.initialize_uvh5_file(str(fname.absolute()), clobber=overwrite)
+    return fname
+
+def write_baseline_slc_to_file(
+    fl: Path, 
+    slc: slice, 
+    data: np.ndarray, 
+    flags: np.ndarray, 
+    nsamples: np.ndarray
+):
+    """Write a baseline slice to a file."""
+    
+    with h5py.File(fl, 'r+') as f:
+        ntimes = int(f['Header']['Ntimes'][()])
+        timefirst = bool(f['Header']['time_axis_faster_than_bls'][()])
+        if not timefirst:
+            raise NotImplementedError("Can only do time-first files for now.")
+        
+        slc = slice(slc.start*ntimes, slc.stop*ntimes, 1)
+        f['Data']['visdata'][slc] = data.reshape((-1, data.shape[2], data.shape[3]))
+        f['Data']['flags'][slc] = flags.reshape((-1, data.shape[2], data.shape[3]))
+        f['Data']['nsamples'][slc] = nsamples.reshape((-1, data.shape[2], data.shape[3]))
 
 def lst_bin_arg_parser():
     """
