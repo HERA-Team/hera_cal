@@ -19,7 +19,7 @@ from . import io, apply_cal, utils, redcal
 from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
-
+import re
 
 
 def discard_autocorr_imag(data_container, keys=None):
@@ -2050,15 +2050,15 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
            "interleave" in fname and not interleave_mode:
             raise ValueError("must not have a subset of files with 'interleave' in name.")
     if interleave_mode:
-        interleave_indices = np.unique([int(re.findall(fname, "interleave_[0-9]\{1, 10\}")[0][11:]) for fname in baseline_chunk_files])
-        ninterleave = length(interleave_indices)
+        interleave_indices = np.unique([int(re.findall("interleave_[0-9]{1,10}", fname)[0][11:]) for fname in baseline_chunk_files])
+        ninterleave = len(interleave_indices)
         interleave_sets = {}
         interleave_index_dict = {}
         for inum, interleave in enumerate(interleave_indices):
             interleave_sets[inum] = sorted([fname for fname in baseline_chunk_files if f'interleave_{inum}' in fname])
             interleave_index_dict[inum] = interleave
         # check that all interleave sets have the same length.
-        if length(np.unique([length(iset) for iset in interleave_sets])) > 1:
+        if len(np.unique([len(interleave_sets[k]) for k in interleave_sets])) > 1:
             raise ValueError("If you are providing interleaved files, each interleaved set must have the same number of files in it!")
     else:
        ninterleave = 1
@@ -2067,15 +2067,15 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         
     hd_time_chunk = io.HERAData(time_chunk_template)
     times = hd_time_chunk.times
-    
+    hd_baseline_chunk = io.HERAData(baseline_chunk_files[0])
+    freqs = hd_baseline_chunk.freqs
+    polarizations = hd_baseline_chunk.pols
+
         
     
     # read in the template file, but only include polarizations, frequencies
     # from the baseline_chunk_file files.
     if not time_bounds:
-        hd_baseline_chunk = io.HERAData(baseline_chunk_files[0])
-        freqs = hd_baseline_chunk.freqs
-        polarizations = hd_baseline_chunk.pols
         hd_time_chunk.read(times=times, frequencies=freqs, polarizations=polarizations)
         # set the all data to zero, flags to True, and nsamples to zero.
         hd_time_chunk.nsample_array[:] = 0.0
@@ -2084,29 +2084,36 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         # for each baseline_chunk_file, read in only the times relevant to the templatefile.
         # and update the data, flags, nsamples array of the template file
         # with the baseline_chunk_file data.
-        for baseline_chunk_file in baseline_chunk_files:
-            hd_baseline_chunk = io.HERAData(baseline_chunk_file)
-            # find times that are close.
-            tload = []
-            # use tolerance in times that is set by the time resolution of the dataset.
-            atol = np.median(np.diff(hd_baseline_chunk.times)) / 10.
-            all_times = np.unique(hd_baseline_chunk.times)
-            for t in all_times:
-                if np.any(np.isclose(t, hd_time_chunk.times, atol=atol, rtol=0)):
-                    tload.append(t)
-            d, f, n = hd_baseline_chunk.read(times=tload, axis='blt')
-            hd_time_chunk.update(flags=f, data=d, nsamples=n)
-        # now that we've updated everything, we write the output file.
-        hd_time_chunk.write_uvh5(outfilename, clobber=clobber)
+        for inum in interleave_sets:
+            for baseline_chunk_file in interleave_sets[inum]:
+                hd_baseline_chunk = io.HERAData(baseline_chunk_file)
+                # find times that are close.
+                tload = []
+                # use tolerance in times that is set by the time resolution of the dataset.
+                atol = np.median(np.diff(hd_baseline_chunk.times)) / 10.
+                all_times = np.unique(hd_baseline_chunk.times)
+                for t in all_times:
+                    if np.any(np.isclose(t, hd_time_chunk.times, atol=atol, rtol=0)):
+                        tload.append(t)
+                d, f, n = hd_baseline_chunk.read(times=tload, axis='blt')
+                hd_time_chunk.update(flags=f, data=d, nsamples=n)
+            # now that we've updated everything, we write the output file.
+            if ninterleave > 1:
+                outfilename_i = outfilename.replace('.uvh5', '.interleave_{}.uvh5')
+            else:
+                outfilename_i = outfilename
+                
+            hd_time_chunk.write_uvh5(outfilename_i, clobber=clobber)
+            # reinstantiate writer file.
+            hd_time_chunk = io.HERAData(time_chunk_template)
+            hd_time_chunk.read(times=times, frequencies=freqs, polarizations=polarizations)
+            
     else:
         dt_time_chunk = np.median(np.diff(hd_time_chunk.times)) / 2.
         tmax = hd_time_chunk.times.max() + dt_time_chunk
         tmin = hd_time_chunk.times.min() - dt_time_chunk
         for inum in interleave_sets:
             hd_combined = io.HERAData(interleave_sets[inum])
-            hd_baseline_chunk = io.HERAData(interleave_sets[inum][0])
-            freqs = hd_baseline_chunk.freqs
-            polarizations = hd_baseline_chunk.pols
             if inum == 0:
                 # use same time selection for all interleaves even though the times don't line
                 # up. We need the indices too.
@@ -2121,7 +2128,7 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
             if np.any(t_select):
                 hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
                 if ninterleave > 1:
-                    outfilename_interleave = outfilename.replace('.uvh5', f'.interleave_{interleaved_index_dict[inum]}.uvh5')
+                    outfilename_interleave = outfilename.replace('.uvh5', f'.interleave_{interleave_index_dict[inum]}.uvh5')
                 else:
                     outfilename_interleave = outfilename
                 hd_combined.write_uvh5(outfilename_interleave, clobber=clobber)
