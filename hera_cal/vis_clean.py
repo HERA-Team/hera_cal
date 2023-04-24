@@ -2112,21 +2112,21 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         dt_time_chunk = np.median(np.diff(hd_time_chunk.times)) / 2.
         tmax = hd_time_chunk.times.max() + dt_time_chunk
         tmin = hd_time_chunk.times.min() - dt_time_chunk
-        for inum in interleave_sets:
-            hd_combined = io.HERAData(interleave_sets[inum])
-            if inum == 0:
-                # use same time selection for all interleaves even though the times don't line
-                # up. We need the indices too.
-                t_select0 = (hd_baseline_chunk.times >= tmin) & (hd_baseline_chunk.times < tmax)
-            # if the interleaves have different Ntimes,
-            # we will only use the Ntimes from the first interleave.
-            t_select = t_select0[:hd_baseline_chunk.Ntimes]
-            # we only compare centers of baseline files to time limits of time-file.
-            # this is to prevent integrations that straddle file boundaries from being dropped.
-            # when we perform reconstitution.
+        t_select0 = (hd_baseline_chunk.times >= tmin) & (hd_baseline_chunk.times < tmax)
+        # use same time selection for all interleaves even though the times don't line
+        # up. We need the indices too.
+        # if the interleaves have different Ntimes,
+        # we will only use the Ntimes from the first interleave.
+        t_select = t_select0[:hd_baseline_chunk.Ntimes]
+        # we only compare centers of baseline files to time limits of time-file.
+        # this is to prevent integrations that straddle file boundaries from being dropped.
+        # when we perform reconstitution.
 
+        for inum in interleave_sets:
+            hd_baseline_chunk_iset = io.HERAData(interleave_sets[inum][0])
+            hd_combined = io.HERAData(interleave_sets[inum])
             if np.any(t_select):
-                hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
+                hd_combined.read(times=hd_baseline_chunk_iset.times[t_select], axis='blt')
                 if ninterleave > 1:
                     outfilename_interleave = outfilename.replace('.uvh5', f'.interleave_{interleave_index_dict[inum]}.uvh5')
                 else:
