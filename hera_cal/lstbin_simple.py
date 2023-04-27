@@ -738,7 +738,6 @@ def lst_bin_files_single_outfile(
     ex_ant_yaml_files=None, 
     ignore_ants: tuple[int]=(),
     write_kwargs: dict | None = None,
-    ignore_missing_calfiles: bool = False,
     save_channels: tuple[int] = (),
     golden_lsts: tuple[float] = (),
     sigma_clip_thresh: float = 0.0,
@@ -1290,58 +1289,6 @@ def get_all_unflagged_baselines(
 
     return all_baselines, all_pols
 
-def get_nlstbin_matching_files(
-    data_files: list[list[str | FastUVH5Meta]], 
-    dlst: float | None=None, 
-    atol: float=1e-10, 
-    lst_start: float =0., 
-    lst_width: float = 2*np.pi,
-    verbose: bool=True, 
-    ntimes_per_file: int=60,
-    blts_are_rectangular: bool | None = None,
-    time_axis_faster_than_bls: bool | None = None
-):
-    """Get the number of LST-bin files required for a set of data files."""
-    # Make the data files into FastUVH5Meta objects
-    data_files = [
-        [
-        df if isinstance(df, FastUVH5Meta) else 
-        FastUVH5Meta(
-            df, 
-            blts_are_rectangular=blts_are_rectangular, 
-            time_axis_faster_than_bls=time_axis_faster_than_bls
-        ) 
-        for df in dfs 
-        ] for dfs in data_files
-    ]
-
-    df0 = data_files[0][0]
-
-    # get dlst from first data file if None
-    if dlst is None:
-        dlst, _, _, _ = io.get_file_times(str(df0.path), filetype='uvh5')
-
-    has_lst_arrays = 'lst_array' in df0.header
-
-    # make 24 hour LST grid
-    lst_grid = make_lst_grid(dlst, begin_lst=lst_start, lst_width=lst_width)
-    dlstbin = lst_grid[1] - lst_grid[0]
-
-    nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
-    all_file_lsts = [
-        lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] 
-        for i in range(nfiles)
-    ]
-    required_lsts = 0
-    for f_lst in all_file_lsts:
-        edges = [f_lst[0] - dlstbin/2, f_lst[-1] + dlstbin/2]
-        for flist in data_files:
-            outfiles = utils.match_lsts_regular(edges, flist)
-            if outfiles:
-                required_lsts += 1
-                break
-    return required_lsts
-
 def create_lstbin_output_file(
     outdir: Path,
     kind: str, 
@@ -1627,7 +1574,7 @@ def lst_bin_arg_parser():
             "Consult lstbin.lst_bin_files() for further details on functionality."
         )
     )
-    a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to nightly data files (UVH5)")
+    a.add_argument('config-file', type=str, help="config file produced by lstbin.make_lst_bin_config_file")
     a.add_argument(
         "--calfile-rules", nargs='*', type=str, 
         help="rules to convert datafile names to calfile names. A series of two strings where the first will be replaced by the latter"
