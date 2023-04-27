@@ -18,6 +18,9 @@ from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_D
 from pyuvdata.uvdata import FastUVH5Meta
 from typing import Sequence
 from pathlib import Path
+import operator
+import functools
+import re
 
 import sklearn.gaussian_process as gp
 import warnings
@@ -1480,16 +1483,35 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
         else:
             return data
 
-def match_lsts_regular(
-        lst_range: tuple[float], 
-        file_list: Sequence[str | Path | FastUVH5Meta],
-        files_sorted: bool = False,
-    ) -> list[FastUVH5Meta]:
-    """For a given input file, find all files in a list that overlap in lst.
+def match_files_to_lst_bins(
+    lst_edges: tuple[float], 
+    file_list: Sequence[str | Path],
+    files_sorted: bool = False,
+    sort_fn: callable = sorted,
+    jd_regex: str | None = r"zen\.(\d+\.\d+)\.",
+    blts_are_rectangular: bool | None = None,
+    time_axis_faster_than_bls: bool | None = None,
+    atol: float = 1e-5,
+) -> list[list[FastUVH5Meta]]:
+    """Find all files in a list that have times in a given LST range.
 
-    This function is faster than match_times for a large ``file_list`` because it
-    assumes that the lsts are regularly spaced over the whole list. If the files are
-    not contiguous, bad things might happen.
+    While the obvious way to do this is to read the times/lsts from each file in the
+    list, and match them to the LST-edges, this is slow for a large list of files,
+    mostly because of the time it takes to open each file (not read it!). 
+
+    To speed this up, this function does two things: (1) it uses filenames to get the
+    first time in each file, if possible. This makes it *approximate*, not exact, but 
+    this quickly whittles down the number of files that need to be opened. (2) It
+    uses bounded binary search to find the files that have times in the given full
+    LST range, with an approximate knowledge of how many files to move forward or
+    backward after each file read, based on the integration time. This means many
+    fewer files need to be opened (this is much faster if the files themselves describe
+    a regular grid of JDs, but works either way due to the binary search). This latter
+    speedup is really only a speed up if the filename-time matching is not available.
+
+    If the filename-matching is not available, and the LST-edges cover a full 2pi
+    steradians, then this function is as slow (or perhaps a bit slower) than something
+    like ``config_lst_bin_files``. 
 
     Parameters
     ----------
@@ -1498,88 +1520,188 @@ def match_lsts_regular(
     file_list
         A list of files to match against. This can be a list of strings, a list of
         pathlib.Path objects, or a list of FastUVH5Meta objects.
-    sorted
-        If True, assume that the file_list is already sorted by time. If False, sort
-        the file_list by time within the function.
-
+    files_sorted
+        If True, assume that the file_list is already sorted by increasing time. 
+        If False, sort the file_list by time within the function, using ``sort_fn``.
+    sort_fn
+        The function to use to sort the file_list in increasing time. This should be a 
+        function that takes a list of str or Path objects and returns a list of the same
+        in order.
+    jd_regex
+        The regex to use to extract the julian date from the file name. If provided,
+    approximate
+        If True, return a list of files that is a superset of those that exist in the
+        LST bins -- either the exact list or more than the true list. This will be based
+        on times inferred from the filename (if possible) and the integration time of
+        the first file. 
+    
     Returns
     -------
     list of FastUVH5Meta
         The list of FastUVH5Meta file objects that have lsts that fall into the given
         LST range.
     """
-    # look for the one file matching our main lst
-    file_list = [fl if isinstance(fl, FastUVH5Meta) else FastUVH5Meta(fl) for fl in file_list]
-
     if not files_sorted:
-        file_list = sorted(file_list, key=lambda x: x.path)
+        file_list = sort_fn(file_list)
 
-    start, stop = lst_range
+    # Get performance parameters from the first file in the list
+    meta = FastUVH5Meta(
+        file_list[0], 
+        blts_are_rectangular=blts_are_rectangular, 
+        time_axis_faster_than_bls=time_axis_faster_than_bls
+    )
+    if blts_are_rectangular is None:
+        blts_are_rectangular = meta.blts_are_rectangular
+    if time_axis_faster_than_bls is None:
+        time_axis_faster_than_bls = meta.time_axis_faster_than_bls
 
-    index = 0
-    meta = file_list[0]
-    lsts = meta.lsts
+    file_list = [
+        FastUVH5Meta(
+            fl, 
+            blts_are_rectangular=blts_are_rectangular, 
+            time_axis_faster_than_bls=time_axis_faster_than_bls
+        ) for fl in file_list
+    ]
 
+    # Ensure lst-edges are always ascending, and stay within a range of 2pi
+    if len(lst_edges) < 2:
+        raise ValueError("lst_edges must have at least 2 elements.")
+    lst0 = lst_edges[0]
+    lst_edges=np.array([(lst - lst0)%(2*np.pi) + lst0 for lst in lst_edges])
+    # We can have the case that an edges is at lst0 + 2pi exactly, which would
+    # get wrapped around to lst0, but it should stay at lst0+2pi.
+    lst_edges[1:][lst_edges[1:] == lst_edges[0]] += 2*np.pi
+
+    if np.any(np.diff(lst_edges) < 0 ):
+        raise ValueError("lst_edges must not extend beyond 2pi total radians from start to finish.")
+    
+    lstmin, lstmax = lst_edges[0], lst_edges[-1]
+    
     # The files in the list MUST NOT wrap around in LST, i.e.
     # there is 24 hours or less of time in the files. 
-    if file_list[-1].times[-1] < start.times[0]: 
+    if file_list[-1].times[-1] < file_list[0].times[0]: 
         raise ValueError("After sorting, the last file in the list is is before the first.")
 
-    if file_list[-1].times[-1] > start.times[0] + 1.0:
+    if file_list[-1].times[-1] > meta.times[0] + 1.0:
         raise ValueError("The input files span greater than 24 hours, cannot use this function. Use match_times instead.")
-    
-    fundamental_lst = lsts[0]
-    lstbinsize = lsts[1] - lsts[0]
-    start = (start - fundamental_lst) % (2*np.pi)
-    stop = (stop - fundamental_lst) % (2*np.pi)
-    lsts =  lsts - fundamental_lst
-    lsts %= (2*np.pi)
-    
-    # Assume that each file has the same dlst and same number of files.
-    ntimes_per_file = len(lsts)
 
-    end_lsts = file_list[-1].lsts - fundamental_lst
-    end_lsts %= (2*np.pi)
-    
-    if end_lsts[-1] < start:
-        return []
-    if lsts[0] >= stop:
-        return []
-    
-    indices_tried = set()
+    jd_edges = LST2JD(
+        np.array(lst_edges), 
+        start_jd=int(meta.times[0]), 
+        lst_branch_cut=lstmin,
+        allow_other_jd=False,
+        latitude=meta.telescope_location_lat_lon_alt_degrees[0],
+        longitude=meta.telescope_location_lat_lon_alt_degrees[1],
+        altitude=meta.telescope_location_lat_lon_alt_degrees[2],
+    )
+    jdstart, jdend = jd_edges[0], jd_edges[-1]
 
-    while lsts[0] > stop or lsts[1] < start:
-        if index in indices_tried:
-            return []
+    tint = np.median(meta.integration_time) / 86400.0
+    ntimes_per_file = meta.Ntimes
+
+    # Cache times
+    _metas = {meta.path: meta for meta in file_list}
+
+    if jd_regex is not None:
+        jd_regex = re.compile(jd_regex)
+        @functools.cache
+        def get_first_time(path: Path) -> float:
+            return float(jd_regex.findall(path.name)[0])
+    else:
+        @functools.cache
+        def get_first_time(path: Path) -> float:
+            meta = _metas[path]
+            return meta.get_transactional("times")[0]
         
-        diff = (start - lsts[0])
-        nfiles = int(diff / (lstbinsize*ntimes_per_file))
+    def get_first_file_in_range(file_list, jd_range: Tuple[float, float]) -> int:
+        jdstart, jdend = jd_range
 
-        if nfiles == 0:
-            # Never move by 0 files
-            nfiles = int(1 * np.sign(diff))
+        jdstart_for_file = jdstart - tint*(ntimes_per_file-1) - atol
+
+        # The lst-edges might wrap around within a day. If so, when comparing times
+        # to the bins, we need to use an OR instead of an AND.
+        cmp = operator.and_ if (jdstart < jdend) else operator.or_
+
+        index = 0
+        meta = file_list[index]
+        thistime = get_first_time(meta.path)
+
+        # Find the first file that has times in the LST range
+        minidx = -1
+        maxidx = len(file_list)
+        best_diff = np.inf
+        best_index = -1
+
+        while True:
+            if maxidx - minidx <= 1:
+                break
+
+            diff = jdstart_for_file - thistime
+            in_range = cmp(jdstart_for_file <= thistime, thistime <= jdend+atol)
+            if np.abs(diff) < best_diff and in_range:
+                # This file has a time that is in our range, and is closest so far
+                # to the start of the range.
+                best_diff = np.abs(diff)
+                best_index = index
+
             
-        meta = file_list[index + nfiles]
-        lsts = meta.lsts - fundamental_lst
-        lsts %= (2*np.pi)
+            move_nfiles = round(diff / (tint*ntimes_per_file))
 
-        index += nfiles
-        indices_tried.add(index)
+            if move_nfiles == 0:
+                if in_range:
+                    break
+                else:
+                    # Move by one file in the right direction, just to be sure.
+                    move_nfiles = int(1*np.sign(diff))
 
-    # Now we have the first file that overlaps with the lst range.
-    npossible_overlaps = int(np.ceil((stop - start) / (lstbinsize*ntimes_per_file)))
-    try_indices = range(index - npossible_overlaps + 1, index + npossible_overlaps)
-    matched_files = []
-    for indx in try_indices:
-        if indx < 0 or indx >= len(file_list):
-            continue
-        meta = file_list[indx]
-        lsts = meta.lsts - fundamental_lst
-        lsts %= (2*np.pi)
-        if lsts[0] < stop or lsts[-1] > start:
-            matched_files.append(file_list[indx])
+            if diff > 0:
+                minidx = max(minidx, index)
+            else:
+                maxidx = min(maxidx, index)
+    
+            index += move_nfiles
+            if not (minidx < index < maxidx):
+                print(index, minidx, maxidx)
+                index = min(maxidx-1, max(minidx+1, (minidx + maxidx) // 2))
+                if index < 0:
+                    index = 0
+                elif index >= len(file_list):
+                    index = len(file_list) - 1
 
-    return matched_files
+            meta = file_list[index]
+            thistime = get_first_time(meta.path)
+
+        if best_index == -1:
+            raise ValueError("Could not find a file in the range.")
+        else:
+            return best_index
+    
+    try:
+        # We subtract one, because the file before the first file in the range
+        # may just get into the range by a tiny bit, and we allow the user to test
+        # that out later.
+        first_file = get_first_file_in_range(file_list, (jdstart, jdend))
+    except ValueError:
+        return [[] for _ in range(len(lst_edges)-1)]
+
+    # Now, we have to actually go through the bins in lst_edges and assign files.
+    lstbin_files = [[] for _ in range(len(lst_edges)-1)]
+    _file_list = file_list[first_file:] + file_list[:first_file]  # roll the files
+    
+    for i, fl in enumerate(_file_list):
+        thistime = get_first_time(fl.path)
+        fl_in_range = False
+        for lstbin, (jdstart, jdend) in enumerate(zip(jd_edges[:-1], jd_edges[1:])):
+            # Go through each lst bin
+            cmp = operator.and_ if (jdstart < jdend) else operator.or_
+            if cmp(jdstart - (ntimes_per_file-1)*tint - atol <= thistime, thistime < jdend + atol):
+                lstbin_files[lstbin].append(fl)
+            fl_in_range = True
+        
+        if not fl_in_range:
+            break
+
+    return lstbin_files
         
 def eq2top_m(ha, dec):
     """Return the 3x3 matrix converting equatorial coordinates to topocentric

@@ -17,7 +17,7 @@ from pathlib import Path
 from astropy.coordinates import EarthLocation
 from itertools import combinations_with_replacement
 from pyuvdata import utils as uvutils
-
+from . import mock_uvdata as mockuvd
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:Degrees of freedom <= 0 for slice")
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
@@ -956,37 +956,21 @@ class Test_lstbin:
             if os.path.exists(of):
                 os.remove(of)
 
+def create_small_array_uvd(identifiable: bool = False, **kwargs):
+    kwargs.update(
+        freqs=np.linspace(150e6, 160e6, 100),
+        ants=[0,1,2,127,128],
+        antpairs=[(0,0), (0,1), (0,2), (1, 1), (1,2), (2, 2)],
+        pols=('xx', 'yy')
+    )
+    if identifiable:
+        return mockuvd.create_uvd_identifiable(**kwargs)
+    else:
+        return mockuvd.create_uvd_ones(**kwargs)
 
 @pytest.fixture(scope="function")
 def uvd():
-    hera_loc = EarthLocation.from_geodetic(
-        lat=-30.721526120690307, 
-        lon=21.428303826863015, 
-        height=1051.690000070259
-    )
-
-    # build a UVData object that knows about 5 antennas, but only uses 3 of them 
-    # in baselines.
-    uvd = UVData.new(
-        freq_array= np.linspace(150e8, 160e8, 100),
-        polarization_array= ["xx", "yy"],
-        antenna_positions= {
-            0: [0.0, 0.0, 0.0],
-            1: [0.0, 0.0, 1.0],
-            2: [0.0, 0.0, 2.0],
-            127: [0.0, 0.0, 127.0],
-            128: [0.0, 0.0, 128.0],
-        },
-        antpairs= list(combinations_with_replacement(range(3), 2)),
-        telescope_location= hera_loc,
-        telescope_name= "HERA",
-        times= np.linspace(2459855, 2459855.1, 20),
-        x_orientation='n',
-        empty=True
-    )
-
-    uvd.data_array += 1.0
-    return uvd
+    return create_small_array_uvd()
 
 @pytest.fixture(scope="function")
 def uvc(uvd):
@@ -1201,9 +1185,11 @@ class Test_LSTBinSimple:
         # Make a mock data file with partial times
 
         # Make sure that using a calfile with all ones doesn't change the data
+        lsts = np.sort(np.unique(uvd.lst_array))
+        dlst = lsts[1] - lsts[0]
         nocal_fnames = lstbin_simple.lst_bin_files(
             data_files=[[uvd_file]],
-            dlst=uvd.lst_array[1] - uvd.lst_array[0],
+            dlst=dlst,
             n_lstbins_per_outfile=len(uvd.lst_array),
             outdir=os.path.dirname(uvd_file),
             lst_start=uvd.lst_array[0],
@@ -1212,14 +1198,15 @@ class Test_LSTBinSimple:
         withcal_fnames = lstbin_simple.lst_bin_files(
             data_files=[[uvd_file]],
             input_cals=[[uvc_file]],
-            dlst=uvd.lst_array[1] - uvd.lst_array[0],
+            dlst=dlst,
             n_lstbins_per_outfile=len(uvd.lst_array),
             outdir=os.path.dirname(uvd_file),
             lst_start=uvd.lst_array[0],
+            overwrite=True
         )
 
-        uvd_nocal = UVData.from_file(nocal_fnames[0], read_data=True)
-        uvd_withcal = UVData.from_file(withcal_fnames[0], read_data=True)
+        uvd_nocal = UVData.from_file(nocal_fnames[0]["LST"], read_data=True)
+        uvd_withcal = UVData.from_file(withcal_fnames[0]["LST"], read_data=True)
 
         np.testing.assert_allclose(uvd_nocal.data_array, uvd_withcal.data_array)
         
@@ -1287,8 +1274,32 @@ class Test_LSTBinSimple:
             rephase=True
         )
 
-        print(len(f0), f0[0].shape)
         assert np.all(f0[0][:, -1])  # last baseline is the extra one that's all flagged.
+
+    def test_lst_bin_files_for_baselines_straddle_times(self, uvd, uvd_file):
+        """This just tests that the code doesn't crash when the lst bins straddle the end of the file.
+        
+        Since the input uvdata is all ones, the output should be all ones as well, 
+        regardless of how many times go into the LST bin.
+        """
+        dlst = uvd.lst_array.max() - uvd.lst_array.min()
+
+        lstbins, d0, f0, n0, times0 = lstbin_simple.lst_bin_files_for_baselines(
+            data_files=[uvd_file],
+            lst_bin_edges=[uvd.lst_array.min() - dlst/2, uvd.lst_array.max() + dlst/2],
+            antpairs=uvd.get_antpairs(),
+            rephase=False
+        )
+
+        lstbins1, d01, f01, n01, times01= lstbin_simple.lst_bin_files_for_baselines(
+            data_files=[uvd_file],
+            lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
+            antpairs=uvd.get_antpairs(),
+            rephase=False
+        )
+        assert len(d0[0]) == 20
+        assert len(d01[0]) == 18
+        assert np.allclose(d0, 1+0j)
 
     def test_lst_bin_files_output_select(self, uvd, uvd_file):
         with pytest.warns(UserWarning, match="One or more indices in output_file_select"):
@@ -1307,18 +1318,17 @@ class Test_LSTBinSimple:
                 output_file_select=6,
             )
 
-        uvd1 = UVData.from_file(uvd_file, read_data=True)
         fnames = lstbin_simple.lst_bin_files(
             data_files=[[uvd_file]],
             dlst=dlst,
-            n_lstbins_per_outfile=len(uvd.lst_array),
+            n_lstbins_per_outfile=len(np.unique(uvd.lst_array)),
             outdir=os.path.dirname(uvd_file),
             lst_start=lsts.min() - dlst/2,
             lst_width=lsts.max() - lsts.min() + dlst,
             output_file_select=0,
         )
 
-        uvd_nocal = UVData.from_file(fnames[0], read_data=True)
+        uvd_nocal = UVData.from_file(fnames[0]['LST'], read_data=True)
         assert uvd_nocal.Ntimes == uvd.Ntimes
 
 
@@ -1337,7 +1347,7 @@ class Test_LSTBinSimple:
             input_cals=[[uvc_file]],
         )
 
-        uvd = UVData.from_file(fnames[0], read_data=True)
+        uvd = UVData.from_file(fnames[0]['LST'], read_data=True)
 
         fnames_rules = lstbin_simple.lst_bin_files(
             data_files=[[uvd_file]],
@@ -1347,7 +1357,130 @@ class Test_LSTBinSimple:
             lst_start=lsts[0] - dlst/2,
             lst_width=lsts.max() - lsts.min() + dlst,
             calfile_rules=[(".uvh5", ".calfits")],
+            overwrite=True
         )
-        uvd_rules = UVData.from_file(fnames_rules[0], read_data=True)
+        uvd_rules = UVData.from_file(fnames_rules[0]['LST'], read_data=True)
 
         np.testing.assert_allclose(uvd.data_array, uvd_rules.data_array)
+
+    def test_lst_bin_files_calfiles_freqrange(self, uvd, uvd_file, uvc_file):
+        """Test that providing calfiles and using calfile_rules give the same thing."""
+        lsts = np.sort(np.unique(uvd.lst_array))
+        dlst = lsts[1] - lsts[0]
+
+        fnames = lstbin_simple.lst_bin_files(
+            data_files=[[uvd_file]],
+            dlst=dlst,
+            n_lstbins_per_outfile=len(uvd.lst_array),
+            outdir=os.path.dirname(uvd_file),
+            lst_start=lsts[0] - dlst/2,
+            lst_width=lsts.max() - lsts.min() + dlst,
+            input_cals=[[uvc_file]],
+            freq_min=153e8,
+            freq_max=158e8,
+        )
+
+        uvd = UVData.from_file(fnames[0]['LST'], read_data=True)
+
+        fnames_rules = lstbin_simple.lst_bin_files(
+            data_files=[[uvd_file]],
+            dlst=dlst,
+            n_lstbins_per_outfile=len(uvd.lst_array),
+            # outdir=os.path.dirname(uvd_file),  # by default it's this dir
+            lst_start=lsts[0] - dlst/2,
+            lst_width=lsts.max() - lsts.min() + dlst,
+            calfile_rules=[(".uvh5", ".calfits")],
+            freq_min=153e8,
+            freq_max=158e8,
+            overwrite=True
+        )
+        uvd_rules = UVData.from_file(fnames_rules[0]['LST'], read_data=True)
+
+        np.testing.assert_allclose(uvd.data_array, uvd_rules.data_array)
+
+    def test_golden_data(self, tmp_path_factory):
+        tmp = tmp_path_factory.mktemp("lstbin_golden_data")
+        uvds = mockuvd.make_dataset(ndays=3, nfiles=4, ntimes=2, identifiable=True, creator=create_small_uvdata)
+        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
+
+        out_files = lstbin_simple.lst_bin_files(
+            data_files=data_files,
+            n_lstbins_per_outfile=2,
+            golden_lsts=uvds[0][1].lst_array.min() + 0.0001
+        )
+
+        assert len(out_files) == 4
+        assert out_files[1]['GOLDEN']
+        assert not out_files[0]["GOLDEN"]
+        assert not out_files[2]["GOLDEN"]
+        assert not out_files[3]["GOLDEN"]
+
+        # Read the Golden File
+        golden_hd = io.HERAData(out_files[1]['GOLDEN'])
+        gd, gf, gn = golden_hd.read()
+        
+        assert gd.shape[0] == 3  # ndays
+        assert len(gd.antpairs()) == 6
+        assert gd.shape[1] == uvds[0][0].freq_array.size
+        assert len(gd.pols()) == 2
+
+        assert len(gd.keys()) == 12
+
+        # Check that autos are all the same
+        assert np.all(gd[(0,0,'ee')] == gd[(1, 1,'nn')])
+        assert np.all(gd[(0,0,'ee')] == gd[(2, 2,'nn')])
+
+        # Since each day is at exactly the same LST by construction, the golden data
+        # over time should be the same.
+        for key, data in gd.items():
+            for day in data:
+                print(key)    
+                np.testing.assert_allclose(data[0], day)
+
+        assert not np.allclose(gd[(0, 1, 'ee')][0], gd[(0, 2, 'ee')][0])
+        assert not np.allclose(gd[(1, 2, 'ee')][0], gd[(0, 2, 'ee')][0])
+        assert not np.allclose(gd[(1, 2, 'ee')][0], gd[(0, 1, 'ee')][0])
+        
+
+    def test_save_chans(self, tmp_path_factory):
+        tmp = tmp_path_factory.mktemp("lstbin_golden_data")
+        uvds = mockuvd.make_dataset(ndays=3, nfiles=4, ntimes=2, identifiable=True, creator=create_small_uvdata)
+        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
+
+        out_files = lstbin_simple.lst_bin_files(
+            data_files=data_files,
+            n_lstbins_per_outfile=2,
+            save_channels=[50]
+        )
+
+        assert len(out_files) == 4
+        # Ensure there's a REDUCEDCHAN file for each output LST
+        for fl in out_files:
+            assert fl['REDUCEDCHAN']
+            
+            # Read the Golden File
+            hd = io.HERAData(fl['REDUCEDCHAN'])
+            gd, gf, gn = hd.read()
+            
+            assert gd.shape[0] == 3  # ndays
+            assert len(gd.antpairs()) == 6
+            assert gd.shape[1] == 1  # single frequency
+            assert len(gd.pols()) == 2
+
+            assert len(gd.keys()) == 12
+
+            # Check that autos are all the same
+            assert np.all(gd[(0,0,'ee')] == gd[(1, 1,'nn')])
+            assert np.all(gd[(0,0,'ee')] == gd[(2, 2,'nn')])
+
+            # Since each day is at exactly the same LST by construction, the golden data
+            # over time should be the same.
+            for key, data in gd.items():
+                for day in data:
+                    print(key)    
+                    np.testing.assert_allclose(data[0], day, rtol=1e-6)
+
+            assert not np.allclose(gd[(0, 1, 'ee')][0], gd[(0, 2, 'ee')][0])
+            assert not np.allclose(gd[(1, 2, 'ee')][0], gd[(0, 2, 'ee')][0])
+            assert not np.allclose(gd[(1, 2, 'ee')][0], gd[(0, 1, 'ee')][0])
+            
