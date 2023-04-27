@@ -1189,7 +1189,7 @@ def lst_bin_files(
     elif isinstance(output_file_select, int):
         output_file_select = [output_file_select]
     output_file_select = [int(i) for i in output_file_select]
-    
+
     if max(output_file_select) >= len(matched_files):
         raise ValueError(
             "output_file_select must be less than the number of output files"
@@ -1657,7 +1657,7 @@ def lst_bin_arg_parser():
     a.add_argument("--rephase", default=False, action='store_true', help="rephase data to center of LST bin before binning")
     a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
     a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
-    a.add_argument("--output_file_select", default=None, nargs='*', help="list of output file integers to run on. Default is all output files.")
+    a.add_argument("--output_file_select", default=None, nargs='*', type=int, help="list of output file integers to run on. Default is all output files.")
     a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
     a.add_argument("--ignore_flags", default=False, action='store_true', help="Ignore flags in data files, such that all input data is included in binning.")
     a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
