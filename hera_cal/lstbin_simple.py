@@ -1596,9 +1596,10 @@ def make_lst_bin_config_file(
     meta = get_meta()
 
     tint = np.median(meta.integration_time)
-    if not  np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6):
+    if not np.all(np.abs(np.diff(np.diff(meta.times))) < 1e-6):
         raise ValueError(
-            f'All integrations must be of equal length (BDA not supported), got diffs: {np.diff(times)}'
+            'All integrations must be of equal length (BDA not supported), got diffs: '
+            f'{np.diff(meta.times)}'
         )
 
     output = {
