@@ -59,7 +59,7 @@ kwargs['golden_lsts'] = tuple(float(lst) for lst in kwargs['golden_lsts'].split(
 run_with_profiling(
     lstbin.lst_bin_files, 
     args,
-    config_file=kwargs.pop('config_file'),
+    config_file=args.config_file,
     calfile_rules=calfile_rules, 
     write_kwargs=write_kwargs, 
     **kwargs
