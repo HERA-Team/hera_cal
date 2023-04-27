@@ -640,8 +640,6 @@ def lst_bin_files_for_baselines(
 
     bins = get_lst_bins(lsts, lst_bin_edges)[0]
     times = np.concatenate(time_arrays)
-    print(len(times), len(lsts), len(bins))
-    print(bins)
     times_in_bins = []
     for i in range(len(bin_lst)):
         mask = bins == i
@@ -1564,7 +1562,7 @@ def make_lst_bin_config_file(
     if config_file.exists() and not clobber:
         raise IOError(f"{config_file} exists and clobber is False")
 
-    lst_grid, matched_files, blts_are_rectangular, time_axis_faster_than_bls = config_lst_bin_files(
+    lst_grid, matched_files = config_lst_bin_files(
         data_files=data_files,
         dlst=dlst,
         atol=atol,
