@@ -1574,6 +1574,7 @@ def make_lst_bin_config_file(
     )
 
     nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
+    dlst = lst_grid[1] - lst_grid[0]
     lst_grid = [lst_grid[ntimes_per_file*i:ntimes_per_file*(i+1)] for i in range(nfiles)]
     # Make it a real list of floats to make the YAML easier to read
     lst_grid = [[float(l) for l in lsts] for lsts in lst_grid]
@@ -1604,7 +1605,7 @@ def make_lst_bin_config_file(
 
     output = {
         'config_params': {
-            'dlst': lst_grid[1] - lst_grid[0],
+            'dlst': dlst,
             'atol': atol,
             'lst_start': lst_start,
             'lst_width': lst_width,
