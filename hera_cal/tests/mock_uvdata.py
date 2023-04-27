@@ -61,7 +61,6 @@ def create_mock_hera_obs(
         time_axis_faster_than_bls=time_axis_faster_than_bls,
         do_blt_outer=True
     )
-    print(times, uvd.time_array, uvd.lst_array)
     return uvd
 
 

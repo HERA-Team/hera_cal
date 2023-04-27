@@ -24,6 +24,7 @@ from pyuvdata import utils as uvutils
 from .red_groups import RedundantGroups
 import h5py
 from functools import partial
+import yaml
 
 try:
     profile
@@ -833,19 +834,16 @@ def lst_bin_files_single_outfile(
     data_metas = [[
         FastUVH5Meta(
             df, 
-            blts_are_rectangular=config_opts['blts_are_rectangular'], 
-            time_axis_faster_than_bls=config_opts['time_axis_faster_than_bls']
+            blts_are_rectangular=metadata['blts_are_rectangular'], 
+            time_axis_faster_than_bls=metadata['time_axis_faster_than_bls']
         ) for df in dflist
         ] 
         for dflist in data_files
     ]
 
-    lst_arrs, time_arrs = get_lst_time_arrays(data_metas)
-
     # get outdir
     if outdir is None:
         outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
-
 
     x_orientation = metadata['x_orientation']
     start_jd = metadata['start_jd']
@@ -857,7 +855,6 @@ def lst_bin_files_single_outfile(
         meta = data_metas[0][0]
     
     freq_array = np.squeeze(meta.freq_array)
-    # times = meta.times
     
     # reds will contain all of the redundant groups for the whole array, because
     # all the antenna positions are included in every file.
@@ -916,18 +913,9 @@ def lst_bin_files_single_outfile(
     bl_chunks = [all_baselines[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(n_bl_chunks)]
     bl_chunks = [blg for blg in bl_chunks if len(blg) > 0]
 
-    # iterate over output LST files
-    outfnames = []
-
-
-    all_lsts = np.concatenate(all_lsts)
-
-    # If we have no times at all for this file, just return
-    if len(all_lsts) == 0:
-        return {}
-
+    dlst = config_opts['dlst']
     lst_bin_edges = np.array(
-        [x - dlst/2 for x in outfile_lsts] + [outfile_lsts[-1] + dlst/2]
+        [x - dlst/2 for x in lst_bins] + [lst_bins[-1] + dlst/2]
     )
 
     tinds, time_arrays, all_lsts, file_list, cals = filter_required_files_by_times(
@@ -935,6 +923,12 @@ def lst_bin_files_single_outfile(
         data_metas,
         input_cals,
     )
+
+    all_lsts = np.concatenate(all_lsts)
+
+    # If we have no times at all for this file, just return
+    if len(all_lsts) == 0:
+        return {}
 
     # The "golden" data is the full data over all days for a small subset of LST
     # bins. This works best if the LST bins are small (similar to the size of the
@@ -969,7 +963,7 @@ def lst_bin_files_single_outfile(
         out_files[kind] = create_outfile(
             kind = kind,
             lst=lst_bin_edges[0],
-            lsts=outfile_lsts,
+            lsts=lst_bins,
         )
         
     nbls_so_far = 0
@@ -1066,6 +1060,7 @@ def lst_bin_files_single_outfile(
 def lst_bin_files(
     config_file: str | Path,
     output_file_select: int | Sequence[int] | None=None, 
+    include_autos: bool=True,
     **kwargs
 ) -> list[dict[str, Path]]:
     """
@@ -1199,10 +1194,11 @@ def lst_bin_files(
             "output_file_select must be less than the number of output files"
         )
 
+    print(matched_files[0][0][0])
     meta = FastUVH5Meta(
-        matched_files[0][0], 
+        matched_files[0][0][0], 
         blts_are_rectangular=metadata['blts_are_rectangular'],
-        time_axis_faster_than_bl_axis=metadata['time_axis_faster_than_bl_axis'],
+        time_axis_faster_than_bls=metadata['time_axis_faster_than_bls'],
     )
 
     antpos = dict(zip(meta.antenna_numbers, meta.antpos_enu))
@@ -1222,6 +1218,7 @@ def lst_bin_files(
                 data_files = data_files,
                 meta = meta,
                 reds = reds,
+                include_autos = include_autos,
                 **kwargs
             )
         )
@@ -1603,9 +1600,10 @@ def make_lst_bin_config_file(
             f'{np.diff(meta.times)}'
         )
 
+    matched_files = [[[str(m.path) for m in night] for night in outfiles] for outfiles in matched_files]
     output = {
         'config_params': {
-            'dlst': dlst,
+            'dlst': float(dlst),
             'atol': atol,
             'lst_start': lst_start,
             'lst_width': lst_width,
@@ -1619,7 +1617,7 @@ def make_lst_bin_config_file(
             'blts_are_rectangular': meta.blts_are_rectangular,
             'time_axis_faster_than_bls': meta.time_axis_faster_than_bls,
             'start_jd': int(meta.times[0]),
-            'integration_time': tint,
+            'integration_time': float(tint),
         }
     }
 

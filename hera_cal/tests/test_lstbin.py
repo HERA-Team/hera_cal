@@ -1444,13 +1444,16 @@ class Test_LSTBinSimple:
 
     def test_save_chans(self, tmp_path_factory):
         tmp = tmp_path_factory.mktemp("lstbin_golden_data")
-        uvds = mockuvd.make_dataset(ndays=3, nfiles=4, ntimes=2, identifiable=True, creator=create_small_uvdata)
+        uvds = mockuvd.make_dataset(ndays=3, nfiles=4, ntimes=2, identifiable=True, creator=create_small_array_uvd)
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
+        cfl = tmp / "lstbin_config_file.yaml"
+        config_info = lstbin_simple.make_lst_bin_config_file(
+            cfl, data_files, ntimes_per_file=2,
+        )
+
         out_files = lstbin_simple.lst_bin_files(
-            data_files=data_files,
-            n_lstbins_per_outfile=2,
-            save_channels=[50]
+            config_file=cfl, save_channels=[50]
         )
 
         assert len(out_files) == 4
@@ -1483,4 +1486,17 @@ class Test_LSTBinSimple:
             assert not np.allclose(gd[(0, 1, 'ee')][0], gd[(0, 2, 'ee')][0])
             assert not np.allclose(gd[(1, 2, 'ee')][0], gd[(0, 2, 'ee')][0])
             assert not np.allclose(gd[(1, 2, 'ee')][0], gd[(0, 1, 'ee')][0])
-            
+    
+    def test_make_lst_bin_config_file(self, tmp_path_factory):
+        tmpdir = tmp_path_factory.mktemp("lstbin_config_file")
+
+        cfl = tmpdir / "lstbin_config_file.yaml"
+        uvds = mockuvd.make_dataset(ndays=3, nfiles=4, ntimes=2, identifiable=True, creator=create_small_array_uvd)
+        data_files = mockuvd.write_files_in_hera_format(uvds, tmpdir)
+
+        config_info = lstbin_simple.make_lst_bin_config_file(
+            cfl, data_files
+        )
+
+        assert 'metadata' in config_info
+

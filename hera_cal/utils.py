@@ -1661,7 +1661,6 @@ def match_files_to_lst_bins(
     
             index += move_nfiles
             if not (minidx < index < maxidx):
-                print(index, minidx, maxidx)
                 index = min(maxidx-1, max(minidx+1, (minidx + maxidx) // 2))
                 if index < 0:
                     index = 0
