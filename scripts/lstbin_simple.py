@@ -26,10 +26,6 @@ kwargs = filter_kwargs(dict(vars(args)))
 # configure history
 kwargs['history'] += history
 
-# ensure data_files is a set of nested lists
-if not isinstance(data_files[0], list):
-    raise ValueError("data_files is not a set of nested lists. check input to data_files. See lstbin_run.py doc-string for examples.")
-
 write_kwargs = json.loads(kwargs.pop('write_kwargs'))
 if not write_kwargs:
     write_kwargs = {}
