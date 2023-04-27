@@ -1642,7 +1642,7 @@ def lst_bin_arg_parser():
             "Consult lstbin.lst_bin_files() for further details on functionality."
         )
     )
-    a.add_argument('config-file', type=str, help="config file produced by lstbin.make_lst_bin_config_file")
+    a.add_argument('configfile', type=str, help="config file produced by lstbin.make_lst_bin_config_file")
     a.add_argument(
         "--calfile-rules", nargs='*', type=str, 
         help="rules to convert datafile names to calfile names. A series of two strings where the first will be replaced by the latter"
