@@ -1185,16 +1185,15 @@ def lst_bin_files(
     metadata = configuration['metadata']
 
     if output_file_select is None:
-        output_file_select = np.arange(len(matched_files))
+        output_file_select = list(range(len(matched_files)))
     elif isinstance(output_file_select, int):
-        output_file_select = np.array([output_file_select])
+        output_file_select = [output_file_select]
 
-    if output_file_select.max() >= len(matched_files):
+    if max(output_file_select) >= len(matched_files):
         raise ValueError(
             "output_file_select must be less than the number of output files"
         )
 
-    print(matched_files[0][0][0])
     meta = FastUVH5Meta(
         matched_files[0][0][0], 
         blts_are_rectangular=metadata['blts_are_rectangular'],
