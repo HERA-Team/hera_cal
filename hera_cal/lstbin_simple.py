@@ -1188,7 +1188,8 @@ def lst_bin_files(
         output_file_select = list(range(len(matched_files)))
     elif isinstance(output_file_select, int):
         output_file_select = [output_file_select]
-
+    output_file_select = [int(i) for i in output_file_select]
+    
     if max(output_file_select) >= len(matched_files):
         raise ValueError(
             "output_file_select must be less than the number of output files"
