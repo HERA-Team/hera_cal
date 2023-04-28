@@ -1434,7 +1434,6 @@ class Test_LSTBinSimple:
         # over time should be the same.
         for key, data in gd.items():
             for day in data:
-                print(key)    
                 np.testing.assert_allclose(data[0], day)
 
         assert not np.allclose(gd[(0, 1, 'ee')][0], gd[(0, 2, 'ee')][0])
@@ -1480,7 +1479,6 @@ class Test_LSTBinSimple:
             # over time should be the same.
             for key, data in gd.items():
                 for day in data:
-                    print(key)    
                     np.testing.assert_allclose(data[0], day, rtol=1e-6)
 
             assert not np.allclose(gd[(0, 1, 'ee')][0], gd[(0, 2, 'ee')][0])
@@ -1538,25 +1536,19 @@ class Test_LSTBinSimple:
             np.testing.assert_allclose(uvdlst.data_array, expected, rtol=1e-4)
 
 
-    @pytest.mark.parametrize("random_ants_to_drop", (0, 3))
-    @pytest.mark.parametrize("rephase", [True, False])
-    @pytest.mark.parametrize("sigma_clip_thresh", [0.0, 3.0])
-    @pytest.mark.parametrize("flag_strategy",[(0,0,0), (2,1,3)])
-    def test_lstbin_with_nontrivial_cal(
-        self, tmp_path_factory, random_ants_to_drop: int, rephase: bool, 
-        sigma_clip_thresh: float, flag_strategy: tuple[int, int, int]
+    def test_lstbin_compare_nontrivial_cal(
+        self, tmp_path_factory
     ):
         tmp = tmp_path_factory.mktemp("nontrivial_cal")
         uvds = mockuvd.make_dataset(
             ndays=3, nfiles=4, ntimes=2, 
             creator=mockuvd.create_uvd_identifiable,
             antpairs = [(i,j) for i in range(7) for j in range(i, 7)],  # 55 antpairs
-            pols = ['xx', 'yy'],
+            pols = ('xx', 'yy'),
             freqs=np.linspace(140e6, 180e6, 3),
-            random_ants_to_drop=random_ants_to_drop,
         )
         uvcs = [
-            [mockuvd.make_uvc_identifiable(d, *flag_strategy) for d in uvd ] for uvd in uvds
+            [mockuvd.make_uvc_identifiable(d) for d in uvd ] for uvd in uvds
         ]
         
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
@@ -1598,9 +1590,7 @@ class Test_LSTBinSimple:
         out_files_recal = lstbin_simple.lst_bin_files(
             config_file=cfl, calfile_rules=[(".decal.uvh5", ".calfits")],
             fname_format="zen.{kind}.{lst:7.5f}.recal.uvh5",
-            Nbls_to_load=10, rephase=rephase,
-            sigma_clip_thresh=sigma_clip_thresh,
-            sigma_clip_min_N=2,
+            Nbls_to_load=10, 
         )
 
         config_info = lstbin_simple.make_lst_bin_config_file(
@@ -1608,9 +1598,7 @@ class Test_LSTBinSimple:
         )
         out_files = lstbin_simple.lst_bin_files(
             config_file=cfl, fname_format="zen.{kind}.{lst:7.5f}.uvh5",
-            Nbls_to_load=11, rephase=rephase,
-            sigma_clip_thresh=sigma_clip_thresh,
-            sigma_clip_min_N=2,
+            Nbls_to_load=11, 
         )
 
         for flset, flsetc in zip(out_files, out_files_recal):
@@ -1622,6 +1610,25 @@ class Test_LSTBinSimple:
             uvdlstc.read(flsetc['LST'])
 
             # Don't worry about history here, because we know they use different inputs
+            expected = mockuvd.identifiable_data_from_uvd(uvdlst)
+
+            strpols = utils.polnum2str(uvdlst.polarization_array)
+            for i, ap in enumerate(uvdlst.get_antpairs()):
+                for j, pol in enumerate(strpols):
+                    print(f"Baseline {ap + (pol,)}")
+
+                    # Unfortunately, we don't have LSTs for the files that exactly align
+                    # with bin centres, so some rephasing will happen -- we just have to
+                    # live with it and change the tolerance
+                    # Furthermore, we only check where the flags are False, because
+                    # when we put in flags, we end up setting the data to 1.0 (and 
+                    # never using it...)
+                    np.testing.assert_allclose(
+                        uvdlstc.get_data(ap+(pol,)), 
+                        np.where(uvdlst.get_flags(ap+(pol,)), 1.0, expected[i, :, :, j]), 
+                        rtol=1e-4
+                    )
+
             uvdlst.history = uvdlstc.history
 
             if all(fs==0 for fs in flag_strategy):
@@ -1630,8 +1637,79 @@ class Test_LSTBinSimple:
                 # all samples, while the recal files will have fewer than that
                 assert uvdlst == uvdlstc
     
-            expected = mockuvd.identifiable_data_from_uvd(uvdlst)
-            # Unfortunately, we don't have LSTs for the files that exactly align
-            # with bin centres, so some rephasing will happen -- we just have to
-            # live with it and change the tolerance
-            np.testing.assert_allclose(uvdlstc.data_array, expected, rtol=1e-4 if not rephase else 1e-3)
+    
+
+
+    @pytest.mark.parametrize("random_ants_to_drop", (0, 3))
+    @pytest.mark.parametrize("rephase", [True, False])
+    @pytest.mark.parametrize("sigma_clip_thresh", [0.0, 3.0])
+    @pytest.mark.parametrize("flag_strategy",[(0,0,0), (2,1,3)])
+    @pytest.mark.parametrize("pols", [('xx', 'yy'), ('xx', 'yy', 'xy', 'yx')])
+    def test_lstbin_with_nontrivial_cal(
+        self, tmp_path_factory, random_ants_to_drop: int, rephase: bool, 
+        sigma_clip_thresh: float, flag_strategy: tuple[int, int, int],
+        pols: tuple[str]
+    ):
+        tmp = tmp_path_factory.mktemp("nontrivial_cal")
+        uvds = mockuvd.make_dataset(
+            ndays=3, nfiles=2, ntimes=2, 
+            creator=mockuvd.create_uvd_identifiable,
+            antpairs = [(i,j) for i in range(7) for j in range(i, 7)],  # 55 antpairs
+            pols = pols,
+            freqs=np.linspace(140e6, 180e6, 3),
+            random_ants_to_drop=random_ants_to_drop,
+        )
+
+        uvcs = [
+            [mockuvd.make_uvc_identifiable(d, *flag_strategy) for d in uvd ] for uvd in uvds
+        ]
+        
+        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
+        cal_files = mockuvd.write_cals_in_hera_format(uvcs, tmp)
+        decal_files = [[df.replace(".uvh5", ".decal.uvh5") for df in dfl] for dfl in data_files]        
+        
+        for flist, clist, ulist in zip(data_files, cal_files, decal_files):
+            for df, cf, uf in zip(flist, clist, ulist):
+                apply_cal.apply_cal(
+                    df, uf, cf,
+                    gain_convention='divide',  # go the wrong way
+                    clobber=True,
+                )
+
+        cfl = tmp / "lstbin_config_file.yaml"
+        config_info = lstbin_simple.make_lst_bin_config_file(
+            cfl, data_files, ntimes_per_file=2, clobber=True,
+        )
+        out_files = lstbin_simple.lst_bin_files(
+            config_file=cfl, fname_format="zen.{kind}.{lst:7.5f}.uvh5",
+            Nbls_to_load=11, rephase=rephase,
+            sigma_clip_thresh=sigma_clip_thresh,
+            sigma_clip_min_N=2,
+        )
+        assert len(out_files) == 2
+        for flset in out_files:
+            uvdlst = UVData()
+            uvdlst.read(flset['LST'])
+
+            # Don't worry about history here, because we know they use different inputs
+            expected = mockuvd.identifiable_data_from_uvd(uvdlst, reshape=False)
+            
+            strpols = utils.polnum2str(uvdlst.polarization_array)
+            
+            for i, ap in enumerate(uvdlst.get_antpairs()):
+                for j, pol in enumerate(strpols):
+                    print(f"Baseline {ap + (pol,)}")
+
+                    # Unfortunately, we don't have LSTs for the files that exactly align
+                    # with bin centres, so some rephasing will happen -- we just have to
+                    # live with it and change the tolerance
+                    # Furthermore, we only check where the flags are False, because
+                    # when we put in flags, we end up setting the data to 1.0 (and 
+                    # never using it...)
+                    np.testing.assert_allclose(
+                        uvdlst.get_data(ap+(pol,)), 
+                        np.where(uvdlst.get_flags(ap+(pol,)), 1.0, expected[i, :, :, j]), 
+                        rtol=1e-4 if (not rephase or (ap[0] == ap[1] and pol[0]==pol[1])) else 1e-3
+                    )
+    
+    

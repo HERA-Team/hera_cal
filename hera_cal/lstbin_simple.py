@@ -814,6 +814,8 @@ def lst_bin_files_single_outfile(
     freq_min: float | None = None,
     freq_max: float | None = None,
 ) -> dict[str, Path]:
+    write_kwargs = write_kwargs or {}
+
     # Check that that there are the same number of input data files and 
     # calibration files each night.
     input_cals = []
@@ -1369,7 +1371,7 @@ def create_lstbin_output_file(
     antpairs: list[tuple[int, int]] | None = None,
     freq_min: float | None = None,
     freq_max: float | None = None,
-    channels: np.ndarray | list[int] | None = None
+    channels: np.ndarray | list[int] | None = None,
     vis_units: str = "Jy",
 ) -> Path:
     outdir = Path(outdir)
@@ -1406,7 +1408,9 @@ def create_lstbin_output_file(
         vis_units=vis_units,
     )
     uvd_template.select(frequencies=freqs, polarizations=pols, inplace=True)
-
+    # Need to set the polarization array manually because even though the select
+    # operation does the down-select, it doesn't re-order the pols.
+    uvd_template.polarization_array = np.array(uvutils.polstr2num(pols, x_orientation=uvd_template.x_orientation))
     uvd_template.initialize_uvh5_file(str(fname.absolute()), clobber=overwrite)
     return fname
 
@@ -1536,7 +1540,11 @@ def config_lst_bin_files(
         for i, m in enumerate(matched):
             matched_files[i].append(m)
 
+    nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
+    lst_grid = [lst_grid[ntimes_per_file*i:ntimes_per_file*(i+1)] for i in range(nfiles)]
+
     # Only keep output files that have data associated
+    lst_grid = [lg for lg, mf in zip(lst_grid, matched_files) if any(len(mff)>0 for mff in mf)]
     matched_files = [mf for mf in matched_files if any(len(mff)>0 for mff in mf)]
     return lst_grid, matched_files
 
@@ -1569,9 +1577,7 @@ def make_lst_bin_config_file(
         jd_regex=jd_regex,
     )
 
-    nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
-    dlst = lst_grid[1] - lst_grid[0]
-    lst_grid = [lst_grid[ntimes_per_file*i:ntimes_per_file*(i+1)] for i in range(nfiles)]
+    dlst = lst_grid[0][1] - lst_grid[0][0]
     # Make it a real list of floats to make the YAML easier to read
     lst_grid = [[float(l) for l in lsts] for lsts in lst_grid]
 
@@ -1600,6 +1606,7 @@ def make_lst_bin_config_file(
         )
 
     matched_files = [[[str(m.path) for m in night] for night in outfiles] for outfiles in matched_files]
+    
     output = {
         'config_params': {
             'dlst': float(dlst),

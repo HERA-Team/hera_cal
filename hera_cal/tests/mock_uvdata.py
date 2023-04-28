@@ -61,6 +61,7 @@ def create_mock_hera_obs(
         time_axis_faster_than_bls=time_axis_faster_than_bls,
         do_blt_outer=True
     )
+    uvd.polarization_array = np.array(uvd.polarization_array)
     return uvd
 
 
@@ -73,7 +74,8 @@ def create_uvd_ones(**kwargs) -> UVData:
     return uvd
 
 def identifiable_data_from_uvd(
-    ones: UVData
+    ones: UVData,
+    reshape: bool = True,
 ) -> np.ndarray:
     lsts = np.unique(ones.lst_array)
     normfreqs = np.linspace(0, 2*np.pi, ones.freq_array.size)
@@ -86,15 +88,16 @@ def identifiable_data_from_uvd(
     
     for i, ap in enumerate(ones.get_antpairs()):
         for j, p in enumerate(ones.polarization_array):
-            if ap[0] == ap[1]:
-                d = np.outer(lsts*1000, (ones.freq_array / 75e6)**-2)
+            if ap[0] == ap[1] and p in (-5, -6):
+                d = np.outer(-p*lsts*1000, (ones.freq_array / 75e6)**-2)
             else:
                 d = np.outer(
-                    lsts, np.cos(normfreqs*ap[0]) + np.sin(normfreqs*ap[1])*1j
+                    p*lsts, np.cos(normfreqs*ap[0]) + np.sin(normfreqs*ap[1])*1j
                 )
 
             data[i, :, :, j] = d
-    data.shape = orig_shape
+    if reshape:
+        data.shape = orig_shape
     return data
 
 def create_uvd_identifiable(**kwargs) -> UVData:
@@ -103,7 +106,7 @@ def create_uvd_identifiable(**kwargs) -> UVData:
     Each baseline, pol, LST and freq channel should be identifiable in the data with the
     following pattern:
 
-        data = lst * np.cos(freq*a) + I * np.sin(freq*b)
+        data = pol* lst * [np.cos(freq*a) + I * np.sin(freq*b)]
     """
     ones = create_uvd_ones(**kwargs)
     ones.data_array = identifiable_data_from_uvd(ones)

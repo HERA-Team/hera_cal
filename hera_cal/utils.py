@@ -944,14 +944,16 @@ def lst_rephase_vectorized(
     # note that we pre-divided s_diff by c so this is in units of tau.
     # output has shape (len(dlst), len(bl))
     tau = np.einsum("...i,ki->...k", s_diff, blvecs)
-
+    
     # reshape tau
     if tau.ndim != 2:
         tau = tau[None, :]
 
     # get phasor
     phs = np.exp(-2j * np.pi * freqs[None, None, :, None] * tau[:, :, None, None])
-    
+
+    autos = np.all(blvecs == 0.0, axis=1)    
+
     # multiply into data
     data *= phs
 
