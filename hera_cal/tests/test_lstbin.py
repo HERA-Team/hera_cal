@@ -9,7 +9,7 @@ import copy
 import glob
 import scipy.stats as stats
 from pyuvdata import UVCal, UVData
-from .. import io, lstbin, utils, redcal, lstbin_simple
+from .. import io, lstbin, utils, redcal, lstbin_simple, apply_cal
 from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 import shutil
@@ -1500,3 +1500,138 @@ class Test_LSTBinSimple:
 
         assert 'metadata' in config_info
 
+    def test_baseline_chunking(self, tmp_path_factory):
+        tmp = tmp_path_factory.mktemp("baseline_chunking")
+        uvds = mockuvd.make_dataset(
+            ndays=3, nfiles=4, ntimes=2, 
+            creator=mockuvd.create_uvd_identifiable,
+            antpairs = [(i,j) for i in range(10) for j in range(i, 10)],  # 55 antpairs
+            pols = ['xx', 'yy'],
+            freqs=np.linspace(140e6, 180e6, 12),
+        )
+        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
+
+        cfl = tmp / "lstbin_config_file.yaml"
+        config_info = lstbin_simple.make_lst_bin_config_file(
+            cfl, data_files, ntimes_per_file=2,
+        )
+
+        out_files = lstbin_simple.lst_bin_files(
+            config_file=cfl, fname_format="zen.{kind}.{lst:7.5f}.uvh5",
+        )
+        out_files_chunked = lstbin_simple.lst_bin_files(
+            config_file=cfl, fname_format="zen.{kind}.{lst:7.5f}.chunked.uvh5",
+            Nbls_to_load=10,
+        )
+
+        for flset, flsetc in zip(out_files, out_files_chunked):
+            assert flset['LST'] != flsetc['LST']
+            uvdlst = UVData()
+            uvdlst.read(flset['LST'])
+
+            uvdlstc = UVData()
+            uvdlstc.read(flsetc['LST'])
+
+            assert uvdlst == uvdlstc
+            expected = mockuvd.identifiable_data_from_uvd(uvdlst)
+
+            np.testing.assert_allclose(uvdlst.data_array, expected, rtol=1e-4)
+
+
+    @pytest.mark.parametrize("random_ants_to_drop", (0, 3))
+    @pytest.mark.parametrize("rephase", [True, False])
+    @pytest.mark.parametrize("sigma_clip_thresh", [0.0, 3.0])
+    @pytest.mark.parametrize("flag_strategy",[(0,0,0), (2,1,3)])
+    def test_lstbin_with_nontrivial_cal(
+        self, tmp_path_factory, random_ants_to_drop: int, rephase: bool, 
+        sigma_clip_thresh: float, flag_strategy: tuple[int, int, int]
+    ):
+        tmp = tmp_path_factory.mktemp("nontrivial_cal")
+        uvds = mockuvd.make_dataset(
+            ndays=3, nfiles=4, ntimes=2, 
+            creator=mockuvd.create_uvd_identifiable,
+            antpairs = [(i,j) for i in range(7) for j in range(i, 7)],  # 55 antpairs
+            pols = ['xx', 'yy'],
+            freqs=np.linspace(140e6, 180e6, 3),
+            random_ants_to_drop=random_ants_to_drop,
+        )
+        uvcs = [
+            [mockuvd.make_uvc_identifiable(d, *flag_strategy) for d in uvd ] for uvd in uvds
+        ]
+        
+        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
+        cal_files = mockuvd.write_cals_in_hera_format(uvcs, tmp)
+        decal_files = [[df.replace(".uvh5", ".decal.uvh5") for df in dfl] for dfl in data_files]        
+        
+        for flist, clist, ulist in zip(data_files, cal_files, decal_files):
+            for df, cf, uf in zip(flist, clist, ulist):
+                apply_cal.apply_cal(
+                    df, uf, cf,
+                    gain_convention='divide',  # go the wrong way
+                    clobber=True,
+                )
+
+        # First, let's go the other way to check if we get the same thing back directly
+        recaled_files = [[df.replace(".uvh5", ".recal.uvh5") for df in dfl] for dfl in data_files]
+        for flist, clist, ulist in zip(recaled_files, cal_files, decal_files):
+            for df, cf, uf in zip(flist, clist, ulist):
+                apply_cal.apply_cal(
+                    uf, df, cf,
+                    gain_convention='multiply',  # go the wrong way
+                    clobber=True,
+                )
+
+        for flset, flsetc in zip(data_files, recaled_files):
+            for fl, flc in zip(flset, flsetc):
+                uvdlst = UVData()
+                uvdlst.read(fl)
+
+                uvdlstc = UVData()
+                uvdlstc.read(flc)
+                np.testing.assert_allclose(uvdlst.data_array, uvdlstc.data_array)
+
+        cfl = tmp / "lstbin_config_file.yaml"
+        config_info = lstbin_simple.make_lst_bin_config_file(
+            cfl, decal_files, ntimes_per_file=2,
+        )
+        
+        out_files_recal = lstbin_simple.lst_bin_files(
+            config_file=cfl, calfile_rules=[(".decal.uvh5", ".calfits")],
+            fname_format="zen.{kind}.{lst:7.5f}.recal.uvh5",
+            Nbls_to_load=10, rephase=rephase,
+            sigma_clip_thresh=sigma_clip_thresh,
+            sigma_clip_min_N=2,
+        )
+
+        config_info = lstbin_simple.make_lst_bin_config_file(
+            cfl, data_files, ntimes_per_file=2, clobber=True,
+        )
+        out_files = lstbin_simple.lst_bin_files(
+            config_file=cfl, fname_format="zen.{kind}.{lst:7.5f}.uvh5",
+            Nbls_to_load=11, rephase=rephase,
+            sigma_clip_thresh=sigma_clip_thresh,
+            sigma_clip_min_N=2,
+        )
+
+        for flset, flsetc in zip(out_files, out_files_recal):
+            assert flset['LST'] != flsetc['LST']
+            uvdlst = UVData()
+            uvdlst.read(flset['LST'])
+
+            uvdlstc = UVData()
+            uvdlstc.read(flsetc['LST'])
+
+            # Don't worry about history here, because we know they use different inputs
+            uvdlst.history = uvdlstc.history
+
+            if all(fs==0 for fs in flag_strategy):
+                # It only makes sense to compare full UVData objects if we're not
+                # flagging in the UVCals, since the non-recal files will have
+                # all samples, while the recal files will have fewer than that
+                assert uvdlst == uvdlstc
+    
+            expected = mockuvd.identifiable_data_from_uvd(uvdlst)
+            # Unfortunately, we don't have LSTs for the files that exactly align
+            # with bin centres, so some rephasing will happen -- we just have to
+            # live with it and change the tolerance
+            np.testing.assert_allclose(uvdlstc.data_array, expected, rtol=1e-4 if not rephase else 1e-3)

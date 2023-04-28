@@ -3008,7 +3008,12 @@ def uvdata_from_fastuvh5(
     if antpairs is None:
         antpairs = meta.antpairs
 
-    timefirst = kwargs.get("time_axis_faster_than_bls", meta.time_axis_faster_than_bls)
+    if len(times) > 1:
+        timefirst = kwargs.get(
+            "time_axis_faster_than_bls", meta.time_axis_faster_than_bls
+        )
+    else:
+        timefirst = False
 
     if not timefirst:
         uvd.time_array = np.repeat(times, len(antpairs))

@@ -1,6 +1,6 @@
 """Functions for mocking UVdata objects for testing purposes."""
 
-from pyuvdata import UVData
+from pyuvdata import UVData, UVCal
 from pyuvdata.uvdata import FastUVH5Meta
 from hera_cal import utils
 import numpy as np
@@ -72,6 +72,31 @@ def create_uvd_ones(**kwargs) -> UVData:
     uvd.data_array += 1.0
     return uvd
 
+def identifiable_data_from_uvd(
+    ones: UVData
+) -> np.ndarray:
+    lsts = np.unique(ones.lst_array)
+    normfreqs = np.linspace(0, 2*np.pi, ones.freq_array.size)
+
+    data = np.zeros_like(ones.data_array)
+
+    orig_shape = data.shape
+    # in-place reshape of data to make it easier for us.
+    data.shape = (len(ones.get_antpairs()), ones.Ntimes, ones.Nfreqs, len(ones.polarization_array))
+    
+    for i, ap in enumerate(ones.get_antpairs()):
+        for j, p in enumerate(ones.polarization_array):
+            if ap[0] == ap[1]:
+                d = np.outer(lsts*1000, (ones.freq_array / 75e6)**-2)
+            else:
+                d = np.outer(
+                    lsts, np.cos(normfreqs*ap[0]) + np.sin(normfreqs*ap[1])*1j
+                )
+
+            data[i, :, :, j] = d
+    data.shape = orig_shape
+    return data
+
 def create_uvd_identifiable(**kwargs) -> UVData:
     """Make a UVData object with identifiable data.
     
@@ -81,26 +106,7 @@ def create_uvd_identifiable(**kwargs) -> UVData:
         data = lst * np.cos(freq*a) + I * np.sin(freq*b)
     """
     ones = create_uvd_ones(**kwargs)
-    lsts = np.unique(ones.lst_array)
-    normfreqs = np.linspace(0, 2*np.pi, ones.freq_array.size)
-
-    data = ones.data_array
-    orig_shape = data.shape
-    # in-place reshape of data to make it easier for us.
-    data.shape = (len(ones.get_antpairs()), ones.Ntimes, ones.Nfreqs, len(ones.polarization_array))
-    
-    for i, ap in enumerate(ones.get_antpairs()):
-        for j, p in enumerate(ones.polarization_array):
-            if ap[0] == ap[1]:
-                d = np.outer(lsts, np.ones_like(normfreqs))
-            else:
-                d = np.outer(
-                    lsts, np.cos(normfreqs*ap[0]) + np.sin(normfreqs*ap[1])*1j
-                )
-
-            data[i, :, :, j] = d
-            
-    data.shape = orig_shape
+    ones.data_array = identifiable_data_from_uvd(ones)
     return ones
 
 def write_files_in_hera_format(
@@ -123,7 +129,8 @@ def write_files_in_hera_format(
         if in_jdint_dir:
             jdint = int(uvdlist[0].time_array.min())
             daydir = (tmpdir / str(jdint))
-            daydir.mkdir()
+            if not daydir.exists():
+                daydir.mkdir()
         else:
             daydir = tmpdir
 
@@ -158,11 +165,100 @@ def make_day(nfiles: int, creator: callable = create_mock_hera_obs, **kwargs) ->
     return uvds
 
 def make_dataset(
-    ndays: int, nfiles: int, start_jdint: int = 2459855, creator: callable = create_mock_hera_obs, **kwargs
+    ndays: int, nfiles: int, start_jdint: int = 2459855, creator: callable = create_mock_hera_obs, 
+    random_ants_to_drop: int = 0,
+    **kwargs
 ) -> list[list[UVData]]:
     """Make a dataset of UVData objects."""
+    
+    if random_ants_to_drop > 0:
+        default = creator(jdint=start_jdint, **kwargs)        
+        antpairs = default.get_antpairs()
+        data_ants = list(set([ap[0] for ap in antpairs] + [ap[1] for ap in antpairs]))
+        if 'antpairs' in kwargs:
+            del kwargs['antpairs']
+
     uvds = []
     for i in range(ndays):
+        if random_ants_to_drop > 0:
+            drop_ants = np.random.choice(data_ants, random_ants_to_drop, replace=False)
+            _antpairs = [ap for ap in antpairs if ap[0] not in drop_ants and ap[1] not in drop_ants]
+            kwargs['antpairs'] = _antpairs
         uvds.append(make_day(nfiles, jdint=start_jdint + i, creator=creator, **kwargs))
     
     return uvds
+
+def make_uvc_ones(uvd: UVData, flag_full_ant: int = 0, flag_ant_time: int = 0, flag_ant_freq: int = 0):
+    uvc = UVCal.from_uvdata(
+        uvd,
+        cal_style = "redundant",
+        gain_convention = "multiply",
+        jones_array = "linear",
+        cal_type = "gain",
+        empty=True
+    )
+
+    if flag_full_ant > 0:
+        badants = np.random.choice(np.arange(uvc.Nants_data), flag_full_ant, replace=False)
+        uvc.flag_array[badants] = True
+    if flag_ant_time > 0:
+        badants = np.random.choice(np.arange(uvc.Nants_data), flag_ant_time, replace=False)
+        badtime = np.random.randint(0, uvc.Ntimes)
+        uvc.flag_array[badants, :, badtime] = True
+    if flag_ant_freq > 0:
+        badants = np.random.choice(np.arange(uvc.Nants_data), flag_ant_freq, replace=False)
+        badfreq = np.random.randint(0, uvc.Nfreqs)
+        uvc.flag_array[badants, badfreq, :] = True
+    return uvc
+
+def identifiable_gains_from_uvc(uvc: UVCal):
+    gains = np.zeros_like(uvc.gain_array)
+    for i, ant in enumerate(uvc.antenna_numbers):
+        for j in range(uvc.Njones):
+            gains[i, :, :, j] = np.outer(
+                np.exp(2j*np.pi*uvc.freq_array*(j+1)),
+                np.ones_like(uvc.time_array)*(i+1)
+            )
+    return gains
+
+def make_uvc_identifiable(uvd: UVData,  flag_full_ant: int = 0, flag_ant_time: int = 0, flag_ant_freq: int = 0):
+    uvc = make_uvc_ones(uvd,  flag_full_ant=flag_full_ant, flag_ant_time=flag_ant_time, flag_ant_freq=flag_ant_freq)
+    uvc.gain_array = identifiable_gains_from_uvc(uvc)
+    return uvc
+
+def write_cals_in_hera_format(
+    uvds: list[UVCal] | list[list[UVCal]], 
+    tmpdir: Path,
+    fmt: str = "zen.{jd:.5f}.sum.calfits",
+    in_jdint_dir: bool = True,
+) -> list[list[str]]:
+
+    if not tmpdir.exists():
+        tmpdir.mkdir()
+
+    single_level = False
+    if not isinstance(uvds[0], list):
+        single_level = True
+        uvds = [uvds]
+
+    fls = []
+    for uvdlist in uvds:
+        if in_jdint_dir:
+            jdint = int(uvdlist[0].time_array.min())
+            daydir = (tmpdir / str(jdint))
+            if not daydir.exists():
+                daydir.mkdir()
+        else:
+            daydir = tmpdir
+
+        _fls = []
+        for obj in uvdlist:
+            fl = daydir / fmt.format(jd=obj.time_array.min())
+            obj.write_calfits(fl, clobber=True)
+            _fls.append(str(fl))
+        fls.append(_fls)
+
+    if single_level:
+        return fls[0]
+    else:
+        return fls

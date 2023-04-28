@@ -573,10 +573,10 @@ def lst_bin_files_for_baselines(
         else:
             bls_to_load = [bl for bl in antpairs if bl in data_antpairs or bl[::-1] in data_antpairs]
 
-        if not bls_to_load:
+        if not bls_to_load or not np.any(tind):
             # If none of the requested baselines are in this file, then just 
             # set stuff as nan and go to next file. 
-            logger.warning(f"None of the baselines are in {meta.path}. Skipping.")
+            logger.warning(f"None of the baseline-times are in {meta.path}. Skipping.")
             data[slc] = np.nan
             flags[slc] = True
             nsamples[slc] = 0
@@ -891,7 +891,6 @@ def lst_bin_files_single_outfile(
         reds=reds,
         only_last_file_per_night=only_last_file_per_night,
     )
-    all_baselines = sorted(all_baselines)
 
     nants0 = meta.header['antenna_numbers'].size
 
@@ -956,6 +955,7 @@ def lst_bin_files_single_outfile(
         start_jd=start_jd,
         freq_min=freq_min,
         freq_max=freq_max,
+        **write_kwargs,
     )
     out_files = {}
     for kind in ['LST', 'STD']:
@@ -1236,7 +1236,7 @@ def get_all_unflagged_baselines(
     reds: RedundantGroups | None = None,
     blts_are_rectangular: bool | None = None,
     time_axis_faster_than_bls: bool | None = None,
-) -> tuple[set[tuple[int, int]], list[str]]:
+) -> tuple[list[tuple[int, int]], list[str]]:
     """Generate a set of all antpairs that have at least one un-flagged entry.
     
     This is performed over a list of nights, each of which consists of a list of 
@@ -1352,7 +1352,7 @@ def get_all_unflagged_baselines(
                     all_baselines.add((a1, a2))
                     
 
-    return all_baselines, all_pols
+    return sorted(all_baselines), sorted(all_pols)
 
 def create_lstbin_output_file(
     outdir: Path,
@@ -1370,7 +1370,7 @@ def create_lstbin_output_file(
     freq_min: float | None = None,
     freq_max: float | None = None,
     channels: np.ndarray | list[int] | None = None
-    
+    vis_units: str = "Jy",
 ) -> Path:
     outdir = Path(outdir)
     # pols = set(pols)
@@ -1398,15 +1398,14 @@ def create_lstbin_output_file(
     uvd_template = io.uvdata_from_fastuvh5(
         meta=file_list[0],
         antpairs=antpairs,
-        pols=pols,
         lsts=lsts,
         times=times,
         history=_history,
         start_jd=start_jd,
         time_axis_faster_than_bls = True,
-        vis_units="Jy",
+        vis_units=vis_units,
     )
-    uvd_template.select(frequencies=freqs, inplace=True)
+    uvd_template.select(frequencies=freqs, polarizations=pols, inplace=True)
 
     uvd_template.initialize_uvh5_file(str(fname.absolute()), clobber=overwrite)
     return fname
