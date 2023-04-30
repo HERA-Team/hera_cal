@@ -782,7 +782,7 @@ def _stefcal_optimizer(data_matrix, model_matrix, weights, tol=1e-10, maxiter=10
         gains = gains * stepsize + g_old * (1 - stepsize)
         
         # Compute convergence criterea
-        tau = jnp.sqrt(jnp.sum(jnp.abs(gains - g_old) ** 2))/ jnp.sqrt(jnp.sum(jnp.abs(gains)**2))
+        tau = jnp.sqrt(jnp.sum(jnp.abs(gains - g_old) ** 2)) / jnp.sqrt(jnp.sum(jnp.abs(gains)**2))
         return gains, i + 1, tau
     
     def conditional_function(args):
@@ -831,9 +831,10 @@ def _build_model_matrices(data, model, flags, baselines, ant_flags={}):
     map_ants_to_index: dict
         Dictionary mapping antennas to indices within the data, model, and wgts matrices
     """
-    # Get unique antennas
-    ants = sorted(list(set(sum([list(k[:2]) for k in data], []))))
-    pols = sorted(list(set([k[2] for k in baselines])))
+    # Get antennas and polarizations from data
+    keys = list(data.keys())
+    pols = np.unique([k[2] for k in keys])
+    ants = np.unique(np.concatenate([k[:2] for k in keys]))
 
     # Remove flagged antennas
     ants = [ant for ant in ants if not ant_flags.get((ant, 'J' + pols[0]), False)]
@@ -903,14 +904,13 @@ def sky_calibration(data, model, flags, ant_flags={}, tol=1e-10, maxiter=1000, s
     conv_crits: np.ndarray
         Convergence criterea for each time, frequency, and polarization run of the calibration.
     """
+    # Get antennas and polarizations from data
+    keys = list(data.keys())
+    pols = np.unique([k[2] for k in keys])
+    ants = np.unique(np.concatenate([k[:2] for k in keys]))
+
     # Get number of times and frequencies
-    ntimes, nfreqs = data[list(data.keys())[0]].shape
-
-    # Get unique polarizations in the data
-    pols = sorted(list(set([k[2] for k in data.keys()])))
-
-    # Get antennas
-    ants = sorted(list(set(sum([list(k[:2]) for k in data.keys()], []))))
+    ntimes, nfreqs = data[keys[0]].shape
 
     # get keys from model and data dictionary
     if isinstance(model, RedDataContainer):
