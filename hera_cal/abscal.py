@@ -47,7 +47,7 @@ from . import utils
 from . import redcal
 from . import io
 from . import apply_cal
-from .datacontainer import DataContainer
+from .datacontainer import DataContainer, RedDataContainer
 from .utils import echo, polnum2str, polstr2num, reverse_bl, split_pol, split_bl, join_bl, join_pol
 
 PHASE_SLOPE_SOLVERS = ['linfit', 'dft', 'ndim_fft']  # list of valid solvers for global_phase_slope_logcal
@@ -727,6 +727,253 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solv
 
     return fit
 
+@jax.jit
+def _stefcal_optimizer(data_matrix, model_matrix, weights, tol=1e-10, maxiter=1000, stepsize=0.5):
+    """
+    Function to run stefcal optimization
+
+    Parameters:
+    ----------
+    data_matrix: np.ndarray
+        Data matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that 
+        are not flagged. Tsecond two axes are the time and frequency axes.
+    model_matrix: np.ndarray
+        Model matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that 
+        are not flagged. Tsecond two axes are the time and frequency axes.
+    weights: np.ndarray
+        Weights matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that 
+        are not flagged. Tsecond two axes are the time and frequency axes.
+    tol: float, optional, default=1e-10
+        Tolerance for convergence criterea of subsequent iterations of stefcal
+    maxiter: int, optional, default=1000
+        Maximum number of iterations to run the calibration
+    stepsize: float, optional, default=0.5
+        Step size for the optimization. Must be between 0 and 1. A step size of 1 will take the full step in the direction
+        of the new gains, while a step size of 0 will take no step in the direction of the new gains.
+
+    Returns:
+    -------
+    gains: np.ndarray
+        Complex antenna gain solutions of shape (nants)
+    niters: int
+        Number of iterations performed by the optimizer
+    conv_crit: float
+        Convergence criterea of the final iteration of the optimizer
+    """
+    def inner_function(args):
+        """
+        Main optimization loop
+        """
+        # Unpack arguments
+        gains, i, tau = args
+
+        # Copy gains
+        g_old = jnp.copy(gains)
+
+        # Compute the model gain product
+        zg = gains[:, None] * model_matrix
+        zgw = zg * weights
+
+        # Compute gains
+        gains = jnp.sum(jnp.conj(data_matrix) * zgw, axis=(0)) / jnp.sum(jnp.conj(zgw) * zg, axis=(0))
+
+        # Set gains to 1 if they are nan
+        gains = jnp.where(jnp.isnan(gains), 1, gains)
+        gains = gains * stepsize + g_old * (1 - stepsize)
+        
+        # Compute convergence criterea
+        tau = jnp.sqrt(jnp.sum(jnp.abs(gains - g_old) ** 2))/ jnp.sqrt(jnp.sum(jnp.abs(gains)**2))
+        return gains, i + 1, tau
+    
+    def conditional_function(args):
+        """
+        Conditional function to check to convergence criterea
+        """
+        _, i, tau = args
+        return (tau > tol) & (i < maxiter)
+    
+    nants = data_matrix.shape[0]
+    gains = jnp.ones(nants, dtype=complex)
+    
+    return jax.lax.while_loop(conditional_function, inner_function, (gains, 0, jnp.inf))
+
+def _build_model_matrices(data, model, flags, baselines, ant_flags={}):
+    """
+    Function to build data, model, and weights matrices for sky_calibration optimization.
+
+
+    Parameters:
+    ----------
+    data: DataContainer
+        Visibility data of measurements. Keys are antenna pair + pol tuples (must match model), values are
+        complex ndarray visibilities matching shape of model
+    model: DataContainer or RedDataContainer
+        Model visibilities. Keys are antenna pair + pol tuples (must match data), values are complex ndarray
+    flags: DataContainer
+        Dictionary of flags. Keys are antenna pair + pol tuples (must match data), values are boolean ndarrays
+    baselines: list
+        List of baseline tuples of the form (ant1, ant2, pol) to include in the model matrices
+    ant_flags: dict, optional, default={}
+        Dictionary of antenna flags. Keys are antenna + pol tuples, values are boolean. If an antenna is flagged
+        in this dictionary, it will not be included in the model matrices.
+    
+    Returns:
+    -------
+    data_matrix: np.ndarray
+        Data matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that 
+        are not flagged. Tsecond two axes are the time and frequency axes.
+    model_matrix: np.ndarray
+        Model matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that
+        are not flagged. The second two axes are the time and frequency axes.
+    wgts_matrix: np.ndarray
+        Weights matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that
+        are not flagged. The second two axes are the time and frequency axes.
+    map_ants_to_index: dict
+        Dictionary mapping antennas to indices within the data, model, and wgts matrices
+    """
+    # Get unique antennas
+    ants = sorted(list(set(sum([list(k[:2]) for k in data], []))))
+    pols = sorted(list(set([k[2] for k in baselines])))
+
+    # Remove flagged antennas
+    ants = [ant for ant in ants if not ant_flags.get((ant, 'J' + pols[0]), False)]
+    nants = len(ants)
+
+    # Map antennas to indices in the data, model, and wgts matrices
+    map_ants_to_index = {
+        ant: ki for ki, ant in enumerate(ants)
+    }
+    
+    # Number of times and frequencies
+    ntimes, nfreqs = data[baselines[0]].shape
+    
+    # Populate matrices
+    data_matrix = np.zeros((nants, nants, ntimes, nfreqs), dtype='complex')
+    wgts_matrix = np.zeros((nants, nants, ntimes, nfreqs), dtype='float')
+    model_matrix = np.zeros((nants, nants, ntimes, nfreqs), dtype='complex')
+    
+    for bl in baselines:
+        if bl[0] in map_ants_to_index and bl[1] in map_ants_to_index:
+            m, n = map_ants_to_index[bl[0]], map_ants_to_index[bl[1]]
+            
+            # Data matrix
+            data_matrix[m, n] = data[bl]
+            data_matrix[n, m] = data[bl].conj()
+            
+            # Weights matrix
+            wgts_matrix[m, n] = (~flags[bl]).astype(float)
+            wgts_matrix[n, m] = wgts_matrix[m, n]
+            
+            # Model Matrix
+            model_matrix[m, n] = model[bl]
+            model_matrix[n, m] = model[bl].conj()
+
+    return data_matrix, model_matrix, wgts_matrix, map_ants_to_index
+
+def sky_calibration(data, model, flags, ant_flags={}, tol=1e-10, maxiter=1000, stepsize=0.5):
+    """
+    Solve for per-antenna gains using the Stefcal algorithm (Salvini et al. 2014). 
+
+    Parameters:
+    ----------
+    data: DataContainer
+        Visibility data of measurements. Keys are antenna pair + pol tuples (must match model), values are
+        complex ndarray visibilities matching shape of model
+    model: DataContainer or RedDataContainer
+        Model visibilities. Keys are antenna pair + pol tuples (must match data), values are complex ndarray
+    flags: DataContainer
+        Dictionary of flags. Keys are antenna pair + pol tuples (must match data), values are boolean ndarrays
+    ant_flags: dict, optional, default={}
+        Dictionary of antenna flags. Keys are antenna + pol tuples, values are boolean. If an antenna is flagged
+        in this dictionary, it will not be included in the fit.
+    tol: float, optional, default=1e-10
+        Tolerance for convergence criterea of subsequent iterations of stefcal
+    maxiter: int, optional, default=1000
+        Maximum number of iterations to run the calibration
+    stepsize: float, optional, default=0.5
+        Step size for the optimization. Must be between 0 and 1. A step size of 1 will take the full step in the direction
+        of the new gains, while a step size of 0 will take no step in the direction of the new gains.
+
+    Returns:
+    -------
+    gains: dict
+        Dictionary with all unflagged antenna-polarizations as keys and gain waterfall arrays as values
+    niters: np.ndarray
+        Number of iterations performed for each time, frequency, and polarization run of the calibration algorithm
+    conv_crits: np.ndarray
+        Convergence criterea for each time, frequency, and polarization run of the calibration.
+    """
+    # Get number of times and frequencies
+    ntimes, nfreqs = data[list(data.keys())[0]].shape
+
+    # Get unique polarizations in the data
+    pols = sorted(list(set([k[2] for k in data.keys()])))
+
+    # Get antennas
+    ants = sorted(list(set(sum([list(k[:2]) for k in data.keys()], []))))
+
+    # get keys from model and data dictionary
+    if isinstance(model, RedDataContainer):
+        all_bls = sorted(set(data.keys()))
+    else:
+        all_bls = sorted(set(data.keys()) & set(model.keys()))
+        
+    # Store gains and metadata
+    gains = {}
+    niters = {}
+    conv_crits = {}
+    
+    for pol in pols:
+        # Initialize arrays for gains, niters, and convergence criterea
+        gain_array = []
+        niter_array = []
+        conv_crit_array = []
+
+        # Get data baselines
+        baselines = [k for k in all_bls if k[2] == pol]
+
+        # Pack data and model into numpy arrays
+        data_matrix, model_matrix, wgts, map_ants_to_index = _build_model_matrices(
+            data, model, flags, baselines, ant_flags=ant_flags
+        )
+
+        for ti in range(ntimes):
+            _gains = []
+            _niters = []
+            _conv_crits= []
+            for fi in range(nfreqs):
+                if wgts[..., ti, fi].sum() > 0:
+                    gain, niter, conv_crit = _stefcal_optimizer(
+                        data_matrix[..., ti, fi], model_matrix[..., ti, fi], wgts[..., ti, fi], 
+                        tol=tol, maxiter=maxiter, stepsize=stepsize
+                    )
+                    _niters.append(niter)
+                    _conv_crits.append(conv_crit)
+                    _gains.append(gain)
+                    
+                else:
+                    gain = np.ones(data_matrix.shape[0], dtype='complex')
+                    _niters.append(0)
+                    _conv_crits.append(np.nan)
+                    _gains.append(gain)
+                    
+            gain_array.append(_gains)
+            niter_array.append(_niters)
+            conv_crit_array.append(_conv_crits)
+        
+        gain_array = np.array(gain_array)
+    
+        for k in ants:
+            if k in map_ants_to_index:
+                gains[(k, "J" + pol)] = gain_array[..., map_ants_to_index[k]]
+            else:
+                gains[(k, "J" + pol)] = np.ones((ntimes, nfreqs), dtype='complex')
+
+        niters[pol] = np.array(niter_array)
+        conv_crits[pol] = np.array(conv_crit_array)
+                
+    return gains, niters, conv_crits
+                
 
 def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, f0=0.0, medfilt=True,
                        kernel=(1, 5), assume_2D=True, four_pol=False, edge_cut=0, time_avg=False,
@@ -2449,7 +2696,6 @@ def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
                                    & (model_ends > data_lsts[0] - atol)]
 
     return match
-
 
 def cut_bls(datacontainer, bls=None, min_bl_cut=None, max_bl_cut=None, inplace=False):
     """
