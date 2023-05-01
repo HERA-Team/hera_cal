@@ -765,12 +765,12 @@ def _stefcal_optimizer(data_matrix, model_matrix, weights, tol=1e-10, maxiter=10
         Main optimization loop
         """
         # Unpack arguments
-        gains, i, tau = args
+        gains, i, _ = args
 
         # Copy gains
         g_old = jnp.copy(gains)
 
-        # Compute the model gain product
+        # Compute the model-gain product
         zg = gains[:, None] * model_matrix
         zgw = zg * weights
 
@@ -779,7 +779,10 @@ def _stefcal_optimizer(data_matrix, model_matrix, weights, tol=1e-10, maxiter=10
 
         # Set gains to 1 if they are nan
         gains = jnp.where(jnp.isnan(gains), 1, gains)
-        gains = gains * stepsize + g_old * (1 - stepsize)
+
+        # Average gains on even iterations and take a full step on odd iterations (ensures convergence)
+        step = ((i + 1) % 2) * stepsize
+        gains = gains * (1 - step) + g_old * step
         
         # Compute convergence criterea
         tau = jnp.sqrt(jnp.sum(jnp.abs(gains - g_old) ** 2)) / jnp.sqrt(jnp.sum(jnp.abs(gains)**2))
