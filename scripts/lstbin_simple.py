@@ -3,33 +3,7 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
-"""
-command-line drive script for lstbin.lst_bin_files()
-Assume our current working directory is data/, which looks like
-data/
-    2485042/
-        zen.2485042.1000.xx.HH.uv
-        zen.2485042.2000.xx.HH.uv
-        zen.2485042.3000.xx.HH.uv
-    2485043/
-        zen.2485043.1200.xx.HH.uv
-        zen.2485043.2200.xx.HH.uv
-        zen.2485043.3200.xx.HH.uv
-    2485044/
-        zen.2485044.1400.xx.HH.uv
-        zen.2485044.2400.xx.HH.uv
-        zen.2485044.3400.xx.HH.uv
-In order to LST-bin all of the above files, our call to lstbin_run.py would look like
-lstbin_run.py '2485042/zen.2485042.*.xx.HH.uv' \
-              '2485043/zen.2485043.*.xx.HH.uv' \
-              '2485044/zen.2485044.*.xx.HH.uv'
-Arguments can be specified before the search strings, like
-lstbin_run.py --lst_init np.pi --dlst 0.001 --align --outdir './' \
-              '2485042/zen.2485042.*.xx.HH.uv' \
-              '2485043/zen.2485043.*.xx.HH.uv' \
-              '2485044/zen.2485044.*.xx.HH.uv'
-Note: make sure the search strings are bounded by quotations!
-"""
+"""command-line drive script for lstbin.lst_bin_files()"""
 
 from hera_cal import lstbin_simple as lstbin
 import sys
@@ -51,14 +25,6 @@ kwargs = filter_kwargs(dict(vars(args)))
 
 # configure history
 kwargs['history'] += history
-
-# configure data_files
-data_files = [sorted(glob.glob(s.strip("'").strip('"'))) for s in args.data_files]
-del kwargs['data_files']
-
-# ensure data_files is a set of nested lists
-if not isinstance(data_files[0], list):
-    raise ValueError("data_files is not a set of nested lists. check input to data_files. See lstbin_run.py doc-string for examples.")
 
 write_kwargs = json.loads(kwargs.pop('write_kwargs'))
 if not write_kwargs:
@@ -92,8 +58,8 @@ kwargs['golden_lsts'] = tuple(float(lst) for lst in kwargs['golden_lsts'].split(
 
 run_with_profiling(
     lstbin.lst_bin_files, 
-    args, 
-    data_files=data_files,
+    args,
+    config_file=kwargs.pop('configfile'),
     calfile_rules=calfile_rules, 
     write_kwargs=write_kwargs, 
     **kwargs

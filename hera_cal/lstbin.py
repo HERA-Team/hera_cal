@@ -624,7 +624,8 @@ def config_lst_bin_files(
     # get dlst from first data file if None
     if dlst is None:
         dlst, _, _, _ = io.get_file_times(str(df0.path), filetype='uvh5')
-
+        print("GOT DLST = ", dlst)
+        print(df0.lsts, df0.lst_array)
     has_lst_arrays = 'lst_array' in df0.header
     
     # Grab the LST and time arrays from each file. Using the FastUVH5Meta
