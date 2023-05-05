@@ -9,12 +9,12 @@ import copy
 from functools import cached_property, wraps, partial
 from frozendict import frozendict
 
-from typing import Sequence
+from typing import Sequence, Tuple, List
 
-AntPair = tuple[int, int]
-Baseline = tuple[int, int, str]
+AntPair = Tuple[int, int]
+Baseline = Tuple[int, int, str]
 
-def _convert_red_list(red_list: Sequence[Sequence[AntPair | Baseline]]) -> list[list[AntPair | Baseline]]:
+def _convert_red_list(red_list: Sequence[Sequence[AntPair | Baseline]]) -> List[List[AntPair | Baseline]]:
     """Convert a list of redundant baseline groups to a list of lists of antenna pairs."""
     return [list(bls) for bls in red_list]
 
@@ -38,7 +38,7 @@ class RedundantGroups:
 
     Parameters
     ----------
-    red_list : list[list[tuple[int, int]]]
+    red_list : List[List[tuple[int, int]]]
         List of redundant baseline groups. Each group is a list of antenna pairs or 
         antenna-pair-pols (eg. (0, 1, 'xx')). If provided, ``antpos`` is not required.
         All elements must be of the same type (either all antenna pairs or all
@@ -128,11 +128,11 @@ class RedundantGroups:
         True
     
     To filter out baselines for a specific purpose (but keeping the full antpos array), 
-    the ``filtered`` method can be used. This will return a *new* RedundantGroups object
+    the ``filter_reds`` method can be used. This will return a RedundantGroups object
     with the same ``antpos`` (as these are considered fixed for the array) but fewer
     baselines. All arguments to :func:`hera_cal.redcal.filter_reds` are supported::
 
-        >>> filtered = rg.filtered(bls=[(0, 1,'nn'), (1, 2,'nn'), (2, 3,'nn')])
+        >>> filtered = rg.filter_reds(bls=[(0, 1,'nn'), (1, 2,'nn'), (2, 3,'nn')])
         >>> print(filtered[0])
         [(0, 1, 'nn'), (1, 2, 'nn'), (2, 3, 'nn')]
         >>> print(len(filtered))
@@ -164,7 +164,7 @@ class RedundantGroups:
             )
     """
 
-    _red_list: list[list[AntPair | Baseline]] = attrs.field(converter=_convert_red_list)
+    _red_list: List[List[AntPair | Baseline]] = attrs.field(converter=_convert_red_list)
     _antpos: frozendict[int, np.ndarray] | None = attrs.field(
         default=None, 
         converter=attrs.converters.optional(frozendict),
@@ -186,7 +186,7 @@ class RedundantGroups:
             for red in val:
                 for bl in red:
                     if len(bl) != tp:
-                        raise ValueError("All baselines must have the same type, got an AntPair and a Baseline")
+                        raise TypeError("All baselines must have the same type, got an AntPair and a Baseline")
                          
     @classmethod
     def from_antpos(
@@ -206,8 +206,8 @@ class RedundantGroups:
             A dictionary mapping antenna numbers to their positions in the array. 
             The positions should be 3-element arrays of floats in ENU coordinates in 
             meters. Provide all antennas in the array, even if they are not present
-            in the baselines you want to use in the end. You can always use `.filtered`
-            on the resulting object to remove baselines you don't want.
+            in the baselines you want to use in the end. You can always use 
+            `.filter_reds` on the resulting object to remove baselines you don't want.
         pols
             A list of polarizations to include in the redundant groups. If empty,
             simply use antpairs instead of baselines as keys. All antpairs with all pols 
@@ -248,10 +248,10 @@ class RedundantGroups:
     @cached_property
     def data_bls(self) -> frozenset[Baseline | AntPair]:
         """The list of baselines in the baseline groups."""
-        return frozenset(self._bl_to_red_map.keys())
+        return frozenset(sum(self._red_list, []))
 
     @cached_property
-    def _red_key_to_bls_map(self) -> dict[AntPair, list[AntPair]]:
+    def _red_key_to_bls_map(self) -> dict[AntPair, List[AntPair]]:
         out = {}
         for red in self._red_list:
             out[self.key_chooser(red)] = red
@@ -273,7 +273,7 @@ class RedundantGroups:
         '''Returns the unique baseline representing the group the key is in.'''
         return self._bl_to_red_map[key]
         
-    def get_red(self, key: AntPair | Baseline) -> tuple[AntPair | Baseline]:
+    def get_red(self, key: AntPair | Baseline) -> Tuple[AntPair | Baseline]:
         '''Returns the tuple of baselines redundant with this key.'''
         return self._red_key_to_bls_map[self.get_ubl_key(key)]
         
@@ -296,11 +296,11 @@ class RedundantGroups:
             )
         
         if self.antpos is None:
-            return self.append(other._red_list, inplace=False)
+            return self.extend(other._red_list, inplace=False)
         else:
             new_antpos = {**self.antpos, **other.antpos}
             new = attrs.evolve(self, antpos=new_antpos)
-            return new.append(other._red_list, inplace=False)            
+            return new.extend(other._red_list, inplace=False)            
         
     def append(self, red: Sequence[AntPair | Baseline], inplace: bool=True, pos: int | None = None) -> None:
         """In-place append a new redundant group to the list of redundant groups.
@@ -313,9 +313,9 @@ class RedundantGroups:
             # Ensure that all the ants in the new reds exist in the antpos
             for bl in red:
                 if bl[0] not in self.antpos:
-                    raise ValueError(f"Antenna {bl[0]} not in antpos (valid ants: {self._bl_to_red_map.keys()}).")
+                    raise ValueError(f"Antenna {bl[0]} not in antpos (valid ants: {self.antpos.keys()}).")
                 if bl[1] not in self.antpos:
-                    raise ValueError(f"Antenna {bl[1]} not in antpos (valid ants: {self._bl_to_red_map.keys()}).")
+                    raise ValueError(f"Antenna {bl[1]} not in antpos (valid ants: {self.antpos.keys()}).")
 
         ubls = {r: self.get_ubl_key(r) for r in red if r in self}
 
@@ -365,13 +365,13 @@ class RedundantGroups:
     def __iter__(self):
         return iter(self._red_list)
     
-    def __getitem__(self, key: int | AntPair | Baseline) -> list[AntPair | Baseline]:
+    def __getitem__(self, key: int | AntPair | Baseline) -> List[AntPair | Baseline]:
         if isinstance(key, int):
             return self._red_list[key]
         else:
             return self.get_red(key)
         
-    def __setitem__(self, key: int | AntPair | Baseline, value: list[AntPair | Baseline]):
+    def __setitem__(self, key: int | AntPair | Baseline, value: List[AntPair | Baseline]):
         if isinstance(key, int):
             self._red_list[key] = value
         elif key in self:
@@ -381,6 +381,16 @@ class RedundantGroups:
             # We're setting a new redundant group
             self.append(value)
 
+        # Reset the maps
+        self.clear_cache()
+
+    def __delitem__(self, key: int | AntPair | Baseline):
+        if isinstance(key, int):
+            del self._red_list[key]
+        else:
+            ukey = self.get_ubl_key(key)
+            self._red_list = [red for red in self._red_list if red[0] != ukey]
+        
         # Reset the maps
         self.clear_cache()
 
@@ -405,25 +415,26 @@ class RedundantGroups:
         This maintains the list-of-lists duck-typing of the redundant groups.
         """
         for red in reds:
-            self.append(red, inplace)
+            out = self.append(red, inplace)
+
+        if not inplace:
+            return out
     
-    def sort(self):
+    def sort(self, **kwargs):
         """Sort the redundant groups in-place."""
-        self._red_list.sort()
+        self._red_list.sort(**kwargs)
         self.clear_cache()
 
     def clear_cache(self):
         """Clear the cached maps."""
         for att in (
-            self._bl_to_red_map,
-            self._red_key_to_bls_map,
-            self.data_ants,
-            self.data_bls,
+            "_bl_to_red_map",
+            "_red_key_to_bls_map",
+            "data_ants",
+            "data_bls",
         ):
-            try:
-                del att
-            except AttributeError:
-                pass
+            if att in self.__dict__:
+                del self.__dict__[att]
 
     def get_full_redundancies(
         self, pols: Sequence[str] | None = None, 
