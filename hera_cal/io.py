@@ -2999,9 +2999,7 @@ def uvdata_from_fastuvh5(
             
         )
     elif lsts is None:
-        # DO STUFF
         lsts = JD2LST(times, *meta.telescope_location_lat_lon_alt_degrees)
-
     else:
         assert len(times) == len(lsts)
 

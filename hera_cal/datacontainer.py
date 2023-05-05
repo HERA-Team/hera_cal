@@ -177,12 +177,12 @@ class DataContainer:
                 del self._data[k]
             else:
                 raise ValueError(f'Tuple keys to delete must be in the format (ant1, ant2, pol), {k} is not.')
-        self._antpairs = set([k[:2] for k in self._data.keys()])
-        self._pols = set([k[-1] for k in self._data.keys()])
+        self._antpairs = {k[:2] for k in self._data.keys()}
+        self._pols = {k[-1] for k in self._data.keys()}
 
     @property
     def shape(self):
-        return self.__getitem__(list(self.keys())[0]).shape
+        return self.__getitem__(next(iter(self.keys())[0])).shape
         
     def concatenate(self, D, axis=0):
         '''Concatenates D, a DataContainer or a list of DCs, with self along an axis'''

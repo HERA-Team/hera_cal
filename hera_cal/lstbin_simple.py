@@ -1426,7 +1426,7 @@ def write_baseline_slc_to_file(
     with h5py.File(fl, 'r+') as f:
         ntimes = int(f['Header']['Ntimes'][()])
         timefirst = bool(f['Header']['time_axis_faster_than_bls'][()])
-        if not timefirst:
+        if not timefirst and ntimes > 1:
             raise NotImplementedError("Can only do time-first files for now.")
         
         slc = slice(slc.start*ntimes, slc.stop*ntimes, 1)

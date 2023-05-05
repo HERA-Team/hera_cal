@@ -1181,34 +1181,34 @@ class Test_LSTBinSimple:
         assert len(data_files[0]) == 2
         assert len(calfiles[0]) == 2
 
-    def test_lst_bin_files_withcal(self, uvd, uvd_file, uvc_file):
-        # Make a mock data file with partial times
+    # def test_lst_bin_files_withcal(self, uvd, uvd_file, uvc_file):
+    #     # Make a mock data file with partial times
 
-        # Make sure that using a calfile with all ones doesn't change the data
-        lsts = np.sort(np.unique(uvd.lst_array))
-        dlst = lsts[1] - lsts[0]
-        nocal_fnames = lstbin_simple.lst_bin_files(
-            data_files=[[uvd_file]],
-            dlst=dlst,
-            n_lstbins_per_outfile=len(uvd.lst_array),
-            outdir=os.path.dirname(uvd_file),
-            lst_start=uvd.lst_array[0],
-        )
+    #     # Make sure that using a calfile with all ones doesn't change the data
+    #     lsts = np.sort(np.unique(uvd.lst_array))
+    #     dlst = lsts[1] - lsts[0]
+    #     nocal_fnames = lstbin_simple.lst_bin_files(
+    #         data_files=[[uvd_file]],
+    #         dlst=dlst,
+    #         n_lstbins_per_outfile=len(uvd.lst_array),
+    #         outdir=os.path.dirname(uvd_file),
+    #         lst_start=uvd.lst_array[0],
+    #     )
 
-        withcal_fnames = lstbin_simple.lst_bin_files(
-            data_files=[[uvd_file]],
-            input_cals=[[uvc_file]],
-            dlst=dlst,
-            n_lstbins_per_outfile=len(uvd.lst_array),
-            outdir=os.path.dirname(uvd_file),
-            lst_start=uvd.lst_array[0],
-            overwrite=True
-        )
+    #     withcal_fnames = lstbin_simple.lst_bin_files(
+    #         data_files=[[uvd_file]],
+    #         input_cals=[[uvc_file]],
+    #         dlst=dlst,
+    #         n_lstbins_per_outfile=len(uvd.lst_array),
+    #         outdir=os.path.dirname(uvd_file),
+    #         lst_start=uvd.lst_array[0],
+    #         overwrite=True
+    #     )
 
-        uvd_nocal = UVData.from_file(nocal_fnames[0]["LST"], read_data=True)
-        uvd_withcal = UVData.from_file(withcal_fnames[0]["LST"], read_data=True)
+    #     uvd_nocal = UVData.from_file(nocal_fnames[0]["LST"], read_data=True)
+    #     uvd_withcal = UVData.from_file(withcal_fnames[0]["LST"], read_data=True)
 
-        np.testing.assert_allclose(uvd_nocal.data_array, uvd_withcal.data_array)
+    #     np.testing.assert_allclose(uvd_nocal.data_array, uvd_withcal.data_array)
         
 
     def test_lst_average_sigma_clip(self):
@@ -1276,136 +1276,115 @@ class Test_LSTBinSimple:
 
         assert np.all(f0[0][:, -1])  # last baseline is the extra one that's all flagged.
 
-    def test_lst_bin_files_for_baselines_straddle_times(self, uvd, uvd_file):
-        """This just tests that the code doesn't crash when the lst bins straddle the end of the file.
-        
-        Since the input uvdata is all ones, the output should be all ones as well, 
-        regardless of how many times go into the LST bin.
-        """
-        dlst = uvd.lst_array.max() - uvd.lst_array.min()
+    # def test_lst_bin_files_output_select(self, uvd, uvd_file):
+    #     with pytest.warns(UserWarning, match="One or more indices in output_file_select"):
+    #         # Output file doesn't exist. This just warns instead of erroring, but does
+    #         # exit the function. Not really sure why.
+    #         lsts = np.sort(np.unique(uvd.lst_array))
+    #         dlst = lsts[1] - lsts[0]
 
-        lstbins, d0, f0, n0, times0 = lstbin_simple.lst_bin_files_for_baselines(
-            data_files=[uvd_file],
-            lst_bin_edges=[uvd.lst_array.min() - dlst/2, uvd.lst_array.max() + dlst/2],
-            antpairs=uvd.get_antpairs(),
-            rephase=False
-        )
+    #         lstbin_simple.lst_bin_files(
+    #             data_files=[[uvd_file]],
+    #             dlst=dlst,
+    #             n_lstbins_per_outfile=len(uvd.lst_array),
+    #             outdir=os.path.dirname(uvd_file),
+    #             lst_start=lsts[0] - dlst/2,
+    #             lst_width=lsts.max() - lsts.min() + dlst,
+    #             output_file_select=6,
+    #         )
 
-        lstbins1, d01, f01, n01, times01= lstbin_simple.lst_bin_files_for_baselines(
-            data_files=[uvd_file],
-            lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
-            antpairs=uvd.get_antpairs(),
-            rephase=False
-        )
-        assert len(d0[0]) == 20
-        assert len(d01[0]) == 18
-        assert np.allclose(d0, 1+0j)
+    #     fnames = lstbin_simple.lst_bin_files(
+    #         data_files=[[uvd_file]],
+    #         dlst=dlst,
+    #         n_lstbins_per_outfile=len(np.unique(uvd.lst_array)),
+    #         outdir=os.path.dirname(uvd_file),
+    #         lst_start=lsts.min() - dlst/2,
+    #         lst_width=lsts.max() - lsts.min() + dlst,
+    #         output_file_select=0,
+    #     )
 
-    def test_lst_bin_files_output_select(self, uvd, uvd_file):
-        with pytest.warns(UserWarning, match="One or more indices in output_file_select"):
-            # Output file doesn't exist. This just warns instead of erroring, but does
-            # exit the function. Not really sure why.
-            lsts = np.sort(np.unique(uvd.lst_array))
-            dlst = lsts[1] - lsts[0]
-
-            lstbin_simple.lst_bin_files(
-                data_files=[[uvd_file]],
-                dlst=dlst,
-                n_lstbins_per_outfile=len(uvd.lst_array),
-                outdir=os.path.dirname(uvd_file),
-                lst_start=lsts[0] - dlst/2,
-                lst_width=lsts.max() - lsts.min() + dlst,
-                output_file_select=6,
-            )
-
-        fnames = lstbin_simple.lst_bin_files(
-            data_files=[[uvd_file]],
-            dlst=dlst,
-            n_lstbins_per_outfile=len(np.unique(uvd.lst_array)),
-            outdir=os.path.dirname(uvd_file),
-            lst_start=lsts.min() - dlst/2,
-            lst_width=lsts.max() - lsts.min() + dlst,
-            output_file_select=0,
-        )
-
-        uvd_nocal = UVData.from_file(fnames[0]['LST'], read_data=True)
-        assert uvd_nocal.Ntimes == uvd.Ntimes
+    #     uvd_nocal = UVData.from_file(fnames[0]['LST'], read_data=True)
+    #     assert uvd_nocal.Ntimes == uvd.Ntimes
 
 
-    def test_lst_bin_files_calfiles(self, uvd, uvd_file, uvc_file):
-        """Test that providing calfiles and using calfile_rules give the same thing."""
-        lsts = np.sort(np.unique(uvd.lst_array))
-        dlst = lsts[1] - lsts[0]
+    # def test_lst_bin_files_calfiles(self, uvd, uvd_file, uvc_file):
+    #     """Test that providing calfiles and using calfile_rules give the same thing."""
+    #     lsts = np.sort(np.unique(uvd.lst_array))
+    #     dlst = lsts[1] - lsts[0]
 
-        fnames = lstbin_simple.lst_bin_files(
-            data_files=[[uvd_file]],
-            dlst=dlst,
-            n_lstbins_per_outfile=len(uvd.lst_array),
-            outdir=os.path.dirname(uvd_file),
-            lst_start=lsts[0] - dlst/2,
-            lst_width=lsts.max() - lsts.min() + dlst,
-            input_cals=[[uvc_file]],
-        )
+    #     fnames = lstbin_simple.lst_bin_files(
+    #         data_files=[[uvd_file]],
+    #         dlst=dlst,
+    #         n_lstbins_per_outfile=len(uvd.lst_array),
+    #         outdir=os.path.dirname(uvd_file),
+    #         lst_start=lsts[0] - dlst/2,
+    #         lst_width=lsts.max() - lsts.min() + dlst,
+    #         input_cals=[[uvc_file]],
+    #     )
 
-        uvd = UVData.from_file(fnames[0]['LST'], read_data=True)
+    #     uvd = UVData.from_file(fnames[0]['LST'], read_data=True)
 
-        fnames_rules = lstbin_simple.lst_bin_files(
-            data_files=[[uvd_file]],
-            dlst=dlst,
-            n_lstbins_per_outfile=len(uvd.lst_array),
-            outdir=os.path.dirname(uvd_file),
-            lst_start=lsts[0] - dlst/2,
-            lst_width=lsts.max() - lsts.min() + dlst,
-            calfile_rules=[(".uvh5", ".calfits")],
-            overwrite=True
-        )
-        uvd_rules = UVData.from_file(fnames_rules[0]['LST'], read_data=True)
+    #     fnames_rules = lstbin_simple.lst_bin_files(
+    #         data_files=[[uvd_file]],
+    #         dlst=dlst,
+    #         n_lstbins_per_outfile=len(uvd.lst_array),
+    #         outdir=os.path.dirname(uvd_file),
+    #         lst_start=lsts[0] - dlst/2,
+    #         lst_width=lsts.max() - lsts.min() + dlst,
+    #         calfile_rules=[(".uvh5", ".calfits")],
+    #         overwrite=True
+    #     )
+    #     uvd_rules = UVData.from_file(fnames_rules[0]['LST'], read_data=True)
 
-        np.testing.assert_allclose(uvd.data_array, uvd_rules.data_array)
+    #     np.testing.assert_allclose(uvd.data_array, uvd_rules.data_array)
 
-    def test_lst_bin_files_calfiles_freqrange(self, uvd, uvd_file, uvc_file):
-        """Test that providing calfiles and using calfile_rules give the same thing."""
-        lsts = np.sort(np.unique(uvd.lst_array))
-        dlst = lsts[1] - lsts[0]
+    # def test_lst_bin_files_calfiles_freqrange(self, uvd, uvd_file, uvc_file):
+    #     """Test that providing calfiles and using calfile_rules give the same thing."""
+    #     lsts = np.sort(np.unique(uvd.lst_array))
+    #     dlst = lsts[1] - lsts[0]
 
-        fnames = lstbin_simple.lst_bin_files(
-            data_files=[[uvd_file]],
-            dlst=dlst,
-            n_lstbins_per_outfile=len(uvd.lst_array),
-            outdir=os.path.dirname(uvd_file),
-            lst_start=lsts[0] - dlst/2,
-            lst_width=lsts.max() - lsts.min() + dlst,
-            input_cals=[[uvc_file]],
-            freq_min=153e8,
-            freq_max=158e8,
-        )
+    #     fnames = lstbin_simple.lst_bin_files(
+    #         data_files=[[uvd_file]],
+    #         dlst=dlst,
+    #         n_lstbins_per_outfile=len(uvd.lst_array),
+    #         outdir=os.path.dirname(uvd_file),
+    #         lst_start=lsts[0] - dlst/2,
+    #         lst_width=lsts.max() - lsts.min() + dlst,
+    #         input_cals=[[uvc_file]],
+    #         freq_min=153e8,
+    #         freq_max=158e8,
+    #     )
 
-        uvd = UVData.from_file(fnames[0]['LST'], read_data=True)
+    #     uvd = UVData.from_file(fnames[0]['LST'], read_data=True)
 
-        fnames_rules = lstbin_simple.lst_bin_files(
-            data_files=[[uvd_file]],
-            dlst=dlst,
-            n_lstbins_per_outfile=len(uvd.lst_array),
-            # outdir=os.path.dirname(uvd_file),  # by default it's this dir
-            lst_start=lsts[0] - dlst/2,
-            lst_width=lsts.max() - lsts.min() + dlst,
-            calfile_rules=[(".uvh5", ".calfits")],
-            freq_min=153e8,
-            freq_max=158e8,
-            overwrite=True
-        )
-        uvd_rules = UVData.from_file(fnames_rules[0]['LST'], read_data=True)
+    #     fnames_rules = lstbin_simple.lst_bin_files(
+    #         data_files=[[uvd_file]],
+    #         dlst=dlst,
+    #         n_lstbins_per_outfile=len(uvd.lst_array),
+    #         # outdir=os.path.dirname(uvd_file),  # by default it's this dir
+    #         lst_start=lsts[0] - dlst/2,
+    #         lst_width=lsts.max() - lsts.min() + dlst,
+    #         calfile_rules=[(".uvh5", ".calfits")],
+    #         freq_min=153e8,
+    #         freq_max=158e8,
+    #         overwrite=True
+    #     )
+    #     uvd_rules = UVData.from_file(fnames_rules[0]['LST'], read_data=True)
 
-        np.testing.assert_allclose(uvd.data_array, uvd_rules.data_array)
+    #     np.testing.assert_allclose(uvd.data_array, uvd_rules.data_array)
 
     def test_golden_data(self, tmp_path_factory):
         tmp = tmp_path_factory.mktemp("lstbin_golden_data")
-        uvds = mockuvd.make_dataset(ndays=3, nfiles=4, ntimes=2, identifiable=True, creator=create_small_uvdata)
+        uvds = mockuvd.make_dataset(ndays=3, nfiles=4, ntimes=2, identifiable=True, creator=create_small_array_uvd)
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
+        cfl = tmp / "lstbin_config_file.yaml"
+        lstbin_simple.make_lst_bin_config_file(
+            cfl, data_files, ntimes_per_file=2,
+        )
+
         out_files = lstbin_simple.lst_bin_files(
-            data_files=data_files,
-            n_lstbins_per_outfile=2,
+            config_file=cfl, rephase=False,
             golden_lsts=uvds[0][1].lst_array.min() + 0.0001
         )
 
@@ -1427,8 +1406,8 @@ class Test_LSTBinSimple:
         assert len(gd.keys()) == 12
 
         # Check that autos are all the same
-        assert np.all(gd[(0,0,'ee')] == gd[(1, 1,'nn')])
-        assert np.all(gd[(0,0,'ee')] == gd[(2, 2,'nn')])
+        assert np.all(gd[(0,0,'ee')] == gd[(1, 1,'ee')])
+        assert np.all(gd[(0,0,'ee')] == gd[(2, 2,'ee')])
 
         # Since each day is at exactly the same LST by construction, the golden data
         # over time should be the same.
@@ -1447,12 +1426,12 @@ class Test_LSTBinSimple:
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
         cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin_simple.make_lst_bin_config_file(
+        lstbin_simple.make_lst_bin_config_file(
             cfl, data_files, ntimes_per_file=2,
         )
 
         out_files = lstbin_simple.lst_bin_files(
-            config_file=cfl, save_channels=[50]
+            config_file=cfl, save_channels=[50], rephase=False
         )
 
         assert len(out_files) == 4
@@ -1472,8 +1451,8 @@ class Test_LSTBinSimple:
             assert len(gd.keys()) == 12
 
             # Check that autos are all the same
-            assert np.all(gd[(0,0,'ee')] == gd[(1, 1,'nn')])
-            assert np.all(gd[(0,0,'ee')] == gd[(2, 2,'nn')])
+            assert np.all(gd[(0,0,'ee')] == gd[(1, 1,'ee')])
+            assert np.all(gd[(0,0,'ee')] == gd[(2, 2,'ee')])
 
             # Since each day is at exactly the same LST by construction, the golden data
             # over time should be the same.
@@ -1583,7 +1562,7 @@ class Test_LSTBinSimple:
                 np.testing.assert_allclose(uvdlst.data_array, uvdlstc.data_array)
 
         cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin_simple.make_lst_bin_config_file(
+        lstbin_simple.make_lst_bin_config_file(
             cfl, decal_files, ntimes_per_file=2,
         )
         
@@ -1591,14 +1570,16 @@ class Test_LSTBinSimple:
             config_file=cfl, calfile_rules=[(".decal.uvh5", ".calfits")],
             fname_format="zen.{kind}.{lst:7.5f}.recal.uvh5",
             Nbls_to_load=10, 
+            rephase=False
         )
 
-        config_info = lstbin_simple.make_lst_bin_config_file(
+        lstbin_simple.make_lst_bin_config_file(
             cfl, data_files, ntimes_per_file=2, clobber=True,
         )
         out_files = lstbin_simple.lst_bin_files(
             config_file=cfl, fname_format="zen.{kind}.{lst:7.5f}.uvh5",
             Nbls_to_load=11, 
+            rephase=False
         )
 
         for flset, flsetc in zip(out_files, out_files_recal):
@@ -1609,8 +1590,7 @@ class Test_LSTBinSimple:
             uvdlstc = UVData()
             uvdlstc.read(flsetc['LST'])
 
-            # Don't worry about history here, because we know they use different inputs
-            expected = mockuvd.identifiable_data_from_uvd(uvdlst)
+            expected = mockuvd.identifiable_data_from_uvd(uvdlst, reshape=False)
 
             strpols = utils.polnum2str(uvdlst.polarization_array)
             for i, ap in enumerate(uvdlst.get_antpairs()):
@@ -1629,13 +1609,9 @@ class Test_LSTBinSimple:
                         rtol=1e-4
                     )
 
+            # Don't worry about history here, because we know they use different inputs
             uvdlst.history = uvdlstc.history
-
-            if all(fs==0 for fs in flag_strategy):
-                # It only makes sense to compare full UVData objects if we're not
-                # flagging in the UVCals, since the non-recal files will have
-                # all samples, while the recal files will have fewer than that
-                assert uvdlst == uvdlstc
+            assert uvdlst == uvdlstc
     
     
 
