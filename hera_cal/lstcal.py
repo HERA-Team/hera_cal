@@ -7,6 +7,51 @@ import numpy as np
 from . import redcal
 from . import lstbin_simple
 
+def _build_data_dict(data, flags, nsamples, antpairs, freqs, function):
+    """
+    Build a dictionary of data for each baseline in the lstbin.
+
+    Parameters:
+    -----------
+    data : np.ndarray
+        Shape (Ntimes, Nbls, Nfreqs, Npols) of complex data.
+    flags : np.ndarray
+        Shape (Ntimes, Nbls, Nfreqs, Npols) of boolean flags.
+    nsamples : np.ndarray
+        Number of samples in each time-frequency bin. Shape (Ntimes, Nbls, Nfreqs, Npols).
+    freqs : np.ndarray
+        Frequency array in Hz.
+    function : callable
+        Function to use to solve for the offsets between days in an LST-bin.
+
+    Returns:
+    --------
+    data_dict : dict
+        Dictionary of data for each baseline in the lstbin.
+    """
+    # Dictionary for storing data, flags, and nsamples for each baseline
+    data_dict = {}
+    nsamples_dict = {}
+    flag_dict = {}
+
+    # Loop through all baselines
+    offsets = []
+    good_pairs = []
+
+
+    for j in range(data.shape[1]):
+        for i in range(data.shape[0]):
+            all_nans = np.all(np.isnan(data[i, j]))
+            all_zeros = np.all(data[i, j] == 0)
+            if not (all_nans or all_zeros) and np.mean(flags[i, j]) < 0.1:
+                data_dict[(antpairs[j], i,)] = data[i, j].T
+
+        if len(data_dict) > 1:
+            offset = function(list(data_dict.keys()), freqs, data_dict)
+            offsets.append(offset)
+            good_pairs.append(antpairs[j])
+
+    return data_dict, flag_dict, nsamples_dict, offsets, good_pairs
 
 def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, solve_for_phase_slope=False):
     """
@@ -38,19 +83,8 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, solv
     good_pairs = []
     nsamples_dict = {}
     
-    for j in range(data.shape[1]):
-        data_dict = {}
-        for i in range(data.shape[0]):
-            all_nans = np.all(np.isnan(data[i, j]))
-            all_zeros = np.all(data[i, j] == 0)
-            if not (all_nans or all_zeros) and np.mean(flags[i, j]) < 0.5:
-                data_dict[(i,)] = data[i, j].T
-                nsamples_dict[(antpairs[j], i,)] = nsamples[i, j] * np.logical_not(flags[i, j]).astype(float)
-
-        if len(data_dict) > 1:
-            dlys_offs = redcal._firstcal_align_bls(list(data_dict.keys()), freqs, data_dict)
-            dlys.append(dlys_offs)
-            good_pairs.append(antpairs[j])
+    # Loop through all baselines
+    _, _, nsamples_dict, dlys, good_pairs = _build_data_dict(data, flags, nsamples, antpairs, freqs, redcal._firstcal_align_bls)
                                       
     # Setup equations
     ls_data = {}
@@ -59,7 +93,7 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, solv
             
     # Loop through all of the delay solutions
     for (blgrp, pairs) in zip(dlys, good_pairs):
-        x, y, z = (pos[pairs[1]] - pos[pairs[0]])
+        x, y, z = (antpos[pairs[1]] - antpos[pairs[0]])
         const[f'b_{pairs[0]}_{pairs[1]}_x'] = x
         const[f'b_{pairs[0]}_{pairs[1]}_y'] = y
         const[f'b_{pairs[0]}_{pairs[1]}_z'] = z
@@ -92,7 +126,7 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, solv
 
 def _tip_tilt_align(bls, data, norm=True, wrap_pnt=(np.pi / 2)):
     '''
-    Given a redundant group of bls, find per-baseline dly/off params that
+    Given a redundant group of bls, find per-frequency tip-tilt parameters that
     bring them into phase alignment using hierarchical pairing.
 
     Parameters:
@@ -114,7 +148,6 @@ def _tip_tilt_align(bls, data, norm=True, wrap_pnt=(np.pi / 2)):
     grps = [(bl,) for bl in bls]  # start with each bl in its own group
     _data = {bl: data[bl[0]] for bl in grps}
     Ntimes, Nfreqs = data[bls[0]].shape
-    times = np.arange(Ntimes)
     TT_gps = {}
 
     def process_pair(gp1, gp2):
@@ -154,7 +187,7 @@ def _tip_tilt_align(bls, data, norm=True, wrap_pnt=(np.pi / 2)):
     tip_tilts = {k: v for k, v in tip_tilts.items()}
     return tip_tilts
 
-def phase_slope_calibration(data, flags, nsamples, antpairs, antpos):
+def phase_slope_calibration(data, flags, nsamples, antpairs, antpos, freqs):
     """
     Solve for the per-frequency phase slope of each day in an LST-bin.
 
@@ -178,32 +211,17 @@ def phase_slope_calibration(data, flags, nsamples, antpairs, antpos):
     phase_slope : np.ndarray
         Shape (Ntimes, Nfreqs, Npols) of phase slopes in radians per meter.
     """
-    flag_dict = {}
-    nsamples_dict = {}
-    tip_tilts = []
-    good_pairs = []
-    for j in range(data.shape[1]):
-        data_dict = {}
-        for i in range(data.shape[0]):
-            all_nans = np.all(np.isnan(data[i, j]))
-            all_zeros = np.all(np.isclose(data[i, j], 0))
-            if not (all_nans or all_zeros) and np.mean(flags[i, j]) < 0.5:
-                data_dict[(i, 'ee')] = data[i, j].T
-                flag_dict[(antpairs[j], i, 'ee')] = flags[i, j, :, 0]
-                nsamples_dict[(antpairs[j], i, 'ee')] = nsamples[i, j, :, 0]
-
-        if len(data_dict) > 0:
-            _tip_tilts = _tip_tilt_align(list(data_dict.keys()), data_dict)
-            tip_tilts.append(_tip_tilts)
-            good_pairs.append(antpairs[j])
-            
-        
+     # Loop through all baselines
+    _, flag_dict, nsamples_dict, tip_tilts, good_pairs = _build_data_dict(
+        data, flags, nsamples, antpairs, freqs, _tip_tilt_align
+    )
+           
     # Setup equations
     ls_data = {}
     const = {}
     wgts = {}
     for (blgrp, pairs) in zip(tip_tilts, good_pairs):
-        x, y, z = (pos[pairs[1]] - pos[pairs[0]])
+        x, y, z = (antpos[pairs[1]] - antpos[pairs[0]])
         const[f'b_{pairs[0]}_{pairs[1]}_x'] = x
         const[f'b_{pairs[0]}_{pairs[1]}_y'] = y
         const[f'b_{pairs[0]}_{pairs[1]}_z'] = z            
@@ -236,7 +254,7 @@ def _amplitude_align(bls, data):
         Dictionary of complex visibility data keyed by (i,j) antenna pair.
     """
     grps = [(bl,) for bl in bls]  # start with each bl in its own group
-    _data = {bl: np.abs(data[bl[0]]) for bl in grps}
+    _data = {bl: data[bl[0]] for bl in grps}
     Ntimes, Nfreqs = data[bls[0]].shape
     amp_grps = {}
 
@@ -245,9 +263,11 @@ def _amplitude_align(bls, data):
         and the phase-aligned sum in _data. Returns gp1 + gp2, which
         keys the _data dict and represents group for next iteration.'''
         d12 = np.abs(_data[gp1] / _data[gp2])
-        
-        # Now that we know the slope, estimate the remaining phase offset
+
+        # Record the amplitude scalar for gp2
         amp_grps[gp2] = d12
+        
+        # Average the two groups together, weighted by their amplitudes
         _data[gp1 + gp2] = (_data[gp1] + _data[gp2] * d12) / 2
         return gp1 + gp2
 
@@ -263,17 +283,17 @@ def _amplitude_align(bls, data):
     
     bl0 = bls[0]  # everything is effectively scale referenced off first bl
     amplitudes = {}
-    for gp, TT in amp_grps.items():
+    for gp, amp in amp_grps.items():
         for bl in gp:
             if (bl0, bl) in amplitudes:
-                TT0 = amplitudes[(bl0, bl)]
+                amp0 = amplitudes[(bl0, bl)]
             else:
-                TT0 = np.ones((Ntimes, Nfreqs))
-            amplitudes[(bl0, bl)] = TT * TT0
+                amp0 = np.ones((Ntimes, Nfreqs))
+            amplitudes[(bl0, bl)] = amp * amp0
 
     return amplitudes
 
-def amplitude_calibration(data, flags, nsamples, antpairs):
+def amplitude_calibration(data, flags, nsamples, freqs, antpairs):
     """
     Solve for the frequency-amplitude of each day in an LST-bin.
 
@@ -295,24 +315,10 @@ def amplitude_calibration(data, flags, nsamples, antpairs):
     amplitude : np.ndarray
         Shape (Ntimes, Nfreqs, Npols) of amplitudes.
     """
-    flag_dict = {}
-    nsamples_dict = {}
-    amps = []
-    good_pairs = []
-    for j in range(data.shape[1]):
-        data_dict = {}
-        for i in range(data.shape[0]):
-            all_nans = np.all(np.isnan(data[i, j]))
-            all_zeros = np.all(np.isclose(data[i, j], 0))
-            if not (all_nans or all_zeros):
-                data_dict[(i, 'ee')] = data[i, j].T
-                flag_dict[(antpairs[j], i, 'ee')] = flags[i, j, :, 0]
-                nsamples_dict[(antpairs[j], i, 'ee')] = nsamples[i, j, :, 0]
-
-        if len(data_dict) > 0:
-            _amps = _amplitude_align(list(data_dict.keys()), data_dict)
-            amps.append(_amps)
-            good_pairs.append(antpairs[j])
+     # Loop through all baselines
+    _, flag_dict, nsamples_dict, amps, good_pairs = _build_data_dict(
+        data, flags, nsamples, antpairs, freqs, _amplitude_align
+    )
                         
     # Setup equations
     ls_data = {}
