@@ -158,7 +158,7 @@ def _delay_align_bls(bls, freqs, data, flags=None, norm=True, wrap_pnt=(np.pi / 
         for bl in gp:
             dly0, off0 = dly_offs.get((bl0, bl), (0, 0))
             dly_offs[(bl0, bl)] = (dly0 + dly, off0 + off)
-    dly_offs = {k: (v[0], _wrap_phs(v[1], wrap_pnt=wrap_pnt)) for k, v in dly_offs.items()}
+    dly_offs = {k: (v[0], redcal._wrap_phs(v[1], wrap_pnt=wrap_pnt)) for k, v in dly_offs.items()}
     return dly_offs
 
 def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, sparse=True, day_flags=None, solve_for_phase_slope=False):
@@ -194,48 +194,57 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, spar
     )
 
     # Check if antpos is a dictionary or a list of dictionaries
-    use_same_pos = True if isinstance(antpos, dict) else False
+    use_same_pos = True # if isinstance(antpos, dict) else False
+
+    # Solutions
+    solutions = {}
+    gains = {}
                                       
-    # Setup equations
-    ls_data = {}
-    const = {}
-    wgts = {}
+    # Calibrate polarizations independently
+    for pol in pols:
+        # Setup equations
+        ls_data = {}
+        const = {}
+        wgts = {}
+
+        # Loop through all of the delay solutions
+        for blkey in dlys:
+            if use_same_pos:
+                blvec = (antpos[pairs[1]] - antpos[pairs[0]])
+                const.update({f'b_{pairs[0]}_{pairs[1]}_{i}': blvec[i] for i in range(blvec.shape)})
             
-    # Loop through all of the delay solutions
-    for keys in dlys:
-        blvec = (antpos[pairs[1]] - antpos[pairs[0]])
-        const.update({f'b_{pairs[0]}_{pairs[1]}_{i}': blvec[i] for i in range(blvec.shape)})
-        
-        for k in blgrp:                            
-            # Form the data key
-            data_key_1 = " + ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * T{i}_{k[1][0]}' for i in range(blvec.shape)])
-            data_key_2 = " - ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * T{i}_{k[0][0]}' for i in range(blvec.shape)])
-            data_key = data_key_1 + " - " + data_key_2    
+            for k in blgrp:                            
+                # Form the data key
+                data_key_1 = " + ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * T{i}_{k[1][0]}' for i in range(blvec.shape)])
+                data_key_2 = " - ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * T{i}_{k[0][0]}' for i in range(blvec.shape)])
+                data_key = data_key_1 + " - " + data_key_2    
 
-            # Load data from the blgrp into the linear system
-            ls_data[data_key] = blgrp[k][0][0]
+                # Load data from the blgrp into the linear system
+                ls_data[data_key] = blgrp[k][0][0]
 
-            # Weight the data by the fraction of unflagged data
-            wgt = np.logical_or(flag_dict[blgrp[k][0][0]], flag_dict[blgrp[k][0][0]])
-            wgts[data_key] = np.nanmean(wgt)
-                               
-            if solve_for_phase_slope:
-                phase_key_1 = " + ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * P{i}_{k[1][0]}' for i in range(blvec.shape)])
-                phase_key_2 = " - ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * P{i}_{k[0][0]}' for i in range(blvec.shape)])
-                phase_key = phase_key_1 + " - " + phase_key_2    
-                ls_data[phase_key] = blgrp[k][1][0]
-                wgts[phase_key] = np.nanmean(wgt)
+                # Weight the data by the fraction of unflagged data
+                wgt = np.logical_or(flag_dict[blgrp[k][0][0]], flag_dict[blgrp[k][0][0]])
+                wgts[data_key] = np.nanmean(wgt)
                                 
-    # Solve for the delay slope
-    ls = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
-    sol = ls.solve()   
-    
-    if not solve_for_phase_slope:
-        _sol = {}
-        for k in sol:
-            _sol[k.replace('T', 'P')] = 0
+                if solve_for_phase_slope:
+                    phase_key_1 = " + ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * P{i}_{k[1][0]}' for i in range(blvec.shape)])
+                    phase_key_2 = " - ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * P{i}_{k[0][0]}' for i in range(blvec.shape)])
+                    phase_key = phase_key_1 + " - " + phase_key_2    
+                    ls_data[phase_key] = blgrp[k][1][0]
+                    wgts[phase_key] = np.nanmean(wgt)
+                                    
+        # Solve for the delay slope
+        ls = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
+        sol = ls.solve()  
+        
+        # If the phase slope was not solved for, set it to zero
+        if not solve_for_phase_slope:
+            _sol = {}
+            for k in sol:
+                _sol[k.replace('T', 'P')] = 0
+            sol.update(_sol)
 
-        sol.update(_sol)
+        solutions[pol] = sol 
 
 
     return sol
@@ -298,7 +307,7 @@ def _tip_tilt_align(bls, data, flags, norm=True):
         
     bl0 = bls[0]  # everything is effectively phase referenced off first bl
     angle = {}
-    for gp, TT in TT_gps.items():
+    for gp, TT in angle.items():
         for bl in gp:
             if (bl0, bl) in angle:
                 TT0 = angle.get((bl0, bl))
@@ -340,17 +349,19 @@ def phase_slope_calibration(data, flags, nsamples, antpairs, antpos, freqs, day_
     )
 
     # Check if antpos is a dictionary or a list of dictionaries
-    use_same_pos = True if isinstance(antpos, dict) else False
+    use_same_pos = True # if isinstance(antpos, dict) else False
     
     # Calibration polarizations indepedently
     for pol in pols:
-
         # Setup equations
         ls_data = {}
         const = {}
         wgts = {}
+
+        # Loop through all of the phase offsets
         for (blgrp, pairs) in zip(tip_tilts, antpairs_used):
-            blvec = antpos[pairs[1]] - antpos[pairs[0]]
+            if use_same_pos:
+                blvec = antpos[pairs[1]] - antpos[pairs[0]]
             const.update({f'b_{pairs[0]}_{pairs[1]}_{i}': blvec[i] for i in range(blvec.shape[0])})
             
             for k in blgrp:
