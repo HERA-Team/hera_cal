@@ -8,6 +8,7 @@ from astropy.coordinates import EarthLocation
 import yaml
 from hera_cal.data import DATA_PATH
 from pathlib import Path
+from hera_cal.red_groups import RedundantGroups
 
 HERA_LOC = EarthLocation.from_geodetic(
     lat=-30.721526120690307,
@@ -17,6 +18,7 @@ HERA_LOC = EarthLocation.from_geodetic(
 
 with open(f"{DATA_PATH}/hera_antpos.yaml", "r") as fl:
     HERA_ANTPOS = yaml.safe_load(fl)
+
 
 def create_mock_hera_obs(
     jdint: int = 2459855, 
@@ -30,11 +32,13 @@ def create_mock_hera_obs(
     antpairs: list[tuple[int, int]] | None = None,
     empty: bool = False,
     time_axis_faster_than_bls: bool = True,
+    redundantly_averaged: bool = False,
+    x_orientation: str = "n",
 ) -> UVData:
     tint = integration_time / (24 * 3600)
     dlst = tint * 2 * np.pi
     if jd_start is None:
-        lsts = np.arange(lst_start, ntimes*dlst + lst_start, dlst)
+        lsts = np.arange(lst_start, ntimes*dlst + lst_start, dlst)[:ntimes]
         times = utils.LST2JD(lsts, start_jd=jdint, allow_other_jd=False)
     else:
         if jd_start < 2000000:
@@ -46,17 +50,28 @@ def create_mock_hera_obs(
 
     antpos = {k: v for k,v in HERA_ANTPOS.items() if k in ants}
 
-    # build a UVData object that knows about 5 antennas, but only uses 3 of them 
-    # in baselines.
+    reds = RedundantGroups.from_antpos(antpos)
+
+    if antpairs is None:
+        antpairs = [(i, j) for i in ants for j in ants if i <= j]
+    else:
+        antpairs = [tuple(ap) for ap in antpairs]
+
+    antpairs = [ap for ap in antpairs if ap in reds]
+
+    if redundantly_averaged:
+        antpairs = list({reds.get_ubl_key(ap) for ap in antpairs})
+
+    # build a UVData object 
     uvd = UVData.new(
         freq_array= freqs,
         polarization_array=pols,
         antenna_positions= antpos,
-        antpairs=antpairs,
+        antpairs=np.array(antpairs),
         telescope_location= HERA_LOC,
         telescope_name= "HERA",
         times= times,
-        x_orientation='n',
+        x_orientation=x_orientation,
         empty=empty,
         time_axis_faster_than_bls=time_axis_faster_than_bls,
         do_blt_outer=True
@@ -79,14 +94,14 @@ def identifiable_data_from_uvd(
 ) -> np.ndarray:
     lsts = np.unique(ones.lst_array)
     
-    normfreqs = np.linspace(0, 2*np.pi, ones.freq_array.size)
+    normfreqs = 2*np.pi * (ones.freq_array - 100e6) / 100e6
 
     data = np.zeros_like(ones.data_array)
 
     orig_shape = data.shape
     # in-place reshape of data to make it easier for us.
     data.shape = (len(ones.get_antpairs()), ones.Ntimes, ones.Nfreqs, len(ones.polarization_array))
-    
+
     for i, ap in enumerate(ones.get_antpairs()):
         for j, p in enumerate(ones.polarization_array):
             if ap[0] == ap[1] and p in (-5, -6):
@@ -193,13 +208,13 @@ def make_dataset(
     return uvds
 
 def make_uvc_ones(uvd: UVData, flag_full_ant: int = 0, flag_ant_time: int = 0, flag_ant_freq: int = 0):
-    uvc = UVCal.from_uvdata(
+    uvc = UVCal.initialize_from_uvdata(
         uvd,
         cal_style = "redundant",
         gain_convention = "multiply",
         jones_array = "linear",
         cal_type = "gain",
-        empty=True
+        metadata_only=False
     )
 
     if flag_full_ant > 0:
@@ -217,11 +232,11 @@ def make_uvc_ones(uvd: UVData, flag_full_ant: int = 0, flag_ant_time: int = 0, f
 
 def identifiable_gains_from_uvc(uvc: UVCal):
     gains = np.zeros_like(uvc.gain_array)
-    for i, ant in enumerate(uvc.antenna_numbers):
+    for i, ant in enumerate(uvc.ant_array):
         for j in range(uvc.Njones):
             gains[i, :, :, j] = np.outer(
                 np.exp(2j*np.pi*uvc.freq_array*(j+1)),
-                np.ones_like(uvc.time_array)*(i+1)
+                np.ones_like(uvc.time_array)*(ant+1)
             )
     return gains
 

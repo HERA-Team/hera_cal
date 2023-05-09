@@ -422,8 +422,6 @@ class TestDataContainerWithRealData(object):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         d, f = io.load_vis(test_file, pop_autos=True)
         d2 = d.concatenate(d)
-        print("D2", d2.keys())
-        print("D", d.keys())
         assert d2[(24, 25, 'ee')].shape[0] == d[(24, 25, 'ee')].shape[0] * 2
         d2 = d.concatenate(d, axis=1)
         assert d2[(24, 25, 'ee')].shape[1] == d[(24, 25, 'ee')].shape[1] * 2

@@ -35,7 +35,7 @@ except NameError:
 logger = logging.getLogger(__name__)
 
 @profile
-def simple_lst_bin(
+def lst_align(
     data: np.ndarray,
     data_lsts: np.ndarray,
     baselines: list[tuple[int, int]],
@@ -511,13 +511,10 @@ def lst_bin_files_for_baselines(
 
     if pols is None:
         pols = metas[0].pols
+    else:
+        if not all(isinstance(p, str) for p in pols):
+            pols = uvutils.polnum2str(pols, x_orientation=metas[0].x_orientation)
 
-    if any(isinstance(p, (int, np.int_)) for p in pols):
-        pols = uvutils.polnum2str(pols, x_orientation=metas[0].x_orientation)
-
-    if any(not isinstance(p, str) for p in pols):
-        raise ValueError("pols must be a sequence of strings, e.g. ('xx', 'yy', 'xy', 'yx')")
-    
     if antpos is None and rephase:
         warnings.warn(
             "Getting antpos from the first file only. This is almost always correct, "
@@ -537,7 +534,6 @@ def lst_bin_files_for_baselines(
     if time_arrays is None:
         time_arrays = [meta.get_transactional('times')[idx] for meta, idx in zip(metas, time_idx)]
 
-    
     if lsts is None:
         lsts = np.concatenate(
             [meta.get_transactional('lsts')[idx] for meta, idx in zip(metas, time_idx)]
@@ -627,7 +623,7 @@ def lst_bin_files_for_baselines(
     # +1 of the LST centres. We use +dlst instead of +dlst/2 on the top edge
     # so that np.arange definitely gets the last edge.
     # lst_edges = np.arange(outfile_lsts[0] - dlst/2, outfile_lsts[-1] + dlst, dlst)
-    bin_lst, data, flags, nsamples = simple_lst_bin(
+    bin_lst, data, flags, nsamples = lst_align(
         data=data, 
         flags=None if ignore_flags else flags,
         nsamples=nsamples,
@@ -893,9 +889,8 @@ def lst_bin_files_single_outfile(
         reds=reds,
         only_last_file_per_night=only_last_file_per_night,
     )
-
     nants0 = meta.header['antenna_numbers'].size
-
+    
     # Do a quick check to make sure all nights at least have the same number of Nants
     for dflist in data_metas:
         _nants = dflist[0].header['antenna_numbers'].size

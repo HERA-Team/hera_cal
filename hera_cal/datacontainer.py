@@ -173,17 +173,19 @@ class DataContainer:
         if isinstance(key, tuple):
             key = [key]
         for k in key:
-            if isinstance(k, tuple) and (len(k) == 3):
-                k = comply_bl(k)
-                del self._data[k]
-            else:
-                raise ValueError(f'Tuple keys to delete must be in the format (ant1, ant2, pol), {k} is not.')
+            if not isinstance(k, tuple) or len(k) != 3:
+                raise ValueError(
+                    'Tuple keys to delete must be in the format (ant1, ant2, pol), '
+                    f'{k} is not.'
+                )
+            k = comply_bl(k)
+            del self._data[k]
         self._antpairs = {k[:2] for k in self._data.keys()}
         self._pols = {k[-1] for k in self._data.keys()}
 
     @property
-    def shape(self):
-        return self.__getitem__(next(iter(self.keys())[0])).shape
+    def shape(self) -> tuple[int]:
+        return self[next(iter(self.keys()))].shape
         
     def concatenate(self, D, axis=0):
         '''Concatenates D, a DataContainer or a list of DCs, with self along an axis'''
