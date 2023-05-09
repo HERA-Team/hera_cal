@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
+from __future__ import annotations
 import numpy as np
 from collections import OrderedDict as odict
 import copy

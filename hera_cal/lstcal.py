@@ -6,7 +6,7 @@ import linsolve
 import numpy as np
 from . import utils, redcal, red_groups, lstbin_simple
 
-def _build_data_dict(data, flags, nsamples, antpairs, freqs, cal_function, day_flags=None, pack_data=False, pack_flags=False, pack_nsamples=False):
+def _build_data_dict(data, flags, nsamples, antpairs, freqs, pols, cal_function, day_flags=None, pack_data=False, pack_flags=False, pack_nsamples=False):
     """
     Build a dictionary of data for each baseline in the lstbin.
 
@@ -78,9 +78,9 @@ def _build_data_dict(data, flags, nsamples, antpairs, freqs, cal_function, day_f
                 # all_nans = np.all(np.isnan(data[di, bi, :, pi]))
                 # all_zeros = np.all(data[di, bi, :, pi] == 0)
                 if not np.all(flags[di, bi, :, pi]):
-                    _data_dict[(antpairs[bi], pols[pi], di,)] = data[di, bi, :, pi][None]
-                    _flag_dict[(antpairs[bi], pols[pi], di,)] = flags[di, bi, :, pi][None]
-                    _nsamples_dict[(antpairs[bi], pols[pi], di,)] = nsamples[di, bi, :, pi][None]
+                    _data_dict[(di, pols[pi])] = data[di, bi, :, pi][None]
+                    _flag_dict[(di, pols[pi])] = flags[di, bi, :, pi][None]
+                    _nsamples_dict[(di, pols[pi])] = nsamples[di, bi, :, pi][None]
 
             # If there is data for this baseline, solve for the offset between days
             if len(_data_dict) > 1:
@@ -89,11 +89,11 @@ def _build_data_dict(data, flags, nsamples, antpairs, freqs, cal_function, day_f
                 )
 
             # Update data_dict with data from this loop
-            if not pack_data:
+            if pack_data:
                 data_dict.update(_data_dict)
-            if not pack_flags:
+            if pack_flags:
                 flag_dict.update(_flag_dict)
-            if not pack_nsamples:
+            if pack_nsamples:
                 nsamples_dict.update(_nsamples_dict)
 
     return offsets, data_dict, flag_dict, nsamples_dict
@@ -195,7 +195,7 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, spar
     """
     # Loop through all baselines
     dlys, _, flag_dict, _ = _build_data_dict(
-        data, flags, nsamples, antpairs, freqs, _delay_align_bls, day_flags=day_flags
+        data, flags, nsamples, antpairs, freqs, _delay_align_bls, day_flags=day_flags,
         pack_flags=True
     )
 
@@ -404,7 +404,7 @@ def phase_slope_calibration(data, flags, nsamples, antpairs, antpos, freqs, day_
 
     return gains
 
-def _amplitude_align(bls, data, flags):
+def _amplitude_align(bls, freqs, data, flags):
     """
     Given a redundant group of bls, find per-baseline dly/off params that
     bring them into phase alignment using hierarchical pairing.
@@ -489,8 +489,8 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
     """
      # Loop through all baselines
     amps, _, flags_dict, nsamples_dict = _build_data_dict(
-        data, flags, nsamples, antpairs, freqs, _amplitude_align,
-        return_flags=True, return_nsamples=True
+        data, flags, nsamples, antpairs, freqs, pols, _amplitude_align,
+        pack_flags=True, pack_nsamples=True
     )
                         
     # Store solutions in a dictionary keyed by polarization
@@ -503,12 +503,14 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
         ls_data = {}
         const = {}
         wgts = {}
-        for blgrp in amps:
-            for k in blgrp:
-                data_key_1 = f'a_{k[1][0]}_{pairs[0]}_{pairs[1]} * amp_{k[1][0]} - a_{k[0][0]}_{pairs[0]}_{pairs[1]} * amp_{k[0][0]}'
-                const[f'a_{k[1][0]}_{pairs[0]}_{pairs[1]}'] = 1.0
-                const[f'a_{k[0][0]}_{pairs[0]}_{pairs[1]}'] = 1.0
-                ls_data[data_key_1] = np.log(blgrp[k][0])
+
+        baselines = [bl for bl in amps if pol == bl[-1]]
+        for bl in baselines:
+            for (day1, day2) in amps[bl]:
+                data_key_1 = f'a_{day2[0]}_{bl[0]}_{bl[1]} * amp_{day2[0]} - a_{day1[0]}_{bl[0]}_{bl[1]} * amp_{day1[0]}'
+                const[f'a_{day2[0]}_{bl[0]}_{bl[1]}'] = 1.0
+                const[f'a_{day1[0]}_{bl[0]}_{bl[1]}'] = 1.0
+                ls_data[data_key_1] = np.log(amps[k][0])
                 wgt = np.logical_not(flags_dict[(pairs, k[0][0], pol)]).astype(float) * np.logical_not(flags_dict[(pairs, k[1][0], pol)]).astype(float)
                 wgt *= np.sqrt(nsamples_dict[(pairs, k[0][0], pol)] * nsamples_dict[(pairs, k[1][0], pol)])
                 wgts[data_key_1] = wgt

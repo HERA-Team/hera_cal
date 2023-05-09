@@ -9,10 +9,10 @@ import copy
 from functools import cached_property, wraps, partial
 from frozendict import frozendict
 
-from typing import Sequence
+from typing import Sequence, Tuple, List
 
-AntPair = tuple[int, int]
-Baseline = tuple[int, int, str]
+AntPair = Tuple[int, int]
+Baseline = Tuple[int, int, str]
 
 def _convert_red_list(red_list: Sequence[Sequence[AntPair | Baseline]]) -> list[list[AntPair | Baseline]]:
     """Convert a list of redundant baseline groups to a list of lists of antenna pairs."""
