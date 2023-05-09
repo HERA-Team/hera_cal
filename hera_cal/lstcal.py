@@ -35,8 +35,14 @@ def _build_data_dict(data, flags, nsamples, antpairs, freqs, cal_function, day_f
 
     Returns:
     --------
+    offsets : dict
+        Dictionary of offsets between days in the lstbin.
     data_dict : dict
         Dictionary of data for each baseline in the lstbin.
+    flag_dict : dict
+        Dictionary of flags for each baseline in the lstbin.
+    nsamples_dict : dict
+        Dictionary of nsamples for each baseline in the lstbin.
     """
     # If no day_flags is provided, assume all days are usable
     if day_flags is None:
@@ -188,7 +194,7 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, spar
         Shape (Ntimes, Nfreqs, Npols) of delay slopes in nanoseconds.
     """
     # Loop through all baselines
-    dlys, antpairs_used, _, flag_dict, _ = _build_data_dict(
+    dlys, _, flag_dict, _ = _build_data_dict(
         data, flags, nsamples, antpairs, freqs, _delay_align_bls, day_flags=day_flags
         pack_flags=True
     )
@@ -244,10 +250,18 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, spar
                 _sol[k.replace('T', 'P')] = 0
             sol.update(_sol)
 
-        solutions[pol] = sol 
+        # Pack the solution into a dictionary
+        solutions[pol] = sol
+         
+        # Evaluate gains
+        for k in antpos:
+            gains[k + ("J" + pol)] = np.exp(
+                1j * np.sum([
+                    antpos[k] * (sol[f"P{n}_{k}"] + sol[f"T{n}_{k}"] * freqs) for n in antpos[k]
+                ], axis=0)
+            )
 
-
-    return sol
+    return gains
 
 def _tip_tilt_align(bls, data, flags, norm=True):
     '''
@@ -350,6 +364,8 @@ def phase_slope_calibration(data, flags, nsamples, antpairs, antpos, freqs, day_
 
     # Check if antpos is a dictionary or a list of dictionaries
     use_same_pos = True # if isinstance(antpos, dict) else False
+    gains = {}
+    solutions = {}
     
     # Calibration polarizations indepedently
     for pol in pols:
@@ -368,13 +384,25 @@ def phase_slope_calibration(data, flags, nsamples, antpairs, antpos, freqs, day_
                 data_key_1 = " + ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * TT{i}_{k[1][0]}' for i in range(blvec.shape[0])])
                 data_key_2 = " - ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * TT{i}_{k[0][0]}' for i in range(blvec.shape[0])])
                 ls_data[data_key_1 + " - " + data_key_2] = blgrp[k][0]
-                wgt = np.logical_not(flag_dict[(pairs, k[0][0], 'ee')]).astype(float) * np.logical_not(flag_dict[(pairs, k[1][0], 'ee')]).astype(float)
-                wgt *= np.sqrt(nsamples_dict[(pairs, k[0][0], 'ee')] * nsamples_dict[(pairs, k[1][0], 'ee')])
+                wgt = np.logical_not(flag_dict[(pairs, k[0][0], pol)]).astype(float) * np.logical_not(flag_dict[(pairs, k[1][0], pol)]).astype(float)
+                wgt *= np.sqrt(nsamples_dict[(pairs, k[0][0], pol)] * nsamples_dict[(pairs, k[1][0], pol)])
                 wgts[data_key_1 + " - " + data_key_2] = wgt
         
         ls = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
-        sol = ls.solve()   
-    return sol
+        sol = ls.solve()  
+
+        # Pack the solution into a dictionary
+        solutions[pol] = sol
+
+        # Evaluate gains
+        for k in antpos:
+            gains[k + ("J" + pol)] = np.exp(
+                1j * np.sum([
+                    antpos[k] * sol[f"TT{n}_{k}"] * freqs for n in antpos[k]
+                ], axis=0)
+            )
+
+    return gains
 
 def _amplitude_align(bls, data, flags):
     """
@@ -460,13 +488,14 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
         Shape (Ntimes, Nfreqs, Npols) of amplitudes.
     """
      # Loop through all baselines
-    amps, antpairs_used, flags_dict, nsamples_dict = _build_data_dict(
+    amps, _, flags_dict, nsamples_dict = _build_data_dict(
         data, flags, nsamples, antpairs, freqs, _amplitude_align,
         return_flags=True, return_nsamples=True
     )
                         
     # Store solutions in a dictionary keyed by polarization
     solutions = {}
+    gains = {}
 
     # Solve for the amplitude offsets for each polarization independently
     for pol in pols:
@@ -474,7 +503,7 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
         ls_data = {}
         const = {}
         wgts = {}
-        for (blgrp, pairs) in zip(amps[pol], antpairs_used):
+        for blgrp in amps:
             for k in blgrp:
                 data_key_1 = f'a_{k[1][0]}_{pairs[0]}_{pairs[1]} * amp_{k[1][0]} - a_{k[0][0]}_{pairs[0]}_{pairs[1]} * amp_{k[0][0]}'
                 const[f'a_{k[1][0]}_{pairs[0]}_{pairs[1]}'] = 1.0
@@ -488,6 +517,10 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
         ls = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
         sol = ls.solve()   
         solutions[pol] = sol
+        
+        # Evaluate gains
+        for k in antpos:
+            gains[k + ("J" + pol)] = np.exp(sol[f"amp_{k}"])
 
     return solutions
 
@@ -536,7 +569,6 @@ def apply_lstcal_in_place(data, gains, antpairs, times, pols, gain_convention='d
                     data[ti, ai, :, pi] /= gains[time][antpol1] ** exponent
                     data[ti, ai, :, pi] /= np.conj(gains[time][antpol2]) ** exponent
 
-                
 
 def calibrate_data(data, flags, nsamples, freqs, antpairs, pols, phs_max_iter=100, phs_conv_crit=1e-10, 
                    phase_method="logcal", day_flags=None, sparse=True):
@@ -613,6 +645,11 @@ def calibrate_data(data, flags, nsamples, freqs, antpairs, pols, phs_max_iter=10
         raise ValueError(f"Unrecognized phase_method: {phase_method}")
     
     return gains
+
+def single_file_calibrate_data(model, model_flags, data, data_flags, data_nsamples, day_flags):
+    """
+    """
+    pass
 
 def config_lst_bin_calibration(config_file):
     """
@@ -749,7 +786,7 @@ def run_lst_calibration(
             )
 
             # Calibrate the "bad" days
-            delta_gains = single_file_calibrate_data(model_arr, _data, _flags, _nsamples, day_mask)
+            delta_gains = single_file_calibrate_data(model_arr, model_flags, _data, _flags, _nsamples, day_mask)
             apply_lstcal_in_place(_data, delta_gains, antpairs, times, pols, gain_convention="divide")
             gains = {k: gains[k] * delta_gains[k] for k in gains}
 
