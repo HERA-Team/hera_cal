@@ -606,7 +606,7 @@ def calibrate_data(data, flags, nsamples, freqs, antpairs, pols, phs_max_iter=10
 def config_lst_bin_calibration(config_file):
     """
     """
-    
+    pass
 
 def run_lst_calibration(
         config_file, outfile_index=0, calibrate_bad_days=True, 
