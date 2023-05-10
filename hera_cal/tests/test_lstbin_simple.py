@@ -20,7 +20,9 @@ try:
 except NameError:
     @pytest.fixture(scope='module')
     def benchmark():
-        return lambda fnc: fnc
+        def fnc(wrapped, *args, **kwargs):
+            return wrapped(*args, **kwargs)
+        return fnc
 
 class Test_LSTAlign:
     @classmethod
