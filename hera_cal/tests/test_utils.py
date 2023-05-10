@@ -870,7 +870,7 @@ def test_chunck_baselines_by_redundant_group():
 
 def test_select_spw_ranges(tmpdir):
     # validate spw_ranges.
-    tmp_path = tmpdir.strpath
+    tmp_path = str(tmpdir)
     # test that units are propagated from calibration gains to calibrated data.
     new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
     uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
@@ -900,7 +900,7 @@ def test_select_spw_ranges_argparser():
 
 def test_select_spw_ranges_run_script_code(tmpdir):
     # test script code from scripts/test_select_spw_ranges.py
-    tmp_path = tmpdir.strpath
+    tmp_path = str(tmpdir)
     new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
     uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
     hd = io.HERAData(uvh5)

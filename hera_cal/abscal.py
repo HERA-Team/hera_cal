@@ -4320,6 +4320,7 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
                                    ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
                                    metadata_only=False, sky_field=field_str, cal_type='gain',
                                    future_array_shapes=True)
+
     hc = io.to_HERACal(hc)
     hc.update(flags=data_ant_flags)
     # generate cal object from model to hold model flags.
@@ -4420,7 +4421,6 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
 
     # update the calibration array.
     hc.update(gains=abscal_gains)
-
     hc.write(output_filename, clobber=clobber, spoof_missing_channels=spoof_missing_channels)
 
 

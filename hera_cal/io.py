@@ -257,6 +257,11 @@ class HERACal(UVCal):
             new_quality = np.zeros(new_gains.shape, dtype=float)
             new_quality[:, ~inserted, :, :] = writer.quality_array
 
+            if writer.total_quality_array is not None:
+                new_total_quality = np.zeros((writer.Nfreqs, writer.Ntimes, writer.Njones), dtype=float)
+                new_total_quality[~inserted, :, :] = writer.total_quality_array
+                writer.total_quality_array = new_total_quality
+                
             writer.flag_array = new_flags
             writer.gain_array = new_gains
             writer.quality_array = new_quality

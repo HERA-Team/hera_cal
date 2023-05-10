@@ -15,6 +15,13 @@ from hera_cal import apply_cal
 from pyuvdata import utils as uvutils
 from hera_cal.red_groups import RedundantGroups
 
+try:
+    benchmark
+except NameError:
+    @pytest.fixture(scope='module')
+    def benchmark():
+        return lambda fnc: fnc
+
 class Test_LSTAlign:
     @classmethod
     def get_lst_align_data(
@@ -95,7 +102,7 @@ class Test_LSTAlign:
 
     def test_increasing_lsts_one_per_bin(self, benchmark):
         kwargs = self.get_lst_align_data(ntimes=6)
-        bins, d, f, n = lstbin_simple.lst_align, rephase=False, **kwargs)
+        bins, d, f, n = benchmark(lstbin_simple.lst_align, rephase=False, **kwargs)
 
         # We should not be changing the data at all.
         d = np.squeeze(np.asarray(d))
@@ -109,7 +116,7 @@ class Test_LSTAlign:
 
     def test_multi_days_one_per_bin(self, benchmark):
         kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
-        bins, d, f, n = lstbin_simple.lst_align(rephase=False, **kwargs)
+        bins, d, f, n = benchmark(lstbin_simple.lst_align, rephase=False, **kwargs)
 
         # We should not be changing the data at all.
         d = np.squeeze(np.asarray(d))
@@ -121,7 +128,7 @@ class Test_LSTAlign:
         assert np.all(n == 1.0)
         assert len(bins) == 7
 
-    def test_multi_days_with_flagging(self):
+    def test_multi_days_with_flagging(self, benchmark):
         kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
 
         # Flag everything after the first day, and make the data there crazy.
@@ -129,7 +136,7 @@ class Test_LSTAlign:
         flags[7:] = True
         kwargs['data'][7:] = 1000.0
 
-        bins, d, f, n = lstbin_simple.lst_align(rephase=False, flags=flags, **kwargs)
+        bins, d, f, n = benchmark(lstbin_simple.lst_align, rephase=False, flags=flags, **kwargs)
 
         d = np.squeeze(np.asarray(d))
         f = np.squeeze(np.asarray(f))
@@ -140,8 +147,8 @@ class Test_LSTAlign:
         assert np.all(f[:, 1])
         assert len(bins) == 7
 
-    def test_multi_days_with_nsamples_zero(self):
-        kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
+    def test_multi_days_with_nsamples_zero(self, benchmark):
+        kwargs = benchmark(self.get_lst_align_data, ndays=2, ntimes=7)
 
         # Flag everything after the first day, and make the data there crazy.
         nsamples = np.ones_like(kwargs['data'], dtype=float)
@@ -161,18 +168,18 @@ class Test_LSTAlign:
         assert len(bins) == 7
 
 
-    def test_rephase(self):
+    def test_rephase(self, benchmark):
         """Test that rephasing where each bin is already at center does nothing."""
         kwargs = self.get_lst_align_data(ntimes=7)
 
-        bins0, d0, f0, n0 = lstbin_simple.lst_align(rephase=True, **kwargs)
+        bins0, d0, f0, n0 = benchmark(lstbin_simple.lst_align, rephase=True, **kwargs)
         bins, d, f, n = lstbin_simple.lst_align(rephase=False, **kwargs)
         np.testing.assert_allclose(d, d0, rtol=1e-6)
         np.testing.assert_allclose(f, f0, rtol=1e-6)
         np.testing.assert_allclose(n, n0, rtol=1e-6)
         assert len(bins) == len(bins0)
 
-    def test_lstbinedges_modulus(self):
+    def test_lstbinedges_modulus(self, benchmark):
         
         kwargs = self.get_lst_align_data(ntimes=7)
         edges = kwargs.pop("lst_bin_edges")
@@ -180,7 +187,7 @@ class Test_LSTAlign:
         lst_bin_edges = edges.copy()
         lst_bin_edges -= 4*np.pi
 
-        bins, d0, f0, n0 = lstbin_simple.lst_align(lst_bin_edges=lst_bin_edges, **kwargs)
+        bins, d0, f0, n0 = benchmark(lstbin_simple.lst_align, lst_bin_edges=lst_bin_edges, **kwargs)
 
         lst_bin_edges = edges.copy()
         lst_bin_edges += 4*np.pi
@@ -214,9 +221,9 @@ class Test_ReduceLSTBins:
 
         return data, flags, nsamples
             
-    def test_one_point_per_bin(self):
+    def test_one_point_per_bin(self, benchmark):
         d, f, n = self.get_input_data(ntimes=(1,))
-        dd, ff, std, nn = lstbin_simple.reduce_lst_bins(d, f, n)
+        dd, ff, std, nn = benchmark(lstbin_simple.reduce_lst_bins, d, f, n)
 
         assert dd.shape == ff.shape == std.shape == nn.shape
 
@@ -240,9 +247,9 @@ class Test_ReduceLSTBins:
         assert np.all(nn[:, 0] == 0.0)
 
     @pytest.mark.parametrize("ntimes", [(4, ), (5, 4)])
-    def test_multi_points_per_bin(self, ntimes):
+    def test_multi_points_per_bin(self, ntimes, benchmark):
         d, f, n = self.get_input_data(ntimes=ntimes)
-        dd, ff, std, nn = lstbin_simple.reduce_lst_bins(d, f, n)
+        dd, ff, std, nn = benchmark(lstbin_simple.reduce_lst_bins, d, f, n)
 
         assert dd.shape == ff.shape == std.shape == nn.shape
 
@@ -311,20 +318,21 @@ def test_apply_calfile_rules(tmpdir_factory):
         
 class Test_LSTAverage:
 
-    def test_sigma_clip_without_outliers(self):
+    def test_sigma_clip_without_outliers(self, benchmark):
         shape = (7,8,9)
         data = np.random.random(shape) + np.random.random(shape)*1j
         nsamples = np.ones_like(data)
         flags = np.zeros_like(data, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n =lstbin_simple.lst_average(
             data=data,
             nsamples=nsamples,
             flags=flags,
             sigma_clip_thresh=0.0,
         )
 
-        data, flg, std, norm = lstbin_simple.lst_average(
+        data, flg, std, norm = benchmark(
+            lstbin_simple.lst_average,
             data=data,
             nsamples=nsamples,
             flags=flags,
@@ -854,13 +862,13 @@ class Test_LSTBinFiles:
         self, tmp_path_factory, random_ants_to_drop: int, rephase: bool, 
         sigma_clip_thresh: float, flag_strategy: tuple[int, int, int],
         pols: tuple[str], freq_range: tuple[float, float] | None,
+        benchmark
     ):
 
         tmp = tmp_path_factory.mktemp("nontrivial_cal")
         uvds = mockuvd.make_dataset(
-            ndays=3, nfiles=2, ntimes=2, 
+            ndays=3, nfiles=2, ntimes=2, ants=np.arange(7),
             creator=mockuvd.create_uvd_identifiable,
-            antpairs = [(i,j) for i in range(7) for j in range(i, 7)],  # 55 antpairs
             pols = pols,
             freqs=np.linspace(140e6, 180e6, 3),
             random_ants_to_drop=random_ants_to_drop,
@@ -886,13 +894,15 @@ class Test_LSTBinFiles:
         lstbin_simple.make_lst_bin_config_file(
             cfl, data_files, ntimes_per_file=2, clobber=True,
         )
-        out_files = lstbin_simple.lst_bin_files(
+        out_files = benchmark(
+            lstbin_simple.lst_bin_files,
             config_file=cfl, fname_format="zen.{kind}.{lst:7.5f}.uvh5",
             Nbls_to_load=11, rephase=rephase,
             sigma_clip_thresh=sigma_clip_thresh,
             sigma_clip_min_N=2,
             freq_min=freq_range[0] if freq_range is not None else None,
             freq_max=freq_range[1] if freq_range is not None else None,
+            overwrite=True
         )
         assert len(out_files) == 2
         for flset in out_files:
