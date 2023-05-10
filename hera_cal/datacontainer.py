@@ -588,7 +588,10 @@ class RedDataContainer(DataContainer):
             self.reds = RedundantGroups(red_list=reds, antpos=getattr(self, 'antpos', None))
                 
         self._reds_keyed_on_data = self.reds.keyed_on_bls(bls=self.bls())
-        
+
+        # delete unused data to avoid leaking memory
+        del self[[k for k in self._data if k not in self.reds]]
+
         # Check that the data only has one baseline per redundant group
         redkeys = {}
         for bl in self.bls():
@@ -601,8 +604,6 @@ class RedDataContainer(DataContainer):
             else:
                 redkeys[ubl] = bl
 
-        # delete unused data to avoid leaking memory
-        del self[[k for k in self._data if k not in self.reds]]
 
     def get_ubl_key(self, bl):
         '''Returns the blkey used to internally denote the data stored.
