@@ -244,6 +244,7 @@ class TestRedundantGroups:
         rg = RedundantGroups(
             [[(0, 1)], [(0, 2), (0, 3)]],
         )
+        print(rg._red_key_to_bls_map)
         del rg[(0,1)]
         print("_bl_to_red_map" in rg.__dict__)
         assert len(rg) == 1
