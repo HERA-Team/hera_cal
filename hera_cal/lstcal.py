@@ -52,9 +52,7 @@ def _build_data_dict(data, flags, nsamples, antpairs, freqs, pols, cal_function,
     Ndays, Nbls, Nfreqs, Npols = data.shape
 
     # Dictionary for storing data, flags, and nsamples for each baseline
-    data_dict = {}
-    nsamples_dict = {}
-    flag_dict = {}
+    index_dict = {}
 
     # Dictionary for storing the offsets between days
     offsets = {}
@@ -80,23 +78,24 @@ def _build_data_dict(data, flags, nsamples, antpairs, freqs, pols, cal_function,
                 if not np.all(flags[di, bi, :, pi]):
                     _data_dict[(di, pols[pi])] = data[di, bi, :, pi][None]
                     _flag_dict[(di, pols[pi])] = flags[di, bi, :, pi][None]
-                    _nsamples_dict[(di, pols[pi])] = nsamples[di, bi, :, pi][None]
-
+                    #_nsamples_dict[(di, pols[pi])] = nsamples[di, bi, :, pi][None]
+                    
             # If there is data for this baseline, solve for the offset between days
             if len(_data_dict) > 1:
                 offsets[antpairs[bi] + (pols[pi], )] = cal_function(
                     list(_data_dict.keys()), freqs, _data_dict, _flag_dict
                 )
+                index_dict[antpairs[bi] + (pols[pi], )] = (bi, pi)
 
             # Update data_dict with data from this loop
-            if pack_data:
-                data_dict.update(_data_dict)
-            if pack_flags:
-                flag_dict.update(_flag_dict)
-            if pack_nsamples:
-                nsamples_dict.update(_nsamples_dict)
+            # if pack_data:
+            #    data_dict.update(_data_dict)
+            # if pack_flags:
+            #    flag_dict.update(_flag_dict)
+            # if pack_nsamples:
+            #    nsamples_dict.update(_nsamples_dict)
 
-    return offsets, data_dict, flag_dict, nsamples_dict
+    return offsets, index_dict
 
 def _delay_align_bls(bls, freqs, data, flags=None, norm=True, wrap_pnt=(np.pi / 2)):
     """
@@ -417,7 +416,7 @@ def _amplitude_align(bls, freqs, data, flags):
         Dictionary of complex visibility data keyed by (i,j) antenna pair.
     """
     grps = [(bl,) for bl in bls]  # start with each bl in its own group
-    _data = {bl: data[bl[0]] for bl in grps}
+    _data = {bl: np.abs(data[bl[0]]) for bl in grps}
     _flags = {bl: flags[bl[0]] for bl in grps}
     Ntimes, Nfreqs = data[bls[0]].shape
     amp_grps = {}
@@ -426,7 +425,7 @@ def _amplitude_align(bls, freqs, data, flags):
         '''Phase-align two groups, recording dly/off in dly_off_gps for gp2
         and the phase-aligned sum in _data. Returns gp1 + gp2, which
         keys the _data dict and represents group for next iteration.'''
-        d12 = np.abs(_data[gp1] / _data[gp2])
+        d12 = np.abs(_data[gp1]) / np.abs(_data[gp2])
 
         # Record the amplitude scalar for gp2
         amp_grps[gp2] = d12
@@ -487,8 +486,14 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
     amplitude : np.ndarray
         Shape (Ntimes, Nfreqs, Npols) of amplitudes.
     """
+    # Get shape of data
+    Ndays, Nbls, Nfreqs, Npols = data.shape
+
+    # Get the antennas from the antpairs
+    ants = list(set(sum(map(list, antpairs), [])))
+
      # Loop through all baselines
-    amps, _, flags_dict, nsamples_dict = _build_data_dict(
+    amps, index_dict = _build_data_dict(
         data, flags, nsamples, antpairs, freqs, pols, _amplitude_align,
         pack_flags=True, pack_nsamples=True
     )
@@ -506,13 +511,14 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
 
         baselines = [bl for bl in amps if pol == bl[-1]]
         for bl in baselines:
+            bi, pi = index_dict[bl]
             for (day1, day2) in amps[bl]:
-                data_key_1 = f'a_{day2[0]}_{bl[0]}_{bl[1]} * amp_{day2[0]} - a_{day1[0]}_{bl[0]}_{bl[1]} * amp_{day1[0]}'
+                data_key_1 = f'a_{day2[0]}_{bl[0]}_{bl[1]} * eta_{day2[0]} - a_{day1[0]}_{bl[0]}_{bl[1]} * eta_{day1[0]}'
                 const[f'a_{day2[0]}_{bl[0]}_{bl[1]}'] = 1.0
                 const[f'a_{day1[0]}_{bl[0]}_{bl[1]}'] = 1.0
-                ls_data[data_key_1] = np.log(amps[k][0])
-                wgt = np.logical_not(flags_dict[(pairs, k[0][0], pol)]).astype(float) * np.logical_not(flags_dict[(pairs, k[1][0], pol)]).astype(float)
-                wgt *= np.sqrt(nsamples_dict[(pairs, k[0][0], pol)] * nsamples_dict[(pairs, k[1][0], pol)])
+                ls_data[data_key_1] = np.log(amps[bl][(day1, day2)][0])
+                wgt = np.logical_not(flags[day1[0], bi, :, pi]).astype(float) * np.logical_not(flags[day2[0], bi, :, pi]).astype(float)
+                wgt *= np.sqrt(nsamples[day1[0], bi, :, pi] * nsamples[day1[0], bi, :, pi])
                 wgts[data_key_1] = wgt
         
         # Solve for the amplitude offsets
@@ -520,11 +526,16 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
         sol = ls.solve()   
         solutions[pol] = sol
         
-        # Evaluate gains
-        for k in antpos:
-            gains[k + ("J" + pol)] = np.exp(sol[f"amp_{k}"])
+        # Compute gain amplitudes
+        gain_amp = np.array([
+            np.exp(sol.get(f"eta_{day_index}", np.zeros(Nfreqs))).astype(np.complex128)
+            for day_index in range(Ndays)
+        ])
+        # Evaluate gains - gain dictionary values have shape (Ndays, Nfreqs)
+        gains.update({(ant, "J" + pol): gain_amp for ant in ants})
+        
 
-    return solutions
+    return gains, solutions
 
 def complex_phase_calibration(data, flags, nsamples, freqs, antpairs, pols=['nn', 'ee']):
     """
