@@ -9,7 +9,7 @@ import copy
 import glob
 import scipy.stats as stats
 from pyuvdata import UVCal, UVData
-from .. import io, lstbin, utils, redcal, lstbin_simple
+from .. import io, lstbin, utils, redcal
 from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 import shutil
@@ -615,50 +615,6 @@ class Test_lstbin:
             for bldict in nightly_bldict_list:
                 assert len(bldict) == len(self.data_files)
                 assert np.all([bldict[0] == bldict[i] for i in bldict])
-
-    @pytest.mark.filterwarnings("ignore:The expected shape of the ENU array")
-    @pytest.mark.filterwarnings("ignore:antenna_diameters is not set")
-    @pytest.mark.parametrize('rephase', [True, False])
-    def test_simpler_lst_bin_vs_old(self, rephase):
-        # basic execution
-        file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
-        fname_format = self.fname_format
-        lstbin_simple.lst_bin_files(
-            self.data_files, n_lstbins_per_outfile=250, outdir="./", overwrite=True,
-            fname_format=fname_format, ignore_flags=True, rephase=rephase
-        )
-        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
-        output_std_file = "./zen.ee.STD.0.20124.uvh5"
-        uv1 = UVData()
-        uv1.read(output_lst_file)
-        # assert nsample w.r.t time follows 1-2-3-2-1 pattern
-        os.remove(output_lst_file)
-        os.remove(output_std_file)
-
-        lstbin.lst_bin_files(
-            self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-            file_ext=file_ext, ignore_flags=True, rephase=rephase
-        )
-        uv2 = UVData()
-        uv2.read(output_lst_file)
-        os.remove(output_lst_file)
-        os.remove(output_std_file)
-        # We know the history will be different because they're different functions.
-        assert uv1.history != uv2.history
-        uv1.history = ""
-        uv2.history = ""        
-
-        # We also know the antenna-shaped arrays will be different, because we now only
-        # keep the antennas that we need for the baselines.
-        uv2.antenna_diameters = uv1.antenna_diameters
-        uv2.antenna_names = uv1.antenna_names
-        uv2.antenna_numbers = uv1.antenna_numbers
-        uv2.antenna_positions = uv1.antenna_positions
-        uv2.Nants_telescope = uv1.Nants_telescope
-        uv2.uvw_array = uv1.uvw_array
-        uv2.extra_keywords = uv1.extra_keywords
-        uv2.phase_center_catalog[0]['cat_name'] = 'zenith'
-        assert uv1 == uv2
 
     def tearDown(self):
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))

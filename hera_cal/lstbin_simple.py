@@ -17,7 +17,7 @@ from . import io
 import logging
 from hera_qm.metrics_io import read_a_priori_ant_flags
 from . import apply_cal
-from typing import Sequence
+from typing import Sequence, Any
 import argparse
 from pyuvdata.uvdata.uvh5 import FastUVH5Meta
 from pyuvdata import utils as uvutils
@@ -919,12 +919,12 @@ def lst_bin_files_single_outfile(
         data_metas,
         input_cals,
     )
-
-    all_lsts = np.concatenate(all_lsts)
-
     # If we have no times at all for this file, just return
     if len(all_lsts) == 0:
         return {}
+
+    all_lsts = np.concatenate(all_lsts)
+
 
     # The "golden" data is the full data over all days for a small subset of LST
     # bins. This works best if the LST bins are small (similar to the size of the

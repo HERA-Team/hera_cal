@@ -1,4 +1,5 @@
 """Functions for mocking UVdata objects for testing purposes."""
+from __future__ import annotations
 
 from pyuvdata import UVData, UVCal
 from pyuvdata.uvdata import FastUVH5Meta

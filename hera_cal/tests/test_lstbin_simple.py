@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from . import mock_uvdata as mockuvd
 import pytest
 from pathlib import Path
@@ -91,9 +93,9 @@ class Test_LSTAlign:
         with pytest.raises(ValueError, match="freq_array and antpos is needed for rephase"):
             lst_align_with(rephase=True, antpos=None)
 
-    def test_increasing_lsts_one_per_bin(self):
+    def test_increasing_lsts_one_per_bin(self, benchmark):
         kwargs = self.get_lst_align_data(ntimes=6)
-        bins, d, f, n = lstbin_simple.lst_align(rephase=False, **kwargs)
+        bins, d, f, n = lstbin_simple.lst_align, rephase=False, **kwargs)
 
         # We should not be changing the data at all.
         d = np.squeeze(np.asarray(d))
@@ -105,7 +107,7 @@ class Test_LSTAlign:
         assert np.all(n == 1.0)
         assert len(bins) == 6
 
-    def test_multi_days_one_per_bin(self):
+    def test_multi_days_one_per_bin(self, benchmark):
         kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
         bins, d, f, n = lstbin_simple.lst_align(rephase=False, **kwargs)
 
