@@ -527,10 +527,10 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
         solutions[pol] = sol
         
         # Compute gain amplitudes
-        gain_amp = np.array([
-            np.exp(sol.get(f"eta_{day_index}", np.zeros(Nfreqs))).astype(np.complex128)
-            for day_index in range(Ndays)
-        ])
+        gain_amp = np.exp([
+            -sol.get(f"eta_{day_index}", np.zeros(Nfreqs)) for day_index in range(Ndays)
+        ]).astype(np.complex128)
+
         # Evaluate gains - gain dictionary values have shape (Ndays, Nfreqs)
         gains.update({(ant, "J" + pol): gain_amp for ant in ants})
         
