@@ -309,8 +309,6 @@ class RedundantGroups:
         properties (rather than having to fully recompute them).
         """
         new_ubl = self.key_chooser(bls)
-        old_bls = self._red_key_to_bls_map[ubl]
-        
         self._remove_group(ubl)
         self._add_new_group(bls, ubl=new_ubl)
 
@@ -345,7 +343,7 @@ class RedundantGroups:
 
         rubl = reverse_bl(ubl)
         if rubl != ubl:
-            bls += self._red_key_to_bls_map[rubl]
+            bls =  bls + self._red_key_to_bls_map[rubl]
             del self._red_key_to_bls_map[rubl]
 
         for bl in bls:
@@ -558,11 +556,13 @@ class RedundantGroups:
                 chooser = self.key_chooser.chooser,
             )
 
-            to_remap = [ubl for ubl in self._red_key_to_bls_map.keys() if ubl not in bls]
+            to_remap = [ubl for ubl in self._red_key_to_bls_map.keys() if ubl not in bls and reverse_bl(ubl) not in bls]
+            # Remove all flips....
+            to_remap = [ubl for ubl in to_remap if ubl[0] <= ubl[1]]
+
             obj.key_chooser = new_chooser
             for bl in to_remap:
                 obj._reset_ubl(bl, self[bl])
-            
         if not inplace:
             return obj
         
