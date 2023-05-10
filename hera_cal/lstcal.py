@@ -6,7 +6,7 @@ import linsolve
 import numpy as np
 from . import utils, redcal, red_groups, lstbin_simple
 
-def _build_data_dict(data, flags, nsamples, antpairs, freqs, pols, cal_function, day_flags=None, pack_data=False, pack_flags=False, pack_nsamples=False):
+def build_data_dict(data, flags, antpairs, freqs, pols, cal_function, day_flags=None):
     """
     Build a dictionary of data for each baseline in the lstbin.
 
@@ -16,8 +16,6 @@ def _build_data_dict(data, flags, nsamples, antpairs, freqs, pols, cal_function,
         Shape (Ntimes, Nbls, Nfreqs, Npols) of complex data.
     flags : np.ndarray
         Shape (Ntimes, Nbls, Nfreqs, Npols) of boolean flags.
-    nsamples : np.ndarray
-        Number of samples in each time-frequency bin. Shape (Ntimes, Nbls, Nfreqs, Npols).
     antpairs : list of tuples
         List of tuples of antenna pairs.
     freqs : np.ndarray
@@ -86,14 +84,6 @@ def _build_data_dict(data, flags, nsamples, antpairs, freqs, pols, cal_function,
                     list(_data_dict.keys()), freqs, _data_dict, _flag_dict
                 )
                 index_dict[antpairs[bi] + (pols[pi], )] = (bi, pi)
-
-            # Update data_dict with data from this loop
-            # if pack_data:
-            #    data_dict.update(_data_dict)
-            # if pack_flags:
-            #    flag_dict.update(_flag_dict)
-            # if pack_nsamples:
-            #    nsamples_dict.update(_nsamples_dict)
 
     return offsets, index_dict
 
@@ -193,9 +183,8 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, spar
         Shape (Ntimes, Nfreqs, Npols) of delay slopes in nanoseconds.
     """
     # Loop through all baselines
-    dlys, _, flag_dict, _ = _build_data_dict(
-        data, flags, nsamples, antpairs, freqs, _delay_align_bls, day_flags=day_flags,
-        pack_flags=True
+    dlys, index_dict = build_data_dict(
+        data, flags, antpairs, freqs, pols, _delay_align_bls, day_flags=day_flags,
     )
 
     # Check if antpos is a dictionary or a list of dictionaries
@@ -205,20 +194,26 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, spar
     solutions = {}
     gains = {}
                                       
-    # Calibrate polarizations independently
+    # Calibration polarizations indepedently
     for pol in pols:
         # Setup equations
         ls_data = {}
         const = {}
         wgts = {}
 
-        # Loop through all of the delay solutions
-        for blkey in dlys:
+        # Get the baselines for this polarization
+        baselines = [bl for bl in dlys if pol == bl[-1]]
+
+        for bl in baselines:
+            bi, pi = index_dict[bl]
+
+            # Loop through all of the tip-tilt solutions
             if use_same_pos:
-                blvec = (antpos[pairs[1]] - antpos[pairs[0]])
-                const.update({f'b_{pairs[0]}_{pairs[1]}_{i}': blvec[i] for i in range(blvec.shape)})
-            
-            for k in blgrp:                            
+                blvec = antpos[pairs[1]] - antpos[pairs[0]]
+            const.update({f'b_{pairs[0]}_{pairs[1]}_{i}': blvec[i] for i in range(blvec.shape[0])})
+
+            # Loop through all of the tip-tilt offsets
+            for (day1, day2) in dlys[bl]:                            
                 # Form the data key
                 data_key_1 = " + ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * T{i}_{k[1][0]}' for i in range(blvec.shape)])
                 data_key_2 = " - ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * T{i}_{k[0][0]}' for i in range(blvec.shape)])
@@ -356,10 +351,15 @@ def phase_slope_calibration(data, flags, nsamples, antpairs, antpos, freqs, day_
         Shape (Ntimes, Nfreqs, Npols) of phase slopes in radians per meter.
     """
      # Loop through all baselines
-    tip_tilts, antpairs_used, flag_dict, nsamples_dict = _build_data_dict(
-        data, flags, nsamples, antpairs, freqs, _tip_tilt_align, day_flags=day_flags,
-        return_flags=True, return_nsamples=True
+    tip_tilts, index_dict = build_data_dict(
+        data, flags, antpairs, freqs, pols, _tip_tilt_align, day_flags=day_flags,
     )
+
+    # Get the antennas from the antpairs
+    ants = list(set(sum(map(list, antpairs), [])))
+
+    # Get shape of data
+    Ndays, Nbls, Nfreqs, Npols = data.shape
 
     # Check if antpos is a dictionary or a list of dictionaries
     use_same_pos = True # if isinstance(antpos, dict) else False
@@ -373,13 +373,19 @@ def phase_slope_calibration(data, flags, nsamples, antpairs, antpos, freqs, day_
         const = {}
         wgts = {}
 
-        # Loop through all of the phase offsets
-        for (blgrp, pairs) in zip(tip_tilts, antpairs_used):
+        # Get the baselines for this polarization
+        baselines = [bl for bl in tip_tilts if pol == bl[-1]]
+
+        for bl in baselines:
+            bi, pi = index_dict[bl]
+
+            # Loop through all of the tip-tilt solutions
             if use_same_pos:
                 blvec = antpos[pairs[1]] - antpos[pairs[0]]
             const.update({f'b_{pairs[0]}_{pairs[1]}_{i}': blvec[i] for i in range(blvec.shape[0])})
-            
-            for k in blgrp:
+
+            # Loop through all of the tip-tilt offsets
+            for (day1, day2) in tip_tilts[bl]:
                 data_key_1 = " + ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * TT{i}_{k[1][0]}' for i in range(blvec.shape[0])])
                 data_key_2 = " - ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * TT{i}_{k[0][0]}' for i in range(blvec.shape[0])])
                 ls_data[data_key_1 + " - " + data_key_2] = blgrp[k][0]
@@ -416,6 +422,7 @@ def _amplitude_align(bls, freqs, data, flags):
         Dictionary of complex visibility data keyed by (i,j) antenna pair.
     """
     grps = [(bl,) for bl in bls]  # start with each bl in its own group
+    #_data = {bl: np.abs(data[bl[0]]) for bl in grps}
     _data = {bl: np.abs(data[bl[0]]) for bl in grps}
     _flags = {bl: flags[bl[0]] for bl in grps}
     Ntimes, Nfreqs = data[bls[0]].shape
@@ -425,7 +432,7 @@ def _amplitude_align(bls, freqs, data, flags):
         '''Phase-align two groups, recording dly/off in dly_off_gps for gp2
         and the phase-aligned sum in _data. Returns gp1 + gp2, which
         keys the _data dict and represents group for next iteration.'''
-        d12 = np.abs(_data[gp1]) / np.abs(_data[gp2])
+        d12 = np.abs(_data[gp1] / _data[gp2])
 
         # Record the amplitude scalar for gp2
         amp_grps[gp2] = d12
@@ -493,9 +500,8 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
     ants = list(set(sum(map(list, antpairs), [])))
 
      # Loop through all baselines
-    amps, index_dict = _build_data_dict(
-        data, flags, nsamples, antpairs, freqs, pols, _amplitude_align,
-        pack_flags=True, pack_nsamples=True
+    amps, index_dict = build_data_dict(
+        data, flags, antpairs, freqs, pols, _amplitude_align,
     )
                         
     # Store solutions in a dictionary keyed by polarization
@@ -514,11 +520,11 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
             bi, pi = index_dict[bl]
             for (day1, day2) in amps[bl]:
                 data_key_1 = f'a_{day2[0]}_{bl[0]}_{bl[1]} * eta_{day2[0]} - a_{day1[0]}_{bl[0]}_{bl[1]} * eta_{day1[0]}'
-                const[f'a_{day2[0]}_{bl[0]}_{bl[1]}'] = 1.0
-                const[f'a_{day1[0]}_{bl[0]}_{bl[1]}'] = 1.0
+                const[f'a_{day2[0]}_{bl[0]}_{bl[1]}'] = 2.0
+                const[f'a_{day1[0]}_{bl[0]}_{bl[1]}'] = 2.0
                 ls_data[data_key_1] = np.log(amps[bl][(day1, day2)][0])
                 wgt = np.logical_not(flags[day1[0], bi, :, pi]).astype(float) * np.logical_not(flags[day2[0], bi, :, pi]).astype(float)
-                wgt *= np.sqrt(nsamples[day1[0], bi, :, pi] * nsamples[day1[0], bi, :, pi])
+                wgt *= np.sqrt(nsamples[day1[0], bi, :, pi] * nsamples[day2[0], bi, :, pi])
                 wgts[data_key_1] = wgt
         
         # Solve for the amplitude offsets
@@ -543,7 +549,7 @@ def complex_phase_calibration(data, flags, nsamples, freqs, antpairs, pols=['nn'
     """
     raise NotImplementedError("abscal.complex_phase_abscal not currently implemented.")
 
-def apply_lstcal_in_place(data, gains, antpairs, times, pols, gain_convention='divide'):
+def apply_lstcal_in_place(data, gains, antpairs, pols, gain_convention='divide'):
     """
     Apply the gains to the data in-place.
 
@@ -565,22 +571,20 @@ def apply_lstcal_in_place(data, gains, antpairs, times, pols, gain_convention='d
     exponent = {'divide': 1, 'multiply': -1}[gain_convention]
 
     # Check the shape of the data
-    assert data.shape[0] == len(times), "Data shape does not match the number of times."
     assert data.shape[1] == len(antpairs), "Data shape does not match the number of antenna pairs."
     assert data.shape[3] == len(pols), "Data shape does not match the number of polarizations."
 
     for pi, pol in enumerate(pols):
-        for ti, time in enumerate(times):
-            for ai, ap in enumerate(antpairs):
-                bl = ap + (pol,)
-                antpol1, antpol2 = utils.split_bl(bl)
+        for ai, ap in enumerate(antpairs):
+            bl = ap + (pol,)
+            antpol1, antpol2 = utils.split_bl(bl)
 
-                # Apply the gain calibration
-                if antpol1 == antpol2:
-                    data[ti, ai, :, pi] /= (np.abs(gains[time][antpol1]) ** 2) ** exponent
-                else:
-                    data[ti, ai, :, pi] /= gains[time][antpol1] ** exponent
-                    data[ti, ai, :, pi] /= np.conj(gains[time][antpol2]) ** exponent
+            # Apply the gain calibration
+            if antpol1 == antpol2:
+                data[:, ai, :, pi] /= (np.abs(gains[antpol1]) ** 2) ** exponent
+            else:
+                data[:, ai, :, pi] /= gains[antpol1] ** exponent
+                data[:, ai, :, pi] /= np.conj(gains[antpol2]) ** exponent
 
 
 def calibrate_data(data, flags, nsamples, freqs, antpairs, pols, phs_max_iter=100, phs_conv_crit=1e-10, 
