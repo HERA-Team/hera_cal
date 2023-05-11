@@ -859,7 +859,7 @@ def lst_bin_files_single_outfile(
     ex_ant_yaml_files=None, 
     ignore_ants: tuple[int]=(),
     write_kwargs: dict | None = None,
-    save_channels: tuple[int] = (),
+    save_channels: list[int] = (),
     golden_lsts: tuple[float] = (),
     sigma_clip_thresh: float = 0.0,
     sigma_clip_min_N: int = 4,
@@ -1063,7 +1063,7 @@ def lst_bin_files_single_outfile(
                     kind = 'REDUCEDCHAN',
                     lst=lst_bin_edges[0],
                     times=binned_times[0],
-                    channels=save_channels
+                    channels=list(save_channels),
                 )
 
         if len(golden_bins)>0:
@@ -1449,6 +1449,7 @@ def create_lstbin_output_file(
     if freq_max:
         freqs = freqs[freqs <= freq_max]
     if channels:
+        channels = list(channels)
         freqs = freqs[channels]
 
     uvd_template = io.uvdata_from_fastuvh5(
