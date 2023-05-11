@@ -332,7 +332,7 @@ def _tip_tilt_align(bls, freqs, data, flags, norm=True):
     angles = {k: v for k, v in angles.items()}
     return angles
 
-def phase_slope_calibration(data, flags, nsamples, antpairs, antpos, freqs, pols, day_flags=None, sparse=True):
+def tip_tilt_calibration(data, flags, nsamples, antpairs, antpos, freqs, pols, day_flags=None, sparse=True):
     """
     Solve for the per-frequency phase slope of each day in an LST-bin.
 
@@ -485,7 +485,7 @@ def _amplitude_align(bls, freqs, data, flags):
 
     return amplitudes
 
-def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=True):
+def amplitude_calibration(data, flags, nsamples, antpairs, pols, day_flags=None, sparse=True):
     """
     Solve for the frequency-amplitude of each day in an LST-bin.
 
@@ -515,7 +515,7 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
 
      # Loop through all baselines
     amps, index_dict = build_data_dict(
-        data, flags, antpairs, freqs, pols, _amplitude_align,
+        data, flags, antpairs, freqs, pols, _amplitude_align, day_flags=day_flags
     )
                         
     # Store solutions in a dictionary keyed by polarization
@@ -533,22 +533,27 @@ def amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=T
         for bl in baselines:
             bi, pi = index_dict[bl]
             for (day1, day2) in amps[bl]:
+                # Construct the data key
                 data_key_1 = f'a_{day2[0]}_{bl[0]}_{bl[1]} * eta_{day2[0]} - a_{day1[0]}_{bl[0]}_{bl[1]} * eta_{day1[0]}'
                 const[f'a_{day2[0]}_{bl[0]}_{bl[1]}'] = 2.0
                 const[f'a_{day1[0]}_{bl[0]}_{bl[1]}'] = 2.0
+
+                # Load data from the blgrp into the linear system
                 ls_data[data_key_1] = np.log(amps[bl][(day1, day2)][0])
+                
+                # Weight by flags and nsamples
                 wgt = np.logical_not(flags[day1[0], bi, :, pi]).astype(float) * np.logical_not(flags[day2[0], bi, :, pi]).astype(float)
                 wgt *= np.sqrt(nsamples[day1[0], bi, :, pi] * nsamples[day2[0], bi, :, pi])
                 wgts[data_key_1] = wgt
         
         # Solve for the amplitude offsets
-        ls = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
-        sol = ls.solve()   
-        solutions[pol] = sol
+        solver = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
+        fit = solver.solve()   
+        solutions[pol] = fit
         
         # Compute gain amplitudes
         gain_amp = np.exp([
-            -sol.get(f"eta_{day_index}", np.zeros(Nfreqs)) for day_index in range(Ndays)
+            -fit.get(f"eta_{day_index}", np.zeros(Nfreqs)) for day_index in range(Ndays)
         ]).astype(np.complex128)
 
         # Evaluate gains - gain dictionary values have shape (Ndays, Nfreqs)
@@ -656,18 +661,29 @@ def calibrate_data(data, flags, nsamples, freqs, antpairs, pols, phs_max_iter=10
 
     elif phase_method == "logcal":
         # Perform global delay slope calibration
-        delta_gains = delay_slope_calibration(day_flags=day_flags)
-        apply_lstcal_in_place(data, delta_gains, antpairs, pols, gain_convention="divide")
-        gains = {k: gains[k] * delta_gains[k] for k in gains}
+        for _ in range(phs_max_iter):
+            delta_gains = delay_slope_calibration(day_flags=day_flags)
+            apply_lstcal_in_place(data, delta_gains, antpairs, pols, gain_convention="divide")
+
+            # Check for convergence
+            if np.median(np.linalg.norm([delta_gains[k] - 1 for k in delta_gains], axis=0)) < conv_crit:
+                break
+            # Update gains
+            gains = {k: gains[k] * delta_gains[k] for k in gains}
 
         # Perform global phase-slope calibration
-        delta_gains = delay_slope_calibration(day_flags=day_flags)
-        apply_lstcal_in_place(data, delta_gains, antpairs, pols, gain_convention="divide")
-        gains = {k: gains[k] * delta_gains[k] for k in gains}
+        for _ in range(phs_max_iter):
+            delta_gains = delay_slope_calibration(day_flags=day_flags)
+            apply_lstcal_in_place(data, delta_gains, antpairs, pols, gain_convention="divide")
+            # Check for convergence
+            if np.median(np.linalg.norm([delta_gains[k] - 1 for k in delta_gains], axis=0)) < conv_crit:
+                break
+            # Update gains
+            gains = {k: gains[k] * delta_gains[k] for k in gains}
 
         # Perform per-frequency tip-tilt phase calibration
         for _ in range(phs_max_iter):
-            delta_gains = phase_slope_calibration(day_flags=day_flags)
+            delta_gains = tip_tilt_calibration(day_flags=day_flags)
             apply_lstcal_in_place(data, delta_gains, antpairs, pols, gain_convention="divide")
             gains = {k: gains[k] * delta_gains[k] for k in gains}
             crit = np.median(np.linalg.norm([gains[k] - 1.0 for k in gains.keys()], axis=(0, 1)))
@@ -677,16 +693,6 @@ def calibrate_data(data, flags, nsamples, freqs, antpairs, pols, phs_max_iter=10
         raise ValueError(f"Unrecognized phase_method: {phase_method}")
     
     return gains
-
-def single_file_calibrate_data(model, model_flags, data, data_flags, data_nsamples, day_flags):
-    """
-    """
-    pass
-
-def config_lst_bin_calibration(config_file):
-    """
-    """
-    pass
 
 def run_lst_calibration(
         config_file, outfile_index=0, calibrate_bad_days=True, 
@@ -808,10 +814,11 @@ def run_lst_calibration(
         day_flags = flag_lst_data_products(_data, _flags, _nsamples)
 
         # Calibrate the data
-        gains = calibrate_data(_data, _flags, _nsamples, day_flags=day_flags)
+        gains = calibrate_data(_data, _flags, _nsamples, freqs, all_baselines, all_pols, day_flags=day_flags)
 
-        # Average the data
+        # Attempt to recalibrate days which were flagged as "bad"
         if calibrate_bad_days:
+            # Average the data
             model_arr, model_flags, _ = lstbin_simple.lst_average(
                 data=_data, flags=_flags, nsamples=_nsamples, sigma_clip_thresh=sigma_clip_thresh,
                 sigma_clip_min_N=sigma_clip_min_N
@@ -912,18 +919,5 @@ def flag_lst_data_products(data, flags, nsamples):
     --------
     day_flags : np.ndarray
         Shape (Ndays) of boolean flags.
-    """
-    pass
-
-def save_meta_data(filepath, metadata):
-    """
-    Save the metadata to a file.
-
-    Parameters:
-    -----------
-    filepath : str
-        Path to the output file.
-    metadata : dict
-        Dictionary of metadata.
     """
     pass

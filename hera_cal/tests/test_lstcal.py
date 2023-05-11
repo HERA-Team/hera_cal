@@ -10,7 +10,7 @@ class TestCalFuncs:
     """
     def setup_method(self):
         np.random.seed(0)
-        self.nf = 15
+        self.nf = 100
         self.ndays = 10
         self.freqs = np.linspace(50e6, 250e6, self.nf)
         self.antpos = hex_array(6, split_core=True, outriggers=0)
@@ -60,14 +60,39 @@ class TestCalFuncs:
         nsamples_arr = np.transpose([self.nsamples[k] for k in data], (1, 0, 2))[..., None]
 
         # Run delay slope calibration
-        gains, solutions = lstcal.delay_slope_calibration(
-            data_arr, flag_arr, nsamples_arr, self.freqs, self.baselines, self.idealized_antpos, ['nn']
+        max_phs_iter = 5
+        conv_crit = 1e-10
+        for i in range(max_phs_iter):
+            gains, solutions = lstcal.delay_slope_calibration(
+                data_arr, flag_arr, nsamples_arr, self.freqs, self.baselines, self.idealized_antpos, ['nn']
+            )
+            lstcal.apply_lstcal_in_place(data_arr, gains, self.baselines, ['nn'])
+            if np.median(np.linalg.norm([gains[k] - 1 for k in gains], axis=0)) < conv_crit:
+                break
+                
+        # Check that day to day variation in visibilities is small
+        assert np.allclose(np.std(data_arr, axis=0), 0)
+        
+    def test_tip_tilt_calibration(self):
+        tip_tilt = np.random.uniform(0, 0.01, size=(self.ndays, self.nf, len(self.idealized_antpos[0])))
+        degen_gains = {(k, "Jnn"): np.exp(1j * tip_tilt.dot(self.idealized_antpos[k])) for k in self.antpos}
+
+        # Copy the simulation data and apply the degenerate gains
+        data = deepcopy(self.sim_data)
+        apply_cal.calibrate_in_place(data, degen_gains, gain_convention='multiply')
+
+        # Pack dictionary data into arrays
+        data_arr = np.transpose([data[k] for k in data], (1, 0, 2))[..., None]
+        flag_arr = np.transpose([self.flags[k] for k in data], (1, 0, 2))[..., None]
+        nsamples_arr = np.transpose([self.nsamples[k] for k in data], (1, 0, 2))[..., None]
+
+        gains, solutions = lstcal.tip_tilt_calibration(
+            data_arr, flag_arr, nsamples_arr, self.baselines, self.idealized_antpos, self.freqs, ['nn']
         )
         lstcal.apply_lstcal_in_place(data_arr, gains, self.baselines, ['nn'])
 
         # Check that day to day variation in visibilities is small
         assert np.allclose(np.std(data_arr, axis=0), 0)
-        
 
         
 
