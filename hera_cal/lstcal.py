@@ -24,12 +24,6 @@ def build_data_dict(data, flags, antpairs, freqs, pols, cal_function, day_flags=
         Function to use to solve for the offsets between days in an LST-bin.
     day_flags : np.ndarray
         Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
-    pack_data : bool
-        If True, pack data into a single array for each baseline.
-    pack_flags : bool
-        If True, pack flags into a single array for each baseline.
-    pack_nsamples : bool
-        If True, pack nsamples into a single array for each baseline.
 
     Returns:
     --------
@@ -156,7 +150,7 @@ def _delay_align_bls(bls, freqs, data, flags=None, norm=True, wrap_pnt=(np.pi / 
     dly_offs = {k: (v[0], redcal._wrap_phs(v[1], wrap_pnt=wrap_pnt)) for k, v in dly_offs.items()}
     return dly_offs
 
-def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, sparse=True, day_flags=None, solve_for_phase_slope=False):
+def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, pols, sparse=True, day_flags=None, solve_for_phase_slope=False):
     """
     Solve for the delay slope of each day in an LST-bin.
 
@@ -183,12 +177,15 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, spar
         Shape (Ntimes, Nfreqs, Npols) of delay slopes in nanoseconds.
     """
     # Loop through all baselines
-    dlys, index_dict = build_data_dict(
+    delays, index_dict = build_data_dict(
         data, flags, antpairs, freqs, pols, _delay_align_bls, day_flags=day_flags,
     )
 
+    # Shape of the data
+    Ndays, Nbls, Nfreqs, Npols = data.shape
+
     # Check if antpos is a dictionary or a list of dictionaries
-    use_same_pos = True # if isinstance(antpos, dict) else False
+    use_same_antpos = True # if isinstance(antpos, dict) else False
 
     # Solutions
     solutions = {}
@@ -202,36 +199,36 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, spar
         wgts = {}
 
         # Get the baselines for this polarization
-        baselines = [bl for bl in dlys if pol == bl[-1]]
+        baselines = [bl for bl in delays if pol == bl[-1]]
 
         for bl in baselines:
             bi, pi = index_dict[bl]
 
             # Loop through all of the tip-tilt solutions
-            if use_same_pos:
-                blvec = antpos[pairs[1]] - antpos[pairs[0]]
-            const.update({f'b_{pairs[0]}_{pairs[1]}_{i}': blvec[i] for i in range(blvec.shape[0])})
+            if use_same_antpos:
+                blvec = antpos[bl[1]] - antpos[bl[0]]
+            const.update({f'b_{bl[0]}_{bl[1]}_{i}': blvec[i] for i in range(blvec.shape[0])})
 
             # Loop through all of the tip-tilt offsets
-            for (day1, day2) in dlys[bl]:                            
+            for (day1, day2) in delays[bl]:                            
                 # Form the data key
-                data_key_1 = " + ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * T{i}_{k[1][0]}' for i in range(blvec.shape)])
-                data_key_2 = " - ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * T{i}_{k[0][0]}' for i in range(blvec.shape)])
+                data_key_1 = " + ".join([f'b_{bl[0]}_{bl[1]}_{i} * T{i}_{day2[0]}' for i in range(blvec.shape[0])])
+                data_key_2 = " - ".join([f'b_{bl[0]}_{bl[1]}_{i} * T{i}_{day1[0]}' for i in range(blvec.shape[0])])
                 data_key = data_key_1 + " - " + data_key_2    
 
                 # Load data from the blgrp into the linear system
-                ls_data[data_key] = blgrp[k][0][0]
+                ls_data[data_key] = delays[bl][(day1, day2)][0][0]
 
                 # Weight the data by the fraction of unflagged data
-                wgt = np.logical_or(flag_dict[blgrp[k][0][0]], flag_dict[blgrp[k][0][0]])
-                wgts[data_key] = np.nanmean(wgt)
+                #wgt = np.logical_or(flag_dict[blgrp[k][0][0]], flag_dict[blgrp[k][0][0]])
+                #wgts[data_key] = np.nanmean(wgt)
                                 
                 if solve_for_phase_slope:
-                    phase_key_1 = " + ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * P{i}_{k[1][0]}' for i in range(blvec.shape)])
-                    phase_key_2 = " - ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * P{i}_{k[0][0]}' for i in range(blvec.shape)])
+                    phase_key_1 = " + ".join([f'b_{bl[0]}_{bl[1]}_{i} * P{i}_{day2[0]}' for i in range(blvec.shape[0])])
+                    phase_key_2 = " - ".join([f'b_{bl[0]}_{bl[1]}_{i} * P{i}_{day1[0]}' for i in range(blvec.shape[0])])
                     phase_key = phase_key_1 + " - " + phase_key_2    
-                    ls_data[phase_key] = blgrp[k][1][0]
-                    wgts[phase_key] = np.nanmean(wgt)
+                    ls_data[phase_key] = delays[bl][(day1, day2)][1][0]
+                    #wgts[phase_key] = np.nanmean(wgt)
                                     
         # Solve for the delay slope
         ls = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
@@ -239,25 +236,34 @@ def delay_slope_calibration(data, flags, nsamples, freqs, antpairs, antpos, spar
         
         # If the phase slope was not solved for, set it to zero
         if not solve_for_phase_slope:
-            _sol = {}
-            for k in sol:
-                _sol[k.replace('T', 'P')] = 0
-            sol.update(_sol)
+            sol.update({k.replace('T', 'P'): np.array([0]) for k in sol})
 
         # Pack the solution into a dictionary
         solutions[pol] = sol
-         
-        # Evaluate gains
-        for k in antpos:
-            gains[k + ("J" + pol)] = np.exp(
-                1j * np.sum([
-                    antpos[k] * (sol[f"P{n}_{k}"] + sol[f"T{n}_{k}"] * freqs) for n in antpos[k]
-                ], axis=0)
-            )
+        _gains = {}
+        for ant in antpos:
+            phase = []
+            offset = []
+            for ti in range(Ndays):
+                delay = np.sum([
+                            antpos[ant][n] * sol[f"T{n}_{ti}"]
+                            for n in range(antpos[ant].shape[0])
+                        ], axis=0
+                )
+                _offset = np.sum([
+                            antpos[ant][n] * sol[f"P{n}_{ti}"]
+                            for n in range(antpos[ant].shape[0])
+                        ], axis=0
+                )
+                phase.append(delay * freqs)
+                offset.append(_offset)
+    
+            _gains[(ant, "J" + 'nn')] = np.exp(2j * np.pi * np.array(phase) + 1j * np.array(offset))
+        gains.update(_gains)
 
-    return gains
+    return gains, solutions
 
-def _tip_tilt_align(bls, data, flags, norm=True):
+def _tip_tilt_align(bls, freqs, data, flags, norm=True):
     '''
     Given a redundant group of bls, find per-frequency tip-tilt parameters that
     bring them into phase alignment using hierarchical pairing.
@@ -293,7 +299,7 @@ def _tip_tilt_align(bls, data, flags, norm=True):
         
         # Now that we know the slope, estimate the remaining phase offset
         angle[gp2] = np.angle(d12)
-        rephased = _data[gp2] * np.exp(1j * TT_gps[gp2])
+        rephased = _data[gp2] * np.exp(1j * angle[gp2])
         new_val = (
             _flags[gp1] * _data[gp2] + _flags[gp2] * _data[gp1] + (1 - _flags[gp1] - _flags[gp2]) * (_data[gp1] + rephased) / 2
         )
@@ -314,19 +320,19 @@ def _tip_tilt_align(bls, data, flags, norm=True):
         grps = new_grps
         
     bl0 = bls[0]  # everything is effectively phase referenced off first bl
-    angle = {}
+    angles = {}
     for gp, TT in angle.items():
         for bl in gp:
-            if (bl0, bl) in angle:
-                TT0 = angle.get((bl0, bl))
+            if (bl0, bl) in angles:
+                TT0 = angles.get((bl0, bl))
             else:
                 TT0 = np.zeros((Ntimes, Nfreqs))
-            angle[(bl0, bl)] = TT0 + TT
+            angles[(bl0, bl)] = TT0 + TT
 
-    angles = {k: v for k, v in angle.items()}
+    angles = {k: v for k, v in angles.items()}
     return angles
 
-def phase_slope_calibration(data, flags, nsamples, antpairs, antpos, freqs, day_flags=None, sparse=True):
+def phase_slope_calibration(data, flags, nsamples, antpairs, antpos, freqs, pols, day_flags=None, sparse=True):
     """
     Solve for the per-frequency phase slope of each day in an LST-bin.
 
@@ -381,33 +387,41 @@ def phase_slope_calibration(data, flags, nsamples, antpairs, antpos, freqs, day_
 
             # Loop through all of the tip-tilt solutions
             if use_same_pos:
-                blvec = antpos[pairs[1]] - antpos[pairs[0]]
-            const.update({f'b_{pairs[0]}_{pairs[1]}_{i}': blvec[i] for i in range(blvec.shape[0])})
+                blvec = antpos[bl[1]] - antpos[bl[0]]
+            const.update({f'b_{bl[0]}_{bl[1]}_{i}': blvec[i] for i in range(blvec.shape[0])})
 
             # Loop through all of the tip-tilt offsets
             for (day1, day2) in tip_tilts[bl]:
-                data_key_1 = " + ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * TT{i}_{k[1][0]}' for i in range(blvec.shape[0])])
-                data_key_2 = " - ".join([f'b_{pairs[0]}_{pairs[1]}_{i} * TT{i}_{k[0][0]}' for i in range(blvec.shape[0])])
-                ls_data[data_key_1 + " - " + data_key_2] = blgrp[k][0]
-                wgt = np.logical_not(flag_dict[(pairs, k[0][0], pol)]).astype(float) * np.logical_not(flag_dict[(pairs, k[1][0], pol)]).astype(float)
-                wgt *= np.sqrt(nsamples_dict[(pairs, k[0][0], pol)] * nsamples_dict[(pairs, k[1][0], pol)])
-                wgts[data_key_1 + " - " + data_key_2] = wgt
+                data_key_1 = " + ".join([f'b_{bl[0]}_{bl[1]}_{ni} * TT{ni}_{day2[0]}' for ni in range(blvec.shape[0])])
+                data_key_2 = " - ".join([f'b_{bl[0]}_{bl[1]}_{ni} * TT{ni}_{day1[0]}' for ni in range(blvec.shape[0])])
+                ls_data[data_key_1 + " - " + data_key_2] = tip_tilts[bl][(day1, day2)][0]
+                #wgt = np.logical_not(flag_dict[(pairs, k[0][0], pol)]).astype(float) * np.logical_not(flag_dict[(pairs, k[1][0], pol)]).astype(float)
+                #wgt *= np.sqrt(nsamples_dict[(pairs, k[0][0], pol)] * nsamples_dict[(pairs, k[1][0], pol)])
+                #wgts[data_key_1 + " - " + data_key_2] = wgt
         
+        # Solve system of equations
         ls = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
         sol = ls.solve()  
 
         # Pack the solution into a dictionary
         solutions[pol] = sol
 
-        # Evaluate gains
-        for k in antpos:
-            gains[k + ("J" + pol)] = np.exp(
-                1j * np.sum([
-                    antpos[k] * sol[f"TT{n}_{k}"] * freqs for n in antpos[k]
-                ], axis=0)
-            )
+        _gains = {}
+        for ant in antpos:
+            phase = []
+            for ti in range(Ndays):
+                _phase = np.sum([
+                            antpos[ant][n] * sol[f"TT{n}_{ti}"]
+                            for n in range(antpos[ant].shape[0])
+                        ], axis=0
+                )
+                phase.append(_phase)
 
-    return gains
+            _gains[(ant, "J" + 'nn')] = np.exp(1j * np.array(phase))
+            
+        gains.update(_gains)
+
+    return gains, solutions
 
 def _amplitude_align(bls, freqs, data, flags):
     """
@@ -623,6 +637,7 @@ def calibrate_data(data, flags, nsamples, freqs, antpairs, pols, phs_max_iter=10
     """
     if day_flags is None:
         day_flags = np.zeros(data.shape[0], dtype=bool)
+
     # Perform per-frequency logarithmic absolute amplitude calibration
     gains = amplitude_calibration(data, flags, nsamples, freqs, antpairs, pols, sparse=sparse)
 
@@ -902,5 +917,13 @@ def flag_lst_data_products(data, flags, nsamples):
 
 def save_meta_data(filepath, metadata):
     """
+    Save the metadata to a file.
+
+    Parameters:
+    -----------
+    filepath : str
+        Path to the output file.
+    metadata : dict
+        Dictionary of metadata.
     """
     pass
