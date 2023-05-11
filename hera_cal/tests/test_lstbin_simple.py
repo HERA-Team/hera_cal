@@ -51,7 +51,7 @@ class Test_LSTAlign:
         data = np.concatenate([uvd.data_array.reshape((ntimes, -1, nfreqs, npols)) for uvd in uvds], axis=0)
         freq_array = uvds[0].freq_array
         data_lsts = np.concatenate([np.unique(uvds[0].lst_array),]*len(uvds))
-        baselines = uvds[0].get_antpairs()
+        antpairs = uvds[0].get_antpairs()
         antpos = uvds[0].antenna_positions
 
         # Ensure that each LST is in its own bin
@@ -66,7 +66,7 @@ class Test_LSTAlign:
         return dict(
             data = data,
             data_lsts = data_lsts,
-            baselines=baselines,
+            antpairs=antpairs,
             lst_bin_edges=lst_bin_edges,
             freq_array=freq_array,
             antpos=antpos,

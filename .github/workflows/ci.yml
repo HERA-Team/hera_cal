@@ -34,7 +34,6 @@ jobs:
       - name: Install
         run: |
           pip install .[dev]
-          pip install git+https://github.com/hera-team/hera_filters  # temporary until hera-filters is released
 
       - name: Run Tests
         run: |

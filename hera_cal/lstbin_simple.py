@@ -1,8 +1,16 @@
 """
 An attempt at a simpler LST binner that makes more assumptions but runs faster.
 
-In particular, we assume that all baselines have the same time array and frequency array,
-and that each is present throughout the data array. This allows a vectorization.
+In particular, we assume that all baselines with a particular observation have the same 
+time and frequency arrays, and use this to vectorize many of the calculations.
+
+The main entry-point is the :func:`lst_bin_files` function, which takes a specific
+configuration file, produced by :func:`make_lst_bin_config_file`, that specifies which
+data files to bin into which LST bins, and outputs files containing the binned data.
+This is similar to the older :func:`~lstbin.lst_bin_files` function (though
+the interface is slightly different, as the new function assumes a pre-configured 
+configuration file).
+
 """
 from __future__ import annotations
 
@@ -25,6 +33,7 @@ from .red_groups import RedundantGroups
 import h5py
 from functools import partial
 import yaml
+from .types import Antpair, Pol, Baseline
 
 try:
     profile
@@ -38,13 +47,13 @@ logger = logging.getLogger(__name__)
 def lst_align(
     data: np.ndarray,
     data_lsts: np.ndarray,
-    baselines: list[tuple[int, int]],
+    antpairs: list[Antpair],
     lst_bin_edges: np.ndarray,
     freq_array: np.ndarray,
     flags: np.ndarray | None = None,
     nsamples: np.ndarray | None = None,
     rephase: bool = True,
-    antpos: np.ndarray | None = None,
+    antpos: dict[int, np.ndarray] | None = None,
     lat: float = -30.72152,
 ) -> tuple[np.ndarray, list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
     """
@@ -52,38 +61,56 @@ def lst_align(
 
     This function simply splits a data array with multiple time stamps into a list of
     arrays, each containing a single LST bin. Each of the data arrays in each bin
-    are also rephased onto a common LST grid.
+    may also be rephased onto a common LST grid, taken to be the center of each bin.
+
+    The data is binned via a simple histogram, i.e. the data represented at each LST
+    is essentially assumed to be a delta function in LST, and is fully assigned to one
+    particular LST bin. Due to this, it is irrelevant whether the ``data_lsts`` 
+    represent the start, end, or centre of each integration -- either choice will 
+    incur similar errors.
 
     Parameters
     ----------
     data
-        The visibility data. Must be shape (ntimes, nbls, nfreqs, npols)
+        The complex visibility data. Must be shape ``(ntimes, nbls, nfreqs, npols)``,
+        where the times may be sourced from multiple days.
     data_lsts
         The LSTs corresponding to each of the time stamps in the data. Must have
-        length ``data.shape[0]``
-    baselines
-        The list 2-tuples of baselines in the data array.
+        length ``data.shape[0]``. As noted above, these may be the start, end, or
+        centre of each integration, as long as it is consistent for all the data.
+    antpairs
+        The list of antenna pairs in the data, in the order they appear in ``data``. 
+        Each element is a tuple of two antenna numbers, e.g. ``(0, 1)``.
     lst_bin_edges
-        A sequence of floats specifying the *edges* of the LST bins to use.
+        A sequence of floats specifying the *edges* of the LST bins to use, with length
+        ``N_lstbins + 1``. Bins are thus assumed to be contiguous, but not necessarily
+        of equal size. 
     freq_array
-        An array of frequencies in the data, in Hz.
+        An array of frequencies in the data, in Hz. Size must be ``data.shape[2]``.
     flags
-        An array of boolean flags, indicating bins NOT to use. Same shape as data.
+        An array of boolean flags, indicating data NOT to use. Same shape as ``data``.
     nsamples
-        An array of sample counts, same shape as data.
+        An float array of sample counts, same shape as ``data``.
     rephase
         Whether to apply re-phasing to the data, to bring it to a common LST grid.
+        The LSTs to which the data are rephased are the centres of the LST bins (i.e.
+        the mid-point of each pair of ``lst_bin_edges``).
     antpos
-        3D Antenna positions for each antenna in the data.
+        3D Antenna positions for each antenna in the data. Only required if rephasing.
+        Keys are antenna numbers, values are 3-element arrays of ENU coordinates. 
+        Units are metres.
     lat
-        The latitude (in degrees) of the telescope.
+        The latitude (in degrees) of the telescope. Only required if rephasing.
 
     Returns
     -------
+    lst_bin_centers
+        The centres of the LST bins, in radians. Shape is ``(N_lstbins,)``, which is
+        one less than the length of ``lst_bin_edges``.
     data
-        A nlst-length list of arrays, each of shape 
-        ``(ntimes_in_lst, nbls, nfreq, npol)``, where LST bins without data simply have
-        a first-axis of size zero.
+        A list of length ``N_lstbins`` of arrays, each of shape 
+        ``(nintegrations_in_lst, nbls, nfreq, npol)``, where LST bins without data 
+        simply have a first-axis of size zero.
     flags
         Same as ``data``, but boolean flags.
     nsamples
@@ -96,7 +123,7 @@ def lst_align(
         mean, std) from them.
     """
     npols = data.shape[-1]
-    required_shape = (len(data_lsts), len(baselines), len(freq_array), npols)
+    required_shape = (len(data_lsts), len(antpairs), len(freq_array), npols)
     
     if npols > 4:
         raise ValueError(f"data has more than 4 pols! Got {npols} (last axis of data)")
@@ -137,22 +164,27 @@ def lst_align(
     grid_indices, data_lsts, lst_mask = get_lst_bins(data_lsts, lst_bin_edges)
     lst_bin_centres = (lst_bin_edges[1:] + lst_bin_edges[:-1])/2
 
-    # TODO: check whether this creates a data copy. Don't want the extra RAM...
-    data = data[lst_mask]  # actually good if this is copied, because we do LST rephase in-place
-    flags = flags[lst_mask]
-    nsamples = nsamples[lst_mask]
-    data_lsts = data_lsts[lst_mask]
-    grid_indices = grid_indices[lst_mask]
-
     logger.info(f"Data Shape: {data.shape}")
 
     # Now, rephase the data to the lst bin centres.
     if rephase:
         logger.info("Rephasing data")
+
+        # lst_mask is a boolean mask that masks out LSTs that are not in any bin
+        # we don't want to spend time rephasing data outside our LST range completely,
+        # so we just mask them out here. Indexing by a boolean mask makes a *copy*
+        # of the data, so we can rephase in-place without worrying about overwriting
+        # the original input data. 
+        data = data[lst_mask]
+        flags = flags[lst_mask]
+        nsamples = nsamples[lst_mask]
+        data_lsts = data_lsts[lst_mask]
+        grid_indices = grid_indices[lst_mask]
+
         if freq_array is None or antpos is None:
             raise ValueError("freq_array and antpos is needed for rephase")
 
-        bls = np.array([antpos[k[0]] - antpos[k[1]] for k in baselines])
+        bls = np.array([antpos[k[0]] - antpos[k[1]] for k in antpairs])
 
         # get appropriate lst_shift for each integration, then rephase
         lst_shift = lst_bin_centres[grid_indices] - data_lsts
@@ -160,9 +192,22 @@ def lst_align(
         # this makes a copy of the data in d
         utils.lst_rephase_vectorized(data, bls, freq_array, lst_shift, lat=lat, inplace=True)
 
+    # In case we don't rephase, the data/flags/nsamples arrays are still the original
+    # input arrays. We don't mask out the data outside the LST range, because we're
+    # just going to omit it from our bins naturally anyway. We also don't care if its
+    # not a copy here, because we're not going to modify it, and this saves memory.
+
+    # We anyway end up with a ~full copy of the data in the output arrays, because
+    # we do a fancy-index of the input arrays to get the relevant data for each bin.
+
+    # TODO: we should think a little more carefully about how we might reduce the 
+    #       number of copies made in this function. When rephasing, we essentially
+    #       get three full copies while inside the function (though one is only local
+    #       in scope, and is therefore removed when the function returns).
+
     # shortcut -- just return all the data, re-organized.
     _data, _flags, _nsamples = [], [], []
-    empty_shape = (0, len(baselines), len(freq_array), npols)
+    empty_shape = (0, len(antpairs), len(freq_array), npols)
     for lstbin in range(len(lst_bin_centres)):
         mask = grid_indices == lstbin
         if np.any(mask):
@@ -207,39 +252,41 @@ def get_lst_bins(lsts: np.ndarray, edges: np.ndarray) -> tuple[np.ndarray, np.nd
 
 def reduce_lst_bins(
     data: list[np.ndarray], flags: list[np.ndarray], nsamples: list[np.ndarray],
-    out_data: np.ndarray | None = None, 
-    out_flags: np.ndarray | None = None,
-    out_std: np.ndarray | None = None,
-    out_nsamples: np.ndarray | None = None,
     mutable: bool = False,
     sigma_clip_thresh: float = 0.0,
     sigma_clip_min_N: int = 4,
+    flag_below_min_N: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     From a list of LST-binned data, produce reduced statistics.
 
-    Use this function to reduce lists of arrays with multiple time integrations per bin
-    (i.e. the output of :func:`simple_lst_bin`) to arrays of shape 
-    ``(nbl, nlst_bins, nfreq, npol)``. For example, compute the mean/std.
+    Use this function to reduce a list of `nlst_bins` arrays, each with multiple time 
+    integrations in them (i.e. the output of :func:`lst_align`) to arrays of shape 
+    ``(nbl, nlst_bins, nfreq, npol)``, each representing different statistics of the
+    data in each LST bin (eg. mean, std, etc.).
 
     Parameters
     ----------
     data
         The data to perform the reduction over. The length of the list is the number
         of LST bins. Each array in the list should have shape 
-        ``(nbl, ntimes_per_lst, nfreq, npol)``.
+        ``(nbl, nintegrations_in_lst, nfreq, npol)``.
     flags
         A list, the same length/shape as ``data``, containing the flags.
     nsamples
         A list, the same length/shape as ``data``, containing the number of samples
         for each measurement.
-    out_data, out_flags, out_std, out_nsamples
-        Optional Arrays into which the output can be placed. Useful to provide if 
-        iterating over a set of input files, for example. 
-        Shape ``(nbl, nlst_bins, nfreq, npol)``.
     mutable
         Whether the input data (and flags and nsamples) can be modified in place within
         the algorithm. Setting to true saves memory, and is safe for a one-shot script.
+    sigma_clip_thresh
+        The number of standard deviations to use as a threshold for sigma clipping.
+        If 0, no sigma clipping is performed. Note that sigma-clipping is performed
+        per baseline, frequency, and polarization.
+    sigma_clip_min_N
+        The minimum number of unflagged samples required to perform sigma clipping.
+    flag_below_min_N
+        Whether to flag data that has fewer than ``sigma_clip_min_N`` unflagged samples.
 
     Returns
     -------
@@ -255,17 +302,11 @@ def reduce_lst_bins(
 
     # Do this just so that we can save memory if the call to this function already
     # has allocated memory.
-    if out_data is None:
-        out_data = np.zeros((nbl, nlst_bins, nfreq, npol), dtype=complex)
-    if out_flags is None:
-        out_flags = np.zeros(out_data.shape, dtype=bool)
-    if out_std is None:
-        out_std = np.ones(out_data.shape, dtype=complex)
-    if out_nsamples is None:
-        out_nsamples = np.zeros(out_data.shape, dtype=float)
 
-    assert out_data.shape == out_flags.shape == out_std.shape == out_nsamples.shape
-    assert out_data.shape == (nbl, nlst_bins, nfreq, npol)
+    out_data = np.zeros((nbl, nlst_bins, nfreq, npol), dtype=complex)
+    out_flags = np.zeros(out_data.shape, dtype=bool)
+    out_std = np.ones(out_data.shape, dtype=complex)
+    out_nsamples = np.zeros(out_data.shape, dtype=float)
 
     for lstbin, (d,n,f) in enumerate(zip(data, nsamples, flags)):
         logger.info(f"Computing LST bin {lstbin+1} / {nlst_bins}")
@@ -281,7 +322,8 @@ def reduce_lst_bins(
             ) = lst_average(
                 d, n, f, mutable=mutable, 
                 sigma_clip_thresh=sigma_clip_thresh, 
-                sigma_clip_min_N=sigma_clip_min_N
+                sigma_clip_min_N=sigma_clip_min_N,
+                flag_below_min_N=flag_below_min_N,
             )
         else:
             out_data[:, lstbin] = 1.0
@@ -301,15 +343,16 @@ def _allocate_dnf(shape: tuple[int], d=0.0, f=0, n=0):
 @profile
 def lst_average(
     data: np.ndarray, nsamples: np.ndarray, flags: np.ndarray, 
-    flag_thresh: float = 0.7, median: bool = False,
+    flag_thresh: float = 0.7,
     mutable: bool = False,
     sigma_clip_thresh: float = 0.0,
     sigma_clip_min_N: int=4,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    flag_below_min_N: bool = False,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Compute statistics of a set of data over its first axis.
+    Compute statistics of a set of data over its zeroth axis.
 
-    The idea here is that the data's first axis is "nights", and that each night is
+    The idea here is that the data's zeroth axis is "nights", and that each night is
     at the same LST. However, this function is agnostic to the meaning of the first
     axis. It just computes the mean, std, and nsamples over the first axis.
 
@@ -319,28 +362,30 @@ def lst_average(
     Parameters
     ----------
     data
-        The data to compute the statistics over. Shape ``(ntimes, nbl, nfreq, npol)``.
+        The data to compute the statistics over. Shape ``(nnights, nbl, nfreq, npol)``.
     nsamples
-        The number of samples for each measurement. Shape ``(ntimes, nbl, nfreq, npol)``.
+        The number of samples for each measurement. Same shape as ``data``.
     flags
-        The flags for each measurement. Shape ``(ntimes, nbl, nfreq, npol)``.
+        The flags for each measurement. Same shape as ``data``.
     flag_thresh
         The fraction of times a baseline/frequency/pol must be flagged in order to
-        flag the baseline/frequency/pol for all nights.
+        entirely flag the baseline/frequency/pol.
     sigma_clip_thresh
         The number of standard deviations to use as a threshold for sigma clipping.
         If 0, no sigma clipping is performed. Note that sigma-clipping is performed
         per baseline, frequency, and polarization.
     sigma_clip_min_N
         The minimum number of unflagged samples required to perform sigma clipping.
+    flag_below_min_N
+        Whether to flag data that has fewer than ``sigma_clip_min_N`` unflagged samples.
 
     Returns
     -------
     out_data, out_flags, out_std, out_nsamples
-        The reduced data, flags, standard deviation (across days) and nsamples.
+        The reduced data, flags, standard deviation (across nights) and nsamples.
         Shape ``(nbl, nfreq, npol)``.
     """
-    # data has shape (ntimes, nbl, npols, nfreqs)
+    # data has shape (nnights, nbl, npols, nfreqs)
     # all data is assumed to be in the same LST bin.
 
     assert data.shape == nsamples.shape == flags.shape
@@ -378,11 +423,15 @@ def lst_average(
     
     logger.info("Calculating mean")
     data = np.nansum(data * nsamples, axis=0)
-    data[norm>0] /= norm[norm>0]
-    data[norm<=0] = 1  # any value, it's flagged anyway
-        
+
     f_min = np.all(flags, axis=0)
-    std[f_min] = 1.0
+    if flag_below_min_N:
+        f_min[norm <= sigma_clip_min_N] = True
+
+    data[~f_min] /= norm[~f_min]
+    data[f_min] = 0.0  # any value, it's flagged anyway
+            
+    std[f_min] = np.inf
     norm[f_min] = 0  # This is probably redundant.
 
     return data, f_min, std, norm
@@ -421,11 +470,15 @@ def lst_bin_files_for_baselines(
     This function takes a set of input data files, and reads any data in them that 
     falls within the LST bins specified by ``lst_bin_edges`` (optionally calibrating
     the data as it is read). The data is sorted into the LST-bins provided and returned
-    as a list of arrays, one for each LST bin. The data is not averaged over LST bins.
+    as a list of arrays, one for each LST bin. The data is not averaged within LST bins.
 
     Only the list of baselines given will be read from each file, which makes it
     possible to iterate over baseline chunks and call this function on each chunk,
     to reduce maximum memory usage.
+
+    The data is binned via a simple histogram, i.e. the data represented at each LST
+    is essentially assumed to be a delta function in LST, and is fully assigned to one
+    particular LST bin. See :func:`lst_align` for details.
     
     Parameters
     ----------
@@ -433,7 +486,9 @@ def lst_bin_files_for_baselines(
         A list of paths to data files to read. Instead of paths, you can also pass
         FastUVH5Meta objects, which will be used to read the data.
     lst_bin_edges
-        A list of LST bin edges, in radians.
+        A sequence of floats specifying the *edges* of the LST bins to use, with length
+        ``N_lstbins + 1``. Bins are thus assumed to be contiguous, but not necessarily
+        of equal size. 
     antpairs
         A list of antenna pairs to read from each file. Each pair should be a tuple
         of antenna numbers. Note that having pairs in this list that are not present
@@ -500,14 +555,15 @@ def lst_bin_files_for_baselines(
         freq_chans = None
     else:
         freq_chans = np.arange(len(freqs))
-        if freq_min is not None:
-            mask = freqs >= freq_min
-            freqs = freqs[mask]
-            freq_chans = freq_chans[mask]
-        if freq_max is not None:
-            mask = freqs <= freq_max
-            freqs = freqs[mask]
-            freq_chans = freq_chans[mask]
+    
+    if freq_min is not None:
+        mask = freqs >= freq_min
+        freqs = freqs[mask]
+        freq_chans = freq_chans[mask]
+    if freq_max is not None:
+        mask = freqs <= freq_max
+        freqs = freqs[mask]
+        freq_chans = freq_chans[mask]
 
     if pols is None:
         pols = metas[0].pols
@@ -628,7 +684,7 @@ def lst_bin_files_for_baselines(
         flags=None if ignore_flags else flags,
         nsamples=nsamples,
         data_lsts=lsts,
-        baselines=antpairs,
+        antpairs=antpairs,
         lst_bin_edges=lst_bin_edges,
         freq_array = freqs,
         rephase = rephase,
@@ -682,7 +738,7 @@ def filter_required_files_by_times(
         lstmax += 2 * np.pi
 
     if not cal_files:
-        cal_files = [[None for d in dm] for dm in data_metas]
+        cal_files = [[None for _ in dm] for dm in data_metas]
 
     tinds = []
     all_lsts = []
@@ -807,6 +863,7 @@ def lst_bin_files_single_outfile(
     golden_lsts: tuple[float] = (),
     sigma_clip_thresh: float = 0.0,
     sigma_clip_min_N: int = 4,
+    flag_below_min_N: bool = False,
     freq_min: float | None = None,
     freq_max: float | None = None,
 ) -> dict[str, Path]:
@@ -988,26 +1045,6 @@ def lst_bin_files_single_outfile(
         )
 
         slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))
-        out_data, out_flags, out_std, out_nsamples = reduce_lst_bins(
-            data, flags, nsamples,
-            sigma_clip_thresh = sigma_clip_thresh,
-            sigma_clip_min_N = sigma_clip_min_N,
-        )
-
-        write_baseline_slc_to_file(
-            fl=out_files['LST'],
-            slc=slc,
-            data=out_data,
-            flags=out_flags,
-            nsamples=out_nsamples,
-        )
-        write_baseline_slc_to_file(
-            fl=out_files['STD'],
-            slc=slc,
-            data=out_std,
-            flags=out_flags,
-            nsamples=out_nsamples,
-        )
 
         if bi == 0:
             # On the first baseline chunk, create the output file
@@ -1047,6 +1084,28 @@ def lst_bin_files_single_outfile(
                 flags=flags[0][:, :, save_channels].transpose((1, 0, 2, 3)),
                 nsamples=nsamples[0][:, :, save_channels].transpose((1, 0, 2, 3)),
             )
+
+        data, flags, std, nsamples = reduce_lst_bins(
+            data, flags, nsamples,
+            sigma_clip_thresh = sigma_clip_thresh,
+            sigma_clip_min_N = sigma_clip_min_N,
+            flag_below_min_N=flag_below_min_N,
+        )
+
+        write_baseline_slc_to_file(
+            fl=out_files['LST'],
+            slc=slc,
+            data=data,
+            flags=flags,
+            nsamples=nsamples,
+        )
+        write_baseline_slc_to_file(
+            fl=out_files['STD'],
+            slc=slc,
+            data=std,
+            flags=flags,
+            nsamples=nsamples,
+        )
 
         nbls_so_far += len(bl_chunk)
 
@@ -1665,6 +1724,7 @@ def lst_bin_arg_parser():
     a.add_argument("--save-channels", type=str, help="integer channels separated by commas to save longitudinal data for")
     a.add_argument("--sigma-clip-thresh", type=float, help="sigma clip threshold for flagging data in an LST bin over time. Zero means no clipping.", default=0.0)
     a.add_argument("--sigma-clip-min-N", type=int, help="number of unflagged data points over time to require before considering sigma clipping", default=4)
+    a.add_argument("--flag-below-min-N", action='store_true', help="if true, flag all data in an LST bin if there are fewer than --sigma-clip-min-N unflagged data points over time")
     a.add_argument("--redundantly-averaged", action='store_true', default=None, help="if true, assume input files are redundantly averaged")
     a.add_argument("--only-last-file-per-night", action='store_true', default=False, help="if true, only use the first and last file every night to obtain antpairs")
     a.add_argument("--freq-min", type=float, default=None, help="minimum frequency to include in lstbinning")
