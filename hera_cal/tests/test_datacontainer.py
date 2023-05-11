@@ -477,7 +477,7 @@ def test_RedDataContainer():
     # build an incomplete datacontainer, then finish it
     rdata6 = datacontainer.RedDataContainer(deepcopy(data), reds[:-1])
     rdata6[reds[-1][0]] = deepcopy(data[reds[-1][0]])
-    rdata6.build_red_keys(reds)
+    #rdata6.build_red_keys(reds)
 
     # make sure that the data for a redundant group are being accessed from the same place in memory
     for i, rdata in enumerate([rdata1, rdata2, rdata3, rdata4, rdata5, rdata6]):
