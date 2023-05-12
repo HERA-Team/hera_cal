@@ -1478,7 +1478,8 @@ def create_lstbin_output_file(
     print("len(antpairs)", len(antpairs))
     print("len(pols)", len(pols))
     print("len(freqs)", len(freqs))
-    print("len(lsts)", len(lsts))
+    if lsts is not None:
+        print("len(lsts)", len(lsts))
     return fname
 
 def write_baseline_slc_to_file(
