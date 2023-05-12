@@ -1061,7 +1061,7 @@ def lst_bin_files_single_outfile(
                     )
                 )
 
-            if save_channels:
+            if save_channels and len(binned_times[0]) > 0:
                 out_files['REDUCEDCHAN'] = create_outfile(
                     kind = 'REDUCEDCHAN',
                     lst=lst_bin_edges[0],
