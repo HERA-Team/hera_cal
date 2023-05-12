@@ -698,6 +698,9 @@ def lst_bin_files_for_baselines(
         mask = bins == i
         times_in_bins.append(times[mask])
 
+    print("ntimes in bins: ", [len(t) for t in times_in_bins])
+    print("Data shapes: ", [d.shape for d in data])
+    
     return bin_lst, data, flags, nsamples, times_in_bins
 
 def apply_calfile_rules(
