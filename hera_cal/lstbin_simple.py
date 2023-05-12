@@ -700,7 +700,7 @@ def lst_bin_files_for_baselines(
 
     print("ntimes in bins: ", [len(t) for t in times_in_bins])
     print("Data shapes: ", [d.shape for d in data])
-    
+
     return bin_lst, data, flags, nsamples, times_in_bins
 
 def apply_calfile_rules(
@@ -1057,7 +1057,7 @@ def lst_bin_files_single_outfile(
                     create_outfile(
                         kind = 'GOLDEN',
                         lst=lst_bin_edges[nbin],
-                        times=binned_times[ibin],
+                        times=binned_times[nbin],
                     )
                 )
 
@@ -1070,13 +1070,13 @@ def lst_bin_files_single_outfile(
                 )
 
         if len(golden_bins)>0:
-            for nbin, b in enumerate(golden_bins):
+            for fl, nbin in zip(out_files['GOLDEN'], golden_bins):
                 write_baseline_slc_to_file(
-                    fl = out_files['GOLDEN'][nbin],
+                    fl = fl,
                     slc=slc,
-                    data=data[b].transpose((1, 0, 2, 3)),
-                    flags=flags[b].transpose((1, 0, 2, 3)),
-                    nsamples=nsamples[b].transpose((1, 0, 2, 3)),
+                    data=data[nbin].transpose((1, 0, 2, 3)),
+                    flags=flags[nbin].transpose((1, 0, 2, 3)),
+                    nsamples=nsamples[nbin].transpose((1, 0, 2, 3)),
                 )
 
         if len(save_channels):
