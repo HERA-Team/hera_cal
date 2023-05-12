@@ -1467,6 +1467,19 @@ def create_lstbin_output_file(
     # operation does the down-select, it doesn't re-order the pols.
     uvd_template.polarization_array = np.array(uvutils.polstr2num(pols, x_orientation=uvd_template.x_orientation))
     uvd_template.initialize_uvh5_file(str(fname.absolute()), clobber=overwrite)
+    
+    print("IN CREATE LSTBIN OUTPUT FILE")
+    print('Ntimes: ', uvd_template.Ntimes)
+    print('Nbls: ',uvd_template.Nbls)
+    print('Nfreqs: ',uvd_template.Nfreqs)
+    print('Npols: ',uvd_template.Npols)
+    print('Nspws: ',uvd_template.Nspws)
+    print('Nblts', uvd_template.Nblts)
+    print("len(antpairs)", len(antpairs))
+    print("len(pols)", len(pols))
+    print("len(freqs)", len(freqs))
+    print("len(times)", len(times))
+    print("len(lsts)", len(lsts))
     return fname
 
 def write_baseline_slc_to_file(
@@ -1478,6 +1491,10 @@ def write_baseline_slc_to_file(
 ):
     """Write a baseline slice to a file."""
     
+    print("IN WRITE_BLSLC: ")
+    print('data shape: ', data.shape)
+    print("data reshape: ", data.reshape((-1, data.shape[2], data.shape[3])).shape)
+    print('slice', slc)
     with h5py.File(fl, 'r+') as f:
         ntimes = int(f['Header']['Ntimes'][()])
         timefirst = bool(f['Header']['time_axis_faster_than_bls'][()])
