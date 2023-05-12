@@ -1478,7 +1478,6 @@ def create_lstbin_output_file(
     print("len(antpairs)", len(antpairs))
     print("len(pols)", len(pols))
     print("len(freqs)", len(freqs))
-    print("len(times)", len(times))
     print("len(lsts)", len(lsts))
     return fname
 
