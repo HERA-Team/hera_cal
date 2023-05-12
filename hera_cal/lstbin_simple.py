@@ -1079,7 +1079,7 @@ def lst_bin_files_single_outfile(
                     nsamples=nsamples[nbin].transpose((1, 0, 2, 3)),
                 )
 
-        if len(save_channels):
+        if "REDUCEDCHAN" in out_files:
             write_baseline_slc_to_file(
                 fl = out_files['REDUCEDCHAN'],
                 slc=slc,
