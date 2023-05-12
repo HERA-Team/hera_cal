@@ -1052,7 +1052,7 @@ def lst_bin_files_single_outfile(
         if bi == 0:
             # On the first baseline chunk, create the output file
             out_files['GOLDEN'] = []
-            for ibin, nbin in enumerate(golden_bins):
+            for nbin in golden_bins:
                 out_files["GOLDEN"].append(
                     create_outfile(
                         kind = 'GOLDEN',
