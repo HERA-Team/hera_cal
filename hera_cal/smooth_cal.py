@@ -322,7 +322,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
                         dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9,
-                        skip_flagged_edges=True, fix_phase_flips=True, **win_kwargs):
+                        skip_flagged_edges=True, fix_phase_flips=False, **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -370,7 +370,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             Default is True
         fix_phase_flips : bool, optional
             If True, will try to find integrations whose phases appear to be 180 degrees rotated from the first unflagged
-            integration. These will be flipped before smoothing and then flipped back after smoothing. Default is True.
+            integration. These will be flipped before smoothing and then flipped back after smoothing. Default is False.
         win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
             Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
 
@@ -962,7 +962,7 @@ class CalibrationSmoother():
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
                             window='tukey', maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9,
-                            skip_flagged_edges=True, fix_phase_flips=True, flag_phase_flip_ints=True, **win_kwargs):
+                            skip_flagged_edges=True, fix_phase_flips=False, flag_phase_flip_ints=False, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -991,9 +991,9 @@ class CalibrationSmoother():
                 Default is True, only used when method='DPSS'
             fix_phase_flips: Optional bool. If True, will try to find integrations whose phases appear to be 180 degrees
                 rotated from the first unflagged  integration. These will be flipped before smoothing and then flipped back
-                after smoothing. Will also print info about phase-flips found. Default is True.
+                after smoothing. Will also print info about phase-flips found. Default is False.
             flag_phase_flip_ints: Optional bool. If True and fix_phase_flips is also True, will flag antennas on the integrations
-                just before and just after a phase flip, since the phase flip could have occured mid-integration. Default is True.
+                just before and just after a phase flip, since the phase flip could have occured mid-integration. Default is False.
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
