@@ -38,6 +38,21 @@ class Test_Smooth_Cal_Helper_Functions(object):
         assert a.flag_file_list == ['c']
         assert a.lst_blacklists == [(3, 4), (10, 12), (23, .5)]
 
+    def test_detect_phase_flips(self):
+        # test normal operation
+        phase_flipped = smooth_cal.detect_phase_flips(np.array([1, 1, 1, 4, 4, 4]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
+        # test phase wrapping
+        phase_flipped = smooth_cal.detect_phase_flips(np.array([1, 1, 1, -2, -2, -2]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
+        phase_flipped = smooth_cal.detect_phase_flips(np.array([1, 1, 1, 10, 10, 10]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
+        # test nan handling
+        phase_flipped = smooth_cal.detect_phase_flips(np.array([1, 1, 1, 4, np.nan, 4]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, False, True]))
+        phase_flipped = smooth_cal.detect_phase_flips(np.array([np.nan, 1, 1, 4, np.nan, 4]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, False, True]))
+
     def test_dpss_filters(self):
         times = np.linspace(0, 10 * 10 / 60. / 60. / 24., 40, endpoint=False)
         freqs = np.linspace(100., 200., 50, endpoint=False) * 1e6
