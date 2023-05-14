@@ -567,6 +567,16 @@ class Test_Calibration_Smoother(object):
             cs2.time_freq_2D_filter(method='DPSS', skip_flagged_edges=True)
         del cs2
 
+    def test_2D_filtering_with_phase_flips(self):
+        calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))
+        cs = smooth_cal.CalibrationSmoother(calfits_list)
+        cs.gain_grids[54, 'Jee'] /= np.abs(cs.gain_grids[54, 'Jee'])
+        cs.gain_grids[54, 'Jee'][123:, :] *= -1
+        np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'][122:124, :], False)
+        cs.time_freq_2D_filter(method='DPSS', skip_flagged_edges=False, fix_phase_flips=True, flag_phase_flip_ints=True, eigenval_cutoff=1e-6)
+        np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'][122:124, :], True)
+        assert np.max(np.abs(np.mean(cs.gain_grids[54, 'Jee'][123:], axis=0) / np.mean(cs.gain_grids[54, 'Jee'][0:123], axis=0) + 1)) < 0.15
+
     @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_write(self):
         outfilename = os.path.join(DATA_PATH, 'test_output/smooth_test.calfits')
