@@ -962,7 +962,7 @@ class CalibrationSmoother():
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
                             window='tukey', maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9,
-                            skip_flagged_edges=True, **win_kwargs):
+                            skip_flagged_edges=True, fix_phase_flips=True, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -989,6 +989,9 @@ class CalibrationSmoother():
                 'lu_solve' is the fastest. 'pinv' tends to be more stable.
             skip_flagged_edges : if True, do not filter over flagged edge times (filter over sub-region)
                 Default is True, only used when method='DPSS'
+            fix_phase_flips : Optional bool. If True, will try to find integrations whose phases appear to be 180 degrees
+                rotated from the first unflagged  integration. These will be flipped before smoothing and then flipped back
+                after smoothing. Will also print info about phase-flips found. Default is True.
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
@@ -1029,8 +1032,10 @@ class CalibrationSmoother():
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, dpss_vectors=dpss_vectors, eigenval_cutoff=eigenval_cutoff,
                                                      method=method, fit_method=fit_method, cached_input=cached_input,
-                                                     skip_flagged_edges=skip_flagged_edges, **win_kwargs)
-
+                                                     skip_flagged_edges=skip_flagged_edges, fix_phase_flips=fix_phase_flips, **win_kwargs)
+                flipped = (info['phase_flips'] == -1)
+                if np.any(flipped):
+                    print(f'{np.sum(flipped)} phase-flipped integrations detected on antenna {ant} between {self.time_grid[flipped][0]} and {self.time_grid[flipped][-1]}.')
                 self.gain_grids[ant] = filtered
 
         self.rephase_to_refant(warn=False)
