@@ -321,8 +321,8 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
-                        dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9, skip_flagged_edges=True,
-                        **win_kwargs):
+                        dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9,
+                        skip_flagged_edges=True, fix_phase_flips=True, **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -368,13 +368,17 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         skip_flagged_edges : bool, optional
             if True, do not filter over flagged edge times/freqs (filter over sub-region). Only used when method used is 'DPSS'.
             Default is True
+        fix_phase_flips : bool, optional
+            If True, will try to find integrations whose phases appear to be 180 degrees rotated from the first unflagged
+            integration. These will be flipped before smoothing and then flipped back after smoothing. Default is True.
         win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
             Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
 
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
-        info: dictionary of metadata from aipy.deconv.clean or DPSS, depending on the filter method
-            chosen.
+        info: dictionary of metadata from aipy.deconv.clean or DPSS, depending on the filter method chosen.
+            If fix_phase_flips is True, contains an length-Ntimes phase_flips array of 1s for unflipped integrations
+            and -1s for integrations flipped relative to the first.
     '''
     df = np.median(np.diff(freqs))
     dt = np.median(np.diff(times)) * 24.0 * 3600.0  # in seconds
@@ -383,9 +387,14 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     delay_scale = (freq_scale * 1e6)**-1  # Puts it in seconds
     fringe_scale = (time_scale)**-1  # in Hz
 
-    # Build rephasor to take out average delay
-    dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in seconds
-    rephasor = np.exp(-2.0j * np.pi * dly * freqs)
+    # Build rephasor to take out average delay and handle phase flips
+    if fix_phase_flips:
+        _, offsets = utils.fft_dly(gains, df, wgts=wgts, f0=freqs[0])
+        phase_flips = np.where(detect_phase_flips(offsets), -1, 1)
+    else:
+        phase_flips = np.ones_like(times)[:, np.newaxis]
+    dly = single_iterative_fft_dly(phase_flips * gains, wgts, freqs)  # dly in seconds
+    rephasor = phase_flips * np.exp(-2.0j * np.pi * dly * freqs)
 
     if method == 'DPSS' or method == 'dpss_leastsq':
         info = {}
@@ -459,6 +468,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     else:
         raise ValueError("Filter method {} not recognized. Must be 'CLEAN' or 'DPSS'".format(method))
 
+    info['phase_flips'] = np.squeeze(phase_flips)
     return filtered / rephasor, info
 
 
