@@ -67,6 +67,24 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     return np.sum(taus)
 
 
+def detect_phase_flips(phases):
+    """Detect phases that are flipped relative to the first unflagged integ
+
+    Arguments:
+        phases: phases in radians. Will handle phase wraps and phase starting point (-pi, 0, etc.)
+            automatically. Flagged integrations should be np.nan.
+
+    Returns:
+        phase_flipped: boolean array the same shape as phases where True means pi radians flipped
+            relative to the first unflagged phase.
+    """
+    phases_between_0_and_2pi = (np.angle(np.exp(1.0j * phases)) + 2 * np.pi) % (2 * np.pi)
+    first_nonnan_phase = np.ravel(phases_between_0_and_2pi)[np.isfinite(np.ravel(phases_between_0_and_2pi))][0]
+    phase_diffs = phases_between_0_and_2pi - first_nonnan_phase
+    phase_flipped = np.abs(phase_diffs - np.pi) < np.pi / 2
+    return phase_flipped
+
+
 def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1e-9):
     """Generate a set of 2D discrete prolate spheroidal sequence (DPSS) filters
     to filter calibration solutions along the time and frequency axes simultaneously.
@@ -122,10 +140,10 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cac
             obtained from hera_cal.smooth_cal.dpss_filters
         method: method to use for solving the linear least squares problem. Options are 'pinv', 'lstsq', 'lu_solve', and 'solve'.
             'pinv' uses np.linalg.pinv to compute the least squares solution and tends to be the most reliable. 'lu_solve'
-            uses scipy.linalg.lu_solve to compute the least squares solution and tends to be the fastest. 
+            uses scipy.linalg.lu_solve to compute the least squares solution and tends to be the fastest.
             'solve' uses np.linalg.solve and 'lstsq' uses np.linalg.lstsq and have comparable results.
         cached_input: Dictionary of intermediate products computed when performing linear least-squares with the DPSS basis vectors.
-            Useful for filtering many gain grids with similar flagging patterns. Can be obtained using 
+            Useful for filtering many gain grids with similar flagging patterns. Can be obtained using
             the 'cached_output' return value from a previous call to this function, 'cached_output'. If method is 'lu_solve',
             cached_input will have an additional key 'LU' which is the output of scipy.linalg.lu_factor. If method
             is 'pinv', cached_input will have an additional key 'XTXinv' which is the output of np.linalg.pinv. If
@@ -151,13 +169,13 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cac
         XTX = np.zeros((1, 1))
     else:
         # Use jax einsum to calculate (X^T W X) in a memory efficient way
-        # einsum indices are (t -> time, f -> freq, i > time filter index, j -> freq filter index, m -> 
+        # einsum indices are (t -> time, f -> freq, i > time filter index, j -> freq filter index, m ->
         # time filter index, n -> freq filter index)
         XTX = jnp.einsum(
             "ti,fj,tf,tm,fn->ijmn", time_filters, freq_filters, weights, time_filters, freq_filters, optimize=True
         )
         XTX = np.reshape(XTX, (ncomps, ncomps))
-        
+
     # Calculate X^T W y using the property (A \otimes B) vec(y) = (A Y B)
     XTWy = jnp.ravel(jnp.dot(jnp.dot(jnp.transpose(time_filters), (gains * weights)), freq_filters))
 
@@ -167,7 +185,7 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cac
 
     # Produce an estimate of the filtered gains
     filtered = np.dot(np.dot(time_filters, beta), np.transpose(freq_filters))
-    
+
     return filtered, cached_output
 
 
@@ -340,9 +358,9 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             Only used when the filtering method is 'DPSS'. 'lu_solve' tends to be the fastest, but 'pinv' is more
             stable.
         cached_input: Dictionary of intermediate products computed when performing linear least-squares with the DPSS basis vectors.
-            Useful for filtering many gain grids with similar flagging patterns. Can be obtained using 
+            Useful for filtering many gain grids with similar flagging patterns. Can be obtained using
             the 'cached_output' return value from a previous call to the solve_2D_DPSS function and can also be found the 'info' dictionary
-            returned by this function. If method is 'lu_solve', cached_input will have a key 'LU' which is the output of scipy.linalg.lu_factor. 
+            returned by this function. If method is 'lu_solve', cached_input will have a key 'LU' which is the output of scipy.linalg.lu_factor.
             If method is 'pinv', cached_input will have a key 'XTXinv' which is the output of np.linalg.pinv. If
             other methods are used, nucal._linear_fit will not use cached_input.
         eigenval_cutoff: sinc_matrix eigenvalue cutoffs to use for included dpss modes.
@@ -386,13 +404,13 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                     freqs=xout[1], times=xout[0], freq_scale=freq_scale, time_scale=time_scale,
                     eigenval_cutoff=eigenval_cutoff
                 )
-            
+
             # Unpack DPSS vectors
             time_filters, freq_filters = dpss_vectors
 
             # Filter gain solutions
             filtered, cached_output = solve_2D_DPSS(
-                gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, method=fit_method, 
+                gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, method=fit_method,
                 cached_input=cached_input
             )
 
@@ -933,7 +951,7 @@ class CalibrationSmoother():
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
-                            window='tukey', maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9, 
+                            window='tukey', maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9,
                             skip_flagged_edges=True, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
@@ -956,7 +974,7 @@ class CalibrationSmoother():
             method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
                 'CLEAN': uses the CLEAN algorithm to
                 'DPSS': uses discrete prolate spheroidal sequences to filter calibration solutions
-            fit_method: Linear least-squares method used to fit the DPSS model to the data. 
+            fit_method: Linear least-squares method used to fit the DPSS model to the data.
                 Either 'pinv', 'lstsq', 'solve', or 'lu_solve'. Only used when the method is 'DPSS'
                 'lu_solve' is the fastest. 'pinv' tends to be more stable.
             skip_flagged_edges : if True, do not filter over flagged edge times (filter over sub-region)
@@ -1000,7 +1018,7 @@ class CalibrationSmoother():
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, dpss_vectors=dpss_vectors, eigenval_cutoff=eigenval_cutoff,
-                                                     method=method, fit_method=fit_method, cached_input=cached_input, 
+                                                     method=method, fit_method=fit_method, cached_input=cached_input,
                                                      skip_flagged_edges=skip_flagged_edges, **win_kwargs)
 
                 self.gain_grids[ant] = filtered
