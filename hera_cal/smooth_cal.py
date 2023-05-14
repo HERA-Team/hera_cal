@@ -962,7 +962,7 @@ class CalibrationSmoother():
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
                             window='tukey', maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9,
-                            skip_flagged_edges=True, fix_phase_flips=True, **win_kwargs):
+                            skip_flagged_edges=True, fix_phase_flips=True, flag_phase_flip_ints=True, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -989,9 +989,11 @@ class CalibrationSmoother():
                 'lu_solve' is the fastest. 'pinv' tends to be more stable.
             skip_flagged_edges : if True, do not filter over flagged edge times (filter over sub-region)
                 Default is True, only used when method='DPSS'
-            fix_phase_flips : Optional bool. If True, will try to find integrations whose phases appear to be 180 degrees
+            fix_phase_flips: Optional bool. If True, will try to find integrations whose phases appear to be 180 degrees
                 rotated from the first unflagged  integration. These will be flipped before smoothing and then flipped back
                 after smoothing. Will also print info about phase-flips found. Default is True.
+            flag_phase_flip_ints: Optional bool. If True and fix_phase_flips is also True, will flag antennas on the integrations
+                just before and just after a phase flip, since the phase flip could have occured mid-integration. Default is True.
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
@@ -1036,6 +1038,17 @@ class CalibrationSmoother():
                 flipped = (info['phase_flips'] == -1)
                 if np.any(flipped):
                     print(f'{np.sum(flipped)} phase-flipped integrations detected on antenna {ant} between {self.time_grid[flipped][0]} and {self.time_grid[flipped][-1]}.')
+                    # apply flags before and after phase flips
+                    most_recent_unflagged_tind = 0
+                    if flag_phase_flip_ints:
+                        for tind, flipped_here in enumerate(info['phase_flips'] == -1):
+                            if not np.all(self.flag_grids[ant][tind, :]):
+                                # if the flip state has changed since the most recent unflagged integration
+                                if (info['phase_flips'][most_recent_unflagged_tind] == -1) != flipped_here:
+                                    self.flag_grids[ant][most_recent_unflagged_tind, :] = True
+                                    self.flag_grids[ant][tind, :] = True
+                                most_recent_unflagged_tind = tind
+
                 self.gain_grids[ant] = filtered
 
         self.rephase_to_refant(warn=False)
