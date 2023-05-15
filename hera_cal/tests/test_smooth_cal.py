@@ -572,10 +572,18 @@ class Test_Calibration_Smoother(object):
         cs = smooth_cal.CalibrationSmoother(calfits_list)
         cs.gain_grids[54, 'Jee'] /= np.abs(cs.gain_grids[54, 'Jee'])
         cs.gain_grids[54, 'Jee'][123:, :] *= -1
+
+        # test with flag_phase_flip_ints
         np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'][122:124, :], False)
         cs.time_freq_2D_filter(method='DPSS', skip_flagged_edges=False, fix_phase_flips=True, flag_phase_flip_ints=True, eigenval_cutoff=1e-6)
         np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'][122:124, :], True)
+        np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'][0:122, :], False)
+        np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'][124:, :], False)
         assert np.max(np.abs(np.mean(cs.gain_grids[54, 'Jee'][123:], axis=0) / np.mean(cs.gain_grids[54, 'Jee'][0:123], axis=0) + 1)) < 0.15
+
+        # test with flag_phase_flip_ants
+        cs.time_freq_2D_filter(method='DPSS', skip_flagged_edges=False, fix_phase_flips=True, flag_phase_flip_ants=True, eigenval_cutoff=1e-6)
+        np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'], True)
 
     @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_write(self):
