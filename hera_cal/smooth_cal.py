@@ -1041,7 +1041,7 @@ class CalibrationSmoother():
                 if np.any(flipped):
                     print(f'{np.sum(flipped)} phase-flipped integrations detected on antenna {ant} between {self.time_grid[flipped][0]} and {self.time_grid[flipped][-1]}.')
                     if flag_phase_flip_ants:
-                        self.flag_grids[ant][:, :] = False
+                        self.flag_grids[ant][:, :] = True
                     # apply flags before and after phase flips
                     elif flag_phase_flip_ints:
                         most_recent_unflagged_tind = 0
