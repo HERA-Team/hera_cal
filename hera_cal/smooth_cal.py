@@ -388,13 +388,21 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     fringe_scale = (time_scale)**-1  # in Hz
 
     # Build rephasor to take out average delay and handle phase flips
+    dly = single_iterative_fft_dly(gains, wgts, freqs)
+    rephasor = rephasor = np.exp(-2.0j * np.pi * dly * freqs)
     if fix_phase_flips:
-        _, offsets = utils.fft_dly(gains, df, wgts=wgts, f0=freqs[0])
-        phase_flips = np.where(detect_phase_flips(offsets), -1, 1)
+        # average delay-rephased gain, compute phase of average, and then find phase flips
+        avg_rephased_gain = np.ma.average(gains * rephasor, weights=wgts, axis=1, keepdims=True)
+        phases = np.where(avg_rephased_gain.mask, np.nan, np.angle(avg_rephased_gain))
+        phase_flips = np.where(detect_phase_flips(phases), -1, 1)
+        if np.any(phase_flips == -1):
+            # recompute single dly
+            dly = single_iterative_fft_dly(phase_flips * gains, wgts, freqs)
+            rephasor = np.exp(-2.0j * np.pi * dly * freqs)
     else:
         phase_flips = np.ones_like(times)[:, np.newaxis]
-    dly = single_iterative_fft_dly(phase_flips * gains, wgts, freqs)  # dly in seconds
-    rephasor = phase_flips * np.exp(-2.0j * np.pi * dly * freqs)
+    # include phase_flips in rephasor
+    rephasor = phase_flips * rephasor
 
     if method == 'DPSS' or method == 'dpss_leastsq':
         info = {}
