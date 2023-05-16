@@ -38,6 +38,21 @@ class Test_Smooth_Cal_Helper_Functions(object):
         assert a.flag_file_list == ['c']
         assert a.lst_blacklists == [(3, 4), (10, 12), (23, .5)]
 
+    def test_detect_phase_flips(self):
+        # test normal operation
+        phase_flipped = smooth_cal.detect_phase_flips(np.array([1, 1, 1, 4, 4, 4]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
+        # test phase wrapping
+        phase_flipped = smooth_cal.detect_phase_flips(np.array([1, 1, 1, -2, -2, -2]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
+        phase_flipped = smooth_cal.detect_phase_flips(np.array([1, 1, 1, 10, 10, 10]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
+        # test nan handling
+        phase_flipped = smooth_cal.detect_phase_flips(np.array([1, 1, 1, 4, np.nan, 4]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, False, True]))
+        phase_flipped = smooth_cal.detect_phase_flips(np.array([np.nan, 1, 1, 4, np.nan, 4]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, False, True]))
+
     def test_dpss_filters(self):
         times = np.linspace(0, 10 * 10 / 60. / 60. / 24., 40, endpoint=False)
         freqs = np.linspace(100., 200., 50, endpoint=False) * 1e6
@@ -551,6 +566,24 @@ class Test_Calibration_Smoother(object):
             warnings.simplefilter("ignore")
             cs2.time_freq_2D_filter(method='DPSS', skip_flagged_edges=True)
         del cs2
+
+    def test_2D_filtering_with_phase_flips(self):
+        calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))
+        cs = smooth_cal.CalibrationSmoother(calfits_list)
+        cs.gain_grids[54, 'Jee'] /= np.abs(cs.gain_grids[54, 'Jee'])
+        cs.gain_grids[54, 'Jee'][123:, :] *= -1
+
+        # test with flag_phase_flip_ints
+        np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'][122:124, :], False)
+        cs.time_freq_2D_filter(method='DPSS', skip_flagged_edges=False, fix_phase_flips=True, flag_phase_flip_ints=True, eigenval_cutoff=1e-6)
+        np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'][122:124, :], True)
+        np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'][0:122, :], False)
+        np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'][124:, :], False)
+        assert np.max(np.abs(np.mean(cs.gain_grids[54, 'Jee'][123:], axis=0) / np.mean(cs.gain_grids[54, 'Jee'][0:123], axis=0) + 1)) < 0.15
+
+        # test with flag_phase_flip_ants
+        cs.time_freq_2D_filter(method='DPSS', skip_flagged_edges=False, fix_phase_flips=True, flag_phase_flip_ants=True, eigenval_cutoff=1e-6)
+        np.testing.assert_array_equal(cs.flag_grids[54, 'Jee'], True)
 
     @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_write(self):
