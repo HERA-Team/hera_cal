@@ -68,7 +68,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
 
 
 def detect_phase_flips(phases):
-    """Detect phases that are flipped relative to the first unflagged integ
+    """Detect phases that are flipped relative to the first unflagged integration.
 
     Arguments:
         phases: phases in radians. Will handle phase wraps and phase starting point (-pi, 0, etc.)
@@ -78,10 +78,10 @@ def detect_phase_flips(phases):
         phase_flipped: boolean array the same shape as phases where True means pi radians flipped
             relative to the first unflagged phase.
     """
-    phases_between_0_and_2pi = (np.angle(np.exp(1.0j * phases)) + 2 * np.pi) % (2 * np.pi)
-    first_nonnan_phase = np.ravel(phases_between_0_and_2pi)[np.isfinite(np.ravel(phases_between_0_and_2pi))][0]
-    phase_diffs = phases_between_0_and_2pi - first_nonnan_phase
-    phase_flipped = np.abs(phase_diffs - np.pi) < np.pi / 2
+    complexes = np.exp(1.0j * phases)
+    first_nonnan = np.ravel(complexes)[np.isfinite(np.ravel(complexes))][0]
+    # check if each number is closer to first_nonnan or -first_nonnan
+    phase_flipped = np.abs(complexes - first_nonnan) > np.abs(complexes + first_nonnan)
     return phase_flipped
 
 
