@@ -1,6 +1,8 @@
 """
 Module for calibrating visibilities by comparing data which lie within the same LST-bin
 """
+from __future__ import annotations
+
 import yaml
 import linsolve
 import numpy as np
@@ -8,17 +10,17 @@ from . import utils, redcal, red_groups, lstbin_simple
 
 
 def build_data_dict(
-    data,
-    flags,
-    antpairs,
-    pols,
-    cal_function,
-    day_flags=None,
-    bls_flags=None,
-    ref_operation="multiply",
-    ref_value=1.0,
+    data: np.ndarray,
+    flags: np.ndarray,
+    antpairs: list[tuple[int, int]],
+    pols: list[str],
+    cal_function: callable,
+    day_flags: np.ndarray | None = None,
+    bls_flags: np.ndarray | None = None,
+    ref_operation: str = "multiply",
+    ref_value: float = 1.0,
     **kwargs,
-):
+) -> tuple[dict, dict]:
     """
     Build a dictionary of data for each baseline in the lstbin.
 
@@ -106,13 +108,13 @@ def build_data_dict(
 
 
 def hierachical_pairing(
-    pairing_function,
-    data,
-    flags=None,
-    ref_value=1.0,
-    ref_operation="multiply",
+    pairing_function: callable,
+    data: dict[tuple[int, str], np.ndarray],
+    flags: dict[tuple[int, str], np.ndarray] | None = None,
+    ref_value: float = 1.0,
+    ref_operation: str = "multiply",
     **kwargs,
-):
+) -> dict[tuple[int, int, str], float]:
     """
     Given a redundant group of bls, find per-baseline dly/off params that
 
@@ -269,16 +271,16 @@ def _amplitude_align(data, flags, key1, key2):
 
 
 def delay_slope_calibration(
-    data,
-    flags,
-    nsamples,
-    freqs,
-    antpairs,
-    antpos,
-    pols,
-    sparse=True,
-    day_flags=None,
-    bls_flags=None,
+    data: np.ndarray,
+    flags: np.ndarray,
+    nsamples: np.ndarray,
+    freqs: np.ndarray,
+    antpairs: list[tuple[int, int]],
+    antpos: list[dict[int, np.ndarray]] | dict[int, np.ndarray],
+    pols: list[str],
+    sparse: bool = True,
+    day_flags: np.ndarray | None = None,
+    bls_flags: np.ndarray | None = None,
 ):
     """
     Solve for the delay slope of each day in an LST-bin.
@@ -419,14 +421,14 @@ def delay_slope_calibration(
 
 
 def tip_tilt_calibration(
-    data,
-    flags,
-    antpairs,
-    antpos,
-    pols,
-    day_flags=None,
-    bls_flags=None,
-    sparse=True,
+    data: np.ndarray,
+    flags: np.ndarray,
+    antpairs: list[tuple[int, int]],
+    antpos: list[dict[int, np.ndarray]] | dict[int, np.ndarray],
+    pols: list[str],
+    day_flags: np.ndarray | None = None,
+    bls_flags: np.ndarray | None = None,
+    sparse: bool = True,
 ):
     """
     Solve for the per-frequency phase slope of each day in an LST-bin.
@@ -567,7 +569,14 @@ def tip_tilt_calibration(
 
 
 def amplitude_calibration(
-    data, flags, nsamples, antpairs, pols, day_flags=None, bls_flags=None, sparse=True
+    data: np.ndarray,
+    flags: np.ndarray,
+    nsamples: np.ndarray,
+    antpairs: list[tuple[int, int]],
+    pols: list[str],
+    day_flags: np.ndarray | None = None,
+    bls_flags: np.ndarray | None = None,
+    sparse: bool = True,
 ):
     """
     Solve for the frequency-amplitude of each day in an LST-bin.
@@ -664,7 +673,13 @@ def amplitude_calibration(
     return gains, solutions
 
 
-def apply_lstcal_inplace(data, gains, antpairs, pols, gain_convention="divide"):
+def apply_lstcal_inplace(
+    data: np.ndarray,
+    gains: dict,
+    antpairs: list[tuples],
+    pols: list[str],
+    gain_convention: str = "divide",
+):
     """
     Apply the gains to the data inplace.
 
@@ -707,20 +722,19 @@ def apply_lstcal_inplace(data, gains, antpairs, pols, gain_convention="divide"):
 
 
 def calibrate_data(
-    data,
-    flags,
-    nsamples,
-    freqs,
-    antpos,
-    antpairs,
-    pols,
-    phs_max_iter=10,
-    phs_conv_crit=1e-10,
-    phase_method="logcal",
-    day_flags=None,
-    sparse=True,
-    do_delay_cal=True,
-    do_tip_tilt_cal=True,
+    data: np.ndarray,
+    flags: np.ndarray,
+    nsamples: np.ndarray,
+    freqs: np.ndarray,
+    antpos: list[dict] | dict,
+    antpairs: list[tuple],
+    pols: list[str],
+    phs_max_iter: int = 10,
+    phs_conv_crit: float = 1e-10,
+    phase_method: str = "logcal",
+    day_flags: np.ndarray | None = None,
+    bls_flags: np.ndarray | None = None,
+    sparse: bool = True,
 ):
     """
     Calibrate the data in an LST-bin.
@@ -765,33 +779,26 @@ def calibrate_data(
         )
     elif phase_method == "logcal":
         # Perform global delay slope calibration
-        if do_delay_cal:
-            for _ in range(phs_max_iter):
-                delta_gains, _ = delay_slope_calibration(
-                    data=data,
-                    flags=flags,
-                    nsamples=nsamples,
-                    freqs=freqs,
-                    antpairs=antpairs,
-                    antpos=antpos,
-                    pols=pols,
-                    day_flags=day_flags,
-                )
-                apply_lstcal_inplace(
-                    data=data,
-                    gains=delta_gains,
-                    antpairs=antpairs,
-                    pols=pols,
-                    gain_convention="divide",
-                )
-                # Update gains
-                gains = {k: gains.get(k, 1 + 0j) * delta_gains[k] for k in delta_gains}
-                # Check for convergence
-                crit = np.median(
-                    np.linalg.norm([delta_gains[k] - 1 for k in delta_gains], axis=0)
-                )
-                if crit < phs_conv_crit:
-                    break
+        delta_gains, _ = delay_slope_calibration(
+            data=data,
+            flags=flags,
+            nsamples=nsamples,
+            freqs=freqs,
+            antpairs=antpairs,
+            antpos=antpos,
+            pols=pols,
+            day_flags=day_flags,
+            bls_flags=bls_flags,
+        )
+        apply_lstcal_inplace(
+            data=data,
+            gains=delta_gains,
+            antpairs=antpairs,
+            pols=pols,
+            gain_convention="divide",
+        )
+        # Update gains
+        gains = {k: gains.get(k, 1 + 0j) * delta_gains[k] for k in delta_gains}
 
         # Perform global phase-slope calibration
         """
@@ -813,30 +820,28 @@ def calibrate_data(
         """
 
         # Perform per-frequency tip-tilt phase calibration
-        if do_tip_tilt_cal:
-            for _ in range(phs_max_iter):
-                delta_gains, _ = tip_tilt_calibration(
-                    data=data,
-                    flags=flags,
-                    antpairs=antpairs,
-                    antpos=antpos,
-                    pols=pols,
-                    day_flags=day_flags,
-                )
-                apply_lstcal_inplace(
-                    data=data,
-                    gains=delta_gains,
-                    antpairs=antpairs,
-                    pols=pols,
-                )
-                gains = {k: gains.get(k, 1 + 0j) * delta_gains[k] for k in delta_gains}
-                crit = np.median(
-                    np.linalg.norm(
-                        [delta_gains[k] - 1.0 for k in delta_gains], axis=(0, 1)
-                    )
-                )
-                if crit < phs_conv_crit:
-                    break
+        for _ in range(phs_max_iter):
+            delta_gains, _ = tip_tilt_calibration(
+                data=data,
+                flags=flags,
+                antpairs=antpairs,
+                antpos=antpos,
+                pols=pols,
+                day_flags=day_flags,
+                bls_flags=bls_flags,
+            )
+            apply_lstcal_inplace(
+                data=data,
+                gains=delta_gains,
+                antpairs=antpairs,
+                pols=pols,
+            )
+            gains = {k: gains.get(k, 1 + 0j) * delta_gains[k] for k in delta_gains}
+            crit = np.median(
+                np.linalg.norm([delta_gains[k] - 1.0 for k in delta_gains], axis=(0, 1))
+            )
+            if crit < phs_conv_crit:
+                break
     else:
         raise ValueError(f"Unrecognized phase_method: {phase_method}")
 
@@ -864,178 +869,7 @@ def calibrate_data(
     return gains
 
 
-def run_lst_calibration(
-    config_file,
-    outfile_index=0,
-    calibrate_bad_days=False,
-    sigma_clip_min_N=4,
-    sigma_clip_thresh=4.0,
-):
-    """
-    Run LST-binning calibration on a set of LST-binned data files.
-
-    Parameters:
-    -----------
-    config_file : str
-        Path to the configuration file.
-    pols : list of strings, default=["nn", "ee"]
-        List of polarizations to calibrate.
-    outfile_index : int, default=0
-        Index of the output file to calibrate.
-    inplace : bool, default=True
-        If True, calibrate the data in-place.
-    calibrate_bad_days : bool, default=True
-        If True, calibrate days with bad data.
-    sigma_clip_min_N : int, default=4
-        Minimum number of samples to use for sigma clipping.
-    sigma_clip_thresh : float, default=4.0
-        Sigma clipping threshold.
-
-    Returns:
-    --------
-    data : np.ndarray
-        Calibrated data of shape (Ndays, Nbls, Nfreqs, Npols) of complex data.
-    flags : np.ndarray
-        Shape (Ndays, Nbls, Nfreqs, Npols) of boolean flags.
-    nsamples : np.ndarray
-        Number of samples in each time-frequency bin. Shape (Ndays, Nbls, Nfreqs, Npols).
-    """
-    # Load the configuration file
-    with open(config_file, "r") as fl:
-        configuration = yaml.safe_load(fl)
-
-    # Configuration parameters
-    config_opts = configuration["config_params"]
-    lst_grid = configuration["lst_grid"]
-    matched_files = configuration["matched_files"]
-    metadata = configuration["metadata"]
-
-    # Load the metadata from first file
-    meta = lstbin_simple.FastUVH5Meta(
-        matched_files[outfile_index][0][0],
-        blts_are_rectangular=metadata["blts_are_rectangular"],
-        time_axis_faster_than_bls=metadata["time_axis_faster_than_bls"],
-    )
-
-    # Get the redundant groups
-    antpos = dict(zip(meta.antenna_numbers, meta.antpos_enu))
-    reds = red_groups.RedundantGroups.from_antpos(antpos=antpos, include_autos=True)
-
-    # Get the LST-bins and data files
-    lst_bins = lst_grid[outfile_index]
-    data_files = matched_files[outfile_index]
-    data_files = [df for df in data_files if df]
-
-    # Get the metadata for each file
-    data_metas = [
-        [
-            lstbin_simple.FastUVH5Meta(
-                df,
-                blts_are_rectangular=metadata["blts_are_rectangular"],
-                time_axis_faster_than_bls=metadata["time_axis_faster_than_bls"],
-            )
-            for df in dflist
-        ]
-        for dflist in data_files
-    ]
-
-    # Get additional metadata from the metadata file
-    x_orientation = metadata["x_orientation"]
-    start_jd = metadata["start_jd"]
-    integration_time = metadata["integration_time"]
-    dlst = config_opts["dlst"]
-    freq_array = np.squeeze(meta.freq_array)
-
-    # Find all baselines in the LST-bin
-    all_baselines, all_pols = lstbin_simple.get_all_unflagged_baselines(
-        data_metas, include_autos=True, redundantly_averaged=True, reds=reds
-    )
-
-    # Get the LST bin edges
-    lst_bin_edges = np.array(
-        [x - dlst / 2 for x in lst_bins] + [lst_bins[-1] + dlst / 2]
-    )
-
-    # Get the LST data for each file
-    (
-        tinds,
-        time_arrays,
-        all_lsts,
-        file_list,
-        cals,
-    ) = lstbin_simple.filter_required_files_by_times(
-        (lst_bin_edges[0], lst_bin_edges[-1]), data_metas
-    )
-    all_lsts = np.concatenate(all_lsts)
-
-    # Get the LST data for each file
-    (
-        bin_lst,
-        data,
-        flags,
-        nsamples,
-        binned_times,
-    ) = lstbin_simple.lst_bin_files_for_baselines(
-        data_files=file_list,
-        lst_bin_edges=lst_bin_edges,
-        antpairs=all_baselines,
-        pols=all_pols,
-        freqs=freq_array,
-        cal_files=cals,
-        time_arrays=time_arrays,
-        time_idx=tinds,
-        lsts=all_lsts,
-        redundantly_averaged=True,
-        rephase=True,
-        reds=reds,
-    )
-
-    # Loop through all of the LST-bins
-    for _data, _flags, _nsamples in zip(data, flags, nsamples):
-        # Get the antenna pairs
-        day_flags = flag_lst_data_products(_data, _flags, _nsamples)
-
-        # Calibrate the data
-        gains = calibrate_data(
-            _data,
-            _flags,
-            _nsamples,
-            freq_array,
-            all_baselines,
-            all_pols,
-            day_flags=day_flags,
-        )
-
-        # Attempt to recalibrate days which were flagged as "bad"
-        if calibrate_bad_days:
-            # Average the data
-            model_arr, model_flags, _ = lstbin_simple.lst_average(
-                data=_data,
-                flags=_flags,
-                nsamples=_nsamples,
-                sigma_clip_thresh=sigma_clip_thresh,
-                sigma_clip_min_N=sigma_clip_min_N,
-            )
-
-            # Calibrate the "bad" days
-            delta_gains = single_file_calibrate_data(
-                model_arr, model_flags, _data, _flags, _nsamples, day_flags=day_flags
-            )
-            apply_lstcal_inplace(
-                _data, delta_gains, antpairs, pols, gain_convention="divide"
-            )
-            gains = {k: gains[k] * delta_gains[k] for k in gains}
-
-            # Check to see if the data are still bad
-            day_flags = flag_lst_data_products(_data, _flags, _nsamples)
-
-        # Flag bad days in the original flag array
-        _flags[day_flags] = True
-
-    return gains
-
-
-def robust_divide(num, den):
+def robust_divide(num: np.ndarray, den: np.ndarray):
     """
     Prevent division by zero.
 
@@ -1064,7 +898,13 @@ def robust_divide(num, den):
     return out
 
 
-def modified_zscore(data, flags, nsamples, nsigma=5.0, axis=-1):
+def modified_zscore(
+    data: np.ndarray,
+    flags: np.ndarray,
+    nsamples: np.ndarray,
+    nsigma: float = 5.0,
+    axis: tuple[int, ...] | int = -1,
+):
     """
     Identify outliers in an LST-bin by computing the modified z-score.
 
@@ -1095,7 +935,7 @@ def modified_zscore(data, flags, nsamples, nsigma=5.0, axis=-1):
     d_rs = _data - med_data
     d_sq = np.abs(d_rs) ** 2
     sig = np.sqrt(np.nanmedian(d_sq, axis=axis, keepdims=True) / 0.456)
-    zscore = robust_divide(d_rs, sig)
+    zscore = d_rs / sig
     return np.abs(zscore) > nsigma
 
 
