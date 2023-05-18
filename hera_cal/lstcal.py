@@ -9,7 +9,7 @@ import numpy as np
 from . import utils, redcal, red_groups, lstbin_simple
 
 
-def build_data_dict(
+def compute_offsets(
     data: np.ndarray,
     flags: np.ndarray,
     antpairs: list[tuple[int, int]],
@@ -49,12 +49,8 @@ def build_data_dict(
     --------
     offsets : dict
         Dictionary of offsets between days in the lstbin.
-    data_dict : dict
-        Dictionary of data for each baseline in the lstbin.
-    flag_dict : dict
-        Dictionary of flags for each baseline in the lstbin.
-    nsamples_dict : dict
-        Dictionary of nsamples for each baseline in the lstbin.
+    index_dict : dict
+        Dictionary of indices for each baseline in the lstbin.
     """
     # Get shape of data
     Ndays, Nbls, Nfreqs, Npols = data.shape
@@ -308,7 +304,7 @@ def delay_slope_calibration(
         Shape (Ntimes, Nfreqs, Npols) of delay slopes in nanoseconds.
     """
     # Loop through all baselines
-    delays, index_dict = build_data_dict(
+    delays, index_dict = compute_offsets(
         data,
         flags,
         antpairs,
@@ -454,7 +450,7 @@ def tip_tilt_calibration(
         Shape (Ntimes, Nfreqs, Npols) of phase slopes in radians per meter.
     """
     # Loop through all baselines
-    tip_tilts, index_dict = build_data_dict(
+    tip_tilts, index_dict = compute_offsets(
         data,
         flags,
         antpairs,
@@ -610,7 +606,7 @@ def amplitude_calibration(
     ants = list(set(sum(map(list, antpairs), [])))
 
     # Loop through all baselines
-    amps, index_dict = build_data_dict(
+    amps, index_dict = compute_offsets(
         data,
         flags,
         antpairs,
