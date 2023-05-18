@@ -53,14 +53,14 @@ def compute_offsets(
         Dictionary of indices for each baseline in the lstbin.
     """
     # Get shape of data
-    Ndays, Nbls, Nfreqs, Npols = data.shape
+    ndays, nbls, nfreqs, npols = data.shape
 
     # If no day_flags is provided, assume all days are usable
     if day_flags is None:
-        day_flags = np.zeros(Ndays, dtype=bool)
+        day_flags = np.zeros(ndays, dtype=bool)
     # If no bls_flags is provided, assume all baselines are usable
     if bls_flags is None:
-        bls_flags = np.zeros(Nbls, dtype=bool)
+        bls_flags = np.zeros(nbls, dtype=bool)
 
     # Dictionary for storing data, flags, and nsamples for each baseline
     index_dict = {}
@@ -69,16 +69,16 @@ def compute_offsets(
     offsets = {}
 
     # Loop through all polarizations
-    for pi in range(Npols):
+    for pi in range(npols):
         # Loop through all baselines
-        for bi in range(Nbls):
+        for bi in range(nbls):
             if bls_flags[bi]:
                 continue
 
             _data, _flags, _nsamples = {}, {}, {}
 
             # Loop through all days for a given baseline
-            for di in range(Ndays):
+            for di in range(ndays):
                 # Skip if day is flagged
                 if day_flags[di]:
                     continue
@@ -112,7 +112,8 @@ def hierachical_pairing(
     **kwargs,
 ) -> dict[tuple[int, int, str], float]:
     """
-    Given a redundant group of bls, find per-baseline dly/off params that
+    Hierachically pair data to solve for the offsets between days in an LST-bin.
+
 
     Parameters:
     -----------
@@ -122,8 +123,6 @@ def hierachical_pairing(
         Shape (Ntimes, Nbls, Nfreqs, Npols) of complex data.
     flags : np.ndarray
         Shape (Ntimes, Nbls, Nfreqs, Npols) of boolean flags.
-    nsamples : np.ndarray
-        Shape (Ntimes, Nbls, Nfreqs, Npols) of nsamples.
     ref_operation : str
         Operation to perform on the reference data. Default is 'multiply'.
     kwargs : dict
@@ -391,6 +390,15 @@ def delay_slope_calibration(
                 # Load data from the blgrp into the linear system
                 ls_data[data_key_1 + " - " + data_key_2] = delays[bl][(day1, day2)][0]
 
+                # Weight by flags and nsamples
+                wgt = np.logical_not(flags[day1[0], bi, :, pi]).astype(
+                    float
+                ) * np.logical_not(flags[day2[0], bi, :, pi]).astype(float)
+                wgt *= np.sqrt(
+                    nsamples[day1[0], bi, :, pi] * nsamples[day2[0], bi, :, pi]
+                )
+                wgts[data_key_1 + " - " + data_key_2] = np.median(wgt)
+
         # Solve for the delay slope
         ls = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
         fit = ls.solve()
@@ -536,6 +544,15 @@ def tip_tilt_calibration(
                 ls_data[data_key_1 + " - " + data_key_2] = tip_tilts[bl][(day1, day2)][
                     0
                 ]
+
+                # Weight by flags and nsamples
+                wgt = np.logical_not(flags[day1[0], bi, :, pi]).astype(
+                    float
+                ) * np.logical_not(flags[day2[0], bi, :, pi]).astype(float)
+                wgt *= np.sqrt(
+                    nsamples[day1[0], bi, :, pi] * nsamples[day2[0], bi, :, pi]
+                )
+                wgts[data_key_1 + " - " + data_key_2] = wgt
 
         # Solve system of equations
         solver = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
