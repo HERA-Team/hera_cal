@@ -412,25 +412,28 @@ def lst_average(
         data[flags] *= np.nan
         logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to sigma clipping")
 
-    # get other stats
-    logger.info("Calculating std")
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
-        std = np.nanstd(data.real, axis=0) + 1j*np.nanstd(data.imag, axis=0)
-        
     nsamples[flags] = 0
     norm = np.sum(nsamples, axis=0)  # missing a "clip" between 1e-99 and inf here...
-    
+
     logger.info("Calculating mean")
-    data = np.nansum(data * nsamples, axis=0)
+    meandata = np.nansum(data * nsamples, axis=0)
 
     f_min = np.all(flags, axis=0)
     if flag_below_min_N:
         f_min[norm <= sigma_clip_min_N] = True
 
-    data[~f_min] /= norm[~f_min]
-    data[f_min] = 0.0  # any value, it's flagged anyway
-            
+    meandata[~f_min] /= norm[~f_min]
+    meandata[f_min] = 0.0  # any value, it's flagged anyway
+
+    # get other stats
+    logger.info("Calculating std")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
+        std = np.square(data - meandata)**2
+        std = np.nansum(std * nsamples, axis=0)
+        std[~f_min] /= norm[~f_min]
+        std = np.sqrt(std)
+                    
     std[f_min] = np.inf
     norm[f_min] = 0  # This is probably redundant.
 
