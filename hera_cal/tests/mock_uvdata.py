@@ -4,12 +4,15 @@ from __future__ import annotations
 from pyuvdata import UVData, UVCal
 from pyuvdata.uvdata import FastUVH5Meta
 from hera_cal import utils
+from hera_cal import io
+from hera_cal import noise
 import numpy as np
 from astropy.coordinates import EarthLocation
 import yaml
 from hera_cal.data import DATA_PATH
 from pathlib import Path
 from hera_cal.red_groups import RedundantGroups
+from astropy import units
 
 HERA_LOC = EarthLocation.from_geodetic(
     lat=-30.721526120690307,
@@ -23,7 +26,7 @@ with open(f"{DATA_PATH}/hera_antpos.yaml", "r") as fl:
 
 def create_mock_hera_obs(
     jdint: int = 2459855, 
-    integration_time=10.7,
+    integration_time=9.663677215576172,
     lst_start=0.1, 
     jd_start: float | None = None,
     ntimes: int=2,
@@ -117,7 +120,10 @@ def identifiable_data_from_uvd(
         data.shape = orig_shape
     return data
 
-def create_uvd_identifiable(**kwargs) -> UVData:
+def create_uvd_identifiable(
+    with_noise: bool = False, 
+    autos_noise: bool = False,
+    **kwargs) -> UVData:
     """Make a UVData object with identifiable data.
     
     Each baseline, pol, LST and freq channel should be identifiable in the data with the
@@ -125,10 +131,35 @@ def create_uvd_identifiable(**kwargs) -> UVData:
 
         data = pol* lst * [np.cos(freq*a) + I * np.sin(freq*b)]
     """
-    ones = create_uvd_ones(**kwargs)
-    ones.data_array = identifiable_data_from_uvd(ones)
-    return ones
+    uvd = create_mock_hera_obs(empty=True, **kwargs)
+    uvd.data_array = identifiable_data_from_uvd(uvd)
 
+    if with_noise:
+        add_noise_to_uvd(uvd, autos = autos_noise)
+
+    return uvd
+
+def add_noise_to_uvd(uvd, autos: bool = False):
+    hd = io.to_HERAData(uvd)
+
+
+    data, flags, nsamples = hd.read()
+    dt = (data.times[1] - data.times[0])* units.si.day.in_units(units.si.s)
+    df = data.freqs[1] - data.freqs[0]
+
+    for bl in data.bls():
+        if bl[0] == bl[1] and bl[2][0] == bl[2][1] and not autos:
+            continue
+
+        variance = noise.predict_noise_variance_from_autos(
+            bl, data, dt=dt, df=df, nsamples=nsamples
+        )
+        data[bl] += (
+            np.random.normal(scale=np.sqrt(variance/2))
+            + 1j * np.random.normal(scale=np.sqrt(variance/2))
+        )
+    hd.update(data=data)
+    
 def write_files_in_hera_format(
     uvds: list[UVData] | list[list[UVData]], 
     tmpdir: Path,

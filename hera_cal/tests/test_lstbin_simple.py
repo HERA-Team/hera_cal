@@ -10,10 +10,11 @@ from hera_cal import lstbin_simple as lstbin_simple
 import pytest
 import numpy as np
 from pyuvdata import UVCal, UVData
-from .. import io, utils, lstbin_simple
+from .. import io, utils, lstbin_simple, noise
 from hera_cal import apply_cal
 from pyuvdata import utils as uvutils
 from hera_cal.red_groups import RedundantGroups
+from astropy import units
 
 try:
     benchmark
@@ -372,6 +373,65 @@ class Test_LSTAverage:
         assert np.allclose(std_n, 0.0)
         assert np.allclose(norm_n, 2.0)
 
+    def test_std_simple(self):
+        shape = (5000, 2)  # 1000 nights, doesn't matter what the other axis is.
+
+        std = 2.0
+        data = np.random.normal(scale=std, size=shape) + np.random.normal(scale=std, size=shape)*1j
+        nsamples = np.ones_like(data, dtype=float)
+        flags = np.zeros_like(data, dtype=bool)
+
+        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+            data=data, nsamples=nsamples, flags=flags,
+        )
+
+        # Check the averaged data is within 6 sigma of the population mean
+        np.testing.assert_allclose(data_n, 0.0, atol=std*6/np.sqrt(shape[0]))
+
+        # Check the standard deviation is within 20% of the true value
+        np.testing.assert_allclose(std_n, std + std*1j, rtol=0.2)
+
+        assert not np.any(flg_n)
+
+    @pytest.mark.parametrize("nsamples", ("ones", "random"))
+    @pytest.mark.parametrize("flags", ("zeros", "random"))
+    def test_std(self, nsamples, flags):
+        shape = (5000, 2)  # 1000 nights, doesn't matter what the other axis is.
+
+        std = 2.0
+        if nsamples == "ones":
+            nsamples = np.ones(shape)
+        else:
+            nsamples = np.random.random_integers(1, 10, size=shape).astype(float)
+
+        std = std / np.sqrt(nsamples)
+
+        if flags == "zeros":
+            flags = np.zeros(shape, dtype=bool)
+        else:
+            flags = np.random.random(shape) > 0.1
+
+        data = np.random.normal(scale=std) + np.random.normal(scale=std)*1j
+        
+        flags = np.zeros(data.shape, dtype=bool)
+
+        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+            data=data, nsamples=nsamples, flags=flags,
+        )
+
+        # Check the averaged data is within 6 sigma of the population mean
+        assert np.allclose(data_n, 0.0, atol=std*6/np.sqrt(shape[0]))
+
+        # In reality the std is infinity where flags is True
+        std[flags] = np.inf
+        w = 1 / np.sum(1.0 / std**2, axis=0)
+
+        sample_var_expectation = sve = w * (shape[0] - 1)
+        # Check the standard deviation is within 20% of the true value
+        np.testing.assert_allclose(std_n, np.sqrt(sve) + np.sqrt(sve)*1j, rtol=0.2)
+
+        assert not np.any(flg_n)
+
 def create_small_array_uvd(identifiable: bool = False, **kwargs):
     kwargs.update(
         freqs=np.linspace(150e6, 160e6, 100),
@@ -695,19 +755,6 @@ class Test_LSTBinFiles:
             assert not np.allclose(gd[(0, 1, 'ee')][0], gd[(0, 2, 'ee')][0])
             assert not np.allclose(gd[(1, 2, 'ee')][0], gd[(0, 2, 'ee')][0])
             assert not np.allclose(gd[(1, 2, 'ee')][0], gd[(0, 1, 'ee')][0])
-    
-    # def test_make_lst_bin_config_file(self, tmp_path_factory):
-    #     tmpdir = tmp_path_factory.mktemp("lstbin_config_file")
-
-    #     cfl = tmpdir / "lstbin_config_file.yaml"
-    #     uvds = mockuvd.make_dataset(ndays=3, nfiles=4, ntimes=2, identifiable=True, creator=create_small_array_uvd)
-    #     data_files = mockuvd.write_files_in_hera_format(uvds, tmpdir)
-
-    #     config_info = lstbin_simple.make_lst_bin_config_file(
-    #         cfl, data_files
-    #     )
-
-    #     assert 'metadata' in config_info
 
     def test_baseline_chunking(self, tmp_path_factory):
         tmp = tmp_path_factory.mktemp("baseline_chunking")
@@ -990,4 +1037,71 @@ class Test_LSTBinFiles:
                         rtol=1e-4
                     )
     
-    
+    # @pytest.mark.parametrize(
+    # "random_ants_to_drop, sigma_clip_thresh, flag_strategy",
+    # [
+    #     (0, 0.0, (0,0,0)),
+    #     (0, 0.0, (2,1,3)),
+    #     (0, 3.0, (0,0,0)),
+    #     (3, 0.0, (0,0,0)),
+    # ]
+    # )
+    # def test_with_noise(
+    #     self, tmp_path_factory, random_ants_to_drop: int, 
+    #     sigma_clip_thresh: float, flag_strategy: tuple[int, int, int],
+    # ):
+
+    #     tmp = tmp_path_factory.mktemp("with_noise")
+    #     uvds = mockuvd.make_dataset(
+    #         ndays=100, nfiles=1, ntimes=2, ants=np.arange(7),
+    #         creator=mockuvd.create_uvd_identifiable,
+    #         pols = ('xx', 'yy', 'xy', 'yx'),
+    #         with_noise=True,
+    #         freqs=np.linspace(140e6, 180e6, 3),
+    #         random_ants_to_drop=random_ants_to_drop,
+    #     )
+        
+    #     # TEMPORARY HACK
+    #     realizations = []
+    #     for uvd in uvds:
+    #         data, flags, nsamples = uvd[0].read()
+    #         realizations.append(data[(1,2,'ee')])
+    #     np.save("realizations.npy", np.array(realizations))
+
+    #     data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
+        
+    #     cfl = tmp / "lstbin_config_file.yaml"
+    #     lstbin_simple.make_lst_bin_config_file(
+    #         cfl, data_files, ntimes_per_file=2, clobber=True,
+    #     )
+    #     out_files = lstbin_simple.lst_bin_files(
+    #         config_file=cfl, fname_format="zen.{kind}.{lst:7.5f}.uvh5",
+    #         Nbls_to_load=11, rephase=False,
+    #         sigma_clip_thresh=sigma_clip_thresh,
+    #         sigma_clip_min_N=2,
+    #         overwrite=True
+    #     )
+    #     assert len(out_files) == 1
+
+    #     for flset in out_files:
+    #         hd_std = io.HERADataFastReader(flset['STD'])
+    #         std, flags, nsamples = hd_std.read()
+
+    #         hd_lst = io.HERADataFastReader(flset['LST'])
+    #         data, _, _ = hd_lst.read(read_flags=False, read_nsamples=False)
+
+    #         dt = (data.times[1] - data.times[0])* units.si.day.in_units(units.si.s)
+    #         df = data.freqs[1] - data.freqs[0]
+
+    #         for bl in data.bls():
+    #             print(f"Baseline {bl}")
+    #             print("data: ", data[bl])
+    #             per_lst_expected_var = noise.predict_noise_variance_from_autos(
+    #                 bl=bl, data=data, dt=dt, df=df
+    #             )
+
+    #             # Every night should have the same expected variance since there's no
+    #             # redundant averaging here
+    #             np.testing.assert_allclose(std[bl].real**2, per_lst_expected_var/2, rtol=1e-1)
+    #             np.testing.assert_allclose(std[bl].imag**2, per_lst_expected_var/2, rtol=1e-1)
+                

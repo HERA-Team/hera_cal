@@ -423,19 +423,23 @@ def lst_average(
         f_min[norm <= sigma_clip_min_N] = True
 
     meandata[~f_min] /= norm[~f_min]
-    meandata[f_min] = 0.0  # any value, it's flagged anyway
+    meandata[f_min] = np.nan
 
     # get other stats
     logger.info("Calculating std")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
-        std = np.square(data - meandata)**2
+        print('MEAN: ', meandata)
+        print("norm: ", norm)
+        std = np.square(data.real - meandata.real) + 1j*np.square(data.imag - meandata.imag)
         std = np.nansum(std * nsamples, axis=0)
+        print("SUM OF SQUARES: ", std)
         std[~f_min] /= norm[~f_min]
-        std = np.sqrt(std)
+        print("MEAN OF SQUARES: ", std)
+        std = np.sqrt(std.real) + 1j*np.sqrt(std.imag)
                     
     std[f_min] = np.inf
-    norm[f_min] = 0  # This is probably redundant.
+    norm[f_min] = 0
 
     return meandata, f_min, std, norm
 
@@ -700,9 +704,6 @@ def lst_bin_files_for_baselines(
     for i in range(len(bin_lst)):
         mask = bins == i
         times_in_bins.append(times[mask])
-
-    print("ntimes in bins: ", [len(t) for t in times_in_bins])
-    print("Data shapes: ", [d.shape for d in data])
 
     return bin_lst, data, flags, nsamples, times_in_bins
 
@@ -1474,18 +1475,6 @@ def create_lstbin_output_file(
     uvd_template.polarization_array = np.array(uvutils.polstr2num(pols, x_orientation=uvd_template.x_orientation))
     uvd_template.initialize_uvh5_file(str(fname.absolute()), clobber=overwrite)
     
-    print("IN CREATE LSTBIN OUTPUT FILE")
-    print('Ntimes: ', uvd_template.Ntimes)
-    print('Nbls: ',uvd_template.Nbls)
-    print('Nfreqs: ',uvd_template.Nfreqs)
-    print('Npols: ',uvd_template.Npols)
-    print('Nspws: ',uvd_template.Nspws)
-    print('Nblts', uvd_template.Nblts)
-    print("len(antpairs)", len(antpairs))
-    print("len(pols)", len(pols))
-    print("len(freqs)", len(freqs))
-    if lsts is not None:
-        print("len(lsts)", len(lsts))
     return fname
 
 def write_baseline_slc_to_file(
@@ -1496,11 +1485,6 @@ def write_baseline_slc_to_file(
     nsamples: np.ndarray
 ):
     """Write a baseline slice to a file."""
-    
-    print("IN WRITE_BLSLC: ")
-    print('data shape: ', data.shape)
-    print("data reshape: ", data.reshape((-1, data.shape[2], data.shape[3])).shape)
-    print('slice', slc)
     with h5py.File(fl, 'r+') as f:
         ntimes = int(f['Header']['Ntimes'][()])
         timefirst = bool(f['Header']['time_axis_faster_than_bls'][()])
