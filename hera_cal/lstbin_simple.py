@@ -437,7 +437,7 @@ def lst_average(
     std[f_min] = np.inf
     norm[f_min] = 0  # This is probably redundant.
 
-    return data, f_min, std, norm
+    return meandata, f_min, std, norm
 
 def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
     """
