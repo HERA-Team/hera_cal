@@ -427,6 +427,7 @@ def delay_slope_calibration(
 def tip_tilt_calibration(
     data: np.ndarray,
     flags: np.ndarray,
+    nsamples: np.ndarray,
     antpairs: list[tuple[int, int]],
     antpos: list[dict[int, np.ndarray]] | dict[int, np.ndarray],
     pols: list[str],
@@ -837,6 +838,7 @@ def calibrate_data(
             delta_gains, _ = tip_tilt_calibration(
                 data=data,
                 flags=flags,
+                nsamples=nsamples,
                 antpairs=antpairs,
                 antpos=antpos,
                 pols=pols,
