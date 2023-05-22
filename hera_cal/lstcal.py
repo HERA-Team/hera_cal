@@ -274,9 +274,10 @@ def delay_slope_calibration(
     antpos: list[dict[int, np.ndarray]] | dict[int, np.ndarray],
     pols: list[str],
     sparse: bool = True,
+    solver_method: str = "default",
     day_flags: np.ndarray | None = None,
     bls_flags: np.ndarray | None = None,
-):
+) -> tuple[dict, dict]:
     """
     Solve for the delay slope of each day in an LST-bin.
 
@@ -401,7 +402,7 @@ def delay_slope_calibration(
 
         # Solve for the delay slope
         ls = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
-        fit = ls.solve()
+        fit = ls.solve(mode=solver_method)
 
         # Pack the solution into a dictionary
         solutions[pol] = fit
@@ -409,13 +410,22 @@ def delay_slope_calibration(
         for ant in antpos:
             phase = []
             for ti in range(ndays):
-                delay = np.sum(
-                    [
-                        antpos[ant][n] * fit[f"T{n}_{ti}"]
-                        for n in range(antpos[ant].shape[0])
-                    ],
-                    axis=0,
-                )
+                if use_same_antpos:
+                    delay = np.sum(
+                        [
+                            antpos[ant][n] * fit[f"T{n}_{ti}"]
+                            for n in range(antpos[ant].shape[0])
+                        ],
+                        axis=0,
+                    )
+                else:
+                    delay = np.sum(
+                        [
+                            antpos[ti][ant][n] * fit[f"T{n}_{ti}"]
+                            for n in range(antpos[ti][ant].shape[0])
+                        ],
+                        axis=0,
+                    )
                 phase.append(delay * freqs)
 
             _gains[(ant, "J" + "nn")] = np.exp(2j * np.pi * np.array(phase))
@@ -434,7 +444,8 @@ def tip_tilt_calibration(
     day_flags: np.ndarray | None = None,
     bls_flags: np.ndarray | None = None,
     sparse: bool = True,
-):
+    solver_method: str = "default",
+) -> tuple[dict, dict]:
     """
     Solve for the per-frequency phase slope of each day in an LST-bin.
 
@@ -557,22 +568,31 @@ def tip_tilt_calibration(
 
         # Solve system of equations
         solver = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
-        fit = solver.solve()
+        fit = solver.solve(mode=solver_method)
 
         # Pack the solution into a dictionary
         solutions[pol] = fit
 
         _gains = {}
-        for ant in antpos:
+        for ant in ants:
             phase = []
             for ti in range(ndays):
-                _phase = np.sum(
-                    [
-                        antpos[ant][ni] * fit[f"TT{ni}_{ti}"]
-                        for ni in range(antpos[ant].shape[0])
-                    ],
-                    axis=0,
-                )
+                if use_same_antpos:
+                    _phase = np.sum(
+                        [
+                            antpos[ant][ni] * fit[f"TT{ni}_{ti}"]
+                            for ni in range(antpos[ant].shape[0])
+                        ],
+                        axis=0,
+                    )
+                else:
+                    _phase = np.sum(
+                        [
+                            antpos[ti][ant][ni] * fit[f"TT{ni}_{ti}"]
+                            for ni in range(antpos[ti][ant].shape[0])
+                        ],
+                        axis=0,
+                    )
                 phase.append(_phase)
 
             _gains[(ant, "J" + pol)] = np.exp(1j * np.array(phase))
@@ -591,7 +611,8 @@ def amplitude_calibration(
     day_flags: np.ndarray | None = None,
     bls_flags: np.ndarray | None = None,
     sparse: bool = True,
-):
+    solver_method: str = "default",
+) -> tuple[dict, dict]:
     """
     Solve for the frequency-amplitude of each day in an LST-bin.
 
@@ -670,7 +691,7 @@ def amplitude_calibration(
 
         # Solve for the amplitude offsets
         solver = linsolve.LinearSolver(ls_data, wgts=wgts, sparse=sparse, **const)
-        fit = solver.solve()
+        fit = solver.solve(mode=solver_method)
         solutions[pol] = fit
 
         # Compute gain amplitudes
@@ -749,7 +770,8 @@ def calibrate_data(
     day_flags: np.ndarray | None = None,
     bls_flags: np.ndarray | None = None,
     sparse: bool = True,
-):
+    solver_method: str = "default",
+) -> dict:
     """
     Calibrate the data in an LST-bin.
 
@@ -785,8 +807,10 @@ def calibrate_data(
     if day_flags is None:
         day_flags = None
 
+    # Initialize gains
     gains = {}
 
+    # Perform phase calibration
     if phase_method == "complex_phase":
         raise NotImplementedError(
             "abscal.complex_phase_abscal not currently implemented."
@@ -803,6 +827,8 @@ def calibrate_data(
             pols=pols,
             day_flags=day_flags,
             bls_flags=bls_flags,
+            sparse=sparse,
+            solver_method=solver_method,
         )
         apply_lstcal_inplace(
             data=data,
@@ -844,6 +870,8 @@ def calibrate_data(
                 pols=pols,
                 day_flags=day_flags,
                 bls_flags=bls_flags,
+                sparse=sparse,
+                solver_method=solver_method,
             )
             apply_lstcal_inplace(
                 data=data,
@@ -868,7 +896,9 @@ def calibrate_data(
         antpairs=antpairs,
         pols=pols,
         day_flags=day_flags,
+        bls_flags=bls_flags,
         sparse=sparse,
+        solver_method=solver_method,
     )
 
     # Calibrate the data inplace
@@ -884,42 +914,12 @@ def calibrate_data(
     return gains
 
 
-def robust_divide(num: np.ndarray, den: np.ndarray):
-    """
-    Prevent division by zero.
-
-    This function will compute division between two array-like objects by setting
-    values to infinity when the denominator is small for the given data type. This
-    avoids floating point exception warnings that may hide genuine problems
-    in the data.
-
-    Parameters
-    ----------
-    num : array
-        The numerator.
-    den : array
-        The denominator.
-
-    Returns
-    -------
-    out : array
-        The result of dividing num / den. Elements where b is small (or zero) are set
-        to infinity.
-
-    """
-    thresh = np.finfo(den.dtype).eps
-    out = np.true_divide(num, den, where=(np.abs(den) > thresh))
-    out = np.where(np.abs(den) > thresh, out, np.inf)
-    return out
-
-
 def modified_zscore(
     data: np.ndarray,
     flags: np.ndarray,
-    nsamples: np.ndarray,
     nsigma: float = 5.0,
     axis: tuple[int, ...] | int = -1,
-):
+) -> np.ndarray:
     """
     Identify outliers in an LST-bin by computing the modified z-score.
 
@@ -950,11 +950,18 @@ def modified_zscore(
     d_rs = _data - med_data
     d_sq = np.abs(d_rs) ** 2
     sig = np.sqrt(np.nanmedian(d_sq, axis=axis, keepdims=True) / 0.456)
-    zscore = d_rs / sig
-    return np.abs(zscore) > nsigma
+    return np.abs(d_rs / sig) > nsigma
 
 
-def flag_lst_data_products(data, flags, nsamples, nsigma=5.0):
+def flag_lst_data_products(
+    data: np.ndarray,
+    flags: np.ndarray,
+    nsamples: np.ndarray,
+    nsigma: float = 5.0,
+    axis: int = 0,
+    reduce_axes: int = -1,
+    statistic: callable = np.nanmean,
+) -> np.ndarray:
     """
     Flag data products in an LST-bin.
 
@@ -972,4 +979,13 @@ def flag_lst_data_products(data, flags, nsamples, nsigma=5.0):
     day_flags : np.ndarray
         Shape (Ndays) of boolean flags.
     """
-    pass
+    # Check that the statistic is callable
+    assert callable(statistic), "statistic must be a callable function."
+
+    # Compute the z-score for each data product
+    zscore = modified_zscore(data, flags, nsigma=nsigma, axis=axis)
+
+    # Reduce the z-score along the specified axes
+    new_flags = statistic(zscore, axis=reduce_axes) > nsigma
+
+    return new_flags
