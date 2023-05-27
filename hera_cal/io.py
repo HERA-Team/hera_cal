@@ -989,7 +989,7 @@ class HERAData(UVData):
         #     this = copy.deepcopy(self)
 
         hd_writer.write_uvh5_part(output_path, d, f, n,
-                                  run_check_acceptability=output_path in self._writers,
+                                  run_check_acceptability=(output_path in self._writers),
                                   **self.last_read_kwargs)
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
