@@ -49,9 +49,9 @@ class Test_Smooth_Cal_Helper_Functions(object):
         np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
         # test nan handling
         phase_flipped = smooth_cal.detect_phase_flips(np.array([1, 1, 1, 4, np.nan, 4]))
-        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, False, True]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
         phase_flipped = smooth_cal.detect_phase_flips(np.array([np.nan, 1, 1, 4, np.nan, 4]))
-        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, False, True]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
 
     def test_dpss_filters(self):
         times = np.linspace(0, 10 * 10 / 60. / 60. / 24., 40, endpoint=False)
