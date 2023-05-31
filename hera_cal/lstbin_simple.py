@@ -629,6 +629,11 @@ def lst_bin_files_for_baselines(
         else:
             bls_to_load = [bl for bl in antpairs if bl in data_antpairs or bl[::-1] in data_antpairs]
 
+        print("HEYO!!!!")
+        print("in bls_to_load: ", (4, 146) in bls_to_load or (146, 4) in bls_to_load)
+        print("in data_antpairs: ", (4, 146) in data_antpairs or (146, 4) in data_antpairs)
+        print("in antpairs: ", reds.get_ubl_key((4, 146)) in antpairs or reds.get_ubl_key((146, 4)) in antpairs)
+ 
         if not bls_to_load or not np.any(tind):
             # If none of the requested baselines are in this file, then just 
             # set stuff as nan and go to next file. 
@@ -704,7 +709,7 @@ def lst_bin_files_for_baselines(
     )
 
     print("HEY AGAIN!")
-    print(nsamples[SLC, II, :, JJ].max(), nsamples[SLC, II, :, JJ].min())
+    print(nsamples[0][:, II, :, JJ].max(), nsamples[0][:, II, :, JJ].min())
 
     bins = get_lst_bins(lsts, lst_bin_edges)[0]
     times = np.concatenate(time_arrays)
