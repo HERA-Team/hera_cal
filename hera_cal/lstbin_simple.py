@@ -625,7 +625,7 @@ def lst_bin_files_for_baselines(
         data_antpairs = meta.get_transactional('antpairs')
 
         if redundantly_averaged:
-            bls_to_load = [bl for bl in data_antpairs if reds.get_ubl_key(bl) in antpairs]
+            bls_to_load = [bl for bl in data_antpairs if reds.get_ubl_key(bl) in antpairs or reds.get_ubl_key(bl[::-1]) in antpairs]
         else:
             bls_to_load = [bl for bl in antpairs if bl in data_antpairs or bl[::-1] in data_antpairs]
 
