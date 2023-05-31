@@ -400,7 +400,7 @@ def lst_average(
     # Flag entire LST bins if there are too many flags over time
     flag_frac = np.sum(flags, axis=0) / flags.shape[0]
     nflags = np.sum(flags)
-    logger.info(f"Percent of data flagged before thresholding: {100*np.sum(flags)/flags.size:.2f}%")
+    logger.info(f"Percent of data flagged before thresholding: {100*nflags/flags.size:.2f}%")
     flags |= flag_frac > flag_thresh
     data[flags] *= np.nan  # do this so that we can do nansum later. multiply to get both real/imag as nan
     logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to flag_frac > {flag_thresh}")
@@ -414,28 +414,25 @@ def lst_average(
 
     nsamples[flags] = 0
     norm = np.sum(nsamples, axis=0)  # missing a "clip" between 1e-99 and inf here...
+    ndays_binned = np.sum(nsamples > 0, axis=0)
 
     logger.info("Calculating mean")
     meandata = np.nansum(data * nsamples, axis=0)
 
     f_min = np.all(flags, axis=0)
     if flag_below_min_N:
-        f_min[norm <= sigma_clip_min_N] = True
+        f_min[ndays_binned < sigma_clip_min_N] = True
 
     meandata[~f_min] /= norm[~f_min]
-    meandata[f_min] = np.nan
+    meandata[f_min] *= np.nan
 
     # get other stats
     logger.info("Calculating std")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
-        print('MEAN: ', meandata)
-        print("norm: ", norm)
         std = np.square(data.real - meandata.real) + 1j*np.square(data.imag - meandata.imag)
         std = np.nansum(std * nsamples, axis=0)
-        print("SUM OF SQUARES: ", std)
         std[~f_min] /= norm[~f_min]
-        print("MEAN OF SQUARES: ", std)
         std = np.sqrt(std.real) + 1j*np.sqrt(std.imag)
                     
     std[f_min] = np.inf
