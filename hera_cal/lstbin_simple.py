@@ -166,7 +166,7 @@ def lst_align(
 
     logger.info(f"Data Shape: {data.shape}")
 
-    # Now, rephase the data to the lst bin centres.
+    # Now, a the data to the lst bin centres.
     if rephase:
         logger.info("Rephasing data")
 
@@ -666,6 +666,7 @@ def lst_bin_files_for_baselines(
                 bl = keyed.get_ubl_key(bl)
             for j, pol in enumerate(pols):
                 blpol = bl + (pol,)
+                
                 if blpol in _data:  # DataContainer takes care of conjugates.
                     data[slc, i, :, j] = _data[blpol]
                     flags[slc, i, :, j] = _flags[blpol]
@@ -677,6 +678,13 @@ def lst_bin_files_for_baselines(
                     flags[slc, i, :, j] = True
                     nsamples[slc, i, :, j] = 0
 
+                if bl in [(4, 146) , (146, 4)] and pol == 'ee':
+                    print("HEYYYYYYY!!!")
+                    print(bl, i, j, slc, blpol in _data)
+                    print(nsamples[slc, i, :, j].max())
+                    II = i
+                    JJ = j
+                    SLC = slc
 
     logger.info("About to run LST binning...")
     # LST bin edges are the actual edges of the bins, so should have length
@@ -694,6 +702,9 @@ def lst_bin_files_for_baselines(
         rephase = rephase,
         antpos=antpos,
     )
+
+    print("HEY AGAIN!")
+    print(nsamples[SLC, II, :, JJ].max(), nsamples[SLC, II, :, JJ].min())
 
     bins = get_lst_bins(lsts, lst_bin_edges)[0]
     times = np.concatenate(time_arrays)
