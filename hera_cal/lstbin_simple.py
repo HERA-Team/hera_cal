@@ -628,11 +628,6 @@ def lst_bin_files_for_baselines(
             bls_to_load = [bl for bl in data_antpairs if reds.get_ubl_key(bl) in antpairs or reds.get_ubl_key(bl[::-1]) in antpairs]
         else:
             bls_to_load = [bl for bl in antpairs if bl in data_antpairs or bl[::-1] in data_antpairs]
-
-        print("HEYO!!!!")
-        print("in bls_to_load: ", (4, 146) in bls_to_load or (146, 4) in bls_to_load)
-        print("in data_antpairs: ", (4, 146) in data_antpairs or (146, 4) in data_antpairs)
-        print("in antpairs: ", reds.get_ubl_key((4, 146)) in antpairs or reds.get_ubl_key((146, 4)) in antpairs)
  
         if not bls_to_load or not np.any(tind):
             # If none of the requested baselines are in this file, then just 
@@ -683,14 +678,6 @@ def lst_bin_files_for_baselines(
                     flags[slc, i, :, j] = True
                     nsamples[slc, i, :, j] = 0
 
-                if bl in [(4, 146) , (146, 4)] and pol == 'ee':
-                    print("HEYYYYYYY!!!")
-                    print(bl, i, j, slc, blpol in _data)
-                    print(nsamples[slc, i, :, j].max())
-                    II = i
-                    JJ = j
-                    SLC = slc
-
     logger.info("About to run LST binning...")
     # LST bin edges are the actual edges of the bins, so should have length
     # +1 of the LST centres. We use +dlst instead of +dlst/2 on the top edge
@@ -707,9 +694,6 @@ def lst_bin_files_for_baselines(
         rephase = rephase,
         antpos=antpos,
     )
-
-    print("HEY AGAIN!")
-    print(nsamples[0][:, II, :, JJ].max(), nsamples[0][:, II, :, JJ].min())
 
     bins = get_lst_bins(lsts, lst_bin_edges)[0]
     times = np.concatenate(time_arrays)
