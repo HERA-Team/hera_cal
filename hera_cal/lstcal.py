@@ -938,7 +938,7 @@ def calibrate_data(
     antpairs: list[tuple],
     pols: list[str],
     phs_max_iter: int = 10,
-    phs_conv_crit: float = 1e-10,
+    phs_conv_crit: float = 1e-6,
     phase_method: str = "logcal",
     day_flags: np.ndarray | None = None,
     bls_flags: np.ndarray | None = None,
