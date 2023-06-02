@@ -407,8 +407,16 @@ def lst_average(
 
     # Now do sigma-clipping.
     if sigma_clip_thresh > 0:
+        
         nflags = np.sum(flags)
-        flags |= sigma_clip(data, sigma=sigma_clip_thresh, min_N = sigma_clip_min_N)
+        clip_flags = sigma_clip(data.real, sigma=sigma_clip_thresh, min_N = sigma_clip_min_N)
+        clip_flags |= sigma_clip(data.imag, sigma=sigma_clip_thresh, min_N = sigma_clip_min_N)
+
+        # Need to restore min_N condition properly here because it's not done properly in sigma_clip
+        sc_min_N = np.sum(~flags, axis=0) < sigma_clip_min_N
+        clip_flags[:, sc_min_N] = False
+
+        flags |= clip_flags
         data[flags] *= np.nan
         logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to sigma clipping")
 
