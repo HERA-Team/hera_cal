@@ -429,7 +429,7 @@ def read_hera_calfits(filenames, ants=None, pols=None,
     return rv
 
 
-def get_blt_slices(uvo, tried_to_reorder=False, assume_time_first: bool=False, assume_bl_first: bool=False):
+def get_blt_slices(uvo, tried_to_reorder=False):
     '''For a pyuvdata-style UV object, get the mapping from antenna pair to blt slice.
     If the UV object does not have regular spacing of baselines in its baseline-times,
     this function will try to reorder it using UVData.reorder_blts() to see if that helps.
@@ -437,28 +437,23 @@ def get_blt_slices(uvo, tried_to_reorder=False, assume_time_first: bool=False, a
     Arguments:
         uvo: a "UV-Object" like UVData or baseline-type UVFlag. Blts may get re-ordered internally.
         tried_to_reorder: used internally to prevent infinite recursion
-
     Returns:
         blt_slices: dictionary mapping anntenna pair tuples to baseline-time slice objects
     '''
-    if assume_bl_first and assume_time_first:
-        raise ValueError("Cannot assume both bl first and time first ordering!")
-    if assume_bl_first:
-        if not uvo.Nblts != uvo.Nbls * uvo.Ntimes:
-            raise ValueError("Assumption of bl first ordering cannot be correct if Nblts != Nbls * Ntimes")
-        for i in range(uvo.Nbls):
-            antp = (uvo.ant_1_array[i], uvo.ant_2_array[i])
-            blt_slices[antp] = slice(i, uvo.Nblts, uvo.Nbls)
-        assert uvo.Nbls == len(blt_slices)
+    if hasattr(uvo, 'blts_are_rectangular') and uvo.blts_are_rectangular is None:
+        uvo.set_rectangularity()
 
-    elif assume_time_first:
-        if not uvo.Nblts != uvo.Nbls * uvo.Ntimes:
-            raise ValueError("Assumption of time first ordering cannot be correct if Nblts != Nbls * Ntimes")
-        for i in range(uvo.Nbls):
-            antp = (uvo.ant_1_array[i*uvo.Ntimes], uvo.ant_2_array[i*uvo.Ntimes])
-            blt_slices[antp] = slice(i, uvo.Nbls + i, 1)
-        assert uvo.Nbls == len(blt_slices)
-
+    if getattr(uvo, 'blts_are_rectangular', False):
+        if uvo.time_axis_faster_than_bls:
+            for i in range(uvo.Nbls):
+                antp = (uvo.ant_1_array[i*uvo.Ntimes], uvo.ant_2_array[i*uvo.Ntimes])
+                blt_slices[antp] = slice(i, uvo.Nbls + i, 1)
+            assert uvo.Nbls == len(blt_slices)
+        else:
+            for i in range(uvo.Nbls):
+                antp = (uvo.ant_1_array[i], uvo.ant_2_array[i])
+                blt_slices[antp] = slice(i, uvo.Nblts, uvo.Nbls)
+            assert uvo.Nbls == len(blt_slices)
     else:
         blt_slices = {}
         for ant1, ant2 in uvo.get_antpairs():
@@ -1568,7 +1563,7 @@ def write_filter_cache_scratch(filter_cache, cache_dir=None, skip_keys=None):
         warnings.warn("No new keys provided. No cache file written.")
 
 
-def load_flags(flagfile, filetype='h5', return_meta=False, assume_time_first: bool = False, assume_bl_first: bool = False):
+def load_flags(flagfile, filetype='h5', return_meta=False):
     '''Load flags from a file and returns them as a DataContainer (for per-visibility flags)
     or dictionary (for per-antenna or per-polarization flags). More than one spectral window
     is not supported. Assumes times are evenly-spaced and in order for each baseline.
@@ -1604,7 +1599,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False, assume_time_first: bo
         history = uvf.history
 
         if uvf.type == 'baseline':  # one time x freq waterfall per baseline
-            blt_slices = get_blt_slices(uvf, assume_time_first=assume_time_first, assume_bl_first=assume_bl_first)
+            blt_slices = get_blt_slices(uvf)
             for ip, pol in enumerate(uvf.polarization_array):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                     pol = polnum2str(pol, x_orientation=uvf.x_orientation)  # convert to string if possible
@@ -2024,7 +2019,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
               filetype='miriad', write_file=True, outdir="./", overwrite=False, verbose=True, history=" ",
               return_uvd=False, start_jd=None, lst_branch_cut=0.0, x_orientation="north", instrument="HERA",
               telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
-              telescope_location=HERA_TELESCOPE_LOCATION, integration_time=None, data_array=None,
+              telescope_location=HERA_TELESCOPE_LOCATION, integration_time=None,
               **kwargs):
     """
     Take DataContainer dictionary, export to UVData object and write to file. See pyuvdata.UVdata
@@ -2045,14 +2040,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     time_array : type=ndarray, contains unique Julian Date time bins of data (center of integration).
 
-    flags : type=DataContainer or array, holds data flags, matching data in shape. If
-            an array, must be shape (Nbls, Ntimes, Nfreqs, Npols).
+    flags : type=DataContainer or array, holds data flags, matching data in shape. 
 
     nsamples : type=DataContainer or array, holds number of points averaged into each bin in data 
-               (if applicable). If an array, must be shape (Nbls, Ntimes, Nfreqs, Npols).
-
-    data_array : type=array, if given, use this data as the data_array, instead of 
-                 whatever is in data_array. 
+               (if applicable).
 
     filetype : type=str, filetype to write-out, options=['miriad'].
 
@@ -2132,9 +2123,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     spw_array = np.array([0])
     Nspws = 1
 
-    if data_array is not None and data_array.shape != (Nbls, Ntimes, Nfreqs, Npols):
-        raise ValueError("If given, data_array must have shape (Nbls, Ntimes, Nfreqs, Npols)")
-
     # get baselines keys
     antpairs = sorted(data.antpairs())
     Nbls = len(antpairs)
@@ -2150,11 +2138,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
         integration_time = np.ones_like(time_array, dtype=np.float64) * np.median(np.diff(np.unique(time_array))) * 24 * 3600.
 
     # get data array
-    if data_array is None:
-        data_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=complex)
-        for i, antpair in enumerate(antpairs):
-            for j, pol in enumerate(pols):
-                data_array[i, :, :, j] = data[antpair + (str(pol),)]
+    data_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=complex)
+    for i, antpair in enumerate(antpairs):
+        for j, pol in enumerate(pols):
+            data_array[i, :, :, j] = data[antpair + (str(pol),)]
 
     # resort time and baseline axes
     data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
@@ -2162,26 +2149,20 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     if nsamples is None:
         nsample_array = np.ones_like(data_array, float)
     else:
-        if isinstance(nsamples, DataContainer):
-            nsample_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=float)
-            for i, antpair in enumerate(antpairs):
-                for j, pol in enumerate(pols):
-                    nsample_array[i, :, :, j] = nsamples[antpair + (str(pol),)]
-        else:
-            nsample_array = nsamples
+        nsample_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=float)
+        for i, antpair in enumerate(antpairs):
+            for j, pol in enumerate(pols):
+                nsample_array[i, :, :, j] = nsamples[antpair + (str(pol),)]
         nsample_array = nsample_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # flags
     if flags is None:
         flag_array = np.zeros_like(data_array, float).astype(bool)
     else:
-        if isinstance(flags, DataContainer):
-            flag_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=bool)
-            for i, antpair in enumerate(antpairs):
-                for j, pol in enumerate(pols):
-                    flag_array[i, :, :, j] = flags[antpair + (str(pol),)]
-        else:
-            flag_array = flags
+        flag_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=bool)
+        for i, antpair in enumerate(antpairs):
+            for j, pol in enumerate(pols):
+                flag_array[i, :, :, j] = flags[antpair + (str(pol),)]
         flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # configure baselines

@@ -858,8 +858,7 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, a
         # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
         # note that we pre-divided s_diff by c so this is in units of tau.
         tau = np.einsum("...i,i->...", s_diff, bl)
-        #if i==0:
-        #    print("TAU OLD: ", tau)
+    
         # reshape tau
         if not isinstance(tau, np.ndarray):            
             tau = np.array([tau])
