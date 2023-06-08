@@ -443,6 +443,7 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     if hasattr(uvo, 'blts_are_rectangular') and uvo.blts_are_rectangular is None:
         uvo.set_rectangularity()
 
+    blt_slices = {}
     if getattr(uvo, 'blts_are_rectangular', False):
         if uvo.time_axis_faster_than_bls:
             for i in range(uvo.Nbls):
@@ -454,8 +455,7 @@ def get_blt_slices(uvo, tried_to_reorder=False):
                 antp = (uvo.ant_1_array[i], uvo.ant_2_array[i])
                 blt_slices[antp] = slice(i, uvo.Nblts, uvo.Nbls)
             assert uvo.Nbls == len(blt_slices)
-    else:
-        blt_slices = {}
+    else:    
         for ant1, ant2 in uvo.get_antpairs():
             indices = uvo.antpair2ind(ant1, ant2)
             if len(indices) == 1:  # only one blt matches
