@@ -468,7 +468,7 @@ class DataContainer:
         '''Allows for getting values with fallback if not found. Default None.'''
         return (self[key] if key in self else val)
 
-    def select_or_expand_times(self, new_times, in_place=True):
+    def select_or_expand_times(self, new_times, in_place=True, skip_bda_check=False):
         '''Update self.times with new times, updating data and metadata to be consistent. Data and
         metadata will be deleted, rearranged, or duplicated as necessary using numpy's fancy indexing.
         Assumes that the 0th data axis is time. Does not support baseline-dependent averaging.
@@ -487,12 +487,13 @@ class DataContainer:
         assert dc.times is not None
         if not np.all([nt in dc.times for nt in new_times]):
             raise ValueError('All new_times must be in self.times.')
-        if dc.times_by_bl is not None:
-            for tbbl in dc.times_by_bl.values():
-                assert np.all(tbbl == dc.times), 'select_or_expand_times does not support baseline dependent averaging.'
-        if dc.lsts_by_bl is not None:
-            for lbbl in dc.lsts_by_bl.values():
-                assert np.all(lbbl == dc.lsts), 'select_or_expand_times does not support baseline dependent averaging.'
+        if not skip_bda_check:
+            if dc.times_by_bl is not None:
+                for tbbl in dc.times_by_bl.values():
+                    assert np.all(tbbl == np.asarray(dc.times)), 'select_or_expand_times does not support baseline dependent averaging.'
+            if dc.lsts_by_bl is not None:
+                for lbbl in dc.lsts_by_bl.values():
+                    assert np.all(lbbl == np.asarray(dc.lsts)), 'select_or_expand_times does not support baseline dependent averaging.'
 
         # update data
         nt_inds = np.searchsorted(np.array(dc.times), np.array(new_times))

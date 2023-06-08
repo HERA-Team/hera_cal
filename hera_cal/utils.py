@@ -1516,8 +1516,8 @@ def match_files_to_lst_bins(
 
     Parameters
     ----------
-    lst_range
-        The lst range to match. This is a tuple of (start, stop) lsts in radians.
+    lst_edges
+        The lst edges to match. This is a tuple of (start, stop) lsts in radians.
     file_list
         A list of files to match against. This can be a list of strings, a list of
         pathlib.Path objects, or a list of FastUVH5Meta objects.
@@ -1530,11 +1530,16 @@ def match_files_to_lst_bins(
         in order.
     jd_regex
         The regex to use to extract the julian date from the file name. If provided,
-    approximate
-        If True, return a list of files that is a superset of those that exist in the
-        LST bins -- either the exact list or more than the true list. This will be based
-        on times inferred from the filename (if possible) and the integration time of
-        the first file. 
+    time_axis_faster_than_bls: bool | None
+        If True, assume the time axis is faster than the baseline axis in the data
+        files.
+    blts_are_rectangular: bool | None
+        If True, assume the baseline-time axis is rectangular in the data files.
+    atol : float
+        The absolute tolerance to use when comparing LSTs. This is used to provide
+        a buffer around the LST edges, so that files that have times that are just
+        outside the LST range are included. These can be trimmed later by a more 
+        precise function.
     
     Returns
     -------
