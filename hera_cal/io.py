@@ -1472,7 +1472,7 @@ class HERADataFastReader():
         dc = DataContainer(rv[key])
         for meta in HERAData.HERAData_metas:
             if meta in rv['info'] and meta not in ['pols', 'antpairs', 'bls']:  # these are functions on datacontainers
-                setattr(dc, meta, rv['info'][meta])
+                setattr(dc, meta, copy.deepcopy(rv['info'][meta]))
 
         return dc
 
