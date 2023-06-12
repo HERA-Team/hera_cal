@@ -3619,7 +3619,7 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
 
 
 def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[], data_is_redsol=False,
-                    model_is_redundant=False, tol=1.0, min_bl_cut=None, max_bl_cut=None, max_dims=2, verbose=False):
+                    model_is_redundant=False, tol=1.0, min_bl_cut=None, max_bl_cut=None, max_dims=2, verbose=False, include_autos=False):
     '''Figure out which baselines to use in the data and the model for abscal and their correspondence.
 
     Arguments:
@@ -3635,6 +3635,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
             smaller than min_bl_cut. This is assumed to be in ENU coordinates with units of meters.
         max_bl_cut : float, eliminate all visibilities with baseline separation lengths
             larger than max_bl_cut. This is assumed to be in ENU coordinates with units of meters.
+        include_autos: bool, if true, include autocorr redundant group. Default is false.
 
     Returns:
         data_bl_to_load: list of baseline tuples in the form (0, 1, 'ee') to load from the data file
@@ -3665,7 +3666,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
         # increase all antenna indices in the model by model_offset to distinguish them from data antennas
         model_offset = np.max(list(data_antpos.keys())) + 1
         joint_antpos = {**data_antpos, **{ant + model_offset: pos for ant, pos in model_antpos.items()}}
-        joint_reds = redcal.get_reds(joint_antpos, pols=pols, bl_error_tol=tol)
+        joint_reds = redcal.get_reds(joint_antpos, pols=pols, bl_error_tol=tol, include_autos=include_autos)
 
         # filter out baselines not in data or model or between data and model
         joint_reds = [[bl for bl in red if not ((bl[0] < model_offset) ^ (bl[1] < model_offset))] for red in joint_reds]
