@@ -661,13 +661,12 @@ def config_lst_bin_files(
     lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, lst_width=lst_width)
     dlst = lst_grid[1] - lst_grid[0]
 
-    grid_range = (lst_grid[0] - dlst/2, lst_grid[-1] + dlst/2)
 
     # enforce that lst_arrays are in the same range as the lst_grid
     for larrs in lst_arrays:
         for larr in larrs:
-            larr[larr < grid_range[0]] += 2 * np.pi
-            larr[larr >= grid_range[1]] -= 2 * np.pi
+            larr[larr < (lst_grid[0] - dlst/2)] += 2 * np.pi
+            larr[larr >= (lst_grid[1] + dlst/2)] -= 2 * np.pi
 
     # get number of output files
     nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
@@ -1046,11 +1045,15 @@ def make_lst_grid(
         Beginning point for lst_grid. ``begin_lst`` must fall exactly on an LST bin 
         given a dlst, within 0-2pi. If not, it is replaced with the closest bin. 
         Default is zero radians.
+    lst_width
+        The width of the LST grid (including all bins) in radians. 
+        Default is 2pi radians. Note that regardless of this value, the final grid
+        will always be equally divisible by 2pi.
 
     Output:
     -------
     lst_grid
-        Uniform LST grid marking the center of each LST bin
+        Uniform LST grid marking the center of each LST bin.
     """
     assert dlst >= 6.283e-6, "dlst must be greater than 6.283e-6 radians, or .0864 seconds."
     assert dlst < 2 * np.pi, "dlst must be less than 2pi radians, or 24 hours."
@@ -1092,23 +1095,27 @@ def make_lst_grid(
     return lst_grid
 
 
-def sigma_clip(array, sigma=4.0, min_N=4, axis: int = 0):
+def sigma_clip(array: np.ndarray, sigma: float=4.0, min_N: int=4, axis: int = 0):
     """
-    One-iteration robust sigma clipping algorithm. Returns clip_flags array.
+    One-iteration robust sigma clipping algorithm.
 
-    Parameters:
-    -----------
-    array : ndarray of complex visibility data. Clipping performed on 0th axis.
+    Parameters
+    ----------
+    array 
+        ndarray of *real* data.
+    sigma
+        sigma threshold to cut above.
+    min_N
+        minimum length of array to sigma clip, below which no sigma
+        clipping is performed. Non-clipped values are *not* flagged.
+    axis
+        Axis along which to perform sigma clipping.
 
-    sigma : float, sigma threshold to cut above.
-
-    min_N : int, minimum length of array to sigma clip, below which no sigma
-            clipping is performed.
-
-    Output: flags
-    -------
-    clip_flags : type=boolean ndarray, has same shape as input array, but has clipped
-                 values set to True.
+    Output
+    ------
+    clip_flags 
+        A boolean array with same shape as input array, 
+        with clipped values set to True.
     """
     # ensure array is an array
     if not isinstance(array, np.ndarray):

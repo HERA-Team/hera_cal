@@ -1561,7 +1561,7 @@ def match_files_to_lst_bins(
     if time_axis_faster_than_bls is None:
         time_axis_faster_than_bls = meta.time_axis_faster_than_bls
 
-    file_list = [
+    metadata_list = [
         FastUVH5Meta(
             fl, 
             blts_are_rectangular=blts_are_rectangular, 
@@ -1585,10 +1585,10 @@ def match_files_to_lst_bins(
     
     # The files in the list MUST NOT wrap around in LST, i.e.
     # there is 24 hours or less of time in the files. 
-    if file_list[-1].times[-1] < file_list[0].times[0]: 
+    if metadata_list[-1].times[-1] < metadata_list[0].times[0]: 
         raise ValueError("After sorting, the last file in the list is is before the first.")
 
-    if file_list[-1].times[-1] > meta.times[0] + 1.0:
+    if metadata_list[-1].times[-1] > meta.times[0] + 1.0:
         raise ValueError("The input files span greater than 24 hours, cannot use this function. Use match_times instead.")
 
     jd_edges = LST2JD(
@@ -1606,7 +1606,7 @@ def match_files_to_lst_bins(
     ntimes_per_file = meta.Ntimes
 
     # Cache times
-    _metas = {meta.path: meta for meta in file_list}
+    _metas = {meta.path: meta for meta in metadata_list}
 
     if jd_regex is not None:
         jd_regex = re.compile(jd_regex)
@@ -1619,7 +1619,7 @@ def match_files_to_lst_bins(
             meta = _metas[path]
             return meta.get_transactional("times")[0]
         
-    def get_first_file_in_range(file_list, jd_range: Tuple[float, float]) -> int:
+    def get_first_file_in_range(meta_list, jd_range: Tuple[float, float]) -> int:
         jdstart, jdend = jd_range
 
         jdstart_for_file = jdstart - tint*(ntimes_per_file-1) - atol
@@ -1629,12 +1629,12 @@ def match_files_to_lst_bins(
         cmp = operator.and_ if (jdstart < jdend) else operator.or_
 
         index = 0
-        meta = file_list[index]
+        meta = meta_list[index]
         thistime = get_first_time(meta.path)
 
         # Find the first file that has times in the LST range
         minidx = -1
-        maxidx = len(file_list)
+        maxidx = len(meta_list)
         best_diff = np.inf
         best_index = -1
 
@@ -1670,10 +1670,10 @@ def match_files_to_lst_bins(
                 index = min(maxidx-1, max(minidx+1, (minidx + maxidx) // 2))
                 if index < 0:
                     index = 0
-                elif index >= len(file_list):
-                    index = len(file_list) - 1
+                elif index >= len(meta_list):
+                    index = len(meta_list) - 1
 
-            meta = file_list[index]
+            meta = meta_list[index]
             thistime = get_first_time(meta.path)
 
         if best_index == -1:
@@ -1685,15 +1685,15 @@ def match_files_to_lst_bins(
         # We subtract one, because the file before the first file in the range
         # may just get into the range by a tiny bit, and we allow the user to test
         # that out later.
-        first_file = get_first_file_in_range(file_list, (jdstart, jdend))
+        first_file = get_first_file_in_range(metadata_list, (jdstart, jdend))
     except ValueError:
         return [[] for _ in range(len(lst_edges)-1)]
 
     # Now, we have to actually go through the bins in lst_edges and assign files.
     lstbin_files = [[] for _ in range(len(lst_edges)-1)]
-    _file_list = file_list[first_file:] + file_list[:first_file]  # roll the files
+    _meta_list = metadata_list[first_file:] + metadata_list[:first_file]  # roll the files
     
-    for i, fl in enumerate(_file_list):
+    for i, fl in enumerate(_meta_list):
         thistime = get_first_time(fl.path)
         fl_in_range = False
         for lstbin, (jdstart, jdend) in enumerate(zip(jd_edges[:-1], jd_edges[1:])):
@@ -1831,10 +1831,3 @@ def select_spw_ranges_argparser():
                                                                                 "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
-
-def mergedicts(*dicts) -> dict:
-    """Merge any number of dictionaries, overwriting keys."""
-    output = {}
-    for d in dicts:
-        output.update(dict(d.items()))
-    return output

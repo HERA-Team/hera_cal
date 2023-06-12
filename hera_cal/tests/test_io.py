@@ -968,7 +968,7 @@ class Test_HERADataFastReader:
         hd1 = io.HERADataFastReader(infile)
         hd1.read(check=True)
         hd2 = io.HERAData(infile)
-        #hd2.read()
+
         np.testing.assert_array_equal(hd1.freqs, hd2.freqs)
         np.testing.assert_array_equal(hd1.times, hd2.times)
         np.testing.assert_allclose(hd1.lsts, hd2.lsts)

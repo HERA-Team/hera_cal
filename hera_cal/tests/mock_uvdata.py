@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pyuvdata import UVData, UVCal
 from pyuvdata.uvdata import FastUVH5Meta
+from pyuvdata.telescopes import get_telescope
+
 from hera_cal import utils
 from hera_cal import io
 from hera_cal import noise
@@ -14,15 +16,16 @@ from pathlib import Path
 from hera_cal.red_groups import RedundantGroups
 from astropy import units
 
-HERA_LOC = EarthLocation.from_geodetic(
-    lat=-30.721526120690307,
-    lon=21.428303826863015,
-    height=1051.690000070259,
+HERA_LOC = EarthLocation.from_geocentric(
+    *get_telescope("HERA").telescope_location, unit="m"
 )
 
 with open(f"{DATA_PATH}/hera_antpos.yaml", "r") as fl:
     HERA_ANTPOS = yaml.safe_load(fl)
 
+start: 46920776.3671875
+end:   234298706.0546875
+delta: 122070.3125
 
 def create_mock_hera_obs(
     jdint: int = 2459855, 
@@ -30,7 +33,7 @@ def create_mock_hera_obs(
     lst_start=0.1, 
     jd_start: float | None = None,
     ntimes: int=2,
-    freqs: np.ndarray = np.linspace(45e6, 250e6, 1500),
+    freqs: np.ndarray = np.arange(46920776.3671875, 234298706.0546875 + 10.0, 122070.3125),
     pols: list[str] = ["xx", "yy", "xy", "yx"],
     ants: list[int] | None = None,
     antpairs: list[tuple[int, int]] | None = None,
