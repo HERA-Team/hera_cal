@@ -1,14 +1,14 @@
 """
 An attempt at a simpler LST binner that makes more assumptions but runs faster.
 
-In particular, we assume that all baselines with a particular observation have the same 
+In particular, we assume that all baselines with a particular observation have the same
 time and frequency arrays, and use this to vectorize many of the calculations.
 
 The main entry-point is the :func:`lst_bin_files` function, which takes a specific
 configuration file, produced by :func:`make_lst_bin_config_file`, that specifies which
 data files to bin into which LST bins, and outputs files containing the binned data.
 This is similar to the older :func:`~lstbin.lst_bin_files` function (though
-the interface is slightly different, as the new function assumes a pre-configured 
+the interface is slightly different, as the new function assumes a pre-configured
 configuration file).
 
 """
@@ -65,8 +65,8 @@ def lst_align(
 
     The data is binned via a simple histogram, i.e. the data represented at each LST
     is essentially assumed to be a delta function in LST, and is fully assigned to one
-    particular LST bin. Due to this, it is irrelevant whether the ``data_lsts`` 
-    represent the start, end, or centre of each integration -- either choice will 
+    particular LST bin. Due to this, it is irrelevant whether the ``data_lsts``
+    represent the start, end, or centre of each integration -- either choice will
     incur similar errors.
 
     Parameters
@@ -79,12 +79,12 @@ def lst_align(
         length ``data.shape[0]``. As noted above, these may be the start, end, or
         centre of each integration, as long as it is consistent for all the data.
     antpairs
-        The list of antenna pairs in the data, in the order they appear in ``data``. 
+        The list of antenna pairs in the data, in the order they appear in ``data``.
         Each element is a tuple of two antenna numbers, e.g. ``(0, 1)``.
     lst_bin_edges
         A sequence of floats specifying the *edges* of the LST bins to use, with length
         ``N_lstbins + 1``. Bins are thus assumed to be contiguous, but not necessarily
-        of equal size. 
+        of equal size.
     freq_array
         An array of frequencies in the data, in Hz. Size must be ``data.shape[2]``.
     flags
@@ -97,7 +97,7 @@ def lst_align(
         the mid-point of each pair of ``lst_bin_edges``).
     antpos
         3D Antenna positions for each antenna in the data. Only required if rephasing.
-        Keys are antenna numbers, values are 3-element arrays of ENU coordinates. 
+        Keys are antenna numbers, values are 3-element arrays of ENU coordinates.
         Units are metres.
     lat
         The latitude (in degrees) of the telescope. Only required if rephasing.
@@ -108,8 +108,8 @@ def lst_align(
         The centres of the LST bins, in radians. Shape is ``(N_lstbins,)``, which is
         one less than the length of ``lst_bin_edges``.
     data
-        A list of length ``N_lstbins`` of arrays, each of shape 
-        ``(nintegrations_in_lst, nbls, nfreq, npol)``, where LST bins without data 
+        A list of length ``N_lstbins`` of arrays, each of shape
+        ``(nintegrations_in_lst, nbls, nfreq, npol)``, where LST bins without data
         simply have a first-axis of size zero.
     flags
         Same as ``data``, but boolean flags.
@@ -124,7 +124,7 @@ def lst_align(
     """
     npols = data.shape[-1]
     required_shape = (len(data_lsts), len(antpairs), len(freq_array), npols)
-    
+
     if npols > 4:
         raise ValueError(f"data has more than 4 pols! Got {npols} (last axis of data)")
 
@@ -143,7 +143,7 @@ def lst_align(
 
     if nsamples is None:
         nsamples = np.ones(data.shape, dtype=float)
-    
+
     if nsamples.shape != data.shape:
         raise ValueError(
             f"nsamples should have shape {data.shape} but got {nsamples.shape}"
@@ -174,7 +174,7 @@ def lst_align(
         # we don't want to spend time rephasing data outside our LST range completely,
         # so we just mask them out here. Indexing by a boolean mask makes a *copy*
         # of the data, so we can rephase in-place without worrying about overwriting
-        # the original input data. 
+        # the original input data.
         data = data[lst_mask]
         flags = flags[lst_mask]
         nsamples = nsamples[lst_mask]
@@ -190,7 +190,7 @@ def lst_align(
         lst_shift = lst_bin_centres[grid_indices] - data_lsts
 
         # this makes a copy of the data in d
-        utils.lst_rephase_vectorized(data, bls, freq_array, lst_shift, lat=lat, inplace=True)
+        utils.lst_rephase(data, bls, freq_array, lst_shift, lat=lat, inplace=True)
 
     # In case we don't rephase, the data/flags/nsamples arrays are still the original
     # input arrays. We don't mask out the data outside the LST range, because we're
@@ -200,7 +200,7 @@ def lst_align(
     # We anyway end up with a ~full copy of the data in the output arrays, because
     # we do a fancy-index of the input arrays to get the relevant data for each bin.
 
-    # TODO: we should think a little more carefully about how we might reduce the 
+    # TODO: we should think a little more carefully about how we might reduce the
     #       number of copies made in this function. When rephasing, we essentially
     #       get three full copies while inside the function (though one is only local
     #       in scope, and is therefore removed when the function returns).
@@ -223,7 +223,7 @@ def lst_align(
 
 def get_lst_bins(lsts: np.ndarray, edges: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Get the LST bin indices for a set of LSTs.
-    
+
     Parameters
     ----------
     lsts
@@ -242,7 +242,7 @@ def get_lst_bins(lsts: np.ndarray, edges: np.ndarray) -> tuple[np.ndarray, np.nd
         A boolean mask indicating which LSTs are within the range of the LST bins.
     """
     lsts = np.array(lsts).copy()
-    
+
     # Now ensure that all the observed LSTs are wrapped so they start above the first bin edges
     lsts %= 2*np.pi
     lsts[lsts < edges[0]] += 2* np.pi
@@ -261,8 +261,8 @@ def reduce_lst_bins(
     """
     From a list of LST-binned data, produce reduced statistics.
 
-    Use this function to reduce a list of `nlst_bins` arrays, each with multiple time 
-    integrations in them (i.e. the output of :func:`lst_align`) to arrays of shape 
+    Use this function to reduce a list of `nlst_bins` arrays, each with multiple time
+    integrations in them (i.e. the output of :func:`lst_align`) to arrays of shape
     ``(nbl, nlst_bins, nfreq, npol)``, each representing different statistics of the
     data in each LST bin (eg. mean, std, etc.).
 
@@ -270,7 +270,7 @@ def reduce_lst_bins(
     ----------
     data
         The data to perform the reduction over. The length of the list is the number
-        of LST bins. Each array in the list should have shape 
+        of LST bins. Each array in the list should have shape
         ``(nbl, nintegrations_in_lst, nfreq, npol)``.
     flags
         A list, the same length/shape as ``data``, containing the flags.
@@ -296,7 +296,7 @@ def reduce_lst_bins(
     Returns
     -------
     out_data, out_flags, out_std, out_nsamples
-        The reduced data, flags, standard deviation (across days) and nsamples. 
+        The reduced data, flags, standard deviation (across days) and nsamples.
         Shape ``(nbl, nlst_bins, nfreq, npol)``.
     """
     nlst_bins = len(data)
@@ -315,19 +315,19 @@ def reduce_lst_bins(
 
     for lstbin, (d,n,f) in enumerate(zip(data, nsamples, flags)):
         logger.info(f"Computing LST bin {lstbin+1} / {nlst_bins}")
-        
+
         # TODO: check that this doesn't make yet another copy...
         # This is just the data in this particular lst-bin.
         if d.size:
             (
-                out_data[:, lstbin], 
-                out_flags[:, lstbin], 
-                out_std[:, lstbin], 
+                out_data[:, lstbin],
+                out_flags[:, lstbin],
+                out_std[:, lstbin],
                 out_nsamples[:, lstbin]
             ) = lst_average(
-                d, n, f, mutable=mutable, 
+                d, n, f, mutable=mutable,
                 flag_thresh=flag_thresh,
-                sigma_clip_thresh=sigma_clip_thresh, 
+                sigma_clip_thresh=sigma_clip_thresh,
                 sigma_clip_min_N=sigma_clip_min_N,
                 flag_below_min_N=flag_below_min_N,
             )
@@ -337,10 +337,10 @@ def reduce_lst_bins(
             out_std[:, lstbin] *= np.inf
             out_nsamples[:, lstbin] = 0.0
 
-        
+
     return out_data, out_flags, out_std, out_nsamples
 
-def _allocate_dnf(shape: tuple[int], d=0.0, f=0, n=0):
+def _allocate_dfn(shape: tuple[int], d=0.0, f=0, n=0):
     data = np.full(shape, d, dtype=complex)
     flags = np.full(shape, f, dtype=bool)
     nsamples = np.full(shape, n, dtype=float)
@@ -348,7 +348,7 @@ def _allocate_dnf(shape: tuple[int], d=0.0, f=0, n=0):
 
 @profile
 def lst_average(
-    data: np.ndarray, nsamples: np.ndarray, flags: np.ndarray, 
+    data: np.ndarray, nsamples: np.ndarray, flags: np.ndarray,
     flag_thresh: float = 0.7,
     mutable: bool = False,
     sigma_clip_thresh: float | None= None,
@@ -396,7 +396,7 @@ def lst_average(
     # all data is assumed to be in the same LST bin.
 
     assert data.shape == nsamples.shape == flags.shape
-    
+
     if not mutable:
         flags = flags.copy()
         nsamples = nsamples.copy()
@@ -414,7 +414,7 @@ def lst_average(
 
     # Now do sigma-clipping.
     if sigma_clip_thresh is not None:
-        
+
         nflags = np.sum(flags)
         clip_flags = sigma_clip(data.real, sigma=sigma_clip_thresh, min_N = sigma_clip_min_N)
         clip_flags |= sigma_clip(data.imag, sigma=sigma_clip_thresh, min_N = sigma_clip_min_N)
@@ -449,7 +449,7 @@ def lst_average(
         std = np.nansum(std * nsamples, axis=0)
         std[~f_min] /= norm[~f_min]
         std = np.sqrt(std.real) + 1j*np.sqrt(std.imag)
-                    
+
     std[f_min] = np.inf
     norm[f_min] = 0
 
@@ -458,7 +458,7 @@ def lst_average(
 def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
     """
     Adjust the LST bin edges so that they start in the range [0, 2pi) and increase.
-    
+
     Performs the adjustment in-place.
     """
     while lst_bin_edges[0] < 0:
@@ -467,10 +467,10 @@ def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
         lst_bin_edges -= 2*np.pi
 
 def lst_bin_files_for_baselines(
-    data_files: list[Path | FastUVH5Meta], 
-    lst_bin_edges: np.ndarray, 
-    antpairs: Sequence[tuple[int, int]], 
-    freqs: np.ndarray | None = None, 
+    data_files: list[Path | FastUVH5Meta],
+    lst_bin_edges: np.ndarray,
+    antpairs: Sequence[tuple[int, int]],
+    freqs: np.ndarray | None = None,
     pols: np.ndarray | None = None,
     cal_files: list[Path | None] | None = None,
     time_arrays: list[np.ndarray] | None = None,
@@ -486,7 +486,7 @@ def lst_bin_files_for_baselines(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[np.ndarray]]:
     """Produce a set of LST-binned (but not averaged) data for a set of baselines.
 
-    This function takes a set of input data files, and reads any data in them that 
+    This function takes a set of input data files, and reads any data in them that
     falls within the LST bins specified by ``lst_bin_edges`` (optionally calibrating
     the data as it is read). The data is sorted into the LST-bins provided and returned
     as a list of arrays, one for each LST bin. The data is not averaged within LST bins.
@@ -498,7 +498,7 @@ def lst_bin_files_for_baselines(
     The data is binned via a simple histogram, i.e. the data represented at each LST
     is essentially assumed to be a delta function in LST, and is fully assigned to one
     particular LST bin. See :func:`lst_align` for details.
-    
+
     Parameters
     ----------
     data_files
@@ -507,7 +507,7 @@ def lst_bin_files_for_baselines(
     lst_bin_edges
         A sequence of floats specifying the *edges* of the LST bins to use, with length
         ``N_lstbins + 1``. Bins are thus assumed to be contiguous, but not necessarily
-        of equal size. 
+        of equal size.
     antpairs
         A list of antenna pairs to read from each file. Each pair should be a tuple
         of antenna numbers. Note that having pairs in this list that are not present
@@ -547,13 +547,13 @@ def lst_bin_files_for_baselines(
     freq_min, freq_max
         Minimum and maximum frequencies to include in the data. If not provided,
         all frequencies will be included.
-        
+
     Returns
     -------
     bin_lst
         The bin centres for each of the LST bins.
     data
-        A nlst-length list of arrays, each of shape 
+        A nlst-length list of arrays, each of shape
         ``(ntimes_in_lst, nbls, nfreq, npol)``, where LST bins without data simply have
         a first-axis of size zero.
     flags
@@ -564,17 +564,17 @@ def lst_bin_files_for_baselines(
         The JDs that are in each LST bin -- a list of arrays.
     """
     metas = [fl if isinstance(fl, FastUVH5Meta) else FastUVH5Meta(fl, blts_are_rectangular=True) for fl in data_files]
-    
+
     lst_bin_edges = np.array(lst_bin_edges)
 
     if freqs is None:
         freqs = np.squeeze(metas[0].freq_array)
-    
+
     if freq_min is None and freq_max is None:
         freq_chans = None
     else:
         freq_chans = np.arange(len(freqs))
-    
+
     if freq_min is not None:
         mask = freqs >= freq_min
         freqs = freqs[mask]
@@ -598,7 +598,7 @@ def lst_bin_files_for_baselines(
         antpos = dict(zip(metas[0].antenna_numbers, metas[0].antpos_enu))
 
     if time_idx is None:
-        adjust_lst_bin_edges(lst_bin_edges)        
+        adjust_lst_bin_edges(lst_bin_edges)
         lst_bin_edges %= 2*np.pi
         op = np.logical_and if lst_bin_edges[0] < lst_bin_edges[-1] else np.logical_or
         time_idx = []
@@ -612,9 +612,9 @@ def lst_bin_files_for_baselines(
     if lsts is None:
         lsts = np.concatenate(
             [meta.get_transactional('lsts')[idx] for meta, idx in zip(metas, time_idx)]
-        )            
+        )
 
-    # Now we can set up our master arrays of data. 
+    # Now we can set up our master arrays of data.
     data, flags, nsamples = _allocate_dfn(
         (len(lsts), len(antpairs), len(freqs), len(pols)),
         d=np.nan + np.nan*1j,
@@ -628,7 +628,7 @@ def lst_bin_files_for_baselines(
         raise ValueError("reds must be provided if redundantly_averaged is True")
     if redundantly_averaged and any(c is not None for c in cal_files):
         raise ValueError("Cannot apply calibration if redundantly_averaged is True")
-    
+
     # This loop actually reads the associated data in this LST bin.
     ntimes_so_far = 0
     for meta, calfl, tind, tarr in zip(metas, cal_files, time_idx, time_arrays):
@@ -643,10 +643,10 @@ def lst_bin_files_for_baselines(
             bls_to_load = [bl for bl in data_antpairs if reds.get_ubl_key(bl) in antpairs or reds.get_ubl_key(bl[::-1]) in antpairs]
         else:
             bls_to_load = [bl for bl in antpairs if bl in data_antpairs or bl[::-1] in data_antpairs]
- 
+
         if not bls_to_load or not np.any(tind):
-            # If none of the requested baselines are in this file, then just 
-            # set stuff as nan and go to next file. 
+            # If none of the requested baselines are in this file, then just
+            # set stuff as nan and go to next file.
             logger.warning(f"None of the baseline-times are in {meta.path}. Skipping.")
             data[slc] = np.nan
             flags[slc] = True
@@ -659,7 +659,7 @@ def lst_bin_files_for_baselines(
         )
         if redundantly_averaged:
             keyed = reds.keyed_on_bls(_data.antpairs())
-        
+
         # load calibration
         if calfl is not None:
             logger.info(f"Opening and applying {calfl}")
@@ -681,7 +681,7 @@ def lst_bin_files_for_baselines(
                 bl = keyed.get_ubl_key(bl)
             for j, pol in enumerate(pols):
                 blpol = bl + (pol,)
-                
+
                 if blpol in _data:  # DataContainer takes care of conjugates.
                     data[slc, i, :, j] = _data[blpol]
                     flags[slc, i, :, j] = _flags[blpol]
@@ -699,7 +699,7 @@ def lst_bin_files_for_baselines(
     # so that np.arange definitely gets the last edge.
     # lst_edges = np.arange(outfile_lsts[0] - dlst/2, outfile_lsts[-1] + dlst, dlst)
     bin_lst, data, flags, nsamples = lst_align(
-        data=data, 
+        data=data,
         flags=None if ignore_flags else flags,
         nsamples=nsamples,
         data_lsts=lsts,
@@ -720,7 +720,7 @@ def lst_bin_files_for_baselines(
     return bin_lst, data, flags, nsamples, times_in_bins
 
 def apply_calfile_rules(
-    data_files: list[list[str]], 
+    data_files: list[list[str]],
     calfile_rules: list[tuple[str, str]],
     ignore_missing: bool
 ) -> tuple[list[list[str]], list[list[str]]]:
@@ -756,7 +756,7 @@ def apply_calfile_rules(
         for df in dflist:
             cf = df
             for rule in calfile_rules:
-                cf = cf.replace(rule[0], rule[1]) 
+                cf = cf.replace(rule[0], rule[1])
 
             if os.path.exists(cf):
                 this.append(cf)
@@ -769,7 +769,7 @@ def apply_calfile_rules(
     return data_files, input_cals
 
 def filter_required_files_by_times(
-    lst_range: tuple[float, float], 
+    lst_range: tuple[float, float],
     data_metas: list[list[FastUVH5Meta]],
     cal_files: list[list[str]] | None = None,
 ) -> tuple[list, list, list, list, list]:
@@ -793,13 +793,13 @@ def filter_required_files_by_times(
     # Even though the input files should already have been configured to be those
     # that fall within the output LST range, we still need to read them in to
     # check exactly which time integrations we require.
-    
+
     for night, callist in zip(data_metas, cal_files):
         for meta, cal in zip(night, callist):
             tarr = meta.times
             lsts = meta.lsts % (2*np.pi)
             lsts[lsts < lstmin] += 2 * np.pi
-            
+
             tind = (lsts > lstmin) & (lsts < lstmax)
 
             if np.any(tind):
@@ -823,13 +823,13 @@ def lst_bin_files_single_outfile(
     redundantly_averaged: bool | None = None,
     only_last_file_per_night: bool = False,
     history: str = '',
-    fname_format: str="zen.{kind}.{lst:7.5f}.uvh5", 
-    overwrite: bool=False, 
+    fname_format: str="zen.{kind}.{lst:7.5f}.uvh5",
+    overwrite: bool=False,
     rephase: bool=False,
-    Nbls_to_load: int | None=None, 
-    ignore_flags: bool=False, 
-    include_autos: bool=True, 
-    ex_ant_yaml_files=None, 
+    Nbls_to_load: int | None=None,
+    ignore_flags: bool=False,
+    include_autos: bool=True,
+    ex_ant_yaml_files=None,
     ignore_ants: tuple[int]=(),
     write_kwargs: dict | None = None,
     save_channels: list[int] = (),
@@ -857,7 +857,7 @@ def lst_bin_files_single_outfile(
         of the configuration file produced by :func:`make_lst_bin_config`.
     lst_bins
         An array of LST bin *centres* in radians. These should be *one* of the entries
-        of the "lst_bins" section of the configuration file produced by 
+        of the "lst_bins" section of the configuration file produced by
         :func:`make_lst_bin_config` (which is a list of arrays of LST bin centres, one
         for each output file).
     data_files
@@ -908,35 +908,35 @@ def lst_bin_files_single_outfile(
     include_autos
         If True, include autocorrelations when binning data.
     ex_ant_yaml_files
-        A list of yaml files that specify which antennas to exclude from each 
+        A list of yaml files that specify which antennas to exclude from each
         input data file.
     ignore_ants
         A list of antennas to ignore when binning data.
     write_kwargs
         Arguments to pass to :func:`create_lstbin_output_file`.
     save_channels
-        A list of channels for which to save the a full file of LST-gridded data. 
+        A list of channels for which to save the a full file of LST-gridded data.
         One REDUCEDCHAN file is saved for each output file, corresponding to the
-        first LST-bin in that file. The data in that file will have the shape 
+        first LST-bin in that file. The data in that file will have the shape
         ``(Nbls*Ndays, Nsave_chans, Npols)``. This can be helpful for debugging.
     golden_lsts
-        A list of LSTs for which to save a full file of LST-aligned (but not 
-        averaged) data. One GOLDEN file is saved for each ``golden_lst``, with shape 
-        ``(Nbls*Ndays, Nfreqs, Npols)`` -- that is, the normal "time" axis of a 
+        A list of LSTs for which to save a full file of LST-aligned (but not
+        averaged) data. One GOLDEN file is saved for each ``golden_lst``, with shape
+        ``(Nbls*Ndays, Nfreqs, Npols)`` -- that is, the normal "time" axis of a
         UVData array is replaced by a "night" axis. This is an easy way to load up
         the full data that goes into a particular LST-bin after the fact.
     sigma_clip_thresh
         If provided, this is the threshold for sigma clipping. If this is provided,
-        then the data is sigma clipped before being averaged. This is done for each 
+        then the data is sigma clipped before being averaged. This is done for each
         (antpair, pol, channel) combination.
     sigma_clip_min_N
-        The minimum number of integrations for a particular (antpair, pol, channel) 
+        The minimum number of integrations for a particular (antpair, pol, channel)
         within an LST-bin required to perform sigma clipping. If `flag_below_min_N`
-        is False, these (antpair,pol,channel) combinations are not flagged by 
+        is False, these (antpair,pol,channel) combinations are not flagged by
         sigma-clipping (otherwise they are).
     flag_below_min_N
-        If True, flag all (antpair, pol,channel) combinations  for an LST-bin that 
-        contiain fewer than `flag_below_min_N` unflagged integrations within the bin. 
+        If True, flag all (antpair, pol,channel) combinations  for an LST-bin that
+        contiain fewer than `flag_below_min_N` unflagged integrations within the bin.
     flag_thresh
         The fraction of integrations for a particular (antpair, pol, channel) combination
         within an LST-bin that can be flagged before that combination is flagged
@@ -956,13 +956,13 @@ def lst_bin_files_single_outfile(
     """
     write_kwargs = write_kwargs or {}
 
-    # Check that that there are the same number of input data files and 
+    # Check that that there are the same number of input data files and
     # calibration files each night.
     input_cals = []
     if calfile_rules:
         data_files, input_cals = apply_calfile_rules(
             data_files, calfile_rules, ignore_missing=ignore_missing_calfiles
-        )    
+        )
 
     # Prune empty nights (some nights start with files, but have files removed because
     # they have no associated calibration)
@@ -975,11 +975,11 @@ def lst_bin_files_single_outfile(
 
     data_metas = [[
         FastUVH5Meta(
-            df, 
-            blts_are_rectangular=metadata['blts_are_rectangular'], 
+            df,
+            blts_are_rectangular=metadata['blts_are_rectangular'],
             time_axis_faster_than_bls=metadata['time_axis_faster_than_bls']
         ) for df in dflist
-        ] 
+        ]
         for dflist in data_files
     ]
 
@@ -994,9 +994,9 @@ def lst_bin_files_single_outfile(
     # get metadata
     logger.info("Getting metadata from first file...")
     meta = data_metas[0][0]
-    
+
     freq_array = np.squeeze(meta.freq_array)
-    
+
     # reds will contain all of the redundant groups for the whole array, because
     # all the antenna positions are included in every file.
     antpos = dict(zip(meta.antenna_numbers, meta.antpos_enu))
@@ -1014,7 +1014,7 @@ def lst_bin_files_single_outfile(
             antpairs = meta.get_transactional("antpairs")
             ubls = set(reds.get_ubl_key(ap) for ap in antpairs)
             if len(ubls) != len(antpairs):
-                # At least two of the antpairs are in the same redundant group. 
+                # At least two of the antpairs are in the same redundant group.
                 redundantly_averaged = False
                 logger.info("Inferred that files are not redundantly averaged.")
                 break
@@ -1024,16 +1024,16 @@ def lst_bin_files_single_outfile(
 
     logger.info("Compiling all unflagged baselines...")
     all_baselines, all_pols = get_all_unflagged_baselines(
-        data_metas, 
-        ex_ant_yaml_files, 
-        include_autos=include_autos, 
+        data_metas,
+        ex_ant_yaml_files,
+        include_autos=include_autos,
         ignore_ants=ignore_ants,
         redundantly_averaged=redundantly_averaged,
         reds=reds,
         only_last_file_per_night=only_last_file_per_night,
     )
     nants0 = meta.header['antenna_numbers'].size
-    
+
     # Do a quick check to make sure all nights at least have the same number of Nants
     for dflist in data_metas:
         _nants = dflist[0].header['antenna_numbers'].size
@@ -1043,7 +1043,7 @@ def lst_bin_files_single_outfile(
                 f"Not all nights have the same number of antennas! Got {_nants} for "
                 f"{dflist[0].path} and {nants0} for {meta.path} for {meta.path}"
             )
-        
+
     # Split up the baselines into chunks that will be LST-binned together.
     # This is just to save on RAM.
     if Nbls_to_load is None:
@@ -1072,7 +1072,7 @@ def lst_bin_files_single_outfile(
     # The "golden" data is the full data over all days for a small subset of LST
     # bins. This works best if the LST bins are small (similar to the size of the
     # raw integrations). Usually, the length of "bins" will be zero.
-    # NOTE: we work under the assumption that the LST bins are small, so that 
+    # NOTE: we work under the assumption that the LST bins are small, so that
     # each night only gets one integration in each LST bin. If there are *more*
     # than one integration in the bin, we take the first one only.
     golden_bins, _, mask = get_lst_bins(golden_lsts, lst_bin_edges)
@@ -1084,8 +1084,8 @@ def lst_bin_files_single_outfile(
 
     # make it a bit easier to create the outfiles
     create_outfile = partial(
-        create_lstbin_output_file, 
-        outdir = outdir, 
+        create_lstbin_output_file,
+        outdir = outdir,
         pols=all_pols,
         file_list=file_list,
         history=history,
@@ -1105,17 +1105,17 @@ def lst_bin_files_single_outfile(
             lst=lst_bin_edges[0],
             lsts=lst_bins,
         )
-        
+
     nbls_so_far = 0
     for bi, bl_chunk in enumerate(bl_chunks):
         logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
         # data/flags/nsamples are *lists*, with nlst_bins entries, each being an
         # array, with shape (times, bls, freqs, npols)
         bin_lst, data, flags, nsamples, binned_times = lst_bin_files_for_baselines(
-            data_files = file_list, 
-            lst_bin_edges=lst_bin_edges, 
-            antpairs=bl_chunk, 
-            freqs=freq_array, 
+            data_files = file_list,
+            lst_bin_edges=lst_bin_edges,
+            antpairs=bl_chunk,
+            freqs=freq_array,
             pols=all_pols,
             cal_files=cals,
             time_arrays=time_arrays,
@@ -1202,25 +1202,25 @@ def lst_bin_files_single_outfile(
 @profile
 def lst_bin_files(
     config_file: str | Path,
-    output_file_select: int | Sequence[int] | None=None, 
+    output_file_select: int | Sequence[int] | None=None,
     include_autos: bool=True,
     **kwargs
 ) -> list[dict[str, Path]]:
     """
     LST bin a series of UVH5 files.
-    
-    This takes a series of UVH5 files where each file has the same frequency bins and 
+
+    This takes a series of UVH5 files where each file has the same frequency bins and
     pols, grids them onto a common LST grid, and then averages all integrations
     that appear in that LST bin. It writes a series of UVH5 files, as configured in the
     `config_file`, including the LST-averaged data, the standard deviation of the data
     in each LST bin, optional full data across nights for each LST-bin with a reduced
-    number of frequency channels, and optionally the full data across nights (and all 
+    number of frequency channels, and optionally the full data across nights (and all
     channels) for a 'GOLDEN' subset of LST bins.
 
     Parameters
     ----------
     config_files
-        A configuration file to use. This should be a YAML file constructed by 
+        A configuration file to use. This should be a YAML file constructed by
         :func:`~make_lst_bin_config_file`, encoding the configuration of the LST
         grid, and the matching of input data files to LST bins.
     output_file_select
@@ -1232,17 +1232,17 @@ def lst_bin_files(
     **kwargs
         Additional keyword arguments are passed to :func:`~lstbin.lst_bin_files_single_outfile`.
 
-    
+
     Returns
     -------
     list of dicts
         list of dicts -- one for each output file.
-        Each dict contains keys that indicate the type of output file (e.g. 'LST', 'STD', 
+        Each dict contains keys that indicate the type of output file (e.g. 'LST', 'STD',
         'REDUCEDCHAN', 'GOLDEN') and values that are the path to that file.
     """
     with open(config_file, "r") as fl:
         configuration = yaml.safe_load(fl)
-    
+
     config_opts = configuration['config_params']
     lst_grid = configuration['lst_grid']
     matched_files = configuration['matched_files']
@@ -1260,7 +1260,7 @@ def lst_bin_files(
         )
 
     meta = FastUVH5Meta(
-        matched_files[0][0][0], 
+        matched_files[0][0][0],
         blts_are_rectangular=metadata['blts_are_rectangular'],
         time_axis_faster_than_bls=metadata['time_axis_faster_than_bls'],
     )
@@ -1280,7 +1280,6 @@ def lst_bin_files(
                 metadata = metadata,
                 lst_bins = lst_grid[outfile_index],
                 data_files = data_files,
-                meta = meta,
                 reds = reds,
                 include_autos = include_autos,
                 **kwargs
@@ -1291,7 +1290,7 @@ def lst_bin_files(
 
 @profile
 def get_all_unflagged_baselines(
-    data_files: list[list[str | Path | FastUVH5Meta]], 
+    data_files: list[list[str | Path | FastUVH5Meta]],
     ex_ant_yaml_files: list[str] | None = None,
     include_autos: bool = True,
     ignore_ants: tuple[int] = (),
@@ -1302,20 +1301,20 @@ def get_all_unflagged_baselines(
     time_axis_faster_than_bls: bool | None = None,
 ) -> tuple[list[tuple[int, int]], list[str]]:
     """Generate a set of all antpairs that have at least one un-flagged entry.
-    
-    This is performed over a list of nights, each of which consists of a list of 
+
+    This is performed over a list of nights, each of which consists of a list of
     individual uvh5 files. Each UVH5 file is *assumed* to have the same set of times
     for each baseline internally (different nights obviously have different times).
-    
-    If ``reds`` is provided, then any baseline found is mapped back to the first 
-    baseline in the redundant group it appears in. This *must* be set if 
+
+    If ``reds`` is provided, then any baseline found is mapped back to the first
+    baseline in the redundant group it appears in. This *must* be set if
 
     Returns
     -------
     all_baselines
         The set of all antpairs in all files in the given list.
     all_pols
-        A list of all polarizations in the files in the given list, as strings like 
+        A list of all polarizations in the files in the given list, as strings like
         'ee' and 'nn' (i.e. with x_orientation information).
     """
     if blts_are_rectangular is None and not isinstance(data_files[0][0], FastUVH5Meta):
@@ -1325,14 +1324,14 @@ def get_all_unflagged_baselines(
 
     data_files = [
         [
-        fl if isinstance(fl, FastUVH5Meta) else 
+        fl if isinstance(fl, FastUVH5Meta) else
         FastUVH5Meta(
-            fl, blts_are_rectangular=blts_are_rectangular, 
+            fl, blts_are_rectangular=blts_are_rectangular,
             time_axis_faster_than_bls=time_axis_faster_than_bls
         )  for fl in fl_list
         ] for fl_list in data_files
     ]
-    
+
 
     all_baselines = set()
     all_pols = set()
@@ -1355,7 +1354,7 @@ def get_all_unflagged_baselines(
             antpairs = meta.get_transactional("antpairs")
             ubls = set(reds.get_ubl_key(ap) for ap in antpairs)
             if len(ubls) != len(antpairs):
-                # At least two of the antpairs are in the same redundant group. 
+                # At least two of the antpairs are in the same redundant group.
                 redundantly_averaged = False
                 logger.info("Inferred that files are not redundantly averaged.")
                 break
@@ -1372,7 +1371,7 @@ def get_all_unflagged_baselines(
             raise ValueError(
                 "Cannot exclude antennas if the files are redundantly averaged."
             )
-        
+
     for night, fl_list in enumerate(data_files):
         if ex_ant_yaml_files:
             a_priori_antenna_flags = read_a_priori_ant_flags(
@@ -1389,7 +1388,7 @@ def get_all_unflagged_baselines(
             antpairs = meta.antpairs
             all_pols.update(set(meta.pols))
             this_xorient = meta.x_orientation
-            
+
             # Clear the cache to save memory.
             meta.close()
             del meta.antpairs
@@ -1407,20 +1406,20 @@ def get_all_unflagged_baselines(
                 if (
                     (a1, a2) not in all_baselines and # Do this first because after the
                     (a2, a1) not in all_baselines and # first file it often triggers.
-                    a1 not in ignore_ants and 
-                    a2 not in ignore_ants and 
-                    (include_autos or a1 != a2) and 
-                    a1 not in a_priori_antenna_flags and 
+                    a1 not in ignore_ants and
+                    a2 not in ignore_ants and
+                    (include_autos or a1 != a2) and
+                    a1 not in a_priori_antenna_flags and
                     a2 not in a_priori_antenna_flags
                 ):
                     all_baselines.add((a1, a2))
-                    
+
 
     return sorted(all_baselines), sorted(all_pols)
 
 def create_lstbin_output_file(
     outdir: Path,
-    kind: str, 
+    kind: str,
     lst: float,
     pols: list[str],
     file_list: list[FastUVH5Meta],
@@ -1428,7 +1427,7 @@ def create_lstbin_output_file(
     times: np.ndarray | None = None,
     lsts: np.ndarray | None = None,
     history: str  = "",
-    fname_format: str="zen.{kind}.{lst:7.5f}.uvh5", 
+    fname_format: str="zen.{kind}.{lst:7.5f}.uvh5",
     overwrite: bool = False,
     antpairs: list[tuple[int, int]] | None = None,
     freq_min: float | None = None,
@@ -1475,14 +1474,14 @@ def create_lstbin_output_file(
     # operation does the down-select, it doesn't re-order the pols.
     uvd_template.polarization_array = np.array(uvutils.polstr2num(pols, x_orientation=uvd_template.x_orientation))
     uvd_template.initialize_uvh5_file(str(fname.absolute()), clobber=overwrite)
-    
+
     return fname
 
 def write_baseline_slc_to_file(
-    fl: Path, 
-    slc: slice, 
-    data: np.ndarray, 
-    flags: np.ndarray, 
+    fl: Path,
+    slc: slice,
+    data: np.ndarray,
+    flags: np.ndarray,
     nsamples: np.ndarray
 ):
     """Write a baseline slice to a file."""
@@ -1491,17 +1490,17 @@ def write_baseline_slc_to_file(
         timefirst = bool(f['Header']['time_axis_faster_than_bls'][()])
         if not timefirst and ntimes > 1:
             raise NotImplementedError("Can only do time-first files for now.")
-        
+
         slc = slice(slc.start*ntimes, slc.stop*ntimes, 1)
         f['Data']['visdata'][slc] = data.reshape((-1, data.shape[2], data.shape[3]))
         f['Data']['flags'][slc] = flags.reshape((-1, data.shape[2], data.shape[3]))
         f['Data']['nsamples'][slc] = nsamples.reshape((-1, data.shape[2], data.shape[3]))
 
 def config_lst_bin_files(
-    data_files: list[list[str | FastUVH5Meta]], 
-    dlst: float | None=None, 
-    atol: float=1e-10, 
-    lst_start: float | None=None, 
+    data_files: list[list[str | FastUVH5Meta]],
+    dlst: float | None=None,
+    atol: float=1e-10,
+    lst_start: float | None=None,
     lst_width: float = 2*np.pi,
     blts_are_rectangular: bool | None = None,
     time_axis_faster_than_bls: bool | None = None,
@@ -1542,7 +1541,7 @@ def config_lst_bin_files(
     time_arrays : list, list of time arrays for each file
     """
     logger.info("Configuring lst_grid")
-    
+
     data_files=[sorted(df) for df in data_files]
 
     df0 = data_files[0][0]
@@ -1553,7 +1552,7 @@ def config_lst_bin_files(
 
     # Get rectangularity of blts from first file if None
     meta = FastUVH5Meta(
-        df0, blts_are_rectangular=blts_are_rectangular, 
+        df0, blts_are_rectangular=blts_are_rectangular,
         time_axis_faster_than_bls=time_axis_faster_than_bls
     )
 
@@ -1619,9 +1618,9 @@ def make_lst_bin_config_file(
     config_file: str | Path,
     data_files: list[list[str | FastUVH5Meta]],
     clobber: bool = False,
-    dlst: float | None=None, 
-    atol: float=1e-10, 
-    lst_start: float | None=None, 
+    dlst: float | None=None,
+    atol: float=1e-10,
+    lst_start: float | None=None,
     lst_width: float = 2*np.pi,
     ntimes_per_file: int=60,
     blts_are_rectangular: bool | None = None,
@@ -1632,15 +1631,15 @@ def make_lst_bin_config_file(
 
     This determines an LST-grid, and then determines which files should be
     included in each LST-bin. The output is a YAML file that can be used to
-    quickly read in raw files that correspond to a particular LST-bin. 
+    quickly read in raw files that correspond to a particular LST-bin.
 
     The idea of this function is for it to be run as a separate step (e.g. by hera_opm)
     that needs to run to setup a full LST-binning run on multiple parallel tasks. Each
-    task will read the YAML file, and select out the portion appropriate for that 
+    task will read the YAML file, and select out the portion appropriate for that
     LST bin file.
 
     The algorithm for matching files to LST bins is only approximate, but is conservative
-    (i.e. it includes *at least* all files that should be included in the LST bin). 
+    (i.e. it includes *at least* all files that should be included in the LST bin).
 
     Parameters
     ----------
@@ -1671,10 +1670,10 @@ def make_lst_bin_config_file(
         If True, assume that the data-layout in the input files is rectangular in
         baseline-times. This will be determined if not given.
     time_axis_faster_than_bls : bool, optional
-        If True, assume that the time axis moves faster than the baseline axis in the 
+        If True, assume that the time axis moves faster than the baseline axis in the
         input files. This will be determined if not given.
     jd_regex : str, optional
-        Regex to use to extract the JD from the file name. Set to None or empty 
+        Regex to use to extract the JD from the file name. Set to None or empty
         to force the LST-matching to use the LSTs in the metadata within the file.
 
     Returns
@@ -1719,7 +1718,7 @@ def make_lst_bin_config_file(
         )
 
     matched_files = [[[str(m.path) for m in night] for night in outfiles] for outfiles in matched_files]
-    
+
     output = {
         'config_params': {
             'dlst': float(dlst),
@@ -1762,7 +1761,7 @@ def lst_bin_arg_parser():
     )
     a.add_argument('configfile', type=str, help="config file produced by lstbin.make_lst_bin_config_file")
     a.add_argument(
-        "--calfile-rules", nargs='*', type=str, 
+        "--calfile-rules", nargs='*', type=str,
         help="rules to convert datafile names to calfile names. A series of two strings where the first will be replaced by the latter"
     )
     a.add_argument("--fname-format", type=str, default="zen.{kind}.{lst:7.5f}.uvh5", help="filename format for output files. See docstring for details.")

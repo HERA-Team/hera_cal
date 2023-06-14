@@ -8,6 +8,7 @@ from pyuvdata.telescopes import get_telescope
 from hera_cal import utils
 from hera_cal import io
 from hera_cal import noise
+from hera_cal.lstbin import make_lst_grid
 import numpy as np
 from astropy.coordinates import EarthLocation
 import yaml
@@ -28,9 +29,9 @@ end:   234298706.0546875
 delta: 122070.3125
 
 def create_mock_hera_obs(
-    jdint: int = 2459855, 
+    jdint: int = 2459855,
     integration_time=9.663677215576172,
-    lst_start=0.1, 
+    lst_start=0.1,
     jd_start: float | None = None,
     ntimes: int=2,
     freqs: np.ndarray = np.arange(46920776.3671875, 234298706.0546875 + 10.0, 122070.3125),
@@ -44,7 +45,10 @@ def create_mock_hera_obs(
 ) -> UVData:
     tint = integration_time / (24 * 3600)
     dlst = tint * 2 * np.pi
+
     if jd_start is None:
+        # We ensure that the LSTs align exactly with the LST-grid that would be LST-binned.
+        lst_start = make_lst_grid(dlst, begin_lst=lst_start)[0]
         lsts = np.arange(lst_start, ntimes*dlst + lst_start, dlst)[:ntimes]
         times = utils.LST2JD(lsts, start_jd=jdint, allow_other_jd=False)
     else:
@@ -69,7 +73,7 @@ def create_mock_hera_obs(
     if redundantly_averaged:
         antpairs = list({reds.get_ubl_key(ap) for ap in antpairs})
 
-    # build a UVData object 
+    # build a UVData object
     uvd = UVData.new(
         freq_array= freqs,
         polarization_array=pols,
@@ -100,7 +104,7 @@ def identifiable_data_from_uvd(
     reshape: bool = True,
 ) -> np.ndarray:
     lsts = np.unique(ones.lst_array)
-    
+
     normfreqs = 2*np.pi * (ones.freq_array - 100e6) / 100e6
 
     data = np.zeros_like(ones.data_array)
@@ -124,11 +128,11 @@ def identifiable_data_from_uvd(
     return data
 
 def create_uvd_identifiable(
-    with_noise: bool = False, 
+    with_noise: bool = False,
     autos_noise: bool = False,
     **kwargs) -> UVData:
     """Make a UVData object with identifiable data.
-    
+
     Each baseline, pol, LST and freq channel should be identifiable in the data with the
     following pattern:
 
@@ -162,9 +166,9 @@ def add_noise_to_uvd(uvd, autos: bool = False):
             + 1j * np.random.normal(scale=np.sqrt(variance/2))
         )
     hd.update(data=data)
-    
+
 def write_files_in_hera_format(
-    uvds: list[UVData] | list[list[UVData]], 
+    uvds: list[UVData] | list[list[UVData]],
     tmpdir: Path,
     fmt: str = "zen.{jd:.5f}.sum.uvh5",
     in_jdint_dir: bool = True,
@@ -219,14 +223,14 @@ def make_day(nfiles: int, creator: callable = create_mock_hera_obs, **kwargs) ->
     return uvds
 
 def make_dataset(
-    ndays: int, nfiles: int, start_jdint: int = 2459855, creator: callable = create_mock_hera_obs, 
+    ndays: int, nfiles: int, start_jdint: int = 2459855, creator: callable = create_mock_hera_obs,
     random_ants_to_drop: int = 0,
     **kwargs
 ) -> list[list[UVData]]:
     """Make a dataset of UVData objects."""
-    
+
     if random_ants_to_drop > 0:
-        default = creator(jdint=start_jdint, **kwargs)        
+        default = creator(jdint=start_jdint, **kwargs)
         antpairs = default.get_antpairs()
         data_ants = list(set([ap[0] for ap in antpairs] + [ap[1] for ap in antpairs]))
         if 'antpairs' in kwargs:
@@ -239,7 +243,7 @@ def make_dataset(
             _antpairs = [ap for ap in antpairs if ap[0] not in drop_ants and ap[1] not in drop_ants]
             kwargs['antpairs'] = _antpairs
         uvds.append(make_day(nfiles, jdint=start_jdint + i, creator=creator, **kwargs))
-    
+
     return uvds
 
 def make_uvc_ones(uvd: UVData, flag_full_ant: int = 0, flag_ant_time: int = 0, flag_ant_freq: int = 0):
@@ -281,7 +285,7 @@ def make_uvc_identifiable(uvd: UVData,  flag_full_ant: int = 0, flag_ant_time: i
     return uvc
 
 def write_cals_in_hera_format(
-    uvds: list[UVCal] | list[list[UVCal]], 
+    uvds: list[UVCal] | list[list[UVCal]],
     tmpdir: Path,
     fmt: str = "zen.{jd:.5f}.sum.calfits",
     in_jdint_dir: bool = True,

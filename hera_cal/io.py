@@ -263,7 +263,7 @@ class HERACal(UVCal):
                 new_total_quality = np.zeros((writer.Nfreqs, writer.Ntimes, writer.Njones), dtype=float)
                 new_total_quality[~inserted, :, :] = writer.total_quality_array
                 writer.total_quality_array = new_total_quality
-                
+
             writer.flag_array = new_flags
             writer.gain_array = new_gains
             writer.quality_array = new_quality
@@ -450,15 +450,16 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     if getattr(uvo, 'blts_are_rectangular', False):
         if uvo.time_axis_faster_than_bls:
             for i in range(uvo.Nbls):
-                antp = (uvo.ant_1_array[i*uvo.Ntimes], uvo.ant_2_array[i*uvo.Ntimes])
-                blt_slices[antp] = slice(i, uvo.Nbls + i, 1)
+                start = i*uvo.Ntimes
+                antp = (uvo.ant_1_array[start], uvo.ant_2_array[start])
+                blt_slices[antp] = slice(start, start + uvo.Ntimes, 1)
             assert uvo.Nbls == len(blt_slices)
         else:
             for i in range(uvo.Nbls):
                 antp = (uvo.ant_1_array[i], uvo.ant_2_array[i])
-                blt_slices[antp] = slice(i, uvo.Nblts, uvo.Nbls)
+                blt_slices[antp] = slice(i, uvo.Nblts, self.Nbls)
             assert uvo.Nbls == len(blt_slices)
-    else:    
+    else:
         for ant1, ant2 in uvo.get_antpairs():
             indices = uvo.antpair2ind(ant1, ant2)
             if len(indices) == 1:  # only one blt matches
@@ -1374,7 +1375,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
     rv['info'] = info
     return rv
 
-    
+
 class HERADataFastReader():
     '''Wrapper class around read_hera_hdf5 meant to mimic the functionality of HERAData for drop-in replacement.'''
 
@@ -2033,9 +2034,9 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     time_array : type=ndarray, contains unique Julian Date time bins of data (center of integration).
 
-    flags : type=DataContainer or array, holds data flags, matching data in shape. 
+    flags : type=DataContainer or array, holds data flags, matching data in shape.
 
-    nsamples : type=DataContainer or array, holds number of points averaged into each bin in data 
+    nsamples : type=DataContainer or array, holds number of points averaged into each bin in data
                (if applicable).
 
     filetype : type=str, filetype to write-out, options=['miriad'].
@@ -2138,7 +2139,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     # resort time and baseline axes
     data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
-    
+
     if nsamples is None:
         nsample_array = np.ones_like(data_array, float)
     else:
@@ -2705,7 +2706,7 @@ def throw_away_flagged_ants_parser():
     return ap
 
 def uvdata_from_fastuvh5(
-    meta: FastUVH5Meta, 
+    meta: FastUVH5Meta,
     antpairs: list[tuple[int, int]] | None = None,
     times: np.ndarray | None = None,
     lsts: np.ndarray | None = None,
@@ -2728,10 +2729,10 @@ def uvdata_from_fastuvh5(
         The UVData object.
     """
     uvd = meta.to_uvdata()
-    
+
     if not meta.blts_are_rectangular:
         raise NotImplementedError("Cannot convert non-rectangular blts to UVData.")
-    
+
     if times is None and lsts is None:
         times = meta.times
         lsts = meta.lsts
@@ -2744,7 +2745,7 @@ def uvdata_from_fastuvh5(
             latitude=meta.telescope_location_lat_lon_alt_degrees[0],
             longitude=meta.telescope_location_lat_lon_alt_degrees[1],
             altitude=meta.telescope_location_lat_lon_alt_degrees[2],
-            
+
         )
     elif lsts is None:
         lsts = JD2LST(times, *meta.telescope_location_lat_lon_alt_degrees)
@@ -2765,7 +2766,7 @@ def uvdata_from_fastuvh5(
         uvd.time_array = np.repeat(times, len(antpairs))
         uvd.lst_array = np.repeat(lsts, len(antpairs))
         uvd.ant_1_array = np.tile(np.array([antpair[0] for antpair in antpairs]), len(times))
-        uvd.ant_2_array = np.tile(np.array([antpair[1] for antpair in antpairs]), len(times))    
+        uvd.ant_2_array = np.tile(np.array([antpair[1] for antpair in antpairs]), len(times))
     else:
         uvd.time_array = np.tile(times, len(antpairs))
         uvd.lst_array = np.tile(lsts, len(antpairs))
@@ -2781,10 +2782,10 @@ def uvdata_from_fastuvh5(
         uvd.ant_1_array, uvd.ant_2_array, Nants_telescope=uvd.Nants_telescope
     )
     uvd.phase_center_id_array = np.zeros(uvd.Nblts, dtype=int)
-    
+
     uvd._set_app_coords_helper()
     uvd.extra_keywords = meta.extra_keywords
-    
+
     uvd.set_uvws_from_antenna_positions()
     # Overwrite some of the metadata.
     for key, value in kwargs.items():
