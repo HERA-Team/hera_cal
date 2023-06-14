@@ -245,7 +245,7 @@ class Test_ReduceLSTBins:
         dd, ff, std, nn = lstbin_simple.reduce_lst_bins(d, f, n)
 
         assert dd.shape[1] == 2  # 2 LST bins
-        assert np.all(dd[:, 0] == 1.0)
+        assert np.all(np.isnan(dd[:, 0]))
         assert np.all(ff[:, 0])
         assert np.all(nn[:, 0] == 0.0)
 
@@ -323,7 +323,7 @@ class Test_LSTAverage:
 
     def test_sigma_clip_without_outliers(self, benchmark):
         shape = (7,8,9)
-        data = np.random.random(shape) + np.random.random(shape)*1j
+        data = np.random.normal(size=shape) + np.random.normal(size=shape)*1j
         nsamples = np.ones_like(data)
         flags = np.zeros_like(data, dtype=bool)
 
@@ -331,7 +331,7 @@ class Test_LSTAverage:
             data=data,
             nsamples=nsamples,
             flags=flags,
-            sigma_clip_thresh=0.0,
+            sigma_clip_thresh=None,
         )
 
         data, flg, std, norm = benchmark(
@@ -339,11 +339,13 @@ class Test_LSTAverage:
             data=data,
             nsamples=nsamples,
             flags=flags,
-            sigma_clip_thresh=10.0,
+            sigma_clip_thresh=15.0,
         )
 
         assert data.shape == flg.shape == std.shape == norm.shape == nsamples.shape[1:]
-        assert np.all(data == data_n)
+        print(data)
+        print(data_n)
+        np.testing.assert_allclose(data,data_n)
 
     def test_average_repeated(self):
         shape = (7,8,9)

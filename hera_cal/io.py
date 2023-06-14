@@ -457,7 +457,7 @@ def get_blt_slices(uvo, tried_to_reorder=False):
         else:
             for i in range(uvo.Nbls):
                 antp = (uvo.ant_1_array[i], uvo.ant_2_array[i])
-                blt_slices[antp] = slice(i, uvo.Nblts, self.Nbls)
+                blt_slices[antp] = slice(i, uvo.Nblts, uvo.Nbls)
             assert uvo.Nbls == len(blt_slices)
     else:
         for ant1, ant2 in uvo.get_antpairs():

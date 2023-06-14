@@ -3,6 +3,7 @@
 # Licensed under the MIT License
 from __future__ import annotations
 
+from collections import OrderedDict
 import numpy as np
 import os
 import copy
@@ -790,7 +791,8 @@ def lst_rephase(
     freqs: np.ndarray,
     dlst: float | list | np.ndarray,
     lat: float =-30.721526120689507,
-    inplace: bool=True
+    inplace: bool=True,
+    array=False
 ):
     """
     Shift phase center of each integration in data by amount dlst [radians] along right
@@ -816,7 +818,10 @@ def lst_rephase(
         latitude of observer in degrees North
     inplace
         if True edit arrays in data in memory, else make a copy and return
-
+    array
+        Deprecated parameter that specifies that the input data is an array
+        with shape (ntimes, nfreqs, [npols]). Don't write code with this 
+        parameter -- instead just set the baseline axis of data to be length-1.
 
     Notes:
     ------
@@ -852,7 +857,9 @@ def lst_rephase(
     s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
     s_diff = (s_prime - np.array([0., 0., 1.0])) / const.c.value
 
-    if isinstance(data, DataContainer) and inplace:
+    orig_type = type(data)
+
+    if not isinstance(data, np.ndarray) and inplace:
         # We can't truly do in-place rephasing of a DataContainer in a vectorized way
         # (without copying memory), so we do it in a loop.
         # iterate over data keys
@@ -874,14 +881,33 @@ def lst_rephase(
             # multiply into data
             data[k] *= phs
     else:
-        if isinstance(data, DataContainer):
-            _data = np.zeros((len(data.times), len(data.bls()), len(data.freqs)))
-            for i, k in enumerate(data.keys()):
+        if not isinstance(data, np.ndarray):
+            shape = next(iter(data.values())).shape
+            keys = list(data.keys())
+
+            _data = np.zeros((shape[0], len(keys), shape[1]), dtype=complex)
+
+            for i, k in enumerate(keys):
                 _data[:, i, :] = data[k]
+            blvecs = np.array([bls[k] for k in keys])
             data = _data
-            blvecs = np.array([bls[k] for k in data.keys()])
+
         else:
             blvecs = np.atleast_2d(bls)
+
+            if hasattr(dlst, '__len__'):
+                assert data.shape[0] == len(dlst)
+
+            if array:
+                warnings.warn(
+                    "the 'array' parameter to lst_rephase is deprecated. Please provide data with second-axis of Nbls",
+                    category=DeprecationWarning,    
+                )
+                data = data[:, None]
+
+            assert data.shape[1] == len(blvecs)
+            assert data.shape[2] == len(freqs)
+
             if not inplace:
                 data = data.copy()
 
@@ -895,14 +921,24 @@ def lst_rephase(
             tau = tau[None, :]
 
         # get phasor
-        phs = np.exp(-2j * np.pi * freqs[None, None, :, None] * tau[:, :, None, None])
+        phs = np.exp(-2j * np.pi * freqs[None, None, :] * tau[:, :, None])
+
+        if data.ndim > phs.ndim:
+            # data can have extra dimensions after frequency if it wants (eg pols)
+            newshape = phs.shape + (1,) * (data.ndim - phs.ndim)
+            phs.shape = newshape
 
         # multiply into data
         data *= phs
 
-
         if not inplace:
-            return data
+            if orig_type in (dict, OrderedDict, DataContainer):
+                return orig_type({k: data[:,i] for i,k in enumerate(keys)})
+            else:
+                if array:
+                    return data[:, 0]
+                else:
+                    return data
 
 
 def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_antpol=False,
@@ -1553,13 +1589,19 @@ def match_files_to_lst_bins(
     # Cache times
     _metas = {meta.path: meta for meta in metadata_list}
 
+    try:
+        cache = functools.cache
+    except AttributeError:
+        # Older python
+        cache = partial(functools.lru_cache, maxsize=None)
+
     if jd_regex is not None:
         jd_regex = re.compile(jd_regex)
-        @functools.cache
+        @cache
         def get_first_time(path: Path) -> float:
             return float(jd_regex.findall(path.name)[0])
     else:
-        @functools.cache
+        @cache
         def get_first_time(path: Path) -> float:
             meta = _metas[path]
             return meta.get_transactional("times")[0]
