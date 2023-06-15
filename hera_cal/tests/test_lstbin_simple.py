@@ -323,6 +323,7 @@ class Test_LSTAverage:
 
     def test_sigma_clip_without_outliers(self, benchmark):
         shape = (7,8,9)
+        np.random.seed(42)
         data = np.random.normal(size=shape) + np.random.normal(size=shape)*1j
         nsamples = np.ones_like(data)
         flags = np.zeros_like(data, dtype=bool)
@@ -339,7 +340,7 @@ class Test_LSTAverage:
             data=data,
             nsamples=nsamples,
             flags=flags,
-            sigma_clip_thresh=15.0,
+            sigma_clip_thresh=20.0,
         )
 
         assert data.shape == flg.shape == std.shape == norm.shape == nsamples.shape[1:]

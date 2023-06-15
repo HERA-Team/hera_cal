@@ -1593,7 +1593,7 @@ def match_files_to_lst_bins(
         cache = functools.cache
     except AttributeError:
         # Older python
-        cache = partial(functools.lru_cache, maxsize=None)
+        cache = functools.partial(functools.lru_cache, maxsize=None)
 
     if jd_regex is not None:
         jd_regex = re.compile(jd_regex)
