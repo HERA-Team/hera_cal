@@ -1,5 +1,5 @@
-from typing import Literal
+from typing import Literal, Tuple
 
-Antpair = tuple[int, int]
+Antpair = Tuple[int, int]
 Pol = Literal['xx', 'yy', 'ee', 'nn', 'xy', 'yx', 'en', 'ne']
-Baseline = tuple[int, int, Pol]
+Baseline = Tuple[int, int, Pol]
