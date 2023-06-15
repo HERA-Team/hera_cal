@@ -505,7 +505,7 @@ def test_lst_rephase():
     # test operation on array
     k = (0, 1, 'ee')
     d = data_drift[k].copy()
-    d_phs = utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True)
+    d_phs = utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True, inplace=False)
     assert np.allclose(np.abs(np.angle(d_phs[50] / data[k][50])).max(), 0.0)
 
 
@@ -1035,7 +1035,7 @@ class TestMatchFilesToLSTBins:
             files_sorted=True,
         )
         assert len(out_fls) == 1
-        assert len(out_fls[0]) == nfiles//2 + 1  # Extra file because of atol
+        assert len(out_fls[0]) == nfiles//2
 
         # To make it interesting, choose one big LST bin that covers about half the
         # files, including a partial file at the end.

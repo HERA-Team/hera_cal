@@ -787,7 +787,7 @@ class HERAData(UVData):
         locs = locals()
         partials = ['bls', 'polarizations', 'times', 'time_range', 'lsts', 'lst_range', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
-
+        
         # if filepaths is None, this was converted to HERAData
         # from a different pre-loaded object with no history of filepath
         if self.filepaths is not None:
@@ -833,6 +833,10 @@ class HERAData(UVData):
 
             finally:
                 self.read = temp_read  # reset back to this function, regardless of whether the above try excecutes successfully
+
+        # It turns out that doing .read() can change the inherent rectangularity of the data
+        # so, we reset it:
+        self.set_rectangularity(force=True)
 
         # process data into DataContainers
         if read_data or self.filetype in ['uvh5', 'uvfits']:
