@@ -176,6 +176,15 @@ class TestDataContainer(object):
         assert 'xx' in dc.pols()
         assert 'yy' in dc.pols()
 
+        with pytest.raises(ValueError, match='Tuple keys to delete must be in the format'):
+            del dc['bad_key']
+
+        with pytest.raises(ValueError, match='Tuple keys to delete must be in the format'):
+            del dc[(1,2,3,4)]
+        
+        with pytest.raises(ValueError, match='Tuple keys to delete must be in the format'):
+            del dc[[1,2,'xx']]
+
     def test_getitem(self):
         dc = datacontainer.DataContainer(self.blpol)
         assert dc[(1, 2, 'xx')] == 1j
@@ -330,7 +339,7 @@ class TestDataContainer(object):
         assert dc.ants == blpol.ants
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
-class TestDataContainerWithRealData(object):
+class TestDataContainerWithRealData:
 
     def test_adder(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -546,3 +555,6 @@ def test_RedDataContainerKeyManipulation():
     rdc[1, 3, 'ee'] = 21j
     with pytest.raises(ValueError):
         rdc.build_red_keys([[(0, 2, 'ee'), (1, 3, 'ee')]])
+
+def test_bad_key_deletion():
+

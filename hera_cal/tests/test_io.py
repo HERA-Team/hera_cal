@@ -16,6 +16,9 @@ from pyuvdata import UVCal, UVData, UVFlag
 from pyuvdata.utils import parse_polstr, parse_jpolstr
 import glob
 import sys
+from .mock_uvdata import create_mock_hera_obs
+from tempfile import TemporaryDirectory
+from pyuvdata.uvdata import FastUVH5Meta
 
 from .. import io
 from ..io import HERACal, HERAData
@@ -1754,3 +1757,78 @@ def test_throw_away_flagged_ants(tmpdir):
             assert ant not in set(hdo.ant_1_array).union(set(hdo.ant_2_array))
         else:
             assert ant in set(hdo.ant_1_array).union(set(hdo.ant_2_array))
+
+class Test_UVDataFromFastUVH5:
+    """Test the uvdata_from_fastuvh5 function."""
+
+    def setup_class(self):
+        self.tmp = TemporaryDirectory()
+
+        self.uvd_default = create_mock_hera_obs()
+        self.uvd_blfirst = create_mock_hera_obs(time_axis_faster_than_bls=False)
+
+        self.uvd_default.initialize_uvh5_file(f"{self.tmp.name}/default.uvh5")
+        self.meta_default = FastUVH5Meta(f"{self.tmp.name}/default.uvh5")
+
+        self.uvd_blfirst.initialize_uvh5_file(f"{self.tmp.name}/blfirst.uvh5")
+        self.meta_blfirst = FastUVH5Meta(f"{self.tmp.name}/blfirst.uvh5")
+
+        random_order = np.random.permutation(np.arange(self.uvd_default.Nblts))
+        self.uvd_random = self.uvd_default.copy()
+        self.uvd_random.reorder_blts(order=random_order)
+        self.uvd_random.initialize_uvh5_file(f"{self.tmp.name}/random.uvh5")
+        self.meta_random = FastUVH5Meta(f"{self.tmp.name}/random.uvh5")
+
+    def teardown_class(self):
+        del self.tmp
+
+    def test_default(self):
+        uvd = io.uvdata_from_fastuvh5(self.meta_default)
+
+        assert uvd.metadata_only
+        np.testing.assert_equal(self.uvd_default.ant_1_array, uvd.ant_1_array)
+        np.testing.assert_equal(self.uvd_default.ant_2_array, uvd.ant_2_array)
+        np.testing.assert_equal(self.uvd_default.time_array, uvd.time_array)
+        np.testing.assert_equal(self.uvd_default.lst_array, uvd.lst_array)
+        
+    def test_blfirst(self):
+        uvd = io.uvdata_from_fastuvh5(self.meta_blfirst)
+
+        assert uvd.metadata_only
+        assert not uvd.time_axis_faster_than_bls
+        np.testing.assert_equal(self.uvd_blfirst.ant_1_array, uvd.ant_1_array)
+        np.testing.assert_equal(self.uvd_blfirst.ant_2_array, uvd.ant_2_array)
+        np.testing.assert_equal(self.uvd_blfirst.time_array, uvd.time_array)
+        np.testing.assert_equal(self.uvd_blfirst.lst_array, uvd.lst_array)
+        
+    def test_lsts_without_start_jd(self):
+        with pytest.raises(AttributeError, match='if times is not given, start_jd must be given'):
+            io.uvdata_from_fastuvh5(self.meta_default, times=None, start_jd=None, lsts=np.array([0.1, 0.2]))
+
+    def test_not_rect(self):
+        with pytest.raises(NotImplementedError, match='Cannot convert non-rectangular blts to UVData'):
+            io.uvdata_from_fastuvh5(self.meta_random)
+
+    def test_lsts_with_start_jd(self):
+        uvd = io.uvdata_from_fastuvh5(self.meta_default, lsts=np.array([0.1, 0.2]), start_jd=2459887)
+
+        assert uvd.Ntimes == 2
+        assert np.all(uvd.time_array >= 2459887)
+        np.testing.assert_allclose(np.unique(uvd.lst_array), np.array([0.1, 0.2]))
+
+    def test_times_without_lsts(self):
+        uvd = io.uvdata_from_fastuvh5(self.meta_default, times=np.array([2459887.0, 2459887.1]))
+
+        assert uvd.Ntimes == 2
+        np.testing.assert_allclose(np.unique(uvd.time_array), np.array([2459887.0, 2459887.1]))
+
+    def test_pass_time_and_lst(self):
+        with pytest.raises(AssertionError):
+            io.uvdata_from_fastuvh5(self.meta_default, times=np.array([2459887.0, 2459887.1]), lsts=np.array([0.1, 0.2, 0.3]))
+
+    def test_pass_metadata(self):
+        uvd = io.uvdata_from_fastuvh5(self.meta_default, history='I made this!')
+
+        assert uvd.history == 'I made this!'
+
+    

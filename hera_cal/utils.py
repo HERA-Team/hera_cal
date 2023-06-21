@@ -855,7 +855,7 @@ def lst_rephase(
 
     # get new s-hat vector
     s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
-    s_diff = (s_prime - np.array([0., 0., 1.0])) / const.c.value
+    s_diff_over_c = (s_prime - np.array([0., 0., 1.0])) / const.c.value
 
     orig_type = type(data)
 
@@ -869,7 +869,7 @@ def lst_rephase(
 
             # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
             # note that we pre-divided s_diff by c so this is in units of tau.
-            tau = np.einsum("...i,i->...", s_diff, bl)
+            tau = np.einsum("...i,i->...", s_diff_over_c, bl)
 
             # reshape tau
             if not isinstance(tau, np.ndarray):
@@ -914,7 +914,7 @@ def lst_rephase(
         # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
         # note that we pre-divided s_diff by c so this is in units of tau.
         # output has shape (len(dlst), len(bl))
-        tau = np.einsum("...i,ki->...k", s_diff, blvecs)
+        tau = np.einsum("...i,ki->...k", s_diff_over_c, blvecs)
 
         # reshape tau
         if tau.ndim != 2:

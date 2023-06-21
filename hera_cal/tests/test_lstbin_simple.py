@@ -344,8 +344,6 @@ class Test_LSTAverage:
         )
 
         assert data.shape == flg.shape == std.shape == norm.shape == nsamples.shape[1:]
-        print(data)
-        print(data_n)
         np.testing.assert_allclose(data,data_n)
 
     def test_average_repeated(self):
@@ -434,6 +432,55 @@ class Test_LSTAverage:
         np.testing.assert_allclose(std_n, np.sqrt(sve) + np.sqrt(sve)*1j, rtol=0.2)
 
         assert not np.any(flg_n)
+
+    def test_flag_below_min_N(self):
+        shape = (7,8,9)
+        _data = np.random.random(shape) + np.random.random(shape)*1j
+        nsamples = np.ones(_data.shape, dtype=float)
+        flags = np.zeros(_data.shape, dtype=bool)
+
+        # No samples have more than min_N, so they should all be flagged.
+        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+            data=_data, nsamples=nsamples, flags=flags, sigma_clip_min_N=8,
+            flag_below_min_N=True
+        )
+
+        assert np.all(flg_n)
+        assert np.all(norm_n==0)
+        assert np.all(np.isinf(std_n))
+        assert np.all(np.isnan(data_n))
+
+        # this time, there's enough samples, but too many are flagged...
+        flags[:5] = True
+        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+            data=_data, nsamples=nsamples, flags=flags, sigma_clip_min_N=5,
+            flag_below_min_N=True
+        )
+
+        assert np.all(flg_n)
+        assert np.all(norm_n==0)
+        assert np.all(np.isinf(std_n))
+        assert np.all(np.isnan(data_n))
+
+        # this time, only one column is flagged too much...
+        # this time, there's enough samples, but too many are flagged...
+        flags[:] = False
+        flags[:5, 0] = True
+        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+            data=_data, nsamples=nsamples, flags=flags, sigma_clip_min_N=5,
+            flag_below_min_N=True
+        )
+
+        assert np.all(flg_n[0])
+        assert np.all(norm_n[0]==0)
+        assert np.all(np.isinf(std_n[0]))
+        assert np.all(np.isnan(data_n[0]))
+
+        assert not np.any(flg_n[1:])
+        assert np.all(norm_n[1:]>0)
+        assert not np.any(np.isinf(std_n[1:]))
+        assert not np.any(np.isnan(data_n[1:]))
+        
 
 def create_small_array_uvd(identifiable: bool = False, **kwargs):
     kwargs.update(
@@ -1043,70 +1090,35 @@ class Test_LSTBinFiles:
                         rtol=1e-4
                     )
 
-    # @pytest.mark.parametrize(
-    # "random_ants_to_drop, sigma_clip_thresh, flag_strategy",
-    # [
-    #     (0, 0.0, (0,0,0)),
-    #     (0, 0.0, (2,1,3)),
-    #     (0, 3.0, (0,0,0)),
-    #     (3, 0.0, (0,0,0)),
-    # ]
-    # )
-    # def test_with_noise(
-    #     self, tmp_path_factory, random_ants_to_drop: int,
-    #     sigma_clip_thresh: float, flag_strategy: tuple[int, int, int],
-    # ):
+    def test_output_file_select(self, tmp_path_factory):
+        tmp = tmp_path_factory.mktemp("output_file_select")
+        uvds = mockuvd.make_dataset(
+            ndays=3, nfiles=4, ntimes=2,
+            creator=mockuvd.create_uvd_identifiable,
+            antpairs = [(i,j) for i in range(4) for j in range(i, 4)],  # 55 antpairs
+            pols = ('xx', 'yx'),
+            freqs=np.linspace(140e6, 180e6, 3),
+        )
 
-    #     tmp = tmp_path_factory.mktemp("with_noise")
-    #     uvds = mockuvd.make_dataset(
-    #         ndays=100, nfiles=1, ntimes=2, ants=np.arange(7),
-    #         creator=mockuvd.create_uvd_identifiable,
-    #         pols = ('xx', 'yy', 'xy', 'yx'),
-    #         with_noise=True,
-    #         freqs=np.linspace(140e6, 180e6, 3),
-    #         random_ants_to_drop=random_ants_to_drop,
-    #     )
+        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
-    #     # TEMPORARY HACK
-    #     realizations = []
-    #     for uvd in uvds:
-    #         data, flags, nsamples = uvd[0].read()
-    #         realizations.append(data[(1,2,'ee')])
-    #     np.save("realizations.npy", np.array(realizations))
+        cfl = tmp / "lstbin_config_file.yaml"
+        config_info = lstbin_simple.make_lst_bin_config_file(
+            cfl, data_files, ntimes_per_file=2, clobber=True,
+        )
+        lstbf = partial(
+            lstbin_simple.lst_bin_files, config_file=cfl, 
+            fname_format="zen.{kind}.{lst:7.5f}.uvh5",
+            Nbls_to_load=11, rephase=False,
+        )
 
-    #     data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
+        out_files = lstbf(output_file_select=0)
+        assert len(out_files) == 1
 
-    #     cfl = tmp / "lstbin_config_file.yaml"
-    #     lstbin_simple.make_lst_bin_config_file(
-    #         cfl, data_files, ntimes_per_file=2, clobber=True,
-    #     )
-    #     out_files = lstbin_simple.lst_bin_files(
-    #         config_file=cfl, fname_format="zen.{kind}.{lst:7.5f}.uvh5",
-    #         Nbls_to_load=11, rephase=False,
-    #         sigma_clip_thresh=sigma_clip_thresh,
-    #         sigma_clip_min_N=2,
-    #         overwrite=True
-    #     )
-    #     assert len(out_files) == 1
 
-    #     for flset in out_files:
-    #         hd_std = io.HERADataFastReader(flset['STD'])
-    #         std, flags, nsamples = hd_std.read()
+        out_files = lstbf(output_file_select=(1, 2))
+        assert len(out_files) == 2
 
-    #         hd_lst = io.HERADataFastReader(flset['LST'])
-    #         data, _, _ = hd_lst.read(read_flags=False, read_nsamples=False)
+        with pytest.raises(ValueError, match='output_file_select must be less than the number of output files'):
+            lstbf(output_file_select=100)
 
-    #         dt = (data.times[1] - data.times[0])* units.si.day.in_units(units.si.s)
-    #         df = data.freqs[1] - data.freqs[0]
-
-    #         for bl in data.bls():
-    #             print(f"Baseline {bl}")
-    #             print("data: ", data[bl])
-    #             per_lst_expected_var = noise.predict_noise_variance_from_autos(
-    #                 bl=bl, data=data, dt=dt, df=df
-    #             )
-
-    #             # Every night should have the same expected variance since there's no
-    #             # redundant averaging here
-    #             np.testing.assert_allclose(std[bl].real**2, per_lst_expected_var/2, rtol=1e-1)
-    #             np.testing.assert_allclose(std[bl].imag**2, per_lst_expected_var/2, rtol=1e-1)
