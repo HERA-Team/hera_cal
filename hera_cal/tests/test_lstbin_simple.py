@@ -15,6 +15,7 @@ from hera_cal import apply_cal
 from pyuvdata import utils as uvutils
 from hera_cal.red_groups import RedundantGroups
 from astropy import units
+from functools import partial
 
 try:
     benchmark
