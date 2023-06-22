@@ -34,11 +34,10 @@ jobs:
       - name: Install
         run: |
           pip install .[dev]
-          pip install git+https://github.com/hera-team/hera_filters  # temporary until hera-filters is released
 
       - name: Run Tests
         run: |
-          pytest -s -n auto --pyargs hera_cal --cov=hera_cal --cov-config=./.coveragerc --cov-report xml:./coverage.xml --durations=15 hera_cal/tests/test_chunker.py::test_chunk_data_files
+          pytest -s hera_cal/tests/test_chunker.py::test_chunk_data_files
 
       - name: Upload Coverage (Ubuntu)
         if: matrix.os == 'ubuntu-latest' && success()
