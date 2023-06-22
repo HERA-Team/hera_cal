@@ -36,6 +36,7 @@ def test_chunk_data_files(tmpdir):
     uvdo.read(data_files, freq_chans=range(32))
     apply_yaml_flags(uvdo, DATA_PATH + '/test_input/a_priori_flags_sample_noflags.yaml', throw_away_flagged_ants=True,
                      flag_freqs=False, flag_times=False, ant_indices_only=True)
+    print(uvdo.data_array.shape, uvd.data_array.shape)
     assert np.all(np.isclose(uvdo.data_array, uvd.data_array))
     assert np.all(np.isclose(uvdo.flag_array, uvd.flag_array))
     assert np.all(np.isclose(uvdo.nsample_array, uvd.nsample_array))

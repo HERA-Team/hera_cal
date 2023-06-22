@@ -1,0 +1,2813 @@
+{
+    "machine_info": {
+        "node": "LAPTOP-J64LT06Q",
+        "processor": "x86_64",
+        "machine": "x86_64",
+        "python_compiler": "GCC 10.4.0",
+        "python_implementation": "CPython",
+        "python_implementation_version": "3.10.6",
+        "python_version": "3.10.6",
+        "python_build": [
+            "main",
+            "Aug 22 2022 20:36:39"
+        ],
+        "release": "5.15.90.1-microsoft-standard-WSL2",
+        "system": "Linux",
+        "cpu": {
+            "python_version": "3.10.6.final.0 (64 bit)",
+            "cpuinfo_version": [
+                9,
+                0,
+                0
+            ],
+            "cpuinfo_version_string": "9.0.0",
+            "arch": "X86_64",
+            "bits": 64,
+            "count": 16,
+            "arch_string_raw": "x86_64",
+            "vendor_id_raw": "GenuineIntel",
+            "brand_raw": "11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz",
+            "hz_advertised_friendly": "2.3000 GHz",
+            "hz_actual_friendly": "2.3040 GHz",
+            "hz_advertised": [
+                2300000000,
+                0
+            ],
+            "hz_actual": [
+                2304008000,
+                0
+            ],
+            "stepping": 1,
+            "model": 141,
+            "family": 6,
+            "flags": [
+                "3dnowprefetch",
+                "abm",
+                "adx",
+                "aes",
+                "apic",
+                "arch_capabilities",
+                "arch_perfmon",
+                "avx",
+                "avx2",
+                "avx512_bitalg",
+                "avx512_vbmi2",
+                "avx512_vnni",
+                "avx512_vp2intersect",
+                "avx512_vpopcntdq",
+                "avx512bitalg",
+                "avx512bw",
+                "avx512cd",
+                "avx512dq",
+                "avx512f",
+                "avx512ifma",
+                "avx512vbmi",
+                "avx512vbmi2",
+                "avx512vl",
+                "avx512vnni",
+                "avx512vpopcntdq",
+                "bmi1",
+                "bmi2",
+                "clflush",
+                "clflushopt",
+                "clwb",
+                "cmov",
+                "constant_tsc",
+                "cpuid",
+                "cx16",
+                "cx8",
+                "de",
+                "ept",
+                "ept_ad",
+                "erms",
+                "f16c",
+                "flush_l1d",
+                "fma",
+                "fpu",
+                "fsgsbase",
+                "fsrm",
+                "fxsr",
+                "gfni",
+                "ht",
+                "hypervisor",
+                "ibpb",
+                "ibrs",
+                "ibrs_enhanced",
+                "invpcid",
+                "invpcid_single",
+                "lahf_lm",
+                "lm",
+                "mca",
+                "mce",
+                "mmx",
+                "movbe",
+                "movdir64b",
+                "movdiri",
+                "msr",
+                "mtrr",
+                "nonstop_tsc",
+                "nopl",
+                "nx",
+                "osxsave",
+                "pae",
+                "pat",
+                "pcid",
+                "pclmulqdq",
+                "pdcm",
+                "pdpe1gb",
+                "pge",
+                "pni",
+                "popcnt",
+                "pse",
+                "pse36",
+                "rdpid",
+                "rdrand",
+                "rdrnd",
+                "rdseed",
+                "rdtscp",
+                "rep_good",
+                "sep",
+                "sha",
+                "sha_ni",
+                "smap",
+                "smep",
+                "ss",
+                "ssbd",
+                "sse",
+                "sse2",
+                "sse4_1",
+                "sse4_2",
+                "ssse3",
+                "stibp",
+                "syscall",
+                "tpr_shadow",
+                "tsc",
+                "tsc_adjust",
+                "tsc_deadline_timer",
+                "tsc_reliable",
+                "tscdeadline",
+                "umip",
+                "vaes",
+                "vme",
+                "vmx",
+                "vnmi",
+                "vpclmulqdq",
+                "vpid",
+                "x2apic",
+                "xgetbv1",
+                "xsave",
+                "xsavec",
+                "xsaveopt",
+                "xsaves",
+                "xtopology"
+            ],
+            "l3_cache_size": 25165824,
+            "l2_cache_size": 10485760,
+            "l1_data_cache_size": 393216,
+            "l1_instruction_cache_size": 262144,
+            "l2_cache_line_size": 256,
+            "l2_cache_associativity": 7
+        }
+    },
+    "commit_info": {
+        "id": "3a0f8a44c3a469bd3e3d27009467f90515500b11",
+        "time": "2023-05-10T10:32:33-07:00",
+        "author_time": "2023-05-10T10:32:33-07:00",
+        "dirty": true,
+        "project": "hera_cal",
+        "branch": "lstbin-improvements"
+    },
+    "benchmarks": [
+        {
+            "group": null,
+            "name": "test_increasing_lsts_one_per_bin",
+            "fullname": "hera_cal/tests/test_lstbin_simple.py::Test_LSTAlign::test_increasing_lsts_one_per_bin",
+            "params": null,
+            "param": null,
+            "extra_info": {},
+            "options": {
+                "disable_gc": false,
+                "timer": "perf_counter",
+                "min_rounds": 5,
+                "max_time": 1.0,
+                "min_time": 5e-06,
+                "warmup": false
+            },
+            "cprofile": [
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 6.680600000000001e-05,
+                    "tottime_per": 6.680600000000001e-05,
+                    "cumtime": 0.000165601,
+                    "cumtime_per": 0.000165601,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:37(lst_align)"
+                },
+                {
+                    "ncalls_recursion": "11/10",
+                    "ncalls": 11,
+                    "tottime": 1.0677000000000001e-05,
+                    "tottime_per": 1.0677000000000002e-06,
+                    "cumtime": 6.215100000000001e-05,
+                    "cumtime_per": 6.215100000000001e-06,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.implement_array_function>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.4180000000000001e-05,
+                    "tottime_per": 1.4180000000000001e-05,
+                    "cumtime": 3.1187000000000005e-05,
+                    "cumtime_per": 3.1187000000000005e-05,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:179(get_lst_bins)"
+                },
+                {
+                    "ncalls_recursion": "6",
+                    "ncalls": 6,
+                    "tottime": 3.548e-06,
+                    "tottime_per": 5.913333333333334e-07,
+                    "cumtime": 2.9648e-05,
+                    "cumtime_per": 4.941333333333334e-06,
+                    "function_name": "<__array_function__ internals>:177(any)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 1.0144000000000001e-05,
+                    "tottime_per": 1.4491428571428574e-06,
+                    "cumtime": 2.2746000000000002e-05,
+                    "cumtime_per": 3.2494285714285717e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:69(_wrapreduction)"
+                },
+                {
+                    "ncalls_recursion": "6",
+                    "ncalls": 6,
+                    "tottime": 3.856e-06,
+                    "tottime_per": 6.426666666666667e-07,
+                    "cumtime": 1.9487e-05,
+                    "cumtime_per": 3.2478333333333335e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2307(any)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.354e-06,
+                    "tottime_per": 1.354e-06,
+                    "cumtime": 1.5974e-05,
+                    "cumtime_per": 1.5974e-05,
+                    "function_name": "<__array_function__ internals>:177(digitize)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 3.916e-06,
+                    "tottime_per": 3.916e-06,
+                    "cumtime": 1.3878000000000002e-05,
+                    "cumtime_per": 1.3878000000000002e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/function_base.py:5451(digitize)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.5130000000000002e-06,
+                    "tottime_per": 1.5130000000000002e-06,
+                    "cumtime": 1.3141e-05,
+                    "cumtime_per": 1.3141e-05,
+                    "function_name": "<__array_function__ internals>:177(diff)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.0025000000000001e-05,
+                    "tottime_per": 1.0025000000000001e-05,
+                    "cumtime": 1.0680000000000001e-05,
+                    "cumtime_per": 1.0680000000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/function_base.py:1319(diff)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.1150000000000001e-06,
+                    "tottime_per": 1.1150000000000001e-06,
+                    "cumtime": 9.91e-06,
+                    "cumtime_per": 9.91e-06,
+                    "function_name": "<__array_function__ internals>:177(all)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 9.017e-06,
+                    "tottime_per": 1.2881428571428571e-06,
+                    "cumtime": 9.017e-06,
+                    "cumtime_per": 1.2881428571428571e-06,
+                    "function_name": "~:0(<method 'reduce' of 'numpy.ufunc' objects>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 2.452e-06,
+                    "tottime_per": 2.452e-06,
+                    "cumtime": 8.948000000000001e-06,
+                    "cumtime_per": 8.948000000000001e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numeric.py:149(ones)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 9.060000000000001e-07,
+                    "tottime_per": 9.060000000000001e-07,
+                    "cumtime": 8.021e-06,
+                    "cumtime_per": 8.021e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2406(all)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 2.6300000000000002e-06,
+                    "tottime_per": 2.6300000000000002e-06,
+                    "cumtime": 5.801e-06,
+                    "cumtime_per": 5.801e-06,
+                    "function_name": "<__array_function__ internals>:177(copyto)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 7.15e-07,
+                    "tottime_per": 7.15e-07,
+                    "cumtime": 5.4400000000000004e-06,
+                    "cumtime_per": 5.4400000000000004e-06,
+                    "function_name": "<__array_function__ internals>:177(searchsorted)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 6.760000000000001e-07,
+                    "tottime_per": 6.760000000000001e-07,
+                    "cumtime": 3.936e-06,
+                    "cumtime_per": 3.936e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:1319(searchsorted)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.1770000000000001e-06,
+                    "tottime_per": 1.1770000000000001e-06,
+                    "cumtime": 3.878e-06,
+                    "cumtime_per": 3.878e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numerictypes.py:356(issubdtype)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 2.2020000000000003e-06,
+                    "tottime_per": 2.2020000000000003e-06,
+                    "cumtime": 3.26e-06,
+                    "cumtime_per": 3.26e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:51(_wrapfunc)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 2.915e-06,
+                    "tottime_per": 4.1642857142857144e-07,
+                    "cumtime": 2.915e-06,
+                    "cumtime_per": 4.1642857142857144e-07,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:70(<dictcomp>)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.166e-06,
+                    "tottime_per": 1.083e-06,
+                    "cumtime": 2.582e-06,
+                    "cumtime_per": 1.291e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numerictypes.py:282(issubclass_)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.618e-06,
+                    "tottime_per": 1.618e-06,
+                    "cumtime": 1.618e-06,
+                    "cumtime_per": 1.618e-06,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:390(adjust_lst_bin_edges)"
+                },
+                {
+                    "ncalls_recursion": "19",
+                    "ncalls": 19,
+                    "tottime": 1.347e-06,
+                    "tottime_per": 7.089473684210526e-08,
+                    "cumtime": 1.347e-06,
+                    "cumtime_per": 7.089473684210526e-08,
+                    "function_name": "~:0(<method 'append' of 'list' objects>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.2930000000000002e-06,
+                    "tottime_per": 1.2930000000000002e-06,
+                    "cumtime": 1.2930000000000002e-06,
+                    "cumtime_per": 1.2930000000000002e-06,
+                    "function_name": "~:0(<built-in method numpy.zeros>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 7.29e-07,
+                    "tottime_per": 7.29e-07,
+                    "cumtime": 1.139e-06,
+                    "cumtime_per": 1.139e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/logging/__init__.py:1467(info)"
+                }
+            ],
+            "stats": {
+                "min": 7.921699943835847e-05,
+                "max": 0.000519174001965439,
+                "mean": 9.062959124674811e-05,
+                "stddev": 1.3429730511784498e-05,
+                "rounds": 3320,
+                "median": 8.70160001795739e-05,
+                "iqr": 2.956501703010872e-06,
+                "q1": 8.617549974587746e-05,
+                "q3": 8.913200144888833e-05,
+                "iqr_outliers": 546,
+                "stddev_outliers": 236,
+                "outliers": "236;546",
+                "ld15iqr": 8.185099795809947e-05,
+                "hd15iqr": 9.361800039187074e-05,
+                "ops": 11033.92375761025,
+                "total": 0.30089024293920374,
+                "iterations": 1
+            }
+        },
+        {
+            "group": null,
+            "name": "test_multi_days_one_per_bin",
+            "fullname": "hera_cal/tests/test_lstbin_simple.py::Test_LSTAlign::test_multi_days_one_per_bin",
+            "params": null,
+            "param": null,
+            "extra_info": {},
+            "options": {
+                "disable_gc": false,
+                "timer": "perf_counter",
+                "min_rounds": 5,
+                "max_time": 1.0,
+                "min_time": 5e-06,
+                "warmup": false
+            },
+            "cprofile": [
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 8.1353e-05,
+                    "tottime_per": 8.1353e-05,
+                    "cumtime": 0.000197826,
+                    "cumtime_per": 0.000197826,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:37(lst_align)"
+                },
+                {
+                    "ncalls_recursion": "12/11",
+                    "ncalls": 12,
+                    "tottime": 1.2144000000000001e-05,
+                    "tottime_per": 1.1040000000000001e-06,
+                    "cumtime": 7.4399e-05,
+                    "cumtime_per": 6.763545454545455e-06,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.implement_array_function>)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 4.378e-06,
+                    "tottime_per": 6.254285714285714e-07,
+                    "cumtime": 3.6205e-05,
+                    "cumtime_per": 5.172142857142858e-06,
+                    "function_name": "<__array_function__ internals>:177(any)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.6000000000000003e-05,
+                    "tottime_per": 1.6000000000000003e-05,
+                    "cumtime": 3.5989000000000004e-05,
+                    "cumtime_per": 3.5989000000000004e-05,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:179(get_lst_bins)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 1.2449e-05,
+                    "tottime_per": 1.556125e-06,
+                    "cumtime": 2.7619e-05,
+                    "cumtime_per": 3.452375e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:69(_wrapreduction)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 4.966e-06,
+                    "tottime_per": 7.094285714285715e-07,
+                    "cumtime": 2.4351e-05,
+                    "cumtime_per": 3.478714285714286e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2307(any)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.122e-06,
+                    "tottime_per": 1.122e-06,
+                    "cumtime": 1.8723e-05,
+                    "cumtime_per": 1.8723e-05,
+                    "function_name": "<__array_function__ internals>:177(digitize)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 4.736e-06,
+                    "tottime_per": 4.736e-06,
+                    "cumtime": 1.6863e-05,
+                    "cumtime_per": 1.6863e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/function_base.py:5451(digitize)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.898e-06,
+                    "tottime_per": 1.898e-06,
+                    "cumtime": 1.4940000000000001e-05,
+                    "cumtime_per": 1.4940000000000001e-05,
+                    "function_name": "<__array_function__ internals>:177(diff)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.1454e-05,
+                    "tottime_per": 1.1454e-05,
+                    "cumtime": 1.2086e-05,
+                    "cumtime_per": 1.2086e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/function_base.py:1319(diff)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.171e-06,
+                    "tottime_per": 1.171e-06,
+                    "cumtime": 1.181e-05,
+                    "cumtime_per": 1.181e-05,
+                    "function_name": "<__array_function__ internals>:177(all)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 1.0820000000000001e-05,
+                    "tottime_per": 1.3525000000000002e-06,
+                    "cumtime": 1.0820000000000001e-05,
+                    "cumtime_per": 1.3525000000000002e-06,
+                    "function_name": "~:0(<method 'reduce' of 'numpy.ufunc' objects>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 3.0190000000000002e-06,
+                    "tottime_per": 3.0190000000000002e-06,
+                    "cumtime": 1.0514000000000001e-05,
+                    "cumtime_per": 1.0514000000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numeric.py:149(ones)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.401e-06,
+                    "tottime_per": 1.401e-06,
+                    "cumtime": 9.635e-06,
+                    "cumtime_per": 9.635e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2406(all)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 9.96e-07,
+                    "tottime_per": 9.96e-07,
+                    "cumtime": 6.998000000000001e-06,
+                    "cumtime_per": 6.998000000000001e-06,
+                    "function_name": "<__array_function__ internals>:177(searchsorted)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 3.281e-06,
+                    "tottime_per": 3.281e-06,
+                    "cumtime": 6.959000000000001e-06,
+                    "cumtime_per": 6.959000000000001e-06,
+                    "function_name": "<__array_function__ internals>:177(copyto)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 9.12e-07,
+                    "tottime_per": 9.12e-07,
+                    "cumtime": 5.083e-06,
+                    "cumtime_per": 5.083e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:1319(searchsorted)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.288e-06,
+                    "tottime_per": 1.288e-06,
+                    "cumtime": 4.501000000000001e-06,
+                    "cumtime_per": 4.501000000000001e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numerictypes.py:356(issubdtype)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 2.5960000000000002e-06,
+                    "tottime_per": 2.5960000000000002e-06,
+                    "cumtime": 4.171e-06,
+                    "cumtime_per": 4.171e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:51(_wrapfunc)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 3.738e-06,
+                    "tottime_per": 4.6725e-07,
+                    "cumtime": 3.738e-06,
+                    "cumtime_per": 4.6725e-07,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:70(<dictcomp>)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.5850000000000002e-06,
+                    "tottime_per": 1.2925000000000001e-06,
+                    "cumtime": 3.0210000000000004e-06,
+                    "cumtime_per": 1.5105000000000002e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numerictypes.py:282(issubclass_)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 2.087e-06,
+                    "tottime_per": 2.087e-06,
+                    "cumtime": 2.087e-06,
+                    "cumtime_per": 2.087e-06,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:390(adjust_lst_bin_edges)"
+                },
+                {
+                    "ncalls_recursion": "22",
+                    "ncalls": 22,
+                    "tottime": 1.615e-06,
+                    "tottime_per": 7.340909090909091e-08,
+                    "cumtime": 1.615e-06,
+                    "cumtime_per": 7.340909090909091e-08,
+                    "function_name": "~:0(<method 'append' of 'list' objects>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.082e-06,
+                    "tottime_per": 1.082e-06,
+                    "cumtime": 1.483e-06,
+                    "cumtime_per": 1.483e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/logging/__init__.py:1467(info)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.412e-06,
+                    "tottime_per": 1.412e-06,
+                    "cumtime": 1.412e-06,
+                    "cumtime_per": 1.412e-06,
+                    "function_name": "~:0(<method 'searchsorted' of 'numpy.ndarray' objects>)"
+                }
+            ],
+            "stats": {
+                "min": 8.843500108923763e-05,
+                "max": 0.00040014100159169175,
+                "mean": 9.736616126072903e-05,
+                "stddev": 8.954597624161419e-06,
+                "rounds": 7038,
+                "median": 9.62644971878035e-05,
+                "iqr": 1.372001861454919e-06,
+                "q1": 9.556499935570173e-05,
+                "q3": 9.693700121715665e-05,
+                "iqr_outliers": 1099,
+                "stddev_outliers": 314,
+                "outliers": "314;1099",
+                "ld15iqr": 9.350899927085266e-05,
+                "hd15iqr": 9.899600263452157e-05,
+                "ops": 10270.508635152826,
+                "total": 0.6852630429530109,
+                "iterations": 1
+            }
+        },
+        {
+            "group": null,
+            "name": "test_multi_days_with_flagging",
+            "fullname": "hera_cal/tests/test_lstbin_simple.py::Test_LSTAlign::test_multi_days_with_flagging",
+            "params": null,
+            "param": null,
+            "extra_info": {},
+            "options": {
+                "disable_gc": false,
+                "timer": "perf_counter",
+                "min_rounds": 5,
+                "max_time": 1.0,
+                "min_time": 5e-06,
+                "warmup": false
+            },
+            "cprofile": [
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 7.988400000000001e-05,
+                    "tottime_per": 7.988400000000001e-05,
+                    "cumtime": 0.00019815700000000002,
+                    "cumtime_per": 0.00019815700000000002,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:37(lst_align)"
+                },
+                {
+                    "ncalls_recursion": "12/11",
+                    "ncalls": 12,
+                    "tottime": 1.2037e-05,
+                    "tottime_per": 1.0942727272727274e-06,
+                    "cumtime": 7.7314e-05,
+                    "cumtime_per": 7.028545454545454e-06,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.implement_array_function>)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 4.858e-06,
+                    "tottime_per": 6.939999999999999e-07,
+                    "cumtime": 3.8344000000000004e-05,
+                    "cumtime_per": 5.477714285714286e-06,
+                    "function_name": "<__array_function__ internals>:177(any)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.6059e-05,
+                    "tottime_per": 1.6059e-05,
+                    "cumtime": 3.6869e-05,
+                    "cumtime_per": 3.6869e-05,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:179(get_lst_bins)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 1.3387e-05,
+                    "tottime_per": 1.673375e-06,
+                    "cumtime": 2.9224000000000003e-05,
+                    "cumtime_per": 3.6530000000000004e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:69(_wrapreduction)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 5.191e-06,
+                    "tottime_per": 7.415714285714286e-07,
+                    "cumtime": 2.599e-05,
+                    "cumtime_per": 3.712857142857143e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2307(any)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.2170000000000002e-06,
+                    "tottime_per": 1.2170000000000002e-06,
+                    "cumtime": 1.9777e-05,
+                    "cumtime_per": 1.9777e-05,
+                    "function_name": "<__array_function__ internals>:177(digitize)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 4.797e-06,
+                    "tottime_per": 4.797e-06,
+                    "cumtime": 1.7575e-05,
+                    "cumtime_per": 1.7575e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/function_base.py:5451(digitize)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.398e-06,
+                    "tottime_per": 1.398e-06,
+                    "cumtime": 1.5069000000000001e-05,
+                    "cumtime_per": 1.5069000000000001e-05,
+                    "function_name": "<__array_function__ internals>:177(diff)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.2127000000000001e-05,
+                    "tottime_per": 1.2127000000000001e-05,
+                    "cumtime": 1.2751e-05,
+                    "cumtime_per": 1.2751e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/function_base.py:1319(diff)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.275e-06,
+                    "tottime_per": 1.275e-06,
+                    "cumtime": 1.1749e-05,
+                    "cumtime_per": 1.1749e-05,
+                    "function_name": "<__array_function__ internals>:177(all)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 1.0858e-05,
+                    "tottime_per": 1.35725e-06,
+                    "cumtime": 1.0858e-05,
+                    "cumtime_per": 1.35725e-06,
+                    "function_name": "~:0(<method 'reduce' of 'numpy.ufunc' objects>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 3.501e-06,
+                    "tottime_per": 3.501e-06,
+                    "cumtime": 1.0826000000000001e-05,
+                    "cumtime_per": 1.0826000000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numeric.py:149(ones)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.188e-06,
+                    "tottime_per": 1.188e-06,
+                    "cumtime": 9.613000000000001e-06,
+                    "cumtime_per": 9.613000000000001e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2406(all)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.4560000000000001e-06,
+                    "tottime_per": 1.4560000000000001e-06,
+                    "cumtime": 7.684000000000001e-06,
+                    "cumtime_per": 7.684000000000001e-06,
+                    "function_name": "<__array_function__ internals>:177(searchsorted)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 3.029e-06,
+                    "tottime_per": 3.029e-06,
+                    "cumtime": 6.319e-06,
+                    "cumtime_per": 6.319e-06,
+                    "function_name": "<__array_function__ internals>:177(copyto)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 8.49e-07,
+                    "tottime_per": 8.49e-07,
+                    "cumtime": 5.383e-06,
+                    "cumtime_per": 5.383e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:1319(searchsorted)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 3.136e-06,
+                    "tottime_per": 3.136e-06,
+                    "cumtime": 4.534e-06,
+                    "cumtime_per": 4.534e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:51(_wrapfunc)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.57e-06,
+                    "tottime_per": 1.57e-06,
+                    "cumtime": 4.4890000000000006e-06,
+                    "cumtime_per": 4.4890000000000006e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numerictypes.py:356(issubdtype)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 4.171e-06,
+                    "tottime_per": 5.21375e-07,
+                    "cumtime": 4.171e-06,
+                    "cumtime_per": 5.21375e-07,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:70(<dictcomp>)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.482e-06,
+                    "tottime_per": 1.241e-06,
+                    "cumtime": 2.842e-06,
+                    "cumtime_per": 1.421e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numerictypes.py:282(issubclass_)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.938e-06,
+                    "tottime_per": 1.938e-06,
+                    "cumtime": 1.938e-06,
+                    "cumtime_per": 1.938e-06,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:390(adjust_lst_bin_edges)"
+                },
+                {
+                    "ncalls_recursion": "22",
+                    "ncalls": 22,
+                    "tottime": 1.864e-06,
+                    "tottime_per": 8.472727272727273e-08,
+                    "cumtime": 1.864e-06,
+                    "cumtime_per": 8.472727272727273e-08,
+                    "function_name": "~:0(<method 'append' of 'list' objects>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.229e-06,
+                    "tottime_per": 1.229e-06,
+                    "cumtime": 1.229e-06,
+                    "cumtime_per": 1.229e-06,
+                    "function_name": "~:0(<method 'searchsorted' of 'numpy.ndarray' objects>)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 1.1550000000000002e-06,
+                    "tottime_per": 1.6500000000000003e-07,
+                    "cumtime": 1.1550000000000002e-06,
+                    "cumtime_per": 1.6500000000000003e-07,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2302(_any_dispatcher)"
+                }
+            ],
+            "stats": {
+                "min": 9.083300028578378e-05,
+                "max": 0.00027086800037068315,
+                "mean": 9.7145743533806e-05,
+                "stddev": 8.08285474587903e-06,
+                "rounds": 7148,
+                "median": 9.548799971526023e-05,
+                "iqr": 1.5684981917729601e-06,
+                "q1": 9.475250044488348e-05,
+                "q3": 9.632099863665644e-05,
+                "iqr_outliers": 864,
+                "stddev_outliers": 422,
+                "outliers": "422;864",
+                "ld15iqr": 9.240300278179348e-05,
+                "hd15iqr": 9.868500274023972e-05,
+                "ops": 10293.811788593779,
+                "total": 0.6943977747796453,
+                "iterations": 1
+            }
+        },
+        {
+            "group": null,
+            "name": "test_multi_days_with_nsamples_zero",
+            "fullname": "hera_cal/tests/test_lstbin_simple.py::Test_LSTAlign::test_multi_days_with_nsamples_zero",
+            "params": null,
+            "param": null,
+            "extra_info": {},
+            "options": {
+                "disable_gc": false,
+                "timer": "perf_counter",
+                "min_rounds": 5,
+                "max_time": 1.0,
+                "min_time": 5e-06,
+                "warmup": false
+            },
+            "cprofile": [
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 2.1931e-05,
+                    "tottime_per": 2.1931e-05,
+                    "cumtime": 0.051049144000000005,
+                    "cumtime_per": 0.051049144000000005,
+                    "function_name": "hera_cal/hera_cal/tests/test_lstbin_simple.py:19(get_lst_align_data)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 8.902e-06,
+                    "tottime_per": 8.902e-06,
+                    "cumtime": 0.050874627000000006,
+                    "cumtime_per": 0.050874627000000006,
+                    "function_name": "hera_cal/hera_cal/tests/mock_uvdata.py:187(make_dataset)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 1.2899000000000001e-05,
+                    "tottime_per": 6.449500000000001e-06,
+                    "cumtime": 0.050865507000000004,
+                    "cumtime_per": 0.025432753500000002,
+                    "function_name": "hera_cal/hera_cal/tests/mock_uvdata.py:172(make_day)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 7.959000000000001e-06,
+                    "tottime_per": 3.979500000000001e-06,
+                    "cumtime": 0.050817303,
+                    "cumtime_per": 0.0254086515,
+                    "function_name": "hera_cal/hera_cal/tests/mock_uvdata.py:120(create_uvd_identifiable)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.2862000000000002e-05,
+                    "tottime_per": 1.1431000000000001e-05,
+                    "cumtime": 0.04949046,
+                    "cumtime_per": 0.02474523,
+                    "function_name": "hera_cal/hera_cal/tests/mock_uvdata.py:84(create_uvd_ones)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 3.7434e-05,
+                    "tottime_per": 1.8717e-05,
+                    "cumtime": 0.049458124000000006,
+                    "cumtime_per": 0.024729062000000003,
+                    "function_name": "hera_cal/hera_cal/tests/mock_uvdata.py:24(create_mock_hera_obs)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 4.762e-06,
+                    "tottime_per": 2.381e-06,
+                    "cumtime": 0.031501343,
+                    "cumtime_per": 0.0157506715,
+                    "function_name": "pyuvdata/pyuvdata/uvdata/uvdata.py:774(new)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 0.000132907,
+                    "tottime_per": 6.64535e-05,
+                    "cumtime": 0.031496581,
+                    "cumtime_per": 0.0157482905,
+                    "function_name": "pyuvdata/pyuvdata/uvdata/initializers.py:328(new_uvdata)"
+                },
+                {
+                    "ncalls_recursion": "6",
+                    "ncalls": 6,
+                    "tottime": 0.00011607400000000001,
+                    "tottime_per": 1.934566666666667e-05,
+                    "cumtime": 0.01897451,
+                    "cumtime_per": 0.0031624183333333333,
+                    "function_name": "pyuvdata/pyuvdata/utils.py:3777(get_lst_for_time)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 0.000121905,
+                    "tottime_per": 6.09525e-05,
+                    "cumtime": 0.015625582000000002,
+                    "cumtime_per": 0.007812791000000001,
+                    "function_name": "pyuvdata/pyuvdata/uvdata/uvdata.py:3214(check)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 0.00010214600000000001,
+                    "tottime_per": 5.1073000000000004e-05,
+                    "cumtime": 0.015499496000000001,
+                    "cumtime_per": 0.007749748000000001,
+                    "function_name": "hera_cal/hera_cal/utils.py:549(LST2JD)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 2.9054000000000003e-05,
+                    "tottime_per": 7.263500000000001e-06,
+                    "cumtime": 0.014319167,
+                    "cumtime_per": 0.00357979175,
+                    "function_name": "hera_cal/hera_cal/utils.py:512(JD2LST)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 0.000320635,
+                    "tottime_per": 0.0001603175,
+                    "cumtime": 0.010495856000000001,
+                    "cumtime_per": 0.005247928000000001,
+                    "function_name": "pyuvdata/pyuvdata/uvdata/uvdata.py:3541(copy)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 4.9976000000000004e-05,
+                    "tottime_per": 2.4988000000000002e-05,
+                    "cumtime": 0.008291390000000001,
+                    "cumtime_per": 0.0041456950000000005,
+                    "function_name": "pyuvdata/pyuvdata/uvdata/initializers.py:93(get_time_params)"
+                },
+                {
+                    "ncalls_recursion": "116/28",
+                    "ncalls": 116,
+                    "tottime": 0.000175887,
+                    "tottime_per": 6.281678571428571e-06,
+                    "cumtime": 0.007538474000000001,
+                    "cumtime_per": 0.0002692312142857143,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/astropy/time/core.py:1624(__getattr__)"
+                },
+                {
+                    "ncalls_recursion": "3534/328",
+                    "ncalls": 3534,
+                    "tottime": 0.0034545080000000002,
+                    "tottime_per": 1.0532036585365854e-05,
+                    "cumtime": 0.006615790000000001,
+                    "cumtime_per": 2.0170091463414636e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/copy.py:128(deepcopy)"
+                },
+                {
+                    "ncalls_recursion": "6",
+                    "ncalls": 6,
+                    "tottime": 0.006474669000000001,
+                    "tottime_per": 0.0010791115000000002,
+                    "cumtime": 0.006474669000000001,
+                    "cumtime_per": 0.0010791115000000002,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/erfa/core.py:13528(gst06a)"
+                },
+                {
+                    "ncalls_recursion": "12",
+                    "ncalls": 12,
+                    "tottime": 0.000191973,
+                    "tottime_per": 1.599775e-05,
+                    "cumtime": 0.006340618,
+                    "cumtime_per": 0.0005283848333333333,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/astropy/time/core.py:726(_set_scale)"
+                },
+                {
+                    "ncalls_recursion": "1255/1020",
+                    "ncalls": 1255,
+                    "tottime": 0.000941194,
+                    "tottime_per": 9.227392156862745e-07,
+                    "cumtime": 0.006217872,
+                    "cumtime_per": 6.095952941176471e-06,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.implement_array_function>)"
+                },
+                {
+                    "ncalls_recursion": "160",
+                    "ncalls": 160,
+                    "tottime": 0.000340392,
+                    "tottime_per": 2.1274500000000003e-06,
+                    "cumtime": 0.005559187,
+                    "cumtime_per": 3.474491875e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/copy.py:259(_reconstruct)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 0.000261975,
+                    "tottime_per": 6.549375e-05,
+                    "cumtime": 0.005493175,
+                    "cumtime_per": 0.00137329375,
+                    "function_name": "pyuvdata/pyuvdata/uvdata/uvdata.py:126(__init__)"
+                },
+                {
+                    "ncalls_recursion": "7348/6030",
+                    "ncalls": 7348,
+                    "tottime": 0.001583966,
+                    "tottime_per": 2.6268092868988393e-07,
+                    "cumtime": 0.005294279000000001,
+                    "cumtime_per": 8.779898839137646e-07,
+                    "function_name": "~:0(<built-in method builtins.getattr>)"
+                },
+                {
+                    "ncalls_recursion": "6",
+                    "ncalls": 6,
+                    "tottime": 2.5852000000000003e-05,
+                    "tottime_per": 4.308666666666667e-06,
+                    "cumtime": 0.004832498,
+                    "cumtime_per": 0.0008054163333333334,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/astropy/time/core.py:2405(_get_delta_ut1_utc)"
+                },
+                {
+                    "ncalls_recursion": "14",
+                    "ncalls": 14,
+                    "tottime": 6.181800000000001e-05,
+                    "tottime_per": 4.415571428571429e-06,
+                    "cumtime": 0.004707412,
+                    "cumtime_per": 0.0003362437142857143,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/astropy/time/core.py:1816(__init__)"
+                },
+                {
+                    "ncalls_recursion": "114/106",
+                    "ncalls": 114,
+                    "tottime": 0.0006629670000000001,
+                    "tottime_per": 6.2544056603773595e-06,
+                    "cumtime": 0.004678945,
+                    "cumtime_per": 4.414099056603774e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/copy.py:227(_deepcopy_dict)"
+                }
+            ],
+            "stats": {
+                "min": 0.02688837199821137,
+                "max": 0.03406630500103347,
+                "mean": 0.02766997933323375,
+                "stddev": 0.001251995272898054,
+                "rounds": 33,
+                "median": 0.027340384000126505,
+                "iqr": 0.0006743427484252607,
+                "q1": 0.027112676249089418,
+                "q3": 0.02778701899751468,
+                "iqr_outliers": 2,
+                "stddev_outliers": 1,
+                "outliers": "1;2",
+                "ld15iqr": 0.02688837199821137,
+                "hd15iqr": 0.02882393400068395,
+                "ops": 36.14025106259923,
+                "total": 0.9131093179967138,
+                "iterations": 1
+            }
+        },
+        {
+            "group": null,
+            "name": "test_rephase",
+            "fullname": "hera_cal/tests/test_lstbin_simple.py::Test_LSTAlign::test_rephase",
+            "params": null,
+            "param": null,
+            "extra_info": {},
+            "options": {
+                "disable_gc": false,
+                "timer": "perf_counter",
+                "min_rounds": 5,
+                "max_time": 1.0,
+                "min_time": 5e-06,
+                "warmup": false
+            },
+            "cprofile": [
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 8.6925e-05,
+                    "tottime_per": 8.6925e-05,
+                    "cumtime": 0.000343648,
+                    "cumtime_per": 0.000343648,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:37(lst_align)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 4.3729e-05,
+                    "tottime_per": 4.3729e-05,
+                    "cumtime": 0.000130893,
+                    "cumtime_per": 0.000130893,
+                    "function_name": "hera_cal/hera_cal/utils.py:878(lst_rephase_vectorized)"
+                },
+                {
+                    "ncalls_recursion": "28/19",
+                    "ncalls": 28,
+                    "tottime": 2.6759000000000002e-05,
+                    "tottime_per": 1.4083684210526317e-06,
+                    "cumtime": 0.000124008,
+                    "cumtime_per": 6.526736842105263e-06,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.implement_array_function>)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 4.312e-06,
+                    "tottime_per": 6.16e-07,
+                    "cumtime": 3.6908e-05,
+                    "cumtime_per": 5.272571428571428e-06,
+                    "function_name": "<__array_function__ internals>:177(any)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.4811000000000001e-05,
+                    "tottime_per": 1.4811000000000001e-05,
+                    "cumtime": 3.4593e-05,
+                    "cumtime_per": 3.4593e-05,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:179(get_lst_bins)"
+                },
+                {
+                    "ncalls_recursion": "9",
+                    "ncalls": 9,
+                    "tottime": 1.4264000000000001e-05,
+                    "tottime_per": 1.584888888888889e-06,
+                    "cumtime": 3.2582e-05,
+                    "cumtime_per": 3.6202222222222225e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:69(_wrapreduction)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 5.013e-06,
+                    "tottime_per": 7.161428571428571e-07,
+                    "cumtime": 2.4594000000000002e-05,
+                    "cumtime_per": 3.5134285714285717e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2307(any)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 1.802e-06,
+                    "tottime_per": 6.006666666666667e-07,
+                    "cumtime": 2.4126000000000002e-05,
+                    "cumtime_per": 8.042e-06,
+                    "function_name": "<__array_function__ internals>:177(einsum)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.1410000000000003e-06,
+                    "tottime_per": 1.0705000000000002e-06,
+                    "cumtime": 1.8982000000000002e-05,
+                    "cumtime_per": 9.491000000000001e-06,
+                    "function_name": "<__array_function__ internals>:177(all)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 9.202000000000001e-06,
+                    "tottime_per": 9.202000000000001e-06,
+                    "cumtime": 1.8473e-05,
+                    "cumtime_per": 1.8473e-05,
+                    "function_name": "hera_cal/hera_cal/utils.py:1725(top2eq_m)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.455e-06,
+                    "tottime_per": 1.455e-06,
+                    "cumtime": 1.8432000000000002e-05,
+                    "cumtime_per": 1.8432000000000002e-05,
+                    "function_name": "<__array_function__ internals>:177(digitize)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 1.9260000000000003e-06,
+                    "tottime_per": 6.420000000000001e-07,
+                    "cumtime": 1.7264000000000003e-05,
+                    "cumtime_per": 5.754666666666668e-06,
+                    "function_name": "<__array_function__ internals>:177(zeros_like)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 4.3700000000000005e-06,
+                    "tottime_per": 4.3700000000000005e-06,
+                    "cumtime": 1.6212e-05,
+                    "cumtime_per": 1.6212e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/function_base.py:5451(digitize)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 7.158000000000001e-06,
+                    "tottime_per": 7.158000000000001e-06,
+                    "cumtime": 1.6147e-05,
+                    "cumtime_per": 1.6147e-05,
+                    "function_name": "hera_cal/hera_cal/utils.py:1707(eq2top_m)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.2360000000000003e-06,
+                    "tottime_per": 1.1180000000000001e-06,
+                    "cumtime": 1.5237000000000002e-05,
+                    "cumtime_per": 7.618500000000001e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2406(all)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.7050000000000002e-06,
+                    "tottime_per": 1.7050000000000002e-06,
+                    "cumtime": 1.4421000000000001e-05,
+                    "cumtime_per": 1.4421000000000001e-05,
+                    "function_name": "<__array_function__ internals>:177(diff)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 2.46e-06,
+                    "tottime_per": 8.200000000000001e-07,
+                    "cumtime": 1.3989000000000001e-05,
+                    "cumtime_per": 4.663e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/einsumfunc.py:1009(einsum)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 3.6670000000000002e-06,
+                    "tottime_per": 1.2223333333333333e-06,
+                    "cumtime": 1.3307000000000002e-05,
+                    "cumtime_per": 4.435666666666667e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numeric.py:76(zeros_like)"
+                },
+                {
+                    "ncalls_recursion": "9",
+                    "ncalls": 9,
+                    "tottime": 1.3154000000000001e-05,
+                    "tottime_per": 1.4615555555555557e-06,
+                    "cumtime": 1.3154000000000001e-05,
+                    "cumtime_per": 1.4615555555555557e-06,
+                    "function_name": "~:0(<method 'reduce' of 'numpy.ufunc' objects>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.1111000000000001e-05,
+                    "tottime_per": 1.1111000000000001e-05,
+                    "cumtime": 1.1740000000000001e-05,
+                    "cumtime_per": 1.1740000000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/function_base.py:1319(diff)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 1.1529000000000001e-05,
+                    "tottime_per": 3.843e-06,
+                    "cumtime": 1.1529000000000001e-05,
+                    "cumtime_per": 3.843e-06,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.c_einsum>)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 1.1501e-05,
+                    "tottime_per": 1.643e-06,
+                    "cumtime": 1.1501e-05,
+                    "cumtime_per": 1.643e-06,
+                    "function_name": "~:0(<built-in method numpy.array>)"
+                },
+                {
+                    "ncalls_recursion": "5",
+                    "ncalls": 5,
+                    "tottime": 4.892e-06,
+                    "tottime_per": 9.784e-07,
+                    "cumtime": 1.1261000000000001e-05,
+                    "cumtime_per": 2.2522000000000002e-06,
+                    "function_name": "<__array_function__ internals>:177(copyto)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 9.741e-06,
+                    "tottime_per": 9.741e-06,
+                    "cumtime": 9.741e-06,
+                    "cumtime_per": 9.741e-06,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:155(<listcomp>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.2900000000000001e-06,
+                    "tottime_per": 1.2900000000000001e-06,
+                    "cumtime": 8.677e-06,
+                    "cumtime_per": 8.677e-06,
+                    "function_name": "<__array_function__ internals>:177(ones_like)"
+                }
+            ],
+            "stats": {
+                "min": 0.0001677209984336514,
+                "max": 0.00039920900235301815,
+                "mean": 0.0001863692990509574,
+                "stddev": 1.8783396477488067e-05,
+                "rounds": 2060,
+                "median": 0.00018118900152330752,
+                "iqr": 5.106998287374154e-06,
+                "q1": 0.00018013850058196113,
+                "q3": 0.00018524549886933528,
+                "iqr_outliers": 332,
+                "stddev_outliers": 146,
+                "outliers": "146;332",
+                "ld15iqr": 0.00017265499991481192,
+                "hd15iqr": 0.00019314800010761246,
+                "ops": 5365.690621214272,
+                "total": 0.3839207560449722,
+                "iterations": 1
+            }
+        },
+        {
+            "group": null,
+            "name": "test_lstbinedges_modulus",
+            "fullname": "hera_cal/tests/test_lstbin_simple.py::Test_LSTAlign::test_lstbinedges_modulus",
+            "params": null,
+            "param": null,
+            "extra_info": {},
+            "options": {
+                "disable_gc": false,
+                "timer": "perf_counter",
+                "min_rounds": 5,
+                "max_time": 1.0,
+                "min_time": 5e-06,
+                "warmup": false
+            },
+            "cprofile": [
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 8.5388e-05,
+                    "tottime_per": 8.5388e-05,
+                    "cumtime": 0.00033962600000000004,
+                    "cumtime_per": 0.00033962600000000004,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:37(lst_align)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 4.4024000000000004e-05,
+                    "tottime_per": 4.4024000000000004e-05,
+                    "cumtime": 0.000127922,
+                    "cumtime_per": 0.000127922,
+                    "function_name": "hera_cal/hera_cal/utils.py:878(lst_rephase_vectorized)"
+                },
+                {
+                    "ncalls_recursion": "28/19",
+                    "ncalls": 28,
+                    "tottime": 2.7216e-05,
+                    "tottime_per": 1.432421052631579e-06,
+                    "cumtime": 0.000124258,
+                    "cumtime_per": 6.539894736842105e-06,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.implement_array_function>)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 4.2290000000000005e-06,
+                    "tottime_per": 6.041428571428572e-07,
+                    "cumtime": 3.7046000000000004e-05,
+                    "cumtime_per": 5.292285714285715e-06,
+                    "function_name": "<__array_function__ internals>:177(any)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.5720000000000002e-05,
+                    "tottime_per": 1.5720000000000002e-05,
+                    "cumtime": 3.6684e-05,
+                    "cumtime_per": 3.6684e-05,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:179(get_lst_bins)"
+                },
+                {
+                    "ncalls_recursion": "9",
+                    "ncalls": 9,
+                    "tottime": 1.4465000000000001e-05,
+                    "tottime_per": 1.6072222222222225e-06,
+                    "cumtime": 3.2818e-05,
+                    "cumtime_per": 3.6464444444444448e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:69(_wrapreduction)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 5.0850000000000004e-06,
+                    "tottime_per": 7.264285714285715e-07,
+                    "cumtime": 2.4558e-05,
+                    "cumtime_per": 3.5082857142857144e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2307(any)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 1.79e-06,
+                    "tottime_per": 5.966666666666666e-07,
+                    "cumtime": 2.301e-05,
+                    "cumtime_per": 7.670000000000001e-06,
+                    "function_name": "<__array_function__ internals>:177(einsum)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.3940000000000001e-06,
+                    "tottime_per": 1.3940000000000001e-06,
+                    "cumtime": 1.9737e-05,
+                    "cumtime_per": 1.9737e-05,
+                    "function_name": "<__array_function__ internals>:177(digitize)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.176e-06,
+                    "tottime_per": 1.088e-06,
+                    "cumtime": 1.9552000000000002e-05,
+                    "cumtime_per": 9.776000000000001e-06,
+                    "function_name": "<__array_function__ internals>:177(all)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 9.189000000000001e-06,
+                    "tottime_per": 9.189000000000001e-06,
+                    "cumtime": 1.8068e-05,
+                    "cumtime_per": 1.8068e-05,
+                    "function_name": "hera_cal/hera_cal/utils.py:1725(top2eq_m)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 4.4770000000000005e-06,
+                    "tottime_per": 4.4770000000000005e-06,
+                    "cumtime": 1.7407e-05,
+                    "cumtime_per": 1.7407e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/function_base.py:5451(digitize)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 1.934e-06,
+                    "tottime_per": 6.446666666666666e-07,
+                    "cumtime": 1.7008e-05,
+                    "cumtime_per": 5.6693333333333335e-06,
+                    "function_name": "<__array_function__ internals>:177(zeros_like)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.4610000000000002e-06,
+                    "tottime_per": 1.2305000000000001e-06,
+                    "cumtime": 1.5806e-05,
+                    "cumtime_per": 7.903e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2406(all)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 6.5460000000000005e-06,
+                    "tottime_per": 6.5460000000000005e-06,
+                    "cumtime": 1.4915e-05,
+                    "cumtime_per": 1.4915e-05,
+                    "function_name": "hera_cal/hera_cal/utils.py:1707(eq2top_m)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.2050000000000001e-06,
+                    "tottime_per": 1.2050000000000001e-06,
+                    "cumtime": 1.3813000000000001e-05,
+                    "cumtime_per": 1.3813000000000001e-05,
+                    "function_name": "<__array_function__ internals>:177(diff)"
+                },
+                {
+                    "ncalls_recursion": "9",
+                    "ncalls": 9,
+                    "tottime": 1.3324000000000002e-05,
+                    "tottime_per": 1.4804444444444447e-06,
+                    "cumtime": 1.3324000000000002e-05,
+                    "cumtime_per": 1.4804444444444447e-06,
+                    "function_name": "~:0(<method 'reduce' of 'numpy.ufunc' objects>)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 3.7320000000000004e-06,
+                    "tottime_per": 1.244e-06,
+                    "cumtime": 1.3115e-05,
+                    "cumtime_per": 4.371666666666667e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numeric.py:76(zeros_like)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 2.347e-06,
+                    "tottime_per": 7.823333333333334e-07,
+                    "cumtime": 1.2957000000000001e-05,
+                    "cumtime_per": 4.3190000000000005e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/einsumfunc.py:1009(einsum)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.0739e-05,
+                    "tottime_per": 1.0739e-05,
+                    "cumtime": 1.1418000000000001e-05,
+                    "cumtime_per": 1.1418000000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/function_base.py:1319(diff)"
+                },
+                {
+                    "ncalls_recursion": "7",
+                    "ncalls": 7,
+                    "tottime": 1.1298000000000001e-05,
+                    "tottime_per": 1.6140000000000001e-06,
+                    "cumtime": 1.1298000000000001e-05,
+                    "cumtime_per": 1.6140000000000001e-06,
+                    "function_name": "~:0(<built-in method numpy.array>)"
+                },
+                {
+                    "ncalls_recursion": "5",
+                    "ncalls": 5,
+                    "tottime": 4.466e-06,
+                    "tottime_per": 8.932e-07,
+                    "cumtime": 1.0850000000000001e-05,
+                    "cumtime_per": 2.1700000000000004e-06,
+                    "function_name": "<__array_function__ internals>:177(copyto)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 1.061e-05,
+                    "tottime_per": 3.5366666666666665e-06,
+                    "cumtime": 1.061e-05,
+                    "cumtime_per": 3.5366666666666665e-06,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.c_einsum>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 9.417e-06,
+                    "tottime_per": 9.417e-06,
+                    "cumtime": 9.417e-06,
+                    "cumtime_per": 9.417e-06,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:155(<listcomp>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.0140000000000002e-06,
+                    "tottime_per": 1.0140000000000002e-06,
+                    "cumtime": 8.179e-06,
+                    "cumtime_per": 8.179e-06,
+                    "function_name": "<__array_function__ internals>:177(ones_like)"
+                }
+            ],
+            "stats": {
+                "min": 0.00016322000010404736,
+                "max": 0.0004504370008362457,
+                "mean": 0.00018089479632929357,
+                "stddev": 1.4886639890019225e-05,
+                "rounds": 3903,
+                "median": 0.00017779500194592401,
+                "iqr": 8.844501280691475e-06,
+                "q1": 0.00017412699799024267,
+                "q3": 0.00018297149927093415,
+                "iqr_outliers": 386,
+                "stddev_outliers": 699,
+                "outliers": "699;386",
+                "ld15iqr": 0.00016322000010404736,
+                "hd15iqr": 0.00019626799985417165,
+                "ops": 5528.074993266476,
+                "total": 0.7060323900732328,
+                "iterations": 1
+            }
+        },
+        {
+            "group": null,
+            "name": "test_one_point_per_bin",
+            "fullname": "hera_cal/tests/test_lstbin_simple.py::Test_ReduceLSTBins::test_one_point_per_bin",
+            "params": null,
+            "param": null,
+            "extra_info": {},
+            "options": {
+                "disable_gc": false,
+                "timer": "perf_counter",
+                "min_rounds": 5,
+                "max_time": 1.0,
+                "min_time": 5e-06,
+                "warmup": false
+            },
+            "cprofile": [
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.7311e-05,
+                    "tottime_per": 1.7311e-05,
+                    "cumtime": 0.000310461,
+                    "cumtime_per": 0.000310461,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:208(reduce_lst_bins)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 4.4272000000000006e-05,
+                    "tottime_per": 4.4272000000000006e-05,
+                    "cumtime": 0.000282997,
+                    "cumtime_per": 0.000282997,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:301(lst_average)"
+                },
+                {
+                    "ncalls_recursion": "26/10",
+                    "ncalls": 26,
+                    "tottime": 2.0335e-05,
+                    "tottime_per": 2.0335e-06,
+                    "cumtime": 0.000210623,
+                    "cumtime_per": 2.10623e-05,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.implement_array_function>)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.0000000000000003e-06,
+                    "tottime_per": 1.0000000000000002e-06,
+                    "cumtime": 0.00016403700000000002,
+                    "cumtime_per": 8.201850000000001e-05,
+                    "function_name": "<__array_function__ internals>:177(nanstd)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 3.248e-06,
+                    "tottime_per": 1.624e-06,
+                    "cumtime": 0.000160568,
+                    "cumtime_per": 8.0284e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:1777(nanstd)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 1.641e-06,
+                    "tottime_per": 8.205e-07,
+                    "cumtime": 0.0001572,
+                    "cumtime_per": 7.86e-05,
+                    "function_name": "<__array_function__ internals>:177(nanvar)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 3.346e-05,
+                    "tottime_per": 1.673e-05,
+                    "cumtime": 0.00015378400000000002,
+                    "cumtime_per": 7.689200000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:1616(nanvar)"
+                },
+                {
+                    "ncalls_recursion": "12",
+                    "ncalls": 12,
+                    "tottime": 9.241e-06,
+                    "tottime_per": 7.700833333333333e-07,
+                    "cumtime": 7.6618e-05,
+                    "cumtime_per": 6.384833333333334e-06,
+                    "function_name": "<__array_function__ internals>:177(sum)"
+                },
+                {
+                    "ncalls_recursion": "12",
+                    "ncalls": 12,
+                    "tottime": 1.2119e-05,
+                    "tottime_per": 1.0099166666666668e-06,
+                    "cumtime": 6.0230000000000004e-05,
+                    "cumtime_per": 5.019166666666667e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2162(sum)"
+                },
+                {
+                    "ncalls_recursion": "15",
+                    "ncalls": 15,
+                    "tottime": 1.8908000000000003e-05,
+                    "tottime_per": 1.2605333333333335e-06,
+                    "cumtime": 5.614e-05,
+                    "cumtime_per": 3.7426666666666668e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:69(_wrapreduction)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 1.6372000000000002e-05,
+                    "tottime_per": 4.0930000000000005e-06,
+                    "cumtime": 4.9446e-05,
+                    "cumtime_per": 1.23615e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:187(_divide_by_count)"
+                },
+                {
+                    "ncalls_recursion": "15",
+                    "ncalls": 15,
+                    "tottime": 2.8153000000000003e-05,
+                    "tottime_per": 1.8768666666666668e-06,
+                    "cumtime": 2.8153000000000003e-05,
+                    "cumtime_per": 1.8768666666666668e-06,
+                    "function_name": "~:0(<method 'reduce' of 'numpy.ufunc' objects>)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 1.2582e-05,
+                    "tottime_per": 1.57275e-06,
+                    "cumtime": 2.6097e-05,
+                    "cumtime_per": 3.262125e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:32(seterr)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 9.514e-06,
+                    "tottime_per": 3.1713333333333334e-06,
+                    "cumtime": 2.0260000000000003e-05,
+                    "cumtime_per": 6.7533333333333345e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:68(_replace_nan)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 2.899e-06,
+                    "tottime_per": 7.2475e-07,
+                    "cumtime": 1.7994e-05,
+                    "cumtime_per": 4.4985e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:429(__enter__)"
+                },
+                {
+                    "ncalls_recursion": "6",
+                    "ncalls": 6,
+                    "tottime": 6.451000000000001e-06,
+                    "tottime_per": 1.0751666666666667e-06,
+                    "cumtime": 1.666e-05,
+                    "cumtime_per": 2.7766666666666666e-06,
+                    "function_name": "<__array_function__ internals>:177(copyto)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 8.230000000000001e-07,
+                    "tottime_per": 8.230000000000001e-07,
+                    "cumtime": 1.4313000000000002e-05,
+                    "cumtime_per": 1.4313000000000002e-05,
+                    "function_name": "<__array_function__ internals>:177(nansum)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 2.6080000000000003e-06,
+                    "tottime_per": 6.520000000000001e-07,
+                    "cumtime": 1.361e-05,
+                    "cumtime_per": 3.4025e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:434(__exit__)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.237e-06,
+                    "tottime_per": 1.237e-06,
+                    "cumtime": 1.2630000000000001e-05,
+                    "cumtime_per": 1.2630000000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:623(nansum)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 3.824e-06,
+                    "tottime_per": 3.824e-06,
+                    "cumtime": 1.232e-05,
+                    "cumtime_per": 1.232e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/warnings.py:130(filterwarnings)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 1.3290000000000001e-06,
+                    "tottime_per": 6.645000000000001e-07,
+                    "cumtime": 1.1825000000000001e-05,
+                    "cumtime_per": 5.9125000000000006e-06,
+                    "function_name": "<__array_function__ internals>:177(any)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 9.396000000000001e-06,
+                    "tottime_per": 1.1745000000000001e-06,
+                    "cumtime": 9.976e-06,
+                    "cumtime_per": 1.247e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:131(geterr)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 1.5780000000000002e-06,
+                    "tottime_per": 7.890000000000001e-07,
+                    "cumtime": 8.124e-06,
+                    "cumtime_per": 4.062e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2307(any)"
+                },
+                {
+                    "ncalls_recursion": "15",
+                    "ncalls": 15,
+                    "tottime": 7.840000000000001e-06,
+                    "tottime_per": 5.226666666666668e-07,
+                    "cumtime": 7.840000000000001e-06,
+                    "cumtime_per": 5.226666666666668e-07,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:70(<dictcomp>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 2.521e-06,
+                    "tottime_per": 2.521e-06,
+                    "cumtime": 7.631e-06,
+                    "cumtime_per": 7.631e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numeric.py:149(ones)"
+                }
+            ],
+            "stats": {
+                "min": 0.00014598200141335838,
+                "max": 0.0005297050010995008,
+                "mean": 0.00015557917589997328,
+                "stddev": 1.9881407119900317e-05,
+                "rounds": 1444,
+                "median": 0.00015163300122367218,
+                "iqr": 4.728000931208953e-06,
+                "q1": 0.00015023749983811285,
+                "q3": 0.0001549655007693218,
+                "iqr_outliers": 147,
+                "stddev_outliers": 59,
+                "outliers": "59;147",
+                "ld15iqr": 0.00014598200141335838,
+                "hd15iqr": 0.00016206699729082175,
+                "ops": 6427.595429885368,
+                "total": 0.22465632999956142,
+                "iterations": 1
+            }
+        },
+        {
+            "group": null,
+            "name": "test_multi_points_per_bin[ntimes0]",
+            "fullname": "hera_cal/tests/test_lstbin_simple.py::Test_ReduceLSTBins::test_multi_points_per_bin[ntimes0]",
+            "params": {
+                "ntimes": [
+                    4
+                ]
+            },
+            "param": "ntimes0",
+            "extra_info": {},
+            "options": {
+                "disable_gc": false,
+                "timer": "perf_counter",
+                "min_rounds": 5,
+                "max_time": 1.0,
+                "min_time": 5e-06,
+                "warmup": false
+            },
+            "cprofile": [
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.9976e-05,
+                    "tottime_per": 1.9976e-05,
+                    "cumtime": 0.00036671200000000005,
+                    "cumtime_per": 0.00036671200000000005,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:208(reduce_lst_bins)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 5.1123000000000005e-05,
+                    "tottime_per": 5.1123000000000005e-05,
+                    "cumtime": 0.000336471,
+                    "cumtime_per": 0.000336471,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:301(lst_average)"
+                },
+                {
+                    "ncalls_recursion": "26/10",
+                    "ncalls": 26,
+                    "tottime": 2.1461e-05,
+                    "tottime_per": 2.1461e-06,
+                    "cumtime": 0.000254586,
+                    "cumtime_per": 2.54586e-05,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.implement_array_function>)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.137e-06,
+                    "tottime_per": 1.0685e-06,
+                    "cumtime": 0.000206805,
+                    "cumtime_per": 0.0001034025,
+                    "function_name": "<__array_function__ internals>:177(nanstd)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 3.609e-06,
+                    "tottime_per": 1.8045e-06,
+                    "cumtime": 0.00020320400000000001,
+                    "cumtime_per": 0.00010160200000000001,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:1777(nanstd)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 1.925e-06,
+                    "tottime_per": 9.625e-07,
+                    "cumtime": 0.000199439,
+                    "cumtime_per": 9.97195e-05,
+                    "function_name": "<__array_function__ internals>:177(nanvar)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 4.8667e-05,
+                    "tottime_per": 2.43335e-05,
+                    "cumtime": 0.00019536500000000002,
+                    "cumtime_per": 9.768250000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:1616(nanvar)"
+                },
+                {
+                    "ncalls_recursion": "12",
+                    "ncalls": 12,
+                    "tottime": 9.665e-06,
+                    "tottime_per": 8.054166666666666e-07,
+                    "cumtime": 8.115000000000001e-05,
+                    "cumtime_per": 6.762500000000001e-06,
+                    "function_name": "<__array_function__ internals>:177(sum)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 3.4028e-05,
+                    "tottime_per": 8.507e-06,
+                    "cumtime": 6.944500000000001e-05,
+                    "cumtime_per": 1.7361250000000003e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:187(_divide_by_count)"
+                },
+                {
+                    "ncalls_recursion": "12",
+                    "ncalls": 12,
+                    "tottime": 1.2407e-05,
+                    "tottime_per": 1.0339166666666667e-06,
+                    "cumtime": 6.404300000000001e-05,
+                    "cumtime_per": 5.336916666666667e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2162(sum)"
+                },
+                {
+                    "ncalls_recursion": "15",
+                    "ncalls": 15,
+                    "tottime": 2.0063e-05,
+                    "tottime_per": 1.3375333333333333e-06,
+                    "cumtime": 6.0721000000000004e-05,
+                    "cumtime_per": 4.048066666666667e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:69(_wrapreduction)"
+                },
+                {
+                    "ncalls_recursion": "15",
+                    "ncalls": 15,
+                    "tottime": 3.0972e-05,
+                    "tottime_per": 2.0648e-06,
+                    "cumtime": 3.0972e-05,
+                    "cumtime_per": 2.0648e-06,
+                    "function_name": "~:0(<method 'reduce' of 'numpy.ufunc' objects>)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 1.3384000000000001e-05,
+                    "tottime_per": 1.6730000000000001e-06,
+                    "cumtime": 2.7896000000000002e-05,
+                    "cumtime_per": 3.4870000000000002e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:32(seterr)"
+                },
+                {
+                    "ncalls_recursion": "3",
+                    "ncalls": 3,
+                    "tottime": 1.0232000000000001e-05,
+                    "tottime_per": 3.4106666666666672e-06,
+                    "cumtime": 2.1209e-05,
+                    "cumtime_per": 7.069666666666667e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:68(_replace_nan)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 2.989e-06,
+                    "tottime_per": 7.4725e-07,
+                    "cumtime": 1.9256e-05,
+                    "cumtime_per": 4.814e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:429(__enter__)"
+                },
+                {
+                    "ncalls_recursion": "6",
+                    "ncalls": 6,
+                    "tottime": 6.740000000000001e-06,
+                    "tottime_per": 1.1233333333333335e-06,
+                    "cumtime": 1.7399e-05,
+                    "cumtime_per": 2.8998333333333336e-06,
+                    "function_name": "<__array_function__ internals>:177(copyto)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 2.972e-06,
+                    "tottime_per": 7.43e-07,
+                    "cumtime": 1.4601000000000001e-05,
+                    "cumtime_per": 3.6502500000000003e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:434(__exit__)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 9.81e-07,
+                    "tottime_per": 9.81e-07,
+                    "cumtime": 1.4559e-05,
+                    "cumtime_per": 1.4559e-05,
+                    "function_name": "<__array_function__ internals>:177(nansum)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 5.2330000000000005e-06,
+                    "tottime_per": 5.2330000000000005e-06,
+                    "cumtime": 1.4339000000000001e-05,
+                    "cumtime_per": 1.4339000000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/warnings.py:130(filterwarnings)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.23e-06,
+                    "tottime_per": 1.23e-06,
+                    "cumtime": 1.2675000000000001e-05,
+                    "cumtime_per": 1.2675000000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:623(nansum)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 1.4820000000000002e-06,
+                    "tottime_per": 7.410000000000001e-07,
+                    "cumtime": 1.2578e-05,
+                    "cumtime_per": 6.289e-06,
+                    "function_name": "<__array_function__ internals>:177(any)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 9.970000000000001e-06,
+                    "tottime_per": 1.2462500000000001e-06,
+                    "cumtime": 1.059e-05,
+                    "cumtime_per": 1.32375e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:131(geterr)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 1.658e-06,
+                    "tottime_per": 8.29e-07,
+                    "cumtime": 8.609e-06,
+                    "cumtime_per": 4.3045e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2307(any)"
+                },
+                {
+                    "ncalls_recursion": "15",
+                    "ncalls": 15,
+                    "tottime": 8.23e-06,
+                    "tottime_per": 5.486666666666667e-07,
+                    "cumtime": 8.23e-06,
+                    "cumtime_per": 5.486666666666667e-07,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:70(<dictcomp>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 2.6770000000000004e-06,
+                    "tottime_per": 2.6770000000000004e-06,
+                    "cumtime": 7.638e-06,
+                    "cumtime_per": 7.638e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/numeric.py:149(ones)"
+                }
+            ],
+            "stats": {
+                "min": 0.00014875199849484488,
+                "max": 0.0005022210025344975,
+                "mean": 0.00016167976446373824,
+                "stddev": 1.2162007207362978e-05,
+                "rounds": 2522,
+                "median": 0.00015928150060062762,
+                "iqr": 4.294994141673669e-06,
+                "q1": 0.0001577560033183545,
+                "q3": 0.00016205099746002816,
+                "iqr_outliers": 288,
+                "stddev_outliers": 185,
+                "outliers": "185;288",
+                "ld15iqr": 0.00015134900240809657,
+                "hd15iqr": 0.00016876700101420283,
+                "ops": 6185.065912959574,
+                "total": 0.40775636597754783,
+                "iterations": 1
+            }
+        },
+        {
+            "group": null,
+            "name": "test_multi_points_per_bin[ntimes1]",
+            "fullname": "hera_cal/tests/test_lstbin_simple.py::Test_ReduceLSTBins::test_multi_points_per_bin[ntimes1]",
+            "params": {
+                "ntimes": [
+                    5,
+                    4
+                ]
+            },
+            "param": "ntimes1",
+            "extra_info": {},
+            "options": {
+                "disable_gc": false,
+                "timer": "perf_counter",
+                "min_rounds": 5,
+                "max_time": 1.0,
+                "min_time": 5e-06,
+                "warmup": false
+            },
+            "cprofile": [
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 2.7503e-05,
+                    "tottime_per": 2.7503e-05,
+                    "cumtime": 0.0006219330000000001,
+                    "cumtime_per": 0.0006219330000000001,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:208(reduce_lst_bins)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 9.283e-05,
+                    "tottime_per": 4.6415e-05,
+                    "cumtime": 0.000582412,
+                    "cumtime_per": 0.000291206,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:301(lst_average)"
+                },
+                {
+                    "ncalls_recursion": "51/19",
+                    "ncalls": 51,
+                    "tottime": 4.1037e-05,
+                    "tottime_per": 2.159842105263158e-06,
+                    "cumtime": 0.00043382900000000005,
+                    "cumtime_per": 2.2833105263157897e-05,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.implement_array_function>)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 3.588e-06,
+                    "tottime_per": 8.97e-07,
+                    "cumtime": 0.000342837,
+                    "cumtime_per": 8.570925e-05,
+                    "function_name": "<__array_function__ internals>:177(nanstd)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 7.046000000000001e-06,
+                    "tottime_per": 1.7615000000000002e-06,
+                    "cumtime": 0.000336181,
+                    "cumtime_per": 8.404525e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:1777(nanstd)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 3.366e-06,
+                    "tottime_per": 8.415e-07,
+                    "cumtime": 0.000328771,
+                    "cumtime_per": 8.219275e-05,
+                    "function_name": "<__array_function__ internals>:177(nanvar)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 6.9714e-05,
+                    "tottime_per": 1.74285e-05,
+                    "cumtime": 0.000321225,
+                    "cumtime_per": 8.030625e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:1616(nanvar)"
+                },
+                {
+                    "ncalls_recursion": "24",
+                    "ncalls": 24,
+                    "tottime": 1.8381000000000002e-05,
+                    "tottime_per": 7.658750000000001e-07,
+                    "cumtime": 0.000155904,
+                    "cumtime_per": 6.496e-06,
+                    "function_name": "<__array_function__ internals>:177(sum)"
+                },
+                {
+                    "ncalls_recursion": "24",
+                    "ncalls": 24,
+                    "tottime": 2.3964000000000003e-05,
+                    "tottime_per": 9.985e-07,
+                    "cumtime": 0.000122698,
+                    "cumtime_per": 5.112416666666666e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2162(sum)"
+                },
+                {
+                    "ncalls_recursion": "30",
+                    "ncalls": 30,
+                    "tottime": 3.6622e-05,
+                    "tottime_per": 1.2207333333333334e-06,
+                    "cumtime": 0.00011625900000000001,
+                    "cumtime_per": 3.875300000000001e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:69(_wrapreduction)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 3.2674e-05,
+                    "tottime_per": 4.08425e-06,
+                    "cumtime": 0.000101347,
+                    "cumtime_per": 1.2668375e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:187(_divide_by_count)"
+                },
+                {
+                    "ncalls_recursion": "30",
+                    "ncalls": 30,
+                    "tottime": 6.0898000000000005e-05,
+                    "tottime_per": 2.0299333333333337e-06,
+                    "cumtime": 6.0898000000000005e-05,
+                    "cumtime_per": 2.0299333333333337e-06,
+                    "function_name": "~:0(<method 'reduce' of 'numpy.ufunc' objects>)"
+                },
+                {
+                    "ncalls_recursion": "16",
+                    "ncalls": 16,
+                    "tottime": 2.5552000000000002e-05,
+                    "tottime_per": 1.5970000000000001e-06,
+                    "cumtime": 5.3893e-05,
+                    "cumtime_per": 3.3683125e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:32(seterr)"
+                },
+                {
+                    "ncalls_recursion": "6",
+                    "ncalls": 6,
+                    "tottime": 1.9459e-05,
+                    "tottime_per": 3.2431666666666667e-06,
+                    "cumtime": 4.1515000000000005e-05,
+                    "cumtime_per": 6.919166666666667e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:68(_replace_nan)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 6.054e-06,
+                    "tottime_per": 7.5675e-07,
+                    "cumtime": 3.7002e-05,
+                    "cumtime_per": 4.62525e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:429(__enter__)"
+                },
+                {
+                    "ncalls_recursion": "11",
+                    "ncalls": 11,
+                    "tottime": 1.1094e-05,
+                    "tottime_per": 1.0085454545454546e-06,
+                    "cumtime": 3.0633e-05,
+                    "cumtime_per": 2.784818181818182e-06,
+                    "function_name": "<__array_function__ internals>:177(copyto)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 1.652e-06,
+                    "tottime_per": 8.26e-07,
+                    "cumtime": 2.9167e-05,
+                    "cumtime_per": 1.45835e-05,
+                    "function_name": "<__array_function__ internals>:177(nansum)"
+                },
+                {
+                    "ncalls_recursion": "8",
+                    "ncalls": 8,
+                    "tottime": 5.404e-06,
+                    "tottime_per": 6.755e-07,
+                    "cumtime": 2.8349000000000003e-05,
+                    "cumtime_per": 3.5436250000000003e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:434(__exit__)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.362e-06,
+                    "tottime_per": 1.181e-06,
+                    "cumtime": 2.5867e-05,
+                    "cumtime_per": 1.29335e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:623(nansum)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 2.9470000000000003e-06,
+                    "tottime_per": 7.367500000000001e-07,
+                    "cumtime": 2.4820000000000003e-05,
+                    "cumtime_per": 6.205000000000001e-06,
+                    "function_name": "<__array_function__ internals>:177(any)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 8.207000000000001e-06,
+                    "tottime_per": 4.103500000000001e-06,
+                    "cumtime": 2.4377e-05,
+                    "cumtime_per": 1.21885e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/warnings.py:130(filterwarnings)"
+                },
+                {
+                    "ncalls_recursion": "16",
+                    "ncalls": 16,
+                    "tottime": 1.912e-05,
+                    "tottime_per": 1.195e-06,
+                    "cumtime": 2.0534e-05,
+                    "cumtime_per": 1.283375e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/_ufunc_config.py:131(geterr)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 3.3740000000000002e-06,
+                    "tottime_per": 8.435000000000001e-07,
+                    "cumtime": 1.7012000000000002e-05,
+                    "cumtime_per": 4.253000000000001e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:2307(any)"
+                },
+                {
+                    "ncalls_recursion": "30",
+                    "ncalls": 30,
+                    "tottime": 1.6123e-05,
+                    "tottime_per": 5.374333333333333e-07,
+                    "cumtime": 1.6123e-05,
+                    "cumtime_per": 5.374333333333333e-07,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/core/fromnumeric.py:70(<dictcomp>)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 4.164e-06,
+                    "tottime_per": 1.041e-06,
+                    "cumtime": 1.4493000000000002e-05,
+                    "cumtime_per": 3.6232500000000004e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:113(_copyto)"
+                }
+            ],
+            "stats": {
+                "min": 0.00029319600071175955,
+                "max": 0.0007586370011267718,
+                "mean": 0.0003193955300735487,
+                "stddev": 3.2527025577336854e-05,
+                "rounds": 2290,
+                "median": 0.00031459199999517296,
+                "iqr": 8.414001058554277e-06,
+                "q1": 0.00030933400194044225,
+                "q3": 0.0003177480029989965,
+                "iqr_outliers": 301,
+                "stddev_outliers": 72,
+                "outliers": "72;301",
+                "ld15iqr": 0.00029685899789910764,
+                "hd15iqr": 0.0003303970006527379,
+                "ops": 3130.9141983600252,
+                "total": 0.7314157638684264,
+                "iterations": 1
+            }
+        },
+        {
+            "group": null,
+            "name": "test_sigma_clip_without_outliers",
+            "fullname": "hera_cal/tests/test_lstbin_simple.py::Test_LSTAverage::test_sigma_clip_without_outliers",
+            "params": null,
+            "param": null,
+            "extra_info": {},
+            "options": {
+                "disable_gc": false,
+                "timer": "perf_counter",
+                "min_rounds": 5,
+                "max_time": 1.0,
+                "min_time": 5e-06,
+                "warmup": false
+            },
+            "cprofile": [
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 7.170100000000001e-05,
+                    "tottime_per": 7.170100000000001e-05,
+                    "cumtime": 0.00115332,
+                    "cumtime_per": 0.00115332,
+                    "function_name": "hera_cal/hera_cal/lstbin_simple.py:301(lst_average)"
+                },
+                {
+                    "ncalls_recursion": "43/15",
+                    "ncalls": 43,
+                    "tottime": 4.1155e-05,
+                    "tottime_per": 2.7436666666666667e-06,
+                    "cumtime": 0.001018776,
+                    "cumtime_per": 6.791840000000001e-05,
+                    "function_name": "~:0(<built-in method numpy.core._multiarray_umath.implement_array_function>)"
+                },
+                {
+                    "ncalls_recursion": "1",
+                    "ncalls": 1,
+                    "tottime": 1.9897000000000003e-05,
+                    "tottime_per": 1.9897000000000003e-05,
+                    "cumtime": 0.0007761160000000001,
+                    "cumtime_per": 0.0007761160000000001,
+                    "function_name": "hera_cal/hera_cal/lstbin.py:1095(sigma_clip)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.004e-06,
+                    "tottime_per": 1.002e-06,
+                    "cumtime": 0.00073443,
+                    "cumtime_per": 0.000367215,
+                    "function_name": "<__array_function__ internals>:177(nanmedian)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 5.1600000000000006e-06,
+                    "tottime_per": 2.5800000000000003e-06,
+                    "cumtime": 0.00073083,
+                    "cumtime_per": 0.000365415,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:1126(nanmedian)"
+                },
+                {
+                    "ncalls_recursion": "4/2",
+                    "ncalls": 4,
+                    "tottime": 1.6283e-05,
+                    "tottime_per": 8.1415e-06,
+                    "cumtime": 0.000725445,
+                    "cumtime_per": 0.0003627225,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/function_base.py:3674(_ureduce)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.804e-06,
+                    "tottime_per": 1.402e-06,
+                    "cumtime": 0.000707536,
+                    "cumtime_per": 0.000353768,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:1075(_nanmedian)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 1.0899e-05,
+                    "tottime_per": 5.4495e-06,
+                    "cumtime": 0.000704732,
+                    "cumtime_per": 0.000352366,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:1101(_nanmedian_small)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.466e-06,
+                    "tottime_per": 1.233e-06,
+                    "cumtime": 0.000634236,
+                    "cumtime_per": 0.000317118,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/ma/extras.py:660(median)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 4.0087000000000004e-05,
+                    "tottime_per": 2.0043500000000002e-05,
+                    "cumtime": 0.000615471,
+                    "cumtime_per": 0.0003077355,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/ma/extras.py:743(_median)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.1850000000000003e-06,
+                    "tottime_per": 1.0925000000000001e-06,
+                    "cumtime": 0.00019914300000000001,
+                    "cumtime_per": 9.957150000000001e-05,
+                    "function_name": "<__array_function__ internals>:177(nanstd)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 4.2000000000000004e-06,
+                    "tottime_per": 2.1000000000000002e-06,
+                    "cumtime": 0.00019532500000000002,
+                    "cumtime_per": 9.766250000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:1777(nanstd)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.1860000000000003e-06,
+                    "tottime_per": 1.0930000000000002e-06,
+                    "cumtime": 0.00019098200000000002,
+                    "cumtime_per": 9.549100000000001e-05,
+                    "function_name": "<__array_function__ internals>:177(nanvar)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 1.446e-05,
+                    "tottime_per": 7.23e-06,
+                    "cumtime": 0.00018930500000000002,
+                    "cumtime_per": 9.465250000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/utils.py:1021(_median_nancheck)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 4.2413e-05,
+                    "tottime_per": 2.12065e-05,
+                    "cumtime": 0.00018651600000000001,
+                    "cumtime_per": 9.325800000000001e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/nanfunctions.py:1616(nanvar)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 2.999e-06,
+                    "tottime_per": 1.4995e-06,
+                    "cumtime": 0.000179948,
+                    "cumtime_per": 8.9974e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/ma/core.py:6936(sort)"
+                },
+                {
+                    "ncalls_recursion": "18",
+                    "ncalls": 18,
+                    "tottime": 6.888800000000001e-05,
+                    "tottime_per": 3.827111111111112e-06,
+                    "cumtime": 0.000173436,
+                    "cumtime_per": 9.635333333333334e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/ma/core.py:2972(__array_finalize__)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 3.349e-06,
+                    "tottime_per": 8.3725e-07,
+                    "cumtime": 0.000167858,
+                    "cumtime_per": 4.19645e-05,
+                    "function_name": "<__array_function__ internals>:177(take_along_axis)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 7.722e-06,
+                    "tottime_per": 1.9305e-06,
+                    "cumtime": 0.00016076800000000002,
+                    "cumtime_per": 4.0192000000000004e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/lib/shape_base.py:56(take_along_axis)"
+                },
+                {
+                    "ncalls_recursion": "2",
+                    "ncalls": 2,
+                    "tottime": 5.1430000000000006e-06,
+                    "tottime_per": 2.5715000000000003e-06,
+                    "cumtime": 0.000143172,
+                    "cumtime_per": 7.1586e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/ma/core.py:5622(sort)"
+                },
+                {
+                    "ncalls_recursion": "6",
+                    "ncalls": 6,
+                    "tottime": 4.7413e-05,
+                    "tottime_per": 7.902166666666667e-06,
+                    "cumtime": 0.000135807,
+                    "cumtime_per": 2.2634499999999998e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/ma/core.py:3211(__getitem__)"
+                },
+                {
+                    "ncalls_recursion": "48/46",
+                    "ncalls": 48,
+                    "tottime": 1.3787e-05,
+                    "tottime_per": 2.9971739130434783e-07,
+                    "cumtime": 0.000125768,
+                    "cumtime_per": 2.734086956521739e-06,
+                    "function_name": "~:0(<method 'view' of 'numpy.ndarray' objects>)"
+                },
+                {
+                    "ncalls_recursion": "14",
+                    "ncalls": 14,
+                    "tottime": 1.2876e-05,
+                    "tottime_per": 9.197142857142857e-07,
+                    "cumtime": 0.000107256,
+                    "cumtime_per": 7.661142857142858e-06,
+                    "function_name": "<__array_function__ internals>:177(sum)"
+                },
+                {
+                    "ncalls_recursion": "26",
+                    "ncalls": 26,
+                    "tottime": 6.8986e-05,
+                    "tottime_per": 2.6533076923076924e-06,
+                    "cumtime": 9.8113e-05,
+                    "cumtime_per": 3.7735769230769233e-06,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/ma/core.py:2946(_update_from)"
+                },
+                {
+                    "ncalls_recursion": "4",
+                    "ncalls": 4,
+                    "tottime": 6.965e-06,
+                    "tottime_per": 1.74125e-06,
+                    "cumtime": 9.233800000000001e-05,
+                    "cumtime_per": 2.3084500000000002e-05,
+                    "function_name": "/home/steven/miniconda3/envs/hera/lib/python3.10/site-packages/numpy/ma/core.py:6816(__call__)"
+                }
+            ],
+            "stats": {
+                "min": 0.000537133000761969,
+                "max": 0.0009200329986924771,
+                "mean": 0.0005954967733055606,
+                "stddev": 3.5040402327127075e-05,
+                "rounds": 666,
+                "median": 0.0005892184999538586,
+                "iqr": 2.8136997570982203e-05,
+                "q1": 0.0005760210005973931,
+                "q3": 0.0006041579981683753,
+                "iqr_outliers": 45,
+                "stddev_outliers": 108,
+                "outliers": "108;45",
+                "ld15iqr": 0.000537133000761969,
+                "hd15iqr": 0.0006468240026151761,
+                "ops": 1679.2702241677491,
+                "total": 0.39660085102150333,
+                "iterations": 1
+            }
+        }
+    ],
+    "datetime": "2023-05-10T22:08:36.645548",
+    "version": "4.0.0"
+}

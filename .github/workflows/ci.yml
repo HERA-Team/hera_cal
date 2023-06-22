@@ -38,7 +38,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          pytest -n auto --pyargs hera_cal --cov=hera_cal --cov-config=./.coveragerc --cov-report xml:./coverage.xml --durations=15
+          pytest -s -n auto --pyargs hera_cal --cov=hera_cal --cov-config=./.coveragerc --cov-report xml:./coverage.xml --durations=15 hera_cal/tests/test_chunker::test_chunk_data_files
 
       - name: Upload Coverage (Ubuntu)
         if: matrix.os == 'ubuntu-latest' && success()
