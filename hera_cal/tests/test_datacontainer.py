@@ -556,5 +556,3 @@ def test_RedDataContainerKeyManipulation():
     with pytest.raises(ValueError):
         rdc.build_red_keys([[(0, 2, 'ee'), (1, 3, 'ee')]])
 
-def test_bad_key_deletion():
-
