@@ -888,17 +888,20 @@ class CalibrationSmoother():
         '''
         all_time_indices = np.array([i for indices in self.time_indices.values() for i in indices])
         assert len(all_time_indices) == len(np.unique(all_time_indices)), \
-            'Multiple calibration integrations map to the same time index.'
+                'Multiple calibration integrations map to the same time index.'
         for cal in self.cals:
-            assert np.all(np.abs(self.cal_freqs[cal] - self.freqs) < 1e-4), \
-                '{} and {} have different frequencies.'.format(cal, self.cals[0])
+            assert np.all(
+                np.abs(self.cal_freqs[cal] - self.freqs) < 1e-4
+            ), f'{cal} and {self.cals[0]} have different frequencies.'
         if len(self.flag_files) > 0:
             all_flag_time_indices = np.array([i for indices in self.flag_time_indices.values() for i in indices])
-            assert np.all(np.unique(all_flag_time_indices) == np.unique(all_time_indices)), \
-                'The number of unique indices for the flag files does not match the calibration files.'
+            unq_flag = np.unique(all_flag_time_indices)
+            unq_time = np.unique(all_time_indices)
+            assert len(unq_flag) == len(unq_time) and np.all(unq_flag == unq_time), \
+                    'The number of unique indices for the flag files does not match the calibration files.'
             for ff in self.flag_files:
                 assert np.all(np.abs(self.flag_freqs[ff] - self.freqs) < 1e-4), \
-                    '{} and {} have different frequencies.'.format(ff, self.cals[0])
+                        '{} and {} have different frequencies.'.format(ff, self.cals[0])
 
     def rephase_to_refant(self, warn=True, propagate_refant_flags=False):
         '''If the CalibrationSmoother object has a refant attribute, this function rephases the
