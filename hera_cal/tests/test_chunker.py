@@ -31,22 +31,15 @@ def test_chunk_data_files(tmpdir):
     # to original combined list of files.
     # load in chunks
     chunks = sorted(glob.glob(f'{tmp_path}/chunk.*.uvh5'))
-    meta = FastUVH5Meta(chunks[0])
-    print(meta.datagrp['visdata'].shape)
-    meta.close()
     uvd = UVData()
-    uvd.read(chunks)
+    uvd.read(chunks, use_future_array_shapes=True)
     # load in original file
-    uvdx = UVData()
-    uvdx.read(data_files)
-    print("WITHOUTH FREQ CHAN SELECT: ", uvdx.data_array.shape)
     uvdo = UVData()
-    uvdo.read(data_files, freq_chans=range(32))
-    print("BEFORE APPLYING YAML FLAGS: ", uvdo.data_array.shape, uvd.data_array.shape)
+    uvdo.read(data_files, freq_chans=range(32), use_future_array_shapes=True)
+    # apply_yaml_flags always makes the uvdo object use future_array_shapes!
     apply_yaml_flags(uvdo, f'{DATA_PATH}/test_input/a_priori_flags_sample_noflags.yaml', 
                      throw_away_flagged_ants=True,
                      flag_freqs=False, flag_times=False, ant_indices_only=True)
-    print("AFTER YAML FLAGS: ", uvdo.data_array.shape, uvd.data_array.shape)
     assert np.all(np.isclose(uvdo.data_array, uvd.data_array))
     assert np.all(np.isclose(uvdo.flag_array, uvd.flag_array))
     assert np.all(np.isclose(uvdo.nsample_array, uvd.nsample_array))
