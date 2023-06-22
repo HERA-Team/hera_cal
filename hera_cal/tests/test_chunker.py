@@ -56,10 +56,10 @@ def test_chunk_data_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(tmp_path + '/chunk.*.uvh5'))
     uvd = UVData()
-    uvd.read(chunks)
+    uvd.read(chunks, use_future_array_shapes=True)
     # load in original file
     uvdo = UVData()
-    uvdo.read(data_files)
+    uvdo.read(data_files, use_future_array_shapes=True)
     apply_yaml_flags(uvdo, DATA_PATH + '/test_input/a_priori_flags_sample_noflags.yaml', throw_away_flagged_ants=True,
                      flag_freqs=False, flag_times=False, ant_indices_only=True)
     assert np.all(np.isclose(uvdo.data_array, uvd.data_array))
