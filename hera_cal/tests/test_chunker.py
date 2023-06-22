@@ -11,30 +11,34 @@ from .. import chunker
 from hera_qm.utils import apply_yaml_flags
 import numpy as np
 import sys
+from pyuvdata.uvdata import FastUVH5Meta
 
 
 def test_chunk_data_files(tmpdir):
     # list of data files:
     tmp_path = tmpdir.strpath
-    data_files = sorted(glob.glob(DATA_PATH + '/zen.2458044.*.uvh5'))
+    data_files = sorted(glob.glob(f'{DATA_PATH}/zen.2458044.*.uvh5'))
     nfiles = len(data_files)
     # form chunks with three samples.
     for chunk in range(0, nfiles, 2):
         output = tmp_path + f'/chunk.{chunk}.uvh5'
         chunker.chunk_files(data_files, data_files[chunk], output, 2,
                             polarizations=['ee'], spw_range=[0, 32],
-                            throw_away_flagged_ants=True, ant_flag_yaml=DATA_PATH + '/test_input/a_priori_flags_sample_noflags.yaml')
+                            throw_away_flagged_ants=True, 
+                            ant_flag_yaml=f'{DATA_PATH}/test_input/a_priori_flags_sample_noflags.yaml')
 
     # test that chunked files contain identical data (when combined)
     # to original combined list of files.
     # load in chunks
-    chunks = sorted(glob.glob(tmp_path + '/chunk.*.uvh5'))
+    chunks = sorted(glob.glob(f'{tmp_path}/chunk.*.uvh5'))
     uvd = UVData()
-    uvd.read(chunks)
+    uvd.read(chunks, use_future_array_shapes=True)
     # load in original file
     uvdo = UVData()
-    uvdo.read(data_files, freq_chans=range(32))
-    apply_yaml_flags(uvdo, DATA_PATH + '/test_input/a_priori_flags_sample_noflags.yaml', throw_away_flagged_ants=True,
+    uvdo.read(data_files, freq_chans=range(32), use_future_array_shapes=True)
+    # apply_yaml_flags always makes the uvdo object use future_array_shapes!
+    apply_yaml_flags(uvdo, f'{DATA_PATH}/test_input/a_priori_flags_sample_noflags.yaml', 
+                     throw_away_flagged_ants=True,
                      flag_freqs=False, flag_times=False, ant_indices_only=True)
     assert np.all(np.isclose(uvdo.data_array, uvd.data_array))
     assert np.all(np.isclose(uvdo.flag_array, uvd.flag_array))
@@ -52,10 +56,10 @@ def test_chunk_data_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(tmp_path + '/chunk.*.uvh5'))
     uvd = UVData()
-    uvd.read(chunks)
+    uvd.read(chunks, use_future_array_shapes=True)
     # load in original file
     uvdo = UVData()
-    uvdo.read(data_files)
+    uvdo.read(data_files, use_future_array_shapes=True)
     apply_yaml_flags(uvdo, DATA_PATH + '/test_input/a_priori_flags_sample_noflags.yaml', throw_away_flagged_ants=True,
                      flag_freqs=False, flag_times=False, ant_indices_only=True)
     assert np.all(np.isclose(uvdo.data_array, uvd.data_array))
