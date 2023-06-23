@@ -109,7 +109,6 @@ some of the logging features in an interactive session. To do this, simply impor
 Then, any logging statements in hera_cal code (or your own code in the interactive
 session) will have the desired logging behavior.
 
-
 """
 from __future__ import annotations
 

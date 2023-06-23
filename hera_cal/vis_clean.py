@@ -2073,7 +2073,9 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
     else:
         dt_time_chunk = np.median(np.diff(hd_time_chunk.times)) / 2.
         tmax = hd_time_chunk.times.max() + dt_time_chunk
+        
         tmin = hd_time_chunk.times.min() - dt_time_chunk
+        
         hd_combined = io.HERAData(baseline_chunk_files)
         # we only compare centers of baseline files to time limits of time-file.
         # this is to prevent integrations that straddle file boundaries from being dropped.

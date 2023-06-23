@@ -24,10 +24,8 @@ dependencies:
   - jaxlib
   - optax
   - line_profiler
-
+  - pyuvdata>=2.3.3
   - pip:
-    - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
-    # - git+https://github.com/HERA-Team/aipy
     - git+https://github.com/HERA-Team/hera_filters
     - git+https://github.com/HERA-Team/linsolve
     - git+https://github.com/HERA-Team/hera_qm
