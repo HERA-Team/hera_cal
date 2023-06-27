@@ -462,7 +462,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         binned_power_conj = np.zeros_like(fr_grid)
         # iterate over each frequency and ftaper weighting.
         # use linspace to make sure we get first and last frequencies.
-        unflagged_chans = ~np.all(np.all(uvd.flag_array[:, :, :].squeeze(), axis=0), axis=-1)
+        unflagged_chans = ~np.all(np.all(uvd.flag_array, axis=0), axis=-1).squeeze()
         chans_to_use = np.arange(uvd.Nfreqs).astype(int)[unflagged_chans][::fr_freq_skip]
         frate_coeff = 2 * np.pi / SPEED_OF_LIGHT / (1e-3 * SDAY_SEC)
         frate_over_freq = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * frate_coeff
