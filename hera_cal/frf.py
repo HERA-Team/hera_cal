@@ -324,8 +324,9 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
     return frate_centers, frate_half_widths
 
 
-def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=True, nfr=None, dfr=None,
-                               taper='none', fr_freq_skip=1, verbose=False):
+def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=True, nfr=None,
+                               dfr=None, taper='none', fr_freq_skip=1, freq_min=None, freq_max=None,
+                               zero_below_horizon=True, reds=None, also_calc_reverse_bl=True, verbose=False):
     """
     Calculate fringe-rate profiles to either directly apply as an FIR filter or set a range to filter.
 
@@ -372,6 +373,16 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     fr_freq_skip: int, optional
         bin fringe rates from every freq_skip channels.
         default is 1 -> takes a long time. We recommend setting this to be larger.
+    freq_min: float, optional
+        Smallest frequency in Hz to use in calculating FRs. Default None means no minimum.
+    freq_max: float, optional
+        Largest frequency in Hz to use in calculating FRs. Default None means no maximum.
+    zero_below_horizon: bool, optional
+        Set the beam to 0 below the horizon. Beam will be copied before modification to prevent changes to uvb.
+    reds: RedundantGroups object or list of lists
+        List of list of redundant baseline groups. Default None will compute from uvd. Provide manually to save runtime.
+    also_calc_reverse_bl: bool, optional
+        Also performs this calculation for baselines with flipped orientations. Default True. Turn off to save runtime.
     verbose: bool, optional
         lots of text output.
     Returns
@@ -385,8 +396,8 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
               a particular fringe-rate bin.
 
     """
-
-    uvb = copy.deepcopy(uvb)
+    if zero_below_horizon or uvb.beam_type == 'efield':
+        uvb = copy.deepcopy(uvb)
     # convert to power and healpix if necesssary
     if uvb.beam_type == 'efield':
         uvb.efield_to_power()
@@ -407,7 +418,8 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     hp = HEALPix(nside=uvb.nside, order=uvb.ordering)
     az, alt = hp.healpix_to_lonlat(range(uvb.Npixels))
     # zero out beam below the horizon
-    uvb.data_array[0, :, :, alt <= 0 * units.radian] = 0.
+    if zero_below_horizon:
+        uvb.data_array[0, :, :, alt <= 0 * units.radian] = 0.
     # Covert AltAz coordinates of UVBeam pixels to barycentric coordinates.
     obstime = Time(np.median(np.unique(uvd.time_array)), format='jd')
     altaz = AltAz(obstime=obstime, location=location)
@@ -445,7 +457,8 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     # keeps track of different polarizations for each antenna pair
     # for if we are going to sum over polarizations.
     # get redundancies (will only compute fr-profile once for each red group).
-    reds = _get_key_reds(dict(zip(*uvd.get_ENU_antpos()[::-1])), keys)
+    if reds is None:
+        reds = _get_key_reds(dict(zip(*uvd.get_ENU_antpos()[::-1])), keys)
 
     for redgrp in reds:
         # only explicitly calculate fr profile for the first vis in each redgroup.
@@ -463,6 +476,8 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         # iterate over each frequency and ftaper weighting.
         # use linspace to make sure we get first and last frequencies.
         unflagged_chans = ~np.all(np.all(uvd.flag_array, axis=0), axis=-1).squeeze()
+        unflagged_chans &= uvd.freq_array.squeeze() >= (freq_min if freq_min is not None else -np.inf)
+        unflagged_chans &= uvd.freq_array.squeeze() <= (freq_max if freq_max is not None else np.inf)
         chans_to_use = np.arange(uvd.Nfreqs).astype(int)[unflagged_chans][::fr_freq_skip]
         frate_coeff = 2 * np.pi / SPEED_OF_LIGHT / (1e-3 * SDAY_SEC)
         frate_over_freq = np.dot(np.cross(np.array([0, 0, 1.]), blvec), eq_xyz) * frate_coeff
@@ -472,18 +487,22 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         bsq = np.hstack([np.abs(uvb.data_array[0, polindex, np.argmin(np.abs(freq - uvb.freq_array[0])), :].squeeze()) ** 2. * freqweight ** 2. for freq, freqweight in zip(uvd.freq_array[chans_to_use], ftaper[chans_to_use])])
         # histogram fringe rates weighted by beam square values.
         binned_power = np.histogram(frates, bins=frate_bins, weights=bsq)[0]
-        binned_power_conj = np.histogram(-frates, bins=frate_bins, weights=bsq)[0]
+        if also_calc_reverse_bl:
+            binned_power_conj = np.histogram(-frates, bins=frate_bins, weights=bsq)[0]
 
         # iterate over redgrp and set profiles for each baseline key.
         for blk in redgrp:
             profiles[blk] = binned_power
-            profiles[utils.reverse_bl(blk)] = binned_power_conj
+            if also_calc_reverse_bl:
+                profiles[utils.reverse_bl(blk)] = binned_power_conj
             if blk[:2] not in ap_blkeys:
                 ap_blkeys[blk[:2]] = [blk]
-                ap_blkeys[utils.reverse_bl(blk)[:2]] = [utils.reverse_bl(blk)]
+                if also_calc_reverse_bl:
+                    ap_blkeys[utils.reverse_bl(blk)[:2]] = [utils.reverse_bl(blk)]
             else:
                 ap_blkeys[blk[:2]].append(blk)  # append antpairpols
-                ap_blkeys[utils.reverse_bl(blk)[:2]].append(utils.reverse_bl(blk))
+                if also_calc_reverse_bl:
+                    ap_blkeys[utils.reverse_bl(blk)[:2]].append(utils.reverse_bl(blk))
 
     # combine polarizations by summing over all profiles for each antenna-pair.
     if combine_pols:
