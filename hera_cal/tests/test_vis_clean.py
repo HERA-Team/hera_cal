@@ -1159,9 +1159,13 @@ class Test_VisClean(object):
         for filenum, file in enumerate(datafiles):
             # reconstitute
             fname = 'temp.reconstituted.part.%d.h5' % filenum
-            vis_clean.time_chunk_from_baseline_chunks(time_chunk_template=file,
-                                                      baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), clobber=True,
-                                                      outfilename=str(tmp_path / fname))
+            
+            vis_clean.time_chunk_from_baseline_chunks(
+                time_chunk_template=file,
+                baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), 
+                clobber=True,
+                outfilename=str(tmp_path / fname)
+            )
         # load in the reconstituted files.
         hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
         hd_reconstituted.read()
@@ -1178,9 +1182,14 @@ class Test_VisClean(object):
         for filenum, file in enumerate(datafiles):
             # reconstitute
             fname = 'temp.reconstituted.part.%d.h5' % filenum
-            vis_clean.time_chunk_from_baseline_chunks(time_chunk_template=file,
-                                                      baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), clobber=True,
-                                                      outfilename=str(tmp_path / fname), time_bounds=True)
+            
+            vis_clean.time_chunk_from_baseline_chunks(
+                time_chunk_template=file,
+                baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), 
+                clobber=True,
+                outfilename=str(tmp_path / fname), 
+                time_bounds=True
+            )
         # load in the reconstituted files.
         hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
         hd_reconstituted.read()

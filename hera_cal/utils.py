@@ -3,6 +3,7 @@
 # Licensed under the MIT License
 from __future__ import annotations
 
+from collections import OrderedDict
 import numpy as np
 import os
 import copy
@@ -784,29 +785,43 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
     uvc.write_calfits(output_fname, clobber=True)
 
 
-def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, array=False):
+def lst_rephase(
+    data: 'DataContainer' | np.ndarray,
+    bls: dict[tp.Baseline, np.ndarray] | np.ndarray,
+    freqs: np.ndarray,
+    dlst: float | list | np.ndarray,
+    lat: float =-30.721526120689507,
+    inplace: bool=True,
+    array=False
+):
     """
-    Shift phase center of each integration in data by amount dlst [radians] along right ascension axis.
-    If inplace == True, this function directly edits the arrays in 'data' in memory, so as not to
-    make a copy of data.
+    Shift phase center of each integration in data by amount dlst [radians] along right
+    ascension axis.
 
-    Parameters:
-    -----------
-    data : type=DataContainer, holding 2D visibility data, with [0] axis time and [1] axis frequency
-
-    bls : type=dictionary, same keys as data, values are 3D float arrays holding baseline vector
-                            in ENU frame in meters
-
-    freqs : type=ndarray, frequency array of data [Hz]
-
-    dlst : type=ndarray or float, delta-LST to rephase by [radians]. If a float, shift all integrations
-                by dlst, elif an ndarray, shift each integration by different amount w/ shape=(Ntimes)
-
-    lat : type=float, latitude of observer in degrees North
-
-    inplace : type=bool, if True edit arrays in data in memory, else make a copy and return
-
-    array : type=bool, if True, treat data as a visibility ndarray and bls as a baseline vector
+    Parameters
+    ----------
+    data
+        The complex visibility data. Either a datacontainer whose entries have
+        shape `(time, freq)`, or an array with shape
+        `(ntimes, nbaselines, nfreqs, [npols])`.
+    bls:
+        Eithe a dict mapping baseline-keys to ENU baseline vectors,
+        or an array of baseline vectors (3D) in ENU, shape (nbaselines, 3). If
+        `data` is a DataContainer, this must be a dict.
+    freqs
+        Frequency array of data [Hz].
+    dlst
+        Delta-LST to rephase by [radians]. If a float, shift all integrations
+        by dlst, elif an ndarray, shift each integration by different amount w/
+        shape=(Ntimes)
+    lat
+        latitude of observer in degrees North
+    inplace
+        if True edit arrays in data in memory, else make a copy and return
+    array
+        Deprecated parameter that specifies that the input data is an array
+        with shape (ntimes, nfreqs, [npols]). Don't write code with this 
+        parameter -- instead just set the baseline axis of data to be length-1.
 
     Notes:
     ------
@@ -816,6 +831,8 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, a
 
     This method of rephasing follows Eqn. 21 & 22 of Zhang, Y. et al. 2018 "Unlocking Sensitivity..."
     """
+    from hera_cal.datacontainer import DataContainer
+
     # check format of dlst
     if isinstance(dlst, list):
         lat = np.ones_like(dlst) * lat
@@ -836,129 +853,92 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.721526120689507, inplace=True, a
     # get full rotation matrix
     rot = np.einsum("...jk,...kl->...jl", eq2top, top2eq)
 
-    # make copy of data if desired
-    if not inplace:
-        data = copy.deepcopy(data)
-
-    # turn array into dict
-    if array:
-        inplace = False
-        data = {'data': data}
-        bls = {'data': bls}
-
     # get new s-hat vector
     s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
-    s_diff = (s_prime - np.array([0., 0., 1.0])) / const.c.value
+    s_diff_over_c = (s_prime - np.array([0., 0., 1.0])) / const.c.value
 
-    # iterate over data keys
-    for i, k in enumerate(data.keys()):
-        # get baseline vector
-        bl = bls[k]
+    orig_type = type(data)
+
+    if not isinstance(data, np.ndarray) and inplace:
+        # We can't truly do in-place rephasing of a DataContainer in a vectorized way
+        # (without copying memory), so we do it in a loop.
+        # iterate over data keys
+        for i, k in enumerate(data.keys()):
+            # get baseline vector
+            bl = bls[k]
+
+            # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
+            # note that we pre-divided s_diff by c so this is in units of tau.
+            tau = np.einsum("...i,i->...", s_diff_over_c, bl)
+
+            # reshape tau
+            if not isinstance(tau, np.ndarray):
+                tau = np.array([tau])
+
+            # get phasor
+            phs = np.exp(-2j * np.pi * freqs[None, :] * tau[:, None])
+
+            # multiply into data
+            data[k] *= phs
+    else:
+        if not isinstance(data, np.ndarray):
+            shape = next(iter(data.values())).shape
+            keys = list(data.keys())
+
+            _data = np.zeros((shape[0], len(keys), shape[1]), dtype=complex)
+
+            for i, k in enumerate(keys):
+                _data[:, i, :] = data[k]
+            blvecs = np.array([bls[k] for k in keys])
+            data = _data
+
+        else:
+            blvecs = np.atleast_2d(bls)
+
+            if hasattr(dlst, '__len__'):
+                assert data.shape[0] == len(dlst)
+
+            if array:
+                warnings.warn(
+                    "the 'array' parameter to lst_rephase is deprecated. Please provide data with second-axis of Nbls",
+                    category=DeprecationWarning,    
+                )
+                data = data[:, None]
+
+            assert data.shape[1] == len(blvecs)
+            assert data.shape[2] == len(freqs)
+
+            if not inplace:
+                data = data.copy()
 
         # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
         # note that we pre-divided s_diff by c so this is in units of tau.
-        tau = np.einsum("...i,i->...", s_diff, bl)
-        #if i==0:
-        #    print("TAU OLD: ", tau)
+        # output has shape (len(dlst), len(bl))
+        tau = np.einsum("...i,ki->...k", s_diff_over_c, blvecs)
+
         # reshape tau
-        if not isinstance(tau, np.ndarray):            
-            tau = np.array([tau])
+        if tau.ndim != 2:
+            tau = tau[None, :]
 
         # get phasor
-        phs = np.exp(-2j * np.pi * freqs[None, :] * tau[:, None])
-        
+        phs = np.exp(-2j * np.pi * freqs[None, None, :] * tau[:, :, None])
+
+        if data.ndim > phs.ndim:
+            # data can have extra dimensions after frequency if it wants (eg pols)
+            newshape = phs.shape + (1,) * (data.ndim - phs.ndim)
+            phs.shape = newshape
+
         # multiply into data
-        data[k] *= phs
-    if array:
-        data = data['data']
+        data *= phs
 
-    if not inplace:
-        return data
-
-def lst_rephase_vectorized(
-    data: np.ndarray, blvecs: np.ndarray, freqs: np.ndarray, dlst: float | np.ndarray, 
-    lat: float=-30.721526120689507, inplace: bool=True,
-):
-    """
-    Shift phase center of each integration in data by amount dlst [radians] along RA.
-
-    Parameters
-    ----------
-    data
-        The complex visibility data, with shape (ntimes, nbaselines,nfreqs, npols)
-    bls:
-        Array of baseline vectors (3D) in ENU, shape (nbaselines, 3).
-    freqs
-        Frequency array of data [Hz]
-    dlst
-        Delta-LST to rephase by [radians]. If a float, shift all integrations 
-        by dlst, elif an ndarray, shift each integration by different amount w/ 
-        shape=(Ntimes)
-    lat
-        latitude of observer in degrees North
-    inplace
-        if True edit arrays in data in memory, else make a copy and return
-
-    Notes:
-    ------
-    The rephasing uses top2eq_m and eq2top_m matrices (borrowed from pyuvdata and aipy) 
-    to convert from array TOPO frame to Equatorial frame, induces time rotation, 
-    converts back to TOPO frame, calculates new pointing vector s_prime and inserts a 
-    delay plane into the data for rephasing.
-
-    This method of rephasing follows Eqn. 21 & 22 of Zhang, Y. et al. 2018 
-    "Unlocking Sensitivity..."
-    """
-    blvecs = np.array(blvecs)
-    assert blvecs.shape[1] == 3
-
-    # check format of dlst
-    if isinstance(dlst, list):
-        lat = np.ones_like(dlst) * lat
-        dlst = np.array(dlst)
-        zero = np.zeros_like(dlst)
-    elif isinstance(dlst, np.ndarray):
-        lat = np.ones_like(dlst) * lat
-        zero = np.zeros_like(dlst)
-    else:
-        zero = 0
-
-    # get top2eq matrix, shape=(len(dlst), 3, 3)
-    top2eq = top2eq_m(zero, lat * np.pi / 180)
-
-    # get eq2top matrix shape=(len(dlst), 3, 3)
-    eq2top = eq2top_m(-dlst, lat * np.pi / 180)
-
-    # get full rotation matrix, shape=(len(dlst), 3, 3)
-    rot = np.einsum("...jk,...kl->...jl", eq2top, top2eq)
-
-    # make copy of data if desired
-    if not inplace:
-        data = data.copy()
-
-    # get new s-hat vector, shape=(len(dlst), 3)
-    s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
-    s_diff = (s_prime - np.array([0., 0., 1.0])) / const.c.value
-
-    # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
-    # note that we pre-divided s_diff by c so this is in units of tau.
-    # output has shape (len(dlst), len(bl))
-    tau = np.einsum("...i,ki->...k", s_diff, blvecs)
-    
-    # reshape tau
-    if tau.ndim != 2:
-        tau = tau[None, :]
-
-    # get phasor
-    phs = np.exp(-2j * np.pi * freqs[None, None, :, None] * tau[:, :, None, None])
-
-    autos = np.all(blvecs == 0.0, axis=1)    
-
-    # multiply into data
-    data *= phs
-
-    if not inplace:
-        return data
+        if not inplace:
+            if orig_type in (dict, OrderedDict, DataContainer):
+                return orig_type({k: data[:,i] for i,k in enumerate(keys)})
+            else:
+                if array:
+                    return data[:, 0]
+                else:
+                    return data
 
 
 def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_antpol=False,
@@ -1486,7 +1466,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             return data
 
 def match_files_to_lst_bins(
-    lst_edges: tuple[float], 
+    lst_edges: tuple[float],
     file_list: Sequence[str | Path],
     files_sorted: bool = False,
     sort_fn: callable = sorted,
@@ -1499,10 +1479,10 @@ def match_files_to_lst_bins(
 
     While the obvious way to do this is to read the times/lsts from each file in the
     list, and match them to the LST-edges, this is slow for a large list of files,
-    mostly because of the time it takes to open each file (not read it!). 
+    mostly because of the time it takes to open each file (not read it!).
 
     To speed this up, this function does two things: (1) it uses filenames to get the
-    first time in each file, if possible. This makes it *approximate*, not exact, but 
+    first time in each file, if possible. This makes it *approximate*, not exact, but
     this quickly whittles down the number of files that need to be opened. (2) It
     uses bounded binary search to find the files that have times in the given full
     LST range, with an approximate knowledge of how many files to move forward or
@@ -1513,30 +1493,35 @@ def match_files_to_lst_bins(
 
     If the filename-matching is not available, and the LST-edges cover a full 2pi
     steradians, then this function is as slow (or perhaps a bit slower) than something
-    like ``config_lst_bin_files``. 
+    like ``config_lst_bin_files``.
 
     Parameters
     ----------
-    lst_range
-        The lst range to match. This is a tuple of (start, stop) lsts in radians.
+    lst_edges
+        The lst edges to match. This is a tuple of (start, stop) lsts in radians.
     file_list
         A list of files to match against. This can be a list of strings, a list of
         pathlib.Path objects, or a list of FastUVH5Meta objects.
     files_sorted
-        If True, assume that the file_list is already sorted by increasing time. 
+        If True, assume that the file_list is already sorted by increasing time.
         If False, sort the file_list by time within the function, using ``sort_fn``.
     sort_fn
-        The function to use to sort the file_list in increasing time. This should be a 
+        The function to use to sort the file_list in increasing time. This should be a
         function that takes a list of str or Path objects and returns a list of the same
         in order.
     jd_regex
         The regex to use to extract the julian date from the file name. If provided,
-    approximate
-        If True, return a list of files that is a superset of those that exist in the
-        LST bins -- either the exact list or more than the true list. This will be based
-        on times inferred from the filename (if possible) and the integration time of
-        the first file. 
-    
+    time_axis_faster_than_bls: bool | None
+        If True, assume the time axis is faster than the baseline axis in the data
+        files.
+    blts_are_rectangular: bool | None
+        If True, assume the baseline-time axis is rectangular in the data files.
+    atol : float
+        The absolute tolerance to use when comparing LSTs. This is used to provide
+        a buffer around the LST edges, so that files that have times that are just
+        outside the LST range are included. These can be trimmed later by a more
+        precise function.
+
     Returns
     -------
     list of FastUVH5Meta
@@ -1548,8 +1533,8 @@ def match_files_to_lst_bins(
 
     # Get performance parameters from the first file in the list
     meta = FastUVH5Meta(
-        file_list[0], 
-        blts_are_rectangular=blts_are_rectangular, 
+        file_list[0],
+        blts_are_rectangular=blts_are_rectangular,
         time_axis_faster_than_bls=time_axis_faster_than_bls
     )
     if blts_are_rectangular is None:
@@ -1557,10 +1542,10 @@ def match_files_to_lst_bins(
     if time_axis_faster_than_bls is None:
         time_axis_faster_than_bls = meta.time_axis_faster_than_bls
 
-    file_list = [
+    metadata_list = [
         FastUVH5Meta(
-            fl, 
-            blts_are_rectangular=blts_are_rectangular, 
+            fl,
+            blts_are_rectangular=blts_are_rectangular,
             time_axis_faster_than_bls=time_axis_faster_than_bls
         ) for fl in file_list
     ]
@@ -1576,20 +1561,20 @@ def match_files_to_lst_bins(
 
     if np.any(np.diff(lst_edges) < 0 ):
         raise ValueError("lst_edges must not extend beyond 2pi total radians from start to finish.")
-    
+
     lstmin, lstmax = lst_edges[0], lst_edges[-1]
-    
+
     # The files in the list MUST NOT wrap around in LST, i.e.
-    # there is 24 hours or less of time in the files. 
-    if file_list[-1].times[-1] < file_list[0].times[0]: 
+    # there is 24 hours or less of time in the files.
+    if metadata_list[-1].times[-1] < metadata_list[0].times[0]:
         raise ValueError("After sorting, the last file in the list is is before the first.")
 
-    if file_list[-1].times[-1] > meta.times[0] + 1.0:
+    if metadata_list[-1].times[-1] > meta.times[0] + 1.0:
         raise ValueError("The input files span greater than 24 hours, cannot use this function. Use match_times instead.")
 
     jd_edges = LST2JD(
-        np.array(lst_edges), 
-        start_jd=int(meta.times[0]), 
+        np.array(lst_edges),
+        start_jd=int(meta.times[0]),
         lst_branch_cut=lstmin,
         allow_other_jd=False,
         latitude=meta.telescope_location_lat_lon_alt_degrees[0],
@@ -1602,20 +1587,26 @@ def match_files_to_lst_bins(
     ntimes_per_file = meta.Ntimes
 
     # Cache times
-    _metas = {meta.path: meta for meta in file_list}
+    _metas = {meta.path: meta for meta in metadata_list}
+
+    try:
+        cache = functools.cache
+    except AttributeError:
+        # Older python
+        cache = functools.lru_cache(maxsize=None)
 
     if jd_regex is not None:
         jd_regex = re.compile(jd_regex)
-        @functools.cache
+        @cache
         def get_first_time(path: Path) -> float:
             return float(jd_regex.findall(path.name)[0])
     else:
-        @functools.cache
+        @cache
         def get_first_time(path: Path) -> float:
             meta = _metas[path]
             return meta.get_transactional("times")[0]
-        
-    def get_first_file_in_range(file_list, jd_range: Tuple[float, float]) -> int:
+
+    def get_first_file_in_range(meta_list, jd_range: Tuple[float, float]) -> int:
         jdstart, jdend = jd_range
 
         jdstart_for_file = jdstart - tint*(ntimes_per_file-1) - atol
@@ -1625,12 +1616,12 @@ def match_files_to_lst_bins(
         cmp = operator.and_ if (jdstart < jdend) else operator.or_
 
         index = 0
-        meta = file_list[index]
+        meta = meta_list[index]
         thistime = get_first_time(meta.path)
 
         # Find the first file that has times in the LST range
         minidx = -1
-        maxidx = len(file_list)
+        maxidx = len(meta_list)
         best_diff = np.inf
         best_index = -1
 
@@ -1646,7 +1637,7 @@ def match_files_to_lst_bins(
                 best_diff = np.abs(diff)
                 best_index = index
 
-            
+
             move_nfiles = round(diff / (tint*ntimes_per_file))
 
             if move_nfiles == 0:
@@ -1660,36 +1651,36 @@ def match_files_to_lst_bins(
                 minidx = max(minidx, index)
             else:
                 maxidx = min(maxidx, index)
-    
+
             index += move_nfiles
             if not (minidx < index < maxidx):
                 index = min(maxidx-1, max(minidx+1, (minidx + maxidx) // 2))
                 if index < 0:
                     index = 0
-                elif index >= len(file_list):
-                    index = len(file_list) - 1
+                elif index >= len(meta_list):
+                    index = len(meta_list) - 1
 
-            meta = file_list[index]
+            meta = meta_list[index]
             thistime = get_first_time(meta.path)
 
         if best_index == -1:
             raise ValueError("Could not find a file in the range.")
         else:
             return best_index
-    
+
     try:
         # We subtract one, because the file before the first file in the range
         # may just get into the range by a tiny bit, and we allow the user to test
         # that out later.
-        first_file = get_first_file_in_range(file_list, (jdstart, jdend))
+        first_file = get_first_file_in_range(metadata_list, (jdstart, jdend))
     except ValueError:
         return [[] for _ in range(len(lst_edges)-1)]
 
     # Now, we have to actually go through the bins in lst_edges and assign files.
     lstbin_files = [[] for _ in range(len(lst_edges)-1)]
-    _file_list = file_list[first_file:] + file_list[:first_file]  # roll the files
-    
-    for i, fl in enumerate(_file_list):
+    _meta_list = metadata_list[first_file:] + metadata_list[:first_file]  # roll the files
+
+    for i, fl in enumerate(_meta_list):
         thistime = get_first_time(fl.path)
         fl_in_range = False
         for lstbin, (jdstart, jdend) in enumerate(zip(jd_edges[:-1], jd_edges[1:])):
@@ -1698,17 +1689,17 @@ def match_files_to_lst_bins(
             if cmp(jdstart - (ntimes_per_file-1)*tint - atol <= thistime, thistime < jdend + atol):
                 lstbin_files[lstbin].append(fl)
             fl_in_range = True
-        
+
         if not fl_in_range:
             break
 
     return lstbin_files
-        
+
 def eq2top_m(ha, dec):
     """Return the 3x3 matrix converting equatorial coordinates to topocentric
     at the given hour angle (ha) and declination (dec).
 
-    Returned array has the number of ha's or dec's in the first dimension, so is 
+    Returned array has the number of ha's or dec's in the first dimension, so is
     shape ``(Nha, 3, 3)``.
 
     Borrowed from pyuvdata which borrowed from aipy"""
@@ -1726,9 +1717,9 @@ def top2eq_m(ha, dec):
     """Return the 3x3 matrix converting topocentric coordinates to equatorial
     at the given hour angle (ha) and declination (dec).
 
-    Returned array has the number of ha's or dec's in the first dimension, so is 
+    Returned array has the number of ha's or dec's in the first dimension, so is
     shape ``(Nha, 3, 3)``.
-    
+
     Slightly changed from aipy to simply write the matrix instead of inverting.
     Borrowed from pyuvdata."""
     sin_H, cos_H = np.sin(ha), np.cos(ha)
@@ -1827,10 +1818,3 @@ def select_spw_ranges_argparser():
                                                                                 "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
-
-def mergedicts(*dicts) -> dict:
-    """Merge any number of dictionaries, overwriting keys."""
-    output = {}
-    for d in dicts:
-        output.update(dict(d.items()))
-    return output

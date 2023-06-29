@@ -172,17 +172,19 @@ class DataContainer:
         if isinstance(key, tuple):
             key = [key]
         for k in key:
-            if isinstance(k, tuple) and (len(k) == 3):
-                k = comply_bl(k)
-                del self._data[k]
-            else:
-                raise ValueError(f'Tuple keys to delete must be in the format (ant1, ant2, pol), {k} is not.')
-        self._antpairs = set([k[:2] for k in self._data.keys()])
-        self._pols = set([k[-1] for k in self._data.keys()])
+            if not isinstance(k, tuple) or len(k) != 3:
+                raise ValueError(
+                    'Tuple keys to delete must be in the format (ant1, ant2, pol), '
+                    f'{k} is not.'
+                )
+            k = comply_bl(k)
+            del self._data[k]
+        self._antpairs = {k[:2] for k in self._data.keys()}
+        self._pols = {k[-1] for k in self._data.keys()}
 
     @property
-    def shape(self):
-        return self.__getitem__(list(self.keys())[0]).shape
+    def shape(self) -> tuple[int]:
+        return self[next(iter(self.keys()))].shape
         
     def concatenate(self, D, axis=0):
         '''Concatenates D, a DataContainer or a list of DCs, with self along an axis'''
@@ -465,7 +467,7 @@ class DataContainer:
         '''Allows for getting values with fallback if not found. Default None.'''
         return (self[key] if key in self else val)
 
-    def select_or_expand_times(self, new_times, in_place=True):
+    def select_or_expand_times(self, new_times, in_place=True, skip_bda_check=False):
         '''Update self.times with new times, updating data and metadata to be consistent. Data and
         metadata will be deleted, rearranged, or duplicated as necessary using numpy's fancy indexing.
         Assumes that the 0th data axis is time. Does not support baseline-dependent averaging.
@@ -484,12 +486,13 @@ class DataContainer:
         assert dc.times is not None
         if not np.all([nt in dc.times for nt in new_times]):
             raise ValueError('All new_times must be in self.times.')
-        if dc.times_by_bl is not None:
-            for tbbl in dc.times_by_bl.values():
-                assert np.all(tbbl == dc.times), 'select_or_expand_times does not support baseline dependent averaging.'
-        if dc.lsts_by_bl is not None:
-            for lbbl in dc.lsts_by_bl.values():
-                assert np.all(lbbl == dc.lsts), 'select_or_expand_times does not support baseline dependent averaging.'
+        if not skip_bda_check:
+            if dc.times_by_bl is not None:
+                for tbbl in dc.times_by_bl.values():
+                    assert np.all(tbbl == np.asarray(dc.times)), 'select_or_expand_times does not support baseline dependent averaging.'
+            if dc.lsts_by_bl is not None:
+                for lbbl in dc.lsts_by_bl.values():
+                    assert np.all(lbbl == np.asarray(dc.lsts)), 'select_or_expand_times does not support baseline dependent averaging.'
 
         # update data
         nt_inds = np.searchsorted(np.array(dc.times), np.array(new_times))
@@ -584,19 +587,23 @@ class RedDataContainer(DataContainer):
         else:
             self.reds = RedundantGroups(red_list=reds, antpos=getattr(self, 'antpos', None))
                 
-        self._data_reds = self.reds.filter_reds(bls=self.bls())
         self._reds_keyed_on_data = self.reds.keyed_on_bls(bls=self.bls())
-        
-        # Check that the data only has one baseline per redundant group
-        for red in self._data_reds:
-            if len(red) > 1:        
-                raise ValueError(
-                    'RedDataContainer can only be constructed with (at most) one baseline per group, '
-                    f'but this data has the following redundant baselines: {red}'
-                )
 
         # delete unused data to avoid leaking memory
         del self[[k for k in self._data if k not in self.reds]]
+
+        # Check that the data only has one baseline per redundant group
+        redkeys = {}
+        for bl in self.bls():
+            ubl = self.reds.get_ubl_key(bl)
+            if ubl in redkeys:
+                raise ValueError(
+                    'RedDataContainer can only be constructed with (at most) one baseline per group, '
+                    f'but {bl} is redundant with {redkeys[ubl]}.'
+                ) 
+            else:
+                redkeys[ubl] = bl
+
 
     def get_ubl_key(self, bl):
         '''Returns the blkey used to internally denote the data stored.
@@ -626,12 +633,15 @@ class RedDataContainer(DataContainer):
         else:
             # treat this as a new baseline not redundant with anything
             self.reds.append([key])
+
+            # Since this is a completely new key, the BaselineKeyChooser will
+            # automatically use the only key in the group as the ubl key, we just
+            # need to add it to the potential key list.
+            self._reds_keyed_on_data.append([key])
             ubl_key = key
 
         super().__setitem__(ubl_key, value)
 
-        # Re-key because we've added a new baseline to the data itself.
-        self._reds_keyed_on_data = self.reds.keyed_on_bls(bls=self.bls())
 
     def __contains__(self, key):
         '''Returns true if the baseline redundant with the key is in the data.'''

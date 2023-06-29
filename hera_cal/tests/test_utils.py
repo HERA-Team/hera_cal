@@ -427,7 +427,7 @@ def test_lst_rephase_vectorized():
             data_drift[:, i, :, j] = data[antpair + (pol,)].copy()
     
     # basic test: single dlst for all integrations
-    _data = utils.lst_rephase_vectorized(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)    
+    _data = utils.lst_rephase(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)    
     
     # check error at transit
     phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime+1, ibl, ifreq, ipol])
@@ -438,7 +438,7 @@ def test_lst_rephase_vectorized():
 
     # multiple phase term test: dlst per integration
     dlst = np.array([np.median(np.diff(lsts))] * data.shape[0])
-    _data = utils.lst_rephase_vectorized(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
+    _data = utils.lst_rephase(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
     # check error at transit
     phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime+1, ibl, ifreq, ipol])
     assert np.isclose(phs_err, 0, atol=1e-7)
@@ -448,7 +448,7 @@ def test_lst_rephase_vectorized():
 
     # phase all integrations to a single integration
     dlst = lsts[50] - lsts
-    _data = utils.lst_rephase_vectorized(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
+    _data = utils.lst_rephase(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
     # check error at transit
     phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime, ibl, ifreq, ipol])
     assert np.isclose(phs_err, 0, atol=1e-7)
@@ -505,7 +505,7 @@ def test_lst_rephase():
     # test operation on array
     k = (0, 1, 'ee')
     d = data_drift[k].copy()
-    d_phs = utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True)
+    d_phs = utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True, inplace=False)
     assert np.allclose(np.abs(np.angle(d_phs[50] / data[k][50])).max(), 0.0)
 
 
@@ -870,7 +870,7 @@ def test_chunck_baselines_by_redundant_group():
 
 def test_select_spw_ranges(tmpdir):
     # validate spw_ranges.
-    tmp_path = tmpdir.strpath
+    tmp_path = str(tmpdir)
     # test that units are propagated from calibration gains to calibrated data.
     new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
     uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
@@ -900,7 +900,7 @@ def test_select_spw_ranges_argparser():
 
 def test_select_spw_ranges_run_script_code(tmpdir):
     # test script code from scripts/test_select_spw_ranges.py
-    tmp_path = tmpdir.strpath
+    tmp_path = str(tmpdir)
     new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
     uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
     hd = io.HERAData(uvh5)
@@ -1035,7 +1035,7 @@ class TestMatchFilesToLSTBins:
             files_sorted=True,
         )
         assert len(out_fls) == 1
-        assert len(out_fls[0]) == nfiles//2 + 1  # Extra file because of atol
+        assert len(out_fls[0]) == nfiles//2
 
         # To make it interesting, choose one big LST bin that covers about half the
         # files, including a partial file at the end.
