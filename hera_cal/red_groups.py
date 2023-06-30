@@ -9,12 +9,13 @@ import copy
 from functools import cached_property, wraps, partial
 from frozendict import frozendict
 
-from typing import Sequence, Tuple, List
+from typing import Sequence, Tuple, List, Union
 
 AntPair = Tuple[int, int]
 Baseline = Tuple[int, int, str]
+BlLike = Union[AntPair, Baseline]
 
-def _convert_red_list(red_list: Sequence[Sequence[AntPair | Baseline]]) -> list[list[AntPair | Baseline]]:
+def _convert_red_list(red_list: Sequence[Sequence[BlLike]]) -> List[List[BlLike]]:
     """Convert a list of redundant baseline groups to a list of lists of antenna pairs."""
     return [list(bls) for bls in red_list]
 
@@ -38,7 +39,7 @@ class RedundantGroups:
 
     Parameters
     ----------
-    red_list : list[list[tuple[int, int]]]
+    red_list : List[List[tuple[int, int]]]
         List of redundant baseline groups. Each group is a list of antenna pairs or 
         antenna-pair-pols (eg. (0, 1, 'xx')). If provided, ``antpos`` is not required.
         All elements must be of the same type (either all antenna pairs or all
@@ -128,11 +129,11 @@ class RedundantGroups:
         True
     
     To filter out baselines for a specific purpose (but keeping the full antpos array), 
-    the ``filtered`` method can be used. This will return a *new* RedundantGroups object
+    the ``filter_reds`` method can be used. This will return a RedundantGroups object
     with the same ``antpos`` (as these are considered fixed for the array) but fewer
     baselines. All arguments to :func:`hera_cal.redcal.filter_reds` are supported::
 
-        >>> filtered = rg.filtered(bls=[(0, 1,'nn'), (1, 2,'nn'), (2, 3,'nn')])
+        >>> filtered = rg.filter_reds(bls=[(0, 1,'nn'), (1, 2,'nn'), (2, 3,'nn')])
         >>> print(filtered[0])
         [(0, 1, 'nn'), (1, 2, 'nn'), (2, 3, 'nn')]
         >>> print(len(filtered))
@@ -164,7 +165,7 @@ class RedundantGroups:
             )
     """
 
-    _red_list: list[list[AntPair | Baseline]] = attrs.field(converter=_convert_red_list)
+    _red_list: List[List[BlLike]] = attrs.field(converter=_convert_red_list)
     _antpos: frozendict[int, np.ndarray] | None = attrs.field(
         default=None, 
         converter=attrs.converters.optional(frozendict),
@@ -186,8 +187,26 @@ class RedundantGroups:
             for red in val:
                 for bl in red:
                     if len(bl) != tp:
-                        raise ValueError("All baselines must have the same type, got an AntPair and a Baseline")
-                         
+                        raise TypeError("All baselines must have the same type, got an AntPair and a Baseline")
+
+    def __attrs_post_init__(self):
+        self._data_ants = {ant for red in self._red_list for ap in red for ant in ap[:2]}
+        self._data_bls = {bl for red in self._red_list for bl in red}
+
+        self._red_key_to_bls_map = {}
+        for red in self._red_list:
+            ubl = self.key_chooser(red)
+            self._red_key_to_bls_map[ubl] = red
+            self._red_key_to_bls_map[reverse_bl(ubl)] = [reverse_bl(r) for r in red]
+        
+        self._bl_to_red_map = {}
+        for red in self._red_list:
+            ubl = self.key_chooser(red)
+            rev = reverse_bl(ubl)
+            for bl in red:
+                self._bl_to_red_map[bl] = ubl
+                self._bl_to_red_map[reverse_bl(bl)] = rev 
+        
     @classmethod
     def from_antpos(
         cls, 
@@ -206,8 +225,8 @@ class RedundantGroups:
             A dictionary mapping antenna numbers to their positions in the array. 
             The positions should be 3-element arrays of floats in ENU coordinates in 
             meters. Provide all antennas in the array, even if they are not present
-            in the baselines you want to use in the end. You can always use `.filtered`
-            on the resulting object to remove baselines you don't want.
+            in the baselines you want to use in the end. You can always use 
+            `.filter_reds` on the resulting object to remove baselines you don't want.
         pols
             A list of polarizations to include in the redundant groups. If empty,
             simply use antpairs instead of baselines as keys. All antpairs with all pols 
@@ -239,45 +258,108 @@ class RedundantGroups:
             )
         return cls(antpos=antpos, red_list=reds, **kwargs)
     
-    @cached_property
+    @property
     def data_ants(self) -> frozenset[int]:
-        """The list of antennas that are in the baseline groups."""    
-        return {ant for red in self._red_list for ap in red for ant in ap[:2]}
+        """The set of antennas that are in the baseline groups."""    
+        return frozenset(self._data_ants)
        
+    def _add_data_ants(self, ants: Iterable[int]):
+        """Add antennas to the list of antennas in the baseline groups.
+        
+        Not to be called by users, but used internally to quickly update the cached
+        properties (rather than having to fully recompute them).
+        """
+        self._data_ants.update(ants)
 
-    @cached_property
-    def data_bls(self) -> frozenset[Baseline | AntPair]:
-        """The list of baselines in the baseline groups."""
-        return frozenset(self._bl_to_red_map.keys())
+    def _remove_data_ants(self, ants: Iterable[int]):
+        """Remove antennas from the list of antennas in the baseline groups.
+        
+        Not to be called by users, but used internally to quickly update the cached
+        properties (rather than having to fully recompute them).
+        """
+        self._data_ants.difference_update(ants)
 
-    @cached_property
-    def _red_key_to_bls_map(self) -> dict[AntPair, list[AntPair]]:
-        out = {}
-        for red in self._red_list:
-            out[self.key_chooser(red)] = red
-            out[reverse_bl(self.key_chooser(red))] = [reverse_bl(r) for r in red]
-        return out
+    @property
+    def data_bls(self) -> frozenset[BlLike]:
+        """The set of baselines in the baseline groups."""
+        return frozenset(self._data_bls)
     
-    @cached_property
-    def _bl_to_red_map(self):
-        out = {}
-        for red in self._red_list:
-            ubl = self.key_chooser(red)
-            rev = reverse_bl(ubl)
-            for bl in red:
-                out[bl] = ubl
-                out[reverse_bl(bl)] = rev 
-        return out
+    def _add_data_bls(self, bls: Iterable[BlLike]):
+        """Add baselines to the list of baselines in the baseline groups.
+        
+        Not to be called by users, but used internally to quickly update the cached
+        properties (rather than having to fully recompute them).
+        """
+        self._data_bls.update(bls)
+        self._add_data_ants({ant for bl in bls for ant in bl[:2]})
+
+    def _remove_data_bls(self, bls: Iterable[BlLike]):
+        """Remove baselines from the list of baselines in the baseline groups.
+        
+        Not to be called by users, but used internally to quickly update the cached
+        properties (rather than having to fully recompute them).
+        """
+        self._data_bls.difference_update(bls)
+        self._remove_data_ants({ant for bl in bls for ant in bl[:2]})
     
-    def get_ubl_key(self, key: AntPair | Baseline) -> AntPair | Baseline:
+    def _reset_ubl(self, ubl: BlLike, bls: Iterable[BlLike]):
+        """Reset the redundant group associated with a unique baseline.
+        
+        Not to be called by users, but used internally to quickly update the cached
+        properties (rather than having to fully recompute them).
+        """
+        new_ubl = self.key_chooser(bls)
+        self._remove_group(ubl)
+        self._add_new_group(bls, ubl=new_ubl)
+
+    def _add_new_group(self, bls: Iterable[BlLike], ubl: BlLike | None = None):
+        """Add a new redundant group to the object.
+        
+        Not to be called by users, but used internally to quickly update the cached
+        properties (rather than having to fully recompute them).
+        
+        Assumes without checking that the new group is really new, i.e. none of its
+        baselines are in other groups already (i.e. should be called from other methods
+        that do the appropriate checking).
+        """
+        if ubl is None:
+            ubl = self.key_chooser(bls)
+        rubl = reverse_bl(ubl)
+        self._red_key_to_bls_map[ubl] = bls
+        self._red_key_to_bls_map[rubl] = [reverse_bl(bl) for bl in bls]
+        for bl in bls:
+            self._bl_to_red_map[bl] = ubl
+            self._bl_to_red_map[reverse_bl(bl)] = rubl
+        self._add_data_bls(bls)
+
+    def _remove_group(self, ubl: BlLike):
+        """Remove a redundant group from the object.
+        
+        Not to be called by users, but used internally to quickly update the cached
+        properties (rather than having to fully recompute them).
+        """
+        bls = self._red_key_to_bls_map[ubl]
+        del self._red_key_to_bls_map[ubl]
+
+        rubl = reverse_bl(ubl)
+        if rubl != ubl:
+            bls =  bls + self._red_key_to_bls_map[rubl]
+            del self._red_key_to_bls_map[rubl]
+
+        for bl in bls:
+            del self._bl_to_red_map[bl]
+            
+        self._remove_data_bls(bls)
+
+    def get_ubl_key(self, key: BlLike) -> BlLike:
         '''Returns the unique baseline representing the group the key is in.'''
         return self._bl_to_red_map[key]
         
-    def get_red(self, key: AntPair | Baseline) -> tuple[AntPair | Baseline]:
+    def get_red(self, key: BlLike) -> Tuple[BlLike]:
         '''Returns the tuple of baselines redundant with this key.'''
         return self._red_key_to_bls_map[self.get_ubl_key(key)]
         
-    def __contains__(self, key: AntPair | Baseline):
+    def __contains__(self, key: BlLike):
         '''Returns true if the baseline redundant with the key is in the data.'''
         return key in self._bl_to_red_map
     
@@ -296,13 +378,14 @@ class RedundantGroups:
             )
         
         if self.antpos is None:
-            return self.append(other._red_list, inplace=False)
+            return self.extend(other._red_list, inplace=False)
         else:
             new_antpos = {**self.antpos, **other.antpos}
-            new = attrs.evolve(self, antpos=new_antpos)
-            return new.append(other._red_list, inplace=False)            
+            obj = copy.deepcopy(self)
+            obj._antpos = new_antpos
+            return obj.extend(other._red_list, inplace=False)            
         
-    def append(self, red: Sequence[AntPair | Baseline], inplace: bool=True, pos: int | None = None) -> None:
+    def append(self, red: Sequence[BlLike], inplace: bool=True, pos: int | None = None) -> None:
         """In-place append a new redundant group to the list of redundant groups.
         
         This maintains the list-of-lists duck-typing of the redundant groups.
@@ -313,9 +396,9 @@ class RedundantGroups:
             # Ensure that all the ants in the new reds exist in the antpos
             for bl in red:
                 if bl[0] not in self.antpos:
-                    raise ValueError(f"Antenna {bl[0]} not in antpos (valid ants: {self._bl_to_red_map.keys()}).")
+                    raise ValueError(f"Antenna {bl[0]} not in antpos (valid ants: {self.antpos.keys()}).")
                 if bl[1] not in self.antpos:
-                    raise ValueError(f"Antenna {bl[1]} not in antpos (valid ants: {self._bl_to_red_map.keys()}).")
+                    raise ValueError(f"Antenna {bl[1]} not in antpos (valid ants: {self.antpos.keys()}).")
 
         ubls = {r: self.get_ubl_key(r) for r in red if r in self}
 
@@ -338,7 +421,7 @@ class RedundantGroups:
             # they all map to the same already-existing group.
             ublkey = next(iter(ubls.values()))
             obj[ublkey] = sorted(set(self[ublkey] + red))
-
+            obj._reset_ubl(ublkey, obj[ublkey])
         else:
             # We're adding a completely new group
             if pos is None:
@@ -346,13 +429,12 @@ class RedundantGroups:
             else:
                 obj._red_list.insert(pos, red)
 
-        # Reset the maps
-        obj.clear_cache()
+            self._add_new_group(red)
 
         if not inplace:
             return obj
 
-    def insert(self, pos: int, red: Sequence[AntPair | Baseline], inplace: bool=True) -> None:
+    def insert(self, pos: int, red: Sequence[BlLike], inplace: bool=True) -> None:
         """In-place insert a new redundant group to the list of redundant groups.
         
         This maintains the list-of-lists duck-typing of the redundant groups.
@@ -365,26 +447,35 @@ class RedundantGroups:
     def __iter__(self):
         return iter(self._red_list)
     
-    def __getitem__(self, key: int | AntPair | Baseline) -> list[AntPair | Baseline]:
+    def __getitem__(self, key: int | BlLike) -> List[BlLike]:
         if isinstance(key, int):
             return self._red_list[key]
         else:
             return self.get_red(key)
         
-    def __setitem__(self, key: int | AntPair | Baseline, value: list[AntPair | Baseline]):
+    def __setitem__(self, key: int | BlLike, value: List[BlLike]):
         if isinstance(key, int):
+            self._reset_ubl(self.get_ubl_key(self._red_list[key][0]), value)
             self._red_list[key] = value
         elif key in self:
             ukey = self.get_ubl_key(key)
             self._red_list = [value if red[0]==ukey else red for red in self._red_list]
+            self._reset_ubl(ukey, value)
         else:
             # We're setting a new redundant group
             self.append(value)
 
-        # Reset the maps
-        self.clear_cache()
+    def __delitem__(self, key: int | BlLike):
+        if isinstance(key, int):
+            ukey = self.get_ubl_key(self._red_list[key][0])
+            del self._red_list[key]
+        else:
+            ukey = self.get_ubl_key(key)
+            self._red_list = [red for red in self._red_list if red[0] != ukey]
 
-    def index(self, key: AntPair | Baseline) -> int:
+        self._remove_group(ukey)
+        
+    def index(self, key: BlLike) -> int:
         """Return the index of a redundant group."""
         return list(self._red_key_to_bls_map.keys()).index(self.get_ubl_key(key))
     
@@ -399,31 +490,26 @@ class RedundantGroups:
         else:
             return attrs.evolve(self, red_list=new_reds)
     
-    def extend(self, reds: Sequence[Sequence[AntPair | Baseline]], inplace: bool = True) -> None:
+    def extend(self, reds: Sequence[Sequence[BlLike]], inplace: bool = True) -> None:
         """In-place extend the list of redundant groups with another list of redundant groups.
         
         This maintains the list-of-lists duck-typing of the redundant groups.
         """
+        out = self if inplace else copy.deepcopy(self)
+        
         for red in reds:
-            self.append(red, inplace)
+            out.append(red, inplace=True)
+
+        if not inplace:
+            return out
     
-    def sort(self):
+    def sort(self, **kwargs):
         """Sort the redundant groups in-place."""
-        self._red_list.sort()
-        self.clear_cache()
+        self._red_list.sort(**kwargs)
 
     def clear_cache(self):
         """Clear the cached maps."""
-        for att in (
-            self._bl_to_red_map,
-            self._red_key_to_bls_map,
-            self.data_ants,
-            self.data_bls,
-        ):
-            try:
-                del att
-            except AttributeError:
-                pass
+        self.__attrs_post_init__()
 
     def get_full_redundancies(
         self, pols: Sequence[str] | None = None, 
@@ -447,7 +533,7 @@ class RedundantGroups:
         )
 
     
-    def keyed_on_bls(self, bls: Sequence[AntPair | Baseline]) -> RedundantGroups:
+    def keyed_on_bls(self, bls: Sequence[BlLike], inplace: bool = False) -> RedundantGroups:
         """Return a new RedundantGroups object keyed on the given baselines.
         
         The returned object will have the same redundant groups as this object, but
@@ -456,13 +542,41 @@ class RedundantGroups:
         in the group are in ``bls``, then the key will be gotten from applying
         ``key_chooser`` to the entire group (as usual).
         """
-        return attrs.evolve(
-            self, key_chooser=partial(
-                _choose_key_in_bls, bls=bls, key_chooser=self.key_chooser
-            )
-        )
+        obj = self if inplace else copy.deepcopy(self)
+
         
-def _choose_key_in_bls(red, bls, key_chooser):
-    filtered_red = [bl for bl in red if bl in bls]
-    return key_chooser(filtered_red) if filtered_red else key_chooser(red)
+        
+        if not isinstance(self.key_chooser, BaselineKeyChooser):
+            # Recompute all keys        
+            obj.key_chooser = BaselineKeyChooser(bls=bls, chooser=self.key_chooser)
+            obj.clear_cache()
+        else:
+            new_chooser = BaselineKeyChooser(
+                bls = bls,
+                chooser = self.key_chooser.chooser,
+            )
+
+            to_remap = [ubl for ubl in self._red_key_to_bls_map.keys() if ubl not in bls and reverse_bl(ubl) not in bls]
+            # Remove all flips....
+            to_remap = [ubl for ubl in to_remap if ubl[0] <= ubl[1]]
+
+            obj.key_chooser = new_chooser
+            for bl in to_remap:
+                obj._reset_ubl(bl, self[bl])
+        if not inplace:
+            return obj
+        
+@attrs.define(frozen=True)
+class BaselineKeyChooser:
+    """A callable that chooses a unique key for a redundant group.
+    
+    The callable takes a list of baselines and returns a unique key for the group.
+    """
+    bls: Sequence[BlLike] = attrs.field()
+    chooser: Callable[[Sequence[BlLike]], BlLike] = attrs.field()
+
+    def __call__(self, red: Sequence[BlLike]) -> BlLike:
+        filtered_red = [bl for bl in red if bl in self.bls]
+        return self.chooser(filtered_red) if filtered_red else self.chooser(red)
+    
     

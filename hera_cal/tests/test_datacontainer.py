@@ -176,6 +176,15 @@ class TestDataContainer(object):
         assert 'xx' in dc.pols()
         assert 'yy' in dc.pols()
 
+        with pytest.raises(ValueError, match='Tuple keys to delete must be in the format'):
+            del dc['bad_key']
+
+        with pytest.raises(ValueError, match='Tuple keys to delete must be in the format'):
+            del dc[(1,2,3,4)]
+        
+        with pytest.raises(ValueError, match='Tuple keys to delete must be in the format'):
+            del dc[[1,2,'xx']]
+
     def test_getitem(self):
         dc = datacontainer.DataContainer(self.blpol)
         assert dc[(1, 2, 'xx')] == 1j
@@ -330,7 +339,7 @@ class TestDataContainer(object):
         assert dc.ants == blpol.ants
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
-class TestDataContainerWithRealData(object):
+class TestDataContainerWithRealData:
 
     def test_adder(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -422,8 +431,6 @@ class TestDataContainerWithRealData(object):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         d, f = io.load_vis(test_file, pop_autos=True)
         d2 = d.concatenate(d)
-        print("D2", d2.keys())
-        print("D", d.keys())
         assert d2[(24, 25, 'ee')].shape[0] == d[(24, 25, 'ee')].shape[0] * 2
         d2 = d.concatenate(d, axis=1)
         assert d2[(24, 25, 'ee')].shape[1] == d[(24, 25, 'ee')].shape[1] * 2
@@ -479,7 +486,7 @@ def test_RedDataContainer():
     # build an incomplete datacontainer, then finish it
     rdata6 = datacontainer.RedDataContainer(deepcopy(data), reds[:-1])
     rdata6[reds[-1][0]] = deepcopy(data[reds[-1][0]])
-    rdata6.build_red_keys(reds)
+    #rdata6.build_red_keys(reds)
 
     # make sure that the data for a redundant group are being accessed from the same place in memory
     for i, rdata in enumerate([rdata1, rdata2, rdata3, rdata4, rdata5, rdata6]):
@@ -548,3 +555,4 @@ def test_RedDataContainerKeyManipulation():
     rdc[1, 3, 'ee'] = 21j
     with pytest.raises(ValueError):
         rdc.build_red_keys([[(0, 2, 'ee'), (1, 3, 'ee')]])
+

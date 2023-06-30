@@ -256,10 +256,18 @@ class HERACal(UVCal):
             new_flags[:, ~inserted, :, :] = writer.flag_array
             new_quality = np.zeros(new_gains.shape, dtype=float)
             new_quality[:, ~inserted, :, :] = writer.quality_array
+            new_total_quality = np.ones((writer.Nfreqs, writer.Ntimes, writer.Njones), dtype=float)
+            new_total_quality[~inserted, :, :] = writer.total_quality_array
+
+            if writer.total_quality_array is not None:
+                new_total_quality = np.zeros((writer.Nfreqs, writer.Ntimes, writer.Njones), dtype=float)
+                new_total_quality[~inserted, :, :] = writer.total_quality_array
+                writer.total_quality_array = new_total_quality
 
             writer.flag_array = new_flags
             writer.gain_array = new_gains
             writer.quality_array = new_quality
+            writer.total_quality_array = new_total_quality
 
             writer.write_calfits(filename, **write_kwargs)
         else:
@@ -424,7 +432,7 @@ def read_hera_calfits(filenames, ants=None, pols=None,
     return rv
 
 
-def get_blt_slices(uvo, tried_to_reorder=False, assume_time_first: bool=False, assume_bl_first: bool=False):
+def get_blt_slices(uvo, tried_to_reorder=False):
     '''For a pyuvdata-style UV object, get the mapping from antenna pair to blt slice.
     If the UV object does not have regular spacing of baselines in its baseline-times,
     this function will try to reorder it using UVData.reorder_blts() to see if that helps.
@@ -432,30 +440,26 @@ def get_blt_slices(uvo, tried_to_reorder=False, assume_time_first: bool=False, a
     Arguments:
         uvo: a "UV-Object" like UVData or baseline-type UVFlag. Blts may get re-ordered internally.
         tried_to_reorder: used internally to prevent infinite recursion
-
     Returns:
         blt_slices: dictionary mapping anntenna pair tuples to baseline-time slice objects
     '''
-    if assume_bl_first and assume_time_first:
-        raise ValueError("Cannot assume both bl first and time first ordering!")
-    if assume_bl_first:
-        if not uvo.Nblts != uvo.Nbls * uvo.Ntimes:
-            raise ValueError("Assumption of bl first ordering cannot be correct if Nblts != Nbls * Ntimes")
-        for i in range(uvo.Nbls):
-            antp = (uvo.ant_1_array[i], uvo.ant_2_array[i])
-            blt_slices[antp] = slice(i, uvo.Nblts, uvo.Nbls)
-        assert uvo.Nbls == len(blt_slices)
+    if hasattr(uvo, 'blts_are_rectangular') and uvo.blts_are_rectangular is None:
+        uvo.set_rectangularity()
 
-    elif assume_time_first:
-        if not uvo.Nblts != uvo.Nbls * uvo.Ntimes:
-            raise ValueError("Assumption of time first ordering cannot be correct if Nblts != Nbls * Ntimes")
-        for i in range(uvo.Nbls):
-            antp = (uvo.ant_1_array[i*uvo.Ntimes], uvo.ant_2_array[i*uvo.Ntimes])
-            blt_slices[antp] = slice(i, uvo.Nbls + i, 1)
-        assert uvo.Nbls == len(blt_slices)
-
+    blt_slices = {}
+    if getattr(uvo, 'blts_are_rectangular', False):
+        if uvo.time_axis_faster_than_bls:
+            for i in range(uvo.Nbls):
+                start = i*uvo.Ntimes
+                antp = (uvo.ant_1_array[start], uvo.ant_2_array[start])
+                blt_slices[antp] = slice(start, start + uvo.Ntimes, 1)
+            assert uvo.Nbls == len(blt_slices)
+        else:
+            for i in range(uvo.Nbls):
+                antp = (uvo.ant_1_array[i], uvo.ant_2_array[i])
+                blt_slices[antp] = slice(i, uvo.Nblts, uvo.Nbls)
+            assert uvo.Nbls == len(blt_slices)
     else:
-        blt_slices = {}
         for ant1, ant2 in uvo.get_antpairs():
             indices = uvo.antpair2ind(ant1, ant2)
             if len(indices) == 1:  # only one blt matches
@@ -615,9 +619,9 @@ class HERAData(UVData):
         locs = locals()
         return {meta: locs[meta] for meta in self.HERAData_metas}
 
-    def _determine_blt_slicing(self, assume_bl_first: bool = False, assume_time_first: bool = False):
+    def _determine_blt_slicing(self):
         '''Determine the mapping between antenna pairs and slices of the blt axis of the data_array.'''
-        self._blt_slices = get_blt_slices(self, assume_bl_first=assume_bl_first, assume_time_first=assume_time_first)
+        self._blt_slices = get_blt_slices(self)
 
     def get_polstr_index(self, pol: str) -> int:
         num = polstr2num(pol, x_orientation=self.x_orientation)
@@ -731,8 +735,7 @@ class HERAData(UVData):
 
     def read(self, bls=None, polarizations=None, times=None, time_range=None, lsts=None, lst_range=None,
              frequencies=None, freq_chans=None, axis=None, read_data=True, return_data=True,
-             run_check=True, check_extra=True, run_check_acceptability=True, 
-             assume_time_first: bool = False, assume_bl_first: bool = False, **kwargs):
+             run_check=True, check_extra=True, run_check_acceptability=True, **kwargs):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
         Arguments:
@@ -773,12 +776,6 @@ class HERAData(UVData):
                 ones. Default is True.
             run_check_acceptability: Option to check acceptable range of the values of
                 parameters after reading in the file. Default is True.
-            assume_time_first : bool
-                If it is known that the data's blt axis is in time-first ordering, then
-                specify this as true, it will speed up reading reasonably significantly.
-            assume_bl_first : bool
-                If it is known that the data's blt axis is in baseline-first ordering, then
-                specify this as true, it will speed up reading reasonably significantly.
             kwargs: extra keyword arguments to pass to UVData.read()
 
         Returns:
@@ -790,7 +787,7 @@ class HERAData(UVData):
         locs = locals()
         partials = ['bls', 'polarizations', 'times', 'time_range', 'lsts', 'lst_range', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
-
+        
         # if filepaths is None, this was converted to HERAData
         # from a different pre-loaded object with no history of filepath
         if self.filepaths is not None:
@@ -837,12 +834,13 @@ class HERAData(UVData):
             finally:
                 self.read = temp_read  # reset back to this function, regardless of whether the above try excecutes successfully
 
+        # It turns out that doing .read() can change the inherent rectangularity of the data
+        # so, we reset it:
+        self.set_rectangularity(force=True)
+
         # process data into DataContainers
         if read_data or self.filetype in ['uvh5', 'uvfits']:
-            self._determine_blt_slicing(
-                assume_bl_first=assume_bl_first, 
-                assume_time_first=assume_time_first
-            )
+            self._determine_blt_slicing()
             self._determine_pol_indexing()
         if read_data and return_data:
             return self.build_datacontainers()
@@ -926,7 +924,7 @@ class HERAData(UVData):
             self.set_data_array_with_datacontainer(flags, self.flag_array, tSlice=tSlice, fSlice=fSlice)
         if nsamples is not None:
             self.set_data_array_with_datacontainer(nsamples, self.nsample_array, tSlice=tSlice, fSlice=fSlice)
-        
+
     def set_data_array_with_datacontainer(
         self, dc: DataContainer, data_array: np.ndarray, tSlice=None, fSlice=None
     ) -> np.ndarray:
@@ -971,7 +969,7 @@ class HERAData(UVData):
         return data_array
 
     def partial_write(self, output_path, data=None, flags=None, nsamples=None,
-                      clobber=False, inplace=False, add_to_history='', 
+                      clobber=False, inplace=False, add_to_history='',
                       **kwargs):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
         call to HERAData.read() in this object. The overall file written matches the shape of the
@@ -1008,7 +1006,7 @@ class HERAData(UVData):
                 hd_writer.__setattr__(attribute, value)
             hd_writer.initialize_uvh5_file(output_path, clobber=clobber)  # Makes an empty file (called only once)
             self._writers[output_path] = hd_writer
-        
+
         if inplace:  # update this objects's arrays using DataContainers
             self.update(data=data, flags=flags, nsamples=nsamples)
             d, f, n = self.data_array, self.flag_array, self.nsample_array
@@ -1019,9 +1017,9 @@ class HERAData(UVData):
 
         # else:  # make a copy of this object and then update the relevant arrays using DataContainers
         #     this = copy.deepcopy(self)
-        
-        hd_writer.write_uvh5_part(output_path, d, f, n, 
-                                  run_check_acceptability=output_path in self._writers, 
+
+        hd_writer.write_uvh5_part(output_path, d, f, n,
+                                  run_check_acceptability=(output_path in self._writers),
                                   **self.last_read_kwargs)
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
@@ -1381,7 +1379,7 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
     rv['info'] = info
     return rv
 
-    
+
 class HERADataFastReader():
     '''Wrapper class around read_hera_hdf5 meant to mimic the functionality of HERAData for drop-in replacement.'''
 
@@ -1482,7 +1480,7 @@ class HERADataFastReader():
         dc = DataContainer(rv[key])
         for meta in HERAData.HERAData_metas:
             if meta in rv['info'] and meta not in ['pols', 'antpairs', 'bls']:  # these are functions on datacontainers
-                setattr(dc, meta, rv['info'][meta])
+                setattr(dc, meta, copy.deepcopy(rv['info'][meta]))
 
         return dc
 
@@ -1563,7 +1561,7 @@ def write_filter_cache_scratch(filter_cache, cache_dir=None, skip_keys=None):
         warnings.warn("No new keys provided. No cache file written.")
 
 
-def load_flags(flagfile, filetype='h5', return_meta=False, assume_time_first: bool = False, assume_bl_first: bool = False):
+def load_flags(flagfile, filetype='h5', return_meta=False):
     '''Load flags from a file and returns them as a DataContainer (for per-visibility flags)
     or dictionary (for per-antenna or per-polarization flags). More than one spectral window
     is not supported. Assumes times are evenly-spaced and in order for each baseline.
@@ -1599,7 +1597,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False, assume_time_first: bo
         history = uvf.history
 
         if uvf.type == 'baseline':  # one time x freq waterfall per baseline
-            blt_slices = get_blt_slices(uvf, assume_time_first=assume_time_first, assume_bl_first=assume_bl_first)
+            blt_slices = get_blt_slices(uvf)
             for ip, pol in enumerate(uvf.polarization_array):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                     pol = polnum2str(pol, x_orientation=uvf.x_orientation)  # convert to string if possible
@@ -2019,7 +2017,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
               filetype='miriad', write_file=True, outdir="./", overwrite=False, verbose=True, history=" ",
               return_uvd=False, start_jd=None, lst_branch_cut=0.0, x_orientation="north", instrument="HERA",
               telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
-              telescope_location=HERA_TELESCOPE_LOCATION, integration_time=None, data_array=None,
+              telescope_location=HERA_TELESCOPE_LOCATION, integration_time=None,
               **kwargs):
     """
     Take DataContainer dictionary, export to UVData object and write to file. See pyuvdata.UVdata
@@ -2040,14 +2038,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     time_array : type=ndarray, contains unique Julian Date time bins of data (center of integration).
 
-    flags : type=DataContainer or array, holds data flags, matching data in shape. If
-            an array, must be shape (Nbls, Ntimes, Nfreqs, Npols).
+    flags : type=DataContainer or array, holds data flags, matching data in shape.
 
-    nsamples : type=DataContainer or array, holds number of points averaged into each bin in data 
-               (if applicable). If an array, must be shape (Nbls, Ntimes, Nfreqs, Npols).
-
-    data_array : type=array, if given, use this data as the data_array, instead of 
-                 whatever is in data_array. 
+    nsamples : type=DataContainer or array, holds number of points averaged into each bin in data
+               (if applicable).
 
     filetype : type=str, filetype to write-out, options=['miriad'].
 
@@ -2127,9 +2121,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     spw_array = np.array([0])
     Nspws = 1
 
-    if data_array is not None and data_array.shape != (Nbls, Ntimes, Nfreqs, Npols):
-        raise ValueError("If given, data_array must have shape (Nbls, Ntimes, Nfreqs, Npols)")
-
     # get baselines keys
     antpairs = sorted(data.antpairs())
     Nbls = len(antpairs)
@@ -2145,38 +2136,31 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
         integration_time = np.ones_like(time_array, dtype=np.float64) * np.median(np.diff(np.unique(time_array))) * 24 * 3600.
 
     # get data array
-    if data_array is None:
-        data_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=complex)
-        for i, antpair in enumerate(antpairs):
-            for j, pol in enumerate(pols):
-                data_array[i, :, :, j] = data[antpair + (str(pol),)]
+    data_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=complex)
+    for i, antpair in enumerate(antpairs):
+        for j, pol in enumerate(pols):
+            data_array[i, :, :, j] = data[antpair + (str(pol),)]
 
     # resort time and baseline axes
     data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
-    
+
     if nsamples is None:
         nsample_array = np.ones_like(data_array, float)
     else:
-        if isinstance(nsamples, DataContainer):
-            nsample_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=float)
-            for i, antpair in enumerate(antpairs):
-                for j, pol in enumerate(pols):
-                    nsample_array[i, :, :, j] = nsamples[antpair + (str(pol),)]
-        else:
-            nsample_array = nsamples
+        nsample_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=float)
+        for i, antpair in enumerate(antpairs):
+            for j, pol in enumerate(pols):
+                nsample_array[i, :, :, j] = nsamples[antpair + (str(pol),)]
         nsample_array = nsample_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # flags
     if flags is None:
         flag_array = np.zeros_like(data_array, float).astype(bool)
     else:
-        if isinstance(flags, DataContainer):
-            flag_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=bool)
-            for i, antpair in enumerate(antpairs):
-                for j, pol in enumerate(pols):
-                    flag_array[i, :, :, j] = flags[antpair + (str(pol),)]
-        else:
-            flag_array = flags
+        flag_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=bool)
+        for i, antpair in enumerate(antpairs):
+            for j, pol in enumerate(pols):
+                flag_array[i, :, :, j] = flags[antpair + (str(pol),)]
         flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # configure baselines
@@ -2240,238 +2224,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
         return uvd
 
 
-def create_uvd_from_hera_data(
-    data: np.ndarray, 
-    freq_array: np.ndarray, 
-    antpos: dict[str, np.ndarray], 
-    pols: list[str],
-    antpairs: list[str[int, int]],
-    lst_array: np.ndarray | None = None, 
-    time_array: np.ndarray | None=None, 
-    flags: np.ndarray | None=None, 
-    nsamples: np.ndarray | None=None,
-    start_jd: float | None=None, 
-    lst_branch_cut: float=0.0, 
-    x_orientation: Literal['east', 'north']="north",
-    integration_time: float=None,
-    telescope_location=HERA_TELESCOPE_LOCATION,
-    **kwargs
-) -> UVData:
-    """
-    Takes simple data arrays and converts to a UVData object.
-    
-    This function will always output a UVData object with future_array_shapes set to 
-    True.
 
-    Parameters
-    ----------
-    data
-        The complex visibility data. Shape must be either (Ntimes, Nbls, Nfreqs, Npols)
-        or (Nbls, Ntimes, Nfreqs, Npols) or (Nbls*Ntimes, Nfreqs, Npols)
-    lst_array
-        Unique LST time bins [radians] of data (center of integration).
-    freq_array 
-        Frequency bins of data [Hz].
-    antpos
-        Antenna position dictionary. Keys are antenna integers and values
-        are position vectors in meters in ENU (TOPO) frame.
-    time_array
-        Unique Julian Date time bins of data (center of integration).
-    flags 
-        Data flags, matching ``data`` in shape.
-    nsamples 
-        Number of points averaged into each bin in data (if applicable). Same shape
-        as ``data``.
-    history
-        History string for UVData object
-    start_jd
-        Starting integer Julian Date of time_array if time_array is None.
-    lst_branch_cut
-        LST of data start, ensures that LSTs lower than this are wrapped around
-        and correspond to higher JDs in time_array, but only if time_array is None 
-        [radians]
-    x_orientation
-        Orientation of X dipole, options=['east', 'north']
-    instrument
-        Instrument name.
-    telescope_name
-        Telescope name.
-    object_name
-        Observing object name.
-    vis_unit
-        Visibility units.
-    dec
-        Declination of observer in degrees North.
-    telescope_location
-        Telescope location in xyz in ITRF (earth-centered frame).
-    integration_time
-        Integration duration in seconds for ``data_array``.
-        This does not necessarily have to be equal to the diff(time_array): for the case of
-        LST-binning, this is not the duration of the LST-bin but the integration time of the
-        pre-binned data. Default is median(diff(time_array)) in seconds. Note: the _total_
-        integration time in a visibility is integration_time * nsamples.
-    kwargs : type=dictionary, additional parameters to set in UVData object.
-
-    Output:
-    -------
-    uvd
-        The UVData object.
-    """
-    uvd = UVData()
-    uvd._set_future_array_shapes()
-
-    tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
-
-    # get times
-    if time_array is None:
-        if start_jd is None or lst_array is None:
-            raise AttributeError("if time_array is not fed, start_jd and lst_array must be fed")
-        time_array = LST2JD(
-            lst_array, start_jd, allow_other_jd=True, lst_branch_cut=lst_branch_cut,
-            latitude=(tel_lat_lon_alt[0] * 180 / np.pi),
-            longitude=(tel_lat_lon_alt[1] * 180 / np.pi),
-            altitude=tel_lat_lon_alt[2]
-        )
-
-    if lst_array is None:
-        lst_array = JD2LST(
-            time_array,
-            latitude=(tel_lat_lon_alt[0] * 180 / np.pi),
-            longitude=(tel_lat_lon_alt[1] * 180 / np.pi),
-            altitude=tel_lat_lon_alt[2]
-        )
-
-    # We have three options for the shape of the data. Either (bls, times, freqs, pols),
-    # (times, bls, freqs, pols) or (bls*times, freqs, pols).
-    blfirst = False
-    timefirst = False
-    bltime = False
-    if data.ndim == 4:
-        if data.shape == (len(antpairs), len(time_array), len(freq_array), len(pols)):
-            blfirst = True
-        elif data.shape == (len(time_array), len(antpairs), len(freq_array), len(pols)):
-            timefirst = True
-        else:
-            raise ValueError(f"data shape must be (bls, times, freqs, pols) or (times, bls, freqs, pols). Got {data.shape}")
-    elif data.ndim == 3:
-        if data.shape != (len(antpairs), len(freq_array), len(pols)):
-            raise ValueError("3D data must be shape (nblts, nfreqs, npols)")
-        bltime = True
-    else:
-        raise ValueError("data must be 3- or 4-dimensional.")
-
-    # configure UVData parameters
-    # get pols
-    uvd.Npols = len(pols)
-    uvd.polarization_array = np.array([polstr2num(p, x_orientation=x_orientation) for p in pols])
-    uvd.x_orientation = x_orientation
-
-    # get freqs
-    uvd.Nfreqs = len(freq_array)
-    uvd.channel_width = np.median(np.diff(freq_array)) * np.ones(len(freq_array))
-    uvd.freq_array = freq_array  #freq_array[None, :]
-    uvd.spw_array = np.array([0])
-    uvd.Nspws = 1
-
-    # get telescope ants
-    uvd.antenna_numbers = np.unique(list(antpos.keys()))
-    uvd.Nants_telescope = len(uvd.antenna_numbers)
-    uvd.antenna_names = [f"HH{a}" for a in uvd.antenna_numbers]
-
-    # get antenna positions in ITRF frame
-    antenna_positions = np.array([antpos[k] for k in uvd.antenna_numbers])
-    uvd.antenna_positions = uvutils.ECEF_from_ENU(antenna_positions, *tel_lat_lon_alt) - telescope_location
-    uvd.telescope_location = telescope_location
-
-
-    if bltime:
-        if len(antpairs) != len(time_array):
-            raise ValueError("If using a combined blt axis, require antpairs same length as time_array")
-
-    if not bltime:
-        uvd.Ntimes = len(time_array)
-
-        # get baselines keys
-        uvd.Nbls = len(antpairs)
-
-        if blfirst:
-            # reconfigure time_array and lst_array
-            uvd.time_array = np.tile(time_array, uvd.Nbls)
-            uvd.lst_array = np.tile(lst_array, uvd.Nbls)
-            antpairs = np.repeat(np.array(antpairs), uvd.Ntimes, axis=0)
-        else:
-            uvd.time_array = np.repeat(time_array, uvd.Nbls)
-            uvd.lst_array = np.repeat(lst_array, uvd.Nbls)
-            antpairs = np.tile(np.array(antpairs), uvd.Ntimes, axis=0)
-
-        uvd.Nblts = uvd.Nbls*uvd.Ntimes
-    else:
-        uvd.Nblts = len(time_array)
-        uvd.time_array = time_array
-        uvd.lst_array = lst_array
-
-    # configure integration time, converting from days (the unit of time_array)
-    # to seconds (the unit of integration_time)
-    if integration_time is None:
-        integration_time = np.ones_like(uvd.time_array, dtype=np.float64) * np.median(np.diff(np.unique(time_array))) * 24 * 3600.
-    elif not hasattr(integration_time, "__len__"):
-        integration_time = np.ones_like(uvd.time_array, dtype=np.float64) * integration_time
-    
-    if len(integration_time) != len(uvd.time_array):
-        raise ValueError(f"integration_time must be same shape as time_array. Got {len(integration_time)} not {len(uvd.time_array)}")
-
-    uvd.integration_time = integration_time
-
-    # resort time and baseline axes
-    data.shape = (uvd.Nblts, uvd.Nfreqs, uvd.Npols) #non-copying reshape
-    uvd.data_array = data
-    
-    if nsamples is None:
-        uvd.nsample_array = np.ones(data.shape, float)
-    else:
-        nsamples.shape = data.shape
-        uvd.nsample_array = nsamples
-
-    # flags
-    if flags is None:
-        uvd.flag_array = np.zeros(data.shape, bool)
-    else:
-        flags.shape = data.shape
-        uvd.flag_array = flags
-        
-
-    # get ant_1_array, ant_2_array
-    uvd.ant_1_array = antpairs[:, 0]
-    uvd.ant_2_array = antpairs[:, 1]
-
-    # get baseline array
-    uvd.baseline_array = 2048 * (uvd.ant_1_array + 1) + (uvd.ant_2_array + 1) + 2**16
-
-    # get antennas in data
-    data_ants = np.unique(np.concatenate([uvd.ant_1_array, uvd.ant_2_array]))
-    uvd.Nants_data = len(data_ants)
-
-    # set uvw assuming drift phase i.e. phase center is zenith
-    uvd.uvw_array = np.array([antpos[k[1]] - antpos[k[0]] for k in zip(uvd.ant_1_array, uvd.ant_2_array)])
-
-    # get zenith location: can only write drift phase
-    uvd.phase_type = 'drift'
-
-    # assign parameters
-    default_kwargs = {
-        "instrument": "HERA",
-        "telescope_name": "HERA", 
-        "object_name": 'EOR', 
-        "vis_units": 'uncalib', 
-        'history': '',
-    }
-    default_kwargs.update(kwargs)
-
-    # set parameters in uvd
-    for k, v in default_kwargs.items():
-        uvd.__setattr__(k, v)
-
-    return uvd
 
 
 def update_uvdata(uvd, data=None, flags=None, nsamples=None, add_to_history='', **kwargs):
@@ -2957,7 +2710,7 @@ def throw_away_flagged_ants_parser():
     return ap
 
 def uvdata_from_fastuvh5(
-    meta: FastUVH5Meta, 
+    meta: FastUVH5Meta,
     antpairs: list[tuple[int, int]] | None = None,
     times: np.ndarray | None = None,
     lsts: np.ndarray | None = None,
@@ -2980,10 +2733,10 @@ def uvdata_from_fastuvh5(
         The UVData object.
     """
     uvd = meta.to_uvdata()
-    
+
     if not meta.blts_are_rectangular:
         raise NotImplementedError("Cannot convert non-rectangular blts to UVData.")
-    
+
     if times is None and lsts is None:
         times = meta.times
         lsts = meta.lsts
@@ -2996,12 +2749,10 @@ def uvdata_from_fastuvh5(
             latitude=meta.telescope_location_lat_lon_alt_degrees[0],
             longitude=meta.telescope_location_lat_lon_alt_degrees[1],
             altitude=meta.telescope_location_lat_lon_alt_degrees[2],
-            
+
         )
     elif lsts is None:
-        # DO STUFF
         lsts = JD2LST(times, *meta.telescope_location_lat_lon_alt_degrees)
-
     else:
         assert len(times) == len(lsts)
 
@@ -3019,7 +2770,7 @@ def uvdata_from_fastuvh5(
         uvd.time_array = np.repeat(times, len(antpairs))
         uvd.lst_array = np.repeat(lsts, len(antpairs))
         uvd.ant_1_array = np.tile(np.array([antpair[0] for antpair in antpairs]), len(times))
-        uvd.ant_2_array = np.tile(np.array([antpair[1] for antpair in antpairs]), len(times))    
+        uvd.ant_2_array = np.tile(np.array([antpair[1] for antpair in antpairs]), len(times))
     else:
         uvd.time_array = np.tile(times, len(antpairs))
         uvd.lst_array = np.tile(lsts, len(antpairs))
@@ -3035,10 +2786,10 @@ def uvdata_from_fastuvh5(
         uvd.ant_1_array, uvd.ant_2_array, Nants_telescope=uvd.Nants_telescope
     )
     uvd.phase_center_id_array = np.zeros(uvd.Nblts, dtype=int)
-    
+
     uvd._set_app_coords_helper()
     uvd.extra_keywords = meta.extra_keywords
-    
+
     uvd.set_uvws_from_antenna_positions()
     # Overwrite some of the metadata.
     for key, value in kwargs.items():

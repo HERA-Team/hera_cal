@@ -67,6 +67,33 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     return np.sum(taus)
 
 
+def detect_phase_flips(phases):
+    """Detect phases that are flipped relative to the first unflagged integration.
+
+    Arguments:
+        phases: phases in radians. Will handle phase wraps and phase starting point (-pi, 0, etc.)
+            automatically. Flagged integrations should be np.nan.
+
+    Returns:
+        phase_flipped: boolean array the same shape as phases where True means pi radians flipped
+            relative to the first unflagged phase.
+    """
+    original_shape = np.array(phases).shape
+    complexes = np.exp(1.0j * np.ravel(phases))
+    phase_flipped = np.zeros(len(complexes), dtype=bool)
+    currently_flipped = False
+    previous_non_nan = np.nan  # ensures that first non-nan integration is not flipped
+    for i in range(len(complexes)):
+        if not np.isnan(complexes[i]):
+            flip_here = np.abs(complexes[i] - previous_non_nan) > np.abs(complexes[i] + previous_non_nan)
+            phase_flipped[i] = currently_flipped ^ flip_here
+            currently_flipped = phase_flipped[i]
+            previous_non_nan = complexes[i]
+        else:
+            phase_flipped[i] = currently_flipped
+    return phase_flipped.reshape(original_shape)
+
+
 def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1e-9):
     """Generate a set of 2D discrete prolate spheroidal sequence (DPSS) filters
     to filter calibration solutions along the time and frequency axes simultaneously.
@@ -122,10 +149,10 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cac
             obtained from hera_cal.smooth_cal.dpss_filters
         method: method to use for solving the linear least squares problem. Options are 'pinv', 'lstsq', 'lu_solve', and 'solve'.
             'pinv' uses np.linalg.pinv to compute the least squares solution and tends to be the most reliable. 'lu_solve'
-            uses scipy.linalg.lu_solve to compute the least squares solution and tends to be the fastest. 
+            uses scipy.linalg.lu_solve to compute the least squares solution and tends to be the fastest.
             'solve' uses np.linalg.solve and 'lstsq' uses np.linalg.lstsq and have comparable results.
         cached_input: Dictionary of intermediate products computed when performing linear least-squares with the DPSS basis vectors.
-            Useful for filtering many gain grids with similar flagging patterns. Can be obtained using 
+            Useful for filtering many gain grids with similar flagging patterns. Can be obtained using
             the 'cached_output' return value from a previous call to this function, 'cached_output'. If method is 'lu_solve',
             cached_input will have an additional key 'LU' which is the output of scipy.linalg.lu_factor. If method
             is 'pinv', cached_input will have an additional key 'XTXinv' which is the output of np.linalg.pinv. If
@@ -151,13 +178,13 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cac
         XTX = np.zeros((1, 1))
     else:
         # Use jax einsum to calculate (X^T W X) in a memory efficient way
-        # einsum indices are (t -> time, f -> freq, i > time filter index, j -> freq filter index, m -> 
+        # einsum indices are (t -> time, f -> freq, i > time filter index, j -> freq filter index, m ->
         # time filter index, n -> freq filter index)
         XTX = jnp.einsum(
             "ti,fj,tf,tm,fn->ijmn", time_filters, freq_filters, weights, time_filters, freq_filters, optimize=True
         )
         XTX = np.reshape(XTX, (ncomps, ncomps))
-        
+
     # Calculate X^T W y using the property (A \otimes B) vec(y) = (A Y B)
     XTWy = jnp.ravel(jnp.dot(jnp.dot(jnp.transpose(time_filters), (gains * weights)), freq_filters))
 
@@ -167,7 +194,7 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cac
 
     # Produce an estimate of the filtered gains
     filtered = np.dot(np.dot(time_filters, beta), np.transpose(freq_filters))
-    
+
     return filtered, cached_output
 
 
@@ -303,8 +330,8 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
-                        dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9, skip_flagged_edges=True,
-                        **win_kwargs):
+                        dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9,
+                        skip_flagged_edges=True, fix_phase_flips=False, **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -340,9 +367,9 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             Only used when the filtering method is 'DPSS'. 'lu_solve' tends to be the fastest, but 'pinv' is more
             stable.
         cached_input: Dictionary of intermediate products computed when performing linear least-squares with the DPSS basis vectors.
-            Useful for filtering many gain grids with similar flagging patterns. Can be obtained using 
+            Useful for filtering many gain grids with similar flagging patterns. Can be obtained using
             the 'cached_output' return value from a previous call to the solve_2D_DPSS function and can also be found the 'info' dictionary
-            returned by this function. If method is 'lu_solve', cached_input will have a key 'LU' which is the output of scipy.linalg.lu_factor. 
+            returned by this function. If method is 'lu_solve', cached_input will have a key 'LU' which is the output of scipy.linalg.lu_factor.
             If method is 'pinv', cached_input will have a key 'XTXinv' which is the output of np.linalg.pinv. If
             other methods are used, nucal._linear_fit will not use cached_input.
         eigenval_cutoff: sinc_matrix eigenvalue cutoffs to use for included dpss modes.
@@ -350,13 +377,17 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         skip_flagged_edges : bool, optional
             if True, do not filter over flagged edge times/freqs (filter over sub-region). Only used when method used is 'DPSS'.
             Default is True
+        fix_phase_flips : bool, optional
+            If True, will try to find integrations whose phases appear to be 180 degrees rotated from the first unflagged
+            integration. These will be flipped before smoothing and then flipped back after smoothing. Default is False.
         win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
             Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
 
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
-        info: dictionary of metadata from aipy.deconv.clean or DPSS, depending on the filter method
-            chosen.
+        info: dictionary of metadata from aipy.deconv.clean or DPSS, depending on the filter method chosen.
+            If fix_phase_flips is True, contains an length-Ntimes phase_flips array of 1s for unflipped integrations
+            and -1s for integrations flipped relative to the first.
     '''
     df = np.median(np.diff(freqs))
     dt = np.median(np.diff(times)) * 24.0 * 3600.0  # in seconds
@@ -365,9 +396,22 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     delay_scale = (freq_scale * 1e6)**-1  # Puts it in seconds
     fringe_scale = (time_scale)**-1  # in Hz
 
-    # Build rephasor to take out average delay
-    dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in seconds
-    rephasor = np.exp(-2.0j * np.pi * dly * freqs)
+    # Build rephasor to take out average delay and handle phase flips
+    dly = single_iterative_fft_dly(gains, wgts, freqs)
+    rephasor = rephasor = np.exp(-2.0j * np.pi * dly * freqs)
+    if fix_phase_flips:
+        # average delay-rephased gain, compute phase of average, and then find phase flips
+        avg_rephased_gain = np.ma.average(gains * rephasor, weights=wgts, axis=1, keepdims=True)
+        phases = np.where(avg_rephased_gain.mask, np.nan, np.angle(avg_rephased_gain))
+        phase_flips = np.where(detect_phase_flips(phases), -1, 1)
+        if np.any(phase_flips == -1):
+            # recompute single dly
+            dly = single_iterative_fft_dly(phase_flips * gains, wgts, freqs)
+            rephasor = np.exp(-2.0j * np.pi * dly * freqs)
+    else:
+        phase_flips = np.ones_like(times)[:, np.newaxis]
+    # include phase_flips in rephasor
+    rephasor = phase_flips * rephasor
 
     if method == 'DPSS' or method == 'dpss_leastsq':
         info = {}
@@ -386,13 +430,13 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                     freqs=xout[1], times=xout[0], freq_scale=freq_scale, time_scale=time_scale,
                     eigenval_cutoff=eigenval_cutoff
                 )
-            
+
             # Unpack DPSS vectors
             time_filters, freq_filters = dpss_vectors
 
             # Filter gain solutions
             filtered, cached_output = solve_2D_DPSS(
-                gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, method=fit_method, 
+                gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, method=fit_method,
                 cached_input=cached_input
             )
 
@@ -441,6 +485,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     else:
         raise ValueError("Filter method {} not recognized. Must be 'CLEAN' or 'DPSS'".format(method))
 
+    info['phase_flips'] = np.squeeze(phase_flips)
     return filtered / rephasor, info
 
 
@@ -843,17 +888,20 @@ class CalibrationSmoother():
         '''
         all_time_indices = np.array([i for indices in self.time_indices.values() for i in indices])
         assert len(all_time_indices) == len(np.unique(all_time_indices)), \
-            'Multiple calibration integrations map to the same time index.'
+                'Multiple calibration integrations map to the same time index.'
         for cal in self.cals:
-            assert np.all(np.abs(self.cal_freqs[cal] - self.freqs) < 1e-4), \
-                '{} and {} have different frequencies.'.format(cal, self.cals[0])
+            assert np.all(
+                np.abs(self.cal_freqs[cal] - self.freqs) < 1e-4
+            ), f'{cal} and {self.cals[0]} have different frequencies.'
         if len(self.flag_files) > 0:
             all_flag_time_indices = np.array([i for indices in self.flag_time_indices.values() for i in indices])
-            assert np.all(np.unique(all_flag_time_indices) == np.unique(all_time_indices)), \
-                'The number of unique indices for the flag files does not match the calibration files.'
+            unq_flag = np.unique(all_flag_time_indices)
+            unq_time = np.unique(all_time_indices)
+            assert len(unq_flag) == len(unq_time) and np.all(unq_flag == unq_time), \
+                    'The number of unique indices for the flag files does not match the calibration files.'
             for ff in self.flag_files:
                 assert np.all(np.abs(self.flag_freqs[ff] - self.freqs) < 1e-4), \
-                    '{} and {} have different frequencies.'.format(ff, self.cals[0])
+                        '{} and {} have different frequencies.'.format(ff, self.cals[0])
 
     def rephase_to_refant(self, warn=True, propagate_refant_flags=False):
         '''If the CalibrationSmoother object has a refant attribute, this function rephases the
@@ -932,9 +980,9 @@ class CalibrationSmoother():
                         self.flag_grids[ant][:, i] = np.ones_like(self.flag_grids[ant][:, i])
         self.rephase_to_refant(warn=False)
 
-    def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect',
-                            window='tukey', maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9, 
-                            skip_flagged_edges=True, **win_kwargs):
+    def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect', window='tukey',
+                            maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9, skip_flagged_edges=True,
+                            fix_phase_flips=False, flag_phase_flip_ints=False, flag_phase_flip_ants=False, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -956,11 +1004,18 @@ class CalibrationSmoother():
             method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
                 'CLEAN': uses the CLEAN algorithm to
                 'DPSS': uses discrete prolate spheroidal sequences to filter calibration solutions
-            fit_method: Linear least-squares method used to fit the DPSS model to the data. 
+            fit_method: Linear least-squares method used to fit the DPSS model to the data.
                 Either 'pinv', 'lstsq', 'solve', or 'lu_solve'. Only used when the method is 'DPSS'
                 'lu_solve' is the fastest. 'pinv' tends to be more stable.
             skip_flagged_edges : if True, do not filter over flagged edge times (filter over sub-region)
                 Default is True, only used when method='DPSS'
+            fix_phase_flips: Optional bool. If True, will try to find integrations whose phases appear to be 180 degrees
+                rotated from the first unflagged  integration. These will be flipped before smoothing and then flipped back
+                after smoothing. Will also print info about phase-flips found. Default is False.
+            flag_phase_flip_ints: Optional bool. If True and fix_phase_flips is also True, will flag antennas on the integrations
+                just before and just after a phase flip, since the phase flip could have occured mid-integration. Default is False.
+            flag_phase_flip_ants: Optional bool. If True and fix_phase_flips is also True, will flag antennas that have a phase flip
+                for ALL integrations. Default is False.
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
@@ -1000,8 +1055,23 @@ class CalibrationSmoother():
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, dpss_vectors=dpss_vectors, eigenval_cutoff=eigenval_cutoff,
-                                                     method=method, fit_method=fit_method, cached_input=cached_input, 
-                                                     skip_flagged_edges=skip_flagged_edges, **win_kwargs)
+                                                     method=method, fit_method=fit_method, cached_input=cached_input,
+                                                     skip_flagged_edges=skip_flagged_edges, fix_phase_flips=fix_phase_flips, **win_kwargs)
+                flipped = (info['phase_flips'] == -1)
+                if np.any(flipped):
+                    print(f'{np.sum(flipped)} phase-flipped integrations detected on antenna {ant} between {self.time_grid[flipped][0]} and {self.time_grid[flipped][-1]}.')
+                    if flag_phase_flip_ants:
+                        self.flag_grids[ant][:, :] = True
+                    # apply flags before and after phase flips
+                    elif flag_phase_flip_ints:
+                        most_recent_unflagged_tind = 0
+                        for tind, flipped_here in enumerate(info['phase_flips'] == -1):
+                            if not np.all(self.flag_grids[ant][tind, :]):
+                                # if the flip state has changed since the most recent unflagged integration
+                                if (info['phase_flips'][most_recent_unflagged_tind] == -1) != flipped_here:
+                                    self.flag_grids[ant][most_recent_unflagged_tind, :] = True
+                                    self.flag_grids[ant][tind, :] = True
+                                most_recent_unflagged_tind = tind
 
                 self.gain_grids[ant] = filtered
 

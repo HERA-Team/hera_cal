@@ -560,17 +560,7 @@ def lst_bin_arg_parser():
     return a
 
 
-def config_lst_bin_files(
-    data_files: list[list[str | FastUVH5Meta]], 
-    dlst: float | None=None, 
-    atol: float=1e-10, 
-    lst_start: float | None=None, 
-    lst_width: float = 2*np.pi,
-    verbose: bool=True, 
-    ntimes_per_file: int=60,
-    blts_are_rectangular: bool | None = None,
-    time_axis_faster_than_bls: bool | None = None,
-):
+def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verbose=True, ntimes_per_file=60):
     """
     Configure data for LST binning.
 
@@ -579,20 +569,13 @@ def config_lst_bin_files(
 
     Parameters
     ----------
-    data_files : list of lists
-        nested set of lists, with each nested list containing paths to
-        data files from a particular night. Frequency axis of each file must be identical.
-    dlst : float
-        LST bin width. If None, will get this from the first file in data_files.
-    atol : float
-        absolute tolerance for LST bin float comparison
-    lst_start : float
-        starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
+    data_files : type=list of lists: nested set of lists, with each nested list containing paths to
+                 data files from a particular night. Frequency axis of each file must be identical.
+    dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
+    atol : type=float, absolute tolerance for LST bin float comparison
+    lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
         Default is first LST of the first file of the first night.
-    lst_width : float
-        How much LST to bin.
-    ntimes_per_file : int
-        number of LST bins in a single output file
+    ntimes_per_file : type=int, number of LST bins in a single output file
 
     Returns
     -------
@@ -604,70 +587,39 @@ def config_lst_bin_files(
                  to match the range of lst_grid given lst_start
     time_arrays : list, list of time arrays for each file
     """
-    logger.info("Configuring lst_grid")
-    
-    # Make the data files into FastUVH5Meta objects
-    data_files = [
-        [
-        df if isinstance(df, FastUVH5Meta) else 
-        FastUVH5Meta(
-            df, 
-            blts_are_rectangular=blts_are_rectangular, 
-            time_axis_faster_than_bls=time_axis_faster_than_bls
-        ) 
-        for df in dfs 
-        ] for dfs in data_files
-    ]
-
-    df0 = data_files[0][0]
 
     # get dlst from first data file if None
     if dlst is None:
-        dlst, _, _, _ = io.get_file_times(str(df0.path), filetype='uvh5')
-        print("GOT DLST = ", dlst)
-        print(df0.lsts, df0.lst_array)
-    has_lst_arrays = 'lst_array' in df0.header
-    
-    # Grab the LST and time arrays from each file. Using the FastUVH5Meta
-    # objects to do this is much faster than using the UVData objects, because we only
-    # need the LSTs and times, and we don't need to read in any other metadata.
-    # However, we need to be careful to open and close each file one at a time here
-    # because HDF5 can only have so many files open at a time.
-    time_arrays = [[df.get_transactional('times') for df in dflist] for dflist in data_files]
-    nt = df0.Ntimes
-    
-    if has_lst_arrays:
-        lst_arrays = [[df.get_transactional('lsts') for df in dflist] for dflist in data_files]
-    else:
-        all_times = np.array([time for tarrs in time_arrays for tarr in tarrs for time in tarr])
-        all_lsts = get_lst_for_time(all_times, *df0.telescope_location_lat_lon_alt_degrees)
-        lst_arrays = []
-        n = 0
-        for night, tarrs in enumerate(time_arrays):
-            lst_arrays.append([])
-            for fl, tarr in enumerate(tarrs):
-                lst_arrays[-1].append(all_lsts[n:n+nt])
-                n += nt
-                
+        dlst, _, _, _ = io.get_file_times(data_files[0][0], filetype='uvh5')
+
+    # get time arrays for each file
+    lst_arrays = []
+    time_arrays = []
+    for di, dfs in enumerate(data_files):
+        # get times
+        _, _, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
+        # append
+        lst_arrays.append(larrs)
+        time_arrays.append(tarrs)
+
     # get begin_lst from lst_start or from the first JD in the data_files
     if lst_start is None:
-        if has_lst_arrays:
-            all_lsts = [lst for larrs in lst_arrays for larr in larrs for lst in larr]
-            all_times = [time for tarrs in time_arrays for tarr in tarrs for time in tarr]
+        all_lsts = [lst for larrs in lst_arrays for larr in larrs for lst in larr]
+        all_times = [time for tarrs in time_arrays for tarr in tarrs for time in tarr]
         lst_start = all_lsts[np.argmin(all_times)]
     begin_lst = lst_start
 
     # make 24 hour LST grid
-    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, lst_width=lst_width)
-    dlst = lst_grid[1] - lst_grid[0]
-
-    grid_range = (lst_grid[0] - dlst/2, lst_grid[-1] + dlst/2)
+    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst)
+    dlst = np.median(np.diff(lst_grid))
 
     # enforce that lst_arrays are in the same range as the lst_grid
     for larrs in lst_arrays:
         for larr in larrs:
-            larr[larr < grid_range[0]] += 2 * np.pi
-            larr[larr >= grid_range[1]] -= 2 * np.pi
+            while np.any(larr < np.min(lst_grid)):
+                larr[larr < np.min(lst_grid)] += 2 * np.pi
+            while np.any(larr > np.max(lst_grid)):
+                larr[larr > np.max(lst_grid)] -= 2 * np.pi
 
     # get number of output files
     nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
@@ -676,12 +628,9 @@ def config_lst_bin_files(
     flat_lsts = [lst for larrs in lst_arrays for larr in larrs for lst in larr]
 
     # get output file lsts that are not empty
-    all_file_lsts = [
-        lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] 
-        for i in range(nfiles)
-    ]
+    all_file_lsts = [lst_grid[ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
     file_lsts = []
-    for f_lst in all_file_lsts:
+    for i, f_lst in enumerate(all_file_lsts):
         fmin = f_lst[0] - (dlst / 2 + atol)
         fmax = f_lst[-1] + (dlst / 2 + atol)
         for lst in flat_lsts:
@@ -689,7 +638,7 @@ def config_lst_bin_files(
                 file_lsts.append(f_lst)
                 break
     lst_grid = np.array([lst for file_lsts in all_file_lsts for lst in file_lsts])
-    
+
     return lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays
 
 
@@ -1046,11 +995,15 @@ def make_lst_grid(
         Beginning point for lst_grid. ``begin_lst`` must fall exactly on an LST bin 
         given a dlst, within 0-2pi. If not, it is replaced with the closest bin. 
         Default is zero radians.
+    lst_width
+        The width of the LST grid (including all bins) in radians. 
+        Default is 2pi radians. Note that regardless of this value, the final grid
+        will always be equally divisible by 2pi.
 
     Output:
     -------
     lst_grid
-        Uniform LST grid marking the center of each LST bin
+        Uniform LST grid marking the center of each LST bin.
     """
     assert dlst >= 6.283e-6, "dlst must be greater than 6.283e-6 radians, or .0864 seconds."
     assert dlst < 2 * np.pi, "dlst must be less than 2pi radians, or 24 hours."
@@ -1092,23 +1045,27 @@ def make_lst_grid(
     return lst_grid
 
 
-def sigma_clip(array, sigma=4.0, min_N=4, axis: int = 0):
+def sigma_clip(array: np.ndarray, sigma: float=4.0, min_N: int=4, axis: int = 0):
     """
-    One-iteration robust sigma clipping algorithm. Returns clip_flags array.
+    One-iteration robust sigma clipping algorithm.
 
-    Parameters:
-    -----------
-    array : ndarray of complex visibility data. Clipping performed on 0th axis.
+    Parameters
+    ----------
+    array 
+        ndarray of *real* data.
+    sigma
+        sigma threshold to cut above.
+    min_N
+        minimum length of array to sigma clip, below which no sigma
+        clipping is performed. Non-clipped values are *not* flagged.
+    axis
+        Axis along which to perform sigma clipping.
 
-    sigma : float, sigma threshold to cut above.
-
-    min_N : int, minimum length of array to sigma clip, below which no sigma
-            clipping is performed.
-
-    Output: flags
-    -------
-    clip_flags : type=boolean ndarray, has same shape as input array, but has clipped
-                 values set to True.
+    Output
+    ------
+    clip_flags 
+        A boolean array with same shape as input array, 
+        with clipped values set to True.
     """
     # ensure array is an array
     if not isinstance(array, np.ndarray):
