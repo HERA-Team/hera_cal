@@ -934,7 +934,7 @@ def calibrate_data(
     flags: np.ndarray,
     nsamples: np.ndarray,
     freqs: np.ndarray,
-    antpos: list[dict] | dict,
+    idealized_antpos: list[dict] | dict,
     antpairs: list[tuple],
     pols: list[str],
     phs_max_iter: int = 10,
@@ -956,10 +956,12 @@ def calibrate_data(
         Shape (Ndays, Nbls, Nfreqs, Npols) of boolean flags.
     nsamples : np.ndarray
         Number of samples in each time-frequency bin. Shape (Ndays, Nbls, Nfreqs, Npols).
+    freqs : np.ndarray
+        Frequency array in Hz.
+    idealized_antpos : list of dicts or dict
+        List of dictionaries of idealized antenna positions. Keys are antenna names and values are
     antpairs : list of tuples
         List of antenna pairs.
-    times : list of floats
-        List of times in JD.
     pols : list of strings
         List of polarizations.
     phs_max_iter : int, default=100
@@ -977,9 +979,6 @@ def calibrate_data(
         Dictionary of gains for each time and antenna-polarization pair.
 
     """
-    if day_flags is None:
-        day_flags = None
-
     # Initialize gains
     gains = {}
 
@@ -996,7 +995,7 @@ def calibrate_data(
             nsamples=nsamples,
             freqs=freqs,
             antpairs=antpairs,
-            antpos=antpos,
+            antpos=idealized_antpos,
             pols=pols,
             day_flags=day_flags,
             bls_flags=bls_flags,
@@ -1019,6 +1018,7 @@ def calibrate_data(
             flags=flags,
             nsamples=nsamples,
             antpairs=antpairs,
+            antpos=idealized_antpos,
             pols=pols,
             day_flags=day_flags,
             bls_flags=bls_flags,
@@ -1042,7 +1042,7 @@ def calibrate_data(
                 flags=flags,
                 nsamples=nsamples,
                 antpairs=antpairs,
-                antpos=antpos,
+                antpos=idealized_antpos,
                 pols=pols,
                 day_flags=day_flags,
                 bls_flags=bls_flags,
