@@ -13,10 +13,12 @@ from scipy.cluster.hierarchy import fclusterdata
 
 import jax
 from jax import numpy as jnp
+
 jax.config.update("jax_enable_x64", True)
 
 # Constants
 SPEED_OF_LIGHT = const.c.si.value
+
 
 def is_same_orientation(bl1, bl2, antpos, blvec_error_tol=1e-4):
     """
@@ -53,6 +55,7 @@ def is_same_orientation(bl1, bl2, antpos, blvec_error_tol=1e-4):
     norm_vec2 = blvec2 / np.linalg.norm(blvec2)
 
     return np.isclose(np.linalg.norm(norm_vec1 - norm_vec2), 0, rtol=blvec_error_tol)
+
 
 def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-4):
     """
@@ -107,6 +110,7 @@ def is_frequency_redundant(bl1, bl2, freqs, antpos, blvec_error_tol=1e-4):
     # Last step - return whether or not baselines are in the same orientation
     return is_same_orientation(bl1, bl2, antpos, blvec_error_tol=blvec_error_tol)
 
+
 def get_u_bounds(radial_reds, antpos, freqs):
     """
     Calculates the magnitude of the minimum and maximum u-modes values of the radial redundant group
@@ -128,18 +132,20 @@ def get_u_bounds(radial_reds, antpos, freqs):
     """
     ubounds = []
     for group in radial_reds:
-        umodes = [np.linalg.norm(antpos[ant1] - antpos[ant2]) for (ant1, ant2, pol) in group]
+        umodes = [
+            np.linalg.norm(antpos[ant1] - antpos[ant2]) for (ant1, ant2, pol) in group
+        ]
         umin = np.min(umodes) * freqs.min() / SPEED_OF_LIGHT
         umax = np.max(umodes) * freqs.max() / SPEED_OF_LIGHT
         ubounds.append((umin, umax))
 
     return ubounds
-            
+
 
 def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=1e-4):
     """
     Sort baselines into groups with the same radial heading. These groups of baselines are
-    radially redundant in a similar way to redcal.get_reds does. Returns a list of list of 
+    radially redundant in a similar way to redcal.get_reds does. Returns a list of list of
     radially redundant baselines.
 
     Parameters:
@@ -175,7 +181,9 @@ def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=
         for red in reds:
             ant1, ant2, antpol = red[0]
             if antpol == pol:
-                vector = (antpos[ant2] - antpos[ant1]) / np.linalg.norm(antpos[ant2] - antpos[ant1])
+                vector = (antpos[ant2] - antpos[ant1]) / np.linalg.norm(
+                    antpos[ant2] - antpos[ant1]
+                )
                 # If vector has an EW component less than 0, flip it
                 if vector[0] <= 0:
                     normalized_vecs.append(-vector)
@@ -201,12 +209,13 @@ def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=
 
 
 class RadialRedundancy:
-    """List-like object that contains lists of baselines that are radially redundant. 
+    """List-like object that contains lists of baselines that are radially redundant.
     Functions similarly to the output of redcal.get_reds for frequency redundant
     calibration. In addition to mimicking list functionality, this object also filters
     radially redundant groups by baseline length and number of baselines in a radially redundant
     group radially redundant and spatially redundant groups by baseline key.
     """
+
     def __init__(
         self, antpos, reds=None, blvec_error_tol=1e-4, pols=["nn"], bl_error_tol=1.0
     ):
@@ -235,7 +244,9 @@ class RadialRedundancy:
             self.reds = reds
 
         # Get unique orientations
-        self._radial_groups = get_unique_orientations(antpos, reds=self.reds, blvec_error_tol=blvec_error_tol)
+        self._radial_groups = get_unique_orientations(
+            antpos, reds=self.reds, blvec_error_tol=blvec_error_tol
+        )
 
         # Map baseline key to baseline length
         self.baseline_lengths = {}
@@ -271,11 +282,20 @@ class RadialRedundancy:
         # Check to see if baselines are in the same orientation and have the same polarization
         if len(group) > 1:
             for bi in range(1, len(group)):
-                if not is_same_orientation(group[0], group[bi], self.antpos, blvec_error_tol=self.blvec_error_tol):
-                    raise ValueError(f'Baselines {group[0]} and {group[bi]} are not in the same orientation')
+                if not is_same_orientation(
+                    group[0],
+                    group[bi],
+                    self.antpos,
+                    blvec_error_tol=self.blvec_error_tol,
+                ):
+                    raise ValueError(
+                        f"Baselines {group[0]} and {group[bi]} are not in the same orientation"
+                    )
                 if group[0][-1] != group[bi][-1]:
-                    raise ValueError(f'Baselines {group[0]} and {group[bi]} do not have the same polarization')
-                
+                    raise ValueError(
+                        f"Baselines {group[0]} and {group[bi]} do not have the same polarization"
+                    )
+
     def get_radial_group(self, key):
         """
         Get baselines with the same radial heading as a given baseline
@@ -303,13 +323,17 @@ class RadialRedundancy:
         if group_key in self._bl_to_spec_red_key:
             group_key = self._bl_to_spec_red_key[group_key]
         else:
-            group_key = utils.reverse_bl(self._bl_to_spec_red_key[utils.reverse_bl(group_key)])
-        
+            group_key = utils.reverse_bl(
+                self._bl_to_spec_red_key[utils.reverse_bl(group_key)]
+            )
+
         if group_key in self._mapped_spectral_reds:
             return self._mapped_spectral_reds[group_key]
         else:
-            return [utils.reverse_bl(bl) for bl in self._mapped_spectral_reds[utils.reverse_bl(group_key)]]
-
+            return [
+                utils.reverse_bl(bl)
+                for bl in self._mapped_spectral_reds[utils.reverse_bl(group_key)]
+            ]
 
     def get_redundant_group(self, key):
         """
@@ -337,16 +361,21 @@ class RadialRedundancy:
         if group_key in self._mapped_reds:
             return self._mapped_reds[group_key]
         else:
-            return [utils.reverse_bl(bl) for bl in self._mapped_reds[utils.reverse_bl(group_key)]]
+            return [
+                utils.reverse_bl(bl)
+                for bl in self._mapped_reds[utils.reverse_bl(group_key)]
+            ]
 
     def get_pol(self, pol):
         """Get all radially redundant groups with a given polarization"""
         return [group for group in self if group[0][-1] == pol]
 
-    def filter_radial_groups(self, min_nbls=1, min_bl_cut=None, max_bl_cut=None):
+    def filter_radial_groups(
+        self, min_nbls=1, min_bl_cut=None, max_bl_cut=None, ex_bls=None
+    ):
         """
         Filter each radially redundant group to include/exclude the baselines based on baseline length.
-        Radially redundant groups can also be completely filtered based on the number of baselines in 
+        Radially redundant groups can also be completely filtered based on the number of baselines in
         the group.
 
         Parameters:
@@ -357,15 +386,20 @@ class RadialRedundancy:
             Cut baselines in the radially redundant group with lengths less than min_bl_cut
         max_bl_cut:
             Cut baselines in the radially redundant group with lengths less than min_bl_cut
+        ex_bls : list of tuples, default=None
+            List of baseline tuples to exclude from the radially redundant groups
         """
         # Filter radially redundant group
         radial_reds = []
         for group in self._radial_groups:
             filtered_group = []
             for bl in group:
-                if (max_bl_cut is None or self.baseline_lengths[bl] < max_bl_cut) and (min_bl_cut is None or self.baseline_lengths[bl] > min_bl_cut):
-                    filtered_group.append(bl)
-                
+                if (max_bl_cut is None or self.baseline_lengths[bl] < max_bl_cut) and (
+                    min_bl_cut is None or self.baseline_lengths[bl] > min_bl_cut
+                ):
+                    if ex_bls is None or bl not in ex_bls:
+                        filtered_group.append(bl)
+
             # Identify groups with fewer than min_nbls baselines
             if len(filtered_group) > min_nbls:
                 radial_reds.append(filtered_group)
@@ -388,10 +422,15 @@ class RadialRedundancy:
         """
         # Check to make sure the new group is radially redundant
         self._check_new_group(group)
-            
+
         # If group with same heading already exists, add it to that group. Otherwise, append the group to the list
         for bl in self._mapped_spectral_reds:
-            if is_same_orientation(group[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol) and bl[-1] == group[0][-1]:
+            if (
+                is_same_orientation(
+                    group[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol
+                )
+                and bl[-1] == group[0][-1]
+            ):
                 index = self._radial_groups.index(self._mapped_spectral_reds[bl])
                 self._radial_groups[index] += group
                 self._radial_groups[index] = list(set(self._radial_groups[index]))
@@ -421,17 +460,24 @@ class RadialRedundancy:
 
     def __setitem__(self, index, value):
         """
-        Set a list of baseline tuples that are radially redundant at index in _radial_groups. 
-        Also raises an error if a baseline with the same heading is already in the list of 
+        Set a list of baseline tuples that are radially redundant at index in _radial_groups.
+        Also raises an error if a baseline with the same heading is already in the list of
         radially redundant groups
         """
         # Check to make sure the new group is radially redundant
         self._check_new_group(value)
-            
+
         for bl in self._mapped_spectral_reds:
-            if is_same_orientation(value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol) and bl[-1] == value[0][-1]:
-                raise ValueError('Radially redundant group with same orientation and polarization already exists in the data')
-                
+            if (
+                is_same_orientation(
+                    value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol
+                )
+                and bl[-1] == value[0][-1]
+            ):
+                raise ValueError(
+                    "Radially redundant group with same orientation and polarization already exists in the data"
+                )
+
         # Add group at index
         self._radial_groups[index] = value
 
@@ -448,16 +494,23 @@ class RadialRedundancy:
 
     def append(self, value):
         """
-        Append a list of baseline tuples that are radially redundant to the end of _radial_groups. 
-        Also raises an error if a baseline with the same heading is already in the list of 
+        Append a list of baseline tuples that are radially redundant to the end of _radial_groups.
+        Also raises an error if a baseline with the same heading is already in the list of
         radially redundant groups
         """
         # Check to make sure the new group is radially redundant
         self._check_new_group(value)
-        
+
         for bl in self._mapped_spectral_reds:
-            if is_same_orientation(value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol) and bl[-1] == value[0][-1]:
-                raise ValueError('Radially redundant group with same orientation and polarization already exists in the data')
+            if (
+                is_same_orientation(
+                    value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol
+                )
+                and bl[-1] == value[0][-1]
+            ):
+                raise ValueError(
+                    "Radially redundant group with same orientation and polarization already exists in the data"
+                )
 
         # Append new group
         self._radial_groups.append(value)
@@ -472,7 +525,7 @@ class RadialRedundancy:
         self._mapped_spectral_reds[value[0]] = value
         for bl in value:
             self._bl_to_spec_red_key[bl] = value[0]
-    
+
     def __iter__(self):
         """Iterates through the list of redundant groups"""
         return iter(self._radial_groups)
@@ -480,6 +533,7 @@ class RadialRedundancy:
     def sort(self, key=None, reverse=True):
         """Sorts list by length of the radial groups"""
         self._radial_groups.sort(key=(len if key is None else key), reverse=reverse)
+
 
 def compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=1e-12):
     """
@@ -500,10 +554,14 @@ def compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=
     spectral_filters : np.ndarray
         Array of spectral filters with shape (Nfreqs, Nfilters)
     """
-    return dspec.dpss_operator(freqs, [0], [spectral_filter_half_width], eigenval_cutoff=[eigenval_cutoff])[0].real
+    return dspec.dpss_operator(
+        freqs, [0], [spectral_filter_half_width], eigenval_cutoff=[eigenval_cutoff]
+    )[0].real
 
 
-def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filter_half_width=1, eigenval_cutoff=1e-12):
+def compute_spatial_filters_single_group(
+    group, freqs, bls_lengths, spatial_filter_half_width=1, eigenval_cutoff=1e-12
+):
     """
     Compute prolate spheroidal wave function (PSWF) filters for a single radially redundant group.
 
@@ -516,13 +574,13 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
     bls_lengths : dict
         Dictionary of baseline lengths in meters where keys are baseline tuples
     spatial_filter_half_width : float, optional, default=1
-        Fourier half width of the spatial filter. Value corresponds to maximum value from 
-        zenith where foregrounds are found in terms of the sky-coordinates (l, m). Here the 
-        default, 1, is equivalent to a modeling foregrounds out to the horizon, and allowing 
+        Fourier half width of the spatial filter. Value corresponds to maximum value from
+        zenith where foregrounds are found in terms of the sky-coordinates (l, m). Here the
+        default, 1, is equivalent to a modeling foregrounds out to the horizon, and allowing
         the uv-plane to be modeled at half-wavelength scales.
     eigenval_cutoff : float
         Cutoff for the eigenvalues of the PSWF filter
-    
+
     Returns:
     -------
     spatial_filters : dict
@@ -541,26 +599,33 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
     for bl in group:
         umodes = bls_lengths[bl] / SPEED_OF_LIGHT * freqs
         pswf, _ = dspec.pswf_operator(
-            umodes, filter_centers=[0], filter_half_widths=[spatial_filter_half_width], 
-            eigenval_cutoff=[eigenval_cutoff], xmin=umin, xmax=umax
+            umodes,
+            filter_centers=[0],
+            filter_half_widths=[spatial_filter_half_width],
+            eigenval_cutoff=[eigenval_cutoff],
+            xmin=umin,
+            xmax=umax,
         )
-        
+
         # Filters should be strictly real-valued
         spatial_filters[bl] = np.real(pswf)
 
     return spatial_filters
 
-def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eigenval_cutoff=1e-12, cache={}):
+
+def compute_spatial_filters(
+    radial_reds, freqs, spatial_filter_half_width=1, eigenval_cutoff=1e-12, cache={}
+):
     """
-    Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds. 
+    Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds.
     Note that if you are using a large array with a large range of short and long baselines in an individual radially
-    redundant group, it is advised to filter radial_reds using radial_reds.filter_reds before running this function 
+    redundant group, it is advised to filter radial_reds using radial_reds.filter_reds before running this function
     to reduce the size of filters generated
 
     Parameters:
     ----------
     radial_reds : RadialRedundancy object
-        RadialRedundancy object containing lists of radially redundant baselines. 
+        RadialRedundancy object containing lists of radially redundant baselines.
     freqs : np.ndarray
         Frequencies found in the data in units of Hz
     spatial_half_width : float, default=1
@@ -574,7 +639,7 @@ def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eig
     Returns:
     -------
     spatial_filters : dictionary
-        Dictionary containing baseline tuple / PSWF eigenvectors key-value pairs used for modeling 
+        Dictionary containing baseline tuple / PSWF eigenvectors key-value pairs used for modeling
         foregrounds
     """
     # Create dictionary for all uv pswf eigenvectors
@@ -583,16 +648,38 @@ def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eig
     # Loop through each baseline in each radial group
     for group in radial_reds:
         # Compute spatial filters for each baseline in the group
-        spatial_filters.update(compute_spatial_filters_single_group(
-            group, freqs, radial_reds.baseline_lengths, spatial_filter_half_width, eigenval_cutoff
+        spatial_filters.update(
+            compute_spatial_filters_single_group(
+                group,
+                freqs,
+                radial_reds.baseline_lengths,
+                spatial_filter_half_width,
+                eigenval_cutoff,
             )
         )
 
     return spatial_filters
 
-def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, times_by_bl=None,
-                     df=None, data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None, min_u_cut=None, 
-                     max_u_cut=None, min_freq_cut=None, max_freq_cut=None, spw_range_flags=None):
+
+def build_nucal_wgts(
+    data_flags,
+    data_nsamples,
+    autocorrs,
+    auto_flags,
+    radial_reds,
+    freqs,
+    times_by_bl=None,
+    df=None,
+    data_is_redsol=False,
+    gain_flags=None,
+    tol=1.0,
+    antpos=None,
+    min_u_cut=None,
+    max_u_cut=None,
+    min_freq_cut=None,
+    max_freq_cut=None,
+    spw_range_flags=None,
+):
     """
     Build linear weights for data in nucal (or calculating loss) defined as
     wgts = (noise variance * nsamples)^-1 * (0 if data or model is flagged). Light wrapper
@@ -612,7 +699,7 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
             RadialRedundancy object containing a list of list baseline tuples of radially redundant
             groups
         freqs : np.ndarray
-            Frequency values present in the data in units of Hz     
+            Frequency values present in the data in units of Hz
         times_by_bl : dictionary
             Maps antenna pairs like (0,1) to float Julian Date. Optional if
             inferable from data_flags and all times have length > 1.
@@ -626,7 +713,7 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
         gain_flags : dictionary, default=None
             Used to exclude ants from the noise variance calculation from the autocorrelations
             Ignored if data_is_redsol is False.
-        tol : float, 
+        tol : float,
             Distance for baseline match tolerance in units of baseline vectors (e.g. meters).
             Ignored if data_is_redsol is False.
         antpos : dictionary
@@ -646,13 +733,13 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
             this value will be set to 0.
         spw_range_flags : list of tuples
             List of tuples containing the start and stop frequency of each spectral window to flag in units of Hz.
-                 
+
     Returns:
     -------
         wgts: Datacontainer
             Maps data_flags baseline to weights
     """
-    # Build model flags from 
+    # Build model flags from
     model_flags = {}
     for group in radial_reds:
         for key in group:
@@ -679,16 +766,26 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
 
     # Add flags to DataContainer
     model_flags = DataContainer(model_flags)
-    
+
     # Use abscal.build_data_wgts to build wgts for nucal
     wgts = abscal.build_data_wgts(
-        data_flags, data_nsamples, model_flags, autocorrs, auto_flags, times_by_bl=times_by_bl, df=df, 
-        data_is_redsol=data_is_redsol, gain_flags=gain_flags, tol=tol, antpos=antpos
+        data_flags,
+        data_nsamples,
+        model_flags,
+        autocorrs,
+        auto_flags,
+        times_by_bl=times_by_bl,
+        df=df,
+        data_is_redsol=data_is_redsol,
+        gain_flags=gain_flags,
+        tol=tol,
+        antpos=antpos,
     )
 
     return wgts
 
-def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
+
+def _linear_fit(XTX, Xy, solver="lu_solve", tol=1e-15, cached_input={}):
     """
     Solves a linear system of equations using a variety of methods. This is a light wrapper
     around np.linalg.solve, np.linalg.lstsq, and scipy.linalg.lu_solve which helps fit nucal
@@ -703,15 +800,15 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
         method : str, default='lu_solve'
             Method to use to solve the linear system of equations. Options are 'lu_solve', 'solve', 'pinv', 'lstsq'.
             'lu_solve' uses scipy.linalg.lu_solve to solve the linear system of equations, 'solve' uses np.linalg.solve.
-            'pinv' uses np.linalg.pinv to solve the linear system of equations, and 'lstsq' uses np.linalg.lstsq. 'lu_solve' 
+            'pinv' uses np.linalg.pinv to solve the linear system of equations, and 'lstsq' uses np.linalg.lstsq. 'lu_solve'
             and 'solve' tend to be the faster methods, but 'lstsq' and 'pinv' are more robust.
         tol : float, default=1e-15
-            Tolerance to use for regularization. If method is 'lu_solve' or 'solve', this is added to the diagonal of XTX. 
+            Tolerance to use for regularization. If method is 'lu_solve' or 'solve', this is added to the diagonal of XTX.
             If method is 'pinv' or 'lstsq', this is used as the rcond parameter for np.linalg.pinv and np.linalg.lstsq respectively.
         cached_input : dictionary, default={}
-            Dictionary used to speed-up computation of linear fits for the 'lu_solve' and 'pinv' solvers. 
+            Dictionary used to speed-up computation of linear fits for the 'lu_solve' and 'pinv' solvers.
             WARNING: Solvers will use cached_input if one is provided
-    
+
     Returns:
     -------
         beta : np.ndarray
@@ -719,7 +816,7 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
         cached_output: dictionary
             Dictionary for storing computed results from the linear fit solvers which can
             speed-up computation if reused with the same XTX input. Dictionary is empty if
-            solver method is 'lstsq' or 'solve'. Contains the matrix inverse (key 'XTXinv') 
+            solver method is 'lstsq' or 'solve'. Contains the matrix inverse (key 'XTXinv')
             for 'pinv' method and lu-decomposition for (key 'LU').
     """
     # Assert that the method is valid
@@ -743,45 +840,48 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
     if solver == "lu_solve":
         # Factor XTX using scipy.linalg.lu_factor
         if "LU" in cached_input:
-            L = cached_input.get('LU')
+            L = cached_input.get("LU")
         else:
             L = linalg.lu_factor(XTX)
 
         # Solve the linear system of equations using scipy.linalg.lu_solve
         beta = linalg.lu_solve(L, Xy)
-        
+
         # Save info
-        cached_output = {'LU': L}
+        cached_output = {"LU": L}
 
     elif solver == "solve":
         # Solve the linear system of equations using np.linalg.solve
         beta = np.linalg.solve(XTX, Xy)
-        
+
         # Save info
         cached_output = {}
 
     elif solver == "pinv":
         # Compute the pseudo-inverse of XTX using np.linalg.pinv
         if "XTXinv" in cached_input:
-            XTXinv = cached_input.get('XTXinv')
+            XTXinv = cached_input.get("XTXinv")
         else:
             XTXinv = np.linalg.pinv(XTX, rcond=tol)
 
         # Compute the model parameters using the pseudo-inverse
         beta = np.dot(XTXinv, Xy)
-        
-        cached_output = {'XTXinv': XTXinv}
+
+        cached_output = {"XTXinv": XTXinv}
 
     elif solver == "lstsq":
         # Compute the model parameters using np.linalg.lstsq
         beta, res, rank, s = np.linalg.lstsq(XTX, Xy, rcond=tol)
-        
+
         # Save info
         cached_output = {}
 
     return beta, cached_output
 
-def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spectral_filters=None):
+
+def evaluate_foreground_model(
+    radial_reds, fg_model_comps, spatial_filters, spectral_filters=None
+):
     """
     Evaluates a foreground model using the model components, spatial filters, and spectral filters.
     If the model components are time-dependent, the model is evaluated for each time sample in the data.
@@ -791,7 +891,7 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
     Parameters:
     ----------
         radial_reds : RadialRedundancy object
-            List of lists of radially-redundant baseline tuples. 
+            List of lists of radially-redundant baseline tuples.
         fg_model_comps : dict
             Dictionary mapping baseline tuples to model components. Model components are fitted to the data
             using the DPSS filters to model variations in the spatial and spectral axes. If spectral_filters
@@ -799,7 +899,7 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
         spatial_filters : dict
             Dictionary mapping baseline tuples to PSWF spatial filters.
         spectral_filters : np.ndarray, default=None
-            Array of shape (Nfreqs, Nspec) containing spectral filters for modeling the frequency axis. 
+            Array of shape (Nfreqs, Nspec) containing spectral filters for modeling the frequency axis.
             If None, the model components are assumed to be restricted to the spatial axis.
 
     Returns:
@@ -813,16 +913,20 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
 
     # Assert that the model components match the baselines in the radial_reds
     for group in radial_reds:
-        assert group[0] in fg_model_comps, "fg_model_comps must contain a model component for each baseline in radial_reds."
+        assert (
+            group[0] in fg_model_comps
+        ), "fg_model_comps must contain a model component for each baseline in radial_reds."
         if use_spectral_filters:
-            assert fg_model_comps[group[0]].shape[1:] == (spectral_filters.shape[-1], spatial_filters[group[0]].shape[-1]), (
-                f"The number of model components must match filter shapes."
-            )
+            assert fg_model_comps[group[0]].shape[1:] == (
+                spectral_filters.shape[-1],
+                spatial_filters[group[0]].shape[-1],
+            ), f"The number of model components must match filter shapes."
         else:
-            assert fg_model_comps[group[0]].shape[-1] == spatial_filters[group[0]].shape[-1], (
-                f"The number of model components in fg_model_comps must match the number of \
+            assert (
+                fg_model_comps[group[0]].shape[-1]
+                == spatial_filters[group[0]].shape[-1]
+            ), f"The number of model components in fg_model_comps must match the number of \
                   eigenvectors in spatial_filters for baseline {group[0]}."
-            )
 
     # Initialize a dictionary to hold the model components
     model = {}
@@ -835,23 +939,39 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
         for bl in group:
             # Compute the model components for this baseline
             if use_spectral_filters:
-                model[bl] = jnp.einsum(einsum_path, spectral_filters, spatial_filters[bl], fg_model_comps[group[0]])
+                model[bl] = jnp.einsum(
+                    einsum_path,
+                    spectral_filters,
+                    spatial_filters[bl],
+                    fg_model_comps[group[0]],
+                )
             else:
-                model[bl] = jnp.einsum(einsum_path, spatial_filters[bl], fg_model_comps[group[0]])
+                model[bl] = jnp.einsum(
+                    einsum_path, spatial_filters[bl], fg_model_comps[group[0]]
+                )
 
     return model
 
 
-def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters=None, tol=1e-15,
-                               share_fg_model=False, return_model_comps=False, solver="lu_solve"):
+def fit_nucal_foreground_model(
+    data,
+    data_wgts,
+    radial_reds,
+    spatial_filters,
+    spectral_filters=None,
+    tol=1e-15,
+    share_fg_model=False,
+    return_model_comps=False,
+    solver="lu_solve",
+):
     """
     Compute a foreground model for a set of radially redundant baselines. The model is computed by performing a linear
     least-squares fit using a set of DPSS filters to model visibilities within a radially redundant group. If only spatial
     filters are provided, the model is restricted to the spatial axis. If spectral filters are also provided, the model is fit
-    allowing spectral variation at a fixed spatial scale. The model components are returned if return_model_comps is True. 
+    allowing spectral variation at a fixed spatial scale. The model components are returned if return_model_comps is True.
     Otherwise, the model is evaluated using the model components and the spatial filters (and spectral filters if provided),
     and the model visibilities are returned.
-    
+
     Parameters:
     -----------
     data : dictionary, DataContainer
@@ -871,14 +991,14 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
     solver : str, optional, Default is 'lu_solve'
         Solver to use for linear least-squares fit. Options are 'lu_solve', 'solve', 'pinv', and 'lstsq'.
     tol : float, optional, Default is 1e-15.
-        Regularization tolerance for linear least-squares fit. 
+        Regularization tolerance for linear least-squares fit.
     share_fg_model : bool, optional, Default is False.
-        If True, the foreground model for each radially-redundant group is shared across the time axis. 
+        If True, the foreground model for each radially-redundant group is shared across the time axis.
         Otherwise, a nucal foreground will be independently computed for each time integration individually.
     return_model_comps: bool, optional, Default is False.
         If True, the model components for the foreground model are returned. Otherwise, only the model visibilities
-        are returned. 
-    
+        are returned.
+
     Returns:
     --------
     if return_model_comps:
@@ -890,7 +1010,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
         model : dictionary
             Dictionary mapping baseline tuples to model visibilities. Dictionary is of the form
             {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}.
-    """        
+    """
     # Create empty dictionary for model components
     model_comps = {}
 
@@ -900,7 +1020,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
         design_matrix = np.array([spatial_filters[bl] for bl in group])
         wgts_here = np.array([data_wgts[bl] for bl in group])
         data_here = np.array([data[bl] for bl in group])
-                
+
         # Get number of fit parameters - this is the number of spectral filters times the number of spatial filters
         if spectral_filters is not None:
             ndim = spectral_filters.shape[1] * design_matrix.shape[-1]
@@ -911,16 +1031,28 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
             # Below the indices "a" corresponds to the baseline axis, "f" corresponds to the frequency axis,
             # and "t" corresponds to the time axis. The indices "m" and "n" correspond to the model components.
             if spectral_filters is None:
-                XTX = jnp.einsum("afm,atf,afn->mn", design_matrix, wgts_here, design_matrix)
+                XTX = jnp.einsum(
+                    "afm,atf,afn->mn", design_matrix, wgts_here, design_matrix
+                )
                 Xy = jnp.einsum("afm,atf->m", design_matrix, data_here * wgts_here)
 
                 # Solve for model components
                 beta, _ = _linear_fit(XTX, Xy, solver=solver, tol=tol)
             else:
-                XTX = jnp.einsum("fm,afn,atf,fk,afj->mnkj", 
-                    spectral_filters, design_matrix, wgts_here, spectral_filters, design_matrix
+                XTX = jnp.einsum(
+                    "fm,afn,atf,fk,afj->mnkj",
+                    spectral_filters,
+                    design_matrix,
+                    wgts_here,
+                    spectral_filters,
+                    design_matrix,
                 ).reshape(ndim, ndim)
-                Xy = jnp.einsum("fm,afn,atf->mn", spectral_filters, design_matrix, data_here * wgts_here).reshape(ndim)
+                Xy = jnp.einsum(
+                    "fm,afn,atf->mn",
+                    spectral_filters,
+                    design_matrix,
+                    data_here * wgts_here,
+                ).reshape(ndim)
 
                 # Solve for the foreground model components
                 beta, _ = _linear_fit(XTX, Xy, tol=tol, solver=solver)
@@ -937,32 +1069,56 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
             for i in range(data_here.shape[1]):
                 # Compute the XTX and XTWy
                 if spectral_filters is None:
-                    XTX = jnp.einsum("afm,af,afn->mn", design_matrix, wgts_here[:, i], design_matrix)
-                    Xy = jnp.einsum("afm,af->m", design_matrix, data_here[:, i] * wgts_here[:, i])
+                    XTX = jnp.einsum(
+                        "afm,af,afn->mn", design_matrix, wgts_here[:, i], design_matrix
+                    )
+                    Xy = jnp.einsum(
+                        "afm,af->m", design_matrix, data_here[:, i] * wgts_here[:, i]
+                    )
 
                     # Solve for model components
                     beta.append(_linear_fit(XTX, Xy, solver=solver, tol=tol)[0])
 
                 else:
-                    XTX = jnp.einsum("fm,afn,af,fk,afj->mnkj", 
-                        spectral_filters, design_matrix, wgts_here[:, i], spectral_filters, design_matrix
+                    XTX = jnp.einsum(
+                        "fm,afn,af,fk,afj->mnkj",
+                        spectral_filters,
+                        design_matrix,
+                        wgts_here[:, i],
+                        spectral_filters,
+                        design_matrix,
                     ).reshape(ndim, ndim)
-                    Xy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_here[:, i] * wgts_here[:, i]).reshape(ndim)
-                    
+                    Xy = jnp.einsum(
+                        "fm,afn,af->mn",
+                        spectral_filters,
+                        design_matrix,
+                        data_here[:, i] * wgts_here[:, i],
+                    ).reshape(ndim)
+
                     # Solve for the foreground model components
                     _beta, _ = _linear_fit(XTX, Xy, tol=tol, solver=solver)
-                    beta.append(_beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1]))
-            
+                    beta.append(
+                        _beta.reshape(
+                            spectral_filters.shape[-1], design_matrix.shape[-1]
+                        )
+                    )
+
             # Pack solution into an array
             beta = np.array(beta)
 
         # Store the model components
         model_comps[group[0]] = beta
-                        
+
     if return_model_comps:
         return model_comps
     else:
-        return evaluate_foreground_model(radial_reds, model_comps, spatial_filters=spatial_filters, spectral_filters=spectral_filters)
+        return evaluate_foreground_model(
+            radial_reds,
+            model_comps,
+            spatial_filters=spatial_filters,
+            spectral_filters=spectral_filters,
+        )
+
 
 def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
     """
