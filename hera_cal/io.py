@@ -115,14 +115,19 @@ class HERACal(UVCal):
             i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
             gains[(ant, pol)] = np.array(self.gain_array[i, :, :, ip].T)
             flags[(ant, pol)] = np.array(self.flag_array[i, :, :, ip].T)
-            quals[(ant, pol)] = np.array(self.quality_array[i, :, :, ip].T)
+            if self.quality_array is not None:
+                quals[(ant, pol)] = np.array(self.quality_array[i, :, :, ip].T)
+    
+        if not quals:
+            quals = None
+
         # build dict of total_qual if available
-        for pol in self.pols:
-            ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-            if self.total_quality_array is not None:
+        if self.total_quality_array is not None:
+            for pol in self.pols:
+                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
                 total_qual[pol] = np.array(self.total_quality_array[:, :, ip].T)
-            else:
-                total_qual = None
+        else:
+            total_qual = None
 
         return gains, flags, quals, total_qual
 
@@ -207,6 +212,9 @@ class HERACal(UVCal):
             tSlice = slice(0, self.Ntimes)
         if fSlice is None:
             fSlice = slice(0, self.Nfreqs)
+
+        if quals is not None and self.quality_array is None:
+            self.quality_array = np.zeros(self.gain_array.shape, dtype=float)
 
         # loop over and update gains, flags, and quals
         data_arrays = [self.gain_array, self.flag_array, self.quality_array]
@@ -802,7 +810,7 @@ class HERAData(UVData):
                                  run_check_acceptability=run_check_acceptability, **kwargs)
                     self.use_future_array_shapes()
                     if self.filetype == 'uvfits':
-                        self.unphase_to_drift()
+                        self.unproject_phase()
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
@@ -2263,7 +2271,7 @@ def _write_HERAData_to_filetype(hd, outfilename, filetype_out='miriad', clobber=
     if filetype_out == 'miriad':
         hd.write_miriad(outfilename, clobber=clobber)
     elif filetype_out == 'uvfits':
-        hd.write_uvfits(outfilename, force_phase=True, spoof_nonessential=True)
+        hd.write_uvfits(outfilename, force_phase=True)
     elif filetype_out == 'uvh5':
         hd.write_uvh5(outfilename, clobber=clobber)
     else:
