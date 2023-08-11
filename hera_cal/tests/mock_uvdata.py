@@ -130,6 +130,7 @@ def identifiable_data_from_uvd(
 def create_uvd_identifiable(
     with_noise: bool = False,
     autos_noise: bool = False,
+    flag_frac: float = 0.0,
     **kwargs) -> UVData:
     """Make a UVData object with identifiable data.
 
@@ -144,6 +145,8 @@ def create_uvd_identifiable(
     if with_noise:
         add_noise_to_uvd(uvd, autos = autos_noise)
 
+    if flag_frac > 0:
+        add_flags_to_uvd(uvd, flag_frac=flag_frac)
     return uvd
 
 def add_noise_to_uvd(uvd, autos: bool = False):
@@ -166,6 +169,16 @@ def add_noise_to_uvd(uvd, autos: bool = False):
             + 1j * np.random.normal(scale=np.sqrt(variance/2))
         )
     hd.update(data=data)
+
+def add_flags_to_uvd(uvd, flag_frac: float = 0.1):
+    hd = io.to_HERAData(uvd)
+    data, flags, nsamples = hd.read()
+
+    for bl in data.bls():
+        if bl[0] == bl[1] and bl[2][0] == bl[2][1]:
+            continue
+        flags[bl] = np.random.uniform(size=flags[bl].shape) < flag_frac
+    hd.update(flags=flags)
 
 def write_files_in_hera_format(
     uvds: list[UVData] | list[list[UVData]],

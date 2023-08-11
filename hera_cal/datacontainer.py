@@ -515,6 +515,43 @@ class DataContainer:
         if not in_place:
             return dc
 
+    def select_or_expand_freqs(
+        self, 
+        freqs: np.ndarray | None = None, 
+        channels: np.ndarray | slice | None = None, 
+        in_place: bool=True
+    ):
+        """Update the object with a subset of frequencies (which may be repeated).
+        
+        Parameters
+        ----------
+        freqs : np.ndarray, optional
+            Frequencies to select. If given, all frequencies must be in the datacontainer.
+        channels : np.ndarray, slice, optional
+            Channels to select. If given, all channels must be in the datacontainer. 
+            Only one of freqs or channels can be given.
+        in_place : bool, optional
+            If True, modify the object in place. Otherwise, return a modified copy.
+        """
+        obj = self if in_place else copy.deepcopy(self)
+        if freqs is None and channels is None:
+            return obj
+        elif freqs is not None and channels is not None:
+            raise ValueError('Cannot specify both freqs and channels.')
+        
+        if freqs is not None:
+            if not np.all([fq in dc.freqs for fq in freqs]):
+                raise ValueError('All freqs must be in self.freqs.')
+            channels = np.searchsorted(obj.freqs, freqs)
+        
+        axis = obj[next(iter(dc.keys()))].shape.index(len(obj.freqs))
+        for bl in obj:
+            obj[bl] = obj[bl].take(channels, axis=axis)
+
+        # update metadata
+        obj.freqs = obj.freqs[channels]
+
+        return obj
 
 class RedDataContainer(DataContainer):
     '''Structure for containing redundant visibilities that can be accessed by any

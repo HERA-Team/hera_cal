@@ -108,21 +108,31 @@ class HERACal(UVCal):
             total_qual: dict mapping polarization to (Nint, Nfreq) float total quality array
         '''
         self._extract_metadata()
-        gains, flags, quals, total_qual = odict(), odict(), odict(), odict()
+        gains, flags = odict(), odict()
+
+        if self.total_quality_array is not None:
+            total_qual = odict()
+        else:
+            total_qual = None
+
+        if self.quality_array is not None:
+            quals = odict()
+        else:
+            quals = None
 
         # build dict of gains, flags, and quals
         for (ant, pol) in self.ants:
             i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
             gains[(ant, pol)] = np.array(self.gain_array[i, :, :, ip].T)
             flags[(ant, pol)] = np.array(self.flag_array[i, :, :, ip].T)
-            quals[(ant, pol)] = np.array(self.quality_array[i, :, :, ip].T)
+            if quals is not None:
+                quals[(ant, pol)] = np.array(self.quality_array[i, :, :, ip].T)
+
         # build dict of total_qual if available
-        for pol in self.pols:
-            ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-            if self.total_quality_array is not None:
+        if total_qual is not None:
+            for pol in self.pols:
+                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
                 total_qual[pol] = np.array(self.total_quality_array[:, :, ip].T)
-            else:
-                total_qual = None
 
         return gains, flags, quals, total_qual
 

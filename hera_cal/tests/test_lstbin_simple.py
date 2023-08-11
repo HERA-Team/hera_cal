@@ -106,7 +106,7 @@ class Test_LSTAlign:
 
     def test_increasing_lsts_one_per_bin(self, benchmark):
         kwargs = self.get_lst_align_data(ntimes=6)
-        bins, d, f, n = benchmark(lstbin_simple.lst_align, rephase=False, **kwargs)
+        bins, d, f, n, inp = benchmark(lstbin_simple.lst_align, rephase=False, **kwargs)
 
         # We should not be changing the data at all.
         d = np.squeeze(np.asarray(d))
@@ -120,7 +120,7 @@ class Test_LSTAlign:
 
     def test_multi_days_one_per_bin(self, benchmark):
         kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
-        bins, d, f, n = benchmark(lstbin_simple.lst_align, rephase=False, **kwargs)
+        bins, d, f, n, inp = benchmark(lstbin_simple.lst_align, rephase=False, **kwargs)
 
         # We should not be changing the data at all.
         d = np.squeeze(np.asarray(d))
@@ -140,7 +140,7 @@ class Test_LSTAlign:
         flags[7:] = True
         kwargs['data'][7:] = 1000.0
 
-        bins, d, f, n = benchmark(lstbin_simple.lst_align, rephase=False, flags=flags, **kwargs)
+        bins, d, f, n, inp = benchmark(lstbin_simple.lst_align, rephase=False, flags=flags, **kwargs)
 
         d = np.squeeze(np.asarray(d))
         f = np.squeeze(np.asarray(f))
@@ -159,7 +159,7 @@ class Test_LSTAlign:
         nsamples[7:] = 0.0
         kwargs['data'][7:] = 1000.0
 
-        bins, d, f, n = lstbin_simple.lst_align(rephase=False, nsamples=nsamples, **kwargs)
+        bins, d, f, n, inp = lstbin_simple.lst_align(rephase=False, nsamples=nsamples, **kwargs)
 
         d = np.squeeze(np.asarray(d))
         f = np.squeeze(np.asarray(f))
@@ -176,8 +176,8 @@ class Test_LSTAlign:
         """Test that rephasing where each bin is already at center does nothing."""
         kwargs = self.get_lst_align_data(ntimes=7)
 
-        bins0, d0, f0, n0 = benchmark(lstbin_simple.lst_align, rephase=True, **kwargs)
-        bins, d, f, n = lstbin_simple.lst_align(rephase=False, **kwargs)
+        bins0, d0, f0, n0, inp = benchmark(lstbin_simple.lst_align, rephase=True, **kwargs)
+        bins, d, f, n, inp = lstbin_simple.lst_align(rephase=False, **kwargs)
         np.testing.assert_allclose(d, d0, rtol=1e-6)
         np.testing.assert_allclose(f, f0, rtol=1e-6)
         np.testing.assert_allclose(n, n0, rtol=1e-6)
@@ -191,12 +191,12 @@ class Test_LSTAlign:
         lst_bin_edges = edges.copy()
         lst_bin_edges -= 4*np.pi
 
-        bins, d0, f0, n0 = benchmark(lstbin_simple.lst_align, lst_bin_edges=lst_bin_edges, **kwargs)
+        bins, d0, f0, n0, inp = benchmark(lstbin_simple.lst_align, lst_bin_edges=lst_bin_edges, **kwargs)
 
         lst_bin_edges = edges.copy()
         lst_bin_edges += 4*np.pi
 
-        bins, d, f, n = lstbin_simple.lst_align(lst_bin_edges=lst_bin_edges, **kwargs)
+        bins, d, f, n, inp = lstbin_simple.lst_align(lst_bin_edges=lst_bin_edges, **kwargs)
 
         np.testing.assert_allclose(d, d0)
         np.testing.assert_allclose(f, f0)
@@ -227,7 +227,7 @@ class Test_ReduceLSTBins:
 
     def test_one_point_per_bin(self, benchmark):
         d, f, n = self.get_input_data(ntimes=(1,))
-        dd, ff, std, nn = benchmark(lstbin_simple.reduce_lst_bins, d, f, n)
+        dd, ff, std, nn, db = benchmark(lstbin_simple.reduce_lst_bins, d, f, n)
 
         assert dd.shape == ff.shape == std.shape == nn.shape
 
@@ -243,7 +243,7 @@ class Test_ReduceLSTBins:
     def test_zerosize_bin(self):
         d, f, n = self.get_input_data(ntimes=(0, 1))
         print(d[0].shape, len(d))
-        dd, ff, std, nn = lstbin_simple.reduce_lst_bins(d, f, n)
+        dd, ff, std, nn, db = lstbin_simple.reduce_lst_bins(d, f, n)
 
         assert dd.shape[1] == 2  # 2 LST bins
         assert np.all(np.isnan(dd[:, 0]))
@@ -253,7 +253,7 @@ class Test_ReduceLSTBins:
     @pytest.mark.parametrize("ntimes", [(4, ), (5, 4)])
     def test_multi_points_per_bin(self, ntimes, benchmark):
         d, f, n = self.get_input_data(ntimes=ntimes)
-        dd, ff, std, nn = benchmark(lstbin_simple.reduce_lst_bins, d, f, n)
+        dd, ff, std, nn, db = benchmark(lstbin_simple.reduce_lst_bins, d, f, n)
 
         assert dd.shape == ff.shape == std.shape == nn.shape
 
@@ -271,7 +271,7 @@ class Test_ReduceLSTBins:
         d, f, n = self.get_input_data(ntimes=(4,))
         f[0][2:] = True
         d[0][2:] = 1000.0
-        dd, ff, std, nn = lstbin_simple.reduce_lst_bins(d,f,n)
+        dd, ff, std, nn, db = lstbin_simple.reduce_lst_bins(d,f,n)
 
         assert dd.shape == ff.shape == std.shape == nn.shape
 
@@ -329,14 +329,14 @@ class Test_LSTAverage:
         nsamples = np.ones_like(data)
         flags = np.zeros_like(data, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n =lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, daysbinned =lstbin_simple.lst_average(
             data=data,
             nsamples=nsamples,
             flags=flags,
             sigma_clip_thresh=None,
         )
 
-        data, flg, std, norm = benchmark(
+        data, flg, std, norm, daysbinned = benchmark(
             lstbin_simple.lst_average,
             data=data,
             nsamples=nsamples,
@@ -355,7 +355,7 @@ class Test_LSTAverage:
         nsamples = np.ones_like(data)
         flags = np.zeros_like(data, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
             data=data, nsamples=nsamples, flags=flags,
         )
 
@@ -366,7 +366,7 @@ class Test_LSTAverage:
 
         # Now flag the last "night"
         flags[-1] = True
-        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
             data=data, nsamples=nsamples, flags=flags,
         )
 
@@ -376,14 +376,14 @@ class Test_LSTAverage:
         assert np.allclose(norm_n, 2.0)
 
     def test_std_simple(self):
-        shape = (5000, 2)  # 1000 nights, doesn't matter what the other axis is.
+        shape = (5000, 1, 2, 2)  # 1000 nights, doesn't matter what the other axis is.
 
         std = 2.0
         data = np.random.normal(scale=std, size=shape) + np.random.normal(scale=std, size=shape)*1j
         nsamples = np.ones_like(data, dtype=float)
         flags = np.zeros_like(data, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
             data=data, nsamples=nsamples, flags=flags,
         )
 
@@ -398,7 +398,7 @@ class Test_LSTAverage:
     @pytest.mark.parametrize("nsamples", ("ones", "random"))
     @pytest.mark.parametrize("flags", ("zeros", "random"))
     def test_std(self, nsamples, flags):
-        shape = (5000, 2)  # 1000 nights, doesn't matter what the other axis is.
+        shape = (5000, 1, 2, 2)  # 1000 nights, doesn't matter what the other axis is.
 
         std = 2.0
         if nsamples == "ones":
@@ -417,7 +417,7 @@ class Test_LSTAverage:
 
         flags = np.zeros(data.shape, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
             data=data, nsamples=nsamples, flags=flags,
         )
 
@@ -434,26 +434,111 @@ class Test_LSTAverage:
 
         assert not np.any(flg_n)
 
+    def test_inpaint_mode(self):
+        shape = (7,8,9, 1)  # nights, bls, freqs, pols
+        _data = np.random.random(shape) + np.random.random(shape)*1j
+        nsamples = np.ones(_data.shape, dtype=float)
+        flags = np.zeros(_data.shape, dtype=bool)
+
+        # First test -- no flags should mean inpainted_mode does nothing.
+        df, ff, stdf, nf, dbf = lstbin_simple.lst_average(
+            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=False
+        )
+
+        di, fi, stdi, ni, dbi = lstbin_simple.lst_average(
+            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=True
+        )
+
+        assert np.allclose(df, di)
+        assert np.allclose(ff, fi)
+        assert np.allclose(stdf, stdi)
+        assert np.allclose(nf, ni)
+        assert np.allclose(dbf, dbi)
+
+
+        # Now test with a whole LST bin flagged for a single bl-chan-pol (but inpainted)
+        flags[:, 0, 0, 0] = True
+        df, ff, stdf, nf, dbf = lstbin_simple.lst_average(
+            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=False
+        )
+
+        di, fi, stdi, ni, dbi = lstbin_simple.lst_average(
+            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=True
+        )
+
+        # The data and std in the fully-flagged bin should be different, but Nsamples
+        # and Flags should be the same.
+        assert not np.allclose(df[0,0,0], di[0,0,0])
+        assert np.allclose(df[1:], di[1:])
+        assert np.allclose(ff, fi)
+        assert not np.allclose(stdf[0,0,0], stdi[0,0,0])
+        assert np.allclose(stdf[1:], stdi[1:])
+        assert np.allclose(nf, ni)
+        assert np.allclose(dbf, dbi)
+
+        # Now test with a whole spectrum flagged for one night
+        flags[:] = False
+        flags[0, 0, :, 0] = True
+        df, ff, stdf, nf, dbf = lstbin_simple.lst_average(
+            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=False
+        )
+
+        di, fi, stdi, ni, dbi = lstbin_simple.lst_average(
+            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=True
+        )
+
+        # This should give exactly the same results either way, because the full-flagged
+        # blt is considered to NOT be inpainted by default.
+        assert np.allclose(df, di)
+        assert np.allclose(ff, fi)
+        assert np.allclose(stdf, stdi)
+        assert np.allclose(nf, ni)
+        assert np.allclose(dbf, dbi)
+        
+        # However, if we had explicitly told the routine that the blt was inpainted,
+        # we'd get a different result...
+        df, ff, stdf, nf, dbf = lstbin_simple.lst_average(
+            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=False,
+            inpainted=np.ones_like(flags)  # Everything in-painted.
+        )
+
+        di, fi, stdi, ni, dbi = lstbin_simple.lst_average(
+            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=True,
+            inpainted=np.ones_like(flags)  # Everything in-painted.
+        )
+
+        # The LST-binned data will be different for blt=0, pol=0:
+        assert not np.allclose(df[0,:,0], di[0,:,0])
+        assert np.allclose(df[1:], di[1:])
+        assert np.allclose(ff, fi)
+        assert not np.allclose(stdf[0,:,0], stdi[0,:,0])
+        assert np.allclose(stdf[1:], stdi[1:])
+        assert np.allclose(nf, ni)
+        assert np.allclose(dbf, dbi)
+
+        
+
+
     def test_flag_below_min_N(self):
-        shape = (7,8,9)
+        shape = (7,8,9, 2)
         _data = np.random.random(shape) + np.random.random(shape)*1j
         nsamples = np.ones(_data.shape, dtype=float)
         flags = np.zeros(_data.shape, dtype=bool)
 
         # No samples have more than min_N, so they should all be flagged.
-        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
             data=_data, nsamples=nsamples, flags=flags, sigma_clip_min_N=8,
             flag_below_min_N=True
         )
 
         assert np.all(flg_n)
-        assert np.all(norm_n==0)
-        assert np.all(np.isinf(std_n))
-        assert np.all(np.isnan(data_n))
+        assert np.all(norm_n==7)  # Even though they're flagged, we track the nsamples
+        assert not np.all(np.isinf(std_n))
+        assert not np.all(np.isnan(data_n))
 
         # this time, there's enough samples, but too many are flagged...
         flags[:5] = True
-        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
             data=_data, nsamples=nsamples, flags=flags, sigma_clip_min_N=5,
             flag_below_min_N=True
         )
@@ -461,13 +546,12 @@ class Test_LSTAverage:
         assert np.all(flg_n)
         assert np.all(norm_n==0)
         assert np.all(np.isinf(std_n))
-        assert np.all(np.isnan(data_n))
-
+        
         # this time, only one column is flagged too much...
         # this time, there's enough samples, but too many are flagged...
         flags[:] = False
         flags[:5, 0] = True
-        data_n, flg_n, std_n, norm_n = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
             data=_data, nsamples=nsamples, flags=flags, sigma_clip_min_N=5,
             flag_below_min_N=True
         )
@@ -475,7 +559,6 @@ class Test_LSTAverage:
         assert np.all(flg_n[0])
         assert np.all(norm_n[0]==0)
         assert np.all(np.isinf(std_n[0]))
-        assert np.all(np.isnan(data_n[0]))
 
         assert not np.any(flg_n[1:])
         assert np.all(norm_n[1:]>0)
@@ -541,14 +624,14 @@ def uvc_file(uvc, uvd_file: Path) -> Path:
 
 class Test_LSTBinFilesForBaselines:
     def test_defaults(self, uvd, uvd_file):
-        lstbins, d0, f0, n0, times0 = lstbin_simple.lst_bin_files_for_baselines(
+        lstbins, d0, f0, n0, inpflg, times0 = lstbin_simple.lst_bin_files_for_baselines(
             data_files=[uvd_file],
             lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()+0.01],
             antpairs=uvd.get_antpairs(),
             rephase=False
         )
 
-        lstbins, d, f, n, times = lstbin_simple.lst_bin_files_for_baselines(
+        lstbins, d, f, n, inpflg, times = lstbin_simple.lst_bin_files_for_baselines(
             data_files=[uvd_file],
             lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()+0.01],
             antpairs=uvd.get_antpairs(),
@@ -566,7 +649,7 @@ class Test_LSTBinFilesForBaselines:
         np.testing.assert_allclose(times0, times)
 
     def test_empty(self, uvd, uvd_file):
-        lstbins, d0, f0, n0, times0 = lstbin_simple.lst_bin_files_for_baselines(
+        lstbins, d0, f0, n0, inpflg, times0 = lstbin_simple.lst_bin_files_for_baselines(
             data_files=[uvd_file],
             lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
             antpairs=[(127, 128)],
@@ -577,7 +660,7 @@ class Test_LSTBinFilesForBaselines:
 
     def test_extra(self, uvd, uvd_file):
         # Providing baselines that don't exist in the file is fine, they're just ignored.
-        lstbins, d0, f0, n0, times0 = lstbin_simple.lst_bin_files_for_baselines(
+        lstbins, d0, f0, n0, inpflg, times0 = lstbin_simple.lst_bin_files_for_baselines(
             data_files=[uvd_file],
             lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
             antpairs=uvd.get_antpairs() + [(127, 128)],
@@ -588,7 +671,7 @@ class Test_LSTBinFilesForBaselines:
 
     def test_freqrange(self, uvd, uvd_file, uvc_file):
         """Test that providing freq_range works."""
-        bins, data, flags, nsamples, times = lstbin_simple.lst_bin_files_for_baselines(
+        bins, data, flags, nsamples,  inpflg, times = lstbin_simple.lst_bin_files_for_baselines(
             data_files=[uvd_file],
             lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
             cal_files = [uvc_file],
@@ -631,7 +714,7 @@ class Test_LSTBinFilesForBaselines:
             )
 
     def test_simple_redundant_averaged_file(self, uvd_redavg, uvd_redavg_file):
-        lstbins, d0, f0, n0, times0 = lstbin_simple.lst_bin_files_for_baselines(
+        lstbins, d0, f0, n0, inpflg, times0 = lstbin_simple.lst_bin_files_for_baselines(
             data_files=[uvd_redavg_file],
             lst_bin_edges=[uvd_redavg.lst_array.min()-0.1, uvd_redavg.lst_array.max()+0.1],
             redundantly_averaged=True,
@@ -842,12 +925,12 @@ class Test_LSTBinFiles:
         )
 
         for flset, flsetc in zip(out_files, out_files_chunked):
-            assert flset['LST'] != flsetc['LST']
+            assert flset[('LST', False)] != flsetc[('LST', False)]
             uvdlst = UVData()
-            uvdlst.read(flset['LST'])
+            uvdlst.read(flset[('LST', False)])
 
             uvdlstc = UVData()
-            uvdlstc.read(flsetc['LST'])
+            uvdlstc.read(flsetc[('LST', False)])
 
             assert uvdlst == uvdlstc
 
@@ -922,12 +1005,12 @@ class Test_LSTBinFiles:
         )
 
         for flset, flsetc in zip(out_files, out_files_recal):
-            assert flset['LST'] != flsetc['LST']
+            assert flset[('LST', False)] != flsetc[('LST', False)]
             uvdlst = UVData()
-            uvdlst.read(flset['LST'])
+            uvdlst.read(flset[('LST', False)])
 
             uvdlstc = UVData()
-            uvdlstc.read(flsetc['LST'])
+            uvdlstc.read(flsetc[('LST', False)])
             print(np.unique(uvdlstc.lst_array))
             expected = mockuvd.identifiable_data_from_uvd(uvdlst, reshape=False)
 
@@ -1010,7 +1093,7 @@ class Test_LSTBinFiles:
         assert len(out_files) == 2
         for flset in out_files:
             uvdlst = UVData()
-            uvdlst.read(flset['LST'])
+            uvdlst.read(flset[('LST', False)])
 
             # Don't worry about history here, because we know they use different inputs
             expected = mockuvd.identifiable_data_from_uvd(uvdlst, reshape=False)
@@ -1068,7 +1151,7 @@ class Test_LSTBinFiles:
 
         for flset in out_files:
             uvdlst = UVData()
-            uvdlst.read(flset['LST'])
+            uvdlst.read(flset[('LST', False)])
 
             # Don't worry about history here, because we know they use different inputs
             expected = mockuvd.identifiable_data_from_uvd(uvdlst, reshape=False)
@@ -1123,3 +1206,38 @@ class Test_LSTBinFiles:
         with pytest.raises(ValueError, match='output_file_select must be less than the number of output files'):
             lstbf(output_file_select=100)
 
+
+    def test_inpaint_mode_no_flags(self, tmp_path_factory):
+        """Test that using inpaint mode does nothing when there's no flags."""
+        tmp = tmp_path_factory.mktemp("inpaint_no_flags")
+        uvds = mockuvd.make_dataset(
+            ndays=3, nfiles=2, ntimes=2,
+            creator=mockuvd.create_uvd_identifiable,
+            antpairs = [(i,j) for i in range(7) for j in range(i, 7)],  # 55 antpairs
+            pols = ('xx', 'yx'),
+            freqs=np.linspace(140e6, 180e6, 3),
+            redundantly_averaged=True,
+        )
+
+        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
+
+        cfl = tmp / "lstbin_config_file.yaml"
+        config_info = lstbin_simple.make_lst_bin_config_file(
+            cfl, data_files, ntimes_per_file=2, clobber=True,
+        )
+        out_files = lstbin_simple.lst_bin_files(
+            config_file=cfl, fname_format="zen.{kind}.{lst:7.5f}{inpaint_mode}.uvh5",
+            Nbls_to_load=11, rephase=False,
+            sigma_clip_thresh=0.0,
+            sigma_clip_min_N=2,
+            output_flagged=True,
+            output_inpainted=True
+        )
+
+        assert len(out_files) == 2
+
+        for flset in out_files:
+            flagged = UVData.from_file(flset[('LST', False)])
+            inpainted = UVData.from_file(flset[('LST', True)])
+
+            assert flagged == inpainted
