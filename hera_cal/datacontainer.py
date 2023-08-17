@@ -6,6 +6,7 @@ from __future__ import annotations
 import numpy as np
 from collections import OrderedDict as odict
 import copy
+import warnings
 
 from typing import Sequence
 from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
@@ -515,7 +516,7 @@ class DataContainer:
         if not in_place:
             return dc
 
-    def select_or_expand_freqs(
+    def select_freqs(
         self, 
         freqs: np.ndarray | None = None, 
         channels: np.ndarray | slice | None = None, 
@@ -523,6 +524,9 @@ class DataContainer:
     ):
         """Update the object with a subset of frequencies (which may be repeated).
         
+        While typically this will be used to down-select frequencies, one can 
+        'expand' the frequencies by duplicating channels.
+
         Parameters
         ----------
         freqs : np.ndarray, optional
@@ -532,6 +536,12 @@ class DataContainer:
             Only one of freqs or channels can be given.
         in_place : bool, optional
             If True, modify the object in place. Otherwise, return a modified copy.
+            Even if `in_place` is True, the object is still returned for convenience.
+
+        Returns
+        -------
+        DataContainer
+            The modified object. If `in_place` is True, this is the same object.
         """
         obj = self if in_place else copy.deepcopy(self)
         if freqs is None and channels is None:
@@ -540,11 +550,15 @@ class DataContainer:
             raise ValueError('Cannot specify both freqs and channels.')
         
         if freqs is not None:
-            if not np.all([fq in dc.freqs for fq in freqs]):
+            if not np.all([fq in obj.freqs for fq in freqs]):
                 raise ValueError('All freqs must be in self.freqs.')
             channels = np.searchsorted(obj.freqs, freqs)
         
-        axis = obj[next(iter(dc.keys()))].shape.index(len(obj.freqs))
+        if obj.freqs is None:
+            warnings.warn("It is impossible to automatically detect which axis is frequency. Trying last axis.")
+            axis = -1
+        else:
+            axis = obj[next(iter(obj.keys()))].shape.index(len(obj.freqs))
         for bl in obj:
             obj[bl] = obj[bl].take(channels, axis=axis)
 

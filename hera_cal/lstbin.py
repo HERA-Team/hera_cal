@@ -1076,8 +1076,8 @@ def sigma_clip(array: np.ndarray | np.ma.MaskedArray, sigma: float=4.0, min_N: i
         return np.zeros_like(array, dtype=bool)
 
     if isinstance(array, np.ma.MaskedArray):
-        location = np.expand_dims(np.median(array, axis=axis), axis=axis)
-        scale = np.expand_dims(np.median(np.abs(array - location), axis=axis) * 1.482579, axis=axis)
+        location = np.expand_dims(np.ma.median(array, axis=axis), axis=axis)
+        scale = np.expand_dims(np.ma.median(np.abs(array - location), axis=axis) * 1.482579, axis=axis)
     else:
         # get robust location
         location = np.expand_dims(np.nanmedian(array, axis=axis), axis=axis)

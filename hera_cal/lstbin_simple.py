@@ -458,7 +458,11 @@ def lst_average(
     # Now do sigma-clipping.
     if sigma_clip_thresh is not None:
         if inpainted_mode:
-            warnings.warn("Sigma-clipping in in-painted mode is a bad idea.")
+            warnings.warn(
+                "Sigma-clipping in in-painted mode is a bad idea, because it creates "
+                "non-uniform flags over frequency, which can cause artificial spectral "
+                "structure. In-painted mode specifically attempts to avoid this."
+            )
 
         nflags = np.sum(flags)
         clip_flags = sigma_clip(data.real, sigma=sigma_clip_thresh, min_N = sigma_clip_min_N)
@@ -480,17 +484,19 @@ def lst_average(
         # Update the "non_inpainted" mask
         non_inpainted = data.mask
 
-    nsamples[non_inpainted] = 0
-
     # Here we do a check to make sure Nsamples is uniform across frequency.
+    # Do this before setting non_inpainted to zero nsamples.
     ndiff = np.diff(nsamples, axis=2)
     if np.any(ndiff != 0):
         warnings.warn("Nsamples is not uniform across frequency. This will result in spectral structure.")
+
+    nsamples[non_inpainted] = 0
 
     norm = np.sum(nsamples, axis=0)
     ndays_binned = np.sum((~flags).astype(int), axis=0)
 
     logger.info("Calculating mean")
+    # np.sum works the same for both masked and non-masked arrays.
     meandata = np.sum(data * nsamples, axis=0)
 
     lstbin_flagged = np.all(flags, axis=0)
@@ -499,6 +505,7 @@ def lst_average(
 
     normalizable = norm > 0
     meandata[normalizable] /= norm[normalizable]
+    # Multiply by nan instead of just setting as nan, so both real and imag parts are nan
     meandata[~normalizable] *= np.nan
 
     # get other stats
@@ -748,7 +755,7 @@ def lst_bin_files_for_baselines(
             # We need to down-selecton times/freqs (bls and pols will be sub-selected
             # based on those in the data through the next loop)
             inpainted.select_or_expand_times(times=tarr, skip_bda_check=True)
-            inpainted.select_or_expand_freqs(channels=freq_chans)
+            inpainted.select_freqs(channels=freq_chans)
         else:
             inpainted = None
 
@@ -977,6 +984,7 @@ def lst_bin_files_single_outfile(
     output_inpainted: bool | None = None,
     output_flagged: bool  = True,
     where_inpainted_file_rules: list[tuple[str, str]] | None = None,
+    sigma_clip_in_inpainted_mode: bool = False,
 ) -> dict[str, Path]:
     """
     Bin data files into LST bins, and write all bins to disk in a single file.
@@ -1118,7 +1126,13 @@ def lst_bin_files_single_outfile(
         of the data object). If not provided, but `output_inpainted` is set to True,
         all data-flags will be considered in-painted except for baseline-times that are
         fully flagged, which will be completely ignored.
-
+    sigma_clip_in_inpainted_mode
+        If True, sigma clip the data in inpainted mode (if sigma-clipping is turned on). 
+        This is generally not a good idea, since the point of inpainting is to get
+        smoother spectra, and sigma-clipping creates non-uniform Nsamples, which can
+        lead to less smooth spectra. This option is only here to enable sigma-clipping
+        to be turned on for flagged mode, and off for inpainted mode.
+    
     Returns
     -------
     out_files
@@ -1417,7 +1431,10 @@ def lst_bin_files_single_outfile(
                 where_inpainted=where_inpainted,
                 inpainted_mode=inpainted,
                 flag_thresh=flag_thresh,
-                sigma_clip_thresh = sigma_clip_thresh,
+                sigma_clip_thresh = (
+                    None if inpainted and not sigma_clip_in_inpainted_mode
+                    else sigma_clip_thresh
+                ),
                 sigma_clip_min_N = sigma_clip_min_N,
                 flag_below_min_N=flag_below_min_N,
             )
@@ -2037,4 +2054,5 @@ def lst_bin_arg_parser():
     a.add_argument("--no-flagged-mode", action='store_true', help="turn off output of flagged mode LST-binning")
     a.add_argument("--do-inpaint-mode", action='store_true', default=None, help="turn on inpainting mode LST-binning")
     a.add_argument("--where-inpainted-file-rules", nargs='*', type=str, help="rules to convert datafile names to where-inpainted-file names. A series of two strings where the first will be replaced by the latter")
+    a.add_argument('--sigma-clip-in-inpainted-mode', action='store_true', default=False, help='allow sigma-clipping in inpainted mode')
     return a
