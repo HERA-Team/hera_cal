@@ -267,6 +267,7 @@ def reduce_lst_bins(
     sigma_clip_min_N: int = 4,
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
+    get_mad: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     From a list of LST-binned data, produce reduced statistics.
@@ -331,6 +332,10 @@ def reduce_lst_bins(
     out_nsamples = np.zeros(out_data.shape, dtype=float)
     days_binned = np.zeros(out_nsamples.shape, dtype=int)
 
+    if get_mad:
+        mad = np.zeros(out_data.shape, dtype=complex)
+        med = np.zeros(out_data.shape, dtype=complex)
+
     if where_inpainted is None:
         where_inpainted = [None] * nlst_bins
 
@@ -339,7 +344,12 @@ def reduce_lst_bins(
 
         # TODO: check that this doesn't make yet another copy...
         # This is just the data in this particular lst-bin.
+        
         if d.size:
+            d, f = get_masked_data(d, n, f, inpainted=inpf, inpainted_mode=inpainted_mode)
+            f = threshold_flags(f, inplace=True, flag_thresh=flag_thresh)
+            d.mask |= f
+
             (
                 out_data[:, lstbin],
                 out_flags[:, lstbin],
@@ -348,22 +358,36 @@ def reduce_lst_bins(
                 days_binned[:, lstbin]
             ) = lst_average(
                 d, n, f, 
-                inpainted=inpf,
                 inpainted_mode=inpainted_mode,
-                mutable=mutable,
-                flag_thresh=flag_thresh,
                 sigma_clip_thresh=sigma_clip_thresh,
                 sigma_clip_min_N=sigma_clip_min_N,
                 flag_below_min_N=flag_below_min_N,
             )
+
+            if get_mad:
+                med[:, lstbin], mad[:, lstbin] = get_lst_mad(d)
         else:
             out_data[:, lstbin] *= np.nan
             out_flags[:, lstbin] = True
             out_std[:, lstbin] *= np.inf
             out_nsamples[:, lstbin] = 0.0
 
+            if get_mad:
+                mad[:, lstbin] *= np.inf
+                med[:, lstbin] *= np.nan
 
-    return out_data, out_flags, out_std, out_nsamples, days_binned
+    out = {
+        "data": out_data,
+        "flags": out_flags,
+        "std": out_std,
+        "nsamples": out_nsamples,
+        "days_binned": days_binned,
+    }
+    if get_mad:
+        out["mad"] = mad
+        out["median"] = med
+
+    return out
 
 def _allocate_dfn(shape: tuple[int], d=0.0, f=0, n=0):
     data = np.full(shape, d, dtype=complex)
@@ -371,13 +395,65 @@ def _allocate_dfn(shape: tuple[int], d=0.0, f=0, n=0):
     nsamples = np.full(shape, n, dtype=float)
     return data, flags, nsamples
 
-@profile
-def lst_average(
+def get_masked_data(
     data: np.ndarray, nsamples: np.ndarray, flags: np.ndarray,
     inpainted: np.ndarray | None = None,
     inpainted_mode: bool = False,
+) -> np.ma.MaskedArray:
+    if not inpainted_mode:
+        # Act like nothing is inpainted.
+        inpainted = np.zeros(flags.shape, dtype=bool)
+    elif inpainted is None:
+        # Flag if a whole blt is flagged:
+        allf = np.all(flags, axis=2)[:,:, None, :]
+        
+        # Assume everything else that's flagged is inpainted.
+        inpainted = flags.copy() * (~allf)
+
+    flags = flags | np.isnan(data) | np.isinf(data) | (nsamples == 0)
+    data = np.ma.masked_array(
+        data, 
+        mask=(flags & ~inpainted)
+    )
+    return data, flags
+
+
+def get_lst_mad(
+    data: np.ndarray | np.ma.MaskedArray, 
+):
+    """Compute the median absolute deviation of a set of data over its zeroth axis.
+    
+    Flagged data will be ignored in flagged mode, but included in inpainted mode.
+    Nsamples is not taken into account at all, unless Nsamples=0.
+    """
+    fnc = np.ma.median if isinstance(data, np.ma.MaskedArray) else np.median
+    med = fnc(data, axis=0)
+    madrl = fnc(np.abs(data.real - med.real), axis=0)*1.482579
+    madim = fnc(np.abs(data.imag - med.imag), axis=0)*1.482579
+    return med, madrl + madim*1j
+
+
+def threshold_flags(
+    flags: np.ndarray,
+    inplace: bool = False,
     flag_thresh: float = 0.7,
-    mutable: bool = False,
+):
+    if not inplace:
+        flags = flags.copy()
+
+    # Flag entire LST bins if there are too many flags over time
+    flag_frac = np.sum(flags, axis=0) / flags.shape[0]
+    nflags = np.sum(flags)
+    logger.info(f"Percent of data flagged before thresholding: {100*nflags/flags.size:.2f}%")
+    flags |= flag_frac > flag_thresh
+    logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to flag_frac > {flag_thresh}")
+
+    return flags
+
+@profile
+def lst_average(
+    data: np.ndarray | np.ma.MaskedArray, nsamples: np.ndarray, flags: np.ndarray,
+    inpainted_mode: bool = False,
     sigma_clip_thresh: float | None= None,
     sigma_clip_min_N: int=4,
     flag_below_min_N: bool = False,
@@ -422,38 +498,12 @@ def lst_average(
     # data has shape (nnights, nbl, npols, nfreqs)
     # all data is assumed to be in the same LST bin.
 
-    assert data.shape == nsamples.shape == flags.shape
-    
-    if not mutable:
-        flags = flags.copy()
-        nsamples = nsamples.copy()
-        data = data.copy()
-
-    if not inpainted_mode:
-        # Act like nothing is inpainted.
-        inpainted = np.zeros(flags.shape, dtype=bool)
-    elif inpainted is None:
-        # Flag if a whole blt is flagged:
-        allf = np.all(flags, axis=2)[:,:, None, :]
-        
-        # Assume everything else that's flagged is inpainted.
-        inpainted = flags.copy() * (~allf)
-
-    # These potential extra flags are certainly not inpainted.
-    flags[np.isnan(data) | np.isinf(data) | (nsamples == 0)] = True
-
-    # Flag entire LST bins if there are too many flags over time
-    flag_frac = np.sum(flags, axis=0) / flags.shape[0]
-    nflags = np.sum(flags)
-    logger.info(f"Percent of data flagged before thresholding: {100*nflags/flags.size:.2f}%")
-    flags |= flag_frac > flag_thresh
-    logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to flag_frac > {flag_thresh}")
-
-    non_inpainted = flags & ~inpainted
-    if np.any(non_inpainted):
-        # Use a masked array instead of a nan-filled array. This is very slightly
-        # faster than nanmean, and allows us more flexibility.
-        data = np.ma.masked_array(data, mask=non_inpainted)
+    if not isinstance(data, np.ma.MaskedArray):
+        # Generally, we want a MaskedArray for 'data', where the mask is *either*
+        # the flags or the 'non-inpainted flags', as obtained by `threshold_flags`.
+        # However, if this hasn't been called, and we just have an array, apply flags
+        # appropriately here.
+        data, flags = get_masked_data(data, nsamples, flags, inpainted_mode=inpainted_mode)
 
     # Now do sigma-clipping.
     if sigma_clip_thresh is not None:
@@ -474,15 +524,9 @@ def lst_average(
 
         flags |= clip_flags
 
-        if isinstance(data, np.ma.MaskedArray):
-            data.mask |= clip_flags
-        else:
-            data = np.ma.masked_array(data, mask=clip_flags)
+        data.mask |= clip_flags
 
         logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to sigma clipping")
-
-        # Update the "non_inpainted" mask
-        non_inpainted = data.mask
 
     # Here we do a check to make sure Nsamples is uniform across frequency.
     # Do this before setting non_inpainted to zero nsamples.
@@ -490,7 +534,7 @@ def lst_average(
     if np.any(ndiff != 0):
         warnings.warn("Nsamples is not uniform across frequency. This will result in spectral structure.")
 
-    nsamples[non_inpainted] = 0
+    nsamples = np.ma.masked_array(nsamples, mask=data.mask)
 
     norm = np.sum(nsamples, axis=0)
     ndays_binned = np.sum((~flags).astype(int), axis=0)
@@ -522,13 +566,10 @@ def lst_average(
     
     # While the previous norm is correct for normalizing the mean, we now 
     # calculate nsamples as the unflagged samples in each LST bin.
-    nsamples  = np.sum(nsamples * (~flags).astype(int), axis=0)
-
-    # Get the standard array out of the masked array.
-    if isinstance(meandata, np.ma.MaskedArray):
-        meandata = meandata.data
-
-    return meandata, lstbin_flagged, std, nsamples, ndays_binned
+    nsamples.mask = flags
+    nsamples  = np.sum(nsamples, axis=0)
+    
+    return meandata.data, lstbin_flagged, std.data, nsamples.data, ndays_binned
 
 def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
     """
@@ -985,6 +1026,7 @@ def lst_bin_files_single_outfile(
     output_flagged: bool  = True,
     where_inpainted_file_rules: list[tuple[str, str]] | None = None,
     sigma_clip_in_inpainted_mode: bool = False,
+    write_med_mad: bool = False,
 ) -> dict[str, Path]:
     """
     Bin data files into LST bins, and write all bins to disk in a single file.
@@ -1132,7 +1174,9 @@ def lst_bin_files_single_outfile(
         smoother spectra, and sigma-clipping creates non-uniform Nsamples, which can
         lead to less smooth spectra. This option is only here to enable sigma-clipping
         to be turned on for flagged mode, and off for inpainted mode.
-    
+    write_med_mad
+        If True, write out the median and MAD of the data in each LST bin.
+
     Returns
     -------
     out_files
@@ -1342,7 +1386,10 @@ def lst_bin_files_single_outfile(
         if not inpaint_mode and not output_flagged:
             continue
 
-        for kind in ['LST', 'STD']:
+        kinds = ['LST', 'STD']
+        if write_med_mad:
+            kinds += ['MED', 'MAD']
+        for kind in kinds:
             # Create the files we'll write to
             out_files[(kind, inpaint_mode)] = create_outfile(
                 kind = kind,
@@ -1426,7 +1473,7 @@ def lst_bin_files_single_outfile(
             if not inpainted and not output_flagged:
                 continue
 
-            _data, _flags, std, _nsamples, days_binned = reduce_lst_bins(
+            rdc = reduce_lst_bins(
                 data, flags, nsamples,
                 where_inpainted=where_inpainted,
                 inpainted_mode=inpainted,
@@ -1437,22 +1484,39 @@ def lst_bin_files_single_outfile(
                 ),
                 sigma_clip_min_N = sigma_clip_min_N,
                 flag_below_min_N=flag_below_min_N,
+                get_mad=write_med_mad,
             )
 
             write_baseline_slc_to_file(
                 fl=out_files[('LST', inpainted)],
                 slc=slc,
-                data=_data,
-                flags=_flags,
-                nsamples=_nsamples,
+                data=rdc['data'],
+                flags=rdc['flags'],
+                nsamples=rdc['nsamples'],
             )
             write_baseline_slc_to_file(
                 fl=out_files[('STD', inpainted)],
                 slc=slc,
-                data=std,
-                flags=_flags,
-                nsamples=days_binned,
+                data=rdc['std'],
+                flags=rdc['flags'],
+                nsamples=rdc['days_binned'],
             )
+
+            if write_med_mad:
+                write_baseline_slc_to_file(
+                    fl=out_files[('MED', inpainted)],
+                    slc=slc,
+                    data=rdc['median'],
+                    flags=rdc['flags'],
+                    nsamples=rdc['nsamples'],
+                )
+                write_baseline_slc_to_file(
+                    fl=out_files[('STD', inpainted)],
+                    slc=slc,
+                    data=rdc['mad'],
+                    flags=rdc['flags'],
+                    nsamples=rdc['days_binned'],
+                )
 
         nbls_so_far += len(bl_chunk)
 
@@ -1958,6 +2022,7 @@ def make_lst_bin_config_file(
         blts_are_rectangular=blts_are_rectangular,
         time_axis_faster_than_bls=time_axis_faster_than_bls,
         jd_regex=jd_regex,
+        ntimes_per_file=ntimes_per_file,
     )
 
     dlst = lst_grid[0][1] - lst_grid[0][0]
