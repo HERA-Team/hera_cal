@@ -268,7 +268,7 @@ def reduce_lst_bins(
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
     get_mad: bool = False,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> dict[str, np.ndarray]:
     """
     From a list of LST-binned data, produce reduced statistics.
 
@@ -310,12 +310,17 @@ def reduce_lst_bins(
         The fraction of integrations for a particular (antpair, pol, channel) combination
         within an LST-bin that can be flagged before that combination is flagged
         in the LST-average.
+    get_mad
+        Whether to compute the median and median absolute deviation of the data in each 
+        LST bin, in addition to the mean and standard deviation.
 
     Returns
     -------
-    out_data, out_flags, out_std, out_nsamples
-        The reduced data, flags, standard deviation (across days) and nsamples.
-        Shape ``(nbl, nlst_bins, nfreq, npol)``.
+    dict
+        The reduced data in a dictionary. Keys are 'data' (the lst-binned mean), 
+        'nsamples', 'flags', 'days_binned' (the number of days that went into each bin),
+        'std' (standard deviation) and *otionally* 'median' and 'mad' (if `get_mad` is
+        True). All values are arrays of the same shape: ``(nbl, nlst_bins, nfreq, npol)``.
     """
     nlst_bins = len(data)
     (_, nbl, nfreq, npol) = data[0].shape
@@ -365,7 +370,7 @@ def reduce_lst_bins(
             )
 
             if get_mad:
-                med[:, lstbin], mad[:, lstbin] = get_lst_mad(d)
+                med[:, lstbin], mad[:, lstbin] = get_lst_median_and_mad(d)
         else:
             out_data[:, lstbin] *= np.nan
             out_flags[:, lstbin] = True
@@ -418,7 +423,7 @@ def get_masked_data(
     return data, flags
 
 
-def get_lst_mad(
+def get_lst_median_and_mad(
     data: np.ndarray | np.ma.MaskedArray, 
 ):
     """Compute the median absolute deviation of a set of data over its zeroth axis.
@@ -2120,4 +2125,5 @@ def lst_bin_arg_parser():
     a.add_argument("--do-inpaint-mode", action='store_true', default=None, help="turn on inpainting mode LST-binning")
     a.add_argument("--where-inpainted-file-rules", nargs='*', type=str, help="rules to convert datafile names to where-inpainted-file names. A series of two strings where the first will be replaced by the latter")
     a.add_argument('--sigma-clip-in-inpainted-mode', action='store_true', default=False, help='allow sigma-clipping in inpainted mode')
+    a.add_argument('--write-med-mad', action='store_true', default=False, help='option to write out MED/MAD files in addition to LST/STD files')
     return a
