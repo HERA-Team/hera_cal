@@ -59,7 +59,6 @@ setup_args = {
         'scikit-learn',
         'hera-filters',
         "line_profiler",
-        'aipy',
         "rich",
         "jax",
         "jaxlib",
@@ -68,7 +67,8 @@ setup_args = {
     ],
     'extras_require': {
         "all": [
-            'optax'
+            'optax',
+            'aipy'
         ],
         'dev': [
             "pytest",
