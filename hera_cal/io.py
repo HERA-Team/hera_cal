@@ -812,7 +812,7 @@ class HERAData(UVData):
                                  run_check_acceptability=run_check_acceptability, **kwargs)
                     self.use_future_array_shapes()
                     if self.filetype == 'uvfits':
-                        self.unphase_to_drift()
+                        self.unproject_phase()
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
@@ -2273,7 +2273,7 @@ def _write_HERAData_to_filetype(hd, outfilename, filetype_out='miriad', clobber=
     if filetype_out == 'miriad':
         hd.write_miriad(outfilename, clobber=clobber)
     elif filetype_out == 'uvfits':
-        hd.write_uvfits(outfilename, force_phase=True, spoof_nonessential=True)
+        hd.write_uvfits(outfilename, force_phase=True)
     elif filetype_out == 'uvh5':
         hd.write_uvh5(outfilename, clobber=clobber)
     else:
