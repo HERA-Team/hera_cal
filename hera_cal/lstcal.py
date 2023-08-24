@@ -2,11 +2,9 @@
 Module for calibrating visibilities by comparing data which lie within the same LST-bin
 """
 from __future__ import annotations
-
-import yaml
 import linsolve
 import numpy as np
-from . import utils, redcal, red_groups, lstbin_simple
+from . import utils
 
 
 def compute_offsets(
@@ -812,7 +810,7 @@ def amplitude_calibration(
         Shape (Ntimes, Nfreqs, Npols) of amplitudes.
     """
     # Get shape of data
-    ndays, nbls, nfreqs, npols = data.shape
+    ndays, _, nfreqs, _ = data.shape
 
     # Get the antennas from the antpairs
     ants = list(set(sum(map(list, antpairs), [])))
