@@ -24,6 +24,7 @@ class TestCalFuncs:
             for k in self.reds
         }
 
+        # Generate a set of data, flags, and nsamples
         self.sim_data = {
             k: self.true_vis[k] * np.ones((self.ndays, 1)) for k in self.true_vis
         }
