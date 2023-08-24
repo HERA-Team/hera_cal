@@ -1320,7 +1320,7 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
         else:
             x0.append(phs0[i])
             _phs = None
-        x0 = np.array(x0)
+        x0 = np.squeeze(x0)
 
         # optimize
         res = minimize(L, x0, args=(_amp, _dly, _phs, clean_data[i], clean_model[i], clean_wgts[i], dly_range, freqs, fft_kwargs), method=method, tol=tol, options=dict(maxiter=maxiter))
