@@ -2041,7 +2041,7 @@ def make_lst_bin_config_file(
     # Get the best lst_branch_cut by finding the largest gap in LSTs and starting 
     # AFTER it
     if lst_branch_cut is None:
-        lst_branch_cut = utils.get_best_lst_branch_cut(np.concatenate(lst_grid))
+        lst_branch_cut = float(utils.get_best_lst_branch_cut(np.concatenate(lst_grid)))
     
     dlst = lst_grid[0][1] - lst_grid[0][0]
     # Make it a real list of floats to make the YAML easier to read
