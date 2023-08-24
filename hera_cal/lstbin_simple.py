@@ -1382,6 +1382,7 @@ def lst_bin_files_single_outfile(
         start_jd=start_jd,
         freq_min=freq_min,
         freq_max=freq_max,
+        lst_branch_cut=metadata['lst_branch_cut'],
         **write_kwargs,
     )
     out_files = {}
@@ -1764,6 +1765,7 @@ def create_lstbin_output_file(
     channels: np.ndarray | list[int] | None = None,
     vis_units: str = "Jy",
     inpaint_mode: bool | None = None,
+    lst_branch_cut: float = 0.0,
 ) -> Path:
     outdir = Path(outdir)
     
@@ -1771,6 +1773,9 @@ def create_lstbin_output_file(
     file_list_str = "-".join(ff.path.name for ff in file_list)
     file_history = f"{history} Input files: {file_list_str}"
     _history = file_history + utils.history_string()
+
+    if lst < lst_branch_cut:
+        lst += 2*np.pi
 
     fname = outdir / fname_format.format(
         kind=kind, lst=lst, pol=''.join(pols), 
@@ -1801,6 +1806,7 @@ def create_lstbin_output_file(
         start_jd=start_jd,
         time_axis_faster_than_bls = True,
         vis_units=vis_units,
+        lst_branch_cut=lst_branch_cut,
     )
     uvd_template.select(frequencies=freqs, polarizations=pols, inplace=True)
     # Need to set the polarization array manually because even though the select
@@ -1866,12 +1872,7 @@ def config_lst_bin_files(
     Returns
     -------
     lst_grid : float ndarray holding LST bin centers.
-    dlst : float, LST bin width of output lst_grid
-    file_lsts : list, contains the lst grid of each output file. Empty files are dropped.
-    begin_lst : float, starting lst for LST binner. If lst_start is not None, this equals lst_start.
-    lst_arrays : list, list of lst arrays for each file. These will have 2 pis added or subtracted
-                 to match the range of lst_grid given lst_start
-    time_arrays : list, list of time arrays for each file
+    matched_files : list of lists of files, one list for each output file.
     """
     logger.info("Configuring lst_grid")
 
@@ -1959,6 +1960,7 @@ def make_lst_bin_config_file(
     blts_are_rectangular: bool | None = None,
     time_axis_faster_than_bls: bool | None = None,
     jd_regex: str = r"zen\.(\d+\.\d+)\.",
+    lst_branch_cut: float | None = None,
 ) -> dict[str, Any]:
     """Construct and write a YAML configuration file for lst-binning.
 
@@ -2008,7 +2010,13 @@ def make_lst_bin_config_file(
     jd_regex : str, optional
         Regex to use to extract the JD from the file name. Set to None or empty
         to force the LST-matching to use the LSTs in the metadata within the file.
-
+    lst_branch_cut
+        The LST at which to branch cut the LST grid for file writing. The JDs in the 
+        output LST-binned files will be *lowest* at the lst_branch_cut, and all file
+        names will have LSTs that are higher than lst_branch_cut. If None, this will
+        be determined automatically by finding the largest gap in LSTs and starting
+        AFTER it.
+        
     Returns
     -------
     config : dict
@@ -2030,6 +2038,11 @@ def make_lst_bin_config_file(
         ntimes_per_file=ntimes_per_file,
     )
 
+    # Get the best lst_branch_cut by finding the largest gap in LSTs and starting 
+    # AFTER it
+    if lst_branch_cut is None:
+        lst_branch_cut = utils.get_best_lst_branch_cut(np.concatenate(lst_grid))
+    
     dlst = lst_grid[0][1] - lst_grid[0][0]
     # Make it a real list of floats to make the YAML easier to read
     lst_grid = [[float(l) for l in lsts] for lsts in lst_grid]
@@ -2069,6 +2082,7 @@ def make_lst_bin_config_file(
             'time_axis_faster_than_bls': meta.time_axis_faster_than_bls,
             'start_jd': int(meta.times[0]),
             'integration_time': float(tint),
+            'lst_branch_cut': lst_branch_cut
         }
     }
 

@@ -1070,3 +1070,39 @@ class TestMatchFilesToLSTBins:
 
         # Ensure all files are matched
         assert len(files_matched) == len(fls)
+
+
+class Test_LSTBranchCut:
+    def test_simple_ascending(self):
+        lsts = np.linspace(0, 1.0, 100)
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert best == 0
+
+    def test_simple_descending(self):
+        lsts = np.linspace(1.0, 0, 100)
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert best == 0
+
+    def test_simple_ascending_with_offset(self):
+        lsts = np.linspace(0.1, 1.1, 100)
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert np.isclose(best, 0.1)
+
+    def test_wrap_around_2pi(self):
+        lsts = np.linspace(3*np.pi/2, 5*np.pi/2, 100)
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert np.isclose(best, 3*np.pi/2)
+
+    def test_wrap_around_2pi_starting_low(self):
+        lsts0 = np.linspace(0, np.pi/2)
+        lsts1 = np.linspace(3*np.pi/2, 2*np.pi)
+        lsts = np.concatenate([lsts0, lsts1])
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert np.isclose(best, 3*np.pi/2)
+
+    def test_with_crazy_periods(self):
+        lsts = np.linspace(0, 1.0, 100)
+        n = np.random.random_integers(10, size=100)
+        lsts += n*2*np.pi
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert best == 0

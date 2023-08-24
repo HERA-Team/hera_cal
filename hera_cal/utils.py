@@ -563,7 +563,7 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
                      LSTs to correspond to previous or subsequent days if necessary
 
     lst_branch_cut : type=float, LST that must fall during start_jd even when allow_other_jd
-                     is True. Used as the starting point starting point where LSTs below this
+                     is True. Used as the starting point where LSTs below this
                      value map to later JDs than this LST [radians]
 
     latitude : type=float, degrees North of observer, default=HERA latitude
@@ -1777,6 +1777,20 @@ def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
             else:
                 baseline_chunks.append(grp)
     return baseline_chunks
+
+def get_best_lst_branch_cut(lsts):
+    # Sort them
+    lsts = np.sort(lsts) % (2*np.pi)
+    
+    # wrap lstg around in case the biggest gap is right at the start
+    lsts = np.concatenate((lsts, [lsts[0]]))
+
+    diff_lst = np.diff(lsts)
+    while np.any(diff_lst < 0):
+        lsts[np.where(diff_lst < 0)[0] + 1] += 2*np.pi
+        diff_lst = np.diff(lsts)
+    idxmax = np.argmax(diff_lst) + 1
+    return lsts[idxmax] % (2*np.pi)
 
 
 def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=False):
