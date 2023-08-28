@@ -1757,7 +1757,7 @@ def create_lstbin_output_file(
     times: np.ndarray | None = None,
     lsts: np.ndarray | None = None,
     history: str  = "",
-    fname_format: str="zen.{kind}.{lst:7.5f}{inpaint_mode}.uvh5",
+    fname_format: str="zen.{kind}.{lst:7.5f}.{inpaint_mode}.uvh5",
     overwrite: bool = False,
     antpairs: list[tuple[int, int]] | None = None,
     freq_min: float | None = None,
@@ -1779,7 +1779,7 @@ def create_lstbin_output_file(
 
     fname = outdir / fname_format.format(
         kind=kind, lst=lst, pol=''.join(pols),
-        inpaint_mode='.inpaint' if inpaint_mode else ('.flagged' if inpaint_mode is False else "")
+        inpaint_mode='inpaint' if inpaint_mode else ('flagged' if inpaint_mode is False else "")
     )
 
     logger.info(f"Initializing {fname}")
