@@ -49,7 +49,7 @@ if crules is not None:
 else:
     calfile_rules = None
 
-inprules = kwargs.pop("where-inpainted-file-rules")
+inprules = kwargs.pop("where_inpainted_file_rules")
 if inprules is not None:
     inpaint_rules = [(inprules[i], inprules[i + 1]) for i in range(len(inprules) // 2)]
 else:
