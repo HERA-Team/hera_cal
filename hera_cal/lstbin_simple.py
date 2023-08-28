@@ -311,13 +311,13 @@ def reduce_lst_bins(
         within an LST-bin that can be flagged before that combination is flagged
         in the LST-average.
     get_mad
-        Whether to compute the median and median absolute deviation of the data in each 
+        Whether to compute the median and median absolute deviation of the data in each
         LST bin, in addition to the mean and standard deviation.
 
     Returns
     -------
     dict
-        The reduced data in a dictionary. Keys are 'data' (the lst-binned mean), 
+        The reduced data in a dictionary. Keys are 'data' (the lst-binned mean),
         'nsamples', 'flags', 'days_binned' (the number of days that went into each bin),
         'std' (standard deviation) and *otionally* 'median' and 'mad' (if `get_mad` is
         True). All values are arrays of the same shape: ``(nbl, nlst_bins, nfreq, npol)``.
@@ -349,7 +349,7 @@ def reduce_lst_bins(
 
         # TODO: check that this doesn't make yet another copy...
         # This is just the data in this particular lst-bin.
-        
+
         if d.size:
             d, f = get_masked_data(d, n, f, inpainted=inpf, inpainted_mode=inpainted_mode)
             f = threshold_flags(f, inplace=True, flag_thresh=flag_thresh)
@@ -362,7 +362,7 @@ def reduce_lst_bins(
                 out_nsamples[:, lstbin],
                 days_binned[:, lstbin]
             ) = lst_average(
-                d, n, f, 
+                d, n, f,
                 inpainted_mode=inpainted_mode,
                 sigma_clip_thresh=sigma_clip_thresh,
                 sigma_clip_min_N=sigma_clip_min_N,
@@ -411,23 +411,23 @@ def get_masked_data(
     elif inpainted is None:
         # Flag if a whole blt is flagged:
         allf = np.all(flags, axis=2)[:,:, None, :]
-        
+
         # Assume everything else that's flagged is inpainted.
         inpainted = flags.copy() * (~allf)
 
     flags = flags | np.isnan(data) | np.isinf(data) | (nsamples == 0)
     data = np.ma.masked_array(
-        data, 
+        data,
         mask=(flags & ~inpainted)
     )
     return data, flags
 
 
 def get_lst_median_and_mad(
-    data: np.ndarray | np.ma.MaskedArray, 
+    data: np.ndarray | np.ma.MaskedArray,
 ):
     """Compute the median absolute deviation of a set of data over its zeroth axis.
-    
+
     Flagged data will be ignored in flagged mode, but included in inpainted mode.
     Nsamples is not taken into account at all, unless Nsamples=0.
     """
@@ -568,12 +568,12 @@ def lst_average(
 
     std[~normalizable] = np.inf
 
-    
-    # While the previous norm is correct for normalizing the mean, we now 
+
+    # While the previous norm is correct for normalizing the mean, we now
     # calculate nsamples as the unflagged samples in each LST bin.
     nsamples.mask = flags
     nsamples  = np.sum(nsamples, axis=0)
-    
+
     return meandata.data, lstbin_flagged, std.data, nsamples.data, ndays_binned
 
 def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
@@ -671,7 +671,7 @@ def lst_bin_files_for_baselines(
         all frequencies will be included.
     where_inpainted_files
         A list of lists of strings, one for each file, where each file is a UVFlag file
-        specifying which data are in-painted. If not provided, no inpainting will be 
+        specifying which data are in-painted. If not provided, no inpainting will be
         assumed.
 
     Returns
@@ -797,7 +797,7 @@ def lst_bin_files_for_baselines(
             inpainted = io.load_flags(inpfile)
             if not isinstance(inpainted, DataContainer):
                 raise ValueError(f"Expected {inpfile} to be a DataContainer")
-            
+
             # We need to down-selecton times/freqs (bls and pols will be sub-selected
             # based on those in the data through the next loop)
             inpainted.select_or_expand_times(times=tarr, skip_bda_check=True)
@@ -968,14 +968,14 @@ def filter_required_files_by_times(
     return tinds, time_arrays, all_lsts, file_list, cals, where_inpainted
 
 def _get_where_inpainted_files(
-    data_files: list[list[str | Path]], 
+    data_files: list[list[str | Path]],
     where_inpainted_file_rules: list[tuple[str, str]] | None
 ) -> list[list[str | Path]] | None:
     if where_inpainted_file_rules is None:
         return None
-    
+
     where_inpainted_files = []
-    for dflist in enumerate(data_files):
+    for dflist in data_files:
         this = []
         where_inpainted_files.append(this)
         for df in dflist:
@@ -992,7 +992,7 @@ def _configure_inpainted_mode(output_flagged, output_inpainted, where_inpainted_
     # Sort out defaults for inpaint/flagging mode
     if output_inpainted is None:
         output_inpainted = bool(where_inpainted_files)
-    
+
     if not output_inpainted and not output_flagged:
         raise ValueError("Both output_inpainted and output_flagged are False. One must be True.")
 
@@ -1052,7 +1052,7 @@ def lst_bin_files_single_outfile(
     use *both* modes by default.
 
     .. note:: Both "flagged" and "inpainted" mode as implemented in this function are
-        *not* spectrally smooth if the input Nsamples are not spectrally uniform. 
+        *not* spectrally smooth if the input Nsamples are not spectrally uniform.
 
     Parameters
     ----------
@@ -1157,24 +1157,24 @@ def lst_bin_files_single_outfile(
     output_inpainted
         If True, output data LST-binned in in-painted mode. This mode does *not* flag
         data for the averaging, assuming that data that has flags has been in-painted
-        to improve spectral smoothness. It does take the flags into account for the 
+        to improve spectral smoothness. It does take the flags into account for the
         LST-binned Nsamples, however.
     output_flagged
         If True, output data LST-binned in flagged mode. This mode *does* apply flags
         to the data before averaging. It will yield the same Nsamples as the in-painted
         mode, but simply ignores flagged data for the average, which can yield less
-        spectrally-smooth LST-binned results. 
+        spectrally-smooth LST-binned results.
     where_inpainted_file_rules
-        Rules to transform the input data file names into the corresponding "where 
+        Rules to transform the input data file names into the corresponding "where
         inpainted" files (which should be in UVFlag format). If provided, this indicates
-        that the data itself is in-painted, and the `output_inpainted` mode will be 
+        that the data itself is in-painted, and the `output_inpainted` mode will be
         switched on by default. These files should specify which data is in-painted
         in the associated data file (which may be different than the in-situ flags
         of the data object). If not provided, but `output_inpainted` is set to True,
         all data-flags will be considered in-painted except for baseline-times that are
         fully flagged, which will be completely ignored.
     sigma_clip_in_inpainted_mode
-        If True, sigma clip the data in inpainted mode (if sigma-clipping is turned on). 
+        If True, sigma clip the data in inpainted mode (if sigma-clipping is turned on).
         This is generally not a good idea, since the point of inpainting is to get
         smoother spectra, and sigma-clipping creates non-uniform Nsamples, which can
         lead to less smooth spectra. This option is only here to enable sigma-clipping
@@ -1196,42 +1196,42 @@ def lst_bin_files_single_outfile(
     the data in flagged bl-channel-pols is used for the averaging, as it is considered
     to be in-painted. This gives the most spectrally-smooth results. In order to ignore
     a particular bl-channel-pol while still using inpaint mode, supply a "where inpainted"
-    file, which should be a UVFlag object that specifies which bl-channel-pols are 
-    inpainted in the associated data file. Anything that's flagged but not inpainted is 
+    file, which should be a UVFlag object that specifies which bl-channel-pols are
+    inpainted in the associated data file. Anything that's flagged but not inpainted is
     ignored for the averaging. In this inpainted mode, the Nsamples are the number of
     un-flagged integrations (whether they were in-painted or not). The LST-binned flags
     are only set to True if ALL of the nights for a given bl-channel-pol are flagged
     (again, whether they were in-painted or not). In flagged mode, both the Nsamples
     and Flags are the same as inpainted mode. The averaged data, however, ignores any
-    flagged data. This can lead to less spectrally-smooth results. The "STD" files 
+    flagged data. This can lead to less spectrally-smooth results. The "STD" files
     contain LST-binned "data" that is the standard deviation of the data in each LST-bin.
     This differs between inpainted and flagged modes in the same way as the "LST" files:
     in inpainted mode, the flagged and inpainted data is used for calculating the sample
     variance, while in flagged mode, only the unflagged data is used. The final flags
-    in the "STD" files is equivalent to that in the "LST" files. The Nsamples in the 
+    in the "STD" files is equivalent to that in the "LST" files. The Nsamples in the
     "STD" files is actually the number of unflagged nights in the LST bin (so, not the
     sum of Nsamples), where "unflagged" really does mean unflagged -- whether inpainted
-    or not. 
+    or not.
 
     One note here about what is considered "flagged" vs. "flagged and inpainted" vs
     "flagged and not inpainted". In flagged mode, there are input flags that exist in the
     input files. These are potentially *augmented* by sigma clipping within the LST
     binner, and also by flagging whole LST bins if they have too few unflagged integrations.
-    In inpainted mode, input flags are considered as normal flags. However, only 
+    In inpainted mode, input flags are considered as normal flags. However, only
     "non-inpainted" flags are *ignored* for the averaging. By default, all flagged data
     is considered to to be in-painted UNLESS it is a blt-pol that is fully flagged (i.e.
     all channels are flagged for an integration for a single bl and pol). However, you
     can tell the routine that other data is NOT in-painted by supplying a "where inpainted"
-    file. Now, integrations in LST-bins that end up having "too few" unflagged 
+    file. Now, integrations in LST-bins that end up having "too few" unflagged
     integrations will be flagged inside the binner, however in inpainted mode, if these
     are considered "inpainted", they will still be used in averaging (this means they
-    will have "valid" data for the average, but their average will be flagged). 
-    On the other hand, flags that are applied by sigma-clipping will be considered 
-    NOT inpainted, i.e. those data will be ignored in the averaged, just like flagging 
+    will have "valid" data for the average, but their average will be flagged).
+    On the other hand, flags that are applied by sigma-clipping will be considered
+    NOT inpainted, i.e. those data will be ignored in the averaged, just like flagging
     mode. In this case, either choice is bad: to include them in the average is bad
     because even though they may have been actually in-painted, whatever value they have
     is clearly triggering the sigma-clipper and is therefore an outlier. On the other
-    hand, to ignore them is bad because the point of in-painting mode is to get 
+    hand, to ignore them is bad because the point of in-painting mode is to get
     smoother spectra, and this negates that. So, it's best just to not do sigma-clipping
     in inpainted mode.
     """
@@ -1252,7 +1252,7 @@ def lst_bin_files_single_outfile(
         output_inpainted, output_flagged, where_inpainted_files
     )
 
-    
+
     # Prune empty nights (some nights start with files, but have files removed because
     # they have no associated calibration)
     data_files = [df for df in data_files if df]
@@ -1768,7 +1768,7 @@ def create_lstbin_output_file(
     lst_branch_cut: float = 0.0,
 ) -> Path:
     outdir = Path(outdir)
-    
+
     # update history
     file_list_str = "-".join(ff.path.name for ff in file_list)
     file_history = f"{history} Input files: {file_list_str}"
@@ -1778,7 +1778,7 @@ def create_lstbin_output_file(
         lst += 2*np.pi
 
     fname = outdir / fname_format.format(
-        kind=kind, lst=lst, pol=''.join(pols), 
+        kind=kind, lst=lst, pol=''.join(pols),
         inpaint_mode='.inpaint' if inpaint_mode else ('.flagged' if inpaint_mode is False else "")
     )
 
@@ -2011,12 +2011,12 @@ def make_lst_bin_config_file(
         Regex to use to extract the JD from the file name. Set to None or empty
         to force the LST-matching to use the LSTs in the metadata within the file.
     lst_branch_cut
-        The LST at which to branch cut the LST grid for file writing. The JDs in the 
+        The LST at which to branch cut the LST grid for file writing. The JDs in the
         output LST-binned files will be *lowest* at the lst_branch_cut, and all file
         names will have LSTs that are higher than lst_branch_cut. If None, this will
         be determined automatically by finding the largest gap in LSTs and starting
         AFTER it.
-        
+
     Returns
     -------
     config : dict
@@ -2038,11 +2038,11 @@ def make_lst_bin_config_file(
         ntimes_per_file=ntimes_per_file,
     )
 
-    # Get the best lst_branch_cut by finding the largest gap in LSTs and starting 
+    # Get the best lst_branch_cut by finding the largest gap in LSTs and starting
     # AFTER it
     if lst_branch_cut is None:
         lst_branch_cut = float(utils.get_best_lst_branch_cut(np.concatenate(lst_grid)))
-    
+
     dlst = lst_grid[0][1] - lst_grid[0][0]
     # Make it a real list of floats to make the YAML easier to read
     lst_grid = [[float(l) for l in lsts] for lsts in lst_grid]
