@@ -460,7 +460,7 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     if getattr(uvo, 'blts_are_rectangular', False):
         if uvo.time_axis_faster_than_bls:
             for i in range(uvo.Nbls):
-                start = i*uvo.Ntimes
+                start = i * uvo.Ntimes
                 antp = (uvo.ant_1_array[start], uvo.ant_2_array[start])
                 blt_slices[antp] = slice(start, start + uvo.Ntimes, 1)
             assert uvo.Nbls == len(blt_slices)
@@ -479,8 +479,10 @@ def get_blt_slices(uvo, tried_to_reorder=False):
                     uvo.reorder_blts(order='time')
                     return get_blt_slices(uvo, tried_to_reorder=True)
                 else:
-                    raise NotImplementedError('UVData objects with non-regular spacing of '
-                                            'baselines in its baseline-times are not supported.')
+                    raise NotImplementedError(
+                        'UVData objects with non-regular spacing of '
+                        'baselines in its baseline-times are not supported.'
+                    )
             else:
                 blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
     return blt_slices
@@ -797,7 +799,7 @@ class HERAData(UVData):
         locs = locals()
         partials = ['bls', 'polarizations', 'times', 'time_range', 'lsts', 'lst_range', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
-        
+
         # if filepaths is None, this was converted to HERAData
         # from a different pre-loaded object with no history of filepath
         if self.filepaths is not None:
@@ -1618,6 +1620,8 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             # data container only supports standard polarizations strings
             if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                 flags = DataContainer(flags)
+                flags.times = times
+                flags.freqs = freqs
 
         elif uvf.type == 'antenna':  # one time x freq waterfall per antenna
             for i, ant in enumerate(uvf.ant_array):
@@ -2234,9 +2238,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
         return uvd
 
 
-
-
-
 def update_uvdata(uvd, data=None, flags=None, nsamples=None, add_to_history='', **kwargs):
     '''Updates a UVData/HERAData object with data or parameters. Cannot modify the shape of
     data arrays. More than one spectral window is not supported. Assumes every baseline
@@ -2719,6 +2720,7 @@ def throw_away_flagged_ants_parser():
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
 
+
 def uvdata_from_fastuvh5(
     meta: FastUVH5Meta,
     antpairs: list[tuple[int, int]] | None = None,
@@ -2726,7 +2728,8 @@ def uvdata_from_fastuvh5(
     lsts: np.ndarray | None = None,
     start_jd: float | None = None,
     lst_branch_cut: float = 0.0,
-    **kwargs) -> UVData:
+    **kwargs
+) -> UVData:
     """Convert a FastUVH5Meta object to a UVData object.
 
     This is a convenience function to convert a FastUVH5Meta object to a UVData

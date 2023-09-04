@@ -39,10 +39,13 @@ from .datacontainer import DataContainer
 try:
     profile
 except NameError:
+
     def profile(fnc):
         return fnc
 
+
 logger = logging.getLogger(__name__)
+
 
 @profile
 def lst_align(
@@ -139,9 +142,7 @@ def lst_align(
         flags = np.zeros(data.shape, dtype=bool)
 
     if flags.shape != data.shape:
-        raise ValueError(
-            f"flags should have shape {data.shape} but got {flags.shape}"
-        )
+        raise ValueError(f"flags should have shape {data.shape} but got {flags.shape}")
 
     if nsamples is None:
         nsamples = np.ones(data.shape, dtype=float)
@@ -158,13 +159,11 @@ def lst_align(
     adjust_lst_bin_edges(lst_bin_edges)
 
     if not np.all(np.diff(lst_bin_edges) > 0):
-        raise ValueError(
-            "lst_bin_edges must be monotonically increasing."
-        )
+        raise ValueError("lst_bin_edges must be monotonically increasing.")
 
     # Now ensure that all the observed LSTs are wrapped so they start above the first bin edges
     grid_indices, data_lsts, lst_mask = get_lst_bins(data_lsts, lst_bin_edges)
-    lst_bin_centres = (lst_bin_edges[1:] + lst_bin_edges[:-1])/2
+    lst_bin_centres = (lst_bin_edges[1:] + lst_bin_edges[:-1]) / 2
 
     logger.info(f"Data Shape: {data.shape}")
 
@@ -229,7 +228,10 @@ def lst_align(
 
     return lst_bin_centres, _data, _flags, _nsamples, _where_inpainted or None
 
-def get_lst_bins(lsts: np.ndarray, edges: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+
+def get_lst_bins(
+    lsts: np.ndarray, edges: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Get the LST bin indices for a set of LSTs.
 
     Parameters
@@ -252,14 +254,17 @@ def get_lst_bins(lsts: np.ndarray, edges: np.ndarray) -> tuple[np.ndarray, np.nd
     lsts = np.array(lsts).copy()
 
     # Now ensure that all the observed LSTs are wrapped so they start above the first bin edges
-    lsts %= 2*np.pi
-    lsts[lsts < edges[0]] += 2* np.pi
+    lsts %= 2 * np.pi
+    lsts[lsts < edges[0]] += 2 * np.pi
     bins = np.digitize(lsts, edges, right=True) - 1
-    mask = (bins >= 0) & (bins < (len(edges)-1))
+    mask = (bins >= 0) & (bins < (len(edges) - 1))
     return bins, lsts, mask
 
+
 def reduce_lst_bins(
-    data: list[np.ndarray], flags: list[np.ndarray], nsamples: list[np.ndarray],
+    data: list[np.ndarray],
+    flags: list[np.ndarray],
+    nsamples: list[np.ndarray],
     where_inpainted: list[np.ndarray] | None = None,
     inpainted_mode: bool = False,
     mutable: bool = False,
@@ -344,14 +349,18 @@ def reduce_lst_bins(
     if where_inpainted is None:
         where_inpainted = [None] * nlst_bins
 
-    for lstbin, (d,n,f, inpf) in enumerate(zip(data, nsamples, flags, where_inpainted)):
+    for lstbin, (d, n, f, inpf) in enumerate(
+        zip(data, nsamples, flags, where_inpainted)
+    ):
         logger.info(f"Computing LST bin {lstbin+1} / {nlst_bins}")
 
         # TODO: check that this doesn't make yet another copy...
         # This is just the data in this particular lst-bin.
 
         if d.size:
-            d, f = get_masked_data(d, n, f, inpainted=inpf, inpainted_mode=inpainted_mode)
+            d, f = get_masked_data(
+                d, n, f, inpainted=inpf, inpainted_mode=inpainted_mode
+            )
             f = threshold_flags(f, inplace=True, flag_thresh=flag_thresh)
             d.mask |= f
 
@@ -360,9 +369,11 @@ def reduce_lst_bins(
                 out_flags[:, lstbin],
                 out_std[:, lstbin],
                 out_nsamples[:, lstbin],
-                days_binned[:, lstbin]
+                days_binned[:, lstbin],
             ) = lst_average(
-                d, n, f,
+                d,
+                n,
+                f,
                 inpainted_mode=inpainted_mode,
                 sigma_clip_thresh=sigma_clip_thresh,
                 sigma_clip_min_N=sigma_clip_min_N,
@@ -394,14 +405,18 @@ def reduce_lst_bins(
 
     return out
 
+
 def _allocate_dfn(shape: tuple[int], d=0.0, f=0, n=0):
     data = np.full(shape, d, dtype=complex)
     flags = np.full(shape, f, dtype=bool)
     nsamples = np.full(shape, n, dtype=float)
     return data, flags, nsamples
 
+
 def get_masked_data(
-    data: np.ndarray, nsamples: np.ndarray, flags: np.ndarray,
+    data: np.ndarray,
+    nsamples: np.ndarray,
+    flags: np.ndarray,
     inpainted: np.ndarray | None = None,
     inpainted_mode: bool = False,
 ) -> np.ma.MaskedArray:
@@ -410,16 +425,13 @@ def get_masked_data(
         inpainted = np.zeros(flags.shape, dtype=bool)
     elif inpainted is None:
         # Flag if a whole blt is flagged:
-        allf = np.all(flags, axis=2)[:,:, None, :]
+        allf = np.all(flags, axis=2)[:, :, None, :]
 
         # Assume everything else that's flagged is inpainted.
         inpainted = flags.copy() * (~allf)
 
     flags = flags | np.isnan(data) | np.isinf(data) | (nsamples == 0)
-    data = np.ma.masked_array(
-        data,
-        mask=(flags & ~inpainted)
-    )
+    data = np.ma.masked_array(data, mask=(flags & ~inpainted))
     return data, flags
 
 
@@ -433,9 +445,9 @@ def get_lst_median_and_mad(
     """
     fnc = np.ma.median if isinstance(data, np.ma.MaskedArray) else np.median
     med = fnc(data, axis=0)
-    madrl = fnc(np.abs(data.real - med.real), axis=0)*1.482579
-    madim = fnc(np.abs(data.imag - med.imag), axis=0)*1.482579
-    return med, madrl + madim*1j
+    madrl = fnc(np.abs(data.real - med.real), axis=0) * 1.482579
+    madim = fnc(np.abs(data.imag - med.imag), axis=0) * 1.482579
+    return med, madrl + madim * 1j
 
 
 def threshold_flags(
@@ -449,18 +461,25 @@ def threshold_flags(
     # Flag entire LST bins if there are too many flags over time
     flag_frac = np.sum(flags, axis=0) / flags.shape[0]
     nflags = np.sum(flags)
-    logger.info(f"Percent of data flagged before thresholding: {100*nflags/flags.size:.2f}%")
+    logger.info(
+        f"Percent of data flagged before thresholding: {100*nflags/flags.size:.2f}%"
+    )
     flags |= flag_frac > flag_thresh
-    logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to flag_frac > {flag_thresh}")
+    logger.info(
+        f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to flag_frac > {flag_thresh}"
+    )
 
     return flags
 
+
 @profile
 def lst_average(
-    data: np.ndarray | np.ma.MaskedArray, nsamples: np.ndarray, flags: np.ndarray,
+    data: np.ndarray | np.ma.MaskedArray,
+    nsamples: np.ndarray,
+    flags: np.ndarray,
     inpainted_mode: bool = False,
-    sigma_clip_thresh: float | None= None,
-    sigma_clip_min_N: int=4,
+    sigma_clip_thresh: float | None = None,
+    sigma_clip_min_N: int = 4,
     flag_below_min_N: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -508,7 +527,9 @@ def lst_average(
         # the flags or the 'non-inpainted flags', as obtained by `threshold_flags`.
         # However, if this hasn't been called, and we just have an array, apply flags
         # appropriately here.
-        data, flags = get_masked_data(data, nsamples, flags, inpainted_mode=inpainted_mode)
+        data, flags = get_masked_data(
+            data, nsamples, flags, inpainted_mode=inpainted_mode
+        )
 
     # Now do sigma-clipping.
     if sigma_clip_thresh is not None:
@@ -520,8 +541,12 @@ def lst_average(
             )
 
         nflags = np.sum(flags)
-        clip_flags = sigma_clip(data.real, sigma=sigma_clip_thresh, min_N = sigma_clip_min_N)
-        clip_flags |= sigma_clip(data.imag, sigma=sigma_clip_thresh, min_N = sigma_clip_min_N)
+        clip_flags = sigma_clip(
+            data.real, sigma=sigma_clip_thresh, min_N=sigma_clip_min_N
+        )
+        clip_flags |= sigma_clip(
+            data.imag, sigma=sigma_clip_thresh, min_N=sigma_clip_min_N
+        )
 
         # Need to restore min_N condition properly here because it's not done properly in sigma_clip
         sc_min_N = np.sum(~flags, axis=0) < sigma_clip_min_N
@@ -531,13 +556,17 @@ def lst_average(
 
         data.mask |= clip_flags
 
-        logger.info(f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to sigma clipping")
+        logger.info(
+            f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to sigma clipping"
+        )
 
     # Here we do a check to make sure Nsamples is uniform across frequency.
     # Do this before setting non_inpainted to zero nsamples.
     ndiff = np.diff(nsamples, axis=2)
     if np.any(ndiff != 0):
-        warnings.warn("Nsamples is not uniform across frequency. This will result in spectral structure.")
+        warnings.warn(
+            "Nsamples is not uniform across frequency. This will result in spectral structure."
+        )
 
     nsamples = np.ma.masked_array(nsamples, mask=data.mask)
 
@@ -561,20 +590,22 @@ def lst_average(
     logger.info("Calculating std")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
-        std = np.square(data.real - meandata.real) + 1j*np.square(data.imag - meandata.imag)
+        std = np.square(data.real - meandata.real) + 1j * np.square(
+            data.imag - meandata.imag
+        )
         std = np.sum(std * nsamples, axis=0)
         std[normalizable] /= norm[normalizable]
-        std = np.sqrt(std.real) + 1j*np.sqrt(std.imag)
+        std = np.sqrt(std.real) + 1j * np.sqrt(std.imag)
 
     std[~normalizable] = np.inf
-
 
     # While the previous norm is correct for normalizing the mean, we now
     # calculate nsamples as the unflagged samples in each LST bin.
     nsamples.mask = flags
-    nsamples  = np.sum(nsamples, axis=0)
+    nsamples = np.sum(nsamples, axis=0)
 
     return meandata.data, lstbin_flagged, std.data, nsamples.data, ndays_binned
+
 
 def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
     """
@@ -583,9 +614,10 @@ def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
     Performs the adjustment in-place.
     """
     while lst_bin_edges[0] < 0:
-        lst_bin_edges += 2*np.pi
-    while lst_bin_edges[0] >= 2*np.pi:
-        lst_bin_edges -= 2*np.pi
+        lst_bin_edges += 2 * np.pi
+    while lst_bin_edges[0] >= 2 * np.pi:
+        lst_bin_edges -= 2 * np.pi
+
 
 def lst_bin_files_for_baselines(
     data_files: list[Path | FastUVH5Meta],
@@ -691,7 +723,12 @@ def lst_bin_files_for_baselines(
     times_in_bins
         The JDs that are in each LST bin -- a list of arrays.
     """
-    metas = [fl if isinstance(fl, FastUVH5Meta) else FastUVH5Meta(fl, blts_are_rectangular=True) for fl in data_files]
+    metas = [
+        fl
+        if isinstance(fl, FastUVH5Meta)
+        else FastUVH5Meta(fl, blts_are_rectangular=True)
+        for fl in data_files
+    ]
 
     lst_bin_edges = np.array(lst_bin_edges)
 
@@ -727,26 +764,28 @@ def lst_bin_files_for_baselines(
 
     if time_idx is None:
         adjust_lst_bin_edges(lst_bin_edges)
-        lst_bin_edges %= 2*np.pi
+        lst_bin_edges %= 2 * np.pi
         op = np.logical_and if lst_bin_edges[0] < lst_bin_edges[-1] else np.logical_or
         time_idx = []
         for meta in metas:
-            _lsts = meta.get_transactional('lsts')
+            _lsts = meta.get_transactional("lsts")
             time_idx.append(op(_lsts >= lst_bin_edges[0], _lsts < lst_bin_edges[-1]))
 
     if time_arrays is None:
-        time_arrays = [meta.get_transactional('times')[idx] for meta, idx in zip(metas, time_idx)]
+        time_arrays = [
+            meta.get_transactional("times")[idx] for meta, idx in zip(metas, time_idx)
+        ]
 
     if lsts is None:
         lsts = np.concatenate(
-            [meta.get_transactional('lsts')[idx] for meta, idx in zip(metas, time_idx)]
+            [meta.get_transactional("lsts")[idx] for meta, idx in zip(metas, time_idx)]
         )
 
     # Now we can set up our master arrays of data.
     data, flags, nsamples = _allocate_dfn(
         (len(lsts), len(antpairs), len(freqs), len(pols)),
-        d=np.nan + np.nan*1j,
-        f=True
+        d=np.nan + np.nan * 1j,
+        f=True,
     )
 
     if where_inpainted_files is None or all(w is None for w in where_inpainted_files):
@@ -765,18 +804,29 @@ def lst_bin_files_for_baselines(
 
     # This loop actually reads the associated data in this LST bin.
     ntimes_so_far = 0
-    for meta, calfl, tind, tarr, inpfile in zip(metas, cal_files, time_idx, time_arrays, where_inpainted_files):
+    for meta, calfl, tind, tarr, inpfile in zip(
+        metas, cal_files, time_idx, time_arrays, where_inpainted_files
+    ):
         logger.info(f"Reading {meta.path}")
-        slc = slice(ntimes_so_far,ntimes_so_far+len(tarr))
+        slc = slice(ntimes_so_far, ntimes_so_far + len(tarr))
         ntimes_so_far += len(tarr)
 
-        #hd = io.HERAData(str(fl.path), filetype='uvh5')
-        data_antpairs = meta.get_transactional('antpairs')
+        # hd = io.HERAData(str(fl.path), filetype='uvh5')
+        data_antpairs = meta.get_transactional("antpairs")
 
         if redundantly_averaged:
-            bls_to_load = [bl for bl in data_antpairs if reds.get_ubl_key(bl) in antpairs or reds.get_ubl_key(bl[::-1]) in antpairs]
+            bls_to_load = [
+                bl
+                for bl in data_antpairs
+                if reds.get_ubl_key(bl) in antpairs
+                or reds.get_ubl_key(bl[::-1]) in antpairs
+            ]
         else:
-            bls_to_load = [bl for bl in antpairs if bl in data_antpairs or bl[::-1] in data_antpairs]
+            bls_to_load = [
+                bl
+                for bl in antpairs
+                if bl in data_antpairs or bl[::-1] in data_antpairs
+            ]
 
         if not bls_to_load or not np.any(tind):
             # If none of the requested baselines are in this file, then just
@@ -789,7 +839,10 @@ def lst_bin_files_for_baselines(
 
         # TODO: use Fast readers here instead.
         _data, _flags, _nsamples = io.HERAData(meta.path).read(
-            bls=bls_to_load, times=tarr, freq_chans=freq_chans, polarizations=pols,
+            bls=bls_to_load,
+            times=tarr,
+            freq_chans=freq_chans,
+            polarizations=pols,
         )
         if inpfile is not None:
             # This returns a DataContainer (unless something went wrong) since it should
@@ -800,7 +853,7 @@ def lst_bin_files_for_baselines(
 
             # We need to down-selecton times/freqs (bls and pols will be sub-selected
             # based on those in the data through the next loop)
-            inpainted.select_or_expand_times(times=tarr, skip_bda_check=True)
+            inpainted.select_or_expand_times(new_times=tarr, skip_bda_check=True)
             inpainted.select_freqs(channels=freq_chans)
         else:
             inpainted = None
@@ -820,8 +873,11 @@ def lst_bin_files_for_baselines(
                 gains, cal_flags, _, _ = uvc.build_calcontainers()
 
             apply_cal.calibrate_in_place(
-                _data, gains, data_flags=_flags, cal_flags=cal_flags,
-                gain_convention=uvc.gain_convention
+                _data,
+                gains,
+                data_flags=_flags,
+                cal_flags=cal_flags,
+                gain_convention=uvc.gain_convention,
             )
 
         for i, bl in enumerate(antpairs):
@@ -855,8 +911,8 @@ def lst_bin_files_for_baselines(
         where_inpainted=where_inpainted,
         antpairs=antpairs,
         lst_bin_edges=lst_bin_edges,
-        freq_array = freqs,
-        rephase = rephase,
+        freq_array=freqs,
+        rephase=rephase,
         antpos=antpos,
     )
 
@@ -869,10 +925,11 @@ def lst_bin_files_for_baselines(
 
     return bin_lst, data, flags, nsamples, where_inpainted, times_in_bins
 
+
 def apply_calfile_rules(
     data_files: list[list[str]],
     calfile_rules: list[tuple[str, str]],
-    ignore_missing: bool
+    ignore_missing: bool,
 ) -> tuple[list[list[str]], list[list[str]]]:
     """
     Apply a set of rules to convert data file names to calibration file names.
@@ -918,16 +975,16 @@ def apply_calfile_rules(
         data_files[night] = [df for df in dflist if df not in missing]
     return data_files, input_cals
 
+
 def filter_required_files_by_times(
     lst_range: tuple[float, float],
     data_metas: list[list[FastUVH5Meta]],
     cal_files: list[list[str]] | None = None,
     where_inpainted_files: list[list[str]] | None = None,
 ) -> tuple[list, list, list, list, list, list]:
-
     lstmin, lstmax = lst_range
-    lstmin %= (2 * np.pi)
-    lstmax %= (2 * np.pi)
+    lstmin %= 2 * np.pi
+    lstmax %= 2 * np.pi
     if lstmin > lstmax:
         lstmax += 2 * np.pi
 
@@ -952,7 +1009,7 @@ def filter_required_files_by_times(
     for night, callist, inplist in zip(data_metas, cal_files, where_inpainted_files):
         for meta, cal, inp in zip(night, callist, inplist):
             tarr = meta.times
-            lsts = meta.lsts % (2*np.pi)
+            lsts = meta.lsts % (2 * np.pi)
             lsts[lsts < lstmin] += 2 * np.pi
 
             tind = (lsts > lstmin) & (lsts < lstmax)
@@ -967,9 +1024,10 @@ def filter_required_files_by_times(
 
     return tinds, time_arrays, all_lsts, file_list, cals, where_inpainted
 
+
 def _get_where_inpainted_files(
     data_files: list[list[str | Path]],
-    where_inpainted_file_rules: list[tuple[str, str]] | None
+    where_inpainted_file_rules: list[tuple[str, str]] | None,
 ) -> list[list[str | Path]] | None:
     if where_inpainted_file_rules is None:
         return None
@@ -979,8 +1037,9 @@ def _get_where_inpainted_files(
         this = []
         where_inpainted_files.append(this)
         for df in dflist:
-            wif = df
+            wif = str(df)
             for rule in where_inpainted_file_rules:
+                print(rule[0], "HA", rule[1])
                 wif = wif.replace(rule[0], rule[1])
             if os.path.exists(wif):
                 this.append(wif)
@@ -988,47 +1047,51 @@ def _get_where_inpainted_files(
                 raise IOError(f"Where inpainted file {wif} does not exist")
     return where_inpainted_files
 
+
 def _configure_inpainted_mode(output_flagged, output_inpainted, where_inpainted_files):
     # Sort out defaults for inpaint/flagging mode
     if output_inpainted is None:
         output_inpainted = bool(where_inpainted_files)
 
     if not output_inpainted and not output_flagged:
-        raise ValueError("Both output_inpainted and output_flagged are False. One must be True.")
+        raise ValueError(
+            "Both output_inpainted and output_flagged are False. One must be True."
+        )
 
     return output_flagged, output_inpainted
+
 
 def lst_bin_files_single_outfile(
     config_opts: dict[str, Any],
     metadata: dict[str, Any],
     lst_bins: np.ndarray,
     data_files: list[list[str]],
-    calfile_rules: list[tuple[str, str]] | None= None,
+    calfile_rules: list[tuple[str, str]] | None = None,
     ignore_missing_calfiles: bool = False,
     outdir: str | Path | None = None,
     reds: RedundantGroups | None = None,
     redundantly_averaged: bool | None = None,
     only_last_file_per_night: bool = False,
-    history: str = '',
-    fname_format: str="zen.{kind}.{lst:7.5f}.uvh5",
-    overwrite: bool=False,
-    rephase: bool=False,
-    Nbls_to_load: int | None=None,
-    ignore_flags: bool=False,
-    include_autos: bool=True,
+    history: str = "",
+    fname_format: str = "zen.{kind}.{lst:7.5f}.uvh5",
+    overwrite: bool = False,
+    rephase: bool = False,
+    Nbls_to_load: int | None = None,
+    ignore_flags: bool = False,
+    include_autos: bool = True,
     ex_ant_yaml_files=None,
-    ignore_ants: tuple[int]=(),
+    ignore_ants: tuple[int] = (),
     write_kwargs: dict | None = None,
     save_channels: list[int] = (),
     golden_lsts: tuple[float] = (),
-    sigma_clip_thresh: float | None= None,
+    sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
     freq_min: float | None = None,
     freq_max: float | None = None,
     output_inpainted: bool | None = None,
-    output_flagged: bool  = True,
+    output_flagged: bool = True,
     where_inpainted_file_rules: list[tuple[str, str]] | None = None,
     sigma_clip_in_inpainted_mode: bool = False,
     write_med_mad: bool = False,
@@ -1252,7 +1315,6 @@ def lst_bin_files_single_outfile(
         output_inpainted, output_flagged, where_inpainted_files
     )
 
-
     # Prune empty nights (some nights start with files, but have files removed because
     # they have no associated calibration)
     data_files = [df for df in data_files if df]
@@ -1262,12 +1324,14 @@ def lst_bin_files_single_outfile(
     for dflist in data_files:
         logger.info(f"{dflist[0].split('/')[-1]}: {len(dflist)}")
 
-    data_metas = [[
-        FastUVH5Meta(
-            df,
-            blts_are_rectangular=metadata['blts_are_rectangular'],
-            time_axis_faster_than_bls=metadata['time_axis_faster_than_bls']
-        ) for df in dflist
+    data_metas = [
+        [
+            FastUVH5Meta(
+                df,
+                blts_are_rectangular=metadata["blts_are_rectangular"],
+                time_axis_faster_than_bls=metadata["time_axis_faster_than_bls"],
+            )
+            for df in dflist
         ]
         for dflist in data_files
     ]
@@ -1276,7 +1340,7 @@ def lst_bin_files_single_outfile(
     if outdir is None:
         outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
 
-    start_jd = metadata['start_jd']
+    start_jd = metadata["start_jd"]
 
     # get metadata
     logger.info("Getting metadata from first file...")
@@ -1288,16 +1352,13 @@ def lst_bin_files_single_outfile(
     # all the antenna positions are included in every file.
     antpos = dict(zip(meta.antenna_numbers, meta.antpos_enu))
     if reds is None:
-        reds = RedundantGroups.from_antpos(
-            antpos=antpos,
-            include_autos=include_autos
-        )
+        reds = RedundantGroups.from_antpos(antpos=antpos, include_autos=include_autos)
 
     if redundantly_averaged is None:
         # Try to work out if the files are redundantly averaged.
         # just look at the middle file from each night.
         for fl_list in data_metas:
-            meta = fl_list[len(fl_list)//2]
+            meta = fl_list[len(fl_list) // 2]
             antpairs = meta.get_transactional("antpairs")
             ubls = {reds.get_ubl_key(ap) for ap in antpairs}
             if len(ubls) != len(antpairs):
@@ -1319,11 +1380,11 @@ def lst_bin_files_single_outfile(
         reds=reds,
         only_last_file_per_night=only_last_file_per_night,
     )
-    nants0 = meta.header['antenna_numbers'].size
+    nants0 = meta.header["antenna_numbers"].size
 
     # Do a quick check to make sure all nights at least have the same number of Nants
     for dflist in data_metas:
-        _nants = dflist[0].header['antenna_numbers'].size
+        _nants = dflist[0].header["antenna_numbers"].size
         dflist[0].close()
         if _nants != nants0:
             raise ValueError(
@@ -1336,19 +1397,29 @@ def lst_bin_files_single_outfile(
     if Nbls_to_load is None:
         Nbls_to_load = len(all_baselines) + 1
     n_bl_chunks = len(all_baselines) // Nbls_to_load + 1
-    bl_chunks = [all_baselines[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(n_bl_chunks)]
+    bl_chunks = [
+        all_baselines[i * Nbls_to_load: (i + 1) * Nbls_to_load]
+        for i in range(n_bl_chunks)
+    ]
     bl_chunks = [blg for blg in bl_chunks if len(blg) > 0]
 
-    dlst = config_opts['dlst']
+    dlst = config_opts["dlst"]
     lst_bin_edges = np.array(
-        [x - dlst/2 for x in lst_bins] + [lst_bins[-1] + dlst/2]
+        [x - dlst / 2 for x in lst_bins] + [lst_bins[-1] + dlst / 2]
     )
 
-    tinds, time_arrays, all_lsts, file_list, cals, where_inpainted_files = filter_required_files_by_times(
+    (
+        tinds,
+        time_arrays,
+        all_lsts,
+        file_list,
+        cals,
+        where_inpainted_files,
+    ) = filter_required_files_by_times(
         (lst_bin_edges[0], lst_bin_edges[-1]),
         data_metas,
         input_cals,
-        where_inpainted_files
+        where_inpainted_files,
     )
     # If we have no times at all for this file, just return
     if len(all_lsts) == 0:
@@ -1372,7 +1443,7 @@ def lst_bin_files_single_outfile(
     # make it a bit easier to create the outfiles
     create_outfile = partial(
         create_lstbin_output_file,
-        outdir = outdir,
+        outdir=outdir,
         pols=all_pols,
         file_list=file_list,
         history=history,
@@ -1382,7 +1453,7 @@ def lst_bin_files_single_outfile(
         start_jd=start_jd,
         freq_min=freq_min,
         freq_max=freq_max,
-        lst_branch_cut=metadata['lst_branch_cut'],
+        lst_branch_cut=metadata["lst_branch_cut"],
         **write_kwargs,
     )
     out_files = {}
@@ -1392,16 +1463,16 @@ def lst_bin_files_single_outfile(
         if not inpaint_mode and not output_flagged:
             continue
 
-        kinds = ['LST', 'STD']
+        kinds = ["LST", "STD"]
         if write_med_mad:
-            kinds += ['MED', 'MAD']
+            kinds += ["MED", "MAD"]
         for kind in kinds:
             # Create the files we'll write to
             out_files[(kind, inpaint_mode)] = create_outfile(
-                kind = kind,
+                kind=kind,
                 lst=lst_bin_edges[0],
                 lsts=lst_bins,
-                inpaint_mode = inpaint_mode,
+                inpaint_mode=inpaint_mode,
             )
 
     nbls_so_far = 0
@@ -1409,8 +1480,15 @@ def lst_bin_files_single_outfile(
         logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
         # data/flags/nsamples are *lists*, with nlst_bins entries, each being an
         # array, with shape (times, bls, freqs, npols)
-        bin_lst, data, flags, nsamples, where_inpainted, binned_times = lst_bin_files_for_baselines(
-            data_files = file_list,
+        (
+            bin_lst,
+            data,
+            flags,
+            nsamples,
+            where_inpainted,
+            binned_times,
+        ) = lst_bin_files_for_baselines(
+            data_files=file_list,
             lst_bin_edges=lst_bin_edges,
             antpairs=bl_chunk,
             freqs=freq_array,
@@ -1436,28 +1514,28 @@ def lst_bin_files_single_outfile(
             # TODO: we're not writing out the where_inpainted data for the GOLDEN
             #       or REDUCEDCHAN files yet -- it looks like we'd have to write out
             #       completely new UVFlag files for this.
-            out_files['GOLDEN'] = []
+            out_files["GOLDEN"] = []
             for nbin in golden_bins:
                 out_files["GOLDEN"].append(
                     create_outfile(
-                        kind = 'GOLDEN',
+                        kind="GOLDEN",
                         lst=lst_bin_edges[nbin],
                         times=binned_times[nbin],
                     )
                 )
 
             if save_channels and len(binned_times[0]) > 0:
-                out_files['REDUCEDCHAN'] = create_outfile(
-                    kind = 'REDUCEDCHAN',
+                out_files["REDUCEDCHAN"] = create_outfile(
+                    kind="REDUCEDCHAN",
                     lst=lst_bin_edges[0],
                     times=binned_times[0],
                     channels=list(save_channels),
                 )
 
-        if len(golden_bins)>0:
-            for fl, nbin in zip(out_files['GOLDEN'], golden_bins):
+        if len(golden_bins) > 0:
+            for fl, nbin in zip(out_files["GOLDEN"], golden_bins):
                 write_baseline_slc_to_file(
-                    fl = fl,
+                    fl=fl,
                     slc=slc,
                     data=data[nbin].transpose((1, 0, 2, 3)),
                     flags=flags[nbin].transpose((1, 0, 2, 3)),
@@ -1466,7 +1544,7 @@ def lst_bin_files_single_outfile(
 
         if "REDUCEDCHAN" in out_files:
             write_baseline_slc_to_file(
-                fl = out_files['REDUCEDCHAN'],
+                fl=out_files["REDUCEDCHAN"],
                 slc=slc,
                 data=data[0][:, :, save_channels].transpose((1, 0, 2, 3)),
                 flags=flags[0][:, :, save_channels].transpose((1, 0, 2, 3)),
@@ -1480,48 +1558,51 @@ def lst_bin_files_single_outfile(
                 continue
 
             rdc = reduce_lst_bins(
-                data, flags, nsamples,
+                data,
+                flags,
+                nsamples,
                 where_inpainted=where_inpainted,
                 inpainted_mode=inpainted,
                 flag_thresh=flag_thresh,
-                sigma_clip_thresh = (
-                    None if inpainted and not sigma_clip_in_inpainted_mode
+                sigma_clip_thresh=(
+                    None
+                    if inpainted and not sigma_clip_in_inpainted_mode
                     else sigma_clip_thresh
                 ),
-                sigma_clip_min_N = sigma_clip_min_N,
+                sigma_clip_min_N=sigma_clip_min_N,
                 flag_below_min_N=flag_below_min_N,
                 get_mad=write_med_mad,
             )
 
             write_baseline_slc_to_file(
-                fl=out_files[('LST', inpainted)],
+                fl=out_files[("LST", inpainted)],
                 slc=slc,
-                data=rdc['data'],
-                flags=rdc['flags'],
-                nsamples=rdc['nsamples'],
+                data=rdc["data"],
+                flags=rdc["flags"],
+                nsamples=rdc["nsamples"],
             )
             write_baseline_slc_to_file(
-                fl=out_files[('STD', inpainted)],
+                fl=out_files[("STD", inpainted)],
                 slc=slc,
-                data=rdc['std'],
-                flags=rdc['flags'],
-                nsamples=rdc['days_binned'],
+                data=rdc["std"],
+                flags=rdc["flags"],
+                nsamples=rdc["days_binned"],
             )
 
             if write_med_mad:
                 write_baseline_slc_to_file(
-                    fl=out_files[('MED', inpainted)],
+                    fl=out_files[("MED", inpainted)],
                     slc=slc,
-                    data=rdc['median'],
-                    flags=rdc['flags'],
-                    nsamples=rdc['nsamples'],
+                    data=rdc["median"],
+                    flags=rdc["flags"],
+                    nsamples=rdc["nsamples"],
                 )
                 write_baseline_slc_to_file(
-                    fl=out_files[('STD', inpainted)],
+                    fl=out_files[("STD", inpainted)],
                     slc=slc,
-                    data=rdc['mad'],
-                    flags=rdc['flags'],
-                    nsamples=rdc['days_binned'],
+                    data=rdc["mad"],
+                    flags=rdc["flags"],
+                    nsamples=rdc["days_binned"],
                 )
 
         nbls_so_far += len(bl_chunk)
@@ -1532,9 +1613,9 @@ def lst_bin_files_single_outfile(
 @profile
 def lst_bin_files(
     config_file: str | Path,
-    output_file_select: int | Sequence[int] | None=None,
-    include_autos: bool=True,
-    **kwargs
+    output_file_select: int | Sequence[int] | None = None,
+    include_autos: bool = True,
+    **kwargs,
 ) -> list[dict[str, Path]]:
     """
     LST bin a series of UVH5 files.
@@ -1573,10 +1654,10 @@ def lst_bin_files(
     with open(config_file, "r") as fl:
         configuration = yaml.safe_load(fl)
 
-    config_opts = configuration['config_params']
-    lst_grid = configuration['lst_grid']
-    matched_files = configuration['matched_files']
-    metadata = configuration['metadata']
+    config_opts = configuration["config_params"]
+    lst_grid = configuration["lst_grid"]
+    matched_files = configuration["matched_files"]
+    metadata = configuration["metadata"]
 
     if output_file_select is None:
         output_file_select = list(range(len(matched_files)))
@@ -1591,32 +1672,30 @@ def lst_bin_files(
 
     meta = FastUVH5Meta(
         matched_files[0][0][0],
-        blts_are_rectangular=metadata['blts_are_rectangular'],
-        time_axis_faster_than_bls=metadata['time_axis_faster_than_bls'],
+        blts_are_rectangular=metadata["blts_are_rectangular"],
+        time_axis_faster_than_bls=metadata["time_axis_faster_than_bls"],
     )
 
     antpos = dict(zip(meta.antenna_numbers, meta.antpos_enu))
-    reds = RedundantGroups.from_antpos(
-        antpos=antpos,
-        include_autos=include_autos
-    )
+    reds = RedundantGroups.from_antpos(antpos=antpos, include_autos=include_autos)
 
     output_files = []
     for outfile_index in output_file_select:
         data_files = matched_files[outfile_index]
         output_files.append(
             lst_bin_files_single_outfile(
-                config_opts = config_opts,
-                metadata = metadata,
-                lst_bins = lst_grid[outfile_index],
-                data_files = data_files,
-                reds = reds,
-                include_autos = include_autos,
-                **kwargs
+                config_opts=config_opts,
+                metadata=metadata,
+                lst_bins=lst_grid[outfile_index],
+                data_files=data_files,
+                reds=reds,
+                include_autos=include_autos,
+                **kwargs,
             )
         )
 
     return output_files
+
 
 @profile
 def get_all_unflagged_baselines(
@@ -1654,33 +1733,37 @@ def get_all_unflagged_baselines(
 
     data_files = [
         [
-        fl if isinstance(fl, FastUVH5Meta) else
-        FastUVH5Meta(
-            fl, blts_are_rectangular=blts_are_rectangular,
-            time_axis_faster_than_bls=time_axis_faster_than_bls
-        )  for fl in fl_list
-        ] for fl_list in data_files
+            fl
+            if isinstance(fl, FastUVH5Meta)
+            else FastUVH5Meta(
+                fl,
+                blts_are_rectangular=blts_are_rectangular,
+                time_axis_faster_than_bls=time_axis_faster_than_bls,
+            )
+            for fl in fl_list
+        ]
+        for fl_list in data_files
     ]
-
 
     all_baselines = set()
     all_pols = set()
 
     meta0 = data_files[0][0]
-    x_orientation = meta0.get_transactional('x_orientation')
+    x_orientation = meta0.get_transactional("x_orientation")
 
     # reds will contain all of the redundant groups for the whole array, because
     # all the antenna positions are included in every file.
     if reds is None:
         reds = RedundantGroups.from_antpos(
-            antpos=dict(zip(meta0.antenna_numbers, meta0.antpos_enu)), include_autos=True
+            antpos=dict(zip(meta0.antenna_numbers, meta0.antpos_enu)),
+            include_autos=True,
         )
 
     if redundantly_averaged is None:
         # Try to work out if the files are redundantly averaged.
         # just look at the middle file from each night.
         for fl_list in data_files:
-            meta = fl_list[len(fl_list)//2]
+            meta = fl_list[len(fl_list) // 2]
             antpairs = meta.get_transactional("antpairs")
             ubls = set(reds.get_ubl_key(ap) for ap in antpairs)
             if len(ubls) != len(antpairs):
@@ -1734,18 +1817,18 @@ def get_all_unflagged_baselines(
                     a1, a2 = reds.get_ubl_key((a1, a2))
 
                 if (
-                    (a1, a2) not in all_baselines and # Do this first because after the
-                    (a2, a1) not in all_baselines and # first file it often triggers.
-                    a1 not in ignore_ants and
-                    a2 not in ignore_ants and
-                    (include_autos or a1 != a2) and
-                    a1 not in a_priori_antenna_flags and
-                    a2 not in a_priori_antenna_flags
+                    (a1, a2) not in all_baselines
+                    and (a2, a1) not in all_baselines  # Do this first because after the
+                    and a1 not in ignore_ants  # first file it often triggers.
+                    and a2 not in ignore_ants
+                    and (include_autos or a1 != a2)
+                    and a1 not in a_priori_antenna_flags
+                    and a2 not in a_priori_antenna_flags
                 ):
                     all_baselines.add((a1, a2))
 
-
     return sorted(all_baselines), sorted(all_pols)
+
 
 def create_lstbin_output_file(
     outdir: Path,
@@ -1756,8 +1839,8 @@ def create_lstbin_output_file(
     start_jd: float,
     times: np.ndarray | None = None,
     lsts: np.ndarray | None = None,
-    history: str  = "",
-    fname_format: str="zen.{kind}.{lst:7.5f}.{inpaint_mode}.uvh5",
+    history: str = "",
+    fname_format: str = "zen.{kind}.{lst:7.5f}.{inpaint_mode}.uvh5",
     overwrite: bool = False,
     antpairs: list[tuple[int, int]] | None = None,
     freq_min: float | None = None,
@@ -1775,11 +1858,15 @@ def create_lstbin_output_file(
     _history = file_history + utils.history_string()
 
     if lst < lst_branch_cut:
-        lst += 2*np.pi
+        lst += 2 * np.pi
 
     fname = outdir / fname_format.format(
-        kind=kind, lst=lst, pol=''.join(pols),
-        inpaint_mode='inpaint' if inpaint_mode else ('flagged' if inpaint_mode is False else "")
+        kind=kind,
+        lst=lst,
+        pol="".join(pols),
+        inpaint_mode="inpaint"
+        if inpaint_mode
+        else ("flagged" if inpaint_mode is False else ""),
     )
 
     logger.info(f"Initializing {fname}")
@@ -1804,43 +1891,45 @@ def create_lstbin_output_file(
         times=times,
         history=_history,
         start_jd=start_jd,
-        time_axis_faster_than_bls = True,
+        time_axis_faster_than_bls=True,
         vis_units=vis_units,
         lst_branch_cut=lst_branch_cut,
     )
     uvd_template.select(frequencies=freqs, polarizations=pols, inplace=True)
     # Need to set the polarization array manually because even though the select
     # operation does the down-select, it doesn't re-order the pols.
-    uvd_template.polarization_array = np.array(uvutils.polstr2num(pols, x_orientation=uvd_template.x_orientation))
+    uvd_template.polarization_array = np.array(
+        uvutils.polstr2num(pols, x_orientation=uvd_template.x_orientation)
+    )
     uvd_template.initialize_uvh5_file(str(fname.absolute()), clobber=overwrite)
 
     return fname
 
+
 def write_baseline_slc_to_file(
-    fl: Path,
-    slc: slice,
-    data: np.ndarray,
-    flags: np.ndarray,
-    nsamples: np.ndarray
+    fl: Path, slc: slice, data: np.ndarray, flags: np.ndarray, nsamples: np.ndarray
 ):
     """Write a baseline slice to a file."""
-    with h5py.File(fl, 'r+') as f:
-        ntimes = int(f['Header']['Ntimes'][()])
-        timefirst = bool(f['Header']['time_axis_faster_than_bls'][()])
+    with h5py.File(fl, "r+") as f:
+        ntimes = int(f["Header"]["Ntimes"][()])
+        timefirst = bool(f["Header"]["time_axis_faster_than_bls"][()])
         if not timefirst and ntimes > 1:
             raise NotImplementedError("Can only do time-first files for now.")
 
-        slc = slice(slc.start*ntimes, slc.stop*ntimes, 1)
-        f['Data']['visdata'][slc] = data.reshape((-1, data.shape[2], data.shape[3]))
-        f['Data']['flags'][slc] = flags.reshape((-1, data.shape[2], data.shape[3]))
-        f['Data']['nsamples'][slc] = nsamples.reshape((-1, data.shape[2], data.shape[3]))
+        slc = slice(slc.start * ntimes, slc.stop * ntimes, 1)
+        f["Data"]["visdata"][slc] = data.reshape((-1, data.shape[2], data.shape[3]))
+        f["Data"]["flags"][slc] = flags.reshape((-1, data.shape[2], data.shape[3]))
+        f["Data"]["nsamples"][slc] = nsamples.reshape(
+            (-1, data.shape[2], data.shape[3])
+        )
+
 
 def config_lst_bin_files(
     data_files: list[list[str | FastUVH5Meta]],
-    dlst: float | None=None,
-    atol: float=1e-10,
-    lst_start: float | None=None,
-    lst_width: float = 2*np.pi,
+    dlst: float | None = None,
+    atol: float = 1e-10,
+    lst_start: float | None = None,
+    lst_width: float = 2 * np.pi,
     blts_are_rectangular: bool | None = None,
     time_axis_faster_than_bls: bool | None = None,
     ntimes_per_file: int | None = None,
@@ -1876,18 +1965,19 @@ def config_lst_bin_files(
     """
     logger.info("Configuring lst_grid")
 
-    data_files=[sorted(df) for df in data_files]
+    data_files = [sorted(df) for df in data_files]
 
     df0 = data_files[0][0]
 
     # get dlst from first data file if None
     if dlst is None:
-        dlst = io.get_file_times(df0, filetype='uvh5')[0]
+        dlst = io.get_file_times(df0, filetype="uvh5")[0]
 
     # Get rectangularity of blts from first file if None
     meta = FastUVH5Meta(
-        df0, blts_are_rectangular=blts_are_rectangular,
-        time_axis_faster_than_bls=time_axis_faster_than_bls
+        df0,
+        blts_are_rectangular=blts_are_rectangular,
+        time_axis_faster_than_bls=time_axis_faster_than_bls,
     )
 
     if blts_are_rectangular is None:
@@ -1904,7 +1994,8 @@ def config_lst_bin_files(
             df[0],
             blts_are_rectangular=blts_are_rectangular,
             time_axis_faster_than_bls=time_axis_faster_than_bls,
-        ) for df in data_files
+        )
+        for df in data_files
     ]
 
     # get begin_lst from lst_start or from the first JD in the data_files
@@ -1916,7 +2007,7 @@ def config_lst_bin_files(
     lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, lst_width=lst_width)
     dlst = lst_grid[1] - lst_grid[0]
 
-    lst_edges = np.concatenate([lst_grid - dlst/2, [lst_grid[-1] + dlst/2]])
+    lst_edges = np.concatenate([lst_grid - dlst / 2, [lst_grid[-1] + dlst / 2]])
 
     # Now, what we need here is actually the lst_edges of the *files*, not the actual
     # bins.
@@ -1930,33 +2021,38 @@ def config_lst_bin_files(
     for fllist in data_files:
         matched = utils.match_files_to_lst_bins(
             lst_edges=lst_edges,
-            file_list = fllist,
+            file_list=fllist,
             files_sorted=True,
             jd_regex=jd_regex,
             blts_are_rectangular=blts_are_rectangular,
             time_axis_faster_than_bls=time_axis_faster_than_bls,
-            atol=atol
+            atol=atol,
         )
         for i, m in enumerate(matched):
             matched_files[i].append(m)
 
     nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
-    lst_grid = [lst_grid[ntimes_per_file*i:ntimes_per_file*(i+1)] for i in range(nfiles)]
+    lst_grid = [
+        lst_grid[ntimes_per_file * i: ntimes_per_file * (i + 1)] for i in range(nfiles)
+    ]
 
     # Only keep output files that have data associated
-    lst_grid = [lg for lg, mf in zip(lst_grid, matched_files) if any(len(mff)>0 for mff in mf)]
-    matched_files = [mf for mf in matched_files if any(len(mff)>0 for mff in mf)]
+    lst_grid = [
+        lg for lg, mf in zip(lst_grid, matched_files) if any(len(mff) > 0 for mff in mf)
+    ]
+    matched_files = [mf for mf in matched_files if any(len(mff) > 0 for mff in mf)]
     return lst_grid, matched_files
+
 
 def make_lst_bin_config_file(
     config_file: str | Path,
     data_files: list[list[str | FastUVH5Meta]],
     clobber: bool = False,
-    dlst: float | None=None,
-    atol: float=1e-10,
-    lst_start: float | None=None,
-    lst_width: float = 2*np.pi,
-    ntimes_per_file: int=60,
+    dlst: float | None = None,
+    atol: float = 1e-10,
+    lst_start: float | None = None,
+    lst_width: float = 2 * np.pi,
+    ntimes_per_file: int = 60,
     blts_are_rectangular: bool | None = None,
     time_axis_faster_than_bls: bool | None = None,
     jd_regex: str = r"zen\.(\d+\.\d+)\.",
@@ -2045,51 +2141,57 @@ def make_lst_bin_config_file(
 
     dlst = lst_grid[0][1] - lst_grid[0][0]
     # Make it a real list of floats to make the YAML easier to read
-    lst_grid = [[float(l) for l in lsts] for lsts in lst_grid]
+    lst_grid = [[float(lst) for lst in lsts] for lsts in lst_grid]
 
     # now matched files is a list of output files, each containing a list of nights,
     # each containing a list of files
     logger.info("Getting metadata from first file...")
+
     def get_meta():
         for outfile in matched_files:
             for night in outfile:
                 for i, fl in enumerate(night):
                     return fl
+
     meta = get_meta()
 
     tint = np.median(meta.integration_time)
     if not np.all(np.abs(np.diff(np.diff(meta.times))) < 1e-6):
         raise ValueError(
-            'All integrations must be of equal length (BDA not supported), got diffs: '
-            f'{np.diff(meta.times)}'
+            "All integrations must be of equal length (BDA not supported), got diffs: "
+            f"{np.diff(meta.times)}"
         )
 
-    matched_files = [[[str(m.path) for m in night] for night in outfiles] for outfiles in matched_files]
+    matched_files = [
+        [[str(m.path) for m in night] for night in outfiles]
+        for outfiles in matched_files
+    ]
 
     output = {
-        'config_params': {
-            'dlst': float(dlst),
-            'atol': atol,
-            'lst_start': lst_start,
-            'lst_width': lst_width,
-            'jd_regex': jd_regex,
+        "config_params": {
+            "dlst": float(dlst),
+            "atol": atol,
+            "lst_start": lst_start,
+            "lst_width": lst_width,
+            "jd_regex": jd_regex,
         },
-        'lst_grid': lst_grid,
-        'matched_files': matched_files,
-        'metadata': {
-            'x_orientation': meta.x_orientation,
-            'blts_are_rectangular': meta.blts_are_rectangular,
-            'time_axis_faster_than_bls': meta.time_axis_faster_than_bls,
-            'start_jd': int(meta.times[0]),
-            'integration_time': float(tint),
-            'lst_branch_cut': lst_branch_cut
-        }
+        "lst_grid": lst_grid,
+        "matched_files": matched_files,
+        "metadata": {
+            "x_orientation": meta.x_orientation,
+            "blts_are_rectangular": meta.blts_are_rectangular,
+            "time_axis_faster_than_bls": meta.time_axis_faster_than_bls,
+            "start_jd": int(meta.times[0]),
+            "integration_time": float(tint),
+            "lst_branch_cut": lst_branch_cut,
+        },
     }
 
-    with open(config_file, 'w') as fl:
+    with open(config_file, "w") as fl:
         yaml.safe_dump(output, fl)
 
     return output
+
 
 def lst_bin_arg_parser():
     """
@@ -2107,37 +2209,166 @@ def lst_bin_arg_parser():
             "Consult lstbin.lst_bin_files() for further details on functionality."
         )
     )
-    a.add_argument('configfile', type=str, help="config file produced by lstbin.make_lst_bin_config_file")
     a.add_argument(
-        "--calfile-rules", nargs='*', type=str,
-        help="rules to convert datafile names to calfile names. A series of two strings where the first will be replaced by the latter"
+        "configfile",
+        type=str,
+        help="config file produced by lstbin.make_lst_bin_config_file",
     )
-    a.add_argument("--fname-format", type=str, default="zen.{kind}.{lst:7.5f}.uvh5", help="filename format for output files. See docstring for details.")
-    a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
-    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
-    a.add_argument("--rephase", default=False, action='store_true', help="rephase data to center of LST bin before binning")
-    a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
-    a.add_argument("--output_file_select", default=None, nargs='*', type=int, help="list of output file integers to run on. Default is all output files.")
-    a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
-    a.add_argument("--ignore_flags", default=False, action='store_true', help="Ignore flags in data files, such that all input data is included in binning.")
-    a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
-    a.add_argument("--ex_ant_yaml_files", default=None, type=str, nargs='+', help="list of paths to yamls with lists of antennas from each night to exclude lstbinned data files.")
-    a.add_argument("--ignore-ants", default=(), type=int, nargs='+', help='ants to ignore')
-    a.add_argument("--ignore-missing-calfiles", default=False,action='store_true', help='if true, any datafile with missing calfile will just be removed from lstbinning.')
-    a.add_argument("--write_kwargs", default='{}', type=str, help="json dictionary of arguments to the uvh5 writer")
-    a.add_argument("--golden-lsts", type=str, help="LSTS (rad) to save longitudinal data for, separated by commas")
-    a.add_argument("--save-channels", type=str, help="integer channels separated by commas to save longitudinal data for")
-    a.add_argument("--sigma-clip-thresh", type=float, help="sigma clip threshold for flagging data in an LST bin over time. Zero means no clipping.", default=None)
-    a.add_argument("--sigma-clip-min-N", type=int, help="number of unflagged data points over time to require before considering sigma clipping", default=4)
-    a.add_argument("--flag-below-min-N", action='store_true', help="if true, flag all data in an LST bin if there are fewer than --sigma-clip-min-N unflagged data points over time")
-    a.add_argument("--flag-thresh", type=float, help="fraction of integrations in an LST bin for a particular (antpair, pol, channel) that must be flagged for the entire bin to be flagged", default=0.7)
-    a.add_argument("--redundantly-averaged", action='store_true', default=None, help="if true, assume input files are redundantly averaged")
-    a.add_argument("--only-last-file-per-night", action='store_true', default=False, help="if true, only use the first and last file every night to obtain antpairs")
-    a.add_argument("--freq-min", type=float, default=None, help="minimum frequency to include in lstbinning")
-    a.add_argument("--freq-max", type=float, default=None, help="maximum frequency to include in lstbinning")
-    a.add_argument("--no-flagged-mode", action='store_true', help="turn off output of flagged mode LST-binning")
-    a.add_argument("--do-inpaint-mode", action='store_true', default=None, help="turn on inpainting mode LST-binning")
-    a.add_argument("--where-inpainted-file-rules", nargs='*', type=str, help="rules to convert datafile names to where-inpainted-file names. A series of two strings where the first will be replaced by the latter")
-    a.add_argument('--sigma-clip-in-inpainted-mode', action='store_true', default=False, help='allow sigma-clipping in inpainted mode')
-    a.add_argument('--write-med-mad', action='store_true', default=False, help='option to write out MED/MAD files in addition to LST/STD files')
+    a.add_argument(
+        "--calfile-rules",
+        nargs="*",
+        type=str,
+        help="rules to convert datafile names to calfile names. A series of two strings where the first will be replaced by the latter",
+    )
+    a.add_argument(
+        "--fname-format",
+        type=str,
+        default="zen.{kind}.{lst:7.5f}.uvh5",
+        help="filename format for output files. See docstring for details.",
+    )
+    a.add_argument(
+        "--outdir", default=None, type=str, help="directory for writing output"
+    )
+    a.add_argument(
+        "--overwrite", default=False, action="store_true", help="overwrite output files"
+    )
+    a.add_argument(
+        "--rephase",
+        default=False,
+        action="store_true",
+        help="rephase data to center of LST bin before binning",
+    )
+    a.add_argument(
+        "--history", default=" ", type=str, help="history to insert into output files"
+    )
+    a.add_argument(
+        "--output_file_select",
+        default=None,
+        nargs="*",
+        type=int,
+        help="list of output file integers to run on. Default is all output files.",
+    )
+    a.add_argument(
+        "--vis_units", default="Jy", type=str, help="visibility units of output files."
+    )
+    a.add_argument(
+        "--ignore_flags",
+        default=False,
+        action="store_true",
+        help="Ignore flags in data files, such that all input data is included in binning.",
+    )
+    a.add_argument(
+        "--Nbls_to_load",
+        default=None,
+        type=int,
+        help="Number of baselines to load and bin simultaneously. Default is all.",
+    )
+    a.add_argument(
+        "--ex_ant_yaml_files",
+        default=None,
+        type=str,
+        nargs="+",
+        help="list of paths to yamls with lists of antennas from each night to exclude lstbinned data files.",
+    )
+    a.add_argument(
+        "--ignore-ants", default=(), type=int, nargs="+", help="ants to ignore"
+    )
+    a.add_argument(
+        "--ignore-missing-calfiles",
+        default=False,
+        action="store_true",
+        help="if true, any datafile with missing calfile will just be removed from lstbinning.",
+    )
+    a.add_argument(
+        "--write_kwargs",
+        default="{}",
+        type=str,
+        help="json dictionary of arguments to the uvh5 writer",
+    )
+    a.add_argument(
+        "--golden-lsts",
+        type=str,
+        help="LSTS (rad) to save longitudinal data for, separated by commas",
+    )
+    a.add_argument(
+        "--save-channels",
+        type=str,
+        help="integer channels separated by commas to save longitudinal data for",
+    )
+    a.add_argument(
+        "--sigma-clip-thresh",
+        type=float,
+        help="sigma clip threshold for flagging data in an LST bin over time. Zero means no clipping.",
+        default=None,
+    )
+    a.add_argument(
+        "--sigma-clip-min-N",
+        type=int,
+        help="number of unflagged data points over time to require before considering sigma clipping",
+        default=4,
+    )
+    a.add_argument(
+        "--flag-below-min-N",
+        action="store_true",
+        help="if true, flag all data in an LST bin if there are fewer than --sigma-clip-min-N unflagged data points over time",
+    )
+    a.add_argument(
+        "--flag-thresh",
+        type=float,
+        help="fraction of integrations in an LST bin for a particular (antpair, pol, channel) that must be flagged for the entire bin to be flagged",
+        default=0.7,
+    )
+    a.add_argument(
+        "--redundantly-averaged",
+        action="store_true",
+        default=None,
+        help="if true, assume input files are redundantly averaged",
+    )
+    a.add_argument(
+        "--only-last-file-per-night",
+        action="store_true",
+        default=False,
+        help="if true, only use the first and last file every night to obtain antpairs",
+    )
+    a.add_argument(
+        "--freq-min",
+        type=float,
+        default=None,
+        help="minimum frequency to include in lstbinning",
+    )
+    a.add_argument(
+        "--freq-max",
+        type=float,
+        default=None,
+        help="maximum frequency to include in lstbinning",
+    )
+    a.add_argument(
+        "--no-flagged-mode",
+        action="store_true",
+        help="turn off output of flagged mode LST-binning",
+    )
+    a.add_argument(
+        "--do-inpaint-mode",
+        action="store_true",
+        default=None,
+        help="turn on inpainting mode LST-binning",
+    )
+    a.add_argument(
+        "--where-inpainted-file-rules",
+        nargs="*",
+        type=str,
+        help="rules to convert datafile names to where-inpainted-file names. A series of two strings where the first will be replaced by the latter",
+    )
+    a.add_argument(
+        "--sigma-clip-in-inpainted-mode",
+        action="store_true",
+        default=False,
+        help="allow sigma-clipping in inpainted mode",
+    )
+    a.add_argument(
+        "--write-med-mad",
+        action="store_true",
+        default=False,
+        help="option to write out MED/MAD files in addition to LST/STD files",
+    )
     return a
