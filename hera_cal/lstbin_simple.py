@@ -343,8 +343,8 @@ def reduce_lst_bins(
     days_binned = np.zeros(out_nsamples.shape, dtype=int)
 
     if get_mad:
-        mad = np.zeros(out_data.shape, dtype=complex)
-        med = np.zeros(out_data.shape, dtype=complex)
+        mad = np.ones(out_data.shape, dtype=complex)
+        med = np.ones(out_data.shape, dtype=complex)
 
     if where_inpainted is None:
         where_inpainted = [None] * nlst_bins
@@ -1039,12 +1039,12 @@ def _get_where_inpainted_files(
         for df in dflist:
             wif = str(df)
             for rule in where_inpainted_file_rules:
-                print(rule[0], "HA", rule[1])
                 wif = wif.replace(rule[0], rule[1])
             if os.path.exists(wif):
                 this.append(wif)
             else:
                 raise IOError(f"Where inpainted file {wif} does not exist")
+
     return where_inpainted_files
 
 
@@ -1311,8 +1311,8 @@ def lst_bin_files_single_outfile(
     where_inpainted_files = _get_where_inpainted_files(
         data_files, where_inpainted_file_rules
     )
-    output_inpainted, output_flagged = _configure_inpainted_mode(
-        output_inpainted, output_flagged, where_inpainted_files
+    output_flagged, output_inpainted = _configure_inpainted_mode(
+        output_flagged, output_inpainted, where_inpainted_files
     )
 
     # Prune empty nights (some nights start with files, but have files removed because

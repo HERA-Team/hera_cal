@@ -3,14 +3,13 @@ from __future__ import annotations
 from . import mock_uvdata as mockuvd
 import pytest
 from pathlib import Path
-from pyuvdata import UVCal
-from itertools import combinations_with_replacement
+from pyuvdata import UVCal, UVFlag
 import numpy as np
 from hera_cal import lstbin_simple as lstbin_simple
 import pytest
 import numpy as np
 from pyuvdata import UVCal, UVData
-from .. import io, utils, lstbin_simple, noise
+from .. import io, utils, lstbin_simple
 from hera_cal import apply_cal
 from pyuvdata import utils as uvutils
 from hera_cal.red_groups import RedundantGroups
@@ -283,12 +282,14 @@ class Test_ReduceLSTBins:
     def test_zerosize_bin(self):
         d, f, n = self.get_input_data(ntimes=(0, 1))
         print(d[0].shape, len(d))
-        rdc = lstbin_simple.reduce_lst_bins(d, f, n)
+        rdc = lstbin_simple.reduce_lst_bins(d, f, n, get_mad=True)
 
         assert rdc["data"].shape[1] == 2  # 2 LST bins
         assert np.all(np.isnan(rdc["data"][:, 0]))
         assert np.all(rdc["flags"][:, 0])
         assert np.all(rdc["nsamples"][:, 0] == 0.0)
+        assert np.all(np.isinf(rdc["mad"][:, 0]))
+        assert np.all(np.isnan(rdc["median"][:, 0]))
 
     @pytest.mark.parametrize("ntimes", [(4,), (5, 4)])
     def test_multi_points_per_bin(self, ntimes, benchmark):
@@ -649,6 +650,22 @@ class Test_LSTAverage:
         assert np.all(norm_n[1:] == 7)
         assert not np.any(np.isinf(std_n[1:]))
         assert not np.any(np.isnan(data_n[1:]))
+
+    def test_sigma_clip_and_inpainted_warning(self):
+        """Test that a warning is raised if doing inpainted_mode as well as sigma-clip."""
+        shape = (7, 8, 9, 2)
+        _data = np.random.random(shape) + np.random.random(shape) * 1j
+        nsamples = np.ones(_data.shape, dtype=float)
+        flags = np.zeros(_data.shape, dtype=bool)
+
+        with pytest.warns(UserWarning, match="Sigma-clipping in in-painted mode"):
+            lstbin_simple.lst_average(
+                data=_data,
+                nsamples=nsamples,
+                flags=flags,
+                sigma_clip_thresh=2.0,
+                inpainted_mode=True,
+            )
 
 
 def create_small_array_uvd(identifiable: bool = False, **kwargs):
@@ -1508,6 +1525,51 @@ class Test_LSTBinFiles:
 
             assert flagged == inpainted
 
+    def test_where_inpainted_not_baseline_type(self, tmp_path_factory):
+        """Test that proper error is raised when using incorrect inpainted files."""
+        tmp = tmp_path_factory.mktemp("inpaint_not_baseline_type")
+        uvds = mockuvd.make_dataset(
+            ndays=3,
+            nfiles=1,
+            ntimes=2,
+            creator=mockuvd.create_uvd_identifiable,
+            antpairs=[(i, j) for i in range(3) for j in range(i, 3)],  # 55 antpairs
+            pols=("xx", "yx"),
+            freqs=np.linspace(140e6, 180e6, 3),
+            redundantly_averaged=True,
+        )
+
+        data_files = mockuvd.write_files_in_hera_format(
+            uvds, tmp, add_where_inpainted_files=True
+        )
+
+        # Now create dodgy where_inpainted files
+        inp = lstbin_simple._get_where_inpainted_files(
+            data_files, [(".uvh5", ".where_inpainted.h5")]
+        )
+        for fllist in inp:
+            for fl in fllist:
+                uvf = UVFlag()
+                uvf.read(fl)
+                uvf.to_waterfall()
+                uvf.to_flag()
+                uvf.write(fl.replace(".h5", ".waterfall.h5"), clobber=True)
+
+        cfl = tmp / "lstbin_config_file.yaml"
+        lstbin_simple.make_lst_bin_config_file(
+            cfl,
+            data_files,
+            ntimes_per_file=2,
+            clobber=True,
+        )
+        with pytest.raises(ValueError, match="to be a DataContainer"):
+            lstbin_simple.lst_bin_files(
+                config_file=cfl,
+                fname_format="zen.{kind}.{lst:7.5f}{inpaint_mode}.uvh5",
+                output_flagged=False,
+                where_inpainted_file_rules=[(".uvh5", ".where_inpainted.waterfall.h5")],
+            )
+
 
 def test_get_where_inpainted(tmp_path_factory):
     tmp: Path = tmp_path_factory.mktemp("get_where_inpainted")
@@ -1531,3 +1593,72 @@ def test_get_where_inpainted(tmp_path_factory):
 
     with pytest.raises(IOError, match="Where inpainted file"):
         lstbin_simple._get_where_inpainted_files(fls, [(".uvh5", ".non_existent.h5")])
+
+
+def test_configure_inpainted_mode():
+    flg, inp = lstbin_simple._configure_inpainted_mode(
+        output_flagged=True, output_inpainted=True, where_inpainted_files=[]
+    )
+    assert flg
+    assert inp
+
+    flg, inp = lstbin_simple._configure_inpainted_mode(
+        output_flagged=True, output_inpainted=True, where_inpainted_files=["a_file.h5"]
+    )
+    assert flg
+    assert inp
+
+    flg, inp = lstbin_simple._configure_inpainted_mode(
+        output_flagged=True, output_inpainted=False, where_inpainted_files=[]
+    )
+    assert flg
+    assert not inp
+
+    flg, inp = lstbin_simple._configure_inpainted_mode(
+        output_flagged=True, output_inpainted=False, where_inpainted_files=["a_file.h5"]
+    )
+    assert flg
+    assert not inp
+
+    flg, inp = lstbin_simple._configure_inpainted_mode(
+        output_flagged=True, output_inpainted=None, where_inpainted_files=[]
+    )
+    assert flg
+    assert not inp
+
+    flg, inp = lstbin_simple._configure_inpainted_mode(
+        output_flagged=True, output_inpainted=None, where_inpainted_files=["a_file.h5"]
+    )
+    assert flg
+    assert inp
+
+    flg, inp = lstbin_simple._configure_inpainted_mode(
+        output_flagged=False, output_inpainted=True, where_inpainted_files=[]
+    )
+    assert not flg
+    assert inp
+
+    with pytest.raises(ValueError, match="Both output_inpainted and output_flagged"):
+        lstbin_simple._configure_inpainted_mode(
+            output_flagged=False, output_inpainted=False, where_inpainted_files=[]
+        )
+
+
+class TestThresholdFlags:
+    def test_inplace(self):
+        flags = np.zeros((10, 12), dtype=bool)  # shape = (ntime, ...)
+        flags[:8, 0] = True
+
+        new = lstbin_simple.threshold_flags(flags, flag_thresh=0.7, inplace=True)
+
+        assert np.all(flags[:, 0])
+        assert np.all(new == flags)
+
+    def test_not_inplace(self):
+        flags = np.zeros((10, 12), dtype=bool)  # shape = (ntime, ...)
+        flags[:8, 0] = True
+
+        new = lstbin_simple.threshold_flags(flags, flag_thresh=0.7, inplace=False)
+
+        assert not np.all(flags[:, 0])
+        assert np.all(new[:, 0])
