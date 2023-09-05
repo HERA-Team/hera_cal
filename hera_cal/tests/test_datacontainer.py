@@ -504,6 +504,9 @@ class TestDataContainerWithRealData:
         with pytest.raises(ValueError, match='Cannot specify both freqs and channels'):
             dc1.select_freqs(fq, channels=chans)
 
+        with pytest.raises(ValueError, match="All freqs must be in self.freqs"):
+            dc1.select_freqs(np.array([100.0]))
+
         # Ensure warning is raised without freqs
         dc1.freqs = None
         with pytest.warns(UserWarning, match='It is impossible'):

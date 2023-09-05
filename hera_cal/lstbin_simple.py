@@ -181,8 +181,6 @@ def lst_align(
         nsamples = nsamples[lst_mask]
         data_lsts = data_lsts[lst_mask]
         grid_indices = grid_indices[lst_mask]
-        if where_inpainted is not None:
-            where_inpainted = where_inpainted[lst_mask]
 
         if freq_array is None or antpos is None:
             raise ValueError("freq_array and antpos is needed for rephase")
