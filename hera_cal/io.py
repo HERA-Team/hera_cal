@@ -108,24 +108,31 @@ class HERACal(UVCal):
             total_qual: dict mapping polarization to (Nint, Nfreq) float total quality array
         '''
         self._extract_metadata()
-        gains, flags, quals, total_qual = odict(), odict(), odict(), odict()
+        gains, flags = odict(), odict()
+
+        if self.total_quality_array is not None:
+            total_qual = odict()
+        else:
+            total_qual = None
+
+        if self.quality_array is not None:
+            quals = odict()
+        else:
+            quals = None
 
         # build dict of gains, flags, and quals
         for (ant, pol) in self.ants:
             i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
             gains[(ant, pol)] = np.array(self.gain_array[i, :, :, ip].T)
             flags[(ant, pol)] = np.array(self.flag_array[i, :, :, ip].T)
-            if self.quality_array is not None:
+            if quals is not None:
                 quals[(ant, pol)] = np.array(self.quality_array[i, :, :, ip].T)
-            else:
-                quals = None
+
         # build dict of total_qual if available
-        for pol in self.pols:
-            ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
-            if self.total_quality_array is not None:
+        if total_qual is not None:
+            for pol in self.pols:
+                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
                 total_qual[pol] = np.array(self.total_quality_array[:, :, ip].T)
-            else:
-                total_qual = None
 
         return gains, flags, quals, total_qual
 
@@ -453,7 +460,7 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     if getattr(uvo, 'blts_are_rectangular', False):
         if uvo.time_axis_faster_than_bls:
             for i in range(uvo.Nbls):
-                start = i*uvo.Ntimes
+                start = i * uvo.Ntimes
                 antp = (uvo.ant_1_array[start], uvo.ant_2_array[start])
                 blt_slices[antp] = slice(start, start + uvo.Ntimes, 1)
             assert uvo.Nbls == len(blt_slices)
@@ -472,8 +479,10 @@ def get_blt_slices(uvo, tried_to_reorder=False):
                     uvo.reorder_blts(order='time')
                     return get_blt_slices(uvo, tried_to_reorder=True)
                 else:
-                    raise NotImplementedError('UVData objects with non-regular spacing of '
-                                            'baselines in its baseline-times are not supported.')
+                    raise NotImplementedError(
+                        'UVData objects with non-regular spacing of '
+                        'baselines in its baseline-times are not supported.'
+                    )
             else:
                 blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
     return blt_slices
@@ -790,7 +799,7 @@ class HERAData(UVData):
         locs = locals()
         partials = ['bls', 'polarizations', 'times', 'time_range', 'lsts', 'lst_range', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
-        
+
         # if filepaths is None, this was converted to HERAData
         # from a different pre-loaded object with no history of filepath
         if self.filepaths is not None:
@@ -1591,7 +1600,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
     elif filetype == 'h5':
         from pyuvdata import UVFlag
         uvf = UVFlag(flagfile)
-        assert uvf.mode == 'flag', 'The input h5-based UVFlag object must be in flag mode.'
+        assert uvf.mode == 'flag', f'The input h5-based UVFlag object must be in flag mode, got {uvf.mode}'
         assert (np.issubsctype(uvf.polarization_array.dtype, np.signedinteger)
                 or np.issubsctype(uvf.polarization_array.dtype, np.str_)), \
             "The input h5-based UVFlag object's polarization_array must be integers or byte strings."
@@ -1611,6 +1620,8 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             # data container only supports standard polarizations strings
             if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                 flags = DataContainer(flags)
+                flags.times = times
+                flags.freqs = freqs
 
         elif uvf.type == 'antenna':  # one time x freq waterfall per antenna
             for i, ant in enumerate(uvf.ant_array):
@@ -2227,9 +2238,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
         return uvd
 
 
-
-
-
 def update_uvdata(uvd, data=None, flags=None, nsamples=None, add_to_history='', **kwargs):
     '''Updates a UVData/HERAData object with data or parameters. Cannot modify the shape of
     data arrays. More than one spectral window is not supported. Assumes every baseline
@@ -2712,6 +2720,7 @@ def throw_away_flagged_ants_parser():
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
 
+
 def uvdata_from_fastuvh5(
     meta: FastUVH5Meta,
     antpairs: list[tuple[int, int]] | None = None,
@@ -2719,7 +2728,8 @@ def uvdata_from_fastuvh5(
     lsts: np.ndarray | None = None,
     start_jd: float | None = None,
     lst_branch_cut: float = 0.0,
-    **kwargs) -> UVData:
+    **kwargs
+) -> UVData:
     """Convert a FastUVH5Meta object to a UVData object.
 
     This is a convenience function to convert a FastUVH5Meta object to a UVData
