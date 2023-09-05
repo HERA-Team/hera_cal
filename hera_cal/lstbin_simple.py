@@ -844,7 +844,7 @@ def lst_bin_files_for_baselines(
         )
         if inpfile is not None:
             # This returns a DataContainer (unless something went wrong) since it should
-            # always be a 'baseline' type of UVFlag.s
+            # always be a 'baseline' type of UVFlag.
             inpainted = io.load_flags(inpfile)
             if not isinstance(inpainted, DataContainer):
                 raise ValueError(f"Expected {inpfile} to be a DataContainer")
@@ -881,6 +881,17 @@ def lst_bin_files_for_baselines(
         for i, bl in enumerate(antpairs):
             if redundantly_averaged:
                 bl = keyed.get_ubl_key(bl)
+
+                # Get the representative baseline key from this bl group that exists
+                # in the where_inpainted data.
+                if inpainted is not None:
+                    for inpbl in reds[bl]:
+                        if inpbl in inpainted:
+                            break
+                    else:
+                        raise ValueError(
+                            f"Could not find any baseline from group {bl} in inpainted file"
+                        )
             for j, pol in enumerate(pols):
                 blpol = bl + (pol,)
 
