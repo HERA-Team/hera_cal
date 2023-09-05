@@ -1671,9 +1671,6 @@ def match_files_to_lst_bins(
             return best_index
 
     try:
-        # We subtract one, because the file before the first file in the range
-        # may just get into the range by a tiny bit, and we allow the user to test
-        # that out later.
         first_file = get_first_file_in_range(metadata_list, (jdstart, jdend))
     except ValueError:
         return [[] for _ in range(len(lst_edges) - 1)]
