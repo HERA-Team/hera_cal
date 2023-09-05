@@ -886,7 +886,7 @@ def lst_bin_files_for_baselines(
                 # in the where_inpainted data.
                 if inpainted is not None:
                     for inpbl in reds[bl]:
-                        if inpbl in inpainted:
+                        if inpbl + (pols[0],) in inpainted:
                             break
                     else:
                         raise ValueError(
