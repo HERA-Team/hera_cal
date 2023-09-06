@@ -894,13 +894,14 @@ def lst_bin_files_for_baselines(
                         )
             for j, pol in enumerate(pols):
                 blpol = bl + (pol,)
+                inp_blpol = inpbl + (pol,)
 
                 if blpol in _data:  # DataContainer takes care of conjugates.
                     data[slc, i, :, j] = _data[blpol]
                     flags[slc, i, :, j] = _flags[blpol]
                     nsamples[slc, i, :, j] = _nsamples[blpol]
                     if inpainted is not None:
-                        where_inpainted[slc, i, :, j] = inpainted[blpol]
+                        where_inpainted[slc, i, :, j] = inpainted[inp_blpol]
                 else:
                     # This baseline+pol doesn't exist in this file. That's
                     # OK, we don't assume all baselines are in every file.
