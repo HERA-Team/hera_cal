@@ -119,7 +119,7 @@ def comply_pol(pol):
     compliant with pyuvdata and hera_cal.'''
     try:
         return _comply_vispol(pol)
-    except(KeyError):  # happens if we have an antpol, not vispol
+    except KeyError:  # happens if we have an antpol, not vispol
         return _comply_antpol(pol)
 
 
@@ -399,7 +399,7 @@ if AIPY:
         def get_params(self, ant_prms={'*': '*'}):
             try:
                 prms = aipy.pol.AntennaArray.get_params(self, ant_prms)
-            except(IndexError):
+            except IndexError:
                 return {}
             return prms
 
@@ -411,17 +411,17 @@ if AIPY:
                 try:
                     top_pos[0] = prms[str(i)]['top_x']
                     ant_changed = True
-                except(KeyError):
+                except KeyError:
                     pass
                 try:
                     top_pos[1] = prms[str(i)]['top_y']
                     ant_changed = True
-                except(KeyError):
+                except KeyError:
                     pass
                 try:
                     top_pos[2] = prms[str(i)]['top_z']
                     ant_changed = True
-                except(KeyError):
+                except KeyError:
                     pass
                 if ant_changed:
                     # rotate from zenith to equatorial, convert from meters to ns
@@ -539,7 +539,9 @@ def JD2LST(JD, latitude=-30.721526120689507, longitude=21.428303826863015, altit
         JD = [JD]
 
     # use pyuvdata
-    LST = uvutils.get_lst_for_time(np.array(JD), latitude, longitude, altitude)
+    LST = uvutils.get_lst_for_time(
+        np.array(JD), latitude=latitude, longitude=longitude, altitude=altitude
+    )
 
     if _array:
         return LST

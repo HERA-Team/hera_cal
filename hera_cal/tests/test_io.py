@@ -779,6 +779,7 @@ class Test_HERAData(object):
         nsample_array = hd.set_data_array_with_datacontainer(n, hd.nsample_array.copy())
         assert nsample_array.dtype == n.dtype
 
+
 class Test_ReadHeraHdf5(object):
     def setup_method(self):
         self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5")
@@ -943,19 +944,15 @@ class Test_HERADataFastReader:
         hd2 = io.HERAData(indata)
         if bls == "first10":
             bls = hd2.get_antpairs()[:10]
-            print(bls)
         elif bls == "conjugated":
             bls = hd2.get_antpairs()[:15]
             bls = [(b, a) for a, b in bls]
 
-        d, f, n = hd.read(check=True,bls=bls, pols=pols)
+        d, f, n = hd.read(check=True, bls=bls, pols=pols)
         d2, f2, n2 = hd2.read(bls=bls, polarizations=pols)
-        print(d.antpairs())
-        print(d.times_by_bl.keys())
         # compare all data and metadata
         for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
             self.compare_datacontainers(dc1, dc2, allow_close=infile != 'uvh5_h4c')              
-
 
     @pytest.mark.parametrize(
         'infile', (['uvh5_1'], 'uvh5_h4c')
@@ -1758,6 +1755,7 @@ def test_throw_away_flagged_ants(tmpdir):
         else:
             assert ant in set(hdo.ant_1_array).union(set(hdo.ant_2_array))
 
+
 class Test_UVDataFromFastUVH5:
     """Test the uvdata_from_fastuvh5 function."""
 
@@ -1830,5 +1828,3 @@ class Test_UVDataFromFastUVH5:
         uvd = io.uvdata_from_fastuvh5(self.meta_default, history='I made this!')
 
         assert uvd.history == 'I made this!'
-
-    
