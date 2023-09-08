@@ -1453,7 +1453,6 @@ def lst_bin_files_single_outfile(
         f"lst_bin_edges={lst_bin_edges}"
     )
 
-    logger.warning(f"BEFORE PARTIAL: {outdir}")
     # make it a bit easier to create the outfiles
     create_outfile = partial(
         create_lstbin_output_file,
@@ -1523,7 +1522,6 @@ def lst_bin_files_single_outfile(
 
         slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))
 
-        logger.warning(f"HEY HEY JUST BEFORE WRITING: {outdir}")
         if bi == 0:
             # On the first baseline chunk, create the output file
             # TODO: we're not writing out the where_inpainted data for the GOLDEN
@@ -1875,7 +1873,7 @@ def create_lstbin_output_file(
     if lst < lst_branch_cut:
         lst += 2 * np.pi
 
-    herp = fname_format.format(
+    fname = fname_format.format(
         kind=kind,
         lst=lst,
         pol="".join(pols),
@@ -1883,16 +1881,9 @@ def create_lstbin_output_file(
         if inpaint_mode
         else ("flagged" if inpaint_mode is False else ""),
     )
-    logger.warning(f"IN CREATE LSTBIN OUTPUT FILE for {kind}: {outdir} {fname_format}\n{herp}")
-
-    fname = outdir / fname_format.format(
-        kind=kind,
-        lst=lst,
-        pol="".join(pols),
-        inpaint_mode="inpaint"
-        if inpaint_mode
-        else ("flagged" if inpaint_mode is False else ""),
-    )
+    # There's a weird gotcha with pathlib where if you do path / "/file.name"
+    # You get just "/file.name" which is in root.
+    fname = outdir / fname.removeprefix('/')
 
     logger.info(f"Initializing {fname}")
 
