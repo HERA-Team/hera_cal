@@ -1453,6 +1453,7 @@ def lst_bin_files_single_outfile(
         f"lst_bin_edges={lst_bin_edges}"
     )
 
+    logger.warning("BEFORE PARTIAL: ", outdir)
     # make it a bit easier to create the outfiles
     create_outfile = partial(
         create_lstbin_output_file,
@@ -1522,6 +1523,7 @@ def lst_bin_files_single_outfile(
 
         slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))
 
+        logger.warning("HEY HEY JUST BEFORE WRITIG: ", outdir)
         if bi == 0:
             # On the first baseline chunk, create the output file
             # TODO: we're not writing out the where_inpainted data for the GOLDEN
@@ -1872,7 +1874,7 @@ def create_lstbin_output_file(
 
     if lst < lst_branch_cut:
         lst += 2 * np.pi
-
+    logger.warning(f"IN CREATE LSTBIN OUTPUT FILE for {kind}: ", outdir)
     fname = outdir / fname_format.format(
         kind=kind,
         lst=lst,
