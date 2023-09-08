@@ -1874,7 +1874,17 @@ def create_lstbin_output_file(
 
     if lst < lst_branch_cut:
         lst += 2 * np.pi
-    logger.warning(f"IN CREATE LSTBIN OUTPUT FILE for {kind}: {outdir}")
+
+    herp = fname_format.format(
+        kind=kind,
+        lst=lst,
+        pol="".join(pols),
+        inpaint_mode="inpaint"
+        if inpaint_mode
+        else ("flagged" if inpaint_mode is False else ""),
+    )
+    logger.warning(f"IN CREATE LSTBIN OUTPUT FILE for {kind}: {outdir} {fname_format}\n{herp}")
+
     fname = outdir / fname_format.format(
         kind=kind,
         lst=lst,
