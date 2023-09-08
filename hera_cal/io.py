@@ -9,6 +9,7 @@ import operator
 import os
 import copy
 import warnings
+from packaging import version
 from functools import reduce
 from collections.abc import Iterable
 from pyuvdata import UVCal, UVData
@@ -31,6 +32,7 @@ from astropy.time import Time
 from contextlib import contextmanager
 from functools import lru_cache
 from pyuvdata.uvdata import FastUVH5Meta
+import pyuvdata
 
 try:
     import aipy
@@ -1030,14 +1032,19 @@ class HERAData(UVData):
         # else:  # make a copy of this object and then update the relevant arrays using DataContainers
         #     this = copy.deepcopy(self)
 
-        hd_writer.write_uvh5_part(
-            output_path,
-            data_array=d,
-            flag_array=f,
-            nsample_array=n,
-            run_check_acceptability=(output_path in self._writers),
-            **self.last_read_kwargs
-        )
+        if version.parse(pyuvdata.__version__) < version.parse("3.0"):
+            hd_writer.write_uvh5_part(output_path, d, f, n,
+                                      run_check_acceptability=(output_path in self._writers),
+                                      **self.last_read_kwargs)
+        else:
+            hd_writer.write_uvh5_part(
+                output_path,
+                data_array=d,
+                flag_array=f,
+                nsample_array=n,
+                run_check_acceptability=(output_path in self._writers),
+                **self.last_read_kwargs
+            )
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
                          bl_error_tol=1.0, include_autos=True, frequencies=None):
