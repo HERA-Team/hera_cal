@@ -851,7 +851,6 @@ def lst_bin_files_for_baselines(
 
             # We need to down-selecton times/freqs (bls and pols will be sub-selected
             # based on those in the data through the next loop)
-            print("HERE I AM: ", meta.path, inpfile, tarr, inpainted.times)
             inpainted.select_or_expand_times(new_times=tarr, skip_bda_check=True)
             inpainted.select_freqs(channels=freq_chans)
         else:
@@ -1326,11 +1325,6 @@ def lst_bin_files_single_outfile(
         data_files, where_inpainted_file_rules
     )
 
-    print('FRESH: ')
-    for dlist, inplist in zip(data_files, where_inpainted_files):
-        for df, inp in zip(dlist, inplist):
-            print(df, inp)
-
     output_flagged, output_inpainted = _configure_inpainted_mode(
         output_flagged, output_inpainted, where_inpainted_files
     )
@@ -1413,11 +1407,6 @@ def lst_bin_files_single_outfile(
                 f"{dflist[0].path} and {nants0} for {meta.path} for {meta.path}"
             )
 
-    print('IN BETWEEN: ')
-    for dlist, inplist in zip(data_metas, where_inpainted_files):
-        for df, inp in zip(dlist, inplist):
-            print(df.path, inp)
-
     # Split up the baselines into chunks that will be LST-binned together.
     # This is just to save on RAM.
     if Nbls_to_load is None:
@@ -1434,11 +1423,6 @@ def lst_bin_files_single_outfile(
         [x - dlst / 2 for x in lst_bins] + [lst_bins[-1] + dlst / 2]
     )
 
-    print('JUST BEFORE: ')
-    for dlist, inplist in zip(data_files, where_inpainted_files):
-        for df, inp in zip(dlist, inplist):
-            print(df, inp)
-
     (
         tinds,
         time_arrays,
@@ -1452,10 +1436,6 @@ def lst_bin_files_single_outfile(
         input_cals,
         where_inpainted_files,
     )
-
-    print('JUST AFTER: ')
-    for fl, inp in zip(file_list, where_inpainted_files):
-        print(fl, inp)
 
     # If we have no times at all for this file, just return
     if len(all_lsts) == 0:
