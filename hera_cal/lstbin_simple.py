@@ -1325,6 +1325,12 @@ def lst_bin_files_single_outfile(
     where_inpainted_files = _get_where_inpainted_files(
         data_files, where_inpainted_file_rules
     )
+
+    print('FRESH: ')
+    for dlist, inplist in zip(data_files, where_inpainted_files):
+        for df, inp in zip(dlist, inplist):
+            print(df, inp)
+
     output_flagged, output_inpainted = _configure_inpainted_mode(
         output_flagged, output_inpainted, where_inpainted_files
     )
@@ -1425,7 +1431,7 @@ def lst_bin_files_single_outfile(
     print('JUST BEFORE: ')
     for dlist, inplist in zip(data_files, where_inpainted_files):
         for df, inp in zip(dlist, inplist):
-            print(df.name, inp.name)
+            print(df, inp)
 
     (
         tinds,
@@ -1444,7 +1450,7 @@ def lst_bin_files_single_outfile(
     print('JUST AFTER: ')
     for dlist, inplist in zip(data_files, where_inpainted_files):
         for df, inp in zip(dlist, inplist):
-            print(df.name, inp.name)
+            print(df, inp)
 
     # If we have no times at all for this file, just return
     if len(all_lsts) == 0:
