@@ -1339,6 +1339,7 @@ def lst_bin_files_single_outfile(
     # they have no associated calibration)
     data_files = [df for df in data_files if df]
     input_cals = [cf for cf in input_cals if cf]
+    where_inpainted_files = [wif for wif in where_inpainted_files if wif]
 
     logger.info("Got the following numbers of data files per night:")
     for dflist in data_files:
@@ -1412,6 +1413,11 @@ def lst_bin_files_single_outfile(
                 f"{dflist[0].path} and {nants0} for {meta.path} for {meta.path}"
             )
 
+    print('IN BETWEEN: ')
+    for dlist, inplist in zip(data_metas, where_inpainted_files):
+        for df, inp in zip(dlist, inplist):
+            print(df.path, inp)
+
     # Split up the baselines into chunks that will be LST-binned together.
     # This is just to save on RAM.
     if Nbls_to_load is None:
@@ -1448,9 +1454,8 @@ def lst_bin_files_single_outfile(
     )
 
     print('JUST AFTER: ')
-    for dlist, inplist in zip(data_files, where_inpainted_files):
-        for df, inp in zip(dlist, inplist):
-            print(df, inp)
+    for fl, inp in zip(file_list, where_inpainted_files):
+        print(fl, inp)
 
     # If we have no times at all for this file, just return
     if len(all_lsts) == 0:
