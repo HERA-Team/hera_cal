@@ -1422,6 +1422,11 @@ def lst_bin_files_single_outfile(
         [x - dlst / 2 for x in lst_bins] + [lst_bins[-1] + dlst / 2]
     )
 
+    print('JUST BEFORE: ')
+    for dlist, inplist in zip(data_files, where_inpainted_files):
+        for df, inp in zip(dlist, inplist):
+            print(df.name, inp.name)
+
     (
         tinds,
         time_arrays,
@@ -1435,6 +1440,12 @@ def lst_bin_files_single_outfile(
         input_cals,
         where_inpainted_files,
     )
+
+    print('JUST AFTER: ')
+    for dlist, inplist in zip(data_files, where_inpainted_files):
+        for df, inp in zip(dlist, inplist):
+            print(df.name, inp.name)
+
     # If we have no times at all for this file, just return
     if len(all_lsts) == 0:
         return {}
