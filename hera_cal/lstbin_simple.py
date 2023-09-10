@@ -851,6 +851,7 @@ def lst_bin_files_for_baselines(
 
             # We need to down-selecton times/freqs (bls and pols will be sub-selected
             # based on those in the data through the next loop)
+            print("HERE I AM: ", meta.path, inpfile, tarr, inpainted.times)
             inpainted.select_or_expand_times(new_times=tarr, skip_bda_check=True)
             inpainted.select_freqs(channels=freq_chans)
         else:
