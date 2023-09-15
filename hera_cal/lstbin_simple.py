@@ -1333,7 +1333,8 @@ def lst_bin_files_single_outfile(
     # they have no associated calibration)
     data_files = [df for df in data_files if df]
     input_cals = [cf for cf in input_cals if cf]
-    where_inpainted_files = [wif for wif in where_inpainted_files if wif]
+    if where_inpainted_files is not None:
+        where_inpainted_files = [wif for wif in where_inpainted_files if wif]
 
     logger.info("Got the following numbers of data files per night:")
     for dflist in data_files:
