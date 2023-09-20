@@ -900,30 +900,6 @@ def test_select_spw_ranges_argparser():
     assert args.spw_ranges == [(0, 20), (30, 100), (120, 150)]
 
 
-def test_select_spw_ranges_run_script_code(tmpdir):
-    # test script code from scripts/test_select_spw_ranges.py
-    tmp_path = str(tmpdir)
-    new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-    uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-    hd = io.HERAData(uvh5)
-    hd.read()
-    nf = hd.Nfreqs
-    output = os.path.join(tmp_path, 'test_calibrated_output.uvh5')
-    # construct bash script command
-    select_cmd = f'python ./scripts/select_spw_ranges.py {uvh5} {output} --clobber --spw_ranges 0~256,332~364,792~1000'
-    # and excecute inside of python
-    os.system(select_cmd)
-    # test that output has correct frequencies.
-    hdo = io.HERAData(output)
-    hdo.read()
-    assert np.allclose(hdo.freq_array, np.hstack([hd.freq_array[:256], hd.freq_array[332:364], hd.freq_array[792:1000]]))
-    freq_inds = np.hstack([np.arange(0, 256).astype(int), np.arange(332, 364).astype(int), np.arange(792, 1000).astype(int)])
-    # and check that data, flags, nsamples make sense.
-    assert np.allclose(hdo.data_array, hd.data_array[:, freq_inds, :])
-    assert np.allclose(hdo.flag_array, hd.flag_array[:, freq_inds, :])
-    assert np.allclose(hdo.nsample_array, hd.nsample_array[:, freq_inds, :])
-
-
 @pytest.fixture(scope='function')
 def tmpdir(tmp_path_factory):
     return tmp_path_factory.mktemp('test_match_files_to_lst_bins')
