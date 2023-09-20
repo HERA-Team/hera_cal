@@ -1609,6 +1609,8 @@ def lst_bin_files_single_outfile(
                 flags=rdc["flags"],
                 nsamples=rdc["nsamples"],
             )
+
+            logger.info(f"JUST TO MAKE SURE: {rdc['std'][20,1000,0]}")
             write_baseline_slc_to_file(
                 fl=out_files[("STD", inpainted)],
                 slc=slc,
@@ -1626,7 +1628,7 @@ def lst_bin_files_single_outfile(
                     nsamples=rdc["nsamples"],
                 )
                 write_baseline_slc_to_file(
-                    fl=out_files[("STD", inpainted)],
+                    fl=out_files[("MAD", inpainted)],
                     slc=slc,
                     data=rdc["mad"],
                     flags=rdc["flags"],
