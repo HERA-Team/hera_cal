@@ -9,6 +9,7 @@ import operator
 import os
 import copy
 import warnings
+from packaging import version
 from functools import reduce
 from collections.abc import Iterable
 from pyuvdata import UVCal, UVData
@@ -31,6 +32,7 @@ from astropy.time import Time
 from contextlib import contextmanager
 from functools import lru_cache
 from pyuvdata.uvdata import FastUVH5Meta
+import pyuvdata
 
 try:
     import aipy
@@ -1030,9 +1032,19 @@ class HERAData(UVData):
         # else:  # make a copy of this object and then update the relevant arrays using DataContainers
         #     this = copy.deepcopy(self)
 
-        hd_writer.write_uvh5_part(output_path, d, f, n,
-                                  run_check_acceptability=(output_path in self._writers),
-                                  **self.last_read_kwargs)
+        if version.parse(pyuvdata.__version__) < version.parse("3.0"):
+            hd_writer.write_uvh5_part(output_path, d, f, n,
+                                      run_check_acceptability=(output_path in self._writers),
+                                      **self.last_read_kwargs)
+        else:
+            hd_writer.write_uvh5_part(
+                output_path,
+                data_array=d,
+                flag_array=f,
+                nsample_array=n,
+                run_check_acceptability=(output_path in self._writers),
+                **self.last_read_kwargs
+            )
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
                          bl_error_tol=1.0, include_autos=True, frequencies=None):
@@ -1435,8 +1447,12 @@ class HERADataFastReader():
         info_dict['antpairs'] = sorted(info_dict['bls'])
         info_dict['bls'] = sorted(set([ap + (pol, ) for ap in info_dict['antpairs'] for pol in info_dict['pols']]))
         XYZ = XYZ_from_LatLonAlt(info_dict['latitude'] * np.pi / 180, info_dict['longitude'] * np.pi / 180, info_dict['altitude'])
-        enu_antpos = ENU_from_ECEF(np.array([antpos for ant, antpos in info_dict['antpos'].items()]) + XYZ,
-                                   info_dict['latitude'] * np.pi / 180, info_dict['longitude'] * np.pi / 180, info_dict['altitude'])
+        enu_antpos = ENU_from_ECEF(
+            np.array([antpos for ant, antpos in info_dict['antpos'].items()]) + XYZ,
+            latitude=info_dict['latitude'] * np.pi / 180,
+            longitude=info_dict['longitude'] * np.pi / 180,
+            altitude=info_dict['altitude']
+        )
         info_dict['antpos'] = {ant: enu for enu, ant in zip(enu_antpos, info_dict['antpos'])}
         info_dict['data_antpos'] = {ant: info_dict['antpos'][ant] for ant in info_dict['data_ants']}
         info_dict['times'] = np.unique(info_dict['times'])
@@ -1734,9 +1750,11 @@ def get_file_times(filepaths, filetype='uvh5'):
                                                                   _f[u'Header'][u'altitude'][()]))
 
                 # figure out which baseline has the most times in order to handle BDA appropriately
-                baseline_array = uvutils.antnums_to_baseline(np.array(_f[u'Header'][u'ant_1_array']),
-                                                             np.array(_f[u'Header'][u'ant_2_array']),
-                                                             np.array(_f[u'Header'][u'Nants_telescope']))
+                baseline_array = uvutils.antnums_to_baseline(
+                    np.array(_f[u'Header'][u'ant_1_array']),
+                    np.array(_f[u'Header'][u'ant_2_array']),
+                    Nants_telescope=np.array(_f[u'Header'][u'Nants_telescope'])
+                )
                 most_common_bl_num = scipy.stats.mode(baseline_array, keepdims=True)[0][0]
                 time_array = time_array[baseline_array == most_common_bl_num]
                 lst_array = lst_array[baseline_array == most_common_bl_num]
@@ -2114,18 +2132,25 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     antenna_names = [f"HH{a}" for a in antenna_numbers]
 
     # get antenna positions in ITRF frame
-    tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
+    lat, lon, alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
     antenna_positions = np.array([antpos[k] for k in antenna_numbers])
-    antenna_positions = uvutils.ECEF_from_ENU(antenna_positions, *tel_lat_lon_alt) - telescope_location
+    antenna_positions = uvutils.ECEF_from_ENU(
+        antenna_positions, latitude=lat, longitude=lon, altitude=alt
+    ) - telescope_location
 
     # get times
     if time_array is None:
         if start_jd is None:
             raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = LST2JD(lst_array, start_jd, allow_other_jd=True, lst_branch_cut=lst_branch_cut,
-                            latitude=(tel_lat_lon_alt[0] * 180 / np.pi),
-                            longitude=(tel_lat_lon_alt[1] * 180 / np.pi),
-                            altitude=tel_lat_lon_alt[2])
+        time_array = LST2JD(
+            lst_array,
+            start_jd,
+            allow_other_jd=True,
+            lst_branch_cut=lst_branch_cut,
+            latitude=(lat * 180 / np.pi),
+            longitude=(lon * 180 / np.pi),
+            altitude=alt
+        )
     Ntimes = len(time_array)
 
     # get freqs
@@ -2450,7 +2475,6 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
     # get time info
     time_array = np.array(times, float)
     Ntimes = len(time_array)
-    time_range = np.array([time_array.min(), time_array.max()], float)
     if len(time_array) > 1:
         integration_time = np.median(np.diff(time_array)) * 24. * 3600.
     else:
@@ -2519,7 +2543,7 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
               "ant_array", "antenna_numbers", "antenna_names", "cal_style", "history",
               "channel_width", "flag_array", "gain_array", "quality_array", "jones_array",
               "time_array", "lst_array", "spw_array", "freq_array", "history", "integration_time",
-              "time_range", "x_orientation", "telescope_name", "gain_convention", "total_quality_array"]
+              "x_orientation", "telescope_name", "gain_convention", "total_quality_array"]
 
     # create local parameter dict
     local_params = locals()
