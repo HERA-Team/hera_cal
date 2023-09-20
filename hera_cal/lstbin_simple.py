@@ -584,6 +584,14 @@ def lst_average(
     # Multiply by nan instead of just setting as nan, so both real and imag parts are nan
     meandata[~normalizable] *= np.nan
 
+    logger.info(f"Number of flags in 1000th channel for bl 40: {np.sum(flags[:, 20, 1000, 0])}")
+    logger.info(f"Data: {data[:, 20, 1000, 0]}")
+    logger.info(f"Flags: {flags[:, 20, 1000, 0]}")
+    logger.info(f"Nsamples: {nsamples[:, 20, 1000, 0]}")
+    logger.info(f"Mean: {meandata[20, 1000, 0]}")
+    logger.info(f"Data Mask: {data.mask[:, 20, 1000, 0]}")
+    logger.info(f"NORM: {norm[20, 1000, 0]}")
+
     # get other stats
     logger.info("Calculating std")
     with warnings.catch_warnings():
@@ -594,6 +602,8 @@ def lst_average(
         std = np.sum(std * nsamples, axis=0)
         std[normalizable] /= norm[normalizable]
         std = np.sqrt(std.real) + 1j * np.sqrt(std.imag)
+
+    logger.info(f"STD: {std[20, 1000, 0]}")
 
     std[~normalizable] = np.inf
 
@@ -1401,6 +1411,7 @@ def lst_bin_files_single_outfile(
     ]
     bl_chunks = [blg for blg in bl_chunks if len(blg) > 0]
 
+    logger.info(f"HERE IS BASELINE 20: {all_baselines[20]}")
     dlst = config_opts["dlst"]
     lst_bin_edges = np.array(
         [x - dlst / 2 for x in lst_bins] + [lst_bins[-1] + dlst / 2]
