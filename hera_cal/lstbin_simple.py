@@ -584,13 +584,13 @@ def lst_average(
     # Multiply by nan instead of just setting as nan, so both real and imag parts are nan
     meandata[~normalizable] *= np.nan
 
-    logger.info(f"Number of flags in 1000th channel for bl 40: {np.sum(flags[:, 20, 1000, 0])}")
-    logger.info(f"Data: {data[:, 20, 1000, 0]}")
-    logger.info(f"Flags: {flags[:, 20, 1000, 0]}")
-    logger.info(f"Nsamples: {nsamples[:, 20, 1000, 0]}")
-    logger.info(f"Mean: {meandata[20, 1000, 0]}")
-    logger.info(f"Data Mask: {data.mask[:, 20, 1000, 0]}")
-    logger.info(f"NORM: {norm[20, 1000, 0]}")
+    # logger.info(f"Number of flags in 1000th channel for bl 40: {np.sum(flags[:, 20, 1000, 0])}")
+    # logger.info(f"Data: {data[:, 20, 1000, 0]}")
+    # logger.info(f"Flags: {flags[:, 20, 1000, 0]}")
+    # logger.info(f"Nsamples: {nsamples[:, 20, 1000, 0]}")
+    # logger.info(f"Mean: {meandata[20, 1000, 0]}")
+    # logger.info(f"Data Mask: {data.mask[:, 20, 1000, 0]}")
+    # logger.info(f"NORM: {norm[20, 1000, 0]}")
 
     # get other stats
     logger.info("Calculating std")
@@ -603,7 +603,7 @@ def lst_average(
         std[normalizable] /= norm[normalizable]
         std = np.sqrt(std.real) + 1j * np.sqrt(std.imag)
 
-    logger.info(f"STD: {std[20, 1000, 0]}")
+    # logger.info(f"STD: {std[20, 1000, 0]}")
 
     std[~normalizable] = np.inf
 
@@ -1610,7 +1610,6 @@ def lst_bin_files_single_outfile(
                 nsamples=rdc["nsamples"],
             )
 
-            logger.info(f"JUST TO MAKE SURE: {rdc['std'][20,1000,0]}")
             write_baseline_slc_to_file(
                 fl=out_files[("STD", inpainted)],
                 slc=slc,
