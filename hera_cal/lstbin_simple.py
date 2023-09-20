@@ -1888,7 +1888,9 @@ def create_lstbin_output_file(
     )
     # There's a weird gotcha with pathlib where if you do path / "/file.name"
     # You get just "/file.name" which is in root.
-    fname = outdir / fname.removeprefix('/')
+    if fname.startswith('/'):
+        fname = fname[1:]
+    fname = outdir / fname
 
     logger.info(f"Initializing {fname}")
 
