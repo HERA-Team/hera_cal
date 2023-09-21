@@ -645,7 +645,6 @@ class Test_LSTAverage:
         assert np.all(norm_n[0] == 2)
         assert not np.any(np.isinf(std_n[0]))
 
-        print(np.sum(flg_n[1:]), flg_n[1:].size)
         assert not np.any(flg_n[1:])
         assert np.all(norm_n[1:] == 7)
         assert not np.any(np.isinf(std_n[1:]))
@@ -858,6 +857,83 @@ class Test_LSTBinFilesForBaselines:
             uvd_redavg.Nfreqs,
             uvd_redavg.Npols,
         )
+
+    def test_redavg_with_where_inpainted(self, tmp_path):
+        uvds = mockuvd.make_dataset(
+            ndays=2,
+            nfiles=3,
+            ntimes=2,
+            ants=np.arange(7),
+            creator=mockuvd.create_uvd_identifiable,
+            freqs=mockuvd.PHASEII_FREQS[:25],
+            pols=['xx', 'xy'],
+            redundantly_averaged=True,
+        )
+
+        uvd_files = mockuvd.write_files_in_hera_format(
+            uvds, tmp_path, add_where_inpainted_files=True
+        )
+
+        ap = uvds[0][0].get_antpairs()
+        reds = RedundantGroups.from_antpos(
+            dict(zip(uvds[0][0].antenna_numbers, uvds[0][0].antenna_positions)),
+        )
+        lstbins, d0, f0, n0, inpflg, times0 = lstbin_simple.lst_bin_files_for_baselines(
+            data_files=sum(uvd_files, []),  # flatten the list-of-lists
+            lst_bin_edges=[0, 1.9 * np.pi],
+            redundantly_averaged=True,
+            rephase=False,
+            antpairs=ap,
+            reds=reds,
+            where_inpainted_files=[str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])],
+        )
+        assert len(lstbins) == 1
+
+        # Also test that if a where_inpainted file has missing baselines, an error is
+        # raised.
+        # This is kind of a dodgy way to test it: copy the original data files,
+        # write a whole new dataset in the same place but with fewer baselines, then
+        # copy the data files (but not the where_inpainted files) back, so they mismatch.
+        for flist in uvd_files:
+            for fl in flist:
+                fl = Path(fl)
+                fl.rename(fl.parent / f"{fl.with_suffix('.bk')}")
+
+                winp = fl.with_suffix(".where_inpainted.h5")
+                winp.unlink()
+
+        uvds = mockuvd.make_dataset(
+            ndays=2,
+            nfiles=3,
+            ntimes=2,
+            ants=np.arange(5),  # less than the original
+            creator=mockuvd.create_uvd_identifiable,
+            freqs=mockuvd.PHASEII_FREQS[:25],
+            pols=['xx', 'xy'],
+            redundantly_averaged=True,
+        )
+
+        uvd_files = mockuvd.write_files_in_hera_format(
+            uvds, tmp_path, add_where_inpainted_files=True
+        )
+
+        # Move back the originals.
+        for flist in uvd_files:
+            for fl in flist:
+                fl = Path(fl)
+                fl.unlink()
+                (fl.parent / f"{fl.with_suffix('.bk')}").rename(fl)
+
+        with pytest.raises(ValueError, match="Could not find any baseline from group"):
+            lstbin_simple.lst_bin_files_for_baselines(
+                data_files=sum(uvd_files, []),  # flatten the list-of-lists
+                lst_bin_edges=[0, 1.9 * np.pi],
+                redundantly_averaged=True,
+                rephase=False,
+                antpairs=ap,
+                reds=reds,
+                where_inpainted_files=[str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])],
+            )
 
 
 def test_make_lst_grid():
@@ -1463,9 +1539,12 @@ class Test_LSTBinFiles:
             ntimes_per_file=2,
             clobber=True,
         )
+
+        # Additionally try fname format with leading / which should be removed
+        # automatically in the writing.
         out_files = lstbin_simple.lst_bin_files(
             config_file=cfl,
-            fname_format="zen.{kind}.{lst:7.5f}{inpaint_mode}.uvh5",
+            fname_format="/zen.{kind}.{lst:7.5f}.{inpaint_mode}.uvh5",
             rephase=False,
             sigma_clip_thresh=None,
             sigma_clip_min_N=2,
