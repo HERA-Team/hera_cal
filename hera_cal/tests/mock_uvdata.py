@@ -24,9 +24,9 @@ HERA_LOC = EarthLocation.from_geocentric(
 with open(f"{DATA_PATH}/hera_antpos.yaml", "r") as fl:
     HERA_ANTPOS = yaml.safe_load(fl)
 
-start: 46920776.3671875
-end: 234298706.0546875
-delta: 122070.3125
+PHASEII_FREQS = np.arange(
+    46920776.3671875, 234298706.0546875 + 10.0, 122070.3125
+)
 
 
 def create_mock_hera_obs(
@@ -35,9 +35,7 @@ def create_mock_hera_obs(
     lst_start=0.1,
     jd_start: float | None = None,
     ntimes: int = 2,
-    freqs: np.ndarray = np.arange(
-        46920776.3671875, 234298706.0546875 + 10.0, 122070.3125
-    ),
+    freqs: np.ndarray = PHASEII_FREQS,
     pols: list[str] = ["xx", "yy", "xy", "yx"],
     ants: list[int] | None = None,
     antpairs: list[tuple[int, int]] | None = None,
