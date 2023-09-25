@@ -20,7 +20,6 @@ if ap.mode == 'clean':
                      'edgecut_low': ap.edgecut_low, 'gain': ap.gain}
     if ap.window == 'tukey':
         filter_kwargs['alpha'] = ap.alpha
-    filter_kwargs['flag_model_rms_outliers'] = ap.flag_model_rms_outliers
 elif ap.mode in ['dayenu', 'dpss_leastsq']:
     filter_kwargs = {'max_contiguous_edge_flags': ap.max_contiguous_edge_flags}
 
