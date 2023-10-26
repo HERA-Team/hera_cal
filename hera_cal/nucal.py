@@ -503,7 +503,7 @@ def compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=
     return dspec.dpss_operator(freqs, [0], [spectral_filter_half_width], eigenval_cutoff=[eigenval_cutoff])[0].real
 
 
-def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filter_half_width=1, eigenval_cutoff=1e-12):
+def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None):
     """
     Compute prolate spheroidal wave function (PSWF) filters for a single radially redundant group.
 
@@ -522,6 +522,14 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
         the uv-plane to be modeled at half-wavelength scales.
     eigenval_cutoff : float
         Cutoff for the eigenvalues of the PSWF filter
+    umin : float, optional, default=None
+        Minimum u-mode at which the filters are computed. If None, filter bounds will be computed from the minimum frequency value and shortest
+        baseline length. Restricting the minimum u-mode can decrease the degrees of freedom in a nucal modeling if one is uininterested in u-modes below
+        umin.
+    umax : float, optional, default=None
+        Maximum u-mode at which the filters are computed. If None, filter bounds will be computed from the maximum frequency value and longest
+        baseline length. Restricting the maximum u-mode can significantly decrease the degrees of freedom in a nucal modeling particularly if the 
+        baseline group has a few long baselines an one is uininterested in u-modes above umax.
     
     Returns:
     -------
@@ -531,8 +539,10 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
 
     # Compute the minimum and maximum u values for the spatial filter
     group_bls_lengths = [bls_lengths[bl] for bl in group]
-    umin = np.min(group_bls_lengths) / SPEED_OF_LIGHT * np.min(freqs)
-    umax = np.max(group_bls_lengths) / SPEED_OF_LIGHT * np.max(freqs)
+    if umin is None:
+        umin = np.min(group_bls_lengths) / SPEED_OF_LIGHT * np.min(freqs)
+    if umax is None:
+        umax = np.max(group_bls_lengths) / SPEED_OF_LIGHT * np.max(freqs)
 
     # Create dictionary for storing spatial filters
     spatial_filters = {}
@@ -550,7 +560,7 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
 
     return spatial_filters
 
-def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eigenval_cutoff=1e-12, cache={}):
+def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eigenval_cutoff=1e-12, cache={}, umin=None, umax=None):
     """
     Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds. 
     Note that if you are using a large array with a large range of short and long baselines in an individual radially
@@ -570,6 +580,15 @@ def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eig
         Sinc matrix eigenvalue cutoffs to use for included PSWF modes.
     cache : dictionary, default={}
         Dictionary containing cached PSWF eigenvectors to speed up computation
+    umin : float, optional, default=None
+        Minimum u-mode at which the filters are computed. If None, filter bounds will be computed from the minimum frequency value and shortest
+        baseline length. Restricting the minimum u-mode can decrease the degrees of freedom in a nucal modeling if one is uininterested in u-modes below
+        umin. If umin is not None, umin will be applied to all baseline groups in radial reds.
+    umax : float, optional, default=None
+        Maximum u-mode at which the filters are computed. If None, filter bounds will be computed from the maximum frequency value and longest
+        baseline length. Restricting the maximum u-mode can significantly decrease the degrees of freedom in a nucal modeling particularly if the 
+        baseline group has a few long baselines an one is uininterested in u-modes above umax. If umax is not None, umax will be applied to all 
+        baseline groups in radial reds.
 
     Returns:
     -------
@@ -584,7 +603,7 @@ def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eig
     for group in radial_reds:
         # Compute spatial filters for each baseline in the group
         spatial_filters.update(compute_spatial_filters_single_group(
-            group, freqs, radial_reds.baseline_lengths, spatial_filter_half_width, eigenval_cutoff
+            group, freqs, radial_reds.baseline_lengths, spatial_filter_half_width, eigenval_cutoff, umin=umin, umax=umax
             )
         )
 
