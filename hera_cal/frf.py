@@ -27,6 +27,8 @@ import datetime
 import astropy.constants as const
 from . import redcal
 from .utils import echo
+import os
+import yaml
 
 SPEED_OF_LIGHT = const.c.si.value
 SDAY_SEC = units.sday.to("s")
@@ -1579,20 +1581,22 @@ def tophat_frfilter_argparser(mode='clean'):
     return ap
 
 
-def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calfile_list=None,
-                                   Nbls_per_load=None, spw_range=None, external_flags=None,
-                                   factorize_flags=False, time_thresh=0.05, wgt_by_nsample=False,
-                                   lst_blacklists=None, blacklist_wgt=0.0,
-                                   res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                   clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
-                                   overwrite_flags=False,
-                                   flag_yaml=None, skip_autos=False, beamfitsfile=None, verbose=False,
-                                   read_axis=None,
-                                   percentile_low=5., percentile_high=95.,
-                                   frate_standoff=0.0, frate_width_multiplier=1.0,
-                                   min_frate_half_width=0.025, max_frate_half_width=np.inf,
-                                   max_frate_coeffs=None, fr_freq_skip=1, ninterleave=1,
-                                   **filter_kwargs):
+def load_tophat_frfilter_and_write(
+    datafile_list, case, baseline_list=None, calfile_list=None,
+    Nbls_per_load=None, spw_range=None, external_flags=None,
+    factorize_flags=False, time_thresh=0.05, wgt_by_nsample=False,
+    lst_blacklists=None, blacklist_wgt=0.0,
+    res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
+    clobber=False, add_to_history='', avg_red_bllens=False, polarizations=None,
+    overwrite_flags=False,
+    flag_yaml=None, skip_autos=False, beamfitsfile=None, verbose=False,
+    read_axis=None,
+    percentile_low=5., percentile_high=95.,
+    frate_standoff=0.0, frate_width_multiplier=1.0,
+    min_frate_half_width=0.025, max_frate_half_width=np.inf,
+    max_frate_coeffs=None, fr_freq_skip=1, ninterleave=1, param_file="",
+    **filter_kwargs
+):
     '''
     A tophat fr-filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time) if baseline_list is specified.
@@ -1681,173 +1685,237 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
     '''
     if baseline_list is not None and Nbls_per_load is not None:
         raise NotImplementedError("baseline loading and partial i/o not yet implemented.")
-    hd = io.HERAData(datafile_list, filetype='uvh5')
     if baseline_list is not None and len(baseline_list) == 0:
-        warnings.warn("Length of baseline list is zero."
-                      "This can happen under normal circumstances when there are more files in datafile_list then baselines."
-                      "in your dataset. Exiting without writing any output.", RuntimeWarning)
-    else:
-        if baseline_list is None:
-            if len(hd.filepaths) > 1:
-                baseline_list = list(hd.antpairs.values())[0]
-            else:
-                baseline_list = hd.antpairs
-        if spw_range is None:
-            spw_range = [0, hd.Nfreqs]
-        freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
-        baseline_antennas = []
-        for blpolpair in baseline_list:
-            baseline_antennas += list(blpolpair[:2])
-        baseline_antennas = np.unique(baseline_antennas).astype(int)
-        if calfile_list is not None:
-            cals = io.HERACal(calfile_list)
-            cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
+        warnings.warn(
+            "Length of baseline list is zero. This can happen under normal "
+            "circumstances when there are more files in datafile_list then baselines."
+            "in your dataset. Exiting without writing any output.", RuntimeWarning
+        )
+        return
+
+    hd = io.HERAData(datafile_list, filetype='uvh5')
+    # Figure out which baselines to load if not provided.
+    if baseline_list is None:
+        if len(hd.filepaths) > 1:
+            baseline_list = list(hd.antpairs.values())[0]
         else:
-            cals = None
-        if polarizations is None:
-            if len(hd.filepaths) > 1:
-                polarizations = list(hd.pols.values())[0]
-            else:
-                polarizations = hd.pols
-        if Nbls_per_load is None:
-            Nbls_per_load = len(baseline_list)
-        for i in range(0, len(baseline_list), Nbls_per_load):
-            frfil = FRFilter(hd, input_cal=cals)
-            frfil.read(bls=baseline_list[i:i + Nbls_per_load],
-                       frequencies=freqs, polarizations=polarizations, axis=read_axis)
-            if avg_red_bllens:
-                frfil.avg_red_baseline_vectors()
-            if external_flags is not None:
-                frfil.apply_flags(external_flags, overwrite_flags=overwrite_flags)
-            if flag_yaml is not None:
-                frfil.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
-            if factorize_flags:
-                frfil.factorize_flags(time_thresh=time_thresh, inplace=True)
-            keys = frfil.data.keys()
-            if skip_autos:
-                keys = [bl for bl in keys if bl[0] != bl[1]]
-            if beamfitsfile is not None:
-                uvb = UVBeam()
-                uvb.read_beamfits(beamfitsfile)
-                uvb.use_future_array_shapes()
-            else:
-                uvb = None
-            if len(keys) > 0:
-                # Deal with interleaved sets
-                frfil._deinterleave_data_in_time('data', ninterleave=ninterleave)
-                frfil._deinterleave_data_in_time(
-                    'flags', ninterleave=ninterleave, set_time_sets=False
-                )
-                frfil._deinterleave_data_in_time(
-                    'nsamples', ninterleave=ninterleave, set_time_sets=False
-                )
-                # figure out frige rate centers and half-widths
-                if param_file:
-                    pass
-                else:
-                    assert case in ['sky', 'max_frate_coeffs', 'uvbeam'], f'case={case} is not valid.'
-                    # use conservative nfr (lowest resolution set).
-                    nfr = int(np.min([len(tset) for tset in frfil.time_sets]))
-                    frate_centers, frate_half_widths = select_tophat_frates(
-                        uvd=frfil.hd, blvecs=frfil.blvecs,
-                        case=case, keys=keys, uvb=uvb,
-                        frate_standoff=frate_standoff,
-                        frate_width_multiplier=frate_width_multiplier,
-                        min_frate_half_width=min_frate_half_width,
-                        max_frate_half_width=max_frate_half_width,
-                        max_frate_coeffs=max_frate_coeffs,
-                        percentile_low=percentile_low,
-                        percentile_high=percentile_high,
-                        fr_freq_skip=fr_freq_skip,
-                        verbose=verbose, nfr=nfr,
-                    )
-                # Lists of names of datacontainers that will hold each interleaved 
-                # data set until they are recombined.
-                filtered_data_names = [
-                    f'clean_data_interleave_{inum}' for inum in range(ninterleave)
-                ]
-                filtered_flag_names = [
-                    fstr.replace('data', 'flags') for fstr in filtered_data_names
-                ]
-                filtered_resid_names = [
-                    fstr.replace('data', 'resid') for fstr in filtered_data_names
-                ]
-                filtered_model_names = [
-                    fstr.replace('data', 'model') for fstr in filtered_data_names
-                ]
-                filtered_resid_flag_names = [
-                    fstr.replace('data', 'resid_flags') for fstr in filtered_data_names
-                ]
+            baseline_list = hd.antpairs
 
-                for inum in range(ninterleave):
+    # Figure out which frequencies to load.
+    if spw_range is None:
+        spw_range = [0, hd.Nfreqs]
+    freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
 
-                    # Build weights using flags, nsamples, and exlcuded lsts
-                    flags = getattr(frfil, f'flags_interleave_{inum}')
-                    nsamples = getattr(frfil, f'nsamples_interleave_{inum}')
-                    wgts = io.DataContainer({k: (~flags[k]).astype(float) for k in flags})
+    # Figure out which antennas to load if calfiles are provided.
+    baseline_antennas = []
+    for blpolpair in baseline_list:
+        baseline_antennas += list(blpolpair[:2])
+    baseline_antennas = np.unique(baseline_antennas).astype(int)
 
-                    lsts = frfil.lst_sets[inum]
-                    for k in wgts:
-                        if wgt_by_nsample:
-                            wgts[k] *= nsamples[k]
-                        if lst_blacklists is not None:
-                            for lb in lst_blacklists:
-                                if lb[0] < lb[1]:
-                                    is_blacklisted = (lsts >= lb[0] * np.pi / 12)\
-                                        & (lsts <= lb[1] * np.pi / 12)
-                                else:
-                                    is_blacklisted = (lsts >= lb[0] * np.pi / 12) 
-                                        | (lsts <= lb[1] * np.pi / 12)
-                                wgts[k][is_blacklisted, :] = (
-                                    wgts[k][is_blacklisted, :] * blacklist_wgt
-                                )
-                    # run tophat filter
-                    frfil.tophat_frfilter(
-                        frate_centers=frate_centers, frate_half_widths=frate_half_widths,
-                        keys=keys, verbose=verbose, wgts=wgts,
-                        flags=getattr(frfil, f'flags_interleave_{inum}'),
-                        data=getattr(frfil, f'data_interleave_{inum}'),
-                        output_postfix=f'interleave_{inum}',
-                        times=frfil.time_sets[inum] * SDAY_SEC * 1e-3,
-                        **filter_kwargs
-                    )
+    # Read calibration solutions if provided.
+    if calfile_list is not None:
+        cals = io.HERACal(calfile_list)
+        cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
+    else:
+        cals = None
 
-                frfil._interleave_data_in_time(filtered_data_names, 'clean_data')
-                frfil._interleave_data_in_time(filtered_flag_names, 'clean_flags')
-                frfil._interleave_data_in_time(filtered_resid_names, 'clean_resid')
-                frfil._interleave_data_in_time(filtered_resid_flag_names, 'clean_resid_flags')
-                frfil._interleave_data_in_time(filtered_model_names, 'clean_model')
+    # Figure out which polarizations to use.
+    if polarizations is None:
+        if len(hd.filepaths) > 1:
+            polarizations = list(hd.pols.values())[0]
+        else:
+            polarizations = hd.pols
 
-            else:
-                frfil.clean_data = DataContainer({})
-                frfil.clean_flags = DataContainer({})
-                frfil.clean_resid = DataContainer({})
-                frfil.clean_resid_flags = DataContainer({})
-                frfil.clean_model = DataContainer({})
-            # put autocorr data into filtered data containers if skip_autos = True.
-            # so that it can be written out into the filtered files.
-            if skip_autos:
-                for bl in frfil.data.keys():
-                    if bl[0] == bl[1]:
-                        frfil.clean_data[bl] = frfil.data[bl]
-                        frfil.clean_flags[bl] = frfil.flags[bl]
-                        frfil.clean_resid[bl] = frfil.data[bl]
-                        frfil.clean_model[bl] = np.zeros_like(frfil.data[bl])
-                        frfil.clean_resid_flags[bl] = frfil.flags[bl]
+    # Load all baselines if a baseline list not provided.
+    if Nbls_per_load is None:
+        Nbls_per_load = len(baseline_list)
 
-            frfil.write_filtered_data(
-                res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                filled_outfilename=filled_outfilename,
-                partial_write=Nbls_per_load < len(baseline_list),
-                clobber=clobber, add_to_history=add_to_history,
-                extra_attrs={
-                    'Nfreqs': frfil.hd.Nfreqs,
-                    'freq_array': frfil.hd.freq_array,
-                    'channel_width': frfil.hd.channel_width,
-                    'flex_spw_id_array': frfil.hd.flex_spw_id_array
-                },
+    # If a filter parameter file is provided, let's check that all of the
+    # baselines are present in the filter file.
+    if param_file and os.path.exists(param_file):
+        with open(param_file, "r") as f:
+            filter_info = yaml.load(f.read(), Loader=yaml.SafeLoader)
+        filter_antpairs = set(filter_info["filter_centers"].keys())
+        have_bl_info = [
+            (bl[:2] in filter_antpairs) or (bl[:2][::-1] in filter_antpairs)
+            for bl in baseline_list
+        ]
+        if not all(have_bl_info):
+            raise ValueError(
+                "Provided filter file doesn't have every baseline."
             )
-            frfil.hd.data_array = None  # this forces a reload in the next loop
+
+    # Read the data in chunks and perform filtering.
+    for i in range(0, len(baseline_list), Nbls_per_load):
+        # Read data from this chunk of baselines.
+        frfil = FRFilter(hd, input_cal=cals)
+        frfil.read(
+            bls=baseline_list[i:i + Nbls_per_load],
+            frequencies=freqs,
+            polarizations=polarizations,
+            axis=read_axis,
+        )
+
+        # Some extra handling if requested.
+        if avg_red_bllens:
+            frfil.avg_red_baseline_vectors()
+        if external_flags is not None:
+            frfil.apply_flags(external_flags, overwrite_flags=overwrite_flags)
+        if flag_yaml is not None:
+            frfil.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
+        if factorize_flags:
+            frfil.factorize_flags(time_thresh=time_thresh, inplace=True)
+
+        # Figure out which baselines we'll need for filtering.
+        keys = frfil.data.keys()
+        if skip_autos:
+            keys = [bl for bl in keys if bl[0] != bl[1]]
+
+        # Read in the beam file if provided.
+        if beamfitsfile is not None:
+            uvb = UVBeam()
+            uvb.read_beamfits(beamfitsfile)
+            uvb.use_future_array_shapes()
+        else:
+            uvb = None
+
+        # Filter the data if there is data to filter.
+        if len(keys) > 0:
+            # Deal with interleaved sets
+            frfil._deinterleave_data_in_time('data', ninterleave=ninterleave)
+            frfil._deinterleave_data_in_time(
+                'flags', ninterleave=ninterleave, set_time_sets=False
+            )
+            frfil._deinterleave_data_in_time(
+                'nsamples', ninterleave=ninterleave, set_time_sets=False
+            )
+
+            # Figure out fringe-rate centers and half-widths.
+            if param_file and os.path.exists(param_file):
+                # Read from a file if provided.
+                with open(param_file, "r") as f:
+                    param_info = yaml.load(f.read(), Loader=yaml.SafeLoader)
+                frate_centers = {}
+                frate_half_widths = {}
+                # Assuming we use the same filters for all polarizations.
+                for key in keys:
+                    ai, aj = key[:2]
+                    if (ai, aj) in filter_antpairs:
+                        frate_centers[key] = param_info["filter_centers"][(ai,aj)]
+                        frate_half_widths[key] = param_info["filter_half_widths"][(ai,aj)]
+                    else:
+                        # We've already enforced that all the data baselines
+                        # are in the filter file, so we should be safe here.
+                        frate_centers[key] = -param_info["filter_centers"][(aj,ai)]
+                        frate_centers[key] = param_info["filter_half_widths"][(aj,ai)]
+            else:
+                # Otherwise, we need to compute the filter parameters.
+                if case not in ("sky", "max_frate_coeffs", "uvbeam"):
+                    raise ValueError(f"case={case} is not valid")
+
+                # Use conservative nfr (lowest resolution set).
+                nfr = int(np.min([len(tset) for tset in frfil.time_sets]))
+                frate_centers, frate_half_widths = select_tophat_frates(
+                    uvd=frfil.hd, blvecs=frfil.blvecs,
+                    case=case, keys=keys, uvb=uvb,
+                    frate_standoff=frate_standoff,
+                    frate_width_multiplier=frate_width_multiplier,
+                    min_frate_half_width=min_frate_half_width,
+                    max_frate_half_width=max_frate_half_width,
+                    max_frate_coeffs=max_frate_coeffs,
+                    percentile_low=percentile_low,
+                    percentile_high=percentile_high,
+                    fr_freq_skip=fr_freq_skip,
+                    verbose=verbose, nfr=nfr,
+                )
+            # Lists of names of datacontainers that will hold each interleaved 
+            # data set until they are recombined.
+            filtered_data_names = [
+                f'clean_data_interleave_{inum}' for inum in range(ninterleave)
+            ]
+            filtered_flag_names = [
+                fstr.replace('data', 'flags') for fstr in filtered_data_names
+            ]
+            filtered_resid_names = [
+                fstr.replace('data', 'resid') for fstr in filtered_data_names
+            ]
+            filtered_model_names = [
+                fstr.replace('data', 'model') for fstr in filtered_data_names
+            ]
+            filtered_resid_flag_names = [
+                fstr.replace('data', 'resid_flags') for fstr in filtered_data_names
+            ]
+
+            for inum in range(ninterleave):
+
+                # Build weights using flags, nsamples, and exlcuded lsts
+                flags = getattr(frfil, f'flags_interleave_{inum}')
+                nsamples = getattr(frfil, f'nsamples_interleave_{inum}')
+                wgts = io.DataContainer({k: (~flags[k]).astype(float) for k in flags})
+
+                lsts = frfil.lst_sets[inum]
+                for k in wgts:
+                    if wgt_by_nsample:
+                        wgts[k] *= nsamples[k]
+                    if lst_blacklists is not None:
+                        for lb in lst_blacklists:
+                            if lb[0] < lb[1]:
+                                is_blacklisted = (lsts >= lb[0] * np.pi / 12)\
+                                    & (lsts <= lb[1] * np.pi / 12)
+                            else:
+                                is_blacklisted = (lsts >= lb[0] * np.pi / 12) 
+                                    | (lsts <= lb[1] * np.pi / 12)
+                            wgts[k][is_blacklisted, :] = (
+                                wgts[k][is_blacklisted, :] * blacklist_wgt
+                            )
+                # run tophat filter
+                frfil.tophat_frfilter(
+                    frate_centers=frate_centers, frate_half_widths=frate_half_widths,
+                    keys=keys, verbose=verbose, wgts=wgts,
+                    flags=getattr(frfil, f'flags_interleave_{inum}'),
+                    data=getattr(frfil, f'data_interleave_{inum}'),
+                    output_postfix=f'interleave_{inum}',
+                    times=frfil.time_sets[inum] * SDAY_SEC * 1e-3,
+                    **filter_kwargs
+                )
+
+            frfil._interleave_data_in_time(filtered_data_names, 'clean_data')
+            frfil._interleave_data_in_time(filtered_flag_names, 'clean_flags')
+            frfil._interleave_data_in_time(filtered_resid_names, 'clean_resid')
+            frfil._interleave_data_in_time(filtered_resid_flag_names, 'clean_resid_flags')
+            frfil._interleave_data_in_time(filtered_model_names, 'clean_model')
+
+        else:
+            frfil.clean_data = DataContainer({})
+            frfil.clean_flags = DataContainer({})
+            frfil.clean_resid = DataContainer({})
+            frfil.clean_resid_flags = DataContainer({})
+            frfil.clean_model = DataContainer({})
+
+        # put autocorr data into filtered data containers if skip_autos = True.
+        # so that it can be written out into the filtered files.
+        if skip_autos:
+            for bl in frfil.data.keys():
+                if bl[0] == bl[1]:
+                    frfil.clean_data[bl] = frfil.data[bl]
+                    frfil.clean_flags[bl] = frfil.flags[bl]
+                    frfil.clean_resid[bl] = frfil.data[bl]
+                    frfil.clean_model[bl] = np.zeros_like(frfil.data[bl])
+                    frfil.clean_resid_flags[bl] = frfil.flags[bl]
+
+        frfil.write_filtered_data(
+            res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+            filled_outfilename=filled_outfilename,
+            partial_write=Nbls_per_load < len(baseline_list),
+            clobber=clobber, add_to_history=add_to_history,
+            extra_attrs={
+                'Nfreqs': frfil.hd.Nfreqs,
+                'freq_array': frfil.hd.freq_array,
+                'channel_width': frfil.hd.channel_width,
+                'flex_spw_id_array': frfil.hd.flex_spw_id_array
+            },
+        )
+        frfil.hd.data_array = None  # this forces a reload in the next loop
 
 
 def time_average_argparser():
