@@ -13,6 +13,7 @@ import glob
 from pyuvdata import UVData
 from pyuvdata import utils as uvutils
 import unittest
+import yaml
 from scipy import stats
 from scipy import constants
 from pyuvdata import UVFlag, UVBeam
@@ -929,6 +930,92 @@ class Test_FRFilter(object):
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
         shutil.rmtree(cdir)
+
+    def test_load_tophat_frfilter_and_write_with_filter_yaml(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        uvh5 = os.path.join(
+            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
+        )
+        frate_centers = {(53, 54): 0.1}
+        frate_half_widths = {(53, 54): 0.05}
+        filter_info = dict(
+            filter_centers=frate_centers,
+            filter_half_widths=frate_half_widths,
+        )
+        frate_centers = {k+("ee",): v for k, v in frate_centers.items()}
+        frate_half_widths = {k+("ee",): v for k, v in frate_half_widths.items()}
+
+        with open(tmpdir / "filter_info.yaml", "w") as f:
+            yaml.dump(filter_info, f)
+
+        outfilename = os.path.join(tmp_path, 'temp.h5')
+        CLEAN_outfilename = os.path.join(tmp_path, 'temp_clean.h5')
+        filled_outfilename = os.path.join(tmp_path, 'temp_filled.h5')
+        frf.load_tophat_frfilter_and_write(
+            uvh5,
+            res_outfilename=outfilename,
+            tol=1e-4,
+            clobber=True,
+            Nbls_per_load=1,
+            param_file=str(tmpdir / "filter_info.yaml"),
+            case="sky",
+            skip_autos=True,
+        )
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for bl in d:
+            assert not np.allclose(d[bl], 0)
+
+        frfil = frf.FRFilter(uvh5, filetype='uvh5')
+        frfil.read(bls=[(53, 54, 'ee')])
+        frfil.tophat_frfilter(
+            keys=[(53, 54, 'ee')],
+            tol=1e-4,
+            verbose=True,
+            frate_centers=frate_centers,
+            frate_half_widths=frate_half_widths,
+        )
+
+        # Check that the filtered data both ways matches.
+        np.testing.assert_almost_equal(
+            d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5
+        )
+
+        # Check that the flags match.
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
+
+
+    def test_load_tophat_frfilter_and_write_with_bad_filter_yaml(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        uvh5 = os.path.join(
+            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
+        )
+        frate_centers = {(26, 37): 0.1}
+        frate_half_widths = {(26, 37): 0.05}
+        filter_info = dict(
+            filter_centers=frate_centers,
+            filter_half_widths=frate_half_widths,
+        )
+        frate_centers = {k+("ee",): v for k, v in frate_centers.items()}
+        frate_half_widths = {k+("ee",): v for k, v in frate_half_widths.items()}
+
+        with open(tmpdir / "filter_info.yaml", "w") as f:
+            yaml.dump(filter_info, f)
+
+        outfilename = os.path.join(tmp_path, 'temp.h5')
+        CLEAN_outfilename = os.path.join(tmp_path, 'temp_clean.h5')
+        filled_outfilename = os.path.join(tmp_path, 'temp_filled.h5')
+        with pytest.raises(ValueError, match="doesn't have every baseline"):
+            frf.load_tophat_frfilter_and_write(
+                uvh5,
+                res_outfilename=outfilename,
+                tol=1e-4,
+                clobber=True,
+                Nbls_per_load=1,
+                param_file=str(tmpdir / "filter_info.yaml"),
+                case="sky",
+            )
+
 
     def test_tophat_clean_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris', '--max_frate_coeffs', '0.024', '-0.229']
