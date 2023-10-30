@@ -54,6 +54,8 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
     filenames = sorted(filenames)
     start = filenames.index(inputfile)
     end = start + chunk_size
+    import pdb
+    pdb.set_trace()
     if type == 'data':
         chunked_files = io.HERAData(filenames[start:end])
     elif type == 'gains':
@@ -69,11 +71,13 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
                 polarizations = chunked_files.pols
         if spw_range is None:
             spw_range = (0, chunked_files.Nfreqs)
+        pdb.set_trace()
         chunked_files.read(
             polarizations=polarizations,
             freq_chans=range(spw_range[0], spw_range[1]), 
             **read_kwargs
         )
+        pdb.set_trace()
     elif type == 'gains':
         chunked_files.read()
         if polarizations is None:
@@ -88,8 +92,11 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
         from hera_qm.utils import apply_yaml_flags
         chunked_files = apply_yaml_flags(chunked_files, ant_flag_yaml, flag_freqs=False, flag_times=False,
                                          flag_ants=True, ant_indices_only=True, throw_away_flagged_ants=True)
+        pdb.set_trace()
     if type == 'data':
+        pdb.set_trace()
         chunked_files.write_uvh5(outputfile, clobber=clobber)
+        pdb.set_trace()
     elif type == 'gains':
         chunked_files.write_calfits(outputfile, clobber=clobber)
 
