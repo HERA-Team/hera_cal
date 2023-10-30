@@ -800,7 +800,7 @@ def _stefcal_optimizer(data_matrix, model_matrix, weights, tol=1e-10, maxiter=10
     
     return jax.lax.while_loop(conditional_function, inner_function, (gains, 0, jnp.inf))
 
-def _build_model_matrices(data, model, flags, baselines, ant_flags={}):
+def _build_model_matrices(data, model, weights, baselines, ant_flags={}):
     """
     Function to build data, model, and weights matrices for sky_calibration optimization.
 
@@ -812,8 +812,8 @@ def _build_model_matrices(data, model, flags, baselines, ant_flags={}):
         complex ndarray visibilities matching shape of model
     model: DataContainer or RedDataContainer
         Model visibilities. Keys are antenna pair + pol tuples (must match data), values are complex ndarray
-    flags: DataContainer
-        Dictionary of flags. Keys are antenna pair + pol tuples (must match data), values are boolean ndarrays
+    weights: DataContainer
+        Dictionary of real-valued data weights. Keys are antenna pair + pol tuples (must match data).
     baselines: list
         List of baseline tuples of the form (ant1, ant2, pol) to include in the model matrices
     ant_flags: dict, optional, default={}
@@ -865,7 +865,7 @@ def _build_model_matrices(data, model, flags, baselines, ant_flags={}):
             data_matrix[n, m] = data[bl].conj()
             
             # Weights matrix
-            wgts_matrix[m, n] = (~flags[bl]).astype(float)
+            wgts_matrix[m, n] = weights[bl]
             wgts_matrix[n, m] = wgts_matrix[m, n]
             
             # Model Matrix
@@ -874,7 +874,7 @@ def _build_model_matrices(data, model, flags, baselines, ant_flags={}):
 
     return data_matrix, model_matrix, wgts_matrix, map_ants_to_index
 
-def sky_calibration(data, model, flags, ant_flags={}, tol=1e-10, maxiter=1000, stepsize=0.5):
+def sky_calibration(data, model, weights, ant_flags={}, tol=1e-10, maxiter=1000, stepsize=0.5):
     """
     Solve for per-antenna gains using the Stefcal algorithm (Salvini et al. 2014). 
 
@@ -885,8 +885,8 @@ def sky_calibration(data, model, flags, ant_flags={}, tol=1e-10, maxiter=1000, s
         complex ndarray visibilities matching shape of model
     model: DataContainer or RedDataContainer
         Model visibilities. Keys are antenna pair + pol tuples (must match data), values are complex ndarray
-    flags: DataContainer
-        Dictionary of flags. Keys are antenna pair + pol tuples (must match data), values are boolean ndarrays
+    weights: DataContainer
+        Dictionary of real-valued data weights. Keys are antenna pair + pol tuples (must match data).
     ant_flags: dict, optional, default={}
         Dictionary of antenna flags. Keys are antenna + pol tuples, values are boolean. If an antenna is flagged
         in this dictionary, it will not be included in the fit.
@@ -937,7 +937,7 @@ def sky_calibration(data, model, flags, ant_flags={}, tol=1e-10, maxiter=1000, s
 
         # Pack data and model into numpy arrays
         data_matrix, model_matrix, wgts, map_ants_to_index = _build_model_matrices(
-            data, model, flags, baselines, ant_flags=ant_flags
+            data, model, weights, baselines, ant_flags=ant_flags
         )
 
         for ti in range(ntimes):
@@ -945,6 +945,7 @@ def sky_calibration(data, model, flags, ant_flags={}, tol=1e-10, maxiter=1000, s
             _niters = []
             _conv_crits= []
             for fi in range(nfreqs):
+                # If the weights are non-zero, run the optimizer. Otherwise, set the gains to 1.
                 if wgts[..., ti, fi].sum() > 0:
                     gain, niter, conv_crit = _stefcal_optimizer(
                         data_matrix[..., ti, fi], model_matrix[..., ti, fi], wgts[..., ti, fi], 
@@ -953,7 +954,6 @@ def sky_calibration(data, model, flags, ant_flags={}, tol=1e-10, maxiter=1000, s
                     _niters.append(niter)
                     _conv_crits.append(conv_crit)
                     _gains.append(gain)
-                    
                 else:
                     gain = np.ones(data_matrix.shape[0], dtype='complex')
                     _niters.append(0)
