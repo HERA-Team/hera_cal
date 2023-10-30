@@ -1734,12 +1734,15 @@ def load_tophat_frfilter_and_write(
     # baselines are present in the filter file.
     if param_file and os.path.exists(param_file):
         with open(param_file, "r") as f:
-            filter_info = yaml.load(f.read(), Loader=yaml.SafeLoader)
+            filter_info = yaml.load(f.read(), Loader=yaml.Loader)
         filter_antpairs = set(filter_info["filter_centers"].keys())
-        have_bl_info = [
-            (bl[:2] in filter_antpairs) or (bl[:2][::-1] in filter_antpairs)
-            for bl in baseline_list
-        ]
+        have_bl_info = []
+        for bl in baseline_list:
+            if skip_autos and bl[0] == bl[1]:
+                continue
+            have_bl_info.append(
+                (bl[:2] in filter_antpairs) or (bl[:2][::-1] in filter_antpairs)
+            )
         if not all(have_bl_info):
             raise ValueError(
                 "Provided filter file doesn't have every baseline."
@@ -1792,17 +1795,14 @@ def load_tophat_frfilter_and_write(
 
             # Figure out fringe-rate centers and half-widths.
             if param_file and os.path.exists(param_file):
-                # Read from a file if provided.
-                with open(param_file, "r") as f:
-                    param_info = yaml.load(f.read(), Loader=yaml.SafeLoader)
                 frate_centers = {}
                 frate_half_widths = {}
                 # Assuming we use the same filters for all polarizations.
                 for key in keys:
                     ai, aj = key[:2]
                     if (ai, aj) in filter_antpairs:
-                        frate_centers[key] = param_info["filter_centers"][(ai,aj)]
-                        frate_half_widths[key] = param_info["filter_half_widths"][(ai,aj)]
+                        frate_centers[key] = filter_info["filter_centers"][(ai,aj)]
+                        frate_half_widths[key] = filter_info["filter_half_widths"][(ai,aj)]
                     else:
                         # We've already enforced that all the data baselines
                         # are in the filter file, so we should be safe here.
