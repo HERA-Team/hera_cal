@@ -1860,11 +1860,13 @@ def load_tophat_frfilter_and_write(
                     if lst_blacklists is not None:
                         for lb in lst_blacklists:
                             if lb[0] < lb[1]:
-                                is_blacklisted = (lsts >= lb[0] * np.pi / 12)\
-                                    & (lsts <= lb[1] * np.pi / 12)
+                                is_blacklisted = (
+                                    lsts >= lb[0] * np.pi / 12
+                                ) & (lsts <= lb[1] * np.pi / 12)
                             else:
-                                is_blacklisted = (lsts >= lb[0] * np.pi / 12) 
-                                    | (lsts <= lb[1] * np.pi / 12)
+                                is_blacklisted = (
+                                    lsts >= lb[0] * np.pi / 12
+                                ) | (lsts <= lb[1] * np.pi / 12)
                             wgts[k][is_blacklisted, :] = (
                                 wgts[k][is_blacklisted, :] * blacklist_wgt
                             )
