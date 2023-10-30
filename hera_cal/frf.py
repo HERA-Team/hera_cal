@@ -1572,6 +1572,9 @@ def tophat_frfilter_argparser(mode='clean'):
             "and apply independent fringe-rate filters. Default is 1 (no interleaved filters).",
             "This does not change the format of the output files but it does change the nature of their content.")
     filt_options.add_argument("--ninterleave", default=1, type=int, help=desc)
+    filt_options.add_argument(
+        "--param_file", default="", type=str, help="File containing filter parameters"
+    )
 
     return ap
 
@@ -1672,6 +1675,8 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             only used if case == 'uvbeam'
         ninterleave: int, optional
             Number of interleaved sets to run time filtering on.
+        param_file: str, optional
+            File containing filter parameters (e.g., centers and half-widths).
         filter_kwargs: additional keyword arguments to be passed to FRFilter.tophat_frfilter()
     '''
     if baseline_list is not None and Nbls_per_load is not None:
@@ -1730,30 +1735,49 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
             if len(keys) > 0:
                 # Deal with interleaved sets
                 frfil._deinterleave_data_in_time('data', ninterleave=ninterleave)
-                frfil._deinterleave_data_in_time('flags', ninterleave=ninterleave, set_time_sets=False)
-                frfil._deinterleave_data_in_time('nsamples', ninterleave=ninterleave, set_time_sets=False)
+                frfil._deinterleave_data_in_time(
+                    'flags', ninterleave=ninterleave, set_time_sets=False
+                )
+                frfil._deinterleave_data_in_time(
+                    'nsamples', ninterleave=ninterleave, set_time_sets=False
+                )
                 # figure out frige rate centers and half-widths
-                assert case in ['sky', 'max_frate_coeffs', 'uvbeam'], f'case={case} is not valid.'
-                # use conservative nfr (lowest resolution set).
-                nfr = int(np.min([len(tset) for tset in frfil.time_sets]))
-                frate_centers, frate_half_widths = select_tophat_frates(uvd=frfil.hd, blvecs=frfil.blvecs,
-                                                                        case=case, keys=keys, uvb=uvb,
-                                                                        frate_standoff=frate_standoff,
-                                                                        frate_width_multiplier=frate_width_multiplier,
-                                                                        min_frate_half_width=min_frate_half_width,
-                                                                        max_frate_half_width=max_frate_half_width,
-                                                                        max_frate_coeffs=max_frate_coeffs,
-                                                                        percentile_low=percentile_low,
-                                                                        percentile_high=percentile_high,
-                                                                        fr_freq_skip=fr_freq_skip,
-                                                                        verbose=verbose, nfr=nfr)
-                # Lists of names of datacontainers that will hold each interleaved data set until they are
-                # recombined.
-                filtered_data_names = [f'clean_data_interleave_{inum}' for inum in range(ninterleave)]
-                filtered_flag_names = [fstr.replace('data', 'flags') for fstr in filtered_data_names]
-                filtered_resid_names = [fstr.replace('data', 'resid') for fstr in filtered_data_names]
-                filtered_model_names = [fstr.replace('data', 'model') for fstr in filtered_data_names]
-                filtered_resid_flag_names = [fstr.replace('data', 'resid_flags') for fstr in filtered_data_names]
+                if param_file:
+                    pass
+                else:
+                    assert case in ['sky', 'max_frate_coeffs', 'uvbeam'], f'case={case} is not valid.'
+                    # use conservative nfr (lowest resolution set).
+                    nfr = int(np.min([len(tset) for tset in frfil.time_sets]))
+                    frate_centers, frate_half_widths = select_tophat_frates(
+                        uvd=frfil.hd, blvecs=frfil.blvecs,
+                        case=case, keys=keys, uvb=uvb,
+                        frate_standoff=frate_standoff,
+                        frate_width_multiplier=frate_width_multiplier,
+                        min_frate_half_width=min_frate_half_width,
+                        max_frate_half_width=max_frate_half_width,
+                        max_frate_coeffs=max_frate_coeffs,
+                        percentile_low=percentile_low,
+                        percentile_high=percentile_high,
+                        fr_freq_skip=fr_freq_skip,
+                        verbose=verbose, nfr=nfr,
+                    )
+                # Lists of names of datacontainers that will hold each interleaved 
+                # data set until they are recombined.
+                filtered_data_names = [
+                    f'clean_data_interleave_{inum}' for inum in range(ninterleave)
+                ]
+                filtered_flag_names = [
+                    fstr.replace('data', 'flags') for fstr in filtered_data_names
+                ]
+                filtered_resid_names = [
+                    fstr.replace('data', 'resid') for fstr in filtered_data_names
+                ]
+                filtered_model_names = [
+                    fstr.replace('data', 'model') for fstr in filtered_data_names
+                ]
+                filtered_resid_flag_names = [
+                    fstr.replace('data', 'resid_flags') for fstr in filtered_data_names
+                ]
 
                 for inum in range(ninterleave):
 
@@ -1772,14 +1796,21 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                                     is_blacklisted = (lsts >= lb[0] * np.pi / 12)\
                                         & (lsts <= lb[1] * np.pi / 12)
                                 else:
-                                    is_blacklisted = (lsts >= lb[0] * np.pi / 12) | (lsts <= lb[1] * np.pi / 12)
-                                wgts[k][is_blacklisted, :] = wgts[k][is_blacklisted, :] * blacklist_wgt
+                                    is_blacklisted = (lsts >= lb[0] * np.pi / 12) 
+                                        | (lsts <= lb[1] * np.pi / 12)
+                                wgts[k][is_blacklisted, :] = (
+                                    wgts[k][is_blacklisted, :] * blacklist_wgt
+                                )
                     # run tophat filter
-                    frfil.tophat_frfilter(frate_centers=frate_centers, frate_half_widths=frate_half_widths,
-                                          keys=keys, verbose=verbose, wgts=wgts, flags=getattr(frfil, f'flags_interleave_{inum}'),
-                                          data=getattr(frfil, f'data_interleave_{inum}'), output_postfix=f'interleave_{inum}',
-                                          times=frfil.time_sets[inum] * SDAY_SEC * 1e-3,
-                                          **filter_kwargs)
+                    frfil.tophat_frfilter(
+                        frate_centers=frate_centers, frate_half_widths=frate_half_widths,
+                        keys=keys, verbose=verbose, wgts=wgts,
+                        flags=getattr(frfil, f'flags_interleave_{inum}'),
+                        data=getattr(frfil, f'data_interleave_{inum}'),
+                        output_postfix=f'interleave_{inum}',
+                        times=frfil.time_sets[inum] * SDAY_SEC * 1e-3,
+                        **filter_kwargs
+                    )
 
                 frfil._interleave_data_in_time(filtered_data_names, 'clean_data')
                 frfil._interleave_data_in_time(filtered_flag_names, 'clean_flags')
@@ -1804,10 +1835,18 @@ def load_tophat_frfilter_and_write(datafile_list, case, baseline_list=None, calf
                         frfil.clean_model[bl] = np.zeros_like(frfil.data[bl])
                         frfil.clean_resid_flags[bl] = frfil.flags[bl]
 
-            frfil.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                      filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
-                                      clobber=clobber, add_to_history=add_to_history,
-                                      extra_attrs={'Nfreqs': frfil.hd.Nfreqs, 'freq_array': frfil.hd.freq_array, 'channel_width': frfil.hd.channel_width, 'flex_spw_id_array': frfil.hd.flex_spw_id_array})
+            frfil.write_filtered_data(
+                res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                filled_outfilename=filled_outfilename,
+                partial_write=Nbls_per_load < len(baseline_list),
+                clobber=clobber, add_to_history=add_to_history,
+                extra_attrs={
+                    'Nfreqs': frfil.hd.Nfreqs,
+                    'freq_array': frfil.hd.freq_array,
+                    'channel_width': frfil.hd.channel_width,
+                    'flex_spw_id_array': frfil.hd.flex_spw_id_array
+                },
+            )
             frfil.hd.data_array = None  # this forces a reload in the next loop
 
 
