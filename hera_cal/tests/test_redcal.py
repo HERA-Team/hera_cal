@@ -1890,9 +1890,10 @@ class TestRunMethods(object):
             sys.stdout = open(os.devnull, 'w')
             redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.7, add_to_history='testing',
                                                                       a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
+                                                                      flag_nchan_low=10, flag_nchan_high=10, check_after=500,
                                                                       iter0_prefix='.iter0', metrics_files=ant_metrics_file, clobber=True)
             hd = io.HERAData(input_data)
-            redcal_meta0, hc_first0, hc_omni0, hd_vissol0 = om.redcal_iteration(hd, ex_ants=[11, 50])
+            redcal_meta0, hc_first0, hc_omni0, hd_vissol0 = om.redcal_iteration(hd, flag_nchan_low=10, flag_nchan_high=10, check_after=500, ex_ants=[11, 50])
             sys.stdout = sys.__stdout__
 
         for prefix, hc_here, bad_ants in [('', hc_first, [11, 50, 12, 24]), ('.iter0', hc_first0, [11, 50])]:

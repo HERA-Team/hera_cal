@@ -234,18 +234,23 @@ class TestRedundantGroups:
         rg = RedundantGroups(
             [[(0, 1)], [(0, 2), (0, 3)]],
         )
+        print(rg._red_list)
         new = rg.keyed_on_bls(bls=[(0,3)])
-
+        print(new._red_list)
         assert (0,2) in new
         assert new.get_ubl_key((0,2)) == (0,3)
         assert new.get_ubl_key((0,1)) == (0,1)
-        
+        print(new._red_list)
+
+        new.keyed_on_bls(bls=[(0, 2)], inplace=True)
+        print(new._red_list)
+        assert new.get_ubl_key((0,2)) == (0,2)
+
     def test_delitem(self):
         rg = RedundantGroups(
             [[(0, 1)], [(0, 2), (0, 3)]],
         )
         del rg[(0,1)]
-        print("_bl_to_red_map" in rg.__dict__)
         assert len(rg) == 1
         assert (0,1) not in rg
         assert (0,2) in rg

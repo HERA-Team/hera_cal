@@ -25,7 +25,7 @@ elif ap.mode in ['dayenu', 'dpss_leastsq']:
     filter_kwargs = {'max_contiguous_edge_flags': ap.max_contiguous_edge_flags}
     avg_red_bllens = True
 else:
-    raise ValueError(f"mode {mode} not supported.")
+    raise ValueError(f"mode {ap.mode} not supported.")
 
 if ap.cornerturnfile is not None:
     baseline_list = io.baselines_from_filelist_position(filename=ap.cornerturnfile, filelist=ap.datafilelist)

@@ -30,3 +30,8 @@ hera_cal/data/zen.*.sum.bda.downsampled.redcal_meta.hdf5
 
 htmlcov/
 cache_temp/
+
+# Scalene profiling output
+profile.json
+profile.html
+.benchmarks/*
