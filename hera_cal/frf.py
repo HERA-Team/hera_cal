@@ -1696,7 +1696,7 @@ def load_tophat_frfilter_and_write(
             to dictionaries with antenna pair strings as keys and floating point
             numbers as values. When writing filter parameters to a file, ensure
             that the antenna pair keys have been converted to strings prior to
-            dumping the contents to the file. See the file <insert file name here>
+            dumping the contents to the file. See the file example_filter_params.yaml
             for an example.
         filter_kwargs: additional keyword arguments to be passed to FRFilter.tophat_frfilter()
     '''
