@@ -931,17 +931,28 @@ class Test_FRFilter(object):
         os.remove(outfilename)
         shutil.rmtree(cdir)
 
-    def test_load_tophat_frfilter_and_write_with_filter_yaml(self, tmpdir):
+    @pytest.mark.parametrize("flip", [True, False])
+    def test_load_tophat_frfilter_and_write_with_filter_yaml(self, tmpdir, flip):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(
             DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
         )
         frate_centers = {(53, 54): 0.1}
         frate_half_widths = {(53, 54): 0.05}
-        filter_info = dict(
-            filter_centers=frate_centers,
-            filter_half_widths=frate_half_widths,
-        )
+        if flip:
+            filter_info = dict(
+                filter_centers={
+                    str(k[::-1]): -v for k, v in frate_centers.items()
+                },
+                filter_half_widths={
+                    str(k[::-1]): v for k, v in frate_half_widths.items()
+                },
+            )
+        else:
+            filter_info = dict(
+                filter_centers={str(k): v for k, v in frate_centers.items()},
+                filter_half_widths={str(k): v for k, v in frate_half_widths.items()},
+            )
         frate_centers = {k+("ee",): v for k, v in frate_centers.items()}
         frate_half_widths = {k+("ee",): v for k, v in frate_half_widths.items()}
 
@@ -949,8 +960,6 @@ class Test_FRFilter(object):
             yaml.dump(filter_info, f)
 
         outfilename = os.path.join(tmp_path, 'temp.h5')
-        CLEAN_outfilename = os.path.join(tmp_path, 'temp_clean.h5')
-        filled_outfilename = os.path.join(tmp_path, 'temp_filled.h5')
         frf.load_tophat_frfilter_and_write(
             uvh5,
             res_outfilename=outfilename,
@@ -958,7 +967,7 @@ class Test_FRFilter(object):
             clobber=True,
             Nbls_per_load=1,
             param_file=str(tmpdir / "filter_info.yaml"),
-            case="sky",
+            case="param_file",
             skip_autos=True,
         )
         hd = io.HERAData(outfilename)
@@ -993,19 +1002,15 @@ class Test_FRFilter(object):
         frate_centers = {(26, 37): 0.1}
         frate_half_widths = {(26, 37): 0.05}
         filter_info = dict(
-            filter_centers=frate_centers,
-            filter_half_widths=frate_half_widths,
+            filter_centers={str(k): v for k, v in frate_centers.items()},
+            filter_half_widths={str(k): v for k, v in frate_half_widths.items()},
         )
-        frate_centers = {k+("ee",): v for k, v in frate_centers.items()}
-        frate_half_widths = {k+("ee",): v for k, v in frate_half_widths.items()}
 
         with open(tmpdir / "filter_info.yaml", "w") as f:
             yaml.dump(filter_info, f)
 
         outfilename = os.path.join(tmp_path, 'temp.h5')
-        CLEAN_outfilename = os.path.join(tmp_path, 'temp_clean.h5')
-        filled_outfilename = os.path.join(tmp_path, 'temp_filled.h5')
-        with pytest.raises(ValueError, match="doesn't have every baseline"):
+        with pytest.raises(ValueError, match="(53, 54)"):
             frf.load_tophat_frfilter_and_write(
                 uvh5,
                 res_outfilename=outfilename,
@@ -1013,7 +1018,7 @@ class Test_FRFilter(object):
                 clobber=True,
                 Nbls_per_load=1,
                 param_file=str(tmpdir / "filter_info.yaml"),
-                case="sky",
+                case="param_file",
             )
 
 
