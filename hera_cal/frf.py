@@ -29,6 +29,7 @@ from . import redcal
 from .utils import echo
 import os
 import yaml
+import re
 
 SPEED_OF_LIGHT = const.c.si.value
 SDAY_SEC = units.sday.to("s")
@@ -1562,21 +1563,30 @@ def tophat_frfilter_argparser(mode='clean'):
     filt_options.add_argument("--blacklist_wgt", type=float, default=0.0, help="Relative weight to assign to blacklisted lsts compared to 1.0. Default 0.0 \
                                                                                 means no weight. Note that 0.0 will create problems for DPSS at edge times and frequencies.")
 
-    desc = ("Filtering case ['max_frate_coeffs', 'uvbeam', 'sky']",
+    desc = ("Filtering case ['max_frate_coeffs', 'uvbeam', 'sky', 'param_file']",
             "If case == 'max_frate_coeffs', then determine fringe rate centers",
             "and half-widths based on the max_frate_coeffs arg (see below).",
             "If case == 'uvbeam', then determine fringe rate centers and half widths",
             "from histogram of main-beam wrt instantaneous sky fringe rates.",
             "If case == 'sky': then use fringe-rates corresponding to range of ",
-            "instantanous fringe-rates that include sky emission.")
+            "instantanous fringe-rates that include sky emission.",
+            "If case == 'param_file': then use a provided parameter file to determine",
+            "filter centers and filter half-widths. See param_file help for more ",
+            "information regarding parameter file structure.")
     filt_options.add_argument("--case", default="sky", help=' '.join(desc), type=str)
     desc = ("Number interleaved time subsets to split the data into ",
             "and apply independent fringe-rate filters. Default is 1 (no interleaved filters).",
             "This does not change the format of the output files but it does change the nature of their content.")
     filt_options.add_argument("--ninterleave", default=1, type=int, help=desc)
-    filt_options.add_argument(
-        "--param_file", default="", type=str, help="File containing filter parameters"
-    )
+
+    desc = ("File containing filter parameters. Parameter file must be yaml-readable ",
+            "and contain two entries: filter_centers and filter_half_widths. Each of ",
+            "these entries must be dictionaries whose keys are strings of antenna ",
+            "pairs and whose values are floats. Filter parameters are assumed to ",
+            "correspond to a particular range of frequencies (chosen when making the ",
+            "filter parameter file) and depend on baseline but not polarization (i.e., ",
+            "the 'ee' and 'nn' polarizations will have the same filter for a given baseline.")
+    filt_options.add_argument("--param_file", default="", type=str, help=desc)
 
     return ap
 
@@ -1681,6 +1691,13 @@ def load_tophat_frfilter_and_write(
             Number of interleaved sets to run time filtering on.
         param_file: str, optional
             File containing filter parameters (e.g., centers and half-widths).
+            The file must be readable by yaml, with a "filter_centers" entry and
+            a "filter_half_widths" entry. Each of these entries should correspond
+            to dictionaries with antenna pair strings as keys and floating point
+            numbers as values. When writing filter parameters to a file, ensure
+            that the antenna pair keys have been converted to strings prior to
+            dumping the contents to the file. See the file <insert file name here>
+            for an example.
         filter_kwargs: additional keyword arguments to be passed to FRFilter.tophat_frfilter()
     '''
     if baseline_list is not None and Nbls_per_load is not None:
@@ -1692,6 +1709,12 @@ def load_tophat_frfilter_and_write(
             "in your dataset. Exiting without writing any output.", RuntimeWarning
         )
         return
+
+    if case == "param_file" and not os.path.exists(param_file):
+        raise ValueError(
+            "When using a filter parameter file, a valid parameter file must "
+            f"be provided. The provided file {param_file} could not be found."
+        )
 
     hd = io.HERAData(datafile_list, filetype='uvh5')
     # Figure out which baselines to load if not provided.
@@ -1732,20 +1755,35 @@ def load_tophat_frfilter_and_write(
 
     # If a filter parameter file is provided, let's check that all of the
     # baselines are present in the filter file.
-    if param_file and os.path.exists(param_file):
+    if case == "param_file":
         with open(param_file, "r") as f:
-            filter_info = yaml.load(f.read(), Loader=yaml.Loader)
+            _filter_info = yaml.load(f.read(), Loader=yaml.SafeLoader)
+
+        # Convert the dictionary keys into tuples.
+        filter_info = {param: {} for param in _filter_info.keys()}
+        for filter_param, info in _filter_info.items():
+            for antpair_str, value in info.items():
+                antpair = tuple(
+                    int(ant) for ant in re.findall("[0-9]+", antpair_str)
+                )
+                filter_info[filter_param][antpair] = value
+
         filter_antpairs = set(filter_info["filter_centers"].keys())
         have_bl_info = []
+        missing_bls = set()
         for bl in baseline_list:
             if skip_autos and bl[0] == bl[1]:
                 continue
-            have_bl_info.append(
-                (bl[:2] in filter_antpairs) or (bl[:2][::-1] in filter_antpairs)
-            )
-        if not all(have_bl_info):
+            have_bl = (bl[:2] in filter_antpairs) or (bl[:2][::-1] in filter_antpairs)
+            have_bl_info.append(have_bl)
+            if not have_bl:
+                missing_bls.add(bl[:2])
+
+        if missing_bls:
+            missing_bls = [str(bl) for bl in missing_bls]
             raise ValueError(
-                "Provided filter file doesn't have every baseline."
+                "Provided filter file doesn't have every baseline. The following"
+                "baselines could not be found: " + " ".join(missing_bls)
             )
 
     # Read the data in chunks and perform filtering.
@@ -1794,7 +1832,7 @@ def load_tophat_frfilter_and_write(
             )
 
             # Figure out fringe-rate centers and half-widths.
-            if param_file and os.path.exists(param_file):
+            if case == "param_file":
                 frate_centers = {}
                 frate_half_widths = {}
                 # Assuming we use the same filters for all polarizations.
@@ -1806,8 +1844,8 @@ def load_tophat_frfilter_and_write(
                     else:
                         # We've already enforced that all the data baselines
                         # are in the filter file, so we should be safe here.
-                        frate_centers[key] = -param_info["filter_centers"][(aj,ai)]
-                        frate_centers[key] = param_info["filter_half_widths"][(aj,ai)]
+                        frate_centers[key] = -filter_info["filter_centers"][(aj,ai)]
+                        frate_half_widths[key] = filter_info["filter_half_widths"][(aj,ai)]
             else:
                 # Otherwise, we need to compute the filter parameters.
                 if case not in ("sky", "max_frate_coeffs", "uvbeam"):
