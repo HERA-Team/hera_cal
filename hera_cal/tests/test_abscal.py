@@ -765,7 +765,7 @@ class Test_Abscal_Solvers(object):
 
         # Test that the function runs
         gains, niter, conv_crit = abscal.sky_calibration(
-            data_vis, model_vis, weights, maxiter=1000, tol=1e-10, stepsize=0.5
+            data_vis, model_vis, weights, antpos, maxiter=1000, tol=1e-10, stepsize=0.5
         )
         assert niter['nn'].shape == conv_crit['nn'].shape == (1, nfreqs)
 
@@ -780,7 +780,7 @@ class Test_Abscal_Solvers(object):
         # Test the function with antenna flags
         ant_flags = {(0, 'Jnn'): True}
         gains, niter, conv_crit = abscal.sky_calibration(
-            data_vis, model_vis, weights, ant_flags=ant_flags, maxiter=1000, tol=1e-10, stepsize=0.5
+            data_vis, model_vis, weights, antpos, ant_flags=ant_flags, maxiter=1000, tol=1e-10, stepsize=0.5
         )
 
         # Check that the flagged antenna has unity gain
@@ -792,7 +792,7 @@ class Test_Abscal_Solvers(object):
             model_vis_copy[k] = model_vis[k]
         # Run calibration
         gains, niter, conv_crit = abscal.sky_calibration(
-            data_vis, model_vis_copy, weights, maxiter=1000, tol=1e-10, stepsize=0.5
+            data_vis, model_vis_copy, weights, antpos, maxiter=1000, tol=1e-10, stepsize=0.5
         )
         for k in data_vis:
             np.testing.assert_array_almost_equal(data_vis_copy[k], model_vis[k])
@@ -802,7 +802,7 @@ class Test_Abscal_Solvers(object):
             weights[k][0, 0] = 0.0
     
         gains, niter, conv_crit = abscal.sky_calibration(
-            data_vis, model_vis, weights, maxiter=1000, tol=1e-10, stepsize=0.5
+            data_vis, model_vis, weights, antpos, maxiter=1000, tol=1e-10, stepsize=0.5
         )
         assert np.isclose(gains[(0, 'Jnn')][0, 0], 1.0 + 0.0j)
 

@@ -800,7 +800,7 @@ def _stefcal_optimizer(data_matrix, model_matrix, weights, tol=1e-10, maxiter=10
     
     return jax.lax.while_loop(conditional_function, inner_function, (gains, 0, jnp.inf))
 
-def _build_model_matrices(data, model, weights, baselines, ant_flags={}):
+def _build_model_matrices(data, model, weights, data_bls, data_to_model_bls_map, ant_flags={}):
     """
     Function to build data, model, and weights matrices for sky_calibration optimization.
 
@@ -814,6 +814,11 @@ def _build_model_matrices(data, model, weights, baselines, ant_flags={}):
         Model visibilities. Keys are antenna pair + pol tuples (must match data), values are complex ndarray
     weights: DataContainer
         Dictionary of real-valued data weights. Keys are antenna pair + pol tuples (must match data).
+    data_bls: list
+        List of baseline tuples of the form (ant1, ant2, pol) to include in the data, model, and weights matrices
+    data_to_model_bls_map: dict
+        Dictionary mapping baseline tuples in the data to baseline tuples in the model. Keys are baseline tuples in the
+        data, values are baseline tuples in the model.
     baselines: list
         List of baseline tuples of the form (ant1, ant2, pol) to include in the model matrices
     ant_flags: dict, optional, default={}
@@ -835,28 +840,25 @@ def _build_model_matrices(data, model, weights, baselines, ant_flags={}):
         Dictionary mapping antennas to indices within the data, model, and wgts matrices
     """
     # Get antennas and polarizations from data
-    keys = list(data.keys())
-    pols = np.unique([k[2] for k in keys])
-    ants = np.unique(np.concatenate([k[:2] for k in keys]))
+    pols = np.unique([k[2] for k in data_bls])
+    ants = np.unique(np.concatenate([k[:2] for k in data_bls]))
 
     # Remove flagged antennas
     ants = [ant for ant in ants if not ant_flags.get((ant, 'J' + pols[0]), False)]
     nants = len(ants)
 
     # Map antennas to indices in the data, model, and wgts matrices
-    map_ants_to_index = {
-        ant: ki for ki, ant in enumerate(ants)
-    }
+    map_ants_to_index = {ant: ki for ki, ant in enumerate(ants)}
     
     # Number of times and frequencies
-    ntimes, nfreqs = data[baselines[0]].shape
+    ntimes, nfreqs = data[data_bls[0]].shape
     
     # Populate matrices
     data_matrix = np.zeros((nants, nants, ntimes, nfreqs), dtype='complex')
     wgts_matrix = np.zeros((nants, nants, ntimes, nfreqs), dtype='float')
     model_matrix = np.zeros((nants, nants, ntimes, nfreqs), dtype='complex')
     
-    for bl in baselines:
+    for bl in data_bls:
         if bl[0] in map_ants_to_index and bl[1] in map_ants_to_index:
             m, n = map_ants_to_index[bl[0]], map_ants_to_index[bl[1]]
             
@@ -869,12 +871,15 @@ def _build_model_matrices(data, model, weights, baselines, ant_flags={}):
             wgts_matrix[n, m] = wgts_matrix[m, n]
             
             # Model Matrix
-            model_matrix[m, n] = model[bl]
-            model_matrix[n, m] = model[bl].conj()
+            model_matrix[m, n] = model[data_to_model_bls_map[bl]]
+            model_matrix[n, m] = model[data_to_model_bls_map[bl]].conj()
 
     return data_matrix, model_matrix, wgts_matrix, map_ants_to_index
 
-def sky_calibration(data, model, weights, ant_flags={}, tol=1e-10, maxiter=1000, stepsize=0.5):
+def sky_calibration(
+        data, model, weights, data_antpos=None, ant_flags={}, tol=1e-10, maxiter=1000, stepsize=0.5, 
+        min_bl_cut=None, max_bl_cut=None, model_antpos=None, model_is_redundant=False, include_autos=False
+    ):
     """
     Solve for per-antenna gains using the Stefcal algorithm (Salvini et al. 2014). 
 
@@ -887,6 +892,9 @@ def sky_calibration(data, model, weights, ant_flags={}, tol=1e-10, maxiter=1000,
         Model visibilities. Keys are antenna pair + pol tuples (must match data), values are complex ndarray
     weights: DataContainer
         Dictionary of real-valued data weights. Keys are antenna pair + pol tuples (must match data).
+    data_antpos: dict, default=None
+        Dictionary of antenna positions. Keys are antenna numbers, values are antenna position vectors. If not provided,
+        the antenna positions will be taken from the data dictionary if it has the attribute data_antpos.
     ant_flags: dict, optional, default={}
         Dictionary of antenna flags. Keys are antenna + pol tuples, values are boolean. If an antenna is flagged
         in this dictionary, it will not be included in the fit.
@@ -897,6 +905,17 @@ def sky_calibration(data, model, weights, ant_flags={}, tol=1e-10, maxiter=1000,
     stepsize: float, optional, default=0.5
         Step size for the optimization. Must be between 0 and 1. A step size of 1 will take the full step in the direction
         of the new gains, while a step size of 0 will take no step in the direction of the new gains.
+    min_bl_cut: float, optional, default=None
+        Minimum baseline length to include in the fit. If None, no minimum baseline length cut will be applied.
+    max_bl_cut: float, optional, default=None
+        Maximum baseline length to include in the fit. If None, no minimum baseline length cut will be applied.
+    model_antpos: dict, optional, default=None
+        Dictionary of antenna positions. Keys are antenna numbers, values are antenna position vectors. If not provided,
+        it is assumed that the model antpos matches the data antpos
+    model_is_redundant: bool, optional, default=False
+        If True, it is assumed that the model is redundant.
+    include_autos: bool, optional, default=False
+        If True, include auto-correlations in the model. If False, auto-correlations will be ignored.
 
     Returns:
     -------
@@ -915,11 +934,20 @@ def sky_calibration(data, model, weights, ant_flags={}, tol=1e-10, maxiter=1000,
     # Get number of times and frequencies
     ntimes, nfreqs = data[keys[0]].shape
 
-    # get keys from model and data dictionary
+    # Check if the model is a RedDataContainer. If so, we can assume that the model is redundant
     if isinstance(model, RedDataContainer):
-        all_bls = sorted(set(data.keys()))
-    else:
-        all_bls = sorted(set(data.keys()) & set(model.keys()))
+        model_is_redundant = True
+
+    # User must provide data_antpos if not in data for baseline matching
+    assert data_antpos or has_attr(data, "data_antpos"), "data_antpos must be provided if not in data"
+    if data_antpos is None:
+        data_antpos = data.data_antpos
+
+    # get keys from model and data dictionary
+    data_bls, _, data_to_model_bl_map = match_baselines(
+        list(data.keys()), list(model.keys()), data_antpos, model_is_redundant=model_is_redundant, 
+        min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, include_autos=include_autos
+    )
         
     # Store gains and metadata
     gains = {}
@@ -933,11 +961,11 @@ def sky_calibration(data, model, weights, ant_flags={}, tol=1e-10, maxiter=1000,
         conv_crit_array = []
 
         # Get data baselines
-        baselines = [k for k in all_bls if k[2] == pol]
+        _data_bls = [k for k in data_bls if k[2] == pol]
 
         # Pack data and model into numpy arrays
         data_matrix, model_matrix, wgts, map_ants_to_index = _build_model_matrices(
-            data, model, weights, baselines, ant_flags=ant_flags
+            data, model, weights, _data_bls, data_to_model_bl_map, ant_flags=ant_flags
         )
 
         for ti in range(ntimes):
