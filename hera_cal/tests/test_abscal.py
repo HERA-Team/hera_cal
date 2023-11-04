@@ -761,11 +761,12 @@ class Test_Abscal_Solvers(object):
         gains, model_vis, data_vis = vis.sim_red_data(reds, shape=(1, nfreqs))
         model_vis = RedDataContainer(model_vis, reds=reds)
         data_vis = DataContainer(data_vis)
+        data_vis.data_antpos = antpos
         weights = DataContainer({k: np.ones(data_vis[k].shape, dtype=bool) for k in data_vis})
 
         # Test that the function runs
         gains, niter, conv_crit = abscal.sky_calibration(
-            data_vis, model_vis, weights, antpos, maxiter=1000, tol=1e-10, stepsize=0.5
+            data_vis, model_vis, weights, maxiter=1000, tol=1e-10, stepsize=0.5
         )
         assert niter['nn'].shape == conv_crit['nn'].shape == (1, nfreqs)
 

@@ -939,7 +939,7 @@ def sky_calibration(
         model_is_redundant = True
 
     # User must provide data_antpos if not in data for baseline matching
-    assert data_antpos or has_attr(data, "data_antpos"), "data_antpos must be provided if not in data"
+    assert data_antpos or hasattr(data, "data_antpos"), "data_antpos must be provided if not in data"
     if data_antpos is None:
         data_antpos = data.data_antpos
 
