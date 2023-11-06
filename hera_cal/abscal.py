@@ -1486,20 +1486,22 @@ def _phase_gradient_solution(Z_coefficients, transformed_b_vecs, resolution_fact
     Nk = 2 * dim_maxes + 1
     Nk_use = resolution_factor * Nk + 1 if resolution_factor > 1 else Nk
 
-    # Initialize the grid frequencies
+    # Initialize the grid and the corresponding frequencies
+    grid = np.zeros(tuple(Nk_use), dtype=np.complex64)
     ft_freqs = [- 2 * np.pi * fft.fftshift(fft.fftfreq(n)) for n in Nk_use]
 
     # Get the indices of the grid points corresponding to the transformed_b_vecs
     grid_indices = [tuple(ii for ii in transformed_b_vecs[nn]) for nn in range(Ngroups)]
-    grid_indices = tuple(np.array(grid_indices).T)
+
     # Loop over times and frequency channels
     for i_t in range(Ntimes):
         for i_f in range(Nfreqs):
-            
+
             # Populate grid with Fourier coeffcients of the objective function
-            grid = np.zeros(tuple(Nk_use), dtype=np.complex64)
-            np.add.at(grid, grid_indices, Z_coefficients[i_t, i_f])
-        
+            Z_coeffs_t_f = Z_coefficients[i_t, i_f]
+            for nn in range(Ngroups):
+                grid[grid_indices[nn]] = Z_coeffs_t_f[nn]
+
             # Evaluate the complex objective function Z on a grid of sample points
             grid_ft = fft.fftshift(fft.fftn(grid, workers=-1)) / Ngroups
 
@@ -1511,11 +1513,11 @@ def _phase_gradient_solution(Z_coefficients, transformed_b_vecs, resolution_fact
 
             # Find the local maximum near that initial point, which should also
             # be the global maximum, in which case it is the desired phase gradient solution
-            Lambda_t_f, niter_t_f = _newton_solve(Lambda_init, transformed_b_vecs, Z_coefficients[i_t, i_f], 1e-8, maxiter=newton_maxiter)
+            Lambda_t_f, niter_t_f = _newton_solve(Lambda_init, transformed_b_vecs, Z_coeffs_t_f, 1e-8, maxiter=newton_maxiter)
 
             # Store results
             Lambda_sol[i_t, i_f] = Lambda_t_f
-            Z_sol[i_t, i_f] = _eval_Z(Lambda_t_f, transformed_b_vecs, Z_coefficients[i_t, i_f])
+            Z_sol[i_t, i_f] = _eval_Z(Lambda_t_f, transformed_b_vecs, Z_coeffs_t_f)
             newton_iterations[i_t, i_f] = niter_t_f
 
     return Lambda_sol, Z_sol, newton_iterations
