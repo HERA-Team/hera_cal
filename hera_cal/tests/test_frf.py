@@ -999,15 +999,7 @@ class Test_FRFilter(object):
         uvh5 = os.path.join(
             DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
         )
-        frate_centers = {(26, 37): 0.1}
-        frate_half_widths = {(26, 37): 0.05}
-        filter_info = dict(
-            filter_centers={str(k): v for k, v in frate_centers.items()},
-            filter_half_widths={str(k): v for k, v in frate_half_widths.items()},
-        )
-
-        with open(tmpdir / "filter_info.yaml", "w") as f:
-            yaml.dump(filter_info, f)
+        param_file = os.path.join(DATA_PATH, "example_filter_params.yaml")
 
         outfilename = os.path.join(tmp_path, 'temp.h5')
         with pytest.raises(ValueError, match="(53, 54)"):
@@ -1017,7 +1009,7 @@ class Test_FRFilter(object):
                 tol=1e-4,
                 clobber=True,
                 Nbls_per_load=1,
-                param_file=str(tmpdir / "filter_info.yaml"),
+                param_file=param_file,
                 case="param_file",
             )
 
