@@ -560,7 +560,7 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
 
     return spatial_filters
 
-def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eigenval_cutoff=1e-12, cache={}, umin=None, umax=None):
+def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None):
     """
     Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds. 
     Note that if you are using a large array with a large range of short and long baselines in an individual radially
@@ -578,8 +578,6 @@ def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eig
         modeling foregrounds out to the horizon.
     eigenval_cutoff : float, default=1e-12
         Sinc matrix eigenvalue cutoffs to use for included PSWF modes.
-    cache : dictionary, default={}
-        Dictionary containing cached PSWF eigenvectors to speed up computation
     umin : float, optional, default=None
         Minimum u-mode at which the filters are computed. If None, filter bounds will be computed from the minimum frequency value and shortest
         baseline length. Restricting the minimum u-mode can decrease the degrees of freedom in a nucal modeling if one is uininterested in u-modes below
