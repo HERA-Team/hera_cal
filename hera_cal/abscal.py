@@ -819,8 +819,6 @@ def _build_model_matrices(data, model, weights, data_bls, data_to_model_bls_map,
     data_to_model_bls_map: dict
         Dictionary mapping baseline tuples in the data to baseline tuples in the model. Keys are baseline tuples in the
         data, values are baseline tuples in the model.
-    baselines: list
-        List of baseline tuples of the form (ant1, ant2, pol) to include in the model matrices
     ant_flags: dict, optional, default={}
         Dictionary of antenna flags. Keys are antenna + pol tuples, values are boolean. If an antenna is flagged
         in this dictionary, it will not be included in the model matrices.
@@ -946,7 +944,7 @@ def sky_calibration(
     # get keys from model and data dictionary
     data_bls, _, data_to_model_bl_map = match_baselines(
         list(data.keys()), list(model.keys()), data_antpos, model_is_redundant=model_is_redundant, 
-        min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, include_autos=include_autos
+        min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, include_autos=include_autos, model_antpos=model_antpos
     )
         
     # Store gains and metadata
