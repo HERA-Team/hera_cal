@@ -1694,7 +1694,8 @@ def load_tophat_frfilter_and_write(
             The file must be readable by yaml, with a "filter_centers" entry and
             a "filter_half_widths" entry. Each of these entries should correspond
             to dictionaries with antenna pair strings as keys and floating point
-            numbers as values. When writing filter parameters to a file, ensure
+            numbers as values. The filter centers and filter half widths are assumed
+            to be provided in mHz. When writing filter parameters to a file, ensure
             that the antenna pair keys have been converted to strings prior to
             dumping the contents to the file. See the file example_filter_params.yaml
             for an example.
