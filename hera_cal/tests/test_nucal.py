@@ -307,6 +307,17 @@ def test_compute_spatial_filters():
     model = design_matrix @ (XTXinv @ Xy)
     np.allclose(model, data, atol=1e-6)
 
+    # Show that filters with a u-max cutoff are set to zero
+    umax = 15
+    antpos = linear_array(6, sep=5)
+    radial_reds = nucal.RadialRedundancy(antpos)
+    spatial_filters = nucal.compute_spatial_filters(radial_reds, freqs, umax=umax)
+
+    for rdgrp in radial_reds:
+        for bl in rdgrp:
+            umodes = radial_reds.baseline_lengths[bl] * freqs / 2.998e8
+            assert np.allclose(spatial_filters[bl][umodes > umax], 0)
+
 def test_build_nucal_wgts():
     bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee')]
     auto_bls = [(0, 0, 'ee'), (1, 1, 'ee'), (2, 2, 'ee')]
