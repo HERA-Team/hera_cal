@@ -983,22 +983,25 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
 
 
 @jax.jit
-def _mean_squared_error_no_amp(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
-    """
-    """
-    # Dot baseline vector into tip-tilt parameters
-    phase = jnp.einsum('bn,ntf->btf', blvecs, params["Phi"])
-
-    # Compute model from foreground estimates and amplitude
-    model_r = (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
-    model_i = (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
-    
-    # Compute loss using weights and foreground model
-    return jnp.mean((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
-
-@jax.jit
 def _foreground_model(params, spectral_filters, spatial_filters):
     """
+    Function for computing the foreground model from the foreground parameters and filters.
+
+    Parameters:
+    ----------
+    params : dictionary
+        Parameters for fitting
+    spectral_filters : np.ndarray
+        Array of spectral filters with shape (Nfreqs, Nfilters)
+    spatial_filters : List
+        List of spatial filters for each baseline in the group
+
+    Returns:
+    -------
+    model_r : np.ndarray
+        Array of real component of foreground model with shape (Ntimes, Nbls)
+    model_i : np.ndarray
+        Array of imaginary component of foreground model with shape (Ntimes, Nbls)
     """
     model_r, model_i = [], []
     for sf, fgr, fgi in zip(spatial_filters, params['fg_r'], params['fg_i']):
@@ -1010,6 +1013,28 @@ def _foreground_model(params, spectral_filters, spatial_filters):
 @jax.jit
 def _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
     """
+
+    Parameters:
+    ----------
+    params : dictionary
+        Parameters for fitting
+    data_r : np.ndarray
+        Array of real component of data with shape (Ntimes, Nbls)
+    data_i : np.ndarray
+        Array of imaginary component of data with shape (Ntimes, Nbls)
+    wgts : np.ndarray
+        Array of weights with shape (Ntimes, Nbls)
+    fg_model_r : np.ndarray
+        Array of real component of foreground model with shape (Ntimes, Nbls)
+    fg_model_i : np.ndarray
+        Array of imaginary component of foreground model with shape (Ntimes, Nbls)
+    blvecs : np.ndarray
+        Array of baseline vectors with shape (Nbls, Ndims)
+
+    Returns:
+    -------
+    loss : float
+        Mean squared error between data and foreground model
     """
     # Dot baseline vector into tip-tilt parameters
     phase = jnp.einsum('bn,ntf->btf', blvecs, params["Phi"])
@@ -1022,67 +1047,124 @@ def _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, bl
     return jnp.mean((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
 
 @jax.jit
-def _loss_function_no_amp(params, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs):
+def _calibration_loss_function(params, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs):
     """
-    """
-    fg_model_r, fg_model_i = _foreground_model(params, spectral_filters, spatial_filters)
-    loss = _mean_squared_error_no_amp(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
-    return loss
 
-@jax.jit
-def _loss_function_minor_no_amp(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
-    """
-    """
-    loss = _mean_squared_error_no_amp(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
-    return loss
+    Parameters:
+    ----------
+    params : dictionary
+        Parameters for fitting
+    data_r : np.ndarray
+        Array of real component of data with shape (Ntimes, Nbls)
+    data_i : np.ndarray
+        Array of imaginary component of data with shape (Ntimes, Nbls)
+    wgts : np.ndarray
+        Array of weights with shape (Ntimes, Nbls)
+    spectral_filters : np.ndarray
+        Array of spectral filters with shape (Nfreqs, Nfilters)
+    spatial_filters : List
+        List of spatial filters for each baseline in the group
+    idealized_blvecs : np.ndarray
+        Array of idealized baseline vectors with shape (Nbls, Ndims)
 
-@jax.jit
-def _loss_function(params, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs):
-    """
+    Returns:
+    -------
+    loss : float
+        Mean squared error between data and foreground model
     """
     fg_model_r, fg_model_i = _foreground_model(params, spectral_filters, spatial_filters)
     loss = _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
     return loss
 
 @jax.jit
-def _loss_function_minor(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
+def _calibration_loss_function_minor(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
     """
+
+
+    Parameters:
+    ----------
+    params : dictionary
+        Parameters for fitting
+    data_r : np.ndarray
+        Array of real component of data with shape (Ntimes, Nbls)
+    data_i : np.ndarray
+        Array of imaginary component of data with shape (Ntimes, Nbls)
+    wgts : np.ndarray
+        Array of weights with shape (Ntimes, Nbls)
+    fg_model_r : np.ndarray
+        Array of real component of foreground model with shape (Ntimes, Nbls)
+    fg_model_i : np.ndarray
+        Array of imaginary component of foreground model with shape (Ntimes, Nbls)
+    idealized_blvecs : np.ndarray
+        Array of idealized baseline vectors with shape (Nbls, Ndims)
+
+    Returns:
+    -------
+    loss : float
+        Mean squared error between data and foreground model
     """
     loss = _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
     return loss
 
 def gradient_descent(data_r, data_i, wgts, params, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
-                     maxiter=100, tol=1e-10, nminor_cycle=10, print_step=5):
+                     maxiter=100, tol=1e-10, minor_cycle_iter=0):
     """
     Function to perform frequency redundant calibration using gradient descent.
+
+    Parameters:
+    ----------
+    data_r : np.ndarray
+        Array of real component of data with shape (Ntimes, Nbls)
+    data_i : np.ndarray
+        Array of imaginary component of data with shape (Ntimes, Nbls)
+    wgts : np.ndarray
+        Array of weights with shape (Ntimes, Nbls)
+    params : dictionary
+        Parameters for fitting
+    optimizer : optax optimizer
+        Optimizer to use for gradient descent
+    spectral_filters : np.ndarray
+        Array of spectral filters with shape (Nfreqs, Nfilters)
+    spatial_filters : List
+        List of spatial filters for each baseline in the group
+    idealized_blvecs : np.ndarray
+        Array of idealized baseline vectors with shape (Nbls, Ndims)
+    maxiter : int, optional, default=100
+        Maximum number of iterations to perform
+    tol : float, optional, default=1e-10
+        Tolerance for stopping criterion. If the difference of the loss between two iterations is less than tol,
+        the optimization will stop.
+    minor_cycle_iter : int, optional, default=0
+        Number of minor cycles to perform after each major cycle. Minor cycles are performed by fixing the foreground
+        model and solving for the calibration parameters. This is useful for improving convergence.
+    
+    Returns:
+    -------
+    params : dictionary
+        Optimized parameters
+    metadata : dictionary
+        Dictionary containing metadata from the optimization. Contains the number of iterations ("niter") and the loss history
+        ("loss_history").
     """
     # Initialize optimizer state using parameter guess
     opt_state = optimizer.init(params)
 
     # Initialize variables used in calibration loop
     losses = []
-    
-    # Check if amplitude is being calibrated
-    if 'A' not in params:
-        loss_function = _loss_function_no_amp
-        loss_minor_cycle = _loss_function_minor_no_amp    
-    else:
-        loss_function = _loss_function
-        loss_minor_cycle = _loss_function_minor
 
     # Start gradient descent
     for step in range(maxiter):
         # Compute loss and gradient
-        loss, gradient = jax.value_and_grad(loss_function)(
+        loss, gradient = jax.value_and_grad(_calibration_loss_function)(
             params, data_r, data_i, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs
         )
         updates, opt_state = optimizer.update(gradient, opt_state, params)
         params = optax.apply_updates(params, updates)
         
-        if nminor_cycle > 0:
+        if minor_cycle_iter > 0:
             fg_model_r, fg_model_i = _foreground_model(params, spectral_filters, spatial_filters)
-            for _ in range(nminor_cycle):
-                loss, gradient = jax.value_and_grad(loss_minor_cycle)(
+            for _ in range(minor_cycle_iter):
+                loss, gradient = jax.value_and_grad(_calibration_loss_function_minor)(
                     params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs=idealized_blvecs
                 )
                 updates, opt_state = optimizer.update(gradient, opt_state, params)
@@ -1095,4 +1177,7 @@ def gradient_descent(data_r, data_i, wgts, params, optimizer, spectral_filters, 
         if step >= 1 and np.abs(losses[-1] - losses[-2]) < tol:
             break
 
-    return params, {"loss": losses[-1], "niter": step + 1, "loss_history": losses}
+    # Save the metadata in dictionary
+    metadata = {"niter": step + 1, "loss_history": np.array(losses)}
+
+    return params, metadata
