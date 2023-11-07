@@ -4,6 +4,7 @@ from . import abscal
 from . import apply_cal
 from .datacontainer import DataContainer, RedDataContainer
 
+import inspect
 import warnings
 import numpy as np
 from scipy import linalg
@@ -201,7 +202,7 @@ def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=
 
         # Cluster orientations
         clusters = fclusterdata(normalized_vecs, blvec_error_tol, criterion="distance")
-        uors = [[] for i in range(np.max(clusters))]
+        uors = [[] for _ in range(np.max(clusters))]
 
         for cluster, bl in zip(clusters, ubl_pairs):
             uors[cluster - 1].append(bl)
@@ -823,7 +824,8 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
             else:
                 model[bl] = jnp.einsum(einsum_path, spatial_filters[bl], fg_model_comps[group[0]])
 
-    return model
+    # Return the model as a RedDataContainer
+    return RedDataContainer(model, radial_reds.reds)
 
 
 def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters=None, tol=1e-15,
@@ -983,13 +985,13 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
 
 
 @jax.jit
-def _foreground_model(params, spectral_filters, spatial_filters):
+def _foreground_model(model_parameters, spectral_filters, spatial_filters):
     """
     Function for computing the foreground model from the foreground parameters and filters.
 
     Parameters:
     ----------
-    params : dictionary
+    model_parameters : dictionary
         Parameters for fitting
     spectral_filters : np.ndarray
         Array of spectral filters with shape (Nfreqs, Nfilters)
@@ -1011,12 +1013,12 @@ def _foreground_model(params, spectral_filters, spatial_filters):
     return jnp.expand_dims(jnp.vstack(model_r), axis=1), jnp.expand_dims(jnp.vstack(model_i), axis=1)
 
 @jax.jit
-def _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
+def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
     """
 
     Parameters:
     ----------
-    params : dictionary
+    model_parameters : dictionary
         Parameters for fitting
     data_r : np.ndarray
         Array of real component of data with shape (Ntimes, Nbls)
@@ -1037,22 +1039,22 @@ def _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, bl
         Mean squared error between data and foreground model
     """
     # Dot baseline vector into tip-tilt parameters
-    phase = jnp.einsum('bn,ntf->btf', blvecs, params["Phi"])
+    phase = jnp.einsum('bn,ntf->btf', blvecs, model_parameters["Phi"])
 
     # Compute model from foreground estimates and amplitude
-    model_r = params["A"] * (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
-    model_i = params["A"] * (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
+    model_r = model_parameters["A"] * (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
+    model_i = model_parameters["A"] * (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
     
     # Compute loss using weights and foreground model
     return jnp.mean((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
 
 @jax.jit
-def _calibration_loss_function(params, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs):
+def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs):
     """
 
     Parameters:
     ----------
-    params : dictionary
+    model_parameters : dictionary
         Parameters for fitting
     data_r : np.ndarray
         Array of real component of data with shape (Ntimes, Nbls)
@@ -1072,18 +1074,18 @@ def _calibration_loss_function(params, data_r, data_i, wgts, spectral_filters, s
     loss : float
         Mean squared error between data and foreground model
     """
-    fg_model_r, fg_model_i = _foreground_model(params, spectral_filters, spatial_filters)
-    loss = _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
+    fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
+    loss = _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
     return loss
 
 @jax.jit
-def _calibration_loss_function_minor(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
+def _calibration_loss_function_minor(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
     """
 
 
     Parameters:
     ----------
-    params : dictionary
+    model_parameters : dictionary
         Parameters for fitting
     data_r : np.ndarray
         Array of real component of data with shape (Ntimes, Nbls)
@@ -1103,10 +1105,10 @@ def _calibration_loss_function_minor(params, data_r, data_i, wgts, fg_model_r, f
     loss : float
         Mean squared error between data and foreground model
     """
-    loss = _mean_squared_error(params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
+    loss = _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
     return loss
 
-def gradient_descent(data_r, data_i, wgts, params, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
+def gradient_descent(data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
                      maxiter=100, tol=1e-10, minor_cycle_iter=0):
     """
     Function to perform frequency redundant calibration using gradient descent.
@@ -1119,7 +1121,7 @@ def gradient_descent(data_r, data_i, wgts, params, optimizer, spectral_filters, 
         Array of imaginary component of data with shape (Ntimes, Nbls)
     wgts : np.ndarray
         Array of weights with shape (Ntimes, Nbls)
-    params : dictionary
+    model_parameters : dictionary
         Parameters for fitting
     optimizer : optax optimizer
         Optimizer to use for gradient descent
@@ -1156,19 +1158,19 @@ def gradient_descent(data_r, data_i, wgts, params, optimizer, spectral_filters, 
     for step in range(maxiter):
         # Compute loss and gradient
         loss, gradient = jax.value_and_grad(_calibration_loss_function)(
-            params, data_r, data_i, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs
+            model_parameters, data_r, data_i, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs
         )
-        updates, opt_state = optimizer.update(gradient, opt_state, params)
-        params = optax.apply_updates(params, updates)
+        updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
+        params = optax.apply_updates(model_parameters, updates)
         
         if minor_cycle_iter > 0:
             fg_model_r, fg_model_i = _foreground_model(params, spectral_filters, spatial_filters)
             for _ in range(minor_cycle_iter):
                 loss, gradient = jax.value_and_grad(_calibration_loss_function_minor)(
-                    params, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs=idealized_blvecs
+                    model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs=idealized_blvecs
                 )
-                updates, opt_state = optimizer.update(gradient, opt_state, params)
-                params = optax.apply_updates(params, updates)
+                updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
+                model_parameters = optax.apply_updates(model_parameters, updates)
         
         # Store loss values
         losses.append(loss)
@@ -1181,3 +1183,152 @@ def gradient_descent(data_r, data_i, wgts, params, optimizer, spectral_filters, 
     metadata = {"niter": step + 1, "loss_history": np.array(losses)}
 
     return params, metadata
+
+class SpectrallyRedundantCalibrator:
+    """
+    """
+    def __init__(self, radial_reds):
+        """
+        """
+        self._set_reds(radial_reds)
+        self._filters_computed = False
+
+    def _set_reds(self, radial_reds):
+        """
+        """
+        self.radial_reds = radial_reds
+        self.antpos = radial_reds.antpos
+
+    def _compute_filters(self, freqs, spectral_filter_half_width, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None):
+        """
+        """
+        if self._filters_computed:
+            # Get value of all the parameter names
+            sig = inspect.signature(self._compute_filters)
+
+            # Get value of all the local variables
+            local_vars = locals()
+
+            for key in sig.parameters:
+                if not np.array_equal(local_vars[key], getattr(self, key)):
+                    recompute_filters = True
+                    break
+            
+            if recompute_filters:
+                self.spectral_filters = compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=eigenval_cutoff)
+                self.spatial_filters = compute_spatial_filters(
+                    self.radial_reds, freqs, spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff, umin=umin, umax=umax
+                )
+                self._filters_computed = True
+
+        else:
+            self.spectral_filters = compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=eigenval_cutoff)
+            self.spatial_filters = compute_spatial_filters(
+                self.radial_reds, freqs, spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff, umin=umin, umax=umax
+            )
+            self._filters_computed = True
+
+    def estimate_models(self, data, wgts):
+        """
+        """
+        pass
+
+    def evaluate_model(self, model_parameters):
+        """
+        """
+        # Compute the foreground model using the model parameters
+        model = evaluate_foreground_model(self.radial_reds, model_parameters, self.spatial_filters, self.spectral_filters)
+        return model
+
+    def calibration(self, data, estimate_models="projected_fit", fit_mode="lu_solve", cal_flags={}, spectral_filter_half_width=20e-9, 
+                    spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, return_gains=False, optimizer='adabelief', 
+                    maxiter=100, tol=1e-10, return_model=False):
+        """
+        Calibrate data using a spectrally redundant calibration approach. This function assumes that the data is redundantly
+        
+        Parameters:
+        ----------
+        data : DataContainer
+            Data to be calibrated. Data is assumed to be redundantly averaged.
+        cal_flags : dictionary, default={}
+            Dictionary containing flags for each antenna. Keys are antenna numbers and values are boolean arrays of shape (Ntimes,).
+            If a key is not present, all times for that antenna will be calibrated.
+        estimate_models : str, default="projected_fit"
+            Method to use for estimating the foreground models. Options are "projected_fit" and "fit".
+            "projected_fit" uses the projected fit method described in Kern et al. (2021) to estimate the foreground models.
+            "fit" uses a standard least-squares fit to estimate the foreground models.
+        fit_mode : str, default="lu_solve"
+            Method to use for solving the linear system of equations when fitting the foreground models. Options are
+            "lu_solve", "solve", "pinv", and "lstsq". "lu_solve" uses scipy.linalg.lu_solve to solve the linear system of
+            equations, "solve" uses np.linalg.solve. "pinv" uses np.linalg.pinv to solve the linear system of equations, and
+            "lstsq" uses np.linalg.lstsq. "lu_solve" and "solve" tend to be the faster methods, but "lstsq" and "pinv" are more
+            robust.
+        spectral_filter_half_width : float, default=20e-9
+            Half-width of the spectral filter in units of seconds.
+        spatial_filter_half_width : float, default=1
+            Half-width of the spatial filter in units of wavelengths.
+        eigenval_cutoff : float, default=1e-12
+            Cutoff for the eigenvalues of the PSWF filters
+        umin : float, default=None
+            Minimum u-magnitude value to include in calbration. All u-modes with magnitudes less than
+            min_u_cut will have their weights set to 0.
+        umax : float, default=None
+            Maximum u-magnitude value to include in calbration. All u-modes with magnitudes greater than
+            max_u_cut will have their weights set to 0.
+
+        Returns:
+        -------
+        pass
+        """
+        # Initialize model parameters
+        init_model_parameters = {}
+
+        # Compute spectral and spatial filters
+        self._compute_filters(
+            freqs=data.freqs, spectral_filter_half_width=spectral_filter_half_width, 
+            spatial_filter_half_width=spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff,
+            umin=umin, umax=umax
+        )
+
+        # Compute data weights
+        data_wgts = ...
+
+        # Compute the estimates of the model components from the data
+        estimate_model_comps = self.estimate_models(data, data_wgts, estimate_models=estimate_models, fit_mode=fit_mode)
+
+        # Compute idealized baseline vectors from antenna positions and calibration flags
+        idealized_antpos = abscal._get_idealized_antpos(cal_flags, self.antpos, )
+        idealized_blvecs = np.array([
+            idealized_antpos[blkey[1]] - idealized_antpos[blkey[0]]
+            for rdgrp in self.radial_reds for blkey in rdgrp
+        ])
+
+        # Initialize model parameters
+        init_model_parameters["fg_model_components"] = [estimate_model_comps[blkey] for blkey in estimate_model_comps]
+
+        # Run optimization
+        model_parameters, metadata = gradient_descent(
+            data, data_wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
+            spatial_filters=self.spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, tol=tol
+        )
+
+        if return_model:
+            model = self.evaluate_model(model_parameters)
+
+        if return_gains:
+            gains = {}
+            for pol in pols:
+                for ant in idealized_antpos:
+                    gains[ant] = np.sqrt(model_parameters[f"amplitude_{pol}"]) * np.exp(
+                        1j * np.dot(idealized_antpos[ant], model_parameters[f"tip_tilt_{pol}"])
+                    )
+
+            if return_model:
+                return gains, model, metadata
+            else:
+                return gains, model_parameters, metadata
+        else:
+            if return_model:
+                return model, metadata
+            else:
+                return model_parameters, metadata
