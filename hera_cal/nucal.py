@@ -1006,9 +1006,9 @@ def _foreground_model(model_parameters, spectral_filters, spatial_filters):
         Array of imaginary component of foreground model with shape (Ntimes, Nbls)
     """
     model_r, model_i = [], []
-    for sf, fgr, fgi in zip(spatial_filters, params['fg_r'], params['fg_i']):
-        model_r.append(jnp.einsum('fm,afn,mn->af', spectral_filters, sf, fgr))
-        model_i.append(jnp.einsum('fm,afn,mn->af', spectral_filters, sf, fgi))
+    for sf, fgr, fgi in zip(spatial_filters, model_parameters['fg_r'], model_parameters['fg_i']):
+        model_r.append(jnp.einsum('fm,afn,tmn->af', spectral_filters, sf, fgr))
+        model_i.append(jnp.einsum('fm,afn,tmn->af', spectral_filters, sf, fgi))
 
     return jnp.expand_dims(jnp.vstack(model_r), axis=1), jnp.expand_dims(jnp.vstack(model_i), axis=1)
 
@@ -1039,11 +1039,11 @@ def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_m
         Mean squared error between data and foreground model
     """
     # Dot baseline vector into tip-tilt parameters
-    phase = jnp.einsum('bn,ntf->btf', blvecs, model_parameters["Phi"])
+    phase = jnp.einsum('bn,ntf->btf', blvecs, model_parameters["tip_tilt"])
 
     # Compute model from foreground estimates and amplitude
-    model_r = model_parameters["A"] * (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
-    model_i = model_parameters["A"] * (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
+    model_r = model_parameters["amplitude"] * (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
+    model_i = model_parameters["amplitude"] * (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
     
     # Compute loss using weights and foreground model
     return jnp.mean((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
@@ -1225,19 +1225,35 @@ class SpectrallyRedundantCalibrator:
             )
             self._filters_computed = True
 
-    def estimate_foreground_models(self, data, wgts):
+    def _estimate_degeneracies(self, data, wgts, model):
         """
-        """
-        pass
+        Estimate the redundant degeneracies from the data using traditional abscal techniques.
 
-    def evaluate_model(self, model_parameters):
+        Parameters:
+        ----------
+        data : DataContainer
+            Data to be calibrated. Data is assumed to be redundantly averaged.
+        wgts : DataContainer
+            Weights associated with data
+        model : DataContainer
+            Model visibilities to use for estimating the bandpass. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
+
+        Returns:
+        -------
+        amplitude : np.ndarray
+            Array of shape (Nbls, Ntimes) containing the amplitude of the model visibilities
+        tip_tilt : np.ndarray
+            Array of shape (Nbls, Ntimes, Ndims) containing the tip-tilt parameters for each baseline
         """
-        """
-        # Compute the foreground model using the model parameters
-        model = evaluate_foreground_model(self.radial_reds, model_parameters, self.spatial_filters, self.spectral_filters)
-        return model
+        # Get the baselines in the model
+        data_bls = [blkeys for blkeys in model]
+
+        # Extract the tip-tilt parameters from the model
+        meta, _ = abscal.complex_phase_abscal(
+            data=data, model=model, reds=self.radial_reds.reds, data_bls=data_bls, model_bls=model_bls
+        )
     
-    def calibration(self, data, data_wgts, estimate_models="projected_fit", fit_mode="lu_solve", cal_flags={}, spectral_filter_half_width=30e-9, 
+    def calibrate(self, data, data_wgts, estimate_models="projected_fit", fit_mode="lu_solve", cal_flags={}, spectral_filter_half_width=30e-9, 
                     spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, return_gains=False, optimizer_name='adabelief', 
                     learning_rate=1e-3,maxiter=100, tol=1e-10, return_model=False):
         """
@@ -1275,7 +1291,19 @@ class SpectrallyRedundantCalibrator:
 
         Returns:
         -------
-        pass
+        If return_gains:
+            gains : dictionary
+                Dictionary mapping antenna numbers to complex gains. Keys are antenna numbers and values are complex gains.
+        else:
+            model_parameters : dictionary
+                Dictionary containing the model parameters for each polarization. Keys are polarization strings and values are
+
+        If return_model:
+            model : DataContainer
+                DataContainer containing the model visibilities. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
+        else:
+            model_parameters : dictionary
+                Dictionary containing the model parameters for each polarization. Keys are polarization strings and values are
         """
         # Initialize model parameters
         init_model_parameters = {}
@@ -1304,29 +1332,41 @@ class SpectrallyRedundantCalibrator:
         # Initialize model parameters
         init_model_parameters["fg_model_components"] = [estimate_model_comps[blkey] for blkey in estimate_model_comps]
 
-        # XXX: Do I separate times and polarizations?
+        # XXX: Do I separate times?
         model_parameters = {}
         metadata = {}
 
         for pol in data.pols():
             # Separate data into real and imaginary components
-            data_real = jnp.array([data[blkey].real for blkey in self.radial_reds.get_pol(pol)])
-            data_imag = jnp.array([data[blkey].imag for blkey in self.radial_reds.get_pol(pol)])
+            data_real = jnp.array([
+                data[blkey].real for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
+            data_imag = jnp.array([
+                data[blkey].imag for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
 
             # unpack wgts/filters
-            wgts = jnp.array)[data_wgts[key] for blkey in  in self.radial_reds.get_pol(pol)]
-            spectral_filters = [self.spatial_filters[blkey] for blkey in self.radial_reds.get_pol(pol)]
+            wgts = jnp.array([
+                data_wgts[blkey] for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
+
+            # Set spectral filters 
+            spatial_filters = [
+                jnp.array([self.spatial_filters[blkey] for blkey in rdgrp]) 
+                for rdgrp in self.radial_reds.get_pol(pol)
+            ]
 
             # Run optimization
             _model_parameters, _metadata = gradient_descent(
-                data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=spectral_filters, 
-                spatial_filters=self.spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, tol=tol
+                data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
+                spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, tol=tol
             )
             metadata[pol] = _metadata
             model_parameters[pol] = _model_parameters
 
         if return_model:
-            model = self.evaluate_model(model_parameters)
+            # Compute the foreground model from the model parameters
+            model = evaluate_foreground_model(self.radial_reds, model_parameters, self.spatial_filters, self.spectral_filters)
 
         if return_gains:
             gains = {}
