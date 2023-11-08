@@ -1108,8 +1108,10 @@ def _calibration_loss_function_minor(model_parameters, data_r, data_i, wgts, fg_
     loss = _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
     return loss
 
-def gradient_descent(data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
-                     maxiter=100, tol=1e-10, minor_cycle_iter=0):
+def gradient_descent(
+        data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
+        maxiter=100, tol=1e-10, minor_cycle_iter=0
+    ):
     """
     Function to perform frequency redundant calibration using gradient descent.
 
@@ -1190,20 +1192,15 @@ class SpectrallyRedundantCalibrator:
     def __init__(self, radial_reds):
         """
         """
-        self._set_reds(radial_reds)
-        self._filters_computed = False
-
-    def _set_reds(self, radial_reds):
-        """
-        """
         self.radial_reds = radial_reds
         self.antpos = radial_reds.antpos
+        self._filters_computed = False
 
     def _compute_filters(self, freqs, spectral_filter_half_width, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None):
         """
         """
         if self._filters_computed:
-            # Get value of all the parameter names
+            # Get all parameter names
             sig = inspect.signature(self._compute_filters)
 
             # Get value of all the local variables
@@ -1228,7 +1225,7 @@ class SpectrallyRedundantCalibrator:
             )
             self._filters_computed = True
 
-    def estimate_models(self, data, wgts):
+    def estimate_foreground_models(self, data, wgts):
         """
         """
         pass
@@ -1239,10 +1236,10 @@ class SpectrallyRedundantCalibrator:
         # Compute the foreground model using the model parameters
         model = evaluate_foreground_model(self.radial_reds, model_parameters, self.spatial_filters, self.spectral_filters)
         return model
-
-    def calibration(self, data, estimate_models="projected_fit", fit_mode="lu_solve", cal_flags={}, spectral_filter_half_width=20e-9, 
-                    spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, return_gains=False, optimizer='adabelief', 
-                    maxiter=100, tol=1e-10, return_model=False):
+    
+    def calibration(self, data, data_wgts, estimate_models="projected_fit", fit_mode="lu_solve", cal_flags={}, spectral_filter_half_width=30e-9, 
+                    spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, return_gains=False, optimizer_name='adabelief', 
+                    learning_rate=1e-3,maxiter=100, tol=1e-10, return_model=False):
         """
         Calibrate data using a spectrally redundant calibration approach. This function assumes that the data is redundantly
         
@@ -1290,14 +1287,15 @@ class SpectrallyRedundantCalibrator:
             umin=umin, umax=umax
         )
 
-        # Compute data weights
-        data_wgts = ...
+        # Assert that the optimizer is valid
+        assert optimizer_name in OPTIMIZERS, f"Optimizer must be one of {OPTIMIZERS}. Got {optimizer_name}."
+        optimizer = OPTIMIZERS[optimizer_name](learning_rate=learning_rate)
 
         # Compute the estimates of the model components from the data
         estimate_model_comps = self.estimate_models(data, data_wgts, estimate_models=estimate_models, fit_mode=fit_mode)
 
         # Compute idealized baseline vectors from antenna positions and calibration flags
-        idealized_antpos = abscal._get_idealized_antpos(cal_flags, self.antpos, )
+        idealized_antpos = abscal._get_idealized_antpos(cal_flags, self.antpos, data.pols())
         idealized_blvecs = np.array([
             idealized_antpos[blkey[1]] - idealized_antpos[blkey[0]]
             for rdgrp in self.radial_reds for blkey in rdgrp
@@ -1306,21 +1304,36 @@ class SpectrallyRedundantCalibrator:
         # Initialize model parameters
         init_model_parameters["fg_model_components"] = [estimate_model_comps[blkey] for blkey in estimate_model_comps]
 
-        # Run optimization
-        model_parameters, metadata = gradient_descent(
-            data, data_wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
-            spatial_filters=self.spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, tol=tol
-        )
+        # XXX: Do I separate times and polarizations?
+        model_parameters = {}
+        metadata = {}
+
+        for pol in data.pols():
+            # Separate data into real and imaginary components
+            data_real = jnp.array([data[blkey].real for blkey in self.radial_reds.get_pol(pol)])
+            data_imag = jnp.array([data[blkey].imag for blkey in self.radial_reds.get_pol(pol)])
+
+            # unpack wgts/filters
+            wgts = jnp.array)[data_wgts[key] for blkey in  in self.radial_reds.get_pol(pol)]
+            spectral_filters = [self.spatial_filters[blkey] for blkey in self.radial_reds.get_pol(pol)]
+
+            # Run optimization
+            _model_parameters, _metadata = gradient_descent(
+                data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=spectral_filters, 
+                spatial_filters=self.spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, tol=tol
+            )
+            metadata[pol] = _metadata
+            model_parameters[pol] = _model_parameters
 
         if return_model:
             model = self.evaluate_model(model_parameters)
 
         if return_gains:
             gains = {}
-            for pol in pols:
+            for pol in data.pols():
                 for ant in idealized_antpos:
-                    gains[ant] = np.sqrt(model_parameters[f"amplitude_{pol}"]) * np.exp(
-                        1j * np.dot(idealized_antpos[ant], model_parameters[f"tip_tilt_{pol}"])
+                    gains[(ant, f"J{pol}")] = np.sqrt(model_parameters[pol][f"amplitude"]) * np.exp(
+                        1j * np.dot(idealized_antpos[ant], model_parameters[pol][f"tip_tilt"])
                     )
 
             if return_model:
