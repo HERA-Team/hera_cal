@@ -1,0 +1,6 @@
+filter_centers:
+  (0, 1): 0.1234
+  (0, 2): 0.173
+filter_half_widths:
+  (0, 1): 0.05
+  (0, 2): 0.08
