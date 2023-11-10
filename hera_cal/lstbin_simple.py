@@ -844,7 +844,7 @@ def lst_bin_files_for_baselines(
         )
         if inpfile is not None:
             # This returns a DataContainer (unless something went wrong) since it should
-            # always be a 'baseline' type of UVFlag.s
+            # always be a 'baseline' type of UVFlag.
             inpainted = io.load_flags(inpfile)
             if not isinstance(inpainted, DataContainer):
                 raise ValueError(f"Expected {inpfile} to be a DataContainer")
@@ -881,6 +881,7 @@ def lst_bin_files_for_baselines(
         for i, bl in enumerate(antpairs):
             if redundantly_averaged:
                 bl = keyed.get_ubl_key(bl)
+
             for j, pol in enumerate(pols):
                 blpol = bl + (pol,)
 
@@ -888,7 +889,21 @@ def lst_bin_files_for_baselines(
                     data[slc, i, :, j] = _data[blpol]
                     flags[slc, i, :, j] = _flags[blpol]
                     nsamples[slc, i, :, j] = _nsamples[blpol]
+
                     if inpainted is not None:
+                        # Get the representative baseline key from this bl group that
+                        # exists in the where_inpainted data.
+                        if redundantly_averaged:
+                            for inpbl in reds[bl]:
+                                if inpbl + (pol,) in inpainted:
+                                    blpol = inpbl + (pol,)
+                                    break
+                            else:
+                                raise ValueError(
+                                    f"Could not find any baseline from group {bl} in "
+                                    "inpainted file"
+                                )
+
                         where_inpainted[slc, i, :, j] = inpainted[blpol]
                 else:
                     # This baseline+pol doesn't exist in this file. That's
@@ -1309,6 +1324,7 @@ def lst_bin_files_single_outfile(
     where_inpainted_files = _get_where_inpainted_files(
         data_files, where_inpainted_file_rules
     )
+
     output_flagged, output_inpainted = _configure_inpainted_mode(
         output_flagged, output_inpainted, where_inpainted_files
     )
@@ -1317,6 +1333,8 @@ def lst_bin_files_single_outfile(
     # they have no associated calibration)
     data_files = [df for df in data_files if df]
     input_cals = [cf for cf in input_cals if cf]
+    if where_inpainted_files is not None:
+        where_inpainted_files = [wif for wif in where_inpainted_files if wif]
 
     logger.info("Got the following numbers of data files per night:")
     for dflist in data_files:
@@ -1419,6 +1437,7 @@ def lst_bin_files_single_outfile(
         input_cals,
         where_inpainted_files,
     )
+
     # If we have no times at all for this file, just return
     if len(all_lsts) == 0:
         return {}
@@ -1579,6 +1598,7 @@ def lst_bin_files_single_outfile(
                 flags=rdc["flags"],
                 nsamples=rdc["nsamples"],
             )
+
             write_baseline_slc_to_file(
                 fl=out_files[("STD", inpainted)],
                 slc=slc,
@@ -1596,7 +1616,7 @@ def lst_bin_files_single_outfile(
                     nsamples=rdc["nsamples"],
                 )
                 write_baseline_slc_to_file(
-                    fl=out_files[("STD", inpainted)],
+                    fl=out_files[("MAD", inpainted)],
                     slc=slc,
                     data=rdc["mad"],
                     flags=rdc["flags"],
@@ -1858,7 +1878,7 @@ def create_lstbin_output_file(
     if lst < lst_branch_cut:
         lst += 2 * np.pi
 
-    fname = outdir / fname_format.format(
+    fname = fname_format.format(
         kind=kind,
         lst=lst,
         pol="".join(pols),
@@ -1866,6 +1886,11 @@ def create_lstbin_output_file(
         if inpaint_mode
         else ("flagged" if inpaint_mode is False else ""),
     )
+    # There's a weird gotcha with pathlib where if you do path / "/file.name"
+    # You get just "/file.name" which is in root.
+    if fname.startswith('/'):
+        fname = fname[1:]
+    fname = outdir / fname
 
     logger.info(f"Initializing {fname}")
 

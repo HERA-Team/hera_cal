@@ -9,7 +9,7 @@ import operator
 import os
 import copy
 import warnings
-from packaging import version
+import inspect
 from functools import reduce
 from collections.abc import Iterable
 from pyuvdata import UVCal, UVData
@@ -1032,19 +1032,18 @@ class HERAData(UVData):
         # else:  # make a copy of this object and then update the relevant arrays using DataContainers
         #     this = copy.deepcopy(self)
 
-        if version.parse(pyuvdata.__version__) < version.parse("3.0"):
-            hd_writer.write_uvh5_part(output_path, d, f, n,
-                                      run_check_acceptability=(output_path in self._writers),
-                                      **self.last_read_kwargs)
+        write_kwargs = {
+            "data_array": d,
+            "nsample_array": n,
+            "run_check_acceptability": (output_path in self._writers),
+            **self.last_read_kwargs,
+        }
+        # before pyuvdata 3.0, the "flag_array" parameter was called "flags_array"
+        if "flag_array" in inspect.signature(UVData.write_uvh5_part).parameters:
+            write_kwargs["flag_array"] = f
         else:
-            hd_writer.write_uvh5_part(
-                output_path,
-                data_array=d,
-                flag_array=f,
-                nsample_array=n,
-                run_check_acceptability=(output_path in self._writers),
-                **self.last_read_kwargs
-            )
+            write_kwargs["flags_array"] = f
+        hd_writer.write_uvh5_part(output_path, **write_kwargs)
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
                          bl_error_tol=1.0, include_autos=True, frequencies=None):
