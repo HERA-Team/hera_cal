@@ -524,11 +524,11 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
         Cutoff for the eigenvalues of the PSWF filter
     umin : float, optional, default=None
         Minimum u-mode at which the filters are computed. If None, filter bounds will be computed from the minimum frequency value and shortest
-        baseline length. Restricting the minimum u-mode can decrease the degrees of freedom in a nucal modeling if one is uininterested in u-modes below
+        baseline length. Restricting the minimum u-mode can decrease the degrees of freedom in a nucal model if one is uininterested in u-modes below
         umin.
     umax : float, optional, default=None
         Maximum u-mode at which the filters are computed. If None, filter bounds will be computed from the maximum frequency value and longest
-        baseline length. Restricting the maximum u-mode can significantly decrease the degrees of freedom in a nucal modeling particularly if the 
+        baseline length. Restricting the maximum u-mode can significantly decrease the degrees of freedom in a nucal model particularly if the 
         baseline group has a few long baselines an one is uininterested in u-modes above umax.
     
     Returns:
@@ -580,11 +580,11 @@ def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eig
         Sinc matrix eigenvalue cutoffs to use for included PSWF modes.
     umin : float, optional, default=None
         Minimum u-mode at which the filters are computed. If None, filter bounds will be computed from the minimum frequency value and shortest
-        baseline length. Restricting the minimum u-mode can decrease the degrees of freedom in a nucal modeling if one is uininterested in u-modes below
+        baseline length. Restricting the minimum u-mode can decrease the degrees of freedom in a nucal model if one is uininterested in u-modes below
         umin. If umin is not None, umin will be applied to all baseline groups in radial reds.
     umax : float, optional, default=None
         Maximum u-mode at which the filters are computed. If None, filter bounds will be computed from the maximum frequency value and longest
-        baseline length. Restricting the maximum u-mode can significantly decrease the degrees of freedom in a nucal modeling particularly if the 
+        baseline length. Restricting the maximum u-mode can significantly decrease the degrees of freedom in a nucal model particularly if the 
         baseline group has a few long baselines an one is uininterested in u-modes above umax. If umax is not None, umax will be applied to all 
         baseline groups in radial reds.
 
