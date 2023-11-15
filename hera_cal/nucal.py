@@ -1053,15 +1053,21 @@ def _foreground_model(model_parameters, spectral_filters, spatial_filters):
         Array of imaginary component of foreground model with shape (Ntimes, Nbls)
     """
     model_r, model_i = [], []
-    for sf, fgr, fgi in zip(spatial_filters, model_parameters['fg_r'], model_parameters['fg_i']):
-        model_r.append(jnp.einsum('fm,afn,tmn->af', spectral_filters, sf, fgr))
-        model_i.append(jnp.einsum('fm,afn,tmn->af', spectral_filters, sf, fgi))
 
+    # Loop over each radially redundant group
+    # Below the indicies correspond to f -> frequency, a -> baseline, m -> spectral modes
+    # n -> spatial modes, and t -> time
+    for sf, fgr, fgi in zip(spatial_filters, model_parameters['fg_r'], model_parameters['fg_i']):
+        model_r.append(jnp.einsum('fm,bfn,tmn->bf', spectral_filters, sf, fgr))
+        model_i.append(jnp.einsum('fm,bfn,tmn->bf', spectral_filters, sf, fgi))
+
+    # Stack models
     return jnp.expand_dims(jnp.vstack(model_r), axis=1), jnp.expand_dims(jnp.vstack(model_i), axis=1)
 
 @jax.jit
 def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
     """
+    Computes the mean squared error between the data and foreground model multiplied by the degenerate parameters
 
     Parameters:
     ----------
@@ -1086,6 +1092,7 @@ def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_m
         Mean squared error between data and foreground model
     """
     # Dot baseline vector into tip-tilt parameters
+    # Below the indicies correspond to b -> baseline, n -> tip-tilt parameters, t -> time, and f -> frequency
     phase = jnp.einsum('bn,ntf->btf', blvecs, model_parameters["tip_tilt"])
 
     # Compute model from foreground estimates and amplitude
@@ -1098,7 +1105,8 @@ def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_m
 @jax.jit
 def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs):
     """
-
+    Function which computes the value of the loss from the degenerate parameters, DPSS foreground components, and the data 
+    
     Parameters:
     ----------
     model_parameters : dictionary
@@ -1121,14 +1129,19 @@ def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_
     loss : float
         Mean squared error between data and foreground model
     """
+    # Compute foreground model from the model_parameters and DPSS filters
     fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
+
+    # Compute loss
     loss = _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
     return loss
 
 @jax.jit
 def _calibration_loss_function_minor(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
     """
-
+    Function which computes the value of the loss from the degenerate parameters, foreground, and the data.
+    Intended to be used for minor cycles where the foreground model is fixed and the degenerate parameters are
+    solved for.
 
     Parameters:
     ----------
@@ -1198,7 +1211,7 @@ def gradient_descent(
         ("loss_history").
     """
     # Initialize optimizer state using parameter guess
-    opt_state = optimizer.init(params)
+    opt_state = optimizer.init(model_parameters)
 
     # Initialize variables used in calibration loop
     losses = []
@@ -1309,7 +1322,7 @@ class SpectrallyRedundantCalibrator:
     
     def calibrate(self, data, data_wgts, estimate_models="projected_fit", fit_mode="lu_solve", cal_flags={}, spectral_filter_half_width=30e-9, 
                     spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, return_gains=False, optimizer_name='adabelief', 
-                    learning_rate=1e-3,maxiter=100, tol=1e-10, return_model=False):
+                    learning_rate=1e-3,maxiter=100, tol=1e-10, return_model=False, share_fg_model=False, tol=1e-12):
         """
         Calibrate data using a spectrally redundant calibration approach. This function assumes that the data is redundantly
         
@@ -1342,6 +1355,9 @@ class SpectrallyRedundantCalibrator:
         umax : float, default=None
             Maximum u-magnitude value to include in calbration. All u-modes with magnitudes greater than
             max_u_cut will have their weights set to 0.
+        tol : float, default=1e-12
+            Parameter for regularization of the linear fit of DPSS modeling vectors to data. If fit_mode is "lu_solve" or "solve", 
+            this is added to the diagonal of the XTX matrix.
 
         Returns:
         -------
@@ -1374,7 +1390,11 @@ class SpectrallyRedundantCalibrator:
         optimizer = OPTIMIZERS[optimizer_name](learning_rate=learning_rate)
 
         # Compute the estimates of the model components from the data
-        estimate_model_comps = self.estimate_models(data, data_wgts, estimate_models=estimate_models, fit_mode=fit_mode)
+        estimate_model_comps = fit_nucal_foreground_model(
+            data, data_wgts, self.radial_reds, spatial_filters, estimate_models=estimate_models, fit_mode=fit_mode, share_fg_model=share_fg_model
+        )
+        if share_fg_model:
+            estimate_model_comps = project_u_model_comps_on_spec_axis(estimate_model_comps, self.spectral_filters)
 
         # Compute idealized baseline vectors from antenna positions and calibration flags
         idealized_antpos = abscal._get_idealized_antpos(cal_flags, self.antpos, data.pols())
