@@ -1213,7 +1213,7 @@ def gradient_descent(
         params = optax.apply_updates(model_parameters, updates)
         
         if minor_cycle_iter > 0:
-            fg_model_r, fg_model_i = _foreground_model(params, spectral_filters, spatial_filters)
+            fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
             for _ in range(minor_cycle_iter):
                 loss, gradient = jax.value_and_grad(_calibration_loss_function_minor)(
                     model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs=idealized_blvecs
@@ -1293,12 +1293,19 @@ class SpectrallyRedundantCalibrator:
             Array of shape (Nbls, Ntimes, Ndims) containing the tip-tilt parameters for each baseline
         """
         # Get the baselines in the model
-        data_bls = [blkeys for blkeys in model]
+        data_bls = [blkeys for blkeys in data]
+    
+        # Estimate the amplitude degeneracies from the model
+        amplitude = abscal.abs_amp_logcal(
+            data=data, model=model, wgts=wgts, verbose=False, return_gains=False
+        )
 
         # Extract the tip-tilt parameters from the model
         meta, _ = abscal.complex_phase_abscal(
-            data=data, model=model, reds=self.radial_reds.reds, data_bls=data_bls, model_bls=model_bls
+            data=data, model=model, reds=self.radial_reds.reds, data_bls=data_bls, model_bls=data_bls
         )
+
+        return amplitude, meta
     
     def calibrate(self, data, data_wgts, estimate_models="projected_fit", fit_mode="lu_solve", cal_flags={}, spectral_filter_half_width=30e-9, 
                     spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, return_gains=False, optimizer_name='adabelief', 
@@ -1376,9 +1383,6 @@ class SpectrallyRedundantCalibrator:
             for rdgrp in self.radial_reds for blkey in rdgrp
         ])
 
-        # Initialize model parameters
-        init_model_parameters["fg_model_components"] = [estimate_model_comps[blkey] for blkey in estimate_model_comps]
-
         # XXX: Do I separate times?
         model_parameters = {}
         metadata = {}
@@ -1391,6 +1395,10 @@ class SpectrallyRedundantCalibrator:
             data_imag = jnp.array([
                 data[blkey].imag for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
             ])
+
+            # Initialize model parameters
+            init_model_parameters["fg_r"] = [estimate_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds.get_pol(pol)]
+            init_model_parameters["fg_i"] = [estimate_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds.get_pol(pol)]
 
             # unpack wgts/filters
             wgts = jnp.array([
