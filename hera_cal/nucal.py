@@ -1170,7 +1170,7 @@ def _calibration_loss_function_minor(model_parameters, data_r, data_i, wgts, fg_
 
 def gradient_descent(
         data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
-        maxiter=100, tol=1e-10, minor_cycle_iter=0
+        maxiter=100, convergence_criteria=1e-10, minor_cycle_iter=0
     ):
     """
     Function to perform frequency redundant calibration using gradient descent.
@@ -1322,7 +1322,7 @@ class SpectrallyRedundantCalibrator:
     
     def calibrate(self, data, data_wgts, estimate_models="projected_fit", fit_mode="lu_solve", cal_flags={}, spectral_filter_half_width=30e-9, 
                     spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, return_gains=False, optimizer_name='adabelief', 
-                    learning_rate=1e-3,maxiter=100, tol=1e-10, return_model=False, share_fg_model=False, tol=1e-12):
+                    learning_rate=1e-3, maxiter=100, convergence_criteria=1e-10, return_model=False, share_fg_model=False):
         """
         Calibrate data using a spectrally redundant calibration approach. This function assumes that the data is redundantly
         
@@ -1434,7 +1434,7 @@ class SpectrallyRedundantCalibrator:
             # Run optimization
             _model_parameters, _metadata = gradient_descent(
                 data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
-                spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, tol=tol
+                spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, convergence_criteria=convergence_criteria
             )
             metadata[pol] = _metadata
             model_parameters[pol] = _model_parameters
