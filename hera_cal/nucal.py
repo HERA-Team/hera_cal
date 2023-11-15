@@ -1238,7 +1238,7 @@ def gradient_descent(
         losses.append(loss)
 
         # Stop if subsequent losses are within tolerance
-        if step >= 1 and np.abs(losses[-1] - losses[-2]) < tol:
+        if step >= 1 and np.abs(losses[-1] - losses[-2]) < convergence_criteria:
             break
 
     # Save the metadata in dictionary
