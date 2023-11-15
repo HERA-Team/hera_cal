@@ -16,7 +16,9 @@ import os
 import warnings
 from pyuvdata import UVCal
 from copy import deepcopy
+import logging
 
+logger = logging.getLogger(__name__)
 
 class DelayFilter(VisClean):
     """
@@ -168,24 +170,47 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
                 polarizations = hd.pols
         if Nbls_per_load is None:
             Nbls_per_load = len(baseline_list)
-        for i in range(0, len(baseline_list), Nbls_per_load):
+        nbl_groups = int(np.ceil(len(baseline_list) / Nbls_per_load))
+        logger.info(f"Number of baselines in file: {len(baseline_list)}. Chunking in {nbl_groups} groups of {Nbls_per_load}.")
+
+        for i in range(0, nbl_groups):
+            logger.info(f"Delay-Filtering baseline group {i+1}/{nbl_groups}")
+
             df = DelayFilter(hd, input_cal=cals)
-            df.read(bls=baseline_list[i:i + Nbls_per_load],
-                    frequencies=freqs, polarizations=polarizations, axis=read_axis)
+            
+            df.read(
+                bls=baseline_list[i*Nbls_per_load:min((i+1)*Nbls_per_load, len(baseline_list))],
+                frequencies=freqs, polarizations=polarizations, axis=read_axis
+            )
             if avg_red_bllens:
+                logger.info("  Averaging redundant baseline vector coordinates")
                 df.avg_red_baseline_vectors()
             if external_flags is not None:
+                logger.info("  Applying external flags")
                 df.apply_flags(external_flags, overwrite_flags=overwrite_flags)
             if flag_yaml is not None:
+                logger.info("  Applying flag_yaml flags")
                 df.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
             if factorize_flags:
+                logger.info("  Factorizing flags")
                 df.factorize_flags(time_thresh=time_thresh, inplace=True)
+
+            logger.info("  Running Delay Filter")
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                                 skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-            df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                   filled_outfilename=filled_outfilename, partial_write=Nbls_per_load < len(baseline_list),
-                                   clobber=clobber, add_to_history=add_to_history,
-                                   extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': df.hd.freq_array, 'channel_width': df.hd.channel_width,  'flex_spw_id_array': df.hd.flex_spw_id_array})
+            logger.info("  Writing filtered data")
+            df.write_filtered_data(
+                res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                filled_outfilename=filled_outfilename, 
+                partial_write=Nbls_per_load < len(baseline_list),
+                clobber=clobber, add_to_history=add_to_history,
+                extra_attrs={
+                    'Nfreqs': df.Nfreqs, 
+                    'freq_array': df.hd.freq_array, 
+                    'channel_width': df.hd.channel_width,
+                    'flex_spw_id_array': df.hd.flex_spw_id_array,
+                }
+            )
             df.hd.data_array = None  # this forces a reload in the next loop
 
 

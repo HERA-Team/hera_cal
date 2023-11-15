@@ -18,11 +18,13 @@ import pyuvdata.tests as uvtest
 from sklearn import gaussian_process as gp
 from ..redcal import filter_reds
 from ..redcal import get_pos_reds
-
+from astropy.coordinates import EarthLocation
 from hera_sim.noise import white_noise
 from .. import utils, abscal, datacontainer, io, redcal
 from ..calibrations import CAL_PATH
 from ..data import DATA_PATH
+from . import mock_uvdata as mockuvd
+from pathlib import Path
 
 
 class Test_Pol_Ops(object):
@@ -398,6 +400,64 @@ def test_combine_calfits():
         os.remove('ex.calfits')
 
 
+def test_lst_rephase_vectorized():
+    # load point source sim w/ array at latitude = 0
+    fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        (data, flags, antpos, ants, freqs, times, lsts, pols) = io.load_vis(fname, return_meta=True)
+
+    antpairs = list(data.antpairs())
+    pols = list(data._pols)
+
+    # The following defines which data we check (bl, time, freq, pol)
+    itime = 50  # this is the index of transit.
+    ifreq = 4
+    # get phase error on shortest EW baseline
+#    k = (0, 1, 'ee')
+    ibl = antpairs.index((0, 1))
+    ipol = pols.index('ee')
+
+    # get integration time in LST, baseline dict
+    dlst = np.median(np.diff(lsts))
+    blvec = [antpos[k[0]] - antpos[k[1]] for k in antpairs]
+
+    data_drift = np.zeros((data.shape[0], len(data.bls()), data.shape[1], len(data._pols)), dtype=complex)
+    for i, antpair in enumerate(antpairs):
+        for j, pol in enumerate(pols):
+            data_drift[:, i, :, j] = data[antpair + (pol,)].copy()
+
+    # basic test: single dlst for all integrations
+    _data = utils.lst_rephase(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
+
+    # check error at transit
+    phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime + 1, ibl, ifreq, ipol])
+    assert np.isclose(phs_err, 0, atol=1e-7)
+    # check error across file
+    phs_err = np.angle(_data[:-1, ibl, ifreq, ipol] / data_drift[1:, ibl, ifreq, ipol])
+    assert np.abs(phs_err).max() < 1e-4
+
+    # multiple phase term test: dlst per integration
+    dlst = np.array([np.median(np.diff(lsts))] * data.shape[0])
+    _data = utils.lst_rephase(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
+    # check error at transit
+    phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime + 1, ibl, ifreq, ipol])
+    assert np.isclose(phs_err, 0, atol=1e-7)
+    # check err across file
+    phs_err = np.angle(_data[:-1, ibl, ifreq, ipol] / data_drift[1:, ibl, ifreq, ipol])
+    assert np.abs(phs_err).max() < 1e-4
+
+    # phase all integrations to a single integration
+    dlst = lsts[50] - lsts
+    _data = utils.lst_rephase(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
+    # check error at transit
+    phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime, ibl, ifreq, ipol])
+    assert np.isclose(phs_err, 0, atol=1e-7)
+    # check error across file
+    phs_err = np.angle(_data[:, ibl, ifreq, ipol] / data_drift[50, ibl, ifreq, ipol])
+    assert np.abs(phs_err).max() < 1e-4
+
+
 def test_lst_rephase():
     # load point source sim w/ array at latitude = 0
     fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
@@ -447,7 +507,7 @@ def test_lst_rephase():
     # test operation on array
     k = (0, 1, 'ee')
     d = data_drift[k].copy()
-    d_phs = utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True)
+    d_phs = utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True, inplace=False)
     assert np.allclose(np.abs(np.angle(d_phs[50] / data[k][50])).max(), 0.0)
 
 
@@ -812,7 +872,7 @@ def test_chunck_baselines_by_redundant_group():
 
 def test_select_spw_ranges(tmpdir):
     # validate spw_ranges.
-    tmp_path = tmpdir.strpath
+    tmp_path = str(tmpdir)
     # test that units are propagated from calibration gains to calibrated data.
     new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
     uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
@@ -840,25 +900,188 @@ def test_select_spw_ranges_argparser():
     assert args.spw_ranges == [(0, 20), (30, 100), (120, 150)]
 
 
-def test_select_spw_ranges_run_script_code(tmpdir):
-    # test script code from scripts/test_select_spw_ranges.py
-    tmp_path = tmpdir.strpath
-    new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-    uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-    hd = io.HERAData(uvh5)
-    hd.read()
-    nf = hd.Nfreqs
-    output = os.path.join(tmp_path, 'test_calibrated_output.uvh5')
-    # construct bash script command
-    select_cmd = f'python ./scripts/select_spw_ranges.py {uvh5} {output} --clobber --spw_ranges 0~256,332~364,792~1000'
-    # and excecute inside of python
-    os.system(select_cmd)
-    # test that output has correct frequencies.
-    hdo = io.HERAData(output)
-    hdo.read()
-    assert np.allclose(hdo.freq_array, np.hstack([hd.freq_array[:256], hd.freq_array[332:364], hd.freq_array[792:1000]]))
-    freq_inds = np.hstack([np.arange(0, 256).astype(int), np.arange(332, 364).astype(int), np.arange(792, 1000).astype(int)])
-    # and check that data, flags, nsamples make sense.
-    assert np.allclose(hdo.data_array, hd.data_array[:, freq_inds, :])
-    assert np.allclose(hdo.flag_array, hd.flag_array[:, freq_inds, :])
-    assert np.allclose(hdo.nsample_array, hd.nsample_array[:, freq_inds, :])
+@pytest.fixture(scope='function')
+def tmpdir(tmp_path_factory):
+    return tmp_path_factory.mktemp('test_match_files_to_lst_bins')
+
+
+class TestMatchFilesToLSTBins:
+    def make_empty_day(self, nfiles: int, **kwargs):
+        # We make the internal data really small here, since we care only about the
+        # time metadata
+        return mockuvd.make_day(
+            nfiles=nfiles,
+            ants=[0, 1, 2],
+            antpairs=[(0, 0), (0, 1)],
+            freqs=np.array([155e6]),
+            creator=mockuvd.create_mock_hera_obs,
+            pols=('xx',),
+            **kwargs
+        )
+
+    @pytest.mark.parametrize('files_sorted', [True, False])
+    @pytest.mark.parametrize('blts_are_rectangular', [True, False, None])
+    @pytest.mark.parametrize('time_axis_faster_than_bls', [True, False, None])
+    @pytest.mark.parametrize('jd_regex', (r"zen\.(\d+\.\d+)\.", None))
+    def test_simple_zero2pi(
+        self,
+        files_sorted: bool,
+        blts_are_rectangular: bool,
+        time_axis_faster_than_bls: bool,
+        jd_regex: str,
+        tmpdir: Path,
+    ):
+        """This does the simplest, obvious, thing: one big LST bin covering (0,2pi)
+        which should match all files. This makes it easy to test different input
+        parameter combinations.
+        """
+
+        uvds = self.make_empty_day(nfiles=10, time_axis_faster_than_bls=bool(time_axis_faster_than_bls))
+        fls = mockuvd.write_files_in_hera_format(uvds, tmpdir)
+
+        # Ensure that using lst-bin edges of (0, 2pi) works fine
+        out_fls = utils.match_files_to_lst_bins(
+            lst_edges=(0, 2 * np.pi),
+            file_list=fls,
+            files_sorted=files_sorted,
+            blts_are_rectangular=blts_are_rectangular,
+            jd_regex=jd_regex,
+            time_axis_faster_than_bls=time_axis_faster_than_bls
+        )
+        assert len(out_fls) == 1  # 1 LST bin
+        assert len(out_fls[0]) == len(fls)  # all files are in the same LST bin
+        assert all(str(out.path) in fls for out in out_fls[0])
+
+    def test_regex_vs_readtimes(self, tmpdir: Path):
+        """Test whether reading times from filenames works as well as reading
+        times from the files themselves.
+        """
+        uvds = self.make_empty_day(nfiles=10)
+        fls = mockuvd.write_files_in_hera_format(uvds, tmpdir)
+
+        # To make it interesting, choose one big LST bin that covers about half the
+        # files, including a partial file at the end.
+        lst_edges = (uvds[0].lst_array.min(), (uvds[5].lst_array.min() + uvds[5].lst_array.max()) / 2)
+        out_fls = utils.match_files_to_lst_bins(
+            lst_edges=lst_edges,
+            file_list=fls,
+            files_sorted=True,
+        )
+        assert len(out_fls) == 1
+        assert len(out_fls[0]) == 6
+
+        out_fls_meta = utils.match_files_to_lst_bins(
+            lst_edges=lst_edges,
+            file_list=fls,
+            files_sorted=True,
+            jd_regex=None,
+        )
+
+        assert len(out_fls_meta) == 1
+        assert len(out_fls_meta[0]) == 6
+        assert all(out in out_fls[0] for out in out_fls_meta[0])
+
+    def test_lst_bins_crossing_2pi(self, tmpdir: Path):
+        """Test that lst_bins that cross 2pi are handled correctly.
+        """
+        tint = 10.7
+        dlst = tint * 2 * np.pi / (24 * 3600)
+        nfiles = 12
+        total_dlst = dlst * nfiles * 2
+
+        uvds = self.make_empty_day(
+            nfiles=nfiles, lst_start=2 * np.pi - total_dlst / 2, integration_time=tint,
+        )
+        fls = mockuvd.write_files_in_hera_format(uvds, tmpdir)
+
+        # To make it interesting, choose one big LST bin that covers about half the
+        # files, including a partial file at the end.
+        lst_edges = (3 * np.pi / 2, np.pi / 2)
+        out_fls = utils.match_files_to_lst_bins(
+            lst_edges=lst_edges,
+            file_list=fls,
+            files_sorted=True,
+        )
+        assert len(out_fls) == 1
+        assert len(out_fls[0]) == nfiles
+
+        # To make it interesting, choose one big LST bin that covers about half the
+        # files, including a partial file at the end.
+        lst_edges = (3 * np.pi / 2, 2 * np.pi)
+        out_fls = utils.match_files_to_lst_bins(
+            lst_edges=lst_edges,
+            file_list=fls,
+            files_sorted=True,
+        )
+        assert len(out_fls) == 1
+        assert len(out_fls[0]) == nfiles // 2
+
+        # To make it interesting, choose one big LST bin that covers about half the
+        # files, including a partial file at the end.
+        lst_edges = (0, np.pi / 2)
+        out_fls = utils.match_files_to_lst_bins(
+            lst_edges=lst_edges,
+            file_list=fls,
+            files_sorted=True,
+        )
+        assert len(out_fls) == 1
+        assert len(out_fls[0]) == nfiles // 2
+
+    def test_one_file_per_lstbin(self, tmpdir):
+        uvds = self.make_empty_day(nfiles=10, jd_start=0.2)
+        fls = mockuvd.write_files_in_hera_format(uvds, tmpdir)
+
+        lst_edges = [
+            uvd.lst_array.min() for uvd in uvds
+        ]
+        lst_edges.append(uvds[-1].lst_array.max())
+
+        out_fls = utils.match_files_to_lst_bins(
+            lst_edges=lst_edges,
+            file_list=fls,
+            files_sorted=True,
+        )
+        assert len(out_fls) == len(lst_edges) - 1
+        files_matched = set()
+        for match in out_fls:
+            files_matched.update(match)
+            assert 0 < len(match) <= 2
+
+        # Ensure all files are matched
+        assert len(files_matched) == len(fls)
+
+
+class Test_LSTBranchCut:
+    def test_simple_ascending(self):
+        lsts = np.linspace(0, 1.0, 100)
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert best == 0
+
+    def test_simple_descending(self):
+        lsts = np.linspace(1.0, 0, 100)
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert best == 0
+
+    def test_simple_ascending_with_offset(self):
+        lsts = np.linspace(0.1, 1.1, 100)
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert np.isclose(best, 0.1)
+
+    def test_wrap_around_2pi(self):
+        lsts = np.linspace(3 * np.pi / 2, 5 * np.pi / 2, 100)
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert np.isclose(best, 3 * np.pi / 2)
+
+    def test_wrap_around_2pi_starting_low(self):
+        lsts0 = np.linspace(0, np.pi / 2)
+        lsts1 = np.linspace(3 * np.pi / 2, 2 * np.pi)
+        lsts = np.concatenate([lsts0, lsts1])
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert np.isclose(best, 3 * np.pi / 2)
+
+    def test_with_crazy_periods(self):
+        lsts = np.linspace(0, 1.0, 100)
+        n = np.random.random_integers(10, size=100)
+        lsts += n * 2 * np.pi
+        best = utils.get_best_lst_branch_cut(lsts)
+        assert best == 0

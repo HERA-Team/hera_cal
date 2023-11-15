@@ -60,7 +60,7 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
         chunked_files = io.HERACal(filenames[start:end])
     else:
         raise ValueError("Invalid type provided. Must be in ['data', 'gains']")
-    read_args = {}
+    
     if type == 'data':
         if polarizations is None:
             if len(chunked_files.filepaths) > 1:
@@ -69,8 +69,11 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
                 polarizations = chunked_files.pols
         if spw_range is None:
             spw_range = (0, chunked_files.Nfreqs)
-        data, flags, nsamples = chunked_files.read(polarizations=polarizations,
-                                                   freq_chans=range(spw_range[0], spw_range[1]), **read_kwargs)
+        chunked_files.read(
+            polarizations=polarizations,
+            freq_chans=range(spw_range[0], spw_range[1]), 
+            **read_kwargs
+        )
     elif type == 'gains':
         chunked_files.read()
         if polarizations is None:

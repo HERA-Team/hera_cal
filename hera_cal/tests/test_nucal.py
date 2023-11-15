@@ -307,6 +307,17 @@ def test_compute_spatial_filters():
     model = design_matrix @ (XTXinv @ Xy)
     np.allclose(model, data, atol=1e-6)
 
+    # Show that filters with a u-max cutoff are set to zero
+    umax = 15
+    antpos = linear_array(6, sep=5)
+    radial_reds = nucal.RadialRedundancy(antpos)
+    spatial_filters = nucal.compute_spatial_filters(radial_reds, freqs, umax=umax)
+
+    for rdgrp in radial_reds:
+        for bl in rdgrp:
+            umodes = radial_reds.baseline_lengths[bl] * freqs / 2.998e8
+            assert np.allclose(spatial_filters[bl][umodes > umax], 0)
+
 def test_build_nucal_wgts():
     bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee')]
     auto_bls = [(0, 0, 'ee'), (1, 1, 'ee'), (2, 2, 'ee')]
@@ -403,10 +414,15 @@ def test_linear_fit():
     Xy = np.dot(X.T, y)
 
     # Test different modes
-    b1 = nucal._linear_fit(XTX, Xy, solver='lu_solve')
-    b2 = nucal._linear_fit(XTX, Xy, solver='solve')
-    b3 = nucal._linear_fit(XTX, Xy, solver='lstsq')
-    b4 = nucal._linear_fit(XTX, Xy, solver='pinv')
+    b1, cached_input = nucal._linear_fit(XTX, Xy, solver='lu_solve')
+    assert cached_input.get('LU') is not None
+    b1_cached, _ = nucal._linear_fit(XTX, Xy, solver='lu_solve', cached_input=cached_input)
+    # Show that the cached result is the same as the original
+    np.testing.assert_allclose(b1, b1_cached)
+    b2, _ = nucal._linear_fit(XTX, Xy, solver='solve')
+    b3, _ = nucal._linear_fit(XTX, Xy, solver='lstsq')
+    b4, cached_input = nucal._linear_fit(XTX, Xy, solver='pinv')
+    assert cached_input.get('XTXinv') is not None
 
     # Show that all modes give the same result
     np.testing.assert_allclose(b1, b2, atol=1e-6)
@@ -436,7 +452,7 @@ def test_compute_spectral_filters():
     # Compute XTX and Xy
     XTX = np.dot(spectral_filters.T, spectral_filters)
     Xy = np.dot(spectral_filters.T, y)
-    model = spectral_filters @ nucal._linear_fit(XTX, Xy, solver='solve')
+    model = spectral_filters @ nucal._linear_fit(XTX, Xy, solver='solve')[0]
 
     # Test that the spectral filters are correct
     np.testing.assert_allclose(y, model, atol=1e-6)
