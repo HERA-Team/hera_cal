@@ -1330,7 +1330,7 @@ class SpectrallyRedundantCalibrator:
 
         return amplitude, meta
     
-    def calibrate(self, data, data_wgts, estimate_models="projected_fit", fit_mode="lu_solve", cal_flags={}, spectral_filter_half_width=30e-9, 
+    def calibrate(self, data, data_wgts, estimate_models="projected_fit", linear_solver="lu_solve", cal_flags={}, spectral_filter_half_width=30e-9, 
                     spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, return_gains=False, optimizer_name='adabelief', 
                     learning_rate=1e-3, maxiter=100, convergence_criteria=1e-10, return_model=False, share_fg_model=False):
         """
@@ -1347,7 +1347,7 @@ class SpectrallyRedundantCalibrator:
             Method to use for estimating the foreground models. Options are "projected_fit" and "fit".
             "projected_fit" uses the projected fit method described in Kern et al. (2021) to estimate the foreground models.
             "fit" uses a standard least-squares fit to estimate the foreground models.
-        fit_mode : str, default="lu_solve"
+        linear_solver : str, default="lu_solve"
             Method to use for solving the linear system of equations when fitting the foreground models. Options are
             "lu_solve", "solve", "pinv", and "lstsq". "lu_solve" uses scipy.linalg.lu_solve to solve the linear system of
             equations, "solve" uses np.linalg.solve. "pinv" uses np.linalg.pinv to solve the linear system of equations, and
@@ -1401,7 +1401,7 @@ class SpectrallyRedundantCalibrator:
 
         # Compute the estimates of the model components from the data
         estimate_model_comps = fit_nucal_foreground_model(
-            data, data_wgts, self.radial_reds, self.spatial_filters, fit_mode=fit_mode, share_fg_model=share_fg_model
+            data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model
         )
         if share_fg_model:
             estimate_model_comps = project_u_model_comps_on_spec_axis(estimate_model_comps, self.spectral_filters)
