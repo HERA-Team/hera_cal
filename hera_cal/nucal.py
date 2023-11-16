@@ -1330,9 +1330,9 @@ class SpectrallyRedundantCalibrator:
 
         return amplitude, meta
     
-    def calibrate(self, data, data_wgts, estimate_models="projected_fit", linear_solver="lu_solve", cal_flags={}, spectral_filter_half_width=30e-9, 
+    def calibrate(self, data, data_wgts, cal_flags={}, estimate_w_u_model=True, linear_solver="lu_solve", linear_tol=1e-12, share_fg_model=False, spectral_filter_half_width=30e-9, 
                     spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, return_gains=False, optimizer_name='adabelief', 
-                    learning_rate=1e-3, maxiter=100, convergence_criteria=1e-10, return_model=False, share_fg_model=False):
+                    learning_rate=1e-3, maxiter=100, minor_cycle_iter=0, convergence_criteria=1e-10, return_model=False):
         """
         Calibrate data using a spectrally redundant calibration approach. This function assumes that the data is redundantly
         
@@ -1340,6 +1340,8 @@ class SpectrallyRedundantCalibrator:
         ----------
         data : DataContainer
             Data to be calibrated. Data is assumed to be redundantly averaged.
+        data_wgts : DataContainer
+            Weights associated with data
         cal_flags : dictionary, default={}
             Dictionary containing flags for each antenna. Keys are antenna numbers and values are boolean arrays of shape (Ntimes,).
             If a key is not present, all times for that antenna will be calibrated.
@@ -1353,6 +1355,10 @@ class SpectrallyRedundantCalibrator:
             equations, "solve" uses np.linalg.solve. "pinv" uses np.linalg.pinv to solve the linear system of equations, and
             "lstsq" uses np.linalg.lstsq. "lu_solve" and "solve" tend to be the faster methods, but "lstsq" and "pinv" are more
             robust.
+        linear_tol : float, default=1e-12
+            Regularization parameter for linear least-squares fit when computing the initial estimate of the foreground model.
+        share_fg_model : bool, default=False
+            If True, the foreground model for each radially-redundant group is shared across the time axis.
         spectral_filter_half_width : float, default=20e-9
             Half-width of the spectral filter in units of seconds.
         spatial_filter_half_width : float, default=1
@@ -1365,9 +1371,20 @@ class SpectrallyRedundantCalibrator:
         umax : float, default=None
             Maximum u-magnitude value to include in calbration. All u-modes with magnitudes greater than
             max_u_cut will have their weights set to 0.
-        tol : float, default=1e-12
-            Parameter for regularization of the linear fit of DPSS modeling vectors to data. If fit_mode is "lu_solve" or "solve", 
-            this is added to the diagonal of the XTX matrix.
+        learning_rate : float, default=1e-3
+            Learning rate for the optimizer
+        maxiter : int, default=100
+            Maximum number of iterations to perform
+        minor_cycle_iter : int, default=0
+            Number of minor cycles to perform after each major cycle. Minor cycles are performed by fixing the foreground
+            model and solving for the calibration parameters. This is useful for improving convergence.
+        convergence_criteria : float, default=1e-10
+            Convergence criteria for stopping the optimization. If the difference in loss between two iterations is less than
+            convergence_criteria, the optimization will stop.
+        return_gains : bool, default=False
+            If True, the gains will be returned. Otherwise, the model parameters will be returned.
+        return_model : bool, default=False
+            If True, the model visibilities will be returned. Otherwise, the model parameters will be returned.
 
         Returns:
         -------
@@ -1385,9 +1402,6 @@ class SpectrallyRedundantCalibrator:
             model_parameters : dictionary
                 Dictionary containing the model parameters for each polarization. Keys are polarization strings and values are
         """
-        # Initialize model parameters
-        init_model_parameters = {}
-
         # Compute spectral and spatial filters
         self._compute_filters(
             freqs=data.freqs, spectral_filter_half_width=spectral_filter_half_width, 
@@ -1400,11 +1414,18 @@ class SpectrallyRedundantCalibrator:
         optimizer = OPTIMIZERS[optimizer_name](learning_rate=learning_rate)
 
         # Compute the estimates of the model components from the data
-        estimate_model_comps = fit_nucal_foreground_model(
-            data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model
-        )
-        if share_fg_model:
+        if estimate_w_u_model:
+            estimate_model_comps = fit_nucal_foreground_model(
+                data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model, 
+                return_model_comps=True, tol=linear_tol
+            )
             estimate_model_comps = project_u_model_comps_on_spec_axis(estimate_model_comps, self.spectral_filters)
+        else:
+            estimate_model_comps = fit_nucal_foreground_model(
+                data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model, 
+                spectral_filters=self.spectral_filters, return_model_comps=True, tol=linear_tol
+            )
+            
 
         # Compute idealized baseline vectors from antenna positions and calibration flags
         idealized_antpos = abscal._get_idealized_antpos(cal_flags, self.antpos, data.pols())
@@ -1414,6 +1435,9 @@ class SpectrallyRedundantCalibrator:
         metadata = {}
 
         for pol in data.pols():
+            # Initialize model parameters
+            init_model_parameters = {}
+
             # Separate data into real and imaginary components
             data_real = jnp.array([
                 data[blkey].real for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
@@ -1443,10 +1467,15 @@ class SpectrallyRedundantCalibrator:
                 for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
             ])
 
+            # Estimate the degeneracies from the data
+            init_model_parameters["amplitude"] = jnp.ones((2, 1536))
+            init_model_parameters["tip_tilt"] = jnp.zeros((2, idealized_blvecs.shape[-1], 1536))
+
             # Run optimization
             _model_parameters, _metadata = gradient_descent(
                 data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
-                spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, convergence_criteria=convergence_criteria
+                spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, convergence_criteria=convergence_criteria,
+                minor_cycle_iter=minor_cycle_iter
             )
 
             # Pack model parameters and metadata
@@ -1455,7 +1484,11 @@ class SpectrallyRedundantCalibrator:
 
         if return_model:
             # Compute the foreground model from the model parameters
-            model = evaluate_foreground_model(self.radial_reds, model_parameters, self.spatial_filters, self.spectral_filters)
+            fg_model_comps = {
+                rdgrp[0]: model_parameters[pol][f"fg_r"][ri] + 1j * model_parameters[pol][f"fg_i"][ri]
+                for pol in data.pols() for ri, rdgrp in enumerate(self.radial_reds.get_pol(pol))
+            }
+            model = evaluate_foreground_model(self.radial_reds, fg_model_comps, self.spatial_filters, self.spectral_filters)
 
         if return_gains:
             gains = {}
