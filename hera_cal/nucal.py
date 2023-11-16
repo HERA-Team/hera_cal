@@ -1401,18 +1401,14 @@ class SpectrallyRedundantCalibrator:
 
         # Compute the estimates of the model components from the data
         estimate_model_comps = fit_nucal_foreground_model(
-            data, data_wgts, self.radial_reds, spatial_filters, estimate_models=estimate_models, fit_mode=fit_mode, share_fg_model=share_fg_model
+            data, data_wgts, self.radial_reds, spatial_filters, fit_mode=fit_mode, share_fg_model=share_fg_model
         )
         if share_fg_model:
             estimate_model_comps = project_u_model_comps_on_spec_axis(estimate_model_comps, self.spectral_filters)
 
         # Compute idealized baseline vectors from antenna positions and calibration flags
         idealized_antpos = abscal._get_idealized_antpos(cal_flags, self.antpos, data.pols())
-        idealized_blvecs = np.array([
-            idealized_antpos[blkey[1]] - idealized_antpos[blkey[0]]
-            for rdgrp in self.radial_reds for blkey in rdgrp
-        ])
-
+        
         # XXX: Do I separate times?
         model_parameters = {}
         metadata = {}
@@ -1441,11 +1437,19 @@ class SpectrallyRedundantCalibrator:
                 for rdgrp in self.radial_reds.get_pol(pol)
             ]
 
+            # Compute idealized baseline vectors
+            idealized_blvecs = np.array([
+                idealized_antpos[blkey[1]] - idealized_antpos[blkey[0]]
+                for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
+
             # Run optimization
             _model_parameters, _metadata = gradient_descent(
                 data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
                 spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, convergence_criteria=convergence_criteria
             )
+
+            # Pack model parameters and metadata
             metadata[pol] = _metadata
             model_parameters[pol] = _model_parameters
 
