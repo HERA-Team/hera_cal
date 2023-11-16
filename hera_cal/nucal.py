@@ -1331,8 +1331,8 @@ class SpectrallyRedundantCalibrator:
         return amplitude, meta
     
     def calibrate(self, data, data_wgts, cal_flags={}, estimate_w_u_model=True, linear_solver="lu_solve", linear_tol=1e-12, share_fg_model=False, spectral_filter_half_width=30e-9, 
-                    spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, return_gains=False, optimizer_name='adabelief', 
-                    learning_rate=1e-3, maxiter=100, minor_cycle_iter=0, convergence_criteria=1e-10, return_model=False):
+                    spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, optimizer_name='adabelief', 
+                    learning_rate=1e-3, maxiter=100, minor_cycle_iter=0, convergence_criteria=1e-10, return_gains=False, return_model=False):
         """
         Calibrate data using a spectrally redundant calibration approach. This function assumes that the data is redundantly
         
@@ -1371,6 +1371,8 @@ class SpectrallyRedundantCalibrator:
         umax : float, default=None
             Maximum u-magnitude value to include in calbration. All u-modes with magnitudes greater than
             max_u_cut will have their weights set to 0.
+        optimizer_name : str, default="adabelief"
+            Name of the optimizer to use for gradient descent. Options are listed in the "OPTIMIZERS" variable.
         learning_rate : float, default=1e-3
             Learning rate for the optimizer
         maxiter : int, default=100
