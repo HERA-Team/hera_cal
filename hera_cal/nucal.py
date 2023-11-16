@@ -1,7 +1,6 @@
 from . import utils
 from . import redcal
 from . import abscal
-from . import apply_cal
 from .datacontainer import DataContainer, RedDataContainer
 
 import inspect
@@ -1432,7 +1431,7 @@ class SpectrallyRedundantCalibrator:
         # Compute idealized baseline vectors from antenna positions and calibration flags
         idealized_antpos = abscal._get_idealized_antpos(cal_flags, self.antpos, data.pols())
         
-        # XXX: Do I separate times?
+        # Initialize model parameters and metadata dictionaries for storing results
         model_parameters = {}
         metadata = {}
 
@@ -1506,6 +1505,6 @@ class SpectrallyRedundantCalibrator:
                 return gains, model_parameters, metadata
         else:
             if return_model:
-                return model, metadata
+                return model, model_parameters, metadata
             else:
                 return model_parameters, metadata
