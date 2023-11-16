@@ -561,3 +561,25 @@ def test_fit_nucal_foreground_model():
         assert u_model_comps[k].shape[0] == ntimes
         assert model_comps[k].shape[1:] == (spectral_filters.shape[-1], spatial_filters[k].shape[-1])
         assert u_model_comps[k].shape[1:] == (spatial_filters[k].shape[-1],)
+
+class TestSpectrallyRedundantCalibrator:
+    def setup_method(self):
+        self.freqs = np.linspace(50e6, 250e6, 200)
+        self.antpos = linear_array(10, sep=2)
+        self.radial_reds = nucal.RadialRedundancy(self.antpos)
+
+        # Create a u-dependent model
+        self.data = {
+            bl: np.sin(2 * np.pi * self.radial_reds.baseline_lengths[bl] * freqs / 2.998e8 * 0.25)
+            for rdgrp in self.radial_reds for bl in rdgrp
+        }
+        self.data = DataContainer(self.data)
+        self.data.freqs = self.freqs
+        self.frc = nucal.SpectrallyRedundantCalibrator(self.radial_reds)
+
+    def test_compute_filters(self):
+        assert self.frc.filters_computed is False
+
+        # Compute filters
+        self.frc.compute_filters(self.freqs, 20e-9)
+        assert self.frc.filters_computed is True

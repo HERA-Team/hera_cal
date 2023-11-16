@@ -1329,9 +1329,10 @@ class SpectrallyRedundantCalibrator:
 
         return amplitude, meta
     
-    def calibrate(self, data, data_wgts, cal_flags={}, estimate_w_u_model=True, linear_solver="lu_solve", linear_tol=1e-12, share_fg_model=False, spectral_filter_half_width=30e-9, 
-                    spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, optimizer_name='adabelief', 
-                    learning_rate=1e-3, maxiter=100, minor_cycle_iter=0, convergence_criteria=1e-10, return_gains=False, return_model=False):
+    def calibrate(self, data, data_wgts, cal_flags={}, estimate_w_u_model=True, linear_solver="lu_solve", linear_tol=1e-12, share_fg_model=False, 
+                  spectral_filter_half_width=30e-9, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, estimate_degeneracies=False,
+                  optimizer_name='adabelief', learning_rate=1e-3, maxiter=100, minor_cycle_iter=0, convergence_criteria=1e-10, return_gains=False, 
+                  return_model=False):
         """
         Calibrate data using a spectrally redundant calibration approach. This function assumes that the data is redundantly
         
@@ -1344,10 +1345,8 @@ class SpectrallyRedundantCalibrator:
         cal_flags : dictionary, default={}
             Dictionary containing flags for each antenna. Keys are antenna numbers and values are boolean arrays of shape (Ntimes,).
             If a key is not present, all times for that antenna will be calibrated.
-        estimate_models : str, default="projected_fit"
-            Method to use for estimating the foreground models. Options are "projected_fit" and "fit".
-            "projected_fit" uses the projected fit method described in Kern et al. (2021) to estimate the foreground models.
-            "fit" uses a standard least-squares fit to estimate the foreground models.
+        estimate_w_u_model : bool, default="projected_fit"
+            pass
         linear_solver : str, default="lu_solve"
             Method to use for solving the linear system of equations when fitting the foreground models. Options are
             "lu_solve", "solve", "pinv", and "lstsq". "lu_solve" uses scipy.linalg.lu_solve to solve the linear system of
@@ -1359,23 +1358,28 @@ class SpectrallyRedundantCalibrator:
         share_fg_model : bool, default=False
             If True, the foreground model for each radially-redundant group is shared across the time axis.
         spectral_filter_half_width : float, default=20e-9
-            Half-width of the spectral filter in units of seconds.
+            Half-width of the spectral axis DPSS filters in units of seconds.
         spatial_filter_half_width : float, default=1
-            Half-width of the spatial filter in units of wavelengths.
+            Half-width of the spatial axis DPSS filters in units of wavelengths.
         eigenval_cutoff : float, default=1e-12
-            Cutoff for the eigenvalues of the PSWF filters
+            Cutoff for the eigenvalues of the DPSS filters
         umin : float, default=None
             Minimum u-magnitude value to include in calbration. All u-modes with magnitudes less than
             min_u_cut will have their weights set to 0.
         umax : float, default=None
             Maximum u-magnitude value to include in calbration. All u-modes with magnitudes greater than
             max_u_cut will have their weights set to 0.
+        estimate_degeneracies : bool, default=False
+            If True, the initial estimates of the redcal degeneracies will be computed from the data using traditional 
+            abscal techniques and the initial nucal model as the sky model. These estimates will then be refined by the
+            gradient descent optimizer. If False, the amplitude degeneracies will be initialized to 1 and tip-tilt degeneracies
+            will be initialized to 0.
         optimizer_name : str, default="adabelief"
             Name of the optimizer to use for gradient descent. Options are listed in the "OPTIMIZERS" variable.
         learning_rate : float, default=1e-3
-            Learning rate for the optimizer
+            Learning rate for the gradient descent optimizer
         maxiter : int, default=100
-            Maximum number of iterations to perform
+            Maximum number of iterations to run when performing gradient descent.
         minor_cycle_iter : int, default=0
             Number of minor cycles to perform after each major cycle. Minor cycles are performed by fixing the foreground
             model and solving for the calibration parameters. This is useful for improving convergence.
