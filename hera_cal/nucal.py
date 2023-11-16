@@ -1401,7 +1401,7 @@ class SpectrallyRedundantCalibrator:
 
         # Compute the estimates of the model components from the data
         estimate_model_comps = fit_nucal_foreground_model(
-            data, data_wgts, self.radial_reds, spatial_filters, fit_mode=fit_mode, share_fg_model=share_fg_model
+            data, data_wgts, self.radial_reds, self.spatial_filters, fit_mode=fit_mode, share_fg_model=share_fg_model
         )
         if share_fg_model:
             estimate_model_comps = project_u_model_comps_on_spec_axis(estimate_model_comps, self.spectral_filters)
