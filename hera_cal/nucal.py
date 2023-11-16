@@ -1096,8 +1096,8 @@ def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_m
     phase = jnp.einsum('bn,ntf->btf', blvecs, model_parameters["tip_tilt"])
 
     # Compute model from foreground estimates and amplitude
-    model_r = model_parameters["amplitude"] * (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
-    model_i = model_parameters["amplitude"] * (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
+    model_r = (model_parameters["amplitude"]) * (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
+    model_i = (model_parameters["amplitude"]) * (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
     
     # Compute loss using weights and foreground model
     return jnp.mean((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
@@ -1259,23 +1259,28 @@ class SpectrallyRedundantCalibrator:
     def _compute_filters(self, freqs, spectral_filter_half_width, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None):
         """
         """
+        # Get all parameter names and local variables
+        sig = inspect.signature(self._compute_filters)
+        local_vars = locals()
+        
         if self._filters_computed:
-            # Get all parameter names
-            sig = inspect.signature(self._compute_filters)
-
-            # Get value of all the local variables
-            local_vars = locals()
-
             for key in sig.parameters:
                 if not np.array_equal(local_vars[key], getattr(self, key)):
                     recompute_filters = True
                     break
+            else:
+                return
             
             if recompute_filters:
                 self.spectral_filters = compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=eigenval_cutoff)
                 self.spatial_filters = compute_spatial_filters(
                     self.radial_reds, freqs, spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff, umin=umin, umax=umax
                 )
+
+                # Set most recent parameters
+                for key in sig.parameters:
+                    setattr(self, key, local_vars[key]) 
+
                 self._filters_computed = True
 
         else:
@@ -1283,6 +1288,11 @@ class SpectrallyRedundantCalibrator:
             self.spatial_filters = compute_spatial_filters(
                 self.radial_reds, freqs, spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff, umin=umin, umax=umax
             )
+
+            # Set most recent parameters
+            for key in sig.parameters:
+                setattr(self, key, local_vars[key]) 
+
             self._filters_computed = True
 
     def _estimate_degeneracies(self, data, wgts, model):
