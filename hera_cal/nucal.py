@@ -1294,7 +1294,7 @@ class SpectrallyRedundantCalibrator:
 
             self._filters_computed = True
 
-    def _estimate_degeneracies(self, data, wgts, model):
+    def _estimate_degeneracies(self, data, model, wgts):
         """
         Estimate the redundant degeneracies from the data using traditional abscal techniques.
 
@@ -1302,10 +1302,10 @@ class SpectrallyRedundantCalibrator:
         ----------
         data : DataContainer
             Data to be calibrated. Data is assumed to be redundantly averaged.
-        wgts : DataContainer
-            Weights associated with data
         model : DataContainer
             Model visibilities to use for estimating the bandpass. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
+        wgts : DataContainer
+            Weights associated with data
 
         Returns:
         -------
@@ -1431,9 +1431,17 @@ class SpectrallyRedundantCalibrator:
                 spectral_filters=self.spectral_filters, return_model_comps=True, tol=linear_tol
             )
             
-
         # Compute idealized baseline vectors from antenna positions and calibration flags
         idealized_antpos = abscal._get_idealized_antpos(cal_flags, self.antpos, data.pols())
+
+        if estimate_degeneracies:
+            model = evaluate_foreground_model(
+                self.radial_reds, estimate_model_comps, spatial_filters=self.spatial_filters, spectral_filters=self.spectral_filters
+            )
+            amplitude, tip_tilt = self._estimate_degeneracies(data, data_wgts, model)
+        else:
+            amplitude = {pol: np.ones((2, 1536)) for pol in data.pols()}
+            tip_tilt = {pol: np.zeros((self.antpos.shape[-1], 2, 1536)) for pol in data.pols()}
         
         # Initialize model parameters and metadata dictionaries for storing results
         model_parameters = {}
@@ -1452,9 +1460,12 @@ class SpectrallyRedundantCalibrator:
             ])
 
             # Initialize model parameters
-            init_model_parameters["fg_r"] = [estimate_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds.get_pol(pol)]
-            init_model_parameters["fg_i"] = [estimate_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds.get_pol(pol)]
-
+            init_model_parameters = {
+                "fg_r": [estimate_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds.get_pol(pol)],
+                "fg_i": [estimate_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds.get_pol(pol)],
+                "amplitude": amplitude[pol],
+                "tip_tilt": tip_tilt[pol]
+            }
             # unpack wgts/filters
             wgts = jnp.array([
                 data_wgts[blkey] for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
@@ -1471,10 +1482,6 @@ class SpectrallyRedundantCalibrator:
                 idealized_antpos[blkey[1]] - idealized_antpos[blkey[0]]
                 for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
             ])
-
-            # Estimate the degeneracies from the data
-            init_model_parameters["amplitude"] = jnp.ones((2, 1536))
-            init_model_parameters["tip_tilt"] = jnp.zeros((2, idealized_blvecs.shape[-1], 1536))
 
             # Run optimization
             _model_parameters, _metadata = gradient_descent(

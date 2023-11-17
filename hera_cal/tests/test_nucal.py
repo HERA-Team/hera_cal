@@ -583,3 +583,7 @@ class TestSpectrallyRedundantCalibrator:
         # Compute filters
         self.frc.compute_filters(self.freqs, 20e-9)
         assert self.frc.filters_computed is True
+
+        # Check that filters are the correct shape
+        assert len(self.frc.spatial_filters) == len(self.radial_reds)
+        
