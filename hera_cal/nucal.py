@@ -1318,16 +1318,30 @@ class SpectrallyRedundantCalibrator:
         data_bls = [blkeys for blkeys in data]
     
         # Estimate the amplitude degeneracies from the model
-        amplitude = abscal.abs_amp_logcal(
+        # abs_amp_logcal returns the amplitude degeneracies and works on both pols simulataneously
+        amp_sol = abscal.abs_amp_logcal(
             data=data, model=model, wgts=wgts, verbose=False, return_gains=False
         )
+        
+        # Unpack solution into dictionary
+        # Degeneracy as written in gradient descent is exp(2 * eta)
+        amplitude = {
+            pol: np.exp(2 * amp_sol[f"eta_J{pol}"]) for pol in data.pols()
+        }
 
-        # Extract the tip-tilt parameters from the model
-        meta, _ = abscal.complex_phase_abscal(
-            data=data, model=model, reds=self.radial_reds.reds, data_bls=data_bls, model_bls=data_bls
-        )
+        # Estimate the tip-tilt degeneracies from the model
+        tip_tilt = {}
+        for pol in data.pols():
+            # Get the baselines in the model
+            data_bls = [blkeys for blkeys in data if blkeys[2] == pol]
 
-        return amplitude, meta
+            # complex_phase_abscal returns the tip-tilt degeneracies
+            meta, _ = abscal.complex_phase_abscal(
+                data=data, model=model, reds=self.radial_reds.reds, data_bls=data_bls, model_bls=data_bls
+            )
+            tip_tilt[pol] = meta["Lambda_sol"]
+
+        return amplitude, tip_tilt
     
     def calibrate(self, data, data_wgts, cal_flags={}, estimate_w_u_model=True, linear_solver="lu_solve", linear_tol=1e-12, share_fg_model=False, 
                   spectral_filter_half_width=30e-9, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, estimate_degeneracies=False,
@@ -1440,8 +1454,11 @@ class SpectrallyRedundantCalibrator:
             )
             amplitude, tip_tilt = self._estimate_degeneracies(data, data_wgts, model)
         else:
-            amplitude = {pol: np.ones((2, 1536)) for pol in data.pols()}
-            tip_tilt = {pol: np.zeros((self.antpos.shape[-1], 2, 1536)) for pol in data.pols()}
+            amplitude = {pol: np.ones((data.shape)) for pol in data.pols()}
+            tip_tilt = {
+                pol: np.zeros((data.shape[0], idealized_antpos[list(idealized_antpos.keys())[0]], data.shape[1])) 
+                for pol in data.pols()
+            }
         
         # Initialize model parameters and metadata dictionaries for storing results
         model_parameters = {}

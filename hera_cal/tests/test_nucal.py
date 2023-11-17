@@ -570,10 +570,11 @@ class TestSpectrallyRedundantCalibrator:
 
         # Create a u-dependent model
         self.data = {
-            bl: np.sin(2 * np.pi * self.radial_reds.baseline_lengths[bl] * freqs / 2.998e8 * 0.25)
+            bl: np.sin(2 * np.pi * self.radial_reds.baseline_lengths[bl] * self.freqs / 2.998e8 * 0.25)[None]
             for rdgrp in self.radial_reds for bl in rdgrp
         }
         self.data = DataContainer(self.data)
+        self.data_wgts = DataContainer({k: np.ones(self.data[k].shape) for k in self.data})
         self.data.freqs = self.freqs
         self.frc = nucal.SpectrallyRedundantCalibrator(self.radial_reds)
 
@@ -586,4 +587,18 @@ class TestSpectrallyRedundantCalibrator:
 
         # Check that filters are the correct shape
         assert len(self.frc.spatial_filters) == len(self.radial_reds)
-        
+
+    def test_estimate_degeneracies(self):
+        # Copy data
+        data = deepcopy(self.data)
+
+        # Compute filters
+        self.frc._compute_filters(self.freqs, 20e-9)
+
+        # Fit model
+        model = nucal.fit_nucal_foreground_model(
+            data, self.data_wgts, self.radial_reds, self.frc.spatial_filters, return_model_comps=False
+        )
+
+        # Estimate degeneracies
+        amplitude, tip_tilt = self.frc.estimate_degeneracies(data, self.data_wgts, model)
