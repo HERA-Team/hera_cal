@@ -1057,11 +1057,11 @@ def _foreground_model(model_parameters, spectral_filters, spatial_filters):
     # Below the indicies correspond to f -> frequency, a -> baseline, m -> spectral modes
     # n -> spatial modes, and t -> time
     for sf, fgr, fgi in zip(spatial_filters, model_parameters['fg_r'], model_parameters['fg_i']):
-        model_r.append(jnp.einsum('fm,bfn,tmn->bf', spectral_filters, sf, fgr))
-        model_i.append(jnp.einsum('fm,bfn,tmn->bf', spectral_filters, sf, fgi))
+        model_r.append(jnp.einsum('fm,bfn,tmn->btf', spectral_filters, sf, fgr))
+        model_i.append(jnp.einsum('fm,bfn,tmn->btf', spectral_filters, sf, fgi))
 
     # Stack models
-    return jnp.expand_dims(jnp.vstack(model_r), axis=1), jnp.expand_dims(jnp.vstack(model_i), axis=1)
+    return jnp.vstack(model_r), jnp.vstack(model_i)
 
 @jax.jit
 def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
@@ -1339,7 +1339,9 @@ class SpectrallyRedundantCalibrator:
             meta, _ = abscal.complex_phase_abscal(
                 data=data, model=model, reds=self.radial_reds.reds, data_bls=data_bls, model_bls=data_bls
             )
-            tip_tilt[pol] = meta["Lambda_sol"]
+
+            # Tranpose the tip-tilt parameters to have shape (ndims, ntimes, nfreq)
+            tip_tilt[pol] = np.transpose(meta["Lambda_sol"], (2, 0, 1))
 
         return amplitude, tip_tilt
     

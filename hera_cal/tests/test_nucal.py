@@ -562,6 +562,38 @@ def test_fit_nucal_foreground_model():
         assert model_comps[k].shape[1:] == (spectral_filters.shape[-1], spatial_filters[k].shape[-1])
         assert u_model_comps[k].shape[1:] == (spatial_filters[k].shape[-1],)
 
+class TestGradientDescent:
+    def setup_method(self):
+        self.freqs = np.linspace(50e6, 250e6, 200)
+        self.antpos = linear_array(10, sep=2)
+        self.radial_reds = nucal.RadialRedundancy(self.antpos)
+
+        # Create a u-dependent model
+        self.data = {
+            bl: np.sin(2 * np.pi * self.radial_reds.baseline_lengths[bl] * self.freqs / 2.998e8 * 0.25)[None] * np.ones((2, 1))
+            for rdgrp in self.radial_reds for bl in rdgrp
+        }
+        self.data = DataContainer(self.data)
+        self.data_wgts = DataContainer({k: np.ones(self.data[k].shape) for k in self.data})
+        self.data.freqs = self.freqs
+        self.frc = nucal.SpectrallyRedundantCalibrator(self.radial_reds)
+    
+    def test_foreground_model(self):
+        spatial_filters = nucal.compute_spatial_filters(self.radial_reds, self.freqs)
+        spectral_filters = nucal.compute_spectral_filters(self.freqs, 20e-9)
+
+        sf = [np.array([spatial_filters[blkey] for blkey in rdgrp]) for rdgrp in self.radial_reds]
+        params = {
+            "fg_r": [np.random.normal(0, 1, (self.data.shape[0], spectral_filters.shape[-1], f.shape[-1])) for f in sf],
+            "fg_i": [np.random.normal(0, 1, (self.data.shape[0], spectral_filters.shape[-1], f.shape[-1])) for f in sf]
+        }
+
+        model_r, model_i = nucal._foreground_model(params, spectral_filters, sf)
+        
+        # Check that the model has the correct shape
+        assert model_r.shape == (len(spatial_filters), self.data.shape[0], self.data.shape[1])
+        assert model_i.shape == (len(spatial_filters), self.data.shape[0], self.data.shape[1])
+
 class TestSpectrallyRedundantCalibrator:
     def setup_method(self):
         self.freqs = np.linspace(50e6, 250e6, 200)
@@ -570,7 +602,7 @@ class TestSpectrallyRedundantCalibrator:
 
         # Create a u-dependent model
         self.data = {
-            bl: np.sin(2 * np.pi * self.radial_reds.baseline_lengths[bl] * self.freqs / 2.998e8 * 0.25)[None]
+            bl: np.sin(2 * np.pi * self.radial_reds.baseline_lengths[bl] * self.freqs / 2.998e8 * 0.25)[None] * np.ones((2, 1))
             for rdgrp in self.radial_reds for bl in rdgrp
         }
         self.data = DataContainer(self.data)
@@ -579,14 +611,14 @@ class TestSpectrallyRedundantCalibrator:
         self.frc = nucal.SpectrallyRedundantCalibrator(self.radial_reds)
 
     def test_compute_filters(self):
-        assert self.frc.filters_computed is False
+        assert self.frc._filters_computed == False
 
         # Compute filters
-        self.frc.compute_filters(self.freqs, 20e-9)
-        assert self.frc.filters_computed is True
+        self.frc._compute_filters(self.freqs, 20e-9)
+        assert self.frc._filters_computed == True
 
         # Check that filters are the correct shape
-        assert len(self.frc.spatial_filters) == len(self.radial_reds)
+        assert len(self.frc.spatial_filters) == len(self.radial_reds[0])
 
     def test_estimate_degeneracies(self):
         # Copy data
@@ -597,8 +629,21 @@ class TestSpectrallyRedundantCalibrator:
 
         # Fit model
         model = nucal.fit_nucal_foreground_model(
-            data, self.data_wgts, self.radial_reds, self.frc.spatial_filters, return_model_comps=False
+            data, self.data_wgts, self.radial_reds, self.frc.spatial_filters, 
+            return_model_comps=False, share_fg_model=True
         )
 
         # Estimate degeneracies
-        amplitude, tip_tilt = self.frc.estimate_degeneracies(data, self.data_wgts, model)
+        amplitude, tip_tilt = self.frc._estimate_degeneracies(data, model, self.data_wgts)
+
+        # Since the data are already "perfectly calibrated" and the model should match the data to high precision, 
+        # the estimated tip-tilt should be zero and the amplitude should be 1
+        assert np.isclose(
+            np.sqrt(np.mean(np.square(amplitude['nn'] - 1))), 0, atol=1e-5
+        )
+        assert np.isclose(
+            np.sqrt(np.mean(np.square(tip_tilt['nn']))), 0, atol=1e-5
+        )
+    
+        # Shape of amplitude and tip-tilt should be (ndims, ntimes, nfreqs)
+        assert tip_tilt["nn"].shape == (1, 2, 200)
