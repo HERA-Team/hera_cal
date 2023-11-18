@@ -1165,7 +1165,7 @@ def _calibration_loss_function_minor(model_parameters, data_r, data_i, wgts, fg_
     """
     return _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)
 
-def gradient_descent(
+def _gradient_descent(
         data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
         maxiter=100, convergence_criteria=1e-10, minor_cycle_iter=0
     ):
@@ -1501,7 +1501,7 @@ class SpectrallyRedundantCalibrator:
             ])
 
             # Run optimization
-            _model_parameters, _metadata = gradient_descent(
+            _model_parameters, _metadata = _gradient_descent(
                 data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
                 spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, convergence_criteria=convergence_criteria,
                 minor_cycle_iter=minor_cycle_iter

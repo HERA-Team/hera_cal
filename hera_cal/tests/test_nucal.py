@@ -683,6 +683,77 @@ class TestGradientDescent:
         # Check that the mse is zero
         assert np.isclose(mse, 0)
 
+    def test_gradient_descent(self):
+        # Separate the real and imaginary components
+        data_r = np.array([self.data[bl].real for rdgrp in self.radial_reds for bl in rdgrp])
+        data_i = np.array([self.data[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
+        wgts = np.ones_like(data_r)
+
+        # Make weights for the data
+        data_wgts = DataContainer({k: np.ones(self.data[k].shape) for k in self.data})
+
+        # Compute the filters 
+        self.frc._compute_filters(self.freqs, 10e-9)
+
+        init_model_comps = nucal.fit_nucal_foreground_model(
+            self.data, data_wgts, self.radial_reds, self.frc.spatial_filters, share_fg_model=True, 
+            return_model_comps=True
+        )
+        init_model_comps = nucal.project_u_model_comps_on_spec_axis(init_model_comps, self.frc.spectral_filters)
+
+        # Calculate baseline vectors
+        blvecs = np.array([self.antpos[bl[1]] - self.antpos[bl[0]] for rdgrp in self.radial_reds for bl in rdgrp])
+        
+        model_parameters = {
+            "tip_tilt": np.zeros((3, 2, 200)),
+            "amplitude": np.ones((2, 200)),
+            "fg_r": [init_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds],
+            "fg_i": [init_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds],
+        }
+
+        spatial_filters = [np.array([self.frc.spatial_filters[blkey] for blkey in rdgrp]) for rdgrp in self.radial_reds]
+        
+        # Make optimizer
+        optimizer = nucal.OPTIMIZERS['adagrad'](learning_rate=1e-3)
+
+        # Run gradient descent
+        _, metadata = nucal._gradient_descent(
+            data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
+            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, maxiter=100,
+        )
+
+        # Check that starting in the correct spot doesn't move solutions
+        # If the solutions doesn't change the mse difference should be close zero
+        # And trigger the convergence condition
+        assert metadata['niter'] == 2
+
+        # Run gradient descent w/ minor cycle
+        _, metadata = nucal._gradient_descent(
+            data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
+            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, maxiter=100,
+            minor_cycle_iter=1
+        )
+
+        # Check that starting in the correct spot doesn't move solutions
+        # If the solutions doesn't change the mse difference should be close zero
+        # And trigger the convergence condition
+        assert metadata['niter'] == 2
+
+        # Uncalibrate the data 
+        amp = np.random.normal(1, 0.01, size=self.data[list(self.data.keys())[0]].shape)
+        data_r = np.array([self.data[bl].real * amp for rdgrp in self.radial_reds for bl in rdgrp])
+        data_i = np.array([self.data[bl].imag * amp for rdgrp in self.radial_reds for bl in rdgrp])
+
+        # Run gradient descent w/ minor cycle
+        _, metadata = nucal._gradient_descent(
+            data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
+            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, maxiter=10,
+            minor_cycle_iter=1
+        )
+
+        # Check that the gradient descent decreases the value of the loss function
+        assert metadata['loss_history'][0] > metadata['loss_history'][-1]
+
 class TestSpectrallyRedundantCalibrator:
     def setup_method(self):
         self.freqs = np.linspace(50e6, 250e6, 200)
