@@ -1132,8 +1132,7 @@ def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_
     fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
 
     # Compute loss
-    loss = _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
-    return loss
+    return _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)
 
 @jax.jit
 def _calibration_loss_function_minor(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
@@ -1164,8 +1163,7 @@ def _calibration_loss_function_minor(model_parameters, data_r, data_i, wgts, fg_
     loss : float
         Mean squared error between data and foreground model
     """
-    loss = _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)        
-    return loss
+    return _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)
 
 def gradient_descent(
         data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
@@ -1436,13 +1434,13 @@ class SpectrallyRedundantCalibrator:
 
         # Compute the estimates of the model components from the data
         if estimate_w_u_model:
-            estimate_model_comps = fit_nucal_foreground_model(
+            init_model_comps = fit_nucal_foreground_model(
                 data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model, 
                 return_model_comps=True, tol=linear_tol
             )
-            estimate_model_comps = project_u_model_comps_on_spec_axis(estimate_model_comps, self.spectral_filters)
+            init_model_comps = project_u_model_comps_on_spec_axis(init_model_comps, self.spectral_filters)
         else:
-            estimate_model_comps = fit_nucal_foreground_model(
+            init_model_comps = fit_nucal_foreground_model(
                 data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model, 
                 spectral_filters=self.spectral_filters, return_model_comps=True, tol=linear_tol
             )
@@ -1452,13 +1450,13 @@ class SpectrallyRedundantCalibrator:
 
         if estimate_degeneracies:
             model = evaluate_foreground_model(
-                self.radial_reds, estimate_model_comps, spatial_filters=self.spatial_filters, spectral_filters=self.spectral_filters
+                self.radial_reds, init_model_comps, spatial_filters=self.spatial_filters, spectral_filters=self.spectral_filters
             )
             amplitude, tip_tilt = self._estimate_degeneracies(data, data_wgts, model)
         else:
             amplitude = {pol: np.ones((data.shape)) for pol in data.pols()}
             tip_tilt = {
-                pol: np.zeros((data.shape[0], idealized_antpos[list(idealized_antpos.keys())[0]], data.shape[1])) 
+                pol: np.zeros((idealized_antpos[list(idealized_antpos.keys())[0]], data.shape[0], data.shape[1])) 
                 for pol in data.pols()
             }
         
@@ -1480,8 +1478,8 @@ class SpectrallyRedundantCalibrator:
 
             # Initialize model parameters
             init_model_parameters = {
-                "fg_r": [estimate_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds.get_pol(pol)],
-                "fg_i": [estimate_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds.get_pol(pol)],
+                "fg_r": [init_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds.get_pol(pol)],
+                "fg_i": [init_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds.get_pol(pol)],
                 "amplitude": amplitude[pol],
                 "tip_tilt": tip_tilt[pol]
             }

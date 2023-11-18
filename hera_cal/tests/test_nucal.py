@@ -594,6 +594,95 @@ class TestGradientDescent:
         assert model_r.shape == (len(spatial_filters), self.data.shape[0], self.data.shape[1])
         assert model_i.shape == (len(spatial_filters), self.data.shape[0], self.data.shape[1])
 
+    def test_mean_squared_error(self):
+        
+        # Create a mock model that's the same as the data
+        model = deepcopy(self.data)
+
+        # Separate the real and imaginary components
+        model_r = np.array([model[bl].real for rdgrp in self.radial_reds for bl in rdgrp])
+        model_i = np.array([model[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
+
+        # Separate the real and imaginary components
+        data_r = np.array([self.data[bl].real for rdgrp in self.radial_reds for bl in rdgrp])
+        data_i = np.array([self.data[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
+        wgts = np.ones_like(data_r)
+        
+        # Calculate baseline vectors
+        blvecs = np.array([self.antpos[bl[1]] - self.antpos[bl[0]] for rdgrp in self.radial_reds for bl in rdgrp])
+        
+        model_parameters = {
+            "tip_tilt": np.zeros((3, 2, 200)),
+            "amplitude": np.ones((2, 200))
+        }
+
+        # Compute the mean squared error
+        mse = nucal._mean_squared_error(model_parameters, data_r, data_i, wgts, model_r, model_i, blvecs)
+
+        # Check that the mse is zero
+        assert np.isclose(mse, 0)
+
+    def test_calibration_loss_function_minor(self):
+        # Create a mock model that's the same as the data
+        model = deepcopy(self.data)
+
+        # Separate the real and imaginary components
+        model_r = np.array([model[bl].real for rdgrp in self.radial_reds for bl in rdgrp])
+        model_i = np.array([model[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
+
+        # Separate the real and imaginary components
+        data_r = np.array([self.data[bl].real for rdgrp in self.radial_reds for bl in rdgrp])
+        data_i = np.array([self.data[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
+        wgts = np.ones_like(data_r)
+        
+        # Calculate baseline vectors
+        blvecs = np.array([self.antpos[bl[1]] - self.antpos[bl[0]] for rdgrp in self.radial_reds for bl in rdgrp])
+        
+        model_parameters = {
+            "tip_tilt": np.zeros((3, 2, 200)),
+            "amplitude": np.ones((2, 200))
+        }
+
+        # Compute the mean squared error
+        mse = nucal._calibration_loss_function_minor(model_parameters, data_r, data_i, wgts, model_r, model_i, blvecs)
+
+        # Check that the mse is zero
+        assert np.isclose(mse, 0)
+    
+    def test_calibration_loss_function(self):
+        # Separate the real and imaginary components
+        data_r = np.array([self.data[bl].real for rdgrp in self.radial_reds for bl in rdgrp])
+        data_i = np.array([self.data[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
+        wgts = np.ones_like(data_r)
+
+        # Make weights for the data
+        data_wgts = DataContainer({k: np.ones(self.data[k].shape) for k in self.data})
+
+        # Compute the filters 
+        self.frc._compute_filters(self.freqs, 10e-9)
+
+        init_model_comps = nucal.fit_nucal_foreground_model(
+            self.data, data_wgts, self.radial_reds, self.frc.spatial_filters, share_fg_model=True, 
+            return_model_comps=True
+        )
+        init_model_comps = nucal.project_u_model_comps_on_spec_axis(init_model_comps, self.frc.spectral_filters)
+
+        # Calculate baseline vectors
+        blvecs = np.array([self.antpos[bl[1]] - self.antpos[bl[0]] for rdgrp in self.radial_reds for bl in rdgrp])
+        
+        model_parameters = {
+            "tip_tilt": np.zeros((3, 2, 200)),
+            "amplitude": np.ones((2, 200)),
+            "fg_r": [init_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds],
+            "fg_i": [init_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds],
+        }
+
+        spatial_filters = [np.array([self.frc.spatial_filters[blkey] for blkey in rdgrp]) for rdgrp in self.radial_reds]
+        mse = nucal._calibration_loss_function(model_parameters, data_r, data_i, wgts, self.frc.spectral_filters, spatial_filters, blvecs)
+
+        # Check that the mse is zero
+        assert np.isclose(mse, 0)
+
 class TestSpectrallyRedundantCalibrator:
     def setup_method(self):
         self.freqs = np.linspace(50e6, 250e6, 200)
