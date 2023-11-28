@@ -1221,10 +1221,21 @@ def _gradient_descent(
 
 class SpectrallyRedundantCalibrator:
     """
-    TODO: Add docstring
+    Class for performing spectral redundant calibration using the nucal implementation. This class is designed to 
+    be an easy-to-use, high-level interface for performing spectral redundant calibration, similarly to the redcal.RedundantCalibrator
+    class. The main driver function, SpectrallyRedundantCalibrator.calibrate, estimates the DPSS-based foreground model components and
+    redundant calibration degeneracies using gradient descent. The class also provides a number of helper functions for computing
+    DPSS filters and estimating the degeneracies from the data.
     """
     def __init__(self, radial_reds):
         """
+        Initialize the SpectrallyRedundantCalibrator class.
+
+        Parameters:
+        ----------
+        radial_reds : RadialRedundancy object
+            RadialRedundancy object containing a list of list baseline tuples of radially redundant
+            groups
         """
         self.radial_reds = radial_reds
         self.antpos = radial_reds.antpos
