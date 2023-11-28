@@ -1033,16 +1033,18 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
 @jax.jit
 def _foreground_model(model_parameters, spectral_filters, spatial_filters):
     """
-    Function for computing the foreground model from the foreground parameters and filters.
+    Function for computing the foreground model from the foreground parameters and filters
+    in the gradient descent loop.
 
     Parameters:
     ----------
     model_parameters : dictionary
-        Parameters for fitting
-    spectral_filters : np.ndarray
+        Foreground model components for computing the foreground model
+    spectral_filters : jnp.ndarray
         Array of spectral filters with shape (Nfreqs, Nfilters)
-    spatial_filters : List
-        List of spatial filters for each baseline in the group
+    spatial_filters : List of jnp.ndarray
+        List of jax arrays containing spatial DPSS filters for each baseline in the 
+        spectrally redundant group
 
     Returns:
     -------
@@ -1134,37 +1136,6 @@ def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_
     # Compute loss
     return _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)
 
-@jax.jit
-def _calibration_loss_function_minor(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
-    """
-    Function which computes the value of the loss from the degenerate parameters, foreground, and the data.
-    Intended to be used for minor cycles where the foreground model is fixed and the degenerate parameters are
-    solved for.
-
-    Parameters:
-    ----------
-    model_parameters : dictionary
-        Parameters for fitting
-    data_r : np.ndarray
-        Array of real component of data with shape (Ntimes, Nbls)
-    data_i : np.ndarray
-        Array of imaginary component of data with shape (Ntimes, Nbls)
-    wgts : np.ndarray
-        Array of weights with shape (Ntimes, Nbls)
-    fg_model_r : np.ndarray
-        Array of real component of foreground model with shape (Ntimes, Nbls)
-    fg_model_i : np.ndarray
-        Array of imaginary component of foreground model with shape (Ntimes, Nbls)
-    idealized_blvecs : np.ndarray
-        Array of idealized baseline vectors with shape (Nbls, Ndims)
-
-    Returns:
-    -------
-    loss : float
-        Mean squared error between data and foreground model
-    """
-    return _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)
-
 def _gradient_descent(
         data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
         maxiter=100, convergence_criteria=1e-10, minor_cycle_iter=0
@@ -1219,15 +1190,20 @@ def _gradient_descent(
         loss, gradient = jax.value_and_grad(_calibration_loss_function)(
             model_parameters, data_r, data_i, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs
         )
+        # Update optimizer state and parameters
         updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
         params = optax.apply_updates(model_parameters, updates)
         
         if minor_cycle_iter > 0:
+            # Compute foreground model from the model_parameters and DPSS filters
             fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
             for _ in range(minor_cycle_iter):
-                loss, gradient = jax.value_and_grad(_calibration_loss_function_minor)(
+                # Since the foreground model is fixed, we can just use the _mean_square_error
+                # function as our loss function
+                loss, gradient = jax.value_and_grad(_mean_squared_error)(
                     model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs=idealized_blvecs
                 )
+                # Update optimizer state and parameters
                 updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
                 model_parameters = optax.apply_updates(model_parameters, updates)
         
