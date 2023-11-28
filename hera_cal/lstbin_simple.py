@@ -429,6 +429,7 @@ def get_masked_data(
         inpainted = flags.copy() * (~allf)
 
     flags = flags | np.isnan(data) | np.isinf(data) | (nsamples == 0)
+    logger.info(f"In inpainted_mode: {inpainted_mode}. Got {np.sum(inpainted)} inpainted samples, {np.sum(flags)} total flags, {np.sum(flags & ~inpainted)} non-inpainted flags.")
     data = np.ma.masked_array(data, mask=(flags & ~inpainted))
     return data, flags
 
