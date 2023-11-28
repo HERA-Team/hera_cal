@@ -1245,6 +1245,7 @@ def _gradient_descent(
 
 class SpectrallyRedundantCalibrator:
     """
+    TODO: Add docstring
     """
     def __init__(self, radial_reds):
         """
@@ -1348,7 +1349,12 @@ class SpectrallyRedundantCalibrator:
                   optimizer_name='adabelief', learning_rate=1e-3, maxiter=100, minor_cycle_iter=0, convergence_criteria=1e-10, return_gains=False, 
                   return_model=False):
         """
-        Calibrate data using a spectrally redundant calibration approach. This function assumes that the data is redundantly
+        Estimates redundant calibration degeneracies by building a DPSS-based, sky-model and solving for the parameters which lead to the smoothest
+        calibrated visibilities. Function starts by estimating a sky-model by using DPSS filters (which can start with spatial dependence or spectral 
+        and spatial dependence) which are fit to the data using linear-least squares. The sky-model is then used to estimate the degeneracies using 
+        traditional abscal techniques, or can be set such that the antenna gains are equal to 1+0j if one assumes that the data are well-calibrated. 
+        The degeneracies and sky-model are then refined using gradient descent. Once the gradient descent has converged, or reached the maximum number 
+        of iterations, the degeneracies and sky-model are returned. This function assumes that the input data are redundantly calibrated and redundantly averaged.
         
         Parameters:
         ----------
@@ -1363,7 +1369,8 @@ class SpectrallyRedundantCalibrator:
             If True, the initial estimate of the foreground model will be computed from the data assuming that the evolution foreground model
             is entirely restricted to the spatial axis. This estimate will then be projected onto the eigenmodes of the spectral DPSS modes
             for refinement in the gradient descent step. If False, the initial estimate of the foreground model will be computed from the 
-            data giving the model the flexibility to model the spatial and spectral axes. 
+            data giving the model the flexibility to model the spatial and spectral axes. This option fits for fewer foreground parameters 
+            in the least-squares step, but can lead to slower convergence in the gradient descent step.
         linear_solver : str, default="lu_solve"
             Method to use for solving the linear system of equations when fitting the foreground models. Options are
             "lu_solve", "solve", "pinv", and "lstsq". "lu_solve" uses scipy.linalg.lu_solve to solve the linear system of
@@ -1373,13 +1380,15 @@ class SpectrallyRedundantCalibrator:
         linear_tol : float, default=1e-12
             Regularization parameter for linear least-squares fit when computing the initial estimate of the foreground model.
         share_fg_model : bool, default=False
-            If True, the foreground model for each radially-redundant group is shared across the time axis.
+            If True, the foreground model for each radially-redundant group is shared across the time axis for both the least-squares and 
+            gradient descent steps.
         spectral_filter_half_width : float, default=20e-9
-            Half-width of the spectral axis DPSS filters in units of seconds.
+            Fourier half-width of the spectral axis DPSS filters in units of seconds.
         spatial_filter_half_width : float, default=1
             Half-width of the spatial axis DPSS filters in units of wavelengths.
         eigenval_cutoff : float, default=1e-12
-            Cutoff for the eigenvalues of the DPSS filters.
+            Cutoff for the eigenvalues of the DPSS filters. Only DPSS eigenvectors with eigenvalues greater than eigenval_cutoff will be used
+            for least-squares and gradient descent steps.
         umin : float, default=None
             Minimum u-magnitude value to include in calbration. All u-modes with magnitudes less than
             min_u_cut will have their weights set to 0. Can also be useful for decreasing the number 
@@ -1390,9 +1399,9 @@ class SpectrallyRedundantCalibrator:
             for foreground eigenmodes as the number of eigenmodes is roughly proportional to (umax - umin).
         estimate_degeneracies : bool, default=False
             If True, the initial estimates of the redcal degeneracies will be computed from the data using traditional 
-            abscal techniques and the initial nucal model as the sky model. These estimates will then be refined by the
-            gradient descent optimizer. If False, the amplitude degeneracies will be initialized to 1 and tip-tilt degeneracies
-            will be initialized to 0.
+            abscal techniques and the initial nucal model as the sky model. If False, the amplitude degeneracies will be 
+            initialized to 1 and tip-tilt degeneracies will be initialized to 0. If the data are well-calibrated,
+            setting this option to False can improve the runtime of the calibration.
         optimizer_name : str, default="adabelief"
             Name of the optimizer to use for gradient descent. Options are listed in the "OPTIMIZERS" variable.
         learning_rate : float, default=1e-3
