@@ -1299,11 +1299,11 @@ class SpectrallyRedundantCalibrator:
         Parameters:
         ----------
         data : DataContainer
-            Data to be calibrated. Data is assumed to be redundantly averaged.
+            Data to be calibrated. Data is assumed to be redundantly averaged. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
         model : DataContainer
             Model visibilities to use for estimating the bandpass. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
         wgts : DataContainer
-            Weights associated with data
+            Weights associated with data. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
 
         Returns:
         -------
@@ -1353,14 +1353,17 @@ class SpectrallyRedundantCalibrator:
         Parameters:
         ----------
         data : DataContainer
-            Data to be calibrated. Data is assumed to be redundantly averaged.
+            Data to be calibrated. Data is assumed to be redundantly averaged. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
         data_wgts : DataContainer
-            Weights associated with data
+            Weights associated with data. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
         cal_flags : dictionary, default={}
             Dictionary containing flags for each antenna. Keys are antenna numbers and values are boolean arrays of shape (Ntimes,).
-            If a key is not present, all times for that antenna will be calibrated.
-        estimate_w_u_model : bool, default="projected_fit"
-            pass
+            This dictionary is primarily used for computing the idealized antenna positions.
+        estimate_w_u_model : bool, default="False"
+            If True, the initial estimate of the foreground model will be computed from the data assuming that the evolution foreground model
+            is entirely restricted to the spatial axis. This estimate will then be projected onto the eigenmodes of the spectral DPSS modes
+            for refinement in the gradient descent step. If False, the initial estimate of the foreground model will be computed from the 
+            data giving the model the flexibility to model the spatial and spectral axes. 
         linear_solver : str, default="lu_solve"
             Method to use for solving the linear system of equations when fitting the foreground models. Options are
             "lu_solve", "solve", "pinv", and "lstsq". "lu_solve" uses scipy.linalg.lu_solve to solve the linear system of
@@ -1376,13 +1379,15 @@ class SpectrallyRedundantCalibrator:
         spatial_filter_half_width : float, default=1
             Half-width of the spatial axis DPSS filters in units of wavelengths.
         eigenval_cutoff : float, default=1e-12
-            Cutoff for the eigenvalues of the DPSS filters
+            Cutoff for the eigenvalues of the DPSS filters.
         umin : float, default=None
             Minimum u-magnitude value to include in calbration. All u-modes with magnitudes less than
-            min_u_cut will have their weights set to 0.
+            min_u_cut will have their weights set to 0. Can also be useful for decreasing the number 
+            for foreground eigenmodes as the number of eigenmodes is roughly proportional to (umax - umin).
         umax : float, default=None
             Maximum u-magnitude value to include in calbration. All u-modes with magnitudes greater than
-            max_u_cut will have their weights set to 0.
+            max_u_cut will have their weights set to 0. Can also be useful for decreasing the number 
+            for foreground eigenmodes as the number of eigenmodes is roughly proportional to (umax - umin).
         estimate_degeneracies : bool, default=False
             If True, the initial estimates of the redcal degeneracies will be computed from the data using traditional 
             abscal techniques and the initial nucal model as the sky model. These estimates will then be refined by the
@@ -1401,9 +1406,10 @@ class SpectrallyRedundantCalibrator:
             Convergence criteria for stopping the optimization. If the difference in loss between two iterations is less than
             convergence_criteria, the optimization will stop.
         return_gains : bool, default=False
-            If True, the gains will be returned. Otherwise, the model parameters will be returned.
+            If True, the gains will be returned. See below for the order of the returned parameters.
         return_model : bool, default=False
-            If True, the model visibilities will be returned. Otherwise, the model parameters will be returned.
+            If True, the model visibilities will be returned. Otherwise, the model parameters will be returned. See below for the
+            order of the returned parameters.
 
         Returns:
         -------
