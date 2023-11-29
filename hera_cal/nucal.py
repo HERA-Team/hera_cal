@@ -1056,7 +1056,7 @@ def _foreground_model(model_parameters, spectral_filters, spatial_filters):
     model_r, model_i = [], []
 
     # Loop over each radially redundant group
-    # Below the indicies correspond to f -> frequency, a -> baseline, m -> spectral modes
+    # Below the indicies correspond to f -> frequency, b -> baseline, m -> spectral modes
     # n -> spatial modes, and t -> time
     for sf, fgr, fgi in zip(spatial_filters, model_parameters['fg_r'], model_parameters['fg_i']):
         model_r.append(jnp.einsum('fm,bfn,tmn->btf', spectral_filters, sf, fgr))
@@ -1084,7 +1084,7 @@ def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_m
         Array of real component of foreground model with shape (Ntimes, Nbls)
     fg_model_i : np.ndarray
         Array of imaginary component of foreground model with shape (Ntimes, Nbls)
-    blvecs : np.ndarray
+    idealized_blvecs : np.ndarray
         Array of baseline vectors with shape (Nbls, Ndims)
 
     Returns:
@@ -1136,12 +1136,15 @@ def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_
     # Compute loss
     return _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs)
 
-def _gradient_descent(
+def _nucal_post_redcal(
         data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
-        maxiter=100, convergence_criteria=1e-10, minor_cycle_iter=0
+        maxiter=100, convergence_criteria=1e-10, minor_cycle_maxiter=10
     ):
     """
-    Function to perform frequency redundant calibration using gradient descent.
+    Function to perform frequency redundant calibration using gradient descent. Calibrates the 
+    data by fitting a foreground model to the data using DPSS filters and estimating the redundant
+    calibration degeneracies that lead to the smoothest calibrated visibilities. Intended to only
+    be only after performing redundant calibration with redcal.RedundantCalibrator.
 
     Parameters:
     ----------
@@ -1166,9 +1169,10 @@ def _gradient_descent(
     tol : float, optional, default=1e-10
         Tolerance for stopping criterion. If the difference of the loss between two iterations is less than tol,
         the optimization will stop.
-    minor_cycle_iter : int, optional, default=0
-        Number of minor cycles to perform after each major cycle. Minor cycles are performed by fixing the foreground
-        model and solving for the calibration parameters. This is useful for improving convergence.
+    minor_cycle_maxiter : int, optional, default=0
+        Maximum number of iterations of the minor cycle to perform after each major cycle. Minor cycles are performed by fixing the foreground
+        model and solving for the calibration parameters. When minor_cycle_maxiter is 0, no minor cycles are performed. If subsequent losses
+        are within tolerance, the minor cycle will stop.
     
     Returns:
     -------
@@ -1194,18 +1198,26 @@ def _gradient_descent(
         updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
         params = optax.apply_updates(model_parameters, updates)
         
-        if minor_cycle_iter > 0:
+        if minor_cycle_maxiter > 0:
             # Compute foreground model from the model_parameters and DPSS filters
+            minor_cycle_losses = []
             fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
-            for _ in range(minor_cycle_iter):
+            for minor_step in range(minor_cycle_maxiter):
                 # Since the foreground model is fixed, we can just use the _mean_square_error
                 # function as our loss function
-                loss, gradient = jax.value_and_grad(_mean_squared_error)(
+                minor_cycle_loss, gradient = jax.value_and_grad(_mean_squared_error)(
                     model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs=idealized_blvecs
                 )
                 # Update optimizer state and parameters
                 updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
                 model_parameters = optax.apply_updates(model_parameters, updates)
+
+                # Store minor cycle loss values
+                minor_cycle_losses.append(minor_cycle_loss)
+
+                # Stop if subsequent losses are within tolerance
+                if minor_step >= 1 and np.abs(minor_cycle_losses[-1] - minor_cycle_losses[-2]) < convergence_criteria:
+                    break
         
         # Store loss values
         losses.append(loss)
@@ -1229,13 +1241,14 @@ class SpectrallyRedundantCalibrator:
     """
     def __init__(self, radial_reds):
         """
-        Initialize the SpectrallyRedundantCalibrator class.
+        Initialize the SpectrallyRedundantCalibrator class. Takes a RadialRedundancy object as input for
+        computing the DPSS filters and determining which baselines are in each radially redundant group.
 
         Parameters:
         ----------
         radial_reds : RadialRedundancy object
             RadialRedundancy object containing a list of list baseline tuples of radially redundant
-            groups
+            groups. Can be generated using nucal.RadialRedundancy.
         """
         self.radial_reds = radial_reds
         self.antpos = radial_reds.antpos
@@ -1503,7 +1516,7 @@ class SpectrallyRedundantCalibrator:
             ])
 
             # Run optimization
-            _model_parameters, _metadata = _gradient_descent(
+            _model_parameters, _metadata = _nucal_post_redcal(
                 data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
                 spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, convergence_criteria=convergence_criteria,
                 minor_cycle_iter=minor_cycle_iter
