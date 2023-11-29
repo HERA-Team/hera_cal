@@ -621,7 +621,7 @@ def lst_average(
     # Multiply by nan instead of just setting as nan, so both real and imag parts are nan
     meandata[~normalizable] *= np.nan
 
-    # While the previous nsamples is different for in-painted and flagged mode, whih is
+    # While the previous nsamples is different for in-painted and flagged mode, which is
     # what we want for the mean, for the std and nsamples we want to treat flags as really
     # flagged.
     nsamples.mask = flags
