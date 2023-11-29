@@ -656,7 +656,7 @@ class TestGradientDescent:
         # Check that the mse is zero
         assert np.isclose(mse, 0)
 
-    def test_gradient_descent(self):
+    def test_nucal_post_redcal(self):
         # Separate the real and imaginary components
         data_r = np.array([self.data[bl].real for rdgrp in self.radial_reds for bl in rdgrp])
         data_i = np.array([self.data[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
@@ -690,7 +690,7 @@ class TestGradientDescent:
         optimizer = nucal.OPTIMIZERS['adagrad'](learning_rate=1e-3)
 
         # Run gradient descent
-        _, metadata = nucal._gradient_descent(
+        _, metadata = nucal._nucal_post_redcal(
             data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
             spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, maxiter=100,
         )
@@ -701,10 +701,10 @@ class TestGradientDescent:
         assert metadata['niter'] == 2
 
         # Run gradient descent w/ minor cycle
-        _, metadata = nucal._gradient_descent(
+        _, metadata = nucal._nucal_post_redcal(
             data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
             spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, maxiter=100,
-            minor_cycle_iter=1
+            minor_cycle_maxiter=1
         )
 
         # Check that starting in the correct spot doesn't move solutions
@@ -718,10 +718,10 @@ class TestGradientDescent:
         data_i = np.array([self.data[bl].imag * amp for rdgrp in self.radial_reds for bl in rdgrp])
 
         # Run gradient descent w/ minor cycle
-        _, metadata = nucal._gradient_descent(
+        _, metadata = nucal._nucal_post_redcal(
             data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
             spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, maxiter=10,
-            minor_cycle_iter=1
+            minor_cycle_maxiter=1
         )
 
         # Check that the gradient descent decreases the value of the loss function

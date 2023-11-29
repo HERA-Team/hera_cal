@@ -1066,7 +1066,7 @@ def _foreground_model(model_parameters, spectral_filters, spatial_filters):
     return jnp.vstack(model_r), jnp.vstack(model_i)
 
 @jax.jit
-def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, blvecs):
+def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
     """
     Computes the mean squared error between the data and foreground model multiplied by the degenerate parameters
 
@@ -1094,7 +1094,7 @@ def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_m
     """
     # Dot baseline vector into tip-tilt parameters
     # Below the indicies correspond to b -> baseline, n -> tip-tilt parameters, t -> time, and f -> frequency
-    phase = jnp.einsum('bn,ntf->btf', blvecs, model_parameters["tip_tilt"])
+    phase = jnp.einsum('bn,ntf->btf', idealized_blvecs, model_parameters["tip_tilt"])
 
     # Compute model from foreground estimates and amplitude
     model_r = (model_parameters["amplitude"]) * (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
