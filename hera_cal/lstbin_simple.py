@@ -611,7 +611,8 @@ def lst_average(
     # np.sum works the same for both masked and non-masked arrays.
     meandata = np.sum(data * nsamples, axis=0)
 
-    lstbin_flagged = np.all(flags, axis=0)
+    lstbin_flagged = np.all(data.mask, axis=0)
+
     if flag_below_min_N:
         lstbin_flagged[ndays_binned < sigma_clip_min_N] = True
 
