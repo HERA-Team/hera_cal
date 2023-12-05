@@ -845,7 +845,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
         return {k: eval(k, _sol) for k in keys}
 
     def solve_iteratively(self, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1,
-                          wgt_func=lambda x: 1., verbose=False):
+                          wgt_func=None, verbose=False):
         """Repeatedly solves and updates solution until convergence or maxiter is reached.
         Returns a meta-data about the solution and the solution itself.
 
@@ -859,7 +859,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
             wgt_func: a function f(abs^2 * wgt) operating on weighted absolute differences between
                 data and model that returns an additional data weighting to apply to when calculating
                 chisq and updating parameters. Example: lambda x: np.where(x>0, 5*np.tanh(x/5)/x, 1)
-                clamps deviations to 5 sigma. Default is no additional weighting (lambda x: 1.).
+                clamps deviations to 5 sigma. Default None is no additional weighting.
 
         Returns: meta, sol
             meta: a dictionary with metadata about the solution, including
@@ -873,7 +873,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                  for term in self.all_terms for (gi, gj, uij) in term]
         dmdl_u = self._get_ans0(sol)
         abs2_u = {k: np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys}
-        chisq = sum([v * wgt_func(v) for v in abs2_u.values()])
+        chisq = sum([(v if wgt_func is None else v * wgt_func(v)) for v in abs2_u.values()])
         update = np.where(chisq > 0)
         abs2_u = {k: v[update] for k, v in abs2_u.items()}
         # variables with '_u' are flattened and only include pixels that need updating
@@ -884,7 +884,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
         # clamp_wgts_u adds additional sigma clamping done by wgt_func.
         # abs2_u holds abs(data - mdl)**2 * wgt (i.e. noise-weighted deviations), which is
         # passed to wgt_func to determine any additional weighting (to, e.g., clamp outliers).
-        clamp_wgts_u = {k: v * wgt_func(abs2_u[k]) for k, v in wgts_u.items()}
+        clamp_wgts_u = (wgts_u if wgt_func is None else {k: v * wgt_func(abs2_u[k]) for k, v in wgts_u.items()})
         sol_u = {k: v[update].flatten() for k, v in sol.items()}
         iters = np.zeros(chisq.shape, dtype=int)
         conv = np.ones_like(chisq)
@@ -920,7 +920,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
             else:
                 # Slow branch when we compute convergence/chisq
                 abs2_u = {k: np.abs(v[update] - dmdl_u[k])**2 * wgts_u[k] for k, v in self.data.items()}
-                new_chisq_u = sum([v * wgt_func(v) for v in abs2_u.values()])
+                new_chisq_u = sum([(v if wgt_func is None else v * wgt_func(v)) for v in abs2_u.values()])
                 chisq_u = chisq[update]
                 gotbetter_u = (chisq_u > new_chisq_u)
                 where_gotbetter_u = np.where(gotbetter_u)
@@ -1289,7 +1289,7 @@ class RedundantCalibrator:
         sol = RedSol(self.reds, sol_dict=prms)
         return meta, sol
 
-    def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, wgt_func=lambda x: 1.):
+    def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, wgt_func=None):
         """Use the Liu et al 2010 Omnical algorithm to linearize equations and iteratively minimize chi^2.
 
         Args:
@@ -1307,7 +1307,7 @@ class RedundantCalibrator:
             wgt_func: a function f(abs^2 * wgt) operating on weighted absolute differences between
                 data and model that returns an additional data weighting to apply to when calculating
                 chisq and updating parameters. Example: lambda x: np.where(x>0, 5*np.tanh(x/5)/x, 1)
-                clamps deviations to 5 sigma. Default is no additional weighting (lambda x: 1.).
+                clamps deviations to 5 sigma. Default None is no additional weighting.
 
         Returns:
             meta: dictionary of information about the convergence and chi^2 of the solution
