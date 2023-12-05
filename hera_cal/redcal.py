@@ -832,7 +832,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
             **kwargs: keyword arguments of constants (python variables in keys of data that
                 are not to be solved for) which are passed to linsolve.LinProductSolver.
         """
-        linsolve.LinProductSolver.__init__(self, data, sol0, wgts=wgts, **kwargs)
+        linsolve.LinProductSolver.__init__(self, data, sol0, wgts=wgts, build_solver=False, **kwargs)
         self.gain = np.float32(gain)  # float32 to avoid accidentally promoting data to doubles.
 
     def _get_ans0(self, sol, keys=None):
@@ -1887,7 +1887,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             # try to solve for gains on antennas excluded from calibration, but keep them flagged
             expand_omni_gains(sol, all_reds_this_pol, data, nsamples, chisq_per_ant=meta['chisq_per_ant'])
 
-            # try one more time to expand visibilities, keeping new ones flagged, but 
+            # try one more time to expand visibilities, keeping new ones flagged, but
             # don't update chisq or chisq_per_ant
             expand_omni_vis(sol, all_reds_this_pol, data, nsamples)
             sol.make_sol_finite()
