@@ -902,14 +902,14 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 # compute data wgts: dwgts = sum(V_mdl^2 / n^2) = sum(V_mdl^2 * wgts)
                 # don't need to update data weighting with every iteration
                 # clamped weighting is passed to dwgts_u, which is used to update parameters
-                dwgts_u = {k: dmdl_u[k] * dmdl_u[k].conj() * clamp_wgts_u[k] for k in self.keys}
                 sol_wgt_u = {k: 0 for k in sol.keys()}
+                dw_u = {}
                 for k, (gi, gj, uij) in zip(self.keys, terms):
-                    w = dwgts_u[k]
-                    sol_wgt_u[gi] += w
-                    sol_wgt_u[gj] += w
-                    sol_wgt_u[uij] += w
-                dw_u = {k: v[update] * dwgts_u[k] for k, v in self.data.items()}
+                    dwgts_u = dmdl_u[k] * dmdl_u[k].conj() * clamp_wgts_u[k]
+                    sol_wgt_u[gi] += dwgts_u
+                    sol_wgt_u[gj] += dwgts_u
+                    sol_wgt_u[uij] += dwgts_u
+                    dw_u[k] = self.data[k][update] * dwgts_u
             sol_sum_u = {k: 0 for k in sol_u.keys()}
             for k, (gi, gj, uij) in zip(self.keys, terms):
                 # compute sum(wgts * V_meas / V_mdl)
