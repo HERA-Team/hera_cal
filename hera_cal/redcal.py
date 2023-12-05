@@ -835,14 +835,19 @@ class OmnicalSolver(linsolve.LinProductSolver):
         linsolve.LinProductSolver.__init__(self, data, sol0, wgts=wgts, build_solver=False, **kwargs)
         self.gain = np.float32(gain)  # float32 to avoid accidentally promoting data to doubles.
 
-    def _get_ans0(self, sol, keys=None):
+    def _get_ans0(self, sol, keys=None, to_update_inplace=None):
         '''Evaluate the system of equations given input sol.
         Specify keys to evaluate only a subset of the equations.'''
         if keys is None:
             keys = self.keys
         _sol = {k + '_': v.conj() for k, v in sol.items() if k.startswith('g')}
         _sol.update(sol)
-        return {k: eval(k, _sol) for k in keys}
+        if to_update_inplace is None:
+            return {k: eval(k, _sol) for k in keys}
+        else:
+            # update in place to save memory
+            for k in keys:
+                to_update_inplace[k] = eval(k, _sol)
 
     def solve_iteratively(self, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1,
                           wgt_func=None, verbose=False):
@@ -912,7 +917,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 sol_sum_u[uij] += numerator
             new_sol_u = {k: v * ((1 - self.gain) + self.gain * sol_sum_u[k] / sol_wgt_u[k])
                          for k, v in sol_u.items()}
-            dmdl_u = self._get_ans0(new_sol_u)
+            self._get_ans0(new_sol_u, to_update_inplace=dmdl_u)
             # check if i % check_every is 0, which is purposely one less than the '1' up at the top of the loop
             if i < maxiter and (i < check_after or (i % check_every) != 0):
                 # Fast branch when we aren't expensively computing convergence/chisq
