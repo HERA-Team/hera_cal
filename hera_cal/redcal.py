@@ -953,12 +953,12 @@ class OmnicalSolver(linsolve.LinProductSolver):
                     dmdl_u[k] = v[update_u]
                 for k, v in wgts_u.items():
                     wgts_u[k] = v[update_u]
-                for k, v in wgts_u.items():
-                    clamp_wgts_u[k] = (v if wgt_func is None else v * wgt_func(abs2_u[k]))
-                for k, v in sol_u.items():
-                    sol_u[k] = v[update_u]
                 for k, v in abs2_u.items():
                     abs2_u[k] = v[update_u]
+                for k, v in sol_u.items():
+                    sol_u[k] = v[update_u]
+                for k, v in wgts_u.items():
+                    clamp_wgts_u[k] = (v if wgt_func is None else v * wgt_func(abs2_u[k]))
                 update = tuple(u[update_u] for u in update)
             if verbose:
                 print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
