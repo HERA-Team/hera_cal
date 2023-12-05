@@ -1346,7 +1346,7 @@ class SpectrallyRedundantCalibrator:
     
     def calibrate(self, data, data_wgts, cal_flags={}, estimate_w_u_model=True, linear_solver="lu_solve", linear_tol=1e-12, share_fg_model=False, 
                   spectral_filter_half_width=30e-9, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, estimate_degeneracies=False,
-                  optimizer_name='adabelief', learning_rate=1e-3, maxiter=100, minor_cycle_iter=0, convergence_criteria=1e-10, return_gains=False, 
+                  optimizer_name='adabelief', learning_rate=1e-3, maxiter=100, minor_cycle_maxiter=0, convergence_criteria=1e-10, return_gains=False, 
                   return_model=False):
         """
         Estimates redundant calibration degeneracies by building a DPSS-based, sky-model and solving for the parameters which lead to the smoothest
@@ -1408,7 +1408,7 @@ class SpectrallyRedundantCalibrator:
             Learning rate for the gradient descent optimizer
         maxiter : int, default=100
             Maximum number of iterations to run when performing gradient descent.
-        minor_cycle_iter : int, default=0
+        minor_cycle_maxiter : int, default=0
             Number of minor cycles to perform after each major cycle. Minor cycles are performed by fixing the foreground
             model and solving for the calibration parameters. This is useful for improving convergence.
         convergence_criteria : float, default=1e-10
@@ -1471,7 +1471,7 @@ class SpectrallyRedundantCalibrator:
         else:
             amplitude = {pol: np.ones((data.shape)) for pol in data.pols()}
             tip_tilt = {
-                pol: np.zeros((idealized_antpos[list(idealized_antpos.keys())[0]], data.shape[0], data.shape[1])) 
+                pol: np.zeros((idealized_antpos[list(idealized_antpos.keys())[0]].shape[0], data.shape[0], data.shape[1])) 
                 for pol in data.pols()
             }
         
@@ -1519,7 +1519,7 @@ class SpectrallyRedundantCalibrator:
             _model_parameters, _metadata = _nucal_post_redcal(
                 data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
                 spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, convergence_criteria=convergence_criteria,
-                minor_cycle_iter=minor_cycle_iter
+                minor_cycle_maxiter=minor_cycle_maxiter
             )
 
             # Pack model parameters and metadata
@@ -1539,7 +1539,7 @@ class SpectrallyRedundantCalibrator:
             for pol in data.pols():
                 for ant in idealized_antpos:
                     gains[(ant, f"J{pol}")] = np.sqrt(model_parameters[pol][f"amplitude"]) * np.exp(
-                        1j * np.dot(idealized_antpos[ant], model_parameters[pol][f"tip_tilt"])
+                        1j * np.tensordot(idealized_antpos[ant], model_parameters[pol][f"tip_tilt"], axes=(0, 0))
                     )
 
             if return_model:
