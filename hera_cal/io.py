@@ -1832,9 +1832,9 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
                          return_data=False, **kwargs)
         except ValueError as err:
             # check to see if the read failed because of the time range or lst range
-            if 'No elements in time range between ' in str(err):
+            if 'No elements in time range between ' in str(err) or 'No elements in time_array between ' in str(err):
                 continue  # no matching times, skip this file
-            elif 'No elements in LST range between ' in str(err):
+            elif 'No elements in LST range between ' in str(err) or 'No elements in lst_array between ' in str(err):
                 continue  # no matchings lsts, skip this file
             else:
                 raise
