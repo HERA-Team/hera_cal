@@ -1126,14 +1126,18 @@ class RedundantCalibrator:
         dc = DataContainer(data)
         eqs = self.build_eqs(dc)
         self.phs_avg = {}  # detrend phases within redundant group, used for logcal to avoid phase wraps
+        d_ls, w_ls = {}, {}
         if detrend_phs:
             for grp in self.reds:
                 self.phs_avg[grp[0]] = np.exp(-np.complex64(1j) * np.median(np.unwrap([np.log(dc[bl]).imag for bl in grp], axis=0), axis=0))
                 for bl in grp:
                     self.phs_avg[bl] = self.phs_avg[grp[0]].astype(dc[bl].dtype)
-        d_ls, w_ls = {}, {}
-        for eq, key in eqs.items():
-            d_ls[eq] = dc[key] * self.phs_avg.get(key, np.float32(1))
+            for eq, key in eqs.items():
+                # this makes a copy, which prevents modification of the data when detrending phase
+                d_ls[eq] = dc[key] * self.phs_avg.get(key, np.float32(1))
+        else:
+            for eq, key in eqs.items():
+                d_ls[eq] = dc[key]
         if len(wgts) > 0:
             wc = DataContainer(wgts)
             for eq, key in eqs.items():
