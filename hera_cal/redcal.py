@@ -837,7 +837,9 @@ class OmnicalSolver(linsolve.LinProductSolver):
 
     def _get_ans0(self, sol, keys=None, to_update_inplace=None):
         '''Evaluate the system of equations given input sol.
-        Specify keys to evaluate only a subset of the equations.'''
+        Specify keys to evaluate only a subset of the equations.
+        to_update_inplace is a dictionary mapping keys or self.keys()
+        to numpy arrays that we want to overwrite with ans0 values.'''
         if keys is None:
             keys = self.keys
         _sol = {k + '_': v.conj() for k, v in sol.items() if k.startswith('g')}
