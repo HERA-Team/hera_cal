@@ -533,11 +533,11 @@ class Test_LSTAverage:
             data=_data, nsamples=nsamples, flags=flags, inpainted_mode=True
         )
 
-        # The data and std in the fully-flagged bin should be different, but Nsamples
-        # and Flags should be the same.
+        # The data, flags and std in the fully-flagged bin should be different, but
+        # Nsamples and Flags should be the same.
         assert not np.allclose(df[0, 0, 0], di[0, 0, 0])
         assert np.allclose(df[1:], di[1:])
-        assert np.allclose(ff, fi)
+        assert not np.allclose(ff, fi)
         assert not np.allclose(stdf[0, 0, 0], stdi[0, 0, 0])
         assert np.allclose(stdf[1:], stdi[1:])
         assert np.allclose(nf, ni)
@@ -624,13 +624,11 @@ class Test_LSTAverage:
         )
 
         assert np.all(flg_n)
-        # just because we're flagging it, doesn't mean we need to set nsamples=0
-        # or the std to inf. We have info there, we're just choosing not to use it.
-        assert np.all(norm_n == 2)
-        assert not np.any(np.isinf(std_n))
+        # nsamples is zero because all are flagged.
+        assert np.all(norm_n == 0)
+        assert np.all(np.isinf(std_n))
 
         # this time, only one column is flagged too much...
-        # this time, there's enough samples, but too many are flagged...
         flags[:] = False
         flags[:5, 0] = True
         data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
@@ -642,8 +640,8 @@ class Test_LSTAverage:
         )
 
         assert np.all(flg_n[0])
-        assert np.all(norm_n[0] == 2)
-        assert not np.any(np.isinf(std_n[0]))
+        assert np.all(norm_n[0] == 0)
+        assert np.all(np.isinf(std_n[0]))
 
         assert not np.any(flg_n[1:])
         assert np.all(norm_n[1:] == 7)
