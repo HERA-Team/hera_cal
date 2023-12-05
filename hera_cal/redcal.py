@@ -880,9 +880,11 @@ class OmnicalSolver(linsolve.LinProductSolver):
         abs2_u = {k: np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys}
         chisq = sum([(v if wgt_func is None else v * wgt_func(v)) for v in abs2_u.values()])
         update = np.where(chisq > 0)
-        abs2_u = {k: v[update] for k, v in abs2_u.items()}
+        for k, v in abs2_u.items():
+            abs2_u[k] = v[update]
         # variables with '_u' are flattened and only include pixels that need updating
-        dmdl_u = {k: v[update].flatten() for k, v in dmdl_u.items()}
+        for k, v in dmdl_u.items():
+            dmdl_u[k] = v[update].flatten()
         # wgts_u hold the wgts the user provides
         wgts_u = {k: (v * np.ones(chisq.shape, dtype=np.float32))[update].flatten()
                   for k, v in self.wgts.items()}
@@ -924,7 +926,8 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 sol_u = new_sol_u
             else:
                 # Slow branch when we compute convergence/chisq
-                abs2_u = {k: np.abs(v[update] - dmdl_u[k])**2 * wgts_u[k] for k, v in self.data.items()}
+                for k, v in self.data.items():
+                    abs2_u[k] = np.abs(v[update] - dmdl_u[k])**2 * wgts_u[k]
                 new_chisq_u = sum([(v if wgt_func is None else v * wgt_func(v)) for v in abs2_u.values()])
                 chisq_u = chisq[update]
                 gotbetter_u = (chisq_u > new_chisq_u)
@@ -932,7 +935,8 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 update_where = tuple(u[where_gotbetter_u] for u in update)
                 chisq[update_where] = new_chisq_u[where_gotbetter_u]
                 iters[update_where] = i
-                new_sol_u = {k: np.where(gotbetter_u, v, sol_u[k]) for k, v in new_sol_u.items()}
+                for k, v in new_sol_u.items():
+                    new_sol_u[k] = np.where(gotbetter_u, v, sol_u[k])
                 deltas_u = [v - sol_u[k] for k, v in new_sol_u.items()]
                 conv_u = np.sqrt(sum([(v * v.conj()).real for v in deltas_u])
                                  / sum([(v * v.conj()).real for v in new_sol_u.values()]))
@@ -943,11 +947,16 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 if update_u[0].size == 0 or i == maxiter:
                     meta = {'iter': iters, 'chisq': chisq, 'conv_crit': conv}
                     return meta, sol
-                dmdl_u = {k: v[update_u] for k, v in dmdl_u.items()}
-                wgts_u = {k: v[update_u] for k, v in wgts_u.items()}
-                sol_u = {k: v[update_u] for k, v in new_sol_u.items()}
-                abs2_u = {k: v[update_u] for k, v in abs2_u.items()}
-                clamp_wgts_u = {k: v * wgt_func(abs2_u[k]) for k, v in wgts_u.items()}
+                for k, v in dmdl_u.items():
+                    dmdl_u[k] = v[update_u]
+                for k, v in wgts_u.items():
+                    wgts_u[k] = v[update_u]
+                for k, v in wgts_u.items():
+                    clamp_wgts_u[k] = (v if wgt_func is None else v * wgt_func(abs2_u[k]))
+                for k, v in sol_u.items():
+                    sol_u[k] = v[update_u]
+                for k, v in abs2_u.items():
+                    abs2_u[k] = v[update_u]
                 update = tuple(u[update_u] for u in update)
             if verbose:
                 print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
