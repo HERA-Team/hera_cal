@@ -1111,15 +1111,23 @@ class RedundantCalibrator:
         dtype = list(data.values())[0].dtype
         dc = DataContainer(data)
         eqs = self.build_eqs(dc)
+
+        d_ls, w_ls = {}, {}
         self.phs_avg = {}  # detrend phases within redundant group, used for logcal to avoid phase wraps
         if detrend_phs:
             for grp in self.reds:
                 self.phs_avg[grp[0]] = np.exp(-np.complex64(1j) * np.median(np.unwrap([np.log(dc[bl]).imag for bl in grp], axis=0), axis=0))
                 for bl in grp:
                     self.phs_avg[bl] = self.phs_avg[grp[0]].astype(dc[bl].dtype)
-        d_ls, w_ls = {}, {}
+    
+        
+        # XXX: This step copies the data even when multiplier is one
         for eq, key in eqs.items():
-            d_ls[eq] = dc[key] * self.phs_avg.get(key, np.float32(1))
+            if detrend_phs:
+                d_ls[eq] = dc[key] * self.phs_avg.get(key, np.float32(1))
+            else:
+                d_ls[eq] = dc[key]
+        
         if len(wgts) > 0:
             wc = DataContainer(wgts)
             for eq, key in eqs.items():
@@ -1257,6 +1265,10 @@ class RedundantCalibrator:
             # put back in sol0 gains that were divided out
             for ant in sol.gains:
                 sol.gains[ant] *= sol0.gains.get(ant, 1.0)
+        
+        # Delete the solver to free up memory
+        # del ls, prms, cal_data
+
         return {}, sol
 
     def lincal(self, data, sol0, wgts={}, sparse=False, mode='default', conv_crit=1e-10, maxiter=50, verbose=False):
