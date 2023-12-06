@@ -2202,13 +2202,15 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
         flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # configure baselines
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        antpairs = np.repeat(np.array(antpairs, dtype=np.uint64), Ntimes, axis=0)
+    antpairs = np.repeat(np.array(antpairs), Ntimes, axis=0)
+
+    antpairs_int = antpairs.astype(np.uint64)
+    if not np.allclose(antpairs, antpairs_int):
+        raise ValueError("antenna numbers must be non-negative integers")
 
     # get ant_1_array, ant_2_array
-    ant_1_array = antpairs[:, 0]
-    ant_2_array = antpairs[:, 1]
+    ant_1_array = antpairs_int[:, 0]
+    ant_2_array = antpairs_int[:, 1]
 
     # get baseline array
     baseline_array = 2048 * (ant_1_array + 1) + (ant_2_array + 1) + 2**16
