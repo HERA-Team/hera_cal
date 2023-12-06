@@ -126,12 +126,12 @@ def comply_pol(pol):
 def split_bl(bl):
     '''Splits a (i,j,pol) baseline key into ((i,pi),(j,pj)), where pol=pi+pj.'''
     pi, pj = split_pol(bl[2])
-    return ((bl[0], pi), (bl[1], pj))
+    return ((np.uint64(bl[0]), pi), (np.uint64(bl[1]), pj))
 
 
 def join_bl(ai, aj):
     '''Joins two (i,pi) antenna keys to make a (i,j,pol) baseline key.'''
-    return (ai[0], aj[0], join_pol(ai[1], aj[1]))
+    return (np.uint64(ai[0]), np.uint64(aj[0]), join_pol(ai[1], aj[1]))
 
 
 def reverse_bl(bl):
@@ -141,7 +141,7 @@ def reverse_bl(bl):
     if len(bl) == 2:
         return (j, i)
     else:
-        return (j, i, conj_pol(_comply_vispol(bl[2])))
+        return (np.uint64(j), np.uint64(i), conj_pol(_comply_vispol(bl[2])))
 
 
 def comply_bl(bl):
@@ -151,7 +151,7 @@ def comply_bl(bl):
         return bl
     else:
         i, j, p = bl
-        return (i, j, _comply_vispol(p))
+        return (np.uint64(i), np.uint64(j), _comply_vispol(p))
 
 
 def make_bl(*args):
@@ -163,7 +163,7 @@ def make_bl(*args):
         (i, j), pol = args
     else:
         i, j, pol = args
-    return (i, j, _comply_vispol(pol))
+    return (np.uint64(i), np.uint64(j), _comply_vispol(pol))
 
 
 def filter_bls(bls, ants=None, ex_ants=None, pols=None, antpos=None, min_bl_cut=None, max_bl_cut=None):
@@ -190,15 +190,15 @@ def filter_bls(bls, ants=None, ex_ants=None, pols=None, antpos=None, min_bl_cut=
     for bl in bls:
         ant1, ant2 = split_bl(bl)
         # filter on antennas to keep
-        if (ants is not None) and (ant1 not in ants) and (ant1[0] not in ants):
+        if (ants is not None) and (ant1 not in ants) and (ant1[0].item() not in ants):
             continue
-        if (ants is not None) and (ant2 not in ants) and (ant2[0] not in ants):
+        if (ants is not None) and (ant2 not in ants) and (ant2[0].item() not in ants):
             continue
 
         # filter on antennas to exclude
-        if (ex_ants is not None) and ((ant1 in ex_ants) or (ant1[0] in ex_ants)):
+        if (ex_ants is not None) and ((ant1 in ex_ants) or (ant1[0].item() in ex_ants)):
             continue
-        if (ex_ants is not None) and ((ant2 in ex_ants) or (ant2[0] in ex_ants)):
+        if (ex_ants is not None) and ((ant2 in ex_ants) or (ant2[0].item() in ex_ants)):
             continue
 
         # filter on polarizations
