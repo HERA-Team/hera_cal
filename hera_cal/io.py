@@ -2202,7 +2202,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
         flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # configure baselines
-    antpairs = np.repeat(np.array(antpairs), Ntimes, axis=0)
+    antpairs = np.repeat(np.array(antpairs, dtype=np.uint64), Ntimes, axis=0)
 
     # get ant_1_array, ant_2_array
     ant_1_array = antpairs[:, 0]
