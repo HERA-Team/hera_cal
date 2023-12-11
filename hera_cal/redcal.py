@@ -832,20 +832,27 @@ class OmnicalSolver(linsolve.LinProductSolver):
             **kwargs: keyword arguments of constants (python variables in keys of data that
                 are not to be solved for) which are passed to linsolve.LinProductSolver.
         """
-        linsolve.LinProductSolver.__init__(self, data, sol0, wgts=wgts, **kwargs)
+        linsolve.LinProductSolver.__init__(self, data, sol0, wgts=wgts, build_solver=False, **kwargs)
         self.gain = np.float32(gain)  # float32 to avoid accidentally promoting data to doubles.
 
-    def _get_ans0(self, sol, keys=None):
+    def _get_ans0(self, sol, keys=None, to_update_inplace=None):
         '''Evaluate the system of equations given input sol.
-        Specify keys to evaluate only a subset of the equations.'''
+        Specify keys to evaluate only a subset of the equations.
+        to_update_inplace is a dictionary mapping keys or self.keys()
+        to numpy arrays that we want to overwrite with ans0 values.'''
         if keys is None:
             keys = self.keys
         _sol = {k + '_': v.conj() for k, v in sol.items() if k.startswith('g')}
         _sol.update(sol)
-        return {k: eval(k, _sol) for k in keys}
+        if to_update_inplace is None:
+            return {k: eval(k, _sol) for k in keys}
+        else:
+            # update in place to save memory
+            for k in keys:
+                to_update_inplace[k] = eval(k, _sol)
 
     def solve_iteratively(self, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1,
-                          wgt_func=lambda x: 1., verbose=False):
+                          wgt_func=None, verbose=False):
         """Repeatedly solves and updates solution until convergence or maxiter is reached.
         Returns a meta-data about the solution and the solution itself.
 
@@ -859,7 +866,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
             wgt_func: a function f(abs^2 * wgt) operating on weighted absolute differences between
                 data and model that returns an additional data weighting to apply to when calculating
                 chisq and updating parameters. Example: lambda x: np.where(x>0, 5*np.tanh(x/5)/x, 1)
-                clamps deviations to 5 sigma. Default is no additional weighting (lambda x: 1.).
+                clamps deviations to 5 sigma. Default None is no additional weighting.
 
         Returns: meta, sol
             meta: a dictionary with metadata about the solution, including
@@ -873,18 +880,20 @@ class OmnicalSolver(linsolve.LinProductSolver):
                  for term in self.all_terms for (gi, gj, uij) in term]
         dmdl_u = self._get_ans0(sol)
         abs2_u = {k: np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys}
-        chisq = sum([v * wgt_func(v) for v in abs2_u.values()])
+        chisq = sum([(v if wgt_func is None else v * wgt_func(v)) for v in abs2_u.values()])
         update = np.where(chisq > 0)
-        abs2_u = {k: v[update] for k, v in abs2_u.items()}
+        for k, v in abs2_u.items():
+            abs2_u[k] = v[update]
         # variables with '_u' are flattened and only include pixels that need updating
-        dmdl_u = {k: v[update].flatten() for k, v in dmdl_u.items()}
+        for k, v in dmdl_u.items():
+            dmdl_u[k] = v[update].flatten()
         # wgts_u hold the wgts the user provides
         wgts_u = {k: (v * np.ones(chisq.shape, dtype=np.float32))[update].flatten()
                   for k, v in self.wgts.items()}
         # clamp_wgts_u adds additional sigma clamping done by wgt_func.
         # abs2_u holds abs(data - mdl)**2 * wgt (i.e. noise-weighted deviations), which is
         # passed to wgt_func to determine any additional weighting (to, e.g., clamp outliers).
-        clamp_wgts_u = {k: v * wgt_func(abs2_u[k]) for k, v in wgts_u.items()}
+        clamp_wgts_u = (wgts_u if wgt_func is None else {k: v * wgt_func(abs2_u[k]) for k, v in wgts_u.items()})
         sol_u = {k: v[update].flatten() for k, v in sol.items()}
         iters = np.zeros(chisq.shape, dtype=int)
         conv = np.ones_like(chisq)
@@ -895,14 +904,14 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 # compute data wgts: dwgts = sum(V_mdl^2 / n^2) = sum(V_mdl^2 * wgts)
                 # don't need to update data weighting with every iteration
                 # clamped weighting is passed to dwgts_u, which is used to update parameters
-                dwgts_u = {k: dmdl_u[k] * dmdl_u[k].conj() * clamp_wgts_u[k] for k in self.keys}
                 sol_wgt_u = {k: 0 for k in sol.keys()}
+                dw_u = {}
                 for k, (gi, gj, uij) in zip(self.keys, terms):
-                    w = dwgts_u[k]
-                    sol_wgt_u[gi] += w
-                    sol_wgt_u[gj] += w
-                    sol_wgt_u[uij] += w
-                dw_u = {k: v[update] * dwgts_u[k] for k, v in self.data.items()}
+                    dwgts_u = dmdl_u[k] * dmdl_u[k].conj() * clamp_wgts_u[k]
+                    sol_wgt_u[gi] += dwgts_u
+                    sol_wgt_u[gj] += dwgts_u
+                    sol_wgt_u[uij] += dwgts_u
+                    dw_u[k] = self.data[k][update] * dwgts_u
             sol_sum_u = {k: 0 for k in sol_u.keys()}
             for k, (gi, gj, uij) in zip(self.keys, terms):
                 # compute sum(wgts * V_meas / V_mdl)
@@ -912,22 +921,24 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 sol_sum_u[uij] += numerator
             new_sol_u = {k: v * ((1 - self.gain) + self.gain * sol_sum_u[k] / sol_wgt_u[k])
                          for k, v in sol_u.items()}
-            dmdl_u = self._get_ans0(new_sol_u)
+            self._get_ans0(new_sol_u, to_update_inplace=dmdl_u)
             # check if i % check_every is 0, which is purposely one less than the '1' up at the top of the loop
             if i < maxiter and (i < check_after or (i % check_every) != 0):
                 # Fast branch when we aren't expensively computing convergence/chisq
                 sol_u = new_sol_u
             else:
                 # Slow branch when we compute convergence/chisq
-                abs2_u = {k: np.abs(v[update] - dmdl_u[k])**2 * wgts_u[k] for k, v in self.data.items()}
-                new_chisq_u = sum([v * wgt_func(v) for v in abs2_u.values()])
+                for k, v in self.data.items():
+                    abs2_u[k] = np.abs(v[update] - dmdl_u[k])**2 * wgts_u[k]
+                new_chisq_u = sum([(v if wgt_func is None else v * wgt_func(v)) for v in abs2_u.values()])
                 chisq_u = chisq[update]
                 gotbetter_u = (chisq_u > new_chisq_u)
                 where_gotbetter_u = np.where(gotbetter_u)
                 update_where = tuple(u[where_gotbetter_u] for u in update)
                 chisq[update_where] = new_chisq_u[where_gotbetter_u]
                 iters[update_where] = i
-                new_sol_u = {k: np.where(gotbetter_u, v, sol_u[k]) for k, v in new_sol_u.items()}
+                for k, v in new_sol_u.items():
+                    new_sol_u[k] = np.where(gotbetter_u, v, sol_u[k])
                 deltas_u = [v - sol_u[k] for k, v in new_sol_u.items()]
                 conv_u = np.sqrt(sum([(v * v.conj()).real for v in deltas_u])
                                  / sum([(v * v.conj()).real for v in new_sol_u.values()]))
@@ -938,11 +949,16 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 if update_u[0].size == 0 or i == maxiter:
                     meta = {'iter': iters, 'chisq': chisq, 'conv_crit': conv}
                     return meta, sol
-                dmdl_u = {k: v[update_u] for k, v in dmdl_u.items()}
-                wgts_u = {k: v[update_u] for k, v in wgts_u.items()}
-                sol_u = {k: v[update_u] for k, v in new_sol_u.items()}
-                abs2_u = {k: v[update_u] for k, v in abs2_u.items()}
-                clamp_wgts_u = {k: v * wgt_func(abs2_u[k]) for k, v in wgts_u.items()}
+                for k, v in dmdl_u.items():
+                    dmdl_u[k] = v[update_u]
+                for k, v in wgts_u.items():
+                    wgts_u[k] = v[update_u]
+                for k, v in abs2_u.items():
+                    abs2_u[k] = v[update_u]
+                for k, v in sol_u.items():
+                    sol_u[k] = v[update_u]
+                for k, v in wgts_u.items():
+                    clamp_wgts_u[k] = (v if wgt_func is None else v * wgt_func(abs2_u[k]))
                 update = tuple(u[update_u] for u in update)
             if verbose:
                 print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
@@ -1112,14 +1128,18 @@ class RedundantCalibrator:
         dc = DataContainer(data)
         eqs = self.build_eqs(dc)
         self.phs_avg = {}  # detrend phases within redundant group, used for logcal to avoid phase wraps
+        d_ls, w_ls = {}, {}
         if detrend_phs:
             for grp in self.reds:
                 self.phs_avg[grp[0]] = np.exp(-np.complex64(1j) * np.median(np.unwrap([np.log(dc[bl]).imag for bl in grp], axis=0), axis=0))
                 for bl in grp:
                     self.phs_avg[bl] = self.phs_avg[grp[0]].astype(dc[bl].dtype)
-        d_ls, w_ls = {}, {}
-        for eq, key in eqs.items():
-            d_ls[eq] = dc[key] * self.phs_avg.get(key, np.float32(1))
+            for eq, key in eqs.items():
+                # this makes a copy, which prevents modification of the data when detrending phase
+                d_ls[eq] = dc[key] * self.phs_avg.get(key, np.float32(1))
+        else:
+            for eq, key in eqs.items():
+                d_ls[eq] = dc[key]
         if len(wgts) > 0:
             wc = DataContainer(wgts)
             for eq, key in eqs.items():
@@ -1289,7 +1309,7 @@ class RedundantCalibrator:
         sol = RedSol(self.reds, sol_dict=prms)
         return meta, sol
 
-    def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, wgt_func=lambda x: 1.):
+    def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, wgt_func=None):
         """Use the Liu et al 2010 Omnical algorithm to linearize equations and iteratively minimize chi^2.
 
         Args:
@@ -1307,7 +1327,7 @@ class RedundantCalibrator:
             wgt_func: a function f(abs^2 * wgt) operating on weighted absolute differences between
                 data and model that returns an additional data weighting to apply to when calculating
                 chisq and updating parameters. Example: lambda x: np.where(x>0, 5*np.tanh(x/5)/x, 1)
-                clamps deviations to 5 sigma. Default is no additional weighting (lambda x: 1.).
+                clamps deviations to 5 sigma. Default None is no additional weighting.
 
         Returns:
             meta: dictionary of information about the convergence and chi^2 of the solution
@@ -1887,7 +1907,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             # try to solve for gains on antennas excluded from calibration, but keep them flagged
             expand_omni_gains(sol, all_reds_this_pol, data, nsamples, chisq_per_ant=meta['chisq_per_ant'])
 
-            # try one more time to expand visibilities, keeping new ones flagged, but 
+            # try one more time to expand visibilities, keeping new ones flagged, but
             # don't update chisq or chisq_per_ant
             expand_omni_vis(sol, all_reds_this_pol, data, nsamples)
             sol.make_sol_finite()
