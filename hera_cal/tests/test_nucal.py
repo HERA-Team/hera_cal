@@ -4,10 +4,7 @@ from copy import deepcopy
 from hera_filters import dspec
 from hera_sim.antpos import linear_array, hex_array
 
-from .. import redcal
-from .. import nucal
-from .. import utils
-from .. import abscal
+from .. import redcal, nucal, utils, abscal, apply_cal
 from ..datacontainer import DataContainer
 
 def test_get_u_bounds():
@@ -735,7 +732,7 @@ class TestSpectrallyRedundantCalibrator:
 
         # Create a u-dependent model
         self.data = {
-            bl: np.sin(2 * np.pi * self.radial_reds.baseline_lengths[bl] * self.freqs / 2.998e8 * 0.25)[None] * np.ones((2, 1))
+            bl: 1 + 0.2 * np.sin(2 * np.pi * self.radial_reds.baseline_lengths[bl] * self.freqs / 2.998e8 * 0.25)[None] * np.ones((2, 1), dtype="complex128")
             for rdgrp in self.radial_reds for bl in rdgrp
         }
         self.data = DataContainer(self.data)
@@ -749,6 +746,15 @@ class TestSpectrallyRedundantCalibrator:
         # Compute filters
         self.frc._compute_filters(self.freqs, 20e-9)
         assert self.frc._filters_computed == True
+
+        # Trigger check that filters are already computed
+        sf = deepcopy(self.frc.spectral_filters)
+        self.frc._compute_filters(self.freqs, 20e-9)
+        assert np.allclose(self.frc.spectral_filters, sf)
+
+        # Recompute with different values 
+        self.frc._compute_filters(self.freqs, 30e-9)
+        assert sf.shape != self.frc.spectral_filters.shape
 
         # Check that filters are the correct shape
         assert len(self.frc.spatial_filters) == len(self.radial_reds[0])
@@ -780,3 +786,33 @@ class TestSpectrallyRedundantCalibrator:
     
         # Shape of amplitude and tip-tilt should be (ndims, ntimes, nfreqs)
         assert tip_tilt["nn"].shape == (1, 2, 200)
+
+    def test_post_redcal_nucal(self):
+        """
+        """
+        amp = np.random.normal(1, 0.05, size=(2, 200))
+        gains = {(k, "Jnn"): amp for k in self.antpos}
+        dc = deepcopy(self.data)
+        apply_cal.calibrate_in_place(dc, gains, gain_convention='multiply')
+
+        fit_gains, model_params, meta = self.frc.post_redcal_nucal(
+            dc, self.data_wgts, spatial_estimate_only=True, minor_cycle_maxiter=10,
+            share_fg_model=True, maxiter=10, spectral_filter_half_width=10e-9,
+        )
+
+        # Check that the value of the loss function decreases
+        assert meta['nn']['loss_history'][-1] < meta['nn']['loss_history'][0]
+
+        fit_gains, model_params, meta, model = self.frc.post_redcal_nucal(
+            dc, self.data_wgts, spatial_estimate_only=True, minor_cycle_maxiter=10,
+            share_fg_model=True, maxiter=10, return_model=True, 
+            spectral_filter_half_width=10e-9, estimate_degeneracies=True
+        )
+
+        # Check that the value of the loss function decreases
+        assert meta['nn']['loss_history'][-1] < meta['nn']['loss_history'][0]
+
+        # Check that there is a model visibility for each baseline in radial_reds
+        for group in self.radial_reds:
+            for bl in group:
+                assert bl in model

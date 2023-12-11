@@ -866,9 +866,13 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
         for bl in group:
             # Compute the model components for this baseline
             if use_spectral_filters:
-                model[bl] = jnp.einsum(einsum_path, spectral_filters, spatial_filters[bl], fg_model_comps[group[0]])
+                model[bl] = np.array(jnp.einsum(
+                    einsum_path, spectral_filters, spatial_filters[bl], fg_model_comps[group[0]]
+                ))
             else:
-                model[bl] = jnp.einsum(einsum_path, spatial_filters[bl], fg_model_comps[group[0]])
+                model[bl] = np.array(jnp.einsum(
+                    einsum_path, spatial_filters[bl], fg_model_comps[group[0]]
+                ))
 
     # Return the model as a RedDataContainer
     return RedDataContainer(model, radial_reds.reds)
@@ -1344,10 +1348,9 @@ class SpectrallyRedundantCalibrator:
 
         return amplitude, tip_tilt
     
-    def calibrate(self, data, data_wgts, cal_flags={}, estimate_w_u_model=True, linear_solver="lu_solve", linear_tol=1e-12, share_fg_model=False, 
+    def post_redcal_nucal(self, data, data_wgts, cal_flags={}, spatial_estimate_only=True, linear_solver="lu_solve", linear_tol=1e-12, share_fg_model=False, 
                   spectral_filter_half_width=30e-9, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, estimate_degeneracies=False,
-                  optimizer_name='adabelief', learning_rate=1e-3, maxiter=100, minor_cycle_maxiter=0, convergence_criteria=1e-10, return_gains=False, 
-                  return_model=False):
+                  optimizer_name='adabelief', learning_rate=1e-3, maxiter=100, minor_cycle_maxiter=0, convergence_criteria=1e-10, return_model=False):
         """
         Estimates redundant calibration degeneracies by building a DPSS-based, sky-model and solving for the parameters which lead to the smoothest
         calibrated visibilities. Function starts by estimating a sky-model by using DPSS filters (which can start with spatial dependence or spectral 
@@ -1365,7 +1368,7 @@ class SpectrallyRedundantCalibrator:
         cal_flags : dictionary, default={}
             Dictionary containing flags for each antenna. Keys are antenna numbers and values are boolean arrays of shape (Ntimes,).
             This dictionary is primarily used for computing the idealized antenna positions.
-        estimate_w_u_model : bool, default="False"
+        spatial_estimate_only : bool, default="False"
             If True, the initial estimate of the foreground model will be computed from the data assuming that the evolution foreground model
             is entirely restricted to the spatial axis. This estimate will then be projected onto the eigenmodes of the spectral DPSS modes
             for refinement in the gradient descent step. If False, the initial estimate of the foreground model will be computed from the 
@@ -1414,27 +1417,22 @@ class SpectrallyRedundantCalibrator:
         convergence_criteria : float, default=1e-10
             Convergence criteria for stopping the optimization. If the difference in loss between two iterations is less than
             convergence_criteria, the optimization will stop.
-        return_gains : bool, default=False
-            If True, the gains will be returned. See below for the order of the returned parameters.
         return_model : bool, default=False
-            If True, the model visibilities will be returned. Otherwise, the model parameters will be returned. See below for the
-            order of the returned parameters.
+            If True, the model visibilities will be returned.
 
         Returns:
         -------
-        If return_gains:
-            gains : dictionary
-                Dictionary mapping antenna numbers to complex gains. Keys are antenna numbers and values are complex gains.
-        else:
-            model_parameters : dictionary
-                Dictionary containing the model parameters for each polarization. Keys are polarization strings and values are
-
+        gains : dictionary
+            Dictionary mapping antenna numbers to complex gains. Keys are antenna numbers and values are complex gains.
+        model_parameters : dictionary
+            Dictionary containing the model parameters for each polarization. Keys are polarization strings and values are
+        metadata : dictionary
+            Dictionary containing metadata from the optimization. Contains dictionaries for each polarization with the number of 
+            iterations ("niter") and the loss history of the gradient descent ("loss_history").
+        
         If return_model:
             model : DataContainer
                 DataContainer containing the model visibilities. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
-        else:
-            model_parameters : dictionary
-                Dictionary containing the model parameters for each polarization. Keys are polarization strings and values are
         """
         # Compute spectral and spatial filters
         self._compute_filters(
@@ -1448,7 +1446,7 @@ class SpectrallyRedundantCalibrator:
         optimizer = OPTIMIZERS[optimizer_name](learning_rate=learning_rate)
 
         # Compute the estimates of the model components from the data
-        if estimate_w_u_model:
+        if spatial_estimate_only:
             init_model_comps = fit_nucal_foreground_model(
                 data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model, 
                 return_model_comps=True, tol=linear_tol
@@ -1467,7 +1465,7 @@ class SpectrallyRedundantCalibrator:
             model = evaluate_foreground_model(
                 self.radial_reds, init_model_comps, spatial_filters=self.spatial_filters, spectral_filters=self.spectral_filters
             )
-            amplitude, tip_tilt = self._estimate_degeneracies(data, data_wgts, model)
+            amplitude, tip_tilt = self._estimate_degeneracies(data, model, data_wgts)
         else:
             amplitude = {pol: np.ones((data.shape)) for pol in data.pols()}
             tip_tilt = {
@@ -1534,20 +1532,16 @@ class SpectrallyRedundantCalibrator:
             }
             model = evaluate_foreground_model(self.radial_reds, fg_model_comps, self.spatial_filters, self.spectral_filters)
 
-        if return_gains:
-            gains = {}
-            for pol in data.pols():
-                for ant in idealized_antpos:
-                    gains[(ant, f"J{pol}")] = np.sqrt(model_parameters[pol][f"amplitude"]) * np.exp(
-                        1j * np.tensordot(idealized_antpos[ant], model_parameters[pol][f"tip_tilt"], axes=(0, 0))
-                    )
+        
+        # Compute the gains from the model parameters
+        gains = {}
+        for pol in data.pols():
+            for ant in idealized_antpos:
+                gains[(ant, f"J{pol}")] = np.sqrt(model_parameters[pol][f"amplitude"]) * np.exp(
+                    1j * np.tensordot(idealized_antpos[ant], model_parameters[pol][f"tip_tilt"], axes=(0, 0))
+                )
 
-            if return_model:
-                return gains, model, metadata
-            else:
-                return gains, model_parameters, metadata
+        if return_model:
+            return gains, model_parameters, metadata, model
         else:
-            if return_model:
-                return model, model_parameters, metadata
-            else:
-                return model_parameters, metadata
+            return gains, model_parameters, metadata
