@@ -12,22 +12,18 @@ import astropy.constants as const
 from scipy.cluster.hierarchy import fclusterdata
 
 import jax
+import optax
 from jax import numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
-# Optional import of Optax library for optimization
-try:
-    import optax
 
-    # Approved Optax Optimizers
-    OPTIMIZERS = {
-        'adabelief': optax.adabelief, 'adafactor': optax.adafactor, 'adagrad': optax.adagrad, 'adam': optax.adam,
-        'adamw': optax.adamw, 'fromage': optax.fromage, 'lamb': optax.lamb, 'lars': optax.lars,
-        'noisy_sgd': optax.noisy_sgd, 'dpsgd': optax.dpsgd, 'radam': optax.radam, 'rmsprop': optax.rmsprop,
-        'sgd': optax.sgd, 'sm3': optax.sm3, 'yogi': optax.yogi
-    }
-except:
-    warnings.warn('Optax is not installed. Some functionality may not be available')
+# Approved Optax Optimizers
+OPTIMIZERS = {
+    'adabelief': optax.adabelief, 'adafactor': optax.adafactor, 'adagrad': optax.adagrad, 'adam': optax.adam,
+    'adamw': optax.adamw, 'fromage': optax.fromage, 'lamb': optax.lamb, 'lars': optax.lars,
+    'noisy_sgd': optax.noisy_sgd, 'dpsgd': optax.dpsgd, 'radam': optax.radam, 'rmsprop': optax.rmsprop,
+    'sgd': optax.sgd, 'sm3': optax.sm3, 'yogi': optax.yogi
+}
 
 # Constants
 SPEED_OF_LIGHT = const.c.si.value

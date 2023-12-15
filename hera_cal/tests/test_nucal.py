@@ -803,6 +803,7 @@ class TestSpectrallyRedundantCalibrator:
         # Check that the value of the loss function decreases
         assert meta['nn']['loss_history'][-1] < meta['nn']['loss_history'][0]
 
+        # Run with abscal degeneracy estimation
         fit_gains, model_params, meta, model = self.frc.post_redcal_nucal(
             dc, self.data_wgts, spatial_estimate_only=True, minor_cycle_maxiter=10,
             share_fg_model=True, maxiter=10, return_model=True, 
