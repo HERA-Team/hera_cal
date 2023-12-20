@@ -1174,16 +1174,17 @@ def _nucal_post_redcal(
         List of spatial filters for each baseline in the group
     idealized_blvecs : np.ndarray
         Array of idealized baseline vectors with shape (Nbls, Ndims)
-    maxiter : int, optional, default=100
-        Maximum number of iterations to perform in the gradient descent loop. If convergence_criteria is not met
-        after maxiter iterations, the optimization will stop.
+    major_cycle_maxiter : int, optional, default=100
+        Maximum number of iterations to perform in the major portion of the gradient descent loop. A major cycle is defined as a gradient descent step
+        in which the foreground model parameters and redundant calibration degeneracies are fit to the data.
+        If convergence_criteria is not met after maxiter iterations, the optimization will stop.
     tol : float, optional, default=1e-10
         Tolerance for stopping criterion. If the difference of the loss between two iterations is less than tol,
         the optimization will stop.
     minor_cycle_maxiter : int, optional, default=0
         Maximum number of iterations of the minor cycle to perform after each major cycle. Minor cycles are performed by fixing the foreground
         model and solving for the calibration parameters. When minor_cycle_maxiter is 0, no minor cycles are performed. If subsequent losses
-        are within tolerance, the minor cycle will stop.
+        are within convergence_criterea, the minor cycle will stop.
     
     Returns:
     -------
@@ -1191,7 +1192,7 @@ def _nucal_post_redcal(
         Optimized parameters
     metadata : dictionary
         Dictionary containing metadata from the optimization. Contains the number of iterations ("niter") and the loss history
-        ("loss_history").
+        ("loss_history"). The loss history is an array that stores the value of the loss at each major and minor cycle iteration.
     """
     # Initialize optimizer state using parameter guess
     opt_state = optimizer.init(model_parameters)
@@ -1200,7 +1201,7 @@ def _nucal_post_redcal(
     losses = []
 
     # Start gradient descent
-    for step in range(maxiter):
+    for step in range(major_cycle_maxiter):
         # Compute loss and gradient
         loss, gradient = jax.value_and_grad(_calibration_loss_function)(
             model_parameters, data_r, data_i, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs
