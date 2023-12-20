@@ -1154,9 +1154,9 @@ def _nucal_post_redcal(
 
     Parameters:
     ----------
-    data_r : np.ndarray
+    data_r : jnp.ndarray (or np.ndarray)
         Array of real component of data with shape (Ntimes, Nbls)
-    data_i : np.ndarray
+    data_i : jnp.ndarray (or np.ndarray)
         Array of imaginary component of data with shape (Ntimes, Nbls)
     wgts : np.ndarray
         Array of weights with shape (Ntimes, Nbls)
@@ -1208,10 +1208,14 @@ def _nucal_post_redcal(
         # Update optimizer state and parameters
         updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
         params = optax.apply_updates(model_parameters, updates)
+
+        # Store loss values
+        losses.append(loss)
         
         if minor_cycle_maxiter > 0:
-            # Compute foreground model from the model_parameters and DPSS filters
             minor_cycle_losses = []
+
+            # Compute foreground model from the model_parameters and DPSS filters
             fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
             for minor_step in range(minor_cycle_maxiter):
                 # Since the foreground model is fixed, we can just use the _mean_square_error
@@ -1229,10 +1233,9 @@ def _nucal_post_redcal(
                 # Stop if subsequent losses are within tolerance
                 if minor_step >= 1 and np.abs(minor_cycle_losses[-1] - minor_cycle_losses[-2]) < convergence_criteria:
                     break
-        
-        # Store loss values
-        losses.append(loss)
 
+                losses.append(minor_cycle_loss)
+        
         # Stop if subsequent losses are within tolerance
         if step >= 1 and np.abs(losses[-1] - losses[-2]) < convergence_criteria:
             break
