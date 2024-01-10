@@ -504,7 +504,6 @@ def threshold_flags(
 
 def sigma_clip(
     array: np.ndarray | np.ma.MaskedArray,
-    expected_variance: np.ndarray | None = None,
     threshold: float = 4.0,
     min_N: int = 4,
     median_axis: int = 0,
@@ -524,9 +523,6 @@ def sigma_clip(
         ``ndim > max(median_axis, threshold_axis)``. In the context of this module
         (lst binning), we expect the array to be of shape
         ``(Nnights, Nbls, Nfreqs, Npols)``.
-    expected_variance
-        Expected variance of the data over the median_axis.
-        If None, it is estimated from the data.
     threshold
         Threshold to cut above, in units of the standard deviation.
     min_N
@@ -559,8 +555,7 @@ def sigma_clip(
         with clipped values set to True.
     """
     # ensure array is an array
-    if not isinstance(array, np.ndarray):
-        array = np.array(array)
+    array = np.asarray(array)
 
     if np.iscomplexobj(array):
         raise ValueError("array must be real")
@@ -570,14 +565,10 @@ def sigma_clip(
         return np.zeros_like(array, dtype=bool)
 
     if not isinstance(array, np.ma.MaskedArray):
-        array = np.ma.MaskedArray(array, mask=np.nonzero(np.isnan(array)))
+        array = np.ma.MaskedArray(array, mask=np.isnan(array))
 
     location = np.expand_dims(np.ma.median(array, axis=median_axis), axis=median_axis)
-
-    if expected_variance is None:
-        scale = np.expand_dims(np.ma.median(np.abs(array - location), axis=median_axis) * 1.482579, axis=median_axis)
-    else:
-        scale = np.expand_dims(np.sqrt(expected_variance), axis=median_axis)
+    scale = np.expand_dims(np.ma.median(np.abs(array - location), axis=median_axis) * 1.482579, axis=median_axis)
 
     if flag_bands is None:
         # Use entire threshold axis together
@@ -585,7 +576,7 @@ def sigma_clip(
 
     zscore = np.abs(array - location) / scale
 
-    clip_flags = np.zeros_like(array, dtype=bool)
+    clip_flags = np.zeros(array.shape, dtype=bool)
 
     for band in flag_bands:
         # build the slice index. Don't use np.take with axis= parameter because it
@@ -604,6 +595,7 @@ def sigma_clip(
             # In this mode, an entire sub-band of the data is flagged if its mean
             # (absolute) zscore is beyond the threshold.
             mean_abs_dev = getattr(np.ma, clip_type)(subz, axis=threshold_axis)
+            print(mean_abs_dev.min(), mean_abs_dev.max(), subz.min(), subz.max())
             subflags[:] = np.expand_dims(mean_abs_dev > threshold, axis=threshold_axis)
         else:
             raise ValueError(
@@ -695,7 +687,6 @@ def lst_average(
 
         nflags = np.sum(flags)
         kw = {
-            'expected_variance': sigma_clip_expected_variance,
             'threshold': sigma_clip_thresh,
             'min_N': sigma_clip_min_N,
             'clip_type': sigma_clip_type,
