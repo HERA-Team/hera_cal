@@ -594,9 +594,11 @@ def sigma_clip(
         elif clip_type in ['mean', 'median']:
             # In this mode, an entire sub-band of the data is flagged if its mean
             # (absolute) zscore is beyond the threshold.
-            mean_abs_dev = getattr(np.ma, clip_type)(subz, axis=threshold_axis)
-            print(mean_abs_dev.min(), mean_abs_dev.max(), subz.min(), subz.max())
-            subflags[:] = np.expand_dims(mean_abs_dev > threshold, axis=threshold_axis)
+            thisf = getattr(np.ma, clip_type)(subz, axis=threshold_axis) > threshold
+            for day_idx, bl_idx, pol_idx in thisf.nonzero():
+                print(f"Sigma-clipping (day,bl,pol)={day_idx},{bl_idx},{pol_idx}")
+
+            subflags[:] = np.expand_dims(thisf, axis=threshold_axis)
         else:
             raise ValueError(
                 f"clip_type must be 'direct', 'mean' or 'median', got {clip_type}"
@@ -2516,7 +2518,7 @@ def lst_bin_arg_parser():
     )
     a.add_argument(
         "--sigma-clip-type",
-        type='str',
+        type=str,
         default='direct',
         choices=['direct', 'mean', 'median'],
         help="How to threshold the absolute zscores for sigma clipping."
