@@ -269,6 +269,8 @@ def reduce_lst_bins(
     mutable: bool = False,
     sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
+    sigma_clip_type: str = 'direct',
+    sigma_clip_subbands: list[int] | None = None,
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
     get_mad: bool = False,
@@ -375,6 +377,8 @@ def reduce_lst_bins(
                 inpainted_mode=inpainted_mode,
                 sigma_clip_thresh=sigma_clip_thresh,
                 sigma_clip_min_N=sigma_clip_min_N,
+                sigma_clip_subbands=sigma_clip_subbands,
+                sigma_clip_type=sigma_clip_type,
                 flag_below_min_N=flag_below_min_N,
             )
 
