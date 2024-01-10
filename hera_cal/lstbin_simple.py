@@ -518,7 +518,12 @@ def sigma_clip(
     Parameters
     ----------
     array
-        ndarray of *real* data.
+        ndarray of *real* data, of any dimension. If a MaskedArray, the mask is
+        respected. If not, a masked array is created that masks out NaN values in the
+        array. While the input array can be of any dimension, it must have at least
+        ``ndim > max(median_axis, threshold_axis)``. In the context of this module
+        (lst binning), we expect the array to be of shape
+        ``(Nnights, Nbls, Nfreqs, Npols)``.
     expected_variance
         Expected variance of the data over the median_axis.
         If None, it is estimated from the data.
@@ -543,8 +548,9 @@ def sigma_clip(
         flagged if its mean (absolute) zscore is beyond the threshold.
     flag_bands
         A list of tuples specifying the start and end indices of the threshold axis
-        to perform sigma clipping over. If None, the entire threshold axis is used at
-        once.
+        over which to perform sigma clipping. They are used in a ``slice`` object,
+        so that the end is exclusive but the start is inclusive. If None, the entire
+        threshold axis is used at once.
 
     Output
     ------
@@ -555,6 +561,9 @@ def sigma_clip(
     # ensure array is an array
     if not isinstance(array, np.ndarray):
         array = np.array(array)
+
+    if np.iscomplexobj(array):
+        raise ValueError("array must be real")
 
     # ensure array passes min_N criterion:
     if array.shape[median_axis] < min_N:
@@ -591,17 +600,11 @@ def sigma_clip(
         if clip_type == 'direct':
             # In this mode, each datum is flagged individually.
             subflags[:] = subz > threshold
-        elif clip_type == 'mean':
+        elif clip_type in ['mean', 'median']:
             # In this mode, an entire sub-band of the data is flagged if its mean
             # (absolute) zscore is beyond the threshold.
-            mean_abs_dev = np.mean(subz, axis=threshold_axis)
+            mean_abs_dev = getattr(np.ma, clip_type)(subz, axis=threshold_axis)
             subflags[:] = np.expand_dims(mean_abs_dev > threshold, axis=threshold_axis)
-        elif clip_type == 'median':
-            # In this mode, an entire sub-band of the data is flagged if its median
-            # (absolute) zscore is beyond the threshold.
-            mean_abs_dev = np.median(subz, axis=threshold_axis)
-            subflags[:] = np.expand_dims(mean_abs_dev > threshold, axis=threshold_axis)
-
         else:
             raise ValueError(
                 f"clip_type must be 'direct', 'mean' or 'median', got {clip_type}"
@@ -621,7 +624,6 @@ def lst_average(
     flag_below_min_N: bool = False,
     sigma_clip_subbands: list[int] | None = None,
     sigma_clip_type: Literal['direct', 'mean', 'median'] = 'direct',
-    sigma_clip_expected_variance: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute statistics of a set of data over its zeroth axis.
@@ -656,14 +658,13 @@ def lst_average(
     sigma_clip_subbands
         A list of integers specifying the start and end indices of the frequency axis
         to perform sigma clipping over. If None, the entire frequency axis is used at
-        once.
+        once. Given a list of integers e.g. ``[0, 10, 20]``, the sub-bands will be
+        defined as [(0, 10), (10, 20)], where each 2-tuple defines a standard Python
+        slice object (i.e. end is exclusive, start is inclusive).
     sigma_clip_type
         The type of sigma clipping to perform. If ``direct``, each datum is flagged
         individually. If ``mean`` or ``median``, an entire sub-band of the data is
         flagged if its mean (absolute) zscore is beyond the threshold.
-    sigma_clip_expected_variance
-        Expected variance of the data over the sigma_clip_subbands. If None, it is
-        estimated from the data.
 
     Returns
     -------
