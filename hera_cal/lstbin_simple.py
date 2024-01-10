@@ -601,7 +601,8 @@ def sigma_clip(
             thisf = getattr(np.ma, clip_type)(subz, axis=threshold_axis) > threshold
             if np.any(thisf):
                 for day_idx, bl_idx, pol_idx in zip(*thisf.nonzero()):
-                    print(f"Sigma-clipping (day,bl,pol)={day_idx},{bl_idx},{pol_idx}")
+                    if not np.all(subz.mask[day_idx, bl_idx, :, pol_idx]):
+                        print(f"Sigma-clipping (band,day,bl,pol)={band},{day_idx},{bl_idx},{pol_idx}")
 
             subflags[:] = np.expand_dims(thisf, axis=threshold_axis)
         else:
