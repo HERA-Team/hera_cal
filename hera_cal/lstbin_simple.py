@@ -599,8 +599,9 @@ def sigma_clip(
             # In this mode, an entire sub-band of the data is flagged if its mean
             # (absolute) zscore is beyond the threshold.
             thisf = getattr(np.ma, clip_type)(subz, axis=threshold_axis) > threshold
-            for day_idx, bl_idx, pol_idx in thisf.nonzero():
-                print(f"Sigma-clipping (day,bl,pol)={day_idx},{bl_idx},{pol_idx}")
+            if np.any(thisf):
+                for day_idx, bl_idx, pol_idx in zip(*thisf.nonzero()):
+                    print(f"Sigma-clipping (day,bl,pol)={day_idx},{bl_idx},{pol_idx}")
 
             subflags[:] = np.expand_dims(thisf, axis=threshold_axis)
         else:
