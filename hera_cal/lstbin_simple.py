@@ -1268,7 +1268,6 @@ def lst_bin_files_single_outfile(
     sigma_clip_min_N: int = 4,
     sigma_clip_subbands: list[int] | None = None,
     sigma_clip_type: Literal['direct', 'mean', 'median'] = 'direct',
-    sigma_clip_expected_variance: np.ndarray | None = None,
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
     freq_min: float | None = None,
@@ -1395,9 +1394,6 @@ def lst_bin_files_single_outfile(
         The type of sigma clipping to perform. If ``direct``, each datum is flagged
         individually. If ``mean`` or ``median``, an entire sub-band of the data is
         flagged if its mean (absolute) zscore is beyond the threshold.
-    sigma_clip_expected_variance
-        Expected variance of the data over the sigma_clip_subbands. If None, it is
-        estimated from the data.
     flag_below_min_N
         If True, flag all (antpair, pol,channel) combinations  for an LST-bin that
         contiain fewer than `flag_below_min_N` unflagged integrations within the bin.
@@ -1772,7 +1768,6 @@ def lst_bin_files_single_outfile(
                 get_mad=write_med_mad,
                 sigma_clip_subbands=sigma_clip_subbands,
                 sigma_clip_type=sigma_clip_type,
-                sigma_clip_expected_variance=sigma_clip_expected_variance,
             )
 
             write_baseline_slc_to_file(
