@@ -559,7 +559,8 @@ def sigma_clip(
         with clipped values set to True.
     """
     # ensure array is an array
-    array = np.asarray(array)
+    if not isinstance(array, np.ndarray):  # this covers np.ma.MaskedArray as well
+        array = np.asarray(array)
 
     if np.iscomplexobj(array):
         raise ValueError("array must be real")
