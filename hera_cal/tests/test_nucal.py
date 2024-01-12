@@ -790,6 +790,10 @@ class TestSpectrallyRedundantCalibrator:
     def test_post_redcal_nucal(self):
         """
         """
+        # Set random seed
+        np.random.seed(42)
+
+        # Set gains
         amp = np.random.normal(1, 0.05, size=(2, 200))
         gains = {(k, "Jnn"): amp for k in self.antpos}
         dc = deepcopy(self.data)
