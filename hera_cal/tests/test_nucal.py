@@ -689,7 +689,7 @@ class TestGradientDescent:
         # Run gradient descent
         _, metadata = nucal._nucal_post_redcal(
             data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
-            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, maxiter=100,
+            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, major_cycle_maxiter=100,
         )
 
         # Check that starting in the correct spot doesn't move solutions
@@ -700,7 +700,7 @@ class TestGradientDescent:
         # Run gradient descent w/ minor cycle
         _, metadata = nucal._nucal_post_redcal(
             data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
-            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, maxiter=100,
+            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, major_cycle_maxiter=100,
             minor_cycle_maxiter=1
         )
 
@@ -717,7 +717,7 @@ class TestGradientDescent:
         # Run gradient descent w/ minor cycle
         _, metadata = nucal._nucal_post_redcal(
             data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
-            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, maxiter=10,
+            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, major_cycle_maxiter=10,
             minor_cycle_maxiter=1
         )
 
@@ -810,7 +810,7 @@ class TestSpectrallyRedundantCalibrator:
         # Run with abscal degeneracy estimation
         fit_gains, model_params, meta, model = self.frc.post_redcal_nucal(
             dc, self.data_wgts, spatial_estimate_only=True, minor_cycle_maxiter=10,
-            share_fg_model=True, maxiter=10, return_model=True, 
+            share_fg_model=True, major_cycle_maxiter=10, return_model=True, 
             spectral_filter_half_width=10e-9, estimate_degeneracies=True
         )
 
