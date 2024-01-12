@@ -1177,7 +1177,7 @@ def _nucal_post_redcal(
     major_cycle_maxiter : int, optional, default=100
         Maximum number of iterations to perform in the major portion of the gradient descent loop. A major cycle is defined as a gradient descent step
         in which the foreground model parameters and redundant calibration degeneracies are fit to the data.
-        If convergence_criteria is not met after maxiter iterations, the optimization will stop.
+        If convergence_criteria is not met after major_cycle_maxiter iterations, the optimization will stop.
     tol : float, optional, default=1e-10
         Tolerance for stopping criterion. If the difference of the loss between two iterations is less than tol,
         the optimization will stop.
