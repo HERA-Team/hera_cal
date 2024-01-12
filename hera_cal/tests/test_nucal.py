@@ -801,7 +801,7 @@ class TestSpectrallyRedundantCalibrator:
 
         fit_gains, model_params, meta = self.frc.post_redcal_nucal(
             dc, self.data_wgts, spatial_estimate_only=True, minor_cycle_maxiter=10,
-            share_fg_model=True, maxiter=10, spectral_filter_half_width=10e-9,
+            share_fg_model=True, major_cycle_maxiter=10, spectral_filter_half_width=10e-9,
         )
 
         # Check that the value of the loss function decreases
