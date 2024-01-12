@@ -180,10 +180,10 @@ class TestDataContainer(object):
             del dc['bad_key']
 
         with pytest.raises(ValueError, match='Tuple keys to delete must be in the format'):
-            del dc[(1,2,3,4)]
-        
+            del dc[(1, 2, 3, 4)]
+
         with pytest.raises(ValueError, match='Tuple keys to delete must be in the format'):
-            del dc[[1,2,'xx']]
+            del dc[[1, 2, 'xx']]
 
     def test_getitem(self):
         dc = datacontainer.DataContainer(self.blpol)
@@ -314,7 +314,7 @@ class TestDataContainer(object):
         assert dc.dtype is None
         dc = datacontainer.DataContainer({(1, 2): {'xx': 2}})
         assert dc.dtype is None
-        
+
         dc = datacontainer.DataContainer(self.blpolarr)
         assert dc.dtype == complex
         dc = datacontainer.DataContainer(self.bools)
@@ -326,17 +326,18 @@ class TestDataContainer(object):
             def __init__(self, d: dict):
                 self._data = deepcopy(d)
                 self.ants = set(sum(self._data.keys(), ()))
-            
+
             def __getitem__(self, key):
                 return self._data[key]
-            
+
             def keys(self):
                 return self._data.keys()
-            
+
         blpol = SmallDataContainer(self.blpol)
-        
+
         dc = datacontainer.DataContainer(blpol)
         assert dc.ants == blpol.ants
+
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class TestDataContainerWithRealData:
@@ -467,6 +468,55 @@ class TestDataContainerWithRealData:
                 assert np.all(dc.lsts == (np.arange(10) * 2 * np.pi / 10)[new_times])
                 assert np.all(dc.lsts_by_bl[0, 1] == (np.arange(10) * 2 * np.pi / 10)[new_times])
 
+    def test_select_freqs(self):
+        fq = np.linspace(0, 1, 10)
+        dc1 = datacontainer.DataContainer({(0, 1, 'ee'): np.arange(10)})
+        dc1.freqs = fq
+
+        # Both of the following should pick all the freqs
+        dc2 = dc1.select_freqs(fq, in_place=False)
+        dc1.select_freqs(fq, in_place=True)
+        dc1.select_freqs()
+
+        for dc in (dc1, dc2):
+            assert np.all(dc[(0, 1, 'ee')] == np.arange(10))
+            assert np.all(dc.freqs == fq)
+
+        # Now actually sub-select
+        fq2 = fq[:9]
+        dc2 = dc1.select_freqs(fq2, in_place=False)
+        dc1.select_freqs(fq2, in_place=True)
+
+        for dc in (dc1, dc2):
+            assert np.all(dc[(0, 1, 'ee')] == np.arange(9))
+            assert np.all(dc.freqs == fq2)
+
+        # Sub-select by channel
+        chans = np.arange(8)
+        dc2 = dc1.select_freqs(channels=chans, in_place=False)
+        dc1.select_freqs(channels=chans, in_place=True)
+
+        for dc in (dc1, dc2):
+            assert np.all(dc[(0, 1, 'ee')] == np.arange(8))
+            assert np.all(dc.freqs == fq[chans])
+
+        # Error if both freqs and chans given
+        with pytest.raises(ValueError, match='Cannot specify both freqs and channels'):
+            dc1.select_freqs(fq, channels=chans)
+
+        with pytest.raises(ValueError, match="All freqs must be in self.freqs"):
+            dc1.select_freqs(np.array([100.0]))
+
+        # Ensure warning is raised without freqs
+        dc1.freqs = None
+        with pytest.warns(UserWarning, match='It is impossible'):
+            dc1.select_freqs(channels=chans)
+
+        assert len(dc1[(0, 1, 'ee')]) == 8
+
+        with pytest.raises(ValueError, match='Cannot select frequencies'):
+            dc1.select_freqs(fq2)
+
 
 def test_RedDataContainer():
     # build hexagonal array and data which tells us which baseline it comes from
@@ -486,7 +536,7 @@ def test_RedDataContainer():
     # build an incomplete datacontainer, then finish it
     rdata6 = datacontainer.RedDataContainer(deepcopy(data), reds[:-1])
     rdata6[reds[-1][0]] = deepcopy(data[reds[-1][0]])
-    #rdata6.build_red_keys(reds)
+    # rdata6.build_red_keys(reds)
 
     # make sure that the data for a redundant group are being accessed from the same place in memory
     for i, rdata in enumerate([rdata1, rdata2, rdata3, rdata4, rdata5, rdata6]):
@@ -555,4 +605,3 @@ def test_RedDataContainerKeyManipulation():
     rdc[1, 3, 'ee'] = 21j
     with pytest.raises(ValueError):
         rdc.build_red_keys([[(0, 2, 'ee'), (1, 3, 'ee')]])
-

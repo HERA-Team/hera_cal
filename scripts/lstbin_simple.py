@@ -7,11 +7,8 @@
 
 from hera_cal import lstbin_simple as lstbin
 import sys
-import glob
 import json
 from hera_cal._cli_tools import setup_logger, parse_args, filter_kwargs, run_with_profiling
-import logging
-import importlib
 from pathlib import Path
 
 a = lstbin.lst_bin_arg_parser()
@@ -48,19 +45,27 @@ if kwargs['output_file_select'] == ['None']:
 # Turn a list into a list of 2-tuples.
 crules = kwargs.pop("calfile_rules")
 if crules is not None:
-    calfile_rules = [(crules[i], crules[i+1]) for i in range(len(crules)//2)]
+    calfile_rules = [(crules[i], crules[i + 1]) for i in range(len(crules) // 2)]
 else:
     calfile_rules = None
 
+inprules = kwargs.pop("where_inpainted_file_rules")
+if inprules is not None:
+    inpaint_rules = [(inprules[i], inprules[i + 1]) for i in range(len(inprules) // 2)]
+else:
+    inpaint_rules = None
 
 kwargs['save_channels'] = tuple(int(ch) for ch in kwargs['save_channels'].split(','))
 kwargs['golden_lsts'] = tuple(float(lst) for lst in kwargs['golden_lsts'].split(','))
 
+kwargs['output_flagged'] = not kwargs.pop('no_flagged_mode')
+kwargs['output_inpainted'] = kwargs.pop("do_inpaint_mode")
 run_with_profiling(
-    lstbin.lst_bin_files, 
+    lstbin.lst_bin_files,
     args,
     config_file=kwargs.pop('configfile'),
-    calfile_rules=calfile_rules, 
-    write_kwargs=write_kwargs, 
+    calfile_rules=calfile_rules,
+    where_inpainted_file_rules=inpaint_rules,
+    write_kwargs=write_kwargs,
     **kwargs
 )

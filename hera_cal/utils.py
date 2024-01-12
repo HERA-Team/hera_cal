@@ -119,7 +119,7 @@ def comply_pol(pol):
     compliant with pyuvdata and hera_cal.'''
     try:
         return _comply_vispol(pol)
-    except(KeyError):  # happens if we have an antpol, not vispol
+    except KeyError:  # happens if we have an antpol, not vispol
         return _comply_antpol(pol)
 
 
@@ -399,7 +399,7 @@ if AIPY:
         def get_params(self, ant_prms={'*': '*'}):
             try:
                 prms = aipy.pol.AntennaArray.get_params(self, ant_prms)
-            except(IndexError):
+            except IndexError:
                 return {}
             return prms
 
@@ -411,17 +411,17 @@ if AIPY:
                 try:
                     top_pos[0] = prms[str(i)]['top_x']
                     ant_changed = True
-                except(KeyError):
+                except KeyError:
                     pass
                 try:
                     top_pos[1] = prms[str(i)]['top_y']
                     ant_changed = True
-                except(KeyError):
+                except KeyError:
                     pass
                 try:
                     top_pos[2] = prms[str(i)]['top_z']
                     ant_changed = True
-                except(KeyError):
+                except KeyError:
                     pass
                 if ant_changed:
                     # rotate from zenith to equatorial, convert from meters to ns
@@ -539,7 +539,9 @@ def JD2LST(JD, latitude=-30.721526120689507, longitude=21.428303826863015, altit
         JD = [JD]
 
     # use pyuvdata
-    LST = uvutils.get_lst_for_time(np.array(JD), latitude, longitude, altitude)
+    LST = uvutils.get_lst_for_time(
+        np.array(JD), latitude=latitude, longitude=longitude, altitude=altitude
+    )
 
     if _array:
         return LST
@@ -563,7 +565,7 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
                      LSTs to correspond to previous or subsequent days if necessary
 
     lst_branch_cut : type=float, LST that must fall during start_jd even when allow_other_jd
-                     is True. Used as the starting point starting point where LSTs below this
+                     is True. Used as the starting point where LSTs below this
                      value map to later JDs than this LST [radians]
 
     latitude : type=float, degrees North of observer, default=HERA latitude
@@ -790,8 +792,8 @@ def lst_rephase(
     bls: dict[tp.Baseline, np.ndarray] | np.ndarray,
     freqs: np.ndarray,
     dlst: float | list | np.ndarray,
-    lat: float =-30.721526120689507,
-    inplace: bool=True,
+    lat=-30.721526120689507,
+    inplace=True,
     array=False
 ):
     """
@@ -820,7 +822,7 @@ def lst_rephase(
         if True edit arrays in data in memory, else make a copy and return
     array
         Deprecated parameter that specifies that the input data is an array
-        with shape (ntimes, nfreqs, [npols]). Don't write code with this 
+        with shape (ntimes, nfreqs, [npols]). Don't write code with this
         parameter -- instead just set the baseline axis of data to be length-1.
 
     Notes:
@@ -901,7 +903,7 @@ def lst_rephase(
             if array:
                 warnings.warn(
                     "the 'array' parameter to lst_rephase is deprecated. Please provide data with second-axis of Nbls",
-                    category=DeprecationWarning,    
+                    category=DeprecationWarning,
                 )
                 data = data[:, None]
 
@@ -933,7 +935,7 @@ def lst_rephase(
 
         if not inplace:
             if orig_type in (dict, OrderedDict, DataContainer):
-                return orig_type({k: data[:,i] for i,k in enumerate(keys)})
+                return orig_type({k: data[:, i] for i, k in enumerate(keys)})
             else:
                 if array:
                     return data[:, 0]
@@ -1465,6 +1467,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
         else:
             return data
 
+
 def match_files_to_lst_bins(
     lst_edges: tuple[float],
     file_list: Sequence[str | Path],
@@ -1554,12 +1557,12 @@ def match_files_to_lst_bins(
     if len(lst_edges) < 2:
         raise ValueError("lst_edges must have at least 2 elements.")
     lst0 = lst_edges[0]
-    lst_edges=np.array([(lst - lst0)%(2*np.pi) + lst0 for lst in lst_edges])
+    lst_edges = np.array([(lst - lst0) % (2 * np.pi) + lst0 for lst in lst_edges])
     # We can have the case that an edges is at lst0 + 2pi exactly, which would
     # get wrapped around to lst0, but it should stay at lst0+2pi.
-    lst_edges[1:][lst_edges[1:] == lst_edges[0]] += 2*np.pi
+    lst_edges[1:][lst_edges[1:] == lst_edges[0]] += 2 * np.pi
 
-    if np.any(np.diff(lst_edges) < 0 ):
+    if np.any(np.diff(lst_edges) < 0):
         raise ValueError("lst_edges must not extend beyond 2pi total radians from start to finish.")
 
     lstmin, lstmax = lst_edges[0], lst_edges[-1]
@@ -1597,10 +1600,12 @@ def match_files_to_lst_bins(
 
     if jd_regex is not None:
         jd_regex = re.compile(jd_regex)
+
         @cache
         def get_first_time(path: Path) -> float:
             return float(jd_regex.findall(path.name)[0])
     else:
+
         @cache
         def get_first_time(path: Path) -> float:
             meta = _metas[path]
@@ -1609,7 +1614,7 @@ def match_files_to_lst_bins(
     def get_first_file_in_range(meta_list, jd_range: Tuple[float, float]) -> int:
         jdstart, jdend = jd_range
 
-        jdstart_for_file = jdstart - tint*(ntimes_per_file-1) - atol
+        jdstart_for_file = jdstart - tint * (ntimes_per_file - 1) - atol
 
         # The lst-edges might wrap around within a day. If so, when comparing times
         # to the bins, we need to use an OR instead of an AND.
@@ -1630,22 +1635,21 @@ def match_files_to_lst_bins(
                 break
 
             diff = jdstart_for_file - thistime
-            in_range = cmp(jdstart_for_file <= thistime, thistime <= jdend+atol)
+            in_range = cmp(jdstart_for_file <= thistime, thistime <= jdend + atol)
             if np.abs(diff) < best_diff and in_range:
                 # This file has a time that is in our range, and is closest so far
                 # to the start of the range.
                 best_diff = np.abs(diff)
                 best_index = index
 
-
-            move_nfiles = round(diff / (tint*ntimes_per_file))
+            move_nfiles = round(diff / (tint * ntimes_per_file))
 
             if move_nfiles == 0:
                 if in_range:
                     break
                 else:
                     # Move by one file in the right direction, just to be sure.
-                    move_nfiles = int(1*np.sign(diff))
+                    move_nfiles = int(1 * np.sign(diff))
 
             if diff > 0:
                 minidx = max(minidx, index)
@@ -1654,7 +1658,7 @@ def match_files_to_lst_bins(
 
             index += move_nfiles
             if not (minidx < index < maxidx):
-                index = min(maxidx-1, max(minidx+1, (minidx + maxidx) // 2))
+                index = min(maxidx - 1, max(minidx + 1, (minidx + maxidx) // 2))
                 if index < 0:
                     index = 0
                 elif index >= len(meta_list):
@@ -1669,15 +1673,12 @@ def match_files_to_lst_bins(
             return best_index
 
     try:
-        # We subtract one, because the file before the first file in the range
-        # may just get into the range by a tiny bit, and we allow the user to test
-        # that out later.
         first_file = get_first_file_in_range(metadata_list, (jdstart, jdend))
     except ValueError:
-        return [[] for _ in range(len(lst_edges)-1)]
+        return [[] for _ in range(len(lst_edges) - 1)]
 
     # Now, we have to actually go through the bins in lst_edges and assign files.
-    lstbin_files = [[] for _ in range(len(lst_edges)-1)]
+    lstbin_files = [[] for _ in range(len(lst_edges) - 1)]
     _meta_list = metadata_list[first_file:] + metadata_list[:first_file]  # roll the files
 
     for i, fl in enumerate(_meta_list):
@@ -1686,7 +1687,7 @@ def match_files_to_lst_bins(
         for lstbin, (jdstart, jdend) in enumerate(zip(jd_edges[:-1], jd_edges[1:])):
             # Go through each lst bin
             cmp = operator.and_ if (jdstart < jdend) else operator.or_
-            if cmp(jdstart - (ntimes_per_file-1)*tint - atol <= thistime, thistime < jdend + atol):
+            if cmp(jdstart - (ntimes_per_file - 1) * tint - atol <= thistime, thistime < jdend + atol):
                 lstbin_files[lstbin].append(fl)
             fl_in_range = True
 
@@ -1694,6 +1695,7 @@ def match_files_to_lst_bins(
             break
 
     return lstbin_files
+
 
 def eq2top_m(ha, dec):
     """Return the 3x3 matrix converting equatorial coordinates to topocentric
@@ -1777,6 +1779,21 @@ def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
             else:
                 baseline_chunks.append(grp)
     return baseline_chunks
+
+
+def get_best_lst_branch_cut(lsts_in):
+    # Sort them
+    lsts = np.sort(lsts_in % (2 * np.pi))
+
+    # wrap lstg around in case the biggest gap is right at the start
+    lsts = np.concatenate((lsts, [lsts[0]]))
+
+    diff_lst = np.diff(lsts)
+    while np.any(diff_lst < 0):
+        lsts[np.where(diff_lst < 0)[0] + 1] += 2 * np.pi
+        diff_lst = np.diff(lsts)
+    idxmax = np.argmax(diff_lst) + 1
+    return lsts[idxmax] % (2 * np.pi)
 
 
 def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=False):
