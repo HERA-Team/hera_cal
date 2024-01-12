@@ -1144,7 +1144,7 @@ def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_
 
 def _nucal_post_redcal(
         data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
-        maxiter=100, convergence_criteria=1e-10, minor_cycle_maxiter=10
+        major_cycle_maxiter=100, convergence_criteria=1e-10, minor_cycle_maxiter=10
     ):
     """
     Function to perform frequency redundant calibration using gradient descent. Calibrates the 
@@ -1234,9 +1234,7 @@ def _nucal_post_redcal(
                 # Stop if subsequent losses are within tolerance
                 if minor_step >= 1 and np.abs(minor_cycle_losses[-1] - minor_cycle_losses[-2]) < convergence_criteria:
                     break
-
-                losses.append(minor_cycle_loss)
-        
+    
         # Stop if subsequent losses are within tolerance
         if step >= 1 and np.abs(losses[-1] - losses[-2]) < convergence_criteria:
             break
@@ -1281,14 +1279,14 @@ class SpectrallyRedundantCalibrator:
         local_vars.pop("self")
         
         if self._filters_computed:
+            # Variable for tracking if the filters need to be recomputed
+            recompute_filters = False
+
             # Loop over all parameters and check if they have changed
             for key in local_vars:
                 if not np.array_equal(local_vars[key], self._most_recent_filter_params[key]):
                     recompute_filters = True
                     break
-            else:
-                # if for loop reaches completion, parameters haven't changed -- return
-                return
             
             if recompute_filters:
                 self.spectral_filters = compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=eigenval_cutoff)
@@ -1300,9 +1298,11 @@ class SpectrallyRedundantCalibrator:
                 for key in local_vars:
                     self._most_recent_filter_params[key] = local_vars[key]
 
+                # Set filters computed to True
                 self._filters_computed = True
 
         else:
+            # Compute the spectral and spatial filters
             self.spectral_filters = compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=eigenval_cutoff)
             self.spatial_filters = compute_spatial_filters(
                 self.radial_reds, freqs, spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff, umin=umin, umax=umax
@@ -1312,6 +1312,7 @@ class SpectrallyRedundantCalibrator:
             for key in local_vars:
                 self._most_recent_filter_params[key] = local_vars[key]
 
+            # Set filters computed to True
             self._filters_computed = True
 
     def _estimate_degeneracies(self, data, model, wgts):
@@ -1368,7 +1369,7 @@ class SpectrallyRedundantCalibrator:
     
     def post_redcal_nucal(self, data, data_wgts, cal_flags={}, spatial_estimate_only=False, linear_solver="lu_solve", linear_tol=1e-12, share_fg_model=False, 
                   spectral_filter_half_width=30e-9, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, estimate_degeneracies=False,
-                  optimizer_name='adabelief', learning_rate=1e-3, maxiter=100, minor_cycle_maxiter=0, convergence_criteria=1e-10, return_model=False):
+                  optimizer_name='adabelief', learning_rate=1e-3, major_cycle_maxiter=100, minor_cycle_maxiter=0, convergence_criteria=1e-10, return_model=False):
         """
         Estimates redundant calibration degeneracies by building a DPSS-based, sky-model and solving for the parameters which lead to the smoothest
         calibrated visibilities. Function starts by estimating a sky-model by using DPSS filters (which can start with spatial dependence or spectral 
@@ -1431,11 +1432,14 @@ class SpectrallyRedundantCalibrator:
             Name of the optimizer to use for gradient descent. Options are keys in nucal.OPTIMIZERS.
         learning_rate : float, default=1e-3
             Learning rate for the gradient descent optimizer
-        maxiter : int, default=100
-            Maximum number of iterations to run when performing gradient descent.
+        major_cycle_maxiter : int, default=100
+            Maximum number of iterations to run when performing gradient descent. Major cycles are defined as a gradient descent step
+            in which the foreground model parameters and redundant calibration degeneracies are fit to the data. If the difference of the loss
+            between two major cycle iterations is less than convergence_criteria, the optimization will stop.
         minor_cycle_maxiter : int, default=0
             Number of minor cycles to perform after each major cycle. Minor cycles are performed by fixing the foreground
-            model and solving for the calibration parameters. This is useful for improving convergence.
+            model and solving for the calibration parameters. Can be useful for improving convergence. If subsequent minor losses
+            are within convergence_criteria, the minor cycle will stop for a given major cycle.
         convergence_criteria : float, default=1e-10
             Convergence criteria for stopping the optimization. If the difference in loss between two iterations is less than
             convergence_criteria, the optimization will stop.
@@ -1538,8 +1542,8 @@ class SpectrallyRedundantCalibrator:
             # Run optimization
             model_parameters[pol], metadata[pol] = _nucal_post_redcal(
                 data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
-                spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, maxiter=maxiter, convergence_criteria=convergence_criteria,
-                minor_cycle_maxiter=minor_cycle_maxiter
+                spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, major_cycle_maxiter=major_cycle_maxiter, 
+                convergence_criteria=convergence_criteria, minor_cycle_maxiter=minor_cycle_maxiter
             )
 
         if return_model:
