@@ -30,6 +30,8 @@ def compute_offsets(
         Shape (Ntimes, Nbls, Nfreqs, Npols) of boolean flags.
     antpairs : list of tuples
         List of tuples of antenna pairs.
+    pols : list of strings
+        List of polarizations. Must contain the same number of polarizations as the data.
     cal_function : callable
         Function to use to solve for the offsets between days in an LST-bin.
     day_flags : np.ndarray
@@ -121,6 +123,8 @@ def hierachical_pairing(
         Shape (Ntimes, Nbls, Nfreqs, Npols) of complex data.
     flags : np.ndarray
         Shape (Ntimes, Nbls, Nfreqs, Npols) of boolean flags.
+    ref_value : float
+        Value to use for the reference data. Default is 1.0.
     ref_operation : str
         Operation to perform on the reference data. Default is 'multiply'.
     kwargs : dict
@@ -181,7 +185,9 @@ def hierachical_pairing(
 
 
 def _phase_slope_align_bls(data, flags, key1, key2, norm=True):
-    """"""
+    """
+    Function for comparing the phase slope between two days of data.
+    """
     # Compute the cross-correlation between the two groups
     d12 = data[key1] * np.conj(data[key2])
 
@@ -210,7 +216,9 @@ def _phase_slope_align_bls(data, flags, key1, key2, norm=True):
 
 
 def _delay_align_bls(data, flags, key1, key2, freqs, norm=True):
-    """ """
+    """ 
+    Function for comparing the delay between two days of data.
+    """
     # Compute the cross-correlation between the two groups
     d12 = data[key1] * np.conj(data[key2])
 
@@ -271,7 +279,9 @@ def _tip_tilt_align(data, flags, key1, key2, norm=True):
 
 
 def _amplitude_align(data, flags, key1, key2):
-    """ """
+    """ 
+    Function for comparing the amplitude between two days of data.
+    """
     d12 = np.abs(data[key1]) / np.abs(data[key2])
 
     # Average the two groups together, weighted by their amplitudes
@@ -318,8 +328,16 @@ def delay_slope_calibration(
         List of tuples of antenna pairs.
     antpos : list of dictionarys, or dictionary
         Dictionary of antenna positions in ENU coordinates.
-    solve_for_phase_slope : bool
-        If True, solve for the phase slope as well as the delay slope.
+    pols : list of strings
+        List of polarizations. Must contain the same number of polarizations as the data.
+    sparse : bool, default=True
+        Use sparse matrices to solve for the delay slopes.
+    solver_method : str, default='default'
+        Method to use to solve for the delay slopes. Options are 'default' and 'pinv'.
+    day_flags : np.ndarray
+        Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
+    bls_flags : np.ndarray
+        Boolean array of shape (Nbls,) indicating which baselines to use in the lstbin.
 
     Returns:
     --------
@@ -471,6 +489,36 @@ def global_phase_slope_calibration(
 ) -> tuple[dict, dict]:
     """
     Solve for the global phase slope of each day in an LST-bin.
+
+    Parameters:
+    -----------
+    data : np.ndarray
+        Shape (Ndays, Nbls, Nfreqs, Npols) of complex data.
+    flags : np.ndarray
+        Shape (Ndays, Nbls, Nfreqs, Npols) of boolean flags.
+    nsamples : np.ndarray
+        Number of samples in each time-frequency bin. Shape (Ndays, Nbls, Nfreqs, Npols).
+    antpairs : list of tuples
+        List of tuples of antenna pairs.
+    antpos : list of dictionaries, or dictionary
+        Dictionary of antenna positions in ENU frame in meters.
+    pols : list of strings
+        List of polarizations. Must contain the same number of polarizations as the data.
+    sparse : bool, default=True
+        Use sparse matrices to solve for the delay slopes.
+    solver_method : str, default='default'
+        Method to use to solve for the delay slopes. Options are 'default' and 'pinv'.
+    day_flags : np.ndarray
+        Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
+    bls_flags : np.ndarray
+        Boolean array of shape (Nbls,) indicating which baselines to use in the lstbin.
+    
+    Returns:
+    --------
+    gains : dict
+        Dictionary of gains for each antenna and polarization.
+    phase_slope : np.ndarray
+        Shape (Ntimes, Nfreqs, Npols) of phase slopes in radians per meter.
     """
     # Loop through all baselines
     phase_slopes, index_dict = compute_offsets(
@@ -632,8 +680,16 @@ def tip_tilt_calibration(
         List of antenna pairs.
     antpos : list of dictionaries, or dictionary
         Dictionary of antenna positions in ENU frame in meters.
-    freqs : np.ndarray
-        Frequency array in Hz.
+    pols : list of strings
+        List of polarizations. Must contain the same number of polarizations as the data.
+    sparse : bool, default=True
+        Use sparse matrices to solve for the delay slopes.
+    solver_method : str, default='default'
+        Method to use to solve for the delay slopes. Options are 'default' and 'pinv'.
+    day_flags : np.ndarray
+        Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
+    bls_flags : np.ndarray
+        Boolean array of shape (Nbls,) indicating which baselines to use in the lstcal.
 
     Returns:
     --------
@@ -796,13 +852,17 @@ def amplitude_calibration(
     nsamples : np.ndarray
         Number of samples in each time-frequency bin. Shape (Ndays, Nbls, Nfreqs, Npols).
     antpairs : list of tuples
-        List of antenna pairs.
+        List of antenna pairs. Must contain the same number of baselines as the data.
     pols : list of strings
         List of polarizations.
     day_flags : np.ndarray
         Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
     bls_flags : np.ndarray
         Boolean array of shape (Nbls,) indicating which baselines to use in the lstbin.
+    sparse : bool, default=True
+        Use sparse matrices to solve for the delay slopes.
+    solver_method : str, default='default'
+        Method to use to solve for the delay slopes. Options are 'default' and 'pinv'.
 
     Returns:
     --------
@@ -896,11 +956,9 @@ def apply_lstcal_inplace(
     gains : dict
         Dictionary of gains for each time and antenna-polarization pair.
     antpairs : list of tuples
-        List of antenna pairs.
-    times : list of floats
-        List of times in JD.
+        List of antenna pairs. Must contain the same number of baselines as the data.
     pols : list of strings
-        List of polarizations.
+        List of polarizations. Must contain the same number of polarizations as the data.
     gain_convention : str, default='divide'
         Convention for applying the gains. Options are 'divide' and 'multiply'.
     """
@@ -959,18 +1017,16 @@ def calibrate_data(
     idealized_antpos : list of dicts or dict
         List of dictionaries of idealized antenna positions. Keys are antenna names and values are
     antpairs : list of tuples
-        List of antenna pairs.
+        List of antenna pairs. Must contain the same number of baselines as the data.
     pols : list of strings
-        List of polarizations.
+        List of polarizations. Must contain the same number of polarizations as the data.
     phs_max_iter : int, default=100
         Maximum number of iterations to perform for the phase calibration.
     conv_crit : float, default=1e-10
         Convergence criterion for the phase calibration.
     phase_method : str, default="logcal"
         Method to use for phase calibration. Options are "complex_phase" and "logcal".
-    flag_bad_days : bool, default=True
-        If True, flag days with bad data before performing calibration.
-
+    
     Returns:
     --------
     gains : dict
@@ -1086,80 +1142,3 @@ def calibrate_data(
     gains = {k: gains.get(k, 1 + 0j) * delta_gains[k] for k in delta_gains}
 
     return gains
-
-
-def modified_zscore(
-    data: np.ndarray,
-    flags: np.ndarray,
-    nsigma: float = 5.0,
-    axis: tuple[int, ...] | int = -1,
-) -> np.ndarray:
-    """
-    Identify outliers in an LST-bin by computing the modified z-score.
-
-    Parameters:
-    -----------
-    data : np.ndarray
-        Shape (Ntimes, Nbls, Nfreqs, Npols) of complex data.
-    flags : np.ndarray
-        Shape (Ntimes, Nbls, Nfreqs, Npols) of boolean flags.
-    nsamples : np.ndarray
-        Number of samples in each time-frequency bin. Shape (Ntimes, Nbls, Nfreqs, Npols).
-    sigma : float, default=5.0
-        Number of standard deviations to use for outlier rejection.
-    axis : int, default=-1
-        Axis along which to compute the modified z-score.
-
-    Returns:
-    --------
-    outlier_flags : np.ndarray
-        Shape (Ndays, Nbls, Nfreqs, Npols) of boolean flags.
-    """
-    # Make a copy of the data and set flags to NaN
-    _data = np.copy(data)
-    _data[flags] = np.nan
-
-    # Compute the modified z-score
-    med_data = np.nanmedian(_data, axis=axis, keepdims=True)
-    d_rs = _data - med_data
-    d_sq = np.abs(d_rs) ** 2
-    sig = np.sqrt(np.nanmedian(d_sq, axis=axis, keepdims=True) / 0.456)
-    return np.abs(d_rs / sig)
-
-
-def flag_lst_data_products(
-    data: np.ndarray,
-    flags: np.ndarray,
-    nsamples: np.ndarray,
-    nsigma: float = 5.0,
-    axis: int = 0,
-    reduce_axes: int = -1,
-    statistic: callable = np.nanmean,
-) -> np.ndarray:
-    """
-    Flag data products in an LST-bin.
-
-    Parameters:
-    -----------
-    data : np.ndarray
-        Shape (Ntimes, Nbls, Nfreqs, Npols) of complex data.
-    flags : np.ndarray
-        Shape (Ndays, Nbls, Nfreqs, Npols) of boolean flags.
-    nsamples : np.ndarray
-        Number of samples in each time-frequency bin. Shape (Ntimes, Nbls, Nfreqs, Npols).
-
-    Returns:
-    --------
-    day_flags : np.ndarray
-        Shape (Ndays) of boolean flags.
-    """
-    # Check that the statistic is callable
-    assert callable(statistic), "statistic must be a callable function."
-
-    # Compute the z-score for each data product
-    zscore = modified_zscore(data, flags, nsigma=nsigma, axis=axis)
-
-    # Reduce the z-score along the specified axes
-    new_flags = statistic(zscore, axis=reduce_axes) > nsigma
-
-    return new_flags
