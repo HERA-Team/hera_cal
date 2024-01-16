@@ -1026,6 +1026,14 @@ def calibrate_data(
         Convergence criterion for the phase calibration.
     phase_method : str, default="logcal"
         Method to use for phase calibration. Options are "complex_phase" and "logcal".
+    day_flags : np.ndarray
+        Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
+    bls_flags : np.ndarray
+        Boolean array of shape (Nbls,) indicating which baselines to use in the lstbin.
+    sparse : bool, default=True
+        Use sparse matrices to solve for the delay slopes.
+    solver_method : str, default='default'
+        Method to use to solve for the delay slopes. Options are 'default' and 'pinv'.
     
     Returns:
     --------

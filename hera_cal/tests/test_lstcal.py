@@ -14,7 +14,7 @@ class TestCalFuncs:
         self.nf = 100
         self.ndays = 10
         self.freqs = np.linspace(50e6, 250e6, self.nf)
-        self.antpos = hex_array(6, split_core=True, outriggers=0)
+        self.antpos = hex_array(4, split_core=False, outriggers=0)
         self.reds = redcal.get_reds(self.antpos)
         self.idealized_antpos = redcal.reds_to_antpos(self.reds)
         self.true_vis = {
@@ -171,3 +171,26 @@ class TestCalFuncs:
 
         # Check that day to day variation in visibilities is small
         assert np.allclose(np.std(data_arr, axis=0), 0)
+
+    def test_calibrate_data(self):
+        """ """
+        # Copy the simulation data and apply the degenerate gains
+        data = deepcopy(self.sim_data)
+    
+        # Pack dictionary data into arrays
+        data_arr = np.transpose([data[k] for k in data], (1, 0, 2))[..., None]
+        flag_arr = np.transpose([self.flags[k] for k in data], (1, 0, 2))[..., None]
+        nsamples_arr = np.transpose([self.nsamples[k] for k in data], (1, 0, 2))[
+            ..., None
+        ]
+
+        # Run LST-calibration
+        gains = lstcal.calibrate_data(
+            data_arr,
+            flag_arr,
+            nsamples_arr,
+            freqs=self.freqs,
+            antpairs=self.baselines,
+            idealized_antpos=self.idealized_antpos,
+            pols=["nn"],
+        )
