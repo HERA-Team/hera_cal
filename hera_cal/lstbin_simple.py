@@ -271,6 +271,7 @@ def reduce_lst_bins(
     sigma_clip_min_N: int = 4,
     sigma_clip_type: str = 'direct',
     sigma_clip_subbands: list[int] | None = None,
+    sigma_clip_scale: list[np.ndarray] | None = None,
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
     get_mad: bool = False,
@@ -288,7 +289,7 @@ def reduce_lst_bins(
     data
         The data to perform the reduction over. The length of the list is the number
         of LST bins. Each array in the list should have shape
-        ``(nbl, nintegrations_in_lst, nfreq, npol)``.
+        ``(nintegrations_in_lst, nbl, nfreq, npol)``.
     flags
         A list, the same length/shape as ``data``, containing the flags.
     nsamples
@@ -350,8 +351,11 @@ def reduce_lst_bins(
     if where_inpainted is None:
         where_inpainted = [None] * nlst_bins
 
-    for lstbin, (d, n, f, inpf) in enumerate(
-        zip(data, nsamples, flags, where_inpainted)
+    if sigma_clip_scale is None:
+        sigma_clip_scale = [None] * nlst_bins
+
+    for lstbin, (d, n, f, clip_scale, inpf) in enumerate(
+        zip(data, nsamples, flags, sigma_clip_scale, where_inpainted)
     ):
         logger.info(f"Computing LST bin {lstbin+1} / {nlst_bins}")
 
@@ -379,6 +383,7 @@ def reduce_lst_bins(
                 sigma_clip_min_N=sigma_clip_min_N,
                 sigma_clip_subbands=sigma_clip_subbands,
                 sigma_clip_type=sigma_clip_type,
+                sigma_clip_scale=clip_scale,
                 flag_below_min_N=flag_below_min_N,
             )
 
@@ -513,7 +518,8 @@ def sigma_clip(
     median_axis: int = 0,
     threshold_axis: int = 0,
     clip_type: Literal['direct', 'mean', 'median'] = 'direct',
-    flag_bands: list[tuple[int, int]] | None = None
+    flag_bands: list[tuple[int, int]] | None = None,
+    scale: np.ndarray | None = None,
 ):
     """
     One-iteration robust sigma clipping algorithm.
@@ -551,6 +557,14 @@ def sigma_clip(
         over which to perform sigma clipping. They are used in a ``slice`` object,
         so that the end is exclusive but the start is inclusive. If None, the entire
         threshold axis is used at once.
+    scale
+        If given, interpreted as the expected standard deviation of the data
+        (over nights). If not given, estimated from the data using the median
+        absolute deviation. If given, must be an array with eitherthe same
+        shape as ``array`` OR the same shape as ``array`` with the ``median_axis``
+        removed. If the former, each variate over the ``median_axis`` is scaled
+        independently. If the latter, the same scale is applied to all variates
+        (generally nights).
 
     Output
     ------
@@ -573,7 +587,14 @@ def sigma_clip(
         array = np.ma.MaskedArray(array, mask=np.isnan(array))
 
     location = np.expand_dims(np.ma.median(array, axis=median_axis), axis=median_axis)
-    scale = np.expand_dims(np.ma.median(np.abs(array - location), axis=median_axis) * 1.482579, axis=median_axis)
+
+    if scale is None:
+        scale = np.expand_dims(np.ma.median(np.abs(array - location), axis=median_axis) * 1.482579, axis=median_axis)
+    elif scale.shape != array.shape:
+        scale = np.expand_dims(scale, axis=median_axis)
+
+    if scale.shape != array.shape:
+        raise ValueError("scale must have same shape as array or array with median_axis removed")
 
     if flag_bands is None:
         # Use entire threshold axis together
@@ -625,6 +646,7 @@ def lst_average(
     flag_below_min_N: bool = False,
     sigma_clip_subbands: list[int] | None = None,
     sigma_clip_type: Literal['direct', 'mean', 'median'] = 'direct',
+    sigma_clip_scale: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute statistics of a set of data over its zeroth axis.
@@ -702,6 +724,7 @@ def lst_average(
             'median_axis': 0,
             'threshold_axis': 0 if sigma_clip_type == 'direct' else -2,
             'flag_bands': list(zip(sigma_clip_subbands[:-1], sigma_clip_subbands[1:])) if sigma_clip_subbands else None,
+            "sigma_clip_scale": sigma_clip_scale,
         }
         clip_flags = sigma_clip(data.real, **kw)
         clip_flags |= sigma_clip(data.imag, **kw)
@@ -1271,6 +1294,7 @@ def lst_bin_files_single_outfile(
     sigma_clip_min_N: int = 4,
     sigma_clip_subbands: list[int] | None = None,
     sigma_clip_type: Literal['direct', 'mean', 'median'] = 'direct',
+    sigma_clip_use_autos: bool = False,
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
     freq_min: float | None = None,
@@ -1397,6 +1421,10 @@ def lst_bin_files_single_outfile(
         The type of sigma clipping to perform. If ``direct``, each datum is flagged
         individually. If ``mean`` or ``median``, an entire sub-band of the data is
         flagged if its mean (absolute) zscore is beyond the threshold.
+    sigma_clip_use_autos
+        If True, use the autos to predict the standard deviation for each baseline
+        over nights for use in sigma-clipping. If False, use the median absolute
+        deviation over nights for each baseline.
     flag_below_min_N
         If True, flag all (antpair, pol,channel) combinations  for an LST-bin that
         contiain fewer than `flag_below_min_N` unflagged integrations within the bin.
@@ -1592,7 +1620,15 @@ def lst_bin_files_single_outfile(
     # This is just to save on RAM.
     if Nbls_to_load is None:
         Nbls_to_load = len(all_baselines) + 1
+
     n_bl_chunks = len(all_baselines) // Nbls_to_load + 1
+
+    # First, separate the auto baselines from the rest. We do this first because
+    # we'd potentially like to use the autos to infer the noise, and do some
+    # preliminary clipping.
+    auto_bls = [bl for bl in all_baselines if bl[0] == bl[1]]
+    all_baselines = [bl for bl in all_baselines if bl[0] != bl[1]]
+
     bl_chunks = [
         all_baselines[i * Nbls_to_load: (i + 1) * Nbls_to_load]
         for i in range(n_bl_chunks)
@@ -1646,7 +1682,7 @@ def lst_bin_files_single_outfile(
         history=history,
         fname_format=fname_format,
         overwrite=overwrite,
-        antpairs=all_baselines,
+        antpairs=auto_bls + all_baselines,
         start_jd=start_jd,
         freq_min=freq_min,
         freq_max=freq_max,
@@ -1672,42 +1708,39 @@ def lst_bin_files_single_outfile(
                 inpaint_mode=inpaint_mode,
             )
 
-    nbls_so_far = 0
-    for bi, bl_chunk in enumerate(bl_chunks):
-        logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
-        # data/flags/nsamples are *lists*, with nlst_bins entries, each being an
-        # array, with shape (times, bls, freqs, npols)
-        (
-            bin_lst,
-            data,
-            flags,
-            nsamples,
-            where_inpainted,
-            binned_times,
-        ) = lst_bin_files_for_baselines(
-            data_files=file_list,
-            lst_bin_edges=lst_bin_edges,
-            antpairs=bl_chunk,
-            freqs=freq_array,
-            pols=all_pols,
-            cal_files=cals,
-            time_arrays=time_arrays,
-            time_idx=tinds,
-            ignore_flags=ignore_flags,
-            rephase=rephase,
-            antpos=antpos,
-            lsts=all_lsts,
-            redundantly_averaged=redundantly_averaged,
-            reds=reds,
-            freq_min=freq_min,
-            freq_max=freq_max,
-            where_inpainted_files=where_inpainted_files,
+    _bin_files_for_bls = partial(
+        lst_bin_files_for_baselines,
+        data_files=file_list,
+        lst_bin_edges=lst_bin_edges,
+        freqs=freq_array,
+        pols=all_pols,
+        cal_files=cals,
+        time_arrays=time_arrays,
+        time_idx=tinds,
+        ignore_flags=ignore_flags,
+        rephase=rephase,
+        antpos=antpos,
+        lsts=all_lsts,
+        redundantly_averaged=redundantly_averaged,
+        reds=reds,
+        freq_min=freq_min,
+        freq_max=freq_max,
+        where_inpainted_files=where_inpainted_files
+    )
+
+    def _process_blchunk(
+        bl_chunk: list[tuple[int, int]],
+        nbls_so_far: int,
+        mean_autos: list[np.ndarray] | None = None,
+    ):
+        """Process a single chunk of baselines."""
+        _, data, flags, nsamples, where_inpainted, binned_times = _bin_files_for_bls(
+            antpairs=bl_chunk
         )
 
         slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))
 
-        if bi == 0:
-            # On the first baseline chunk, create the output file
+        if "GOLDEN" not in out_files:
             # TODO: we're not writing out the where_inpainted data for the GOLDEN
             #       or REDUCEDCHAN files yet -- it looks like we'd have to write out
             #       completely new UVFlag files for this.
@@ -1748,6 +1781,14 @@ def lst_bin_files_single_outfile(
                 nsamples=nsamples[0][:, :, save_channels].transpose((1, 0, 2, 3)),
             )
 
+        # Get the sigma clip scale
+        if sigma_clip_use_autos and mean_autos is not None:
+            dtdf = np.median(np.ediff1d(meta.times)) * (meta.freq_array[1] - meta.freq_array[0])
+            predicted_var = [np.abs(auto)**2 / dtdf / ns for ns, auto in zip(nsamples, mean_autos)]
+            sigma_clip_scale = [np.sqrt(p) for p in predicted_var]
+        else:
+            sigma_clip_scale = None
+
         for inpainted in [True, False]:
             if inpainted and not output_inpainted:
                 continue
@@ -1771,6 +1812,7 @@ def lst_bin_files_single_outfile(
                 get_mad=write_med_mad,
                 sigma_clip_subbands=sigma_clip_subbands,
                 sigma_clip_type=sigma_clip_type,
+                sigma_clip_scale=sigma_clip_scale,
             )
 
             write_baseline_slc_to_file(
@@ -1804,7 +1846,21 @@ def lst_bin_files_single_outfile(
                     flags=rdc["flags"],
                     nsamples=rdc["days_binned"],
                 )
+        return data, flags, nsamples, rdc
 
+    auto_data, auto_flags, _, _ = _process_blchunk(auto_bls, 0)
+
+    # Get the mean auto
+    autos = [np.ma.masked_array(d, mask=f) for d, f in zip(auto_data, auto_flags)]
+    # Now each mean has shape (nnights, 1, nfreqs, npols)
+    auto_mean = [np.ma.mean(a, axis=1)[:, None] for a in autos]
+
+    nbls_so_far = len(auto_bls)
+    for bi, bl_chunk in enumerate(bl_chunks):
+        logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
+        # data/flags/nsamples are *lists*, with nlst_bins entries, each being an
+        # array, with shape (times, bls, freqs, npols)
+        _process_blchunk(bl_chunk, nbls_so_far=nbls_so_far, mean_autos=auto_mean)
         nbls_so_far += len(bl_chunk)
 
     return out_files
@@ -2524,6 +2580,11 @@ def lst_bin_arg_parser():
         default='direct',
         choices=['direct', 'mean', 'median'],
         help="How to threshold the absolute zscores for sigma clipping."
+    )
+    a.add_argument(
+        "--sigma-clip-use-autos",
+        type="store_true",
+        help="whether to use the autos to predict the variance for sigma-clipping"
     )
     a.add_argument(
         "--flag-below-min-N",
