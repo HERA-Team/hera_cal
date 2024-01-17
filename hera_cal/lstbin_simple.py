@@ -1565,6 +1565,16 @@ def lst_bin_files_single_outfile(
             where_inpainted_files=where_inpainted_files,
         )
 
+        if (0, 4) in bl_chunks:
+            blidx = bl_chunks.index((0, 4))
+            lstidx = 1
+
+            print("--- INFO ABOUT (0, 4) ----")
+            print("SUM OF DATA: ", np.sum(data[lstidx][:, blidx]))
+            print("SUM OF FLAGS: ", np.sum(flags[lstidx][:, blidx]))
+            print("SUM OF NSAMPLES: ", np.sum(nsamples[lstidx][:, blidx]))
+            print("SUM OF WHERE INPAINTED: ", np.sum(where_inpainted[lstidx][:, blidx]))
+
         slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))
 
         if bi == 0:
@@ -1631,6 +1641,11 @@ def lst_bin_files_single_outfile(
                 flag_below_min_N=flag_below_min_N,
                 get_mad=write_med_mad,
             )
+            if (0, 4) in bl_chunks:
+                print(rdc["data"].shape)
+                print("DATA SUM: ", np.sum(rdc["data"][lstidx, blidx]))
+                print("FLAGS SUM: ", np.sum(rdc["flags"][lstidx, blidx]))
+                print("NSAMPLES SUM: ", np.sum(rdc["nsamples"][lstidx, blidx]))
 
             write_baseline_slc_to_file(
                 fl=out_files[("LST", inpainted)],
