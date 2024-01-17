@@ -724,7 +724,7 @@ def lst_average(
             'median_axis': 0,
             'threshold_axis': 0 if sigma_clip_type == 'direct' else -2,
             'flag_bands': list(zip(sigma_clip_subbands[:-1], sigma_clip_subbands[1:])) if sigma_clip_subbands else None,
-            "sigma_clip_scale": sigma_clip_scale,
+            "scale": sigma_clip_scale,
         }
         clip_flags = sigma_clip(data.real, **kw)
         clip_flags |= sigma_clip(data.imag, **kw)
@@ -2583,7 +2583,7 @@ def lst_bin_arg_parser():
     )
     a.add_argument(
         "--sigma-clip-use-autos",
-        type="store_true",
+        action="store_true",
         help="whether to use the autos to predict the variance for sigma-clipping"
     )
     a.add_argument(
