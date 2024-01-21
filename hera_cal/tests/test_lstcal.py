@@ -184,6 +184,11 @@ class TestCalFuncs:
             ..., None
         ]
 
+        # Simulate and apply the gains
+        amplitude = np.random.normal(1, 0.01, size=(self.ndays, self.nf))
+        sim_gains = {(k, 'Jnn'): amplitude for k in self.antpos}
+        lstcal.apply_lstcal_inplace(data_arr, sim_gains, self.baselines, ["nn"], gain_convention="multiply")
+
         # Run LST-calibration
         gains = lstcal.calibrate_data(
             data_arr,
@@ -194,3 +199,9 @@ class TestCalFuncs:
             idealized_antpos=self.idealized_antpos,
             pols=["nn"],
         )
+
+        # Apply the gains
+        lstcal.apply_lstcal_inplace(data_arr, gains, self.baselines, ["nn"], gain_convention="divide")
+
+        # Check that day to day variation in visibilities is small
+        assert np.allclose(np.std(data_arr, axis=0), 0)
