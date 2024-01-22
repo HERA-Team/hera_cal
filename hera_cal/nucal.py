@@ -1199,6 +1199,7 @@ def _nucal_post_redcal(
 
     # Initialize variables used in calibration loop
     losses = []
+    previous_loss = np.inf
 
     # Start gradient descent
     for step in range(major_cycle_maxiter):
@@ -1209,9 +1210,6 @@ def _nucal_post_redcal(
         # Update optimizer state and parameters
         updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
         params = optax.apply_updates(model_parameters, updates)
-
-        # Store loss values
-        losses.append(loss)
         
         if minor_cycle_maxiter > 0:
             minor_cycle_losses = []
@@ -1234,6 +1232,9 @@ def _nucal_post_redcal(
                 # Stop if subsequent losses are within tolerance
                 if minor_step >= 1 and np.abs(minor_cycle_losses[-1] - minor_cycle_losses[-2]) < convergence_criteria:
                     break
+
+        # Store loss values
+        losses.append(loss)
     
         # Stop if subsequent losses are within tolerance
         if step >= 1 and np.abs(losses[-1] - losses[-2]) < convergence_criteria:
@@ -1279,7 +1280,7 @@ class SpectrallyRedundantCalibrator:
         local_vars.pop("self")
         
         if self._filters_computed:
-            # Variable for tracking if the filters need to be recomputed
+            # Variable for tracking if the filters need to be recomputed - by default, assume they do not
             recompute_filters = False
 
             # Loop over all parameters and check if they have changed

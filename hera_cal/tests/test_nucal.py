@@ -804,10 +804,15 @@ class TestSpectrallyRedundantCalibrator:
             share_fg_model=True, major_cycle_maxiter=10, spectral_filter_half_width=10e-9,
         )
 
+        # Apply gains to data
+        apply_cal.calibrate_in_place(dc, fit_gains, gain_convention='divide')
+
         # Check that the value of the loss function decreases
         assert meta['nn']['loss_history'][-1] < meta['nn']['loss_history'][0]
 
         # Run with abscal degeneracy estimation
+        dc = deepcopy(self.data)
+        apply_cal.calibrate_in_place(dc, gains, gain_convention='multiply')
         fit_gains, model_params, meta, model = self.frc.post_redcal_nucal(
             dc, self.data_wgts, spatial_estimate_only=True, minor_cycle_maxiter=10,
             share_fg_model=True, major_cycle_maxiter=10, return_model=True, 
