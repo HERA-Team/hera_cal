@@ -1107,7 +1107,7 @@ def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_m
     model_i = (model_parameters["amplitude"]) * (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
     
     # Compute loss using weights and foreground model
-    return jnp.mean((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
+    return jnp.sum((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
 
 @jax.jit
 def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs):
@@ -1356,7 +1356,7 @@ class SpectrallyRedundantCalibrator:
         tip_tilt = {}
         for pol in data.pols():
             # Get the baselines in the model
-            data_bls = [blkeys for blkeys in data if blkeys[2] == pol]
+            data_bls = [blkeys for blkeys in model if blkeys[2] == pol and blkeys[0] != blkeys[1]]
 
             # complex_phase_abscal returns the tip-tilt degeneracies
             meta, _ = abscal.complex_phase_abscal(
