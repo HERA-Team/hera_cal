@@ -45,7 +45,7 @@ run_with_profiling(
     cache_dir=ap.cache_dir, res_outfilename=ap.res_outfilename,
     clobber=ap.clobber, write_cache=ap.write_cache, external_flags=ap.external_flags,
     read_cache=ap.read_cache, mode=ap.mode, overwrite_flags=ap.overwrite_flags,
-    factorize_flags=ap.factorize_flags, time_thresh=ap.time_thresh,
+    factorize_flags=ap.factorize_flags, apply_flag_to_nsample=ap.apply_flag_to_nsample, time_thresh=ap.time_thresh,
     add_to_history=' '.join(sys.argv), polarizations=ap.polarizations,
     verbose=ap.verbose, skip_if_flag_within_edge_distance=ap.skip_if_flag_within_edge_distance,
     flag_yaml=ap.flag_yaml, Nbls_per_load=ap.Nbls_per_load,
