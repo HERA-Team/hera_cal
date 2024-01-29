@@ -138,7 +138,7 @@ class Test_DelayFilter(object):
         input_file = os.path.join(tmp_path, 'temp_special_flags.h5')
         shutil.copy(uvh5, input_file)
         hd = io.HERAData(input_file)
-        _, flags, _ = hd.read()
+        _, flags, nsamples = hd.read()
         ntimes_before = hd.Ntimes
         nfreqs_before = hd.Nfreqs
         freqs_before = hd.freqs
@@ -180,6 +180,16 @@ class Test_DelayFilter(object):
             # check that flags were broadcasted.
             assert np.all(f[bl][0, :])
             assert np.all(f[bl][:, -1])
+
+        # test apply flag to nsample
+        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, Nbls_per_load=1, avg_red_bllens=avg_bl,
+                                       apply_flag_to_nsample=True, time_thresh=time_thresh, clobber=True)
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for bl in f:
+            # check nsample is the same as input nsample applied with flag
+            nsamples[bl][flags[bl]] = 0
+            assert np.all(nsamples[bl] == n[bl])
 
     def test_load_delay_filter_and_write_baseline_list(self, tmpdir):
         tmp_path = tmpdir.strpath
