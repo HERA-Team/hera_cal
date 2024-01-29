@@ -89,7 +89,7 @@ def test_get_unique_orientations():
         assert len(group) >= 5
 
 class TestRadialRedundancy:
-    def setup(self):
+    def setup_method(self):
         self.antpos = hex_array(4, outriggers=0, split_core=False)
         self.radial_reds = nucal.RadialRedundancy(self.antpos)
 
