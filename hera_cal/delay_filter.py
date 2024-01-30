@@ -200,12 +200,18 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
                 df.factorize_flags(time_thresh=time_thresh, inplace=True)
             if apply_flag_to_nsample:
                 logger.info("  Applying flags to nsample arrays")
+                # Modify self.hd.nsamples
                 for bl in baseline_list[i:i + Nbls_per_load]:
                     _nsample = np.copy(df.hd.get_nsamples(bl))
                     _nsample[df.hd.get_flags(bl)] = 0
                     if _nsample.ndim == 2:
                         _nsample = _nsample[:, :, np.newaxis]
                     df.hd.set_nsamples(_nsample, bl)
+                # Modify self.nsamples
+                for blk in df.nsamples:
+                    _nsample = np.copy(df.nsamples[blk])
+                    _nsample[df.flags[blk]] = 0
+                    df.nsamples[blk] = _nsample
 
             logger.info("  Running Delay Filter")
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
