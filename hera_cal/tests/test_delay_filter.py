@@ -189,6 +189,7 @@ class Test_DelayFilter(object):
         for bl in f:
             # check nsample is the same as input nsample applied with flag
             nsamples[bl][flags[bl]] = 0
+            assert np.any(n[bl] == 0)
             assert np.all(nsamples[bl] == n[bl])
 
     def test_load_delay_filter_and_write_baseline_list(self, tmpdir):
