@@ -1493,7 +1493,8 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                     avg_lsts = avg_lsts[:ntimes]
 
                 # write data
-                output_data_name = output_data.replace('.uvh5', f'.interleave_{inum}.uvh5')
+                output_data_name = os.path.join(os.path.dirname(output_data),
+                                                os.path.basename(output_data).replace('.uvh5', f'.interleave_{inum}.uvh5'))
                 fr.write_data(data=avg_data, filename=output_data_name, flags=avg_flags, nsamples=avg_nsamples,
                               times=avg_times, lsts=avg_lsts, filetype=filetype, overwrite=clobber)
                 if flag_output is not None:
@@ -1502,7 +1503,8 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                     uv_avg.use_future_array_shapes()
                     uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
                     uvf.to_waterfall(keep_pol=False, method='and')
-                    uvf.write(flag_output.replace('h5', f'.interleave_{inum}.h5'), clobber=clobber)
+                    uvf.write(os.path.join(os.path.dirname(flag_output),
+                                           os.path.basename(flag_output).replace('.h5', f'.interleave_{inum}.h5')), clobber=clobber)
         else:
             fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
                             wgt_by_nsample=wgt_by_nsample, wgt_by_favg_nsample=wgt_by_favg_nsample, rephase=rephase)
@@ -1840,13 +1842,13 @@ def load_tophat_frfilter_and_write(
                 for key in keys:
                     ai, aj = key[:2]
                     if (ai, aj) in filter_antpairs:
-                        frate_centers[key] = filter_info["filter_centers"][(ai,aj)]
-                        frate_half_widths[key] = filter_info["filter_half_widths"][(ai,aj)]
+                        frate_centers[key] = filter_info["filter_centers"][(ai, aj)]
+                        frate_half_widths[key] = filter_info["filter_half_widths"][(ai, aj)]
                     else:
                         # We've already enforced that all the data baselines
                         # are in the filter file, so we should be safe here.
-                        frate_centers[key] = -filter_info["filter_centers"][(aj,ai)]
-                        frate_half_widths[key] = filter_info["filter_half_widths"][(aj,ai)]
+                        frate_centers[key] = -filter_info["filter_centers"][(aj, ai)]
+                        frate_half_widths[key] = filter_info["filter_half_widths"][(aj, ai)]
             else:
                 # Otherwise, we need to compute the filter parameters.
                 if case not in ("sky", "max_frate_coeffs", "uvbeam"):
@@ -1867,7 +1869,7 @@ def load_tophat_frfilter_and_write(
                     fr_freq_skip=fr_freq_skip,
                     verbose=verbose, nfr=nfr,
                 )
-            # Lists of names of datacontainers that will hold each interleaved 
+            # Lists of names of datacontainers that will hold each interleaved
             # data set until they are recombined.
             filtered_data_names = [
                 f'clean_data_interleave_{inum}' for inum in range(ninterleave)
