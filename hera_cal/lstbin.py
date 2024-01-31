@@ -549,6 +549,7 @@ def lst_bin_arg_parser():
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
     a.add_argument("--lst_start", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is first LST of first file.")
+    a.add_argument("--weight_by_nsamples", default=True, action='store_true', help="Weight by nsamples during LST binning. If set to False, weight by flags only. Default True.")
     a.add_argument("--sig_clip", default=False, action='store_true', help="perform robust sigma clipping before binning")
     a.add_argument("--sigma", type=float, default=4.0, help="sigma threshold for sigma clipping")
     a.add_argument("--min_N", type=int, default=4, help="minimum number of points in bin needed to proceed with sigma clipping")
