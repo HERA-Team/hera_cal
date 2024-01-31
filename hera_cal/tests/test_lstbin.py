@@ -13,6 +13,8 @@ from .. import io, lstbin, utils, redcal
 from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 import shutil
+
+
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:Degrees of freedom <= 0 for slice")
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
@@ -134,7 +136,7 @@ class Test_lstbin:
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
                                 verbose=False, sig_clip=True, min_N=15, flag_below_min_N=True, sigma=2)
         # test wrapping
-        lst_list = [(copy.deepcopy(l) + 6) % (2 * np.pi) for l in self.lst_list]
+        lst_list = [(copy.deepcopy(_lst) + 6) % (2 * np.pi) for _lst in self.lst_list]
         output = lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, begin_lst=np.pi)
         assert output[0][0] > output[0][-1]
         assert len(output[0]) == 175
@@ -167,6 +169,33 @@ class Test_lstbin:
             assert np.all(np.isclose(output[4][k], output2[4][k]))
             assert np.all(np.isclose(output[2][k], output2[2][k]))
             assert np.all(np.isclose(output[1][k], output2[1][k]))
+
+        # test weighted_by_nsamples, nsamples are propagated but data is not weighted by nsamples if set to False
+        output1 = lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst,
+                                 flags_list=self.flgs_list, nsamples_list=self.nsmp_list,
+                                 weight_by_nsamples=True)
+
+        nsmps1 = copy.deepcopy(self.nsmps1)
+        nsmps1[(24, 25, 'ee')][:, 32] = 0
+        nsmps2 = copy.deepcopy(self.nsmps2)
+        nsmps2[(24, 25, 'ee')][:, 32] = 0
+        nsmps3 = copy.deepcopy(self.nsmps3)
+        nsmps3[(24, 25, 'ee')][:, 32] = 0
+        nsmps_list = [nsmps1, nsmps2, nsmps3]
+        output = lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst,
+                                flags_list=self.flgs_list, nsamples_list=nsmps_list,
+                                weight_by_nsamples=True)
+        # Check Nsamples are all 0
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[:, 32], 0)
+        # Check data got weighted sum to 0
+        assert np.allclose(output[1][(24, 25, 'ee')].real[100, 32], 0)
+        output = lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst,
+                                flags_list=self.flgs_list, nsamples_list=nsmps_list,
+                                weight_by_nsamples=False)
+        # Check Nsamples are all 0
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[:, 32], 0)
+        # Check data is the same as before
+        assert np.allclose(output[1][(24, 25, 'ee')].real, output1[1][(24, 25, 'ee')].real)
 
     def test_lstbin_vary_nsamps(self):
         # test execution
@@ -237,6 +266,16 @@ class Test_lstbin:
         # test rephase
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                              verbose=False, rephase=True, file_ext=file_ext)
+        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
+        output_std_file = "./zen.ee.STD.0.20124.uvh5"
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+        # test weight_by_nsamples
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                             verbose=False, rephase=True, weight_by_nsamples=False, file_ext=file_ext)
         output_lst_file = "./zen.ee.LST.0.20124.uvh5"
         output_std_file = "./zen.ee.STD.0.20124.uvh5"
         assert os.path.exists(output_lst_file)
