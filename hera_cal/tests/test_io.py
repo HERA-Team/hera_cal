@@ -923,7 +923,7 @@ class Test_HERADataFastReader:
             np.testing.assert_array_equal(dc1.times_by_bl[ap], dc2.times_by_bl[ap])
         for ap in dc1.lsts_by_bl:
             np.testing.assert_allclose(dc1.lsts_by_bl[ap], dc2.lsts_by_bl[ap])
-    
+
     @pytest.mark.parametrize(
         'infile', (['uvh5_1'], ['uvh5_1', 'uvh5_2'], 'uvh5_h4c')
     )
@@ -952,7 +952,7 @@ class Test_HERADataFastReader:
         d2, f2, n2 = hd2.read(bls=bls, polarizations=pols)
         # compare all data and metadata
         for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
-            self.compare_datacontainers(dc1, dc2, allow_close=infile != 'uvh5_h4c')              
+            self.compare_datacontainers(dc1, dc2, allow_close=infile != 'uvh5_h4c')
 
     @pytest.mark.parametrize(
         'infile', (['uvh5_1'], 'uvh5_h4c')
@@ -975,8 +975,9 @@ class Test_HERADataFastReader:
         np.testing.assert_array_equal(hd1.ants, hd2.ants)
         np.testing.assert_array_equal(hd1.data_ants, hd2.data_ants)
         np.testing.assert_array_equal(hd1.pols, hd2.pols)
-        np.testing.assert_array_equal(hd1.antpairs, hd2.antpairs)
-        np.testing.assert_array_equal(hd1.bls, hd2.bls)
+        assert set(hd1.antpairs) == set(hd2.antpairs)
+        assert set(hd1.bls) == set(hd2.bls)
+
         for ant in hd1.antpos:
             np.testing.assert_array_almost_equal(hd1.antpos[ant] - hd2.antpos[ant], 0)
         for ant in hd1.data_antpos:
@@ -1788,7 +1789,7 @@ class Test_UVDataFromFastUVH5:
         np.testing.assert_equal(self.uvd_default.ant_2_array, uvd.ant_2_array)
         np.testing.assert_equal(self.uvd_default.time_array, uvd.time_array)
         np.testing.assert_equal(self.uvd_default.lst_array, uvd.lst_array)
-        
+
     def test_blfirst(self):
         uvd = io.uvdata_from_fastuvh5(self.meta_blfirst)
 
@@ -1798,7 +1799,7 @@ class Test_UVDataFromFastUVH5:
         np.testing.assert_equal(self.uvd_blfirst.ant_2_array, uvd.ant_2_array)
         np.testing.assert_equal(self.uvd_blfirst.time_array, uvd.time_array)
         np.testing.assert_equal(self.uvd_blfirst.lst_array, uvd.lst_array)
-        
+
     def test_lsts_without_start_jd(self):
         with pytest.raises(AttributeError, match='if times is not given, start_jd must be given'):
             io.uvdata_from_fastuvh5(self.meta_default, times=None, start_jd=None, lsts=np.array([0.1, 0.2]))

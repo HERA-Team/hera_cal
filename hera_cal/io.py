@@ -455,11 +455,11 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     Returns:
         blt_slices: dictionary mapping anntenna pair tuples to baseline-time slice objects
     '''
-    if hasattr(uvo, 'blts_are_rectangular') and uvo.blts_are_rectangular is None:
-        uvo.set_rectangularity()
+    if uvo.blts_are_rectangular is None:
+        uvo.set_rectangularity(force=True)
 
     blt_slices = {}
-    if getattr(uvo, 'blts_are_rectangular', False):
+    if uvo.blts_are_rectangular:
         if uvo.time_axis_faster_than_bls:
             for i in range(uvo.Nbls):
                 start = i * uvo.Ntimes
@@ -474,9 +474,13 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     else:
         for ant1, ant2 in uvo.get_antpairs():
             indices = uvo.antpair2ind(ant1, ant2)
-            if len(indices) == 1:  # only one blt matches
+            if isinstance(indices, slice):
+                blt_slices[(ant1, ant2)] = indices
+            elif indices is None:
+                raise ValueError(f"Antpair ({ant1}, {ant2}) does not exist in the data.")
+            elif len(indices) == 1:  # only one blt matches
                 blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, uvo.Nblts)
-            elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
+            elif len(set(np.ediff1d(indices))) != 1:  # checks if the consecutive differences are all the same
                 if not tried_to_reorder:
                     uvo.reorder_blts(order='time')
                     return get_blt_slices(uvo, tried_to_reorder=True)
@@ -484,9 +488,8 @@ def get_blt_slices(uvo, tried_to_reorder=False):
                     raise NotImplementedError(
                         'UVData objects with non-regular spacing of '
                         'baselines in its baseline-times are not supported.'
+                        f'Got indices {indices} for baseline {ant1}, {ant2}.'
                     )
-            else:
-                blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
     return blt_slices
 
 
@@ -626,6 +629,7 @@ class HERAData(UVData):
         times_by_bl = {antpair: np.array(self.time_array[self._blt_slices[antpair]])
                        for antpair in antpairs}
         times_by_bl.update({(ant1, ant0): times_here for (ant0, ant1), times_here in times_by_bl.items()})
+
         lsts_by_bl = {antpair: np.array(self.lst_array[self._blt_slices[antpair]])
                       for antpair in antpairs}
         lsts_by_bl.update({(ant1, ant0): lsts_here for (ant0, ant1), lsts_here in lsts_by_bl.items()})
@@ -635,6 +639,7 @@ class HERAData(UVData):
 
     def _determine_blt_slicing(self):
         '''Determine the mapping between antenna pairs and slices of the blt axis of the data_array.'''
+
         self._blt_slices = get_blt_slices(self)
 
     def get_polstr_index(self, pol: str) -> int:
@@ -853,9 +858,10 @@ class HERAData(UVData):
         self.set_rectangularity(force=True)
 
         # process data into DataContainers
-        if read_data or self.filetype in ['uvh5', 'uvfits']:
-            self._determine_blt_slicing()
-            self._determine_pol_indexing()
+        self._clear_antpair2ind_cache(self)  # required because we over-wrote read()
+        self._determine_blt_slicing()
+        self._determine_pol_indexing()
+
         if read_data and return_data:
             return self.build_datacontainers()
 
@@ -1443,8 +1449,8 @@ class HERADataFastReader():
     def _adapt_metadata(self, info_dict, skip_lsts=False):
         '''Updates metadata from read_hera_hdf5 to better match HERAData. Updates info_dict in place.'''
         info_dict['data_ants'] = sorted(info_dict['data_ants'])
-        info_dict['antpairs'] = sorted(info_dict['bls'])
-        info_dict['bls'] = sorted(set([ap + (pol, ) for ap in info_dict['antpairs'] for pol in info_dict['pols']]))
+        info_dict['antpairs'] = info_dict['bls']
+        info_dict['bls'] = list(set([ap + (pol, ) for ap in info_dict['antpairs'] for pol in info_dict['pols']]))
         XYZ = XYZ_from_LatLonAlt(info_dict['latitude'] * np.pi / 180, info_dict['longitude'] * np.pi / 180, info_dict['altitude'])
         enu_antpos = ENU_from_ECEF(
             np.array([antpos for ant, antpos in info_dict['antpos'].items()]) + XYZ,
