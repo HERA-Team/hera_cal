@@ -31,6 +31,7 @@ except NameError:
 
 logger = logging.getLogger(__name__)
 
+
 def baselines_same_across_nights(data_list):
     """
     Check whether the sets of baselines in the datacontainers are consistent.
@@ -59,9 +60,10 @@ def baselines_same_across_nights(data_list):
     same_across_nights = np.all([baseline_counts[k] == baseline_counts[bl] for bl in baseline_counts])
     return same_across_nights
 
+
 @profile
 def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None, begin_lst=None, lst_low=None,
-            lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
+            lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True, weight_by_nsamples=True,
             sig_clip=False, sigma=4.0, min_N=4, flag_below_min_N=False, return_no_avg=False, antpos=None,
             rephase=False, freq_array=None, lat=-30.72152, verbose=True, bl_list=None):
     """
@@ -94,6 +96,8 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
              median=True is not supported when nsamples_list is not None.
     truncate_empty : type=boolean, if True, truncate output time bins that have
         no averaged data in them.
+    weight_by_nsamples : type=boolean, if True, weight by nsamples during lst binning;
+        if False, only weight by flags.
     sig_clip : type=boolean, if True, perform a sigma clipping algorithm of the LST bins on the
         real and imag components separately. Resultant clip flags are OR'd between real and imag.
         Warning: This is considerably slow.
@@ -211,9 +215,9 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         # iterate over keys in d
         klist = list(d.keys())
         for j, key in enumerate(klist):
-            if j % max(1, (len(klist)//100)) == 0:
+            if j % max(1, (len(klist) // 100)) == 0:
                 logger.info(f"Doing key {key} [{j+1}/{len(klist)}]")
-            
+
             # if bl_list is not None, use it to determine conjugation:
             # this is to prevent situations where conjugation of bl in
             # data_list is different from bl in data which can cause
@@ -316,7 +320,6 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     # wrap lst_bins if needed
     lst_bins = lst_bins % (2 * np.pi)
 
-
     # return un-averaged data if desired
     if return_no_avg:
         # return all binned data instead of just the bin average
@@ -346,7 +349,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         bin_count = []
         # iterate over sorted LST grid indices in data[key]
         for j, ind in enumerate(sorted(data[key].keys())):
-            
+
             # make data and flag arrays from lists
             d = np.array(data[key][ind])  # shape = (Ndays x Nfreqs)
             f = np.array(flags[key][ind])
@@ -400,18 +403,22 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 # (inverse variance weighted sum).
                 isfinite = np.isfinite(d)
                 n[~isfinite] = 0.0
-
-                norm = np.sum(n, axis=0).clip(1e-99, np.inf)
+                if weight_by_nsamples:
+                    wgt = np.copy(n)
+                else:
+                    wgt = np.ones_like(n)
+                    wgt[~isfinite] = 0.0
+                norm = np.sum(wgt, axis=0).clip(1e-99, np.inf)
                 mask = norm > 0
                 real_avg_t = np.full(d.shape[1:], np.nan)
                 imag_avg_t = np.full(d.shape[1:], np.nan)
-                
-                sm = np.nansum(d * n, axis=0)
+
+                sm = np.nansum(d * wgt, axis=0)
                 sm[mask] /= norm[mask]
 
                 real_avg_t[mask] = sm.real[mask]
-                imag_avg_t[norm>0] = sm.imag[mask]
-                
+                imag_avg_t[norm > 0] = sm.imag[mask]
+
                 # add back nans as np.nansum sums nan slices to 0
                 flagged_f = np.logical_not(isfinite).all(axis=0)
                 real_avg_t[flagged_f] = np.nan
@@ -644,7 +651,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
 
 def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None,
-                  atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, flag_below_min_N=False, rephase=False,
+                  atol=1e-6, weight_by_nsamples=True, sig_clip=True, sigma=5.0, min_N=5, flag_below_min_N=False, rephase=False,
                   output_file_select=None, Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
                   bl_error_tol=1.0, include_autos=True, ex_ant_yaml_files=None, Nblgroups=None, **kwargs):
     """
@@ -674,6 +681,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     overwrite : type=bool, if True overwrite output files
     history : history to insert into output files
     rephase : type=bool, if True, rephase data points in LST bin to center of bin
+    weight_by_nsamples : type=boolean, if True, weight by nsamples during lst binning;
+        if False, only weight by flags.
     bin_kwargs : type=dictionary, keyword arguments for lst_bin.
     atol : type=float, absolute tolerance for LST bin float comparison
     output_file_select : type=int or integer list, list of integer indices of the output files to run on.
@@ -763,7 +772,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     if Nblgroups is None:
         if Nbls_to_load in [None, 'None', 'none']:
             Nbls_to_load = len(bl_nightly_dicts) + 1
-        
+
         Nblgroups = len(bl_nightly_dicts) // Nbls_to_load + 1
     else:
         Nbls_to_load = len(bl_nightly_dicts) // Nblgroups
@@ -865,7 +874,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                             uvc.select(times=uvc.time_array[tinds])
                             gains, cal_flags, _, _ = uvc.build_calcontainers()
                         apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags,
-                                                        gain_convention=uvc.gain_convention)
+                                                     gain_convention=uvc.gain_convention)
                         utils.echo("Done with calibration.", verbose=verbose)
 
                     # redundantly average baselines, keying to baseline group key
@@ -920,7 +929,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             utils.echo("About to run LST binning...")
             (bin_lst, bin_data, flag_data, std_data,
              num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
-                                 lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamples_list=nsamples_list,
+                                 lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip,
+                                 weight_by_nsamples=weight_by_nsamples, nsamples_list=nsamples_list,
                                  sigma=sigma, min_N=min_N, flag_below_min_N=flag_below_min_N, rephase=rephase, freq_array=freq_array,
                                  antpos=antpos, bl_list=all_blgroup_baselines)
             # append to lists
@@ -973,9 +983,9 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
 
 
 def make_lst_grid(
-    dlst: float, 
-    begin_lst: float | None = None, 
-    lst_width: float = 2*np.pi, 
+    dlst: float,
+    begin_lst: float | None = None,
+    lst_width: float = 2 * np.pi,
 ) -> np.ndarray:
     """
     Make a uniform grid in local sidereal time.
@@ -986,17 +996,17 @@ def make_lst_grid(
 
     Parameters:
     -----------
-    dlst : 
+    dlst :
         The width of a single LST bin in radians. 2pi must be equally divisible
         by dlst. If not, will default to the closest dlst that satisfies this criterion that
         is also greater than the input dlst. There is a minimum allowed dlst of 6.283e-6 radians,
         or .0864 seconds.
     begin_lst
-        Beginning point for lst_grid. ``begin_lst`` must fall exactly on an LST bin 
-        given a dlst, within 0-2pi. If not, it is replaced with the closest bin. 
+        Beginning point for lst_grid. ``begin_lst`` must fall exactly on an LST bin
+        given a dlst, within 0-2pi. If not, it is replaced with the closest bin.
         Default is zero radians.
     lst_width
-        The width of the LST grid (including all bins) in radians. 
+        The width of the LST grid (including all bins) in radians.
         Default is 2pi radians. Note that regardless of this value, the final grid
         will always be equally divisible by 2pi.
 
@@ -1010,7 +1020,7 @@ def make_lst_grid(
 
     # check 2pi is equally divisible by dlst
     if not (
-        np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5) 
+        np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5)
         or np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5)
     ):
         # generate array of appropriate dlsts
@@ -1027,7 +1037,7 @@ def make_lst_grid(
         dlst = new_dlst
 
     # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
-    lst_grid = np.arange(0, 2*np.pi - 1e-7, dlst) + dlst / 2
+    lst_grid = np.arange(0, 2 * np.pi - 1e-7, dlst) + dlst / 2
 
     # shift grid by begin_lst
     if begin_lst is not None:
@@ -1041,17 +1051,17 @@ def make_lst_grid(
         begin_lst = 0.0
 
     lst_grid = lst_grid[lst_grid < (begin_lst + lst_width)]
-    
+
     return lst_grid
 
 
-def sigma_clip(array: np.ndarray | np.ma.MaskedArray, sigma: float=4.0, min_N: int=4, axis: int = 0):
+def sigma_clip(array: np.ndarray | np.ma.MaskedArray, sigma: float = 4.0, min_N: int = 4, axis: int = 0):
     """
     One-iteration robust sigma clipping algorithm.
 
     Parameters
     ----------
-    array 
+    array
         ndarray of *real* data.
     sigma
         sigma threshold to cut above.
@@ -1063,8 +1073,8 @@ def sigma_clip(array: np.ndarray | np.ma.MaskedArray, sigma: float=4.0, min_N: i
 
     Output
     ------
-    clip_flags 
-        A boolean array with same shape as input array, 
+    clip_flags
+        A boolean array with same shape as input array,
         with clipped values set to True.
     """
     # ensure array is an array
@@ -1092,11 +1102,11 @@ def sigma_clip(array: np.ndarray | np.ma.MaskedArray, sigma: float=4.0, min_N: i
 
 
 def gen_bl_nightly_dicts(
-    hds: list[io.HERAData], 
-    bl_error_tol: float=1.0, 
-    include_autos: bool=True, 
-    redundant: bool=False, 
-    ex_ant_yaml_files: list[str] | None=None
+    hds: list[io.HERAData],
+    bl_error_tol: float = 1.0,
+    include_autos: bool = True,
+    redundant: bool = False,
+    ex_ant_yaml_files: list[str] | None = None
 ) -> list[dict[int, list[tuple[int, int]]]]:
     """
     Helper function to generate baseline dicts to keep track of reds between nights.
@@ -1104,7 +1114,7 @@ def gen_bl_nightly_dicts(
     Parameters
     ----------
     hds
-        A list of HERAData objects. Can have no data loaded (preferable) and should 
+        A list of HERAData objects. Can have no data loaded (preferable) and should
         refer to single files.
     bl_error_tol
         Baselines whose vector difference are within this tolerance are considered
@@ -1112,8 +1122,8 @@ def gen_bl_nightly_dicts(
     include_autos
         Whether to include autos in bl_nightly_dicts.
     redundant
-        If True, ``bl_nightly_dict`` stores redundant group. If False, each 
-        ``bl_nightly_dict`` will contain a length-1 group for each baseline over all 
+        If True, ``bl_nightly_dict`` stores redundant group. If False, each
+        ``bl_nightly_dict`` will contain a length-1 group for each baseline over all
         the nights.
     ex_ant_yaml_files
         A list of paths to yaml files with antennas to throw out on each night.
@@ -1122,7 +1132,7 @@ def gen_bl_nightly_dicts(
     Outputs:
     --------
     If redundant:
-        list of dictionaries of the form 
+        list of dictionaries of the form
         ``{0: [(a0, b0), (a0, c0)...], 1: [(a1, b1),.., ], ... Nnight: [(ANnight, BNnight), ...,]}.
         Each dictionary represents a unique baseline length and orientation.
         where the key of each dictionary is an index for each night to be LST binned and each value
