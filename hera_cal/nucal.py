@@ -1188,7 +1188,7 @@ def _nucal_post_redcal(
     
     Returns:
     -------
-    params : dictionary
+    model_parameters : dictionary
         Optimized parameters
     metadata : dictionary
         Dictionary containing metadata from the optimization. Contains the number of iterations ("niter") and the loss history
@@ -1209,7 +1209,7 @@ def _nucal_post_redcal(
         )
         # Update optimizer state and parameters
         updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
-        params = optax.apply_updates(model_parameters, updates)
+        model_parameters = optax.apply_updates(model_parameters, updates)
         
         if minor_cycle_maxiter > 0:
             minor_cycle_losses = []
@@ -1243,7 +1243,7 @@ def _nucal_post_redcal(
     # Save the metadata in dictionary
     metadata = {"niter": step + 1, "loss_history": np.array(losses)}
 
-    return params, metadata
+    return model_parameters, metadata
 
 class SpectrallyRedundantCalibrator:
     """
