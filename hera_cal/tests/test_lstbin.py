@@ -170,10 +170,12 @@ class Test_lstbin:
             assert np.all(np.isclose(output[2][k], output2[2][k]))
             assert np.all(np.isclose(output[1][k], output2[1][k]))
 
-        # test weighted_by_nsamples, nsamples are propagated but data is not weighted by nsamples if set to False
+    def test_lstbin_weight_only_by_flags(self):
+        # test when --weight_only_by_flags, nsamples are propagated but data is not weighted by nsamples
+        dlst = 0.0007830490163484
         output1 = lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst,
                                  flags_list=self.flgs_list, nsamples_list=self.nsmp_list,
-                                 weight_by_nsamples=True)
+                                 weight_only_by_flags=False)
 
         nsmps1 = copy.deepcopy(self.nsmps1)
         nsmps1[(24, 25, 'ee')][:, 32] = 0
@@ -184,14 +186,14 @@ class Test_lstbin:
         nsmps_list = [nsmps1, nsmps2, nsmps3]
         output = lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst,
                                 flags_list=self.flgs_list, nsamples_list=nsmps_list,
-                                weight_by_nsamples=True)
+                                weight_only_by_flags=False)
         # Check Nsamples are all 0
         assert np.allclose(output[-1][(24, 25, 'ee')].real[:, 32], 0)
         # Check data got weighted sum to 0
         assert np.allclose(output[1][(24, 25, 'ee')].real[100, 32], 0)
         output = lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst,
                                 flags_list=self.flgs_list, nsamples_list=nsmps_list,
-                                weight_by_nsamples=False)
+                                weight_only_by_flags=True)
         # Check Nsamples are all 0
         assert np.allclose(output[-1][(24, 25, 'ee')].real[:, 32], 0)
         # Check data is the same as before
@@ -273,9 +275,9 @@ class Test_lstbin:
         os.remove(output_lst_file)
         os.remove(output_std_file)
 
-        # test weight_by_nsamples
+        # test weight_only_by_flags
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                             verbose=False, rephase=True, weight_by_nsamples=False, file_ext=file_ext)
+                             verbose=False, rephase=True, weight_only_by_flags=False, file_ext=file_ext)
         output_lst_file = "./zen.ee.LST.0.20124.uvh5"
         output_std_file = "./zen.ee.STD.0.20124.uvh5"
         assert os.path.exists(output_lst_file)
