@@ -63,7 +63,7 @@ def baselines_same_across_nights(data_list):
 
 @profile
 def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None, begin_lst=None, lst_low=None,
-            lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True, weight_by_nsamples=True,
+            lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True, weight_only_by_flags=False,
             sig_clip=False, sigma=4.0, min_N=4, flag_below_min_N=False, return_no_avg=False, antpos=None,
             rephase=False, freq_array=None, lat=-30.72152, verbose=True, bl_list=None):
     """
@@ -96,8 +96,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
              median=True is not supported when nsamples_list is not None.
     truncate_empty : type=boolean, if True, truncate output time bins that have
         no averaged data in them.
-    weight_by_nsamples : type=boolean, if True, weight by nsamples during lst binning;
-        if False, only weight by flags.
+    weight_only_by_flags : type=boolean, if True, weight by flags during lst binning instead of nsamples;
     sig_clip : type=boolean, if True, perform a sigma clipping algorithm of the LST bins on the
         real and imag components separately. Resultant clip flags are OR'd between real and imag.
         Warning: This is considerably slow.
@@ -403,11 +402,11 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
                 # (inverse variance weighted sum).
                 isfinite = np.isfinite(d)
                 n[~isfinite] = 0.0
-                if weight_by_nsamples:
-                    wgt = np.copy(n)
-                else:
+                if weight_only_by_flags:
                     wgt = np.ones_like(n)
                     wgt[~isfinite] = 0.0
+                else:
+                    wgt = np.copy(n)
                 norm = np.sum(wgt, axis=0).clip(1e-99, np.inf)
                 mask = norm > 0
                 real_avg_t = np.full(d.shape[1:], np.nan)
@@ -549,7 +548,7 @@ def lst_bin_arg_parser():
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
     a.add_argument("--lst_start", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is first LST of first file.")
-    a.add_argument("--weight_by_nsamples", default=True, action='store_true', help="Weight by nsamples during LST binning. If set to False, weight by flags only. Default True.")
+    a.add_argument("--weight_only_by_flags", default=False, action='store_true', help="Weight by flags instead of nsamples during LST binning. Default is False.")
     a.add_argument("--sig_clip", default=False, action='store_true', help="perform robust sigma clipping before binning")
     a.add_argument("--sigma", type=float, default=4.0, help="sigma threshold for sigma clipping")
     a.add_argument("--min_N", type=int, default=4, help="minimum number of points in bin needed to proceed with sigma clipping")
@@ -652,7 +651,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, verb
 
 def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None,
-                  atol=1e-6, weight_by_nsamples=True, sig_clip=True, sigma=5.0, min_N=5, flag_below_min_N=False, rephase=False,
+                  atol=1e-6, weight_only_by_flags=False, sig_clip=True, sigma=5.0, min_N=5, flag_below_min_N=False, rephase=False,
                   output_file_select=None, Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
                   bl_error_tol=1.0, include_autos=True, ex_ant_yaml_files=None, Nblgroups=None, **kwargs):
     """
@@ -682,8 +681,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     overwrite : type=bool, if True overwrite output files
     history : history to insert into output files
     rephase : type=bool, if True, rephase data points in LST bin to center of bin
-    weight_by_nsamples : type=boolean, if True, weight by nsamples during lst binning;
-        if False, only weight by flags.
+    weight_only_by_flags : type=boolean, if True, weight by flags during lst binning instead of nsamples;
     bin_kwargs : type=dictionary, keyword arguments for lst_bin.
     atol : type=float, absolute tolerance for LST bin float comparison
     output_file_select : type=int or integer list, list of integer indices of the output files to run on.
@@ -931,7 +929,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             (bin_lst, bin_data, flag_data, std_data,
              num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
                                  lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip,
-                                 weight_by_nsamples=weight_by_nsamples, nsamples_list=nsamples_list,
+                                 weight_only_by_flags=weight_only_by_flags, nsamples_list=nsamples_list,
                                  sigma=sigma, min_N=min_N, flag_below_min_N=flag_below_min_N, rephase=rephase, freq_array=freq_array,
                                  antpos=antpos, bl_list=all_blgroup_baselines)
             # append to lists
