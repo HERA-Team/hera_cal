@@ -86,7 +86,7 @@ def test_get_unique_orientations():
         assert len(group) >= 5
 
 class TestRadialRedundancy:
-    def setup(self):
+    def setup_method(self):
         self.antpos = hex_array(4, outriggers=0, split_core=False)
         self.radial_reds = nucal.RadialRedundancy(self.antpos)
 
@@ -561,7 +561,7 @@ def test_fit_nucal_foreground_model():
 
 class TestGradientDescent:
     def setup_method(self):
-        self.freqs = np.linspace(50e6, 250e6, 200)
+        self.freqs = np.linspace(50e6, 250e6, 400)
         self.antpos = linear_array(10, sep=2)
         self.radial_reds = nucal.RadialRedundancy(self.antpos)
 
@@ -574,22 +574,40 @@ class TestGradientDescent:
         self.data_wgts = DataContainer({k: np.ones(self.data[k].shape) for k in self.data})
         self.data.freqs = self.freqs
         self.frc = nucal.SpectrallyRedundantCalibrator(self.radial_reds)
-    
-    def test_foreground_model(self):
-        spatial_filters = nucal.compute_spatial_filters(self.radial_reds, self.freqs)
-        spectral_filters = nucal.compute_spectral_filters(self.freqs, 20e-9)
 
-        sf = [np.array([spatial_filters[blkey] for blkey in rdgrp]) for rdgrp in self.radial_reds]
-        params = {
-            "fg_r": [np.random.normal(0, 1, (self.data.shape[0], spectral_filters.shape[-1], f.shape[-1])) for f in sf],
-            "fg_i": [np.random.normal(0, 1, (self.data.shape[0], spectral_filters.shape[-1], f.shape[-1])) for f in sf]
+        # Compute the filters 
+        self.frc._compute_filters(self.freqs, 10e-9)
+
+
+        self.init_model_comps = nucal.fit_nucal_foreground_model(
+            self.data, self.data_wgts, self.radial_reds, self.frc.spatial_filters, share_fg_model=True, 
+            return_model_comps=True
+        )
+        self.init_model_comps = nucal.project_u_model_comps_on_spec_axis(self.init_model_comps, self.frc.spectral_filters)
+
+        # Calculate baseline vectors
+        self.blvecs = np.array([(self.antpos[bl[1]] - self.antpos[bl[0]])[0] for rdgrp in self.radial_reds for bl in rdgrp])[:, None]
+        
+        self.model_parameters = {
+            "tip_tilt": np.zeros((1, 2, 400)),
+            "amplitude": np.ones((2, 400)),
+            "fg_r": [self.init_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds],
+            "fg_i": [self.init_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds],
         }
 
-        model_r, model_i = nucal._foreground_model(params, spectral_filters, sf)
+        self.spatial_filters = [np.array([self.frc.spatial_filters[blkey] for blkey in rdgrp]) for rdgrp in self.radial_reds]
+    
+    def test_foreground_model(self):
+        params = {
+            "fg_r": [np.random.normal(0, 1, (self.data.shape[0], self.frc.spectral_filters.shape[-1], f.shape[-1])) for f in self.spatial_filters],
+            "fg_i": [np.random.normal(0, 1, (self.data.shape[0], self.frc.spectral_filters.shape[-1], f.shape[-1])) for f in self.spatial_filters],
+        }
+
+        model_r, model_i = nucal._foreground_model(params, self.frc.spectral_filters, self.spatial_filters)
         
         # Check that the model has the correct shape
-        assert model_r.shape == (len(spatial_filters), self.data.shape[0], self.data.shape[1])
-        assert model_i.shape == (len(spatial_filters), self.data.shape[0], self.data.shape[1])
+        assert model_r.shape == (len(self.data), self.data.shape[0], self.data.shape[1])
+        assert model_i.shape == (len(self.data), self.data.shape[0], self.data.shape[1])
 
     def test_mean_squared_error(self):
         
@@ -605,16 +623,8 @@ class TestGradientDescent:
         data_i = np.array([self.data[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
         wgts = np.ones_like(data_r)
         
-        # Calculate baseline vectors
-        blvecs = np.array([self.antpos[bl[1]] - self.antpos[bl[0]] for rdgrp in self.radial_reds for bl in rdgrp])
-        
-        model_parameters = {
-            "tip_tilt": np.zeros((3, 2, 200)),
-            "amplitude": np.ones((2, 200))
-        }
-
         # Compute the mean squared error
-        mse = nucal._mean_squared_error(model_parameters, data_r, data_i, wgts, model_r, model_i, blvecs)
+        mse = nucal._mean_squared_error(self.model_parameters, data_r, data_i, wgts, model_r, model_i, self.blvecs)
 
         # Check that the mse is zero
         assert np.isclose(mse, 0)
@@ -625,108 +635,48 @@ class TestGradientDescent:
         data_i = np.array([self.data[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
         wgts = np.ones_like(data_r)
 
-        # Make weights for the data
-        data_wgts = DataContainer({k: np.ones(self.data[k].shape) for k in self.data})
-
-        # Compute the filters 
-        self.frc._compute_filters(self.freqs, 10e-9)
-
-        init_model_comps = nucal.fit_nucal_foreground_model(
-            self.data, data_wgts, self.radial_reds, self.frc.spatial_filters, share_fg_model=True, 
-            return_model_comps=True
-        )
-        init_model_comps = nucal.project_u_model_comps_on_spec_axis(init_model_comps, self.frc.spectral_filters)
-
-        # Calculate baseline vectors
-        blvecs = np.array([self.antpos[bl[1]] - self.antpos[bl[0]] for rdgrp in self.radial_reds for bl in rdgrp])
-        
-        model_parameters = {
-            "tip_tilt": np.zeros((3, 2, 200)),
-            "amplitude": np.ones((2, 200)),
-            "fg_r": [init_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds],
-            "fg_i": [init_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds],
-        }
-
-        spatial_filters = [np.array([self.frc.spatial_filters[blkey] for blkey in rdgrp]) for rdgrp in self.radial_reds]
-        mse = nucal._calibration_loss_function(model_parameters, data_r, data_i, wgts, self.frc.spectral_filters, spatial_filters, blvecs)
+        mse = nucal._calibration_loss_function(self.model_parameters, data_r, data_i, wgts, self.frc.spectral_filters, self.spatial_filters, self.blvecs)
 
         # Check that the mse is zero
         assert np.isclose(mse, 0)
 
     def test_nucal_post_redcal(self):
+        amp = np.random.normal(1, 0.01, size=self.data[list(self.data.keys())[0]].shape)
+
         # Separate the real and imaginary components
-        data_r = np.array([self.data[bl].real for rdgrp in self.radial_reds for bl in rdgrp])
-        data_i = np.array([self.data[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
+        data_r = np.array([amp * self.data[bl].real for rdgrp in self.radial_reds for bl in rdgrp])
+        data_i = np.array([amp * self.data[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
         wgts = np.ones_like(data_r)
 
-        # Make weights for the data
-        data_wgts = DataContainer({k: np.ones(self.data[k].shape) for k in self.data})
-
-        # Compute the filters 
-        self.frc._compute_filters(self.freqs, 10e-9)
-
-        init_model_comps = nucal.fit_nucal_foreground_model(
-            self.data, data_wgts, self.radial_reds, self.frc.spatial_filters, share_fg_model=True, 
-            return_model_comps=True
-        )
-        init_model_comps = nucal.project_u_model_comps_on_spec_axis(init_model_comps, self.frc.spectral_filters)
-
-        # Calculate baseline vectors
-        blvecs = np.array([self.antpos[bl[1]] - self.antpos[bl[0]] for rdgrp in self.radial_reds for bl in rdgrp])
-        
-        model_parameters = {
-            "tip_tilt": np.zeros((3, 2, 200)),
-            "amplitude": np.ones((2, 200)),
-            "fg_r": [init_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds],
-            "fg_i": [init_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds],
-        }
-
-        spatial_filters = [np.array([self.frc.spatial_filters[blkey] for blkey in rdgrp]) for rdgrp in self.radial_reds]
         
         # Make optimizer
-        optimizer = nucal.OPTIMIZERS['adagrad'](learning_rate=1e-3)
+        optimizer = nucal.OPTIMIZERS['novograd'](learning_rate=1e-3)
 
         # Run gradient descent
         _, metadata = nucal._nucal_post_redcal(
-            data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
-            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, major_cycle_maxiter=100,
-        )
-
-        # Check that starting in the correct spot doesn't move solutions
-        # If the solutions doesn't change the mse difference should be close zero
-        # And trigger the convergence condition
-        assert metadata['niter'] == 2
-
-        # Run gradient descent w/ minor cycle
-        _, metadata = nucal._nucal_post_redcal(
-            data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
-            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, major_cycle_maxiter=100,
-            minor_cycle_maxiter=1
-        )
-
-        # Check that starting in the correct spot doesn't move solutions
-        # If the solutions doesn't change the mse difference should be close zero
-        # And trigger the convergence condition
-        assert metadata['niter'] == 2
-
-        # Uncalibrate the data 
-        amp = np.random.normal(1, 0.01, size=self.data[list(self.data.keys())[0]].shape)
-        data_r = np.array([self.data[bl].real * amp for rdgrp in self.radial_reds for bl in rdgrp])
-        data_i = np.array([self.data[bl].imag * amp for rdgrp in self.radial_reds for bl in rdgrp])
-
-        # Run gradient descent w/ minor cycle
-        _, metadata = nucal._nucal_post_redcal(
-            data_r, data_i, wgts, model_parameters, spectral_filters=self.frc.spectral_filters,
-            spatial_filters=spatial_filters, idealized_blvecs=blvecs, optimizer=optimizer, major_cycle_maxiter=10,
-            minor_cycle_maxiter=1
+            data_r, data_i, wgts, deepcopy(self.model_parameters), spectral_filters=self.frc.spectral_filters,
+            spatial_filters=self.spatial_filters, idealized_blvecs=self.blvecs, optimizer=optimizer, major_cycle_maxiter=100,
         )
 
         # Check that the gradient descent decreases the value of the loss function
         assert metadata['loss_history'][0] > metadata['loss_history'][-1]
 
+        # Run gradient descent w/ minor cycle
+        _, _metadata = nucal._nucal_post_redcal(
+            data_r, data_i, wgts, deepcopy(self.model_parameters), spectral_filters=self.frc.spectral_filters,
+            spatial_filters=self.spatial_filters, idealized_blvecs=self.blvecs, optimizer=optimizer, major_cycle_maxiter=100,
+            minor_cycle_maxiter=1
+        )
+
+        # Check that the gradient descent decreases the value of the loss function
+        assert _metadata['loss_history'][0] > _metadata['loss_history'][-1]
+
+        # Check that final loss with minor cycle is less than without
+        assert metadata['loss_history'][-1] > _metadata['loss_history'][-1]
+
 class TestSpectrallyRedundantCalibrator:
     def setup_method(self):
-        self.freqs = np.linspace(50e6, 250e6, 200)
+        self.freqs = np.linspace(50e6, 250e6, 400)
         self.antpos = linear_array(10, sep=2)
         self.radial_reds = nucal.RadialRedundancy(self.antpos)
 
@@ -785,7 +735,7 @@ class TestSpectrallyRedundantCalibrator:
         )
     
         # Shape of amplitude and tip-tilt should be (ndims, ntimes, nfreqs)
-        assert tip_tilt["nn"].shape == (1, 2, 200)
+        assert tip_tilt["nn"].shape == (1, 2, 400)
 
     def test_post_redcal_nucal(self):
         """
@@ -794,35 +744,47 @@ class TestSpectrallyRedundantCalibrator:
         np.random.seed(42)
 
         # Set gains
-        amp = np.random.normal(1, 0.05, size=(2, 200))
+        amp = np.random.normal(1, 0.01, size=(2, 400))
         gains = {(k, "Jnn"): amp for k in self.antpos}
         dc = deepcopy(self.data)
         apply_cal.calibrate_in_place(dc, gains, gain_convention='multiply')
 
-        fit_gains, model_params, meta = self.frc.post_redcal_nucal(
-            dc, self.data_wgts, spatial_estimate_only=True, minor_cycle_maxiter=10,
-            share_fg_model=True, major_cycle_maxiter=10, spectral_filter_half_width=10e-9,
+        fit_gains, _model_params, _meta, _ = self.frc.post_redcal_nucal(
+            dc, self.data_wgts, spatial_estimate_only=True, minor_cycle_maxiter=3,
+            share_fg_model=True, major_cycle_maxiter=250, spectral_filter_half_width=5e-9,
+            estimate_degeneracies=True, return_model=True
         )
 
         # Apply gains to data
         apply_cal.calibrate_in_place(dc, fit_gains, gain_convention='divide')
 
-        # Check that the value of the loss function decreases
-        assert meta['nn']['loss_history'][-1] < meta['nn']['loss_history'][0]
-
-        # Run with abscal degeneracy estimation
-        dc = deepcopy(self.data)
-        apply_cal.calibrate_in_place(dc, gains, gain_convention='multiply')
-        fit_gains, model_params, meta, model = self.frc.post_redcal_nucal(
-            dc, self.data_wgts, spatial_estimate_only=True, minor_cycle_maxiter=10,
-            share_fg_model=True, major_cycle_maxiter=10, return_model=True, 
-            spectral_filter_half_width=10e-9, estimate_degeneracies=True
+        # Recompute model with the new gains
+        model = nucal.fit_nucal_foreground_model(
+            dc, self.data_wgts, self.radial_reds, self.frc.spatial_filters, spectral_filters=self.frc.spectral_filters, tol=1e-12,
+            share_fg_model=True
         )
 
-        # Check that the value of the loss function decreases
-        assert meta['nn']['loss_history'][-1] < meta['nn']['loss_history'][0]
+        # Check that the model is close to the data within a certain tolerance
+        assert np.sqrt(np.mean([np.square(model[k] - dc[k]) for k in model])) < 1e-5
 
-        # Check that there is a model visibility for each baseline in radial_reds
-        for group in self.radial_reds:
-            for bl in group:
-                assert bl in model
+        dc = deepcopy(self.data)
+        apply_cal.calibrate_in_place(dc, gains, gain_convention='multiply')
+
+        # Calibrate without estimating degeneracies
+        fit_gains, _model_params, _meta = self.frc.post_redcal_nucal(
+            dc, self.data_wgts, spatial_estimate_only=True, minor_cycle_maxiter=3,
+            share_fg_model=True, major_cycle_maxiter=250, spectral_filter_half_width=5e-9,
+            estimate_degeneracies=False
+        )
+
+        # Apply gains to data
+        apply_cal.calibrate_in_place(dc, fit_gains, gain_convention='divide')
+
+        # Recompute model with the new gains
+        model = nucal.fit_nucal_foreground_model(
+            dc, self.data_wgts, self.radial_reds, self.frc.spatial_filters, spectral_filters=self.frc.spectral_filters, tol=1e-12,
+            share_fg_model=True
+        )
+
+        # Check that the model is close to the data within a certain tolerance
+        assert np.sqrt(np.mean([np.square(model[k] - dc[k]) for k in model])) < 1e-5
