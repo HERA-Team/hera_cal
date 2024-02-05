@@ -21,7 +21,6 @@ from .utils import echo
 from .flag_utils import factorize_flags
 
 
-
 def discard_autocorr_imag(data_container, keys=None):
     """
     Helper function to discard all imaginary components in autocorrs in a datacontainer.
@@ -1153,7 +1152,7 @@ class VisClean(object):
                     win = flag_rows_with_flags_within_edge_distance(xp, win, skip_if_flag_within_edge_distance, ax=ax)
 
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
-                
+
                 if 0 not in din.shape:
                     mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                                           filter_half_widths=filter_half_widths,
@@ -1251,7 +1250,7 @@ class VisClean(object):
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice]) | skipped
                 else:
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice])
-        
+
         # loop through resids, model, and data and make sure everything is real.
         discard_autocorr_imag(filtered_model, keys=keys)
         discard_autocorr_imag(filtered_resid, keys=keys)
@@ -1890,6 +1889,7 @@ def _trim_status(info_dict, axis, zeropad):
     for i in range(nints):
         statuses[i] = statuses.pop(i + zeropad)
 
+
 def _adjust_info_indices(x, info_dict, edges, freq_baseind):
     """Adjust indices in info dict to reflect rows inserted by restore_flagged_edges
 
@@ -1923,7 +1923,7 @@ def _adjust_info_indices(x, info_dict, edges, freq_baseind):
                 statuses[ind + offset + baseinds[axind]] = statuses.pop(ind)
             offset -= edge[0]
 
-            
+
 # ------------------------------------------
 # Here is an argparser with core arguments
 # needed for all types of xtalk and delay
@@ -1986,6 +1986,7 @@ def _filter_argparser():
     flag_options.add_argument("--dont_flag_model_rms_outliers", default=False, action="store_true", help="Do not flag integrations or channels where the rms of the filter model exceeds the rms of the unflagged data.")
     flag_options.add_argument("--model_rms_threshold", type=float, default=1.1, help="Factor that rms of model in a channel or integration needs to exceed the rms of unflagged data to be flagged.")
     flag_options.add_argument("--clean_flags_not_in_resid_flags", default=False, action="store_true", help="Do not include flags from times/channels skipped in the resid flags.")
+    flag_options.add_argument("--apply_flag_to_nsample", default=False, action="store_true", help="Set nsample to 0 where flag is True before filtering.")
 
     # Arguments for CLEAN. Not used in linear filtering methods.
     clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
@@ -2073,9 +2074,9 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
     else:
         dt_time_chunk = np.median(np.diff(hd_time_chunk.times)) / 2.
         tmax = hd_time_chunk.times.max() + dt_time_chunk
-        
+
         tmin = hd_time_chunk.times.min() - dt_time_chunk
-        
+
         hd_combined = io.HERAData(baseline_chunk_files)
         # we only compare centers of baseline files to time limits of time-file.
         # this is to prevent integrations that straddle file boundaries from being dropped.
