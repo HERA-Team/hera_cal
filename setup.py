@@ -63,7 +63,7 @@ setup_args = {
         "rich",
         "jax",
         "jaxlib",
-        "optax",
+        "optax=0.1.7",
         'attrs',
         'frozendict',
     ],
