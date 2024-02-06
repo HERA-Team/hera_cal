@@ -716,7 +716,7 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
 
     return wgts
 
-def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
+def _linear_fit(XTX, Xy, solver='lu_solve', alpha=1e-15, cached_input={}):
     """
     Solves a linear system of equations using a variety of methods. This is a light wrapper
     around np.linalg.solve, np.linalg.lstsq, and scipy.linalg.lu_solve which helps fit nucal
@@ -733,8 +733,8 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
             'lu_solve' uses scipy.linalg.lu_solve to solve the linear system of equations, 'solve' uses np.linalg.solve.
             'pinv' uses np.linalg.pinv to solve the linear system of equations, and 'lstsq' uses np.linalg.lstsq. 'lu_solve' 
             and 'solve' tend to be the faster methods, but 'lstsq' and 'pinv' are more robust.
-        tol : float, default=1e-15
-            Tolerance to use for regularization. If method is 'lu_solve' or 'solve', this is added to the diagonal of XTX. 
+        alpha : float, default=1e-15
+            Parameter used for regularization. If method is 'lu_solve' or 'solve', this is added to the diagonal of XTX. 
             If method is 'pinv' or 'lstsq', this is used as the rcond parameter for np.linalg.pinv and np.linalg.lstsq respectively.
         cached_input : dictionary, default={}
             Dictionary used to speed-up computation of linear fits for the 'lu_solve' and 'pinv' solvers. 
@@ -759,14 +759,14 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
     ], "method must be one of {}".format(["lu_solve", "solve", "pinv", "lstsq"])
 
     # Assert that the regularization tolerance is non-negative
-    assert tol >= 0.0, "tol must be non-negative."
+    assert alpha >= 0.0, "alpha must be non-negative."
 
     # Add regularization tolerance to the diagonal of XTX
     # If XTX is a jax array, use the jax array indexing syntax
     if (solver == "lu_solve" or solver == "solve") and isinstance(XTX, jnp.ndarray):
-        XTX = XTX.at[np.diag_indices_from(XTX)].add(tol)
+        XTX = XTX.at[np.diag_indices_from(XTX)].add(alpha)
     elif solver == "lu_solve" or solver == "solve":
-        XTX[np.diag_indices_from(XTX)] += tol
+        XTX[np.diag_indices_from(XTX)] += alpha
 
     if solver == "lu_solve":
         # Factor XTX using scipy.linalg.lu_factor
@@ -793,7 +793,7 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
         if "XTXinv" in cached_input:
             XTXinv = cached_input.get('XTXinv')
         else:
-            XTXinv = np.linalg.pinv(XTX, rcond=tol)
+            XTXinv = np.linalg.pinv(XTX, rcond=alpha)
 
         # Compute the model parameters using the pseudo-inverse
         beta = np.dot(XTXinv, Xy)
@@ -802,7 +802,7 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
 
     elif solver == "lstsq":
         # Compute the model parameters using np.linalg.lstsq
-        beta, res, rank, s = np.linalg.lstsq(XTX, Xy, rcond=tol)
+        beta, res, rank, s = np.linalg.lstsq(XTX, Xy, rcond=alpha)
         
         # Save info
         cached_output = {}
@@ -875,7 +875,7 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
     return RedDataContainer(model, radial_reds.reds)
 
 
-def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters=None, tol=1e-12,
+def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters=None, alpha=1e-12,
                                share_fg_model=False, return_model_comps=False, solver="lu_solve"):
     """
     Compute a foreground model for a set of radially redundant baselines. The model is computed by performing a linear
@@ -903,8 +903,8 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
         the model is assumed to be restricted to the spatial axis with no spectral variation.
     solver : str, optional, Default is 'lu_solve'
         Solver to use for linear least-squares fit. Options are 'lu_solve', 'solve', 'pinv', and 'lstsq'.
-    tol : float, optional, Default is 1e-15.
-        Regularization tolerance for linear least-squares fit. 
+    alpha : float, optional, Default is 1e-15.
+        Regularization for linear least-squares fit. 
     share_fg_model : bool, optional, Default is False.
         If True, the foreground model for each radially-redundant group is shared across the time axis. 
         Otherwise, a nucal foreground will be independently computed for each time integration individually.
@@ -948,7 +948,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                 Xy = jnp.einsum("afm,atf->m", design_matrix, data_here * wgts_here)
 
                 # Solve for model components
-                beta, _ = _linear_fit(XTX, Xy, solver=solver, tol=tol)
+                beta, _ = _linear_fit(XTX, Xy, solver=solver, alpha=alpha)
             else:
                 XTX = jnp.einsum("fm,afn,atf,fk,afj->mnkj", 
                     spectral_filters, design_matrix, wgts_here, spectral_filters, design_matrix
@@ -956,7 +956,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                 Xy = jnp.einsum("fm,afn,atf->mn", spectral_filters, design_matrix, data_here * wgts_here).reshape(ndim)
 
                 # Solve for the foreground model components
-                beta, _ = _linear_fit(XTX, Xy, tol=tol, solver=solver)
+                beta, _ = _linear_fit(XTX, Xy, alpha=alpha, solver=solver)
                 beta = beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1])
 
             # Expand the model components to have time index
@@ -974,7 +974,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                     Xy = jnp.einsum("afm,af->m", design_matrix, data_here[:, i] * wgts_here[:, i])
 
                     # Solve for model components
-                    beta.append(_linear_fit(XTX, Xy, solver=solver, tol=tol)[0])
+                    beta.append(_linear_fit(XTX, Xy, solver=solver, alpha=alpha)[0])
 
                 else:
                     XTX = jnp.einsum("fm,afn,af,fk,afj->mnkj", 
@@ -983,7 +983,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                     Xy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_here[:, i] * wgts_here[:, i]).reshape(ndim)
                     
                     # Solve for the foreground model components
-                    _beta, _ = _linear_fit(XTX, Xy, tol=tol, solver=solver)
+                    _beta, _ = _linear_fit(XTX, Xy, alpha=alpha, solver=solver)
                     beta.append(_beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1]))
             
             # Pack solution into an array
@@ -1194,6 +1194,9 @@ def _nucal_post_redcal(
         Maximum number of iterations of the minor cycle to perform after each major cycle. Minor cycles are performed by fixing the foreground
         model and solving for the calibration parameters. When minor_cycle_maxiter is 0, no minor cycles are performed. If subsequent losses
         are within convergence_criterea, the minor cycle will stop.
+    alpha : float, optional, default=0
+        Regularization parameter to use for the loss function. If alpha is non-zero, the loss function will be regularized
+        by the sum of the squares of the foreground model parameters.
     
     Returns:
     -------
@@ -1382,7 +1385,7 @@ class SpectrallyRedundantCalibrator:
 
         return amplitude, tip_tilt
     
-    def post_redcal_nucal(self, data, data_wgts, cal_flags={}, spatial_estimate_only=False, linear_solver="lu_solve", linear_tol=1e-12, share_fg_model=False, 
+    def post_redcal_nucal(self, data, data_wgts, cal_flags={}, spatial_estimate_only=False, linear_solver="lu_solve", alpha=0, share_fg_model=False, 
                   spectral_filter_half_width=30e-9, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, estimate_degeneracies=False,
                   optimizer_name='novograd', learning_rate=1e-3, major_cycle_maxiter=100, minor_cycle_maxiter=0, convergence_criteria=1e-10, return_model=False):
         """
@@ -1414,7 +1417,7 @@ class SpectrallyRedundantCalibrator:
             equations, "solve" uses np.linalg.solve. "pinv" uses np.linalg.pinv to solve the linear system of equations, and
             "lstsq" uses np.linalg.lstsq. "lu_solve" and "solve" tend to be the faster methods, but "lstsq" and "pinv" are more
             robust.
-        linear_tol : float, default=1e-12
+        alpha : float, default=1e-12
             Regularization parameter for linear least-squares fit when computing the initial estimate of the foreground model.
             Regularization parameter is also used as a regularizer in the gradient descent step.
         share_fg_model : bool, default=False
@@ -1491,13 +1494,13 @@ class SpectrallyRedundantCalibrator:
         if spatial_estimate_only:
             init_model_comps = fit_nucal_foreground_model(
                 data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model, 
-                return_model_comps=True, tol=linear_tol
+                return_model_comps=True, alpha=alpha
             )
             init_model_comps = project_u_model_comps_on_spec_axis(init_model_comps, self.spectral_filters)
         else:
             init_model_comps = fit_nucal_foreground_model(
                 data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model, 
-                spectral_filters=self.spectral_filters, return_model_comps=True, tol=linear_tol
+                spectral_filters=self.spectral_filters, return_model_comps=True, alpha=alpha
             )
             
         # Compute idealized baseline vectors from antenna positions and calibration flags
@@ -1559,7 +1562,7 @@ class SpectrallyRedundantCalibrator:
             model_parameters[pol], metadata[pol] = _nucal_post_redcal(
                 data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
                 spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, major_cycle_maxiter=major_cycle_maxiter, 
-                convergence_criteria=convergence_criteria, minor_cycle_maxiter=minor_cycle_maxiter, alpha=linear_tol
+                convergence_criteria=convergence_criteria, minor_cycle_maxiter=minor_cycle_maxiter, alpha=alpha
             )
 
         if return_model:
