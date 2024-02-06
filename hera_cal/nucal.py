@@ -1111,7 +1111,7 @@ def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_m
     return jnp.sum((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
 
 @jax.jit
-def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs, alpha=1e-12):
+def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs, alpha=0):
     """
     Function which computes the value of the loss from the degenerate parameters, DPSS foreground components, and the data 
     
@@ -1131,6 +1131,9 @@ def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_
         List of spatial filters for each baseline in the group
     idealized_blvecs : np.ndarray
         Array of idealized baseline vectors with shape (Nbls, Ndims)
+    alpha : float, optional, default=0
+        Regularization parameter to use for the loss function. If alpha is non-zero, the loss function will be regularized
+        by the sum of the squares of the foreground model parameters.
 
     Returns:
     -------
