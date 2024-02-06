@@ -1392,8 +1392,8 @@ class SpectrallyRedundantCalibrator:
         data_wgts : DataContainer (or RedDataContainer)
             Weights associated with data. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
         cal_flags : dictionary, default={}
-            Dictionary containing flags for each antenna. Keys are antenna numbers and values are boolean arrays of shape (Ntimes, Nfreqs).
-            This dictionary is primarily used for computing the idealized antenna positions.
+            Dictionary mapping keys like (1, 'Jnn') to flag waterfalls. This dictionary is primarily used for computing the 
+            idealized antenna positions.
         spatial_estimate_only : bool, default=False
             If True, the initial estimate of the foreground model will be computed from the data assuming that the evolution foreground model
             is entirely restricted to the spatial axis. This estimate will then be projected onto the eigenmodes of the spectral DPSS modes
