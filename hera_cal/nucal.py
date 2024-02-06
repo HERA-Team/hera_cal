@@ -1205,6 +1205,7 @@ def _nucal_post_redcal(
 
     # Initialize variables used in calibration loop
     losses = []
+    previous_loss = np.inf
 
     # Start gradient descent
     for step in range(major_cycle_maxiter):
@@ -1239,12 +1240,16 @@ def _nucal_post_redcal(
                 if minor_step >= 1 and np.abs(minor_cycle_losses[-1] - minor_cycle_losses[-2]) < convergence_criteria:
                     break
 
+            losses += minor_cycle_loss
+
         # Store loss values
         losses.append(loss)
-    
+        
         # Stop if subsequent losses are within tolerance
-        if step >= 1 and np.abs(losses[-1] - losses[-2]) < convergence_criteria:
+        if step >= 1 and np.abs(losses[-1] - previous_loss) < convergence_criteria:
             break
+
+        previous_loss = loss
 
     # Save the metadata in dictionary
     metadata = {"niter": step + 1, "loss_history": np.array(losses)}
