@@ -1240,7 +1240,7 @@ def _nucal_post_redcal(
                 if minor_step >= 1 and np.abs(minor_cycle_losses[-1] - minor_cycle_losses[-2]) < convergence_criteria:
                     break
 
-            losses += minor_cycle_loss
+            losses += minor_cycle_losses
 
         # Store loss values
         losses.append(loss)
