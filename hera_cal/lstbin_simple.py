@@ -593,8 +593,11 @@ def sigma_clip(
     elif scale.shape != array.shape:
         scale = np.expand_dims(scale, axis=median_axis)
 
-    if scale.shape != array.shape:
-        raise ValueError("scale must have same shape as array or array with median_axis removed")
+    if scale.shape != array.shape and scale.shape[median_axis] != 1:
+        raise ValueError(
+            "scale must have same shape as array or array with median_axis removed."
+            f"Got {scale.shape}, needed {array.shape}"
+        )
 
     if flag_bands is None:
         # Use entire threshold axis together
@@ -621,11 +624,6 @@ def sigma_clip(
             # In this mode, an entire sub-band of the data is flagged if its mean
             # (absolute) zscore is beyond the threshold.
             thisf = getattr(np.ma, clip_type)(subz, axis=threshold_axis) > threshold
-            if np.any(thisf):
-                for day_idx, bl_idx, pol_idx in zip(*thisf.nonzero()):
-                    if not np.all(subz.mask[day_idx, bl_idx, :, pol_idx]):
-                        print(f"Sigma-clipping (band,day,bl,pol)={band},{day_idx},{bl_idx},{pol_idx}")
-
             subflags[:] = np.expand_dims(thisf, axis=threshold_axis)
         else:
             raise ValueError(
