@@ -14,7 +14,7 @@ class TestCalFuncs:
         self.nf = 100
         self.ndays = 10
         self.freqs = np.linspace(50e6, 250e6, self.nf)
-        self.antpos = hex_array(4, split_core=False, outriggers=0)
+        self.antpos = hex_array(3, split_core=False, outriggers=0)
         self.reds = redcal.get_reds(self.antpos)
         self.idealized_antpos = redcal.reds_to_antpos(self.reds)
         self.true_vis = {
@@ -107,6 +107,7 @@ class TestCalFuncs:
         assert np.allclose(np.std(data_arr, axis=0), 0)
 
     def test_tip_tilt_calibration(self):
+        # Generate a set of degenerate gains
         tip_tilt = np.random.uniform(
             0, 0.01, size=(self.ndays, self.nf, len(self.idealized_antpos[0]))
         )
@@ -185,12 +186,24 @@ class TestCalFuncs:
         ]
 
         # Simulate and apply the gains
-        amplitude = np.random.normal(1, 0.01, size=(self.ndays, self.nf))
+        # TODO: also add phase slope and tip/tilt
+        amplitude = np.random.normal(1, 0.01, size=(self.ndays, self.nf)).astype(complex)
         sim_gains = {(k, 'Jnn'): amplitude for k in self.antpos}
+        # Generate a set of degenerate gains
+        tip_tilt = np.random.uniform(
+            0, 0.01, size=(self.ndays, self.nf, len(self.idealized_antpos[0]))
+        )
+        degen_gains = {
+            (k, "Jnn"): np.exp(1j * tip_tilt.dot(self.idealized_antpos[k]))
+            for k in self.antpos
+        }
+        for k in sim_gains:
+            sim_gains[k] *= degen_gains[k]
+
         lstcal.apply_lstcal_inplace(data_arr, sim_gains, self.baselines, ["nn"], gain_convention="multiply")
 
         # Run LST-calibration - calibration happens in place
-        gains = lstcal.calibrate_data(
+        _ = lstcal.calibrate_data(
             data_arr,
             flag_arr,
             nsamples_arr,

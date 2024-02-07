@@ -361,6 +361,9 @@ def delay_slope_calibration(
     # Shape of the data
     ndays, _, _, _ = data.shape
 
+    # Get the antennas from the antpairs
+    ants = list(set(sum(map(list, antpairs), [])))
+
     # Check if antpos is a dictionary or a list of dictionaries
     use_same_antpos = True if isinstance(antpos, dict) else False
 
@@ -389,8 +392,9 @@ def delay_slope_calibration(
                     }
                 )
             else:
+                blvec_shape = []
                 # Loop through all of the days for this baseline
-                for di in ndays:
+                for di in range(ndays):
                     blvec = antpos[di][bl[1]] - antpos[di][bl[0]]
                     const.update(
                         {
@@ -398,6 +402,7 @@ def delay_slope_calibration(
                             for ni in range(blvec.shape[0])
                         }
                     )
+                    blvec_shape.append(blvec.shape[0])
 
             # Loop through all of the tip-tilt offsets
             for day1, day2 in delays[bl]:
@@ -419,13 +424,13 @@ def delay_slope_calibration(
                     data_key_1 = " + ".join(
                         [
                             f"b_{bl[0]}_{bl[1]}_{ni}_{day2[0]} * T{ni}_{day2[0]}"
-                            for ni in range(blvec.shape[0])
+                            for ni in range(blvec_shape[day2[0]])
                         ]
                     )
                     data_key_2 = " - ".join(
                         [
                             f"b_{bl[0]}_{bl[1]}_{ni}_{day1[0]} * T{ni}_{day1[0]}"
-                            for ni in range(blvec.shape[0])
+                            for ni in range(blvec_shape[day1[0]])
                         ]
                     )
 
@@ -448,7 +453,7 @@ def delay_slope_calibration(
         # Pack the solution into a dictionary
         solutions[pol] = fit
         _gains = {}
-        for ant in antpos:
+        for ant in ants:
             phase = []
             for ti in range(ndays):
                 if use_same_antpos:
@@ -567,7 +572,8 @@ def global_phase_slope_calibration(
                 )
             else:
                 # Loop through all of the days for this baseline
-                for di in ndays:
+                blvec_shape = []
+                for di in range(ndays):
                     blvec = antpos[di][bl[1]] - antpos[di][bl[0]]
                     const.update(
                         {
@@ -575,6 +581,7 @@ def global_phase_slope_calibration(
                             for ni in range(blvec.shape[0])
                         }
                     )
+                    blvec_shape.append(blvec.shape[0])
 
             # Loop through all of the tip-tilt offsets
             for day1, day2 in phase_slopes[bl]:
@@ -595,13 +602,13 @@ def global_phase_slope_calibration(
                     data_key_1 = " + ".join(
                         [
                             f"b_{bl[0]}_{bl[1]}_{ni}_{day2[0]} * Phi{ni}_{day2[0]}"
-                            for ni in range(blvec.shape[0])
+                            for ni in range(blvec_shape[day2[0]])
                         ]
                     )
                     data_key_2 = " - ".join(
                         [
                             f"b_{bl[0]}_{bl[1]}_{ni}_{day1[0]} * Phi{ni}_{day1[0]}"
-                            for ni in range(blvec.shape[0])
+                            for ni in range(blvec_shape[day1[0]])
                         ]
                     )
                 ls_data[data_key_1 + " - " + data_key_2] = phase_slopes[bl][
@@ -743,7 +750,8 @@ def tip_tilt_calibration(
                 )
             else:
                 # Loop through all of the days for this baseline
-                for di in ndays:
+                blvec_shape = []
+                for di in range(ndays):
                     blvec = antpos[di][bl[1]] - antpos[di][bl[0]]
                     const.update(
                         {
@@ -751,6 +759,7 @@ def tip_tilt_calibration(
                             for ni in range(blvec.shape[0])
                         }
                     )
+                    blvec_shape.append(blvec.shape[0])
 
             # Loop through all of the tip-tilt offsets
             for day1, day2 in tip_tilts[bl]:
@@ -771,13 +780,13 @@ def tip_tilt_calibration(
                     data_key_1 = " + ".join(
                         [
                             f"b_{bl[0]}_{bl[1]}_{ni}_{day2[0]} * TT{ni}_{day2[0]}"
-                            for ni in range(blvec.shape[0])
+                            for ni in range(blvec_shape[day2[0]])
                         ]
                     )
                     data_key_2 = " - ".join(
                         [
                             f"b_{bl[0]}_{bl[1]}_{ni}_{day1[0]} * TT{ni}_{day1[0]}"
-                            for ni in range(blvec.shape[0])
+                            for ni in range(blvec_shape[day1[0]])
                         ]
                     )
                 ls_data[data_key_1 + " - " + data_key_2] = tip_tilts[bl][(day1, day2)][
