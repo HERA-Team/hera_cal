@@ -655,7 +655,7 @@ class Test_LSTAverage:
         nsamples = np.ones(_data.shape, dtype=float)
         flags = np.zeros(_data.shape, dtype=bool)
 
-        with pytest.warns(UserWarning, match="Sigma-clipping in in-painted mode"):
+        with pytest.warns(UserWarning, match="Direct-mode sigma-clipping in in-painted mode"):
             lstbin_simple.lst_average(
                 data=_data,
                 nsamples=nsamples,
