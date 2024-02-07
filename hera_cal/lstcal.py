@@ -53,7 +53,7 @@ def compute_offsets(
         Dictionary of indices for each baseline in the lstbin.
     """
     # Get shape of data
-    ndays, nbls, nfreqs, npols = data.shape
+    ndays, nbls, _, npols = data.shape
 
     # If no day_flags is provided, assume all days are usable
     if day_flags is None:
@@ -62,7 +62,7 @@ def compute_offsets(
     if bls_flags is None:
         bls_flags = np.zeros(nbls, dtype=bool)
 
-    # Dictionary for storing data, flags, and nsamples for each baseline
+    # Dictionary for storing the baseline and polarization indices of each baseline
     index_dict = {}
 
     # Dictionary for storing the offsets between days for each baseline
@@ -112,8 +112,9 @@ def hierachical_pairing(
     **kwargs,
 ) -> dict[tuple[int, int, str], float]:
     """
-    Hierachically pair data to solve for the offsets between days in an LST-bin.
-
+    Hierachically pair data to solve for the offsets between days in an LST-bin. Days are paired
+    together in a binary tree, with the offsets between days being solved for at each level. The
+    final offset is the product of all the offsets between days.
 
     Parameters:
     -----------
@@ -126,7 +127,8 @@ def hierachical_pairing(
     ref_value : float
         Value to use for the reference data. Default is 1.0.
     ref_operation : str
-        Operation to perform on the reference data. Default is 'multiply'.
+        Operation to perform when comparing all the value of the offsets between days in the lstbin.
+        Default is 'multiply'.
     kwargs : dict
         Additional keyword arguments to pass to the pairing_function.
 
@@ -1004,7 +1006,6 @@ def calibrate_data(
     pols: list[str],
     phs_max_iter: int = 10,
     phs_conv_crit: float = 1e-6,
-    phase_method: str = "logcal",
     day_flags: np.ndarray | None = None,
     bls_flags: np.ndarray | None = None,
     sparse: bool = True,
@@ -1040,9 +1041,10 @@ def calibrate_data(
     bls_flags : np.ndarray
         Boolean array of shape (Nbls,) indicating which baselines to use in the lstbin.
     sparse : bool, default=True
-        Use sparse matrices to solve for the delay slopes.
+        Use sparse matrices to solve for the amplitude and phase calibration terms.
     solver_method : str, default='default'
-        Method to use to solve for the delay slopes. Options are 'default' and 'pinv'.
+        Method to use to solve for the amplitude and phase calibration terms. 
+        Options are 'default' and 'pinv'.
     
     Returns:
     --------
@@ -1053,18 +1055,59 @@ def calibrate_data(
     # Initialize gains
     gains = {}
 
-    # Perform phase calibration
-    if phase_method == "complex_phase":
-        raise NotImplementedError(
-            "abscal.complex_phase_abscal not currently implemented."
-        )
-    elif phase_method == "logcal":
-        # Perform global delay slope calibration
-        delta_gains, _ = delay_slope_calibration(
+    # Perform global delay slope calibration
+    delta_gains, _ = delay_slope_calibration(
+        data=data,
+        flags=flags,
+        nsamples=nsamples,
+        freqs=freqs,
+        antpairs=antpairs,
+        antpos=idealized_antpos,
+        pols=pols,
+        day_flags=day_flags,
+        bls_flags=bls_flags,
+        sparse=sparse,
+        solver_method=solver_method,
+    )
+    apply_lstcal_inplace(
+        data=data,
+        gains=delta_gains,
+        antpairs=antpairs,
+        pols=pols,
+        gain_convention="divide",
+    )
+    # Update gains
+    gains = {k: gains.get(k, 1 + 0j) * delta_gains[k] for k in delta_gains}
+
+    # Perform global phase-slope calibration
+    delta_gains, _ = global_phase_slope_calibration(
+        data=data,
+        flags=flags,
+        nsamples=nsamples,
+        antpairs=antpairs,
+        antpos=idealized_antpos,
+        pols=pols,
+        day_flags=day_flags,
+        bls_flags=bls_flags,
+        sparse=sparse,
+        solver_method=solver_method,
+    )
+    apply_lstcal_inplace(
+        data=data,
+        gains=delta_gains,
+        antpairs=antpairs,
+        pols=pols,
+        gain_convention="divide",
+    )
+    # Update gains
+    gains = {k: gains[k] * delta_gains[k] for k in gains}
+
+    # Perform per-frequency tip-tilt phase calibration
+    for _ in range(phs_max_iter):
+        delta_gains, _ = tip_tilt_calibration(
             data=data,
             flags=flags,
             nsamples=nsamples,
-            freqs=freqs,
             antpairs=antpairs,
             antpos=idealized_antpos,
             pols=pols,
@@ -1078,62 +1121,13 @@ def calibrate_data(
             gains=delta_gains,
             antpairs=antpairs,
             pols=pols,
-            gain_convention="divide",
         )
-        # Update gains
         gains = {k: gains.get(k, 1 + 0j) * delta_gains[k] for k in delta_gains}
-
-        # Perform global phase-slope calibration
-        delta_gains, _ = global_phase_slope_calibration(
-            data=data,
-            flags=flags,
-            nsamples=nsamples,
-            antpairs=antpairs,
-            antpos=idealized_antpos,
-            pols=pols,
-            day_flags=day_flags,
-            bls_flags=bls_flags,
-            sparse=sparse,
-            solver_method=solver_method,
+        crit = np.median(
+            np.linalg.norm([delta_gains[k] - 1.0 for k in delta_gains], axis=(0, 1))
         )
-        apply_lstcal_inplace(
-            data=data,
-            gains=delta_gains,
-            antpairs=antpairs,
-            pols=pols,
-            gain_convention="divide",
-        )
-        # Update gains
-        gains = {k: gains[k] * delta_gains[k] for k in gains}
-
-        # Perform per-frequency tip-tilt phase calibration
-        for _ in range(phs_max_iter):
-            delta_gains, _ = tip_tilt_calibration(
-                data=data,
-                flags=flags,
-                nsamples=nsamples,
-                antpairs=antpairs,
-                antpos=idealized_antpos,
-                pols=pols,
-                day_flags=day_flags,
-                bls_flags=bls_flags,
-                sparse=sparse,
-                solver_method=solver_method,
-            )
-            apply_lstcal_inplace(
-                data=data,
-                gains=delta_gains,
-                antpairs=antpairs,
-                pols=pols,
-            )
-            gains = {k: gains.get(k, 1 + 0j) * delta_gains[k] for k in delta_gains}
-            crit = np.median(
-                np.linalg.norm([delta_gains[k] - 1.0 for k in delta_gains], axis=(0, 1))
-            )
-            if crit < phs_conv_crit:
-                break
-    else:
-        raise ValueError(f"Unrecognized phase_method: {phase_method}")
+        if crit < phs_conv_crit:
+            break
 
     # Perform per-frequency logarithmic absolute amplitude calibration
     delta_gains, _ = amplitude_calibration(
@@ -1156,6 +1150,8 @@ def calibrate_data(
         pols=pols,
         gain_convention="divide",
     )
+
+    # Update gains
     gains = {k: gains.get(k, 1 + 0j) * delta_gains[k] for k in delta_gains}
 
     return gains
