@@ -590,10 +590,10 @@ def sigma_clip(
 
     if scale is None:
         scale = np.expand_dims(np.ma.median(np.abs(array - location), axis=median_axis) * 1.482579, axis=median_axis)
-    elif scale.shape != array.shape:
+    elif scale.ndim == array.ndim - 1:
         scale = np.expand_dims(scale, axis=median_axis)
 
-    if scale.shape != array.shape and scale.shape[median_axis] != 1:
+    if (scale.shape != array.shape and scale.shape[median_axis] != 1) or scale.ndim != array.ndim:
         raise ValueError(
             "scale must have same shape as array or array with median_axis removed."
             f"Got {scale.shape}, needed {array.shape}"
