@@ -20,6 +20,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class DelayFilter(VisClean):
     """
     DelayFilter object.
@@ -98,7 +99,8 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', polarizations=None,
                                 skip_flagged_edges=False, overwrite_flags=False,
-                                flag_yaml=None, read_axis=None, **filter_kwargs):
+                                flag_yaml=None, read_axis=None, apply_flag_to_nsample=False,
+                                **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
     While this function reads from multiple files (in datafile_list)
@@ -136,6 +138,8 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         flag_yaml: path to manual flagging text file.
         read_axis: str
             str to pass to axis arg for io.HERAData.read(). Default is None
+        apply_flag_to_nsample: bool, optional
+            apply flag to nsample before performing delay filtering, default is False
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
     if baseline_list is not None and Nbls_per_load is not None:
@@ -177,9 +181,9 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
             logger.info(f"Delay-Filtering baseline group {i+1}/{nbl_groups}")
 
             df = DelayFilter(hd, input_cal=cals)
-            
+
             df.read(
-                bls=baseline_list[i*Nbls_per_load:min((i+1)*Nbls_per_load, len(baseline_list))],
+                bls=baseline_list[i * Nbls_per_load:min((i + 1) * Nbls_per_load, len(baseline_list))],
                 frequencies=freqs, polarizations=polarizations, axis=read_axis
             )
             if avg_red_bllens:
@@ -194,6 +198,20 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
             if factorize_flags:
                 logger.info("  Factorizing flags")
                 df.factorize_flags(time_thresh=time_thresh, inplace=True)
+            if apply_flag_to_nsample:
+                logger.info("  Applying flags to nsample arrays")
+                # Modify self.hd.nsamples
+                for bl in baseline_list[i:i + Nbls_per_load]:
+                    _nsample = np.copy(df.hd.get_nsamples(bl))
+                    _nsample[df.hd.get_flags(bl)] = 0
+                    if _nsample.ndim == 2:
+                        _nsample = _nsample[:, :, np.newaxis]
+                    df.hd.set_nsamples(_nsample, bl)
+                # Modify self.nsamples
+                for blk in df.nsamples:
+                    _nsample = np.copy(df.nsamples[blk])
+                    _nsample[df.flags[blk]] = 0
+                    df.nsamples[blk] = _nsample
 
             logger.info("  Running Delay Filter")
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
@@ -201,12 +219,12 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
             logger.info("  Writing filtered data")
             df.write_filtered_data(
                 res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                filled_outfilename=filled_outfilename, 
+                filled_outfilename=filled_outfilename,
                 partial_write=Nbls_per_load < len(baseline_list),
                 clobber=clobber, add_to_history=add_to_history,
                 extra_attrs={
-                    'Nfreqs': df.Nfreqs, 
-                    'freq_array': df.hd.freq_array, 
+                    'Nfreqs': df.Nfreqs,
+                    'freq_array': df.hd.freq_array,
                     'channel_width': df.hd.channel_width,
                     'flex_spw_id_array': df.hd.flex_spw_id_array,
                 }
