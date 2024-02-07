@@ -359,7 +359,7 @@ def delay_slope_calibration(
     )
 
     # Shape of the data
-    ndays, nbls, nfreqs, npols = data.shape
+    ndays, _, _, _ = data.shape
 
     # Check if antpos is a dictionary or a list of dictionaries
     use_same_antpos = True if isinstance(antpos, dict) else False
@@ -537,7 +537,7 @@ def global_phase_slope_calibration(
     ants = list(set(sum(map(list, antpairs), [])))
 
     # Get shape of data
-    ndays, nbls, nfreqs, npols = data.shape
+    ndays, _, _, _ = data.shape
 
     # Check if antpos is a dictionary or a list of dictionaries
     use_same_antpos = True if isinstance(antpos, dict) else False
@@ -713,7 +713,7 @@ def tip_tilt_calibration(
     ants = list(set(sum(map(list, antpairs), [])))
 
     # Get shape of data
-    ndays, nbls, nfreqs, npols = data.shape
+    ndays, _, _, _ = data.shape
 
     # Check if antpos is a dictionary or a list of dictionaries
     use_same_antpos = True if isinstance(antpos, dict) else False
