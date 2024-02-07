@@ -20,7 +20,7 @@ def compute_offsets(
     **kwargs,
 ) -> tuple[dict, dict]:
     """
-    Build a dictionary of data for each baseline in the lstbin.
+    Compute the offsets between days in an LST-bin using a given calibration function.
 
     Parameters:
     -----------
@@ -29,15 +29,17 @@ def compute_offsets(
     flags : np.ndarray
         Shape (Ntimes, Nbls, Nfreqs, Npols) of boolean flags.
     antpairs : list of tuples
-        List of tuples of antenna pairs.
+        List of antenna pairs. Must contain the same number of baselines as the data and order must match
+        the data.
     pols : list of strings
-        List of polarizations. Must contain the same number of polarizations as the data.
+        List of polarizations. Must contain the same number of polarizations as the data and order must match 
+        the data.
     cal_function : callable
         Function to use to solve for the offsets between days in an LST-bin.
-    day_flags : np.ndarray
-        Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
-    bls_flags : np.ndarray
-        Boolean array of shape (Nbls,) indicating which baselines to use in the lstbin.
+    day_flags : np.ndarray, default=None
+        Boolean array of shape (Ndays,) indicating which days are flagged across all baselines.
+    bls_flags : np.ndarray, default=None
+        Boolean array of shape (Nbls,) indicating which baselines are flagged across all days.
     ref_operation : str
         Operation to perform on the reference data. Default is 'multiply'.
     ref_value : float
@@ -190,7 +192,7 @@ def _phase_slope_align_bls(data, flags, key1, key2, norm=True):
     """
     Function for comparing the phase slope between two days of data.
     """
-    # Compute the cross-correlation between the two groups
+    # Compute the product between the two groups
     d12 = data[key1] * np.conj(data[key2])
 
     # Normalize product
@@ -221,7 +223,7 @@ def _delay_align_bls(data, flags, key1, key2, freqs, norm=True):
     """ 
     Function for comparing the delay between two days of data.
     """
-    # Compute the cross-correlation between the two groups
+    # Compute the product between the two groups
     d12 = data[key1] * np.conj(data[key2])
 
     # Normalize product
@@ -229,7 +231,7 @@ def _delay_align_bls(data, flags, key1, key2, freqs, norm=True):
         ad12 = np.abs(d12)
         np.divide(d12, ad12, out=d12, where=(ad12 != 0))
 
-    # Find the frequency of the peak in the cross-correlation
+    # Find the delay peak in the data product
     delay, _ = utils.fft_dly(
         d12,
         np.diff(freqs)[0],
@@ -314,7 +316,7 @@ def delay_slope_calibration(
     bls_flags: np.ndarray | None = None,
 ) -> tuple[dict, dict]:
     """
-    Solve for the delay slope of each day in an LST-bin.
+    Solve for the delay slope degeneracy of each day in an LST-bin.
 
     Parameters:
     -----------
@@ -327,19 +329,24 @@ def delay_slope_calibration(
     freqs : np.ndarray
         Frequency array in Hz.
     antpairs : list of tuples
-        List of tuples of antenna pairs.
+        List of antenna pairs. Must contain the same number of baselines as the data and order must match
+        the data.
     antpos : list of dictionarys, or dictionary
-        Dictionary of antenna positions in ENU coordinates.
+        List of dictionaries of idealized antenna positions. If only one dictionary is provided, it will be used for all days.
+        If a list of dictionaries is provided, the length of the list must match the number of days.
+        Each dictionary must contain the same number of antennas and the same keys.
     pols : list of strings
-        List of polarizations. Must contain the same number of polarizations as the data.
+        List of polarizations. Must contain the same number of polarizations as the data and order must match 
+        the data.
     sparse : bool, default=True
-        Use sparse matrices to solve for the delay slopes.
+        If True, linsolve will use sparse matrices to solve for the delay slopes.
     solver_method : str, default='default'
-        Method to use to solve for the delay slopes. Options are 'default' and 'pinv'.
-    day_flags : np.ndarray
-        Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
-    bls_flags : np.ndarray
-        Boolean array of shape (Nbls,) indicating which baselines to use in the lstbin.
+        Method for linsolve to use when solving for the calibration terms. 
+        Options are 'default', 'pinv', 'solve', and 'lstsq'.
+    day_flags : np.ndarray, default=None
+        Boolean array of shape (Ndays,) indicating which days are flagged across all baselines.
+    bls_flags : np.ndarray, default=None
+        Boolean array of shape (Nbls,) indicating which baselines are flagged across all days.
 
     Returns:
     --------
@@ -495,7 +502,7 @@ def global_phase_slope_calibration(
     solver_method: str = "default",
 ) -> tuple[dict, dict]:
     """
-    Solve for the global phase slope of each day in an LST-bin.
+    Solve for the global phase slope degeneracy of each day in an LST-bin.
 
     Parameters:
     -----------
@@ -506,24 +513,29 @@ def global_phase_slope_calibration(
     nsamples : np.ndarray
         Number of samples in each time-frequency bin. Shape (Ndays, Nbls, Nfreqs, Npols).
     antpairs : list of tuples
-        List of tuples of antenna pairs.
-    antpos : list of dictionaries, or dictionary
-        Dictionary of antenna positions in ENU frame in meters.
+        List of antenna pairs. Must contain the same number of baselines as the data and order must match
+        the data.
+    antpos : list of dicts or dict
+        List of dictionaries of idealized antenna positions. If only one dictionary is provided, it will be used for all days.
+        If a list of dictionaries is provided, the length of the list must match the number of days.
+        Each dictionary must contain the same number of antennas and the same keys.
     pols : list of strings
-        List of polarizations. Must contain the same number of polarizations as the data.
+        List of polarizations. Must contain the same number of polarizations as the data and order must match 
+        the data.
     sparse : bool, default=True
-        Use sparse matrices to solve for the delay slopes.
+        If True, linsolve will use sparse matrices to solve for the delay slopes.
     solver_method : str, default='default'
-        Method to use to solve for the delay slopes. Options are 'default' and 'pinv'.
-    day_flags : np.ndarray
-        Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
-    bls_flags : np.ndarray
-        Boolean array of shape (Nbls,) indicating which baselines to use in the lstbin.
+        Method for linsolve to use when solving for the calibration terms. 
+        Options are 'default', 'pinv', 'solve', and 'lstsq'.
+    day_flags : np.ndarray, default=None
+        Boolean array of shape (Ndays,) indicating which days are flagged across all baselines.
+    bls_flags : np.ndarray, default=None
+        Boolean array of shape (Nbls,) indicating which baselines are flagged across all days.
     
     Returns:
     --------
     gains : dict
-        Dictionary of gains for each antenna and polarization.
+        Dictionary of gains with keys (ant, pol) and values of shape (Ndays, Nfreqs).
     phase_slope : np.ndarray
         Shape (Ntimes, Nfreqs, Npols) of phase slopes in radians per meter.
     """
@@ -675,7 +687,7 @@ def tip_tilt_calibration(
     solver_method: str = "default",
 ) -> tuple[dict, dict]:
     """
-    Solve for the per-frequency phase slope of each day in an LST-bin.
+    Solve for the per-frequency phase slope degeneracy of each day in an LST-bin.
 
     Parameters:
     -----------
@@ -686,19 +698,24 @@ def tip_tilt_calibration(
     nsamples : np.ndarray
         Number of samples in each time-frequency bin. Shape (Ndays, Nbls, Nfreqs, Npols).
     antpairs : list of tuples
-        List of antenna pairs.
-    antpos : list of dictionaries, or dictionary
-        Dictionary of antenna positions in ENU frame in meters.
+        List of antenna pairs. Must contain the same number of baselines as the data and order must match
+        the data.
+    antpos : list of dicts or dict
+        List of dictionaries of idealized antenna positions. If only one dictionary is provided, it will be used for all days.
+        If a list of dictionaries is provided, the length of the list must match the number of days.
+        Each dictionary must contain the same number of antennas and the same keys.
     pols : list of strings
-        List of polarizations. Must contain the same number of polarizations as the data.
+        List of polarizations. Must contain the same number of polarizations as the data and order must match 
+        the data.
     sparse : bool, default=True
-        Use sparse matrices to solve for the delay slopes.
+        If True, linsolve will use sparse matrices to solve for the delay slopes.
     solver_method : str, default='default'
-        Method to use to solve for the delay slopes. Options are 'default' and 'pinv'.
-    day_flags : np.ndarray
-        Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
-    bls_flags : np.ndarray
-        Boolean array of shape (Nbls,) indicating which baselines to use in the lstcal.
+        Method for linsolve to use when solving for the calibration terms. 
+        Options are 'default', 'pinv', 'solve', and 'lstsq'.
+    day_flags : np.ndarray, default=None
+        Boolean array of shape (Ndays,) indicating which days are flagged across all baselines.
+    bls_flags : np.ndarray, default=None
+        Boolean array of shape (Nbls,) indicating which baselines are flagged across all days.
 
     Returns:
     --------
@@ -852,7 +869,7 @@ def amplitude_calibration(
     solver_method: str = "default",
 ) -> tuple[dict, dict]:
     """
-    Solve for the frequency-amplitude of each day in an LST-bin.
+    Solves for the frequency-dependent amplitude degeneracy of each day in an LST-bin.
 
     Parameters:
     -----------
@@ -863,17 +880,20 @@ def amplitude_calibration(
     nsamples : np.ndarray
         Number of samples in each time-frequency bin. Shape (Ndays, Nbls, Nfreqs, Npols).
     antpairs : list of tuples
-        List of antenna pairs. Must contain the same number of baselines as the data.
+        List of antenna pairs. Must contain the same number of baselines as the data and order must match
+        the data.
     pols : list of strings
-        List of polarizations.
-    day_flags : np.ndarray
-        Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
-    bls_flags : np.ndarray
-        Boolean array of shape (Nbls,) indicating which baselines to use in the lstbin.
+        List of polarizations. Must contain the same number of polarizations as the data and order must match 
+        the data.
+    day_flags : np.ndarray, default=None
+        Boolean array of shape (Ndays,) indicating which days are flagged across all baselines.
+    bls_flags : np.ndarray, default=None
+        Boolean array of shape (Nbls,) indicating which baselines are flagged across all days.
     sparse : bool, default=True
-        Use sparse matrices to solve for the delay slopes.
+        If True, linsolve will use sparse matrices to solve for the delay slopes.
     solver_method : str, default='default'
-        Method to use to solve for the delay slopes. Options are 'default' and 'pinv'.
+        Method for linsolve to use when solving for the amplitude and phase calibration terms. 
+        Options are 'default', 'pinv', 'solve', and 'lstsq'.
 
     Returns:
     --------
@@ -886,7 +906,7 @@ def amplitude_calibration(
     # Get the antennas from the antpairs
     ants = list(set(sum(map(list, antpairs), [])))
 
-    # Loop through all baselines
+    # Loop through all baselines and compute the amplitude offsets
     amps, index_dict = compute_offsets(
         data,
         flags,
@@ -965,11 +985,13 @@ def apply_lstcal_inplace(
     data : np.ndarray
         Shape (Ndays, Nbls, Nfreqs, Npols) of complex data.
     gains : dict
-        Dictionary of gains for each time and antenna-polarization pair.
+        Dictionary of gains with keys (ant, pol) and values of shape (Ndays, Nfreqs).
     antpairs : list of tuples
-        List of antenna pairs. Must contain the same number of baselines as the data.
+        List of antenna pairs. Must contain the same number of baselines as the data and order must match
+        the data.
     pols : list of strings
-        List of polarizations. Must contain the same number of polarizations as the data.
+        List of polarizations. Must contain the same number of polarizations as the data and order must match
+        the data.
     gain_convention : str, default='divide'
         Convention for applying the gains. Options are 'divide' and 'multiply'.
     """
@@ -1012,7 +1034,9 @@ def calibrate_data(
     solver_method: str = "default",
 ) -> dict:
     """
-    Calibrate the data in an LST-bin.
+    Calibrate the data using the LST-binned calibration scheme. This function performs delay slope calibration,
+    global phase slope calibration, tip-tilt calibration, and amplitude calibration using the abscal degrees of freedom
+    by comparing days within an LST bin. Calibration here in performed in place.
 
     Parameters:
     -----------
@@ -1025,31 +1049,33 @@ def calibrate_data(
     freqs : np.ndarray
         Frequency array in Hz.
     idealized_antpos : list of dicts or dict
-        List of dictionaries of idealized antenna positions. Keys are antenna names and values are
+        List of dictionaries of idealized antenna positions. If only one dictionary is provided, it will be used for all days.
+        If a list of dictionaries is provided, the length of the list must match the number of days.
+        Each dictionary must contain the same number of antennas and the same keys.
     antpairs : list of tuples
-        List of antenna pairs. Must contain the same number of baselines as the data.
+        List of antenna pairs. Must contain the same number of baselines as the data and order must match
+        the data.
     pols : list of strings
-        List of polarizations. Must contain the same number of polarizations as the data.
-    phs_max_iter : int, default=100
+        List of polarizations. Must contain the same number of polarizations as the data and order must match 
+        the data.
+    phs_max_iter : int, default=10
         Maximum number of iterations to perform for the phase calibration.
-    conv_crit : float, default=1e-10
+    conv_crit : float, default=1e-6
         Convergence criterion for the phase calibration.
-    phase_method : str, default="logcal"
-        Method to use for phase calibration. Options are "complex_phase" and "logcal".
-    day_flags : np.ndarray
-        Boolean array of shape (Ndays,) indicating which days to use in the lstbin.
-    bls_flags : np.ndarray
-        Boolean array of shape (Nbls,) indicating which baselines to use in the lstbin.
+    day_flags : np.ndarray, default=None
+        Boolean array of shape (Ndays,) indicating which days are flagged across all baselines.
+    bls_flags : np.ndarray, default=None
+        Boolean array of shape (Nbls,) indicating which baselines are flagged across all days.
     sparse : bool, default=True
-        Use sparse matrices to solve for the amplitude and phase calibration terms.
+        If True, linsolve will use sparse matrices to solve for the amplitude and phase calibration terms in linsolve step.
     solver_method : str, default='default'
-        Method to use to solve for the amplitude and phase calibration terms. 
-        Options are 'default' and 'pinv'.
+        Method for linsolve to use when solving for the amplitude and phase calibration terms. 
+        Options are 'default', 'pinv', 'solve', and 'lstsq'.
     
     Returns:
     --------
     gains : dict
-        Dictionary of gains for each time and antenna-polarization pair.
+        Dictionary of gains with keys (ant, pol) and values of shape (Ndays, Nfreqs).
 
     """
     # Initialize gains
