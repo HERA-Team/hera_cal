@@ -1647,6 +1647,39 @@ class Test_LSTBinFiles:
                 where_inpainted_file_rules=[(".uvh5", ".where_inpainted.waterfall.h5")],
             )
 
+    def test_sigma_clip_use_autos(self, tmp_path_factory):
+        tmp = tmp_path_factory.mktemp("test_sigma_clip_use_autos")
+        uvds = mockuvd.make_dataset(
+            ndays=3,
+            nfiles=4,
+            ntimes=2,
+            creator=mockuvd.create_uvd_identifiable,
+            antpairs=[(i, j) for i in range(10) for j in range(i, 10)],  # 55 antpairs
+            pols=["xx", "yy"],
+            freqs=np.linspace(140e6, 180e6, 12),
+        )
+        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
+
+        cfl = tmp / "lstbin_config_file.yaml"
+        lstbin_simple.make_lst_bin_config_file(
+            cfl,
+            data_files,
+            ntimes_per_file=2,
+        )
+
+        out_files = lstbin_simple.lst_bin_files(
+            config_file=cfl,
+            fname_format="zen.{kind}.{lst:7.5f}.uvh5",
+            write_med_mad=False,
+            sigma_clip_thresh=10.0,
+            sigma_clip_use_autos=True,
+        )
+
+        for flset in out_files:
+            uvdlst = UVData()
+            # Just making sure it ran...
+            uvdlst.read(flset[("LST", False)])
+
 
 def test_get_where_inpainted(tmp_path_factory):
     tmp: Path = tmp_path_factory.mktemp("get_where_inpainted")
@@ -1892,3 +1925,60 @@ class TestSigmaClip:
         # The entire first band should be clipped, but nothing else.
         assert np.sum(clip_flags) == flag_bands[0][1] - flag_bands[0][0]
         assert np.all(clip_flags[0, 0, flag_bands[0][0]:flag_bands[0][1], 0])
+
+    def test_passing_list(self):
+        """Test that passing a list of arrays works."""
+        array = np.random.normal(size=(8, 12, 4))
+        clip_flags = lstbin_simple.sigma_clip(
+            [array, array],
+            clip_type='direct',
+            median_axis=0,
+            threshold_axis=2,
+            min_N=0,
+            threshold=3.0,
+        )
+
+        assert clip_flags[0].shape == array.shape
+        assert clip_flags[1].shape == array.shape
+
+    @pytest.mark.parametrize(
+        "scale", [
+            np.random.normal(size=(8, 12, 4)),  # no median_axis
+            np.random.normal(size=(1, 8, 12, 4)),  # dummy median axis
+            np.random.normal(size=(10, 8, 12, 4)),  # full median axis
+        ]
+    )
+    def test_passing_good_scale(self, scale):
+        """Test that passing a scale works."""
+        array = np.random.normal(size=(10, 8, 12, 4))
+        clip_flags = lstbin_simple.sigma_clip(
+            array,
+            clip_type='direct',
+            median_axis=0,
+            threshold_axis=2,
+            min_N=0,
+            threshold=3.0,
+            scale=scale,
+        )
+
+        assert clip_flags.shape == array.shape
+
+    @pytest.mark.parametrize(
+        "scale", [
+            np.random.normal(size=(12, 4)),  # no median_axis
+            np.random.normal(size=(11, 8, 12, 4)),  # dummy median axis
+        ]
+    )
+    def test_passing_bad_scale(self, scale):
+        """Test that passing a scale works."""
+        array = np.random.normal(size=(10, 8, 12, 4))
+        with pytest.raises(ValueError, match='scale must have same shape as array'):
+            clip_flags = lstbin_simple.sigma_clip(
+                array,
+                clip_type='direct',
+                median_axis=0,
+                threshold_axis=2,
+                min_N=0,
+                threshold=3.0,
+                scale=scale,
+            )
