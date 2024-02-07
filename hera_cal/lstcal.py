@@ -465,23 +465,26 @@ def delay_slope_calibration(
         for ant in ants:
             phase = []
             for ti in range(ndays):
-                if use_same_antpos:
-                    delay = np.sum(
-                        [
-                            antpos[ant][n] * fit[f"T{n}_{ti}"]
-                            for n in range(antpos[ant].shape[0])
-                        ],
-                        axis=0,
-                    )
+                if day_flags is not None and day_flags[ti]:
+                    phase.append(np.zeros_like(freqs))
                 else:
-                    delay = np.sum(
-                        [
-                            antpos[ti][ant][n] * fit[f"T{n}_{ti}"]
-                            for n in range(antpos[ti][ant].shape[0])
-                        ],
-                        axis=0,
-                    )
-                phase.append(delay * freqs)
+                    if use_same_antpos:
+                        delay = np.sum(
+                            [
+                                antpos[ant][n] * fit[f"T{n}_{ti}"]
+                                for n in range(antpos[ant].shape[0])
+                            ],
+                            axis=0,
+                        )
+                    else:
+                        delay = np.sum(
+                            [
+                                antpos[ti][ant][n] * fit[f"T{n}_{ti}"]
+                                for n in range(antpos[ti][ant].shape[0])
+                            ],
+                            axis=0,
+                        )
+                    phase.append(delay * freqs)
 
             _gains[(ant, "J" + "nn")] = np.exp(2j * np.pi * np.array(phase))
         gains.update(_gains)
@@ -556,7 +559,7 @@ def global_phase_slope_calibration(
     ants = list(set(sum(map(list, antpairs), [])))
 
     # Get shape of data
-    ndays, _, _, _ = data.shape
+    ndays, _, nfreqs, _ = data.shape
 
     # Check if antpos is a dictionary or a list of dictionaries
     use_same_antpos = True if isinstance(antpos, dict) else False
@@ -649,23 +652,26 @@ def global_phase_slope_calibration(
         for ant in ants:
             phase = []
             for ti in range(ndays):
-                if use_same_antpos:
-                    _phase = np.sum(
-                        [
-                            antpos[ant][ni] * fit[f"Phi{ni}_{ti}"]
-                            for ni in range(antpos[ant].shape[0])
-                        ],
-                        axis=0,
-                    )
+                if day_flags is not None and day_flags[ti]:
+                    phase.append(np.zeros(1))
                 else:
-                    _phase = np.sum(
-                        [
-                            antpos[ti][ant][ni] * fit[f"Phi{ni}_{ti}"]
-                            for ni in range(antpos[ti][ant].shape[0])
-                        ],
-                        axis=0,
-                    )
-                phase.append(_phase)
+                    if use_same_antpos:
+                        _phase = np.sum(
+                            [
+                                antpos[ant][ni] * fit[f"Phi{ni}_{ti}"]
+                                for ni in range(antpos[ant].shape[0])
+                            ],
+                            axis=0,
+                        )
+                    else:
+                        _phase = np.sum(
+                            [
+                                antpos[ti][ant][ni] * fit[f"Phi{ni}_{ti}"]
+                                for ni in range(antpos[ti][ant].shape[0])
+                            ],
+                            axis=0,
+                        )
+                    phase.append(_phase)
 
             _gains[(ant, "J" + pol)] = np.exp(1j * np.array(phase))
 
@@ -739,7 +745,7 @@ def tip_tilt_calibration(
     ants = list(set(sum(map(list, antpairs), [])))
 
     # Get shape of data
-    ndays, _, _, _ = data.shape
+    ndays, _, nfreqs, _ = data.shape
 
     # Check if antpos is a dictionary or a list of dictionaries
     use_same_antpos = True if isinstance(antpos, dict) else False
@@ -832,23 +838,26 @@ def tip_tilt_calibration(
         for ant in ants:
             phase = []
             for ti in range(ndays):
-                if use_same_antpos:
-                    _phase = np.sum(
-                        [
-                            antpos[ant][ni] * fit[f"TT{ni}_{ti}"]
-                            for ni in range(antpos[ant].shape[0])
-                        ],
-                        axis=0,
-                    )
+                if day_flags is not None and day_flags[ti]:
+                    phase.append(np.zeros(nfreqs))
                 else:
-                    _phase = np.sum(
-                        [
-                            antpos[ti][ant][ni] * fit[f"TT{ni}_{ti}"]
-                            for ni in range(antpos[ti][ant].shape[0])
-                        ],
-                        axis=0,
-                    )
-                phase.append(_phase)
+                    if use_same_antpos:
+                        _phase = np.sum(
+                            [
+                                antpos[ant][ni] * fit[f"TT{ni}_{ti}"]
+                                for ni in range(antpos[ant].shape[0])
+                            ],
+                            axis=0,
+                        )
+                    else:
+                        _phase = np.sum(
+                            [
+                                antpos[ti][ant][ni] * fit[f"TT{ni}_{ti}"]
+                                for ni in range(antpos[ti][ant].shape[0])
+                            ],
+                            axis=0,
+                        )
+                    phase.append(_phase)
 
             _gains[(ant, "J" + pol)] = np.exp(1j * np.array(phase))
 
