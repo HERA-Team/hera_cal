@@ -436,7 +436,7 @@ def test_linear_fit():
 
     # Test that an error is raised if the tolerance is negative
     with pytest.raises(AssertionError):
-        b = nucal._linear_fit(XTX, Xy, tol=-1)
+        b = nucal._linear_fit(XTX, Xy, alpha=-1)
 
 def test_compute_spectral_filters():
     # Create a set of mock data to fit
@@ -563,7 +563,14 @@ class TestGradientDescent:
     def setup_method(self):
         self.freqs = np.linspace(50e6, 250e6, 400)
         self.antpos = linear_array(10, sep=2)
+        
+        ns_antpos = linear_array(10, sep=2)
+        for ant in ns_antpos:
+            if ant > 0:
+                self.antpos[ant + 10] = np.array([ns_antpos[ant][1], ns_antpos[ant][0], 0])
+
         self.radial_reds = nucal.RadialRedundancy(self.antpos)
+        self.radial_reds.filter_radial_groups(min_nbls=8)
 
         # Create a u-dependent model
         self.data = {
@@ -586,10 +593,10 @@ class TestGradientDescent:
         self.init_model_comps = nucal.project_u_model_comps_on_spec_axis(self.init_model_comps, self.frc.spectral_filters)
 
         # Calculate baseline vectors
-        self.blvecs = np.array([(self.antpos[bl[1]] - self.antpos[bl[0]])[0] for rdgrp in self.radial_reds for bl in rdgrp])[:, None]
+        self.blvecs = np.array([(self.antpos[bl[1]] - self.antpos[bl[0]])[:2] for rdgrp in self.radial_reds for bl in rdgrp])#[:, None]
         
         self.model_parameters = {
-            "tip_tilt": np.zeros((1, 2, 400)),
+            "tip_tilt": np.zeros((2, 2, 400)),
             "amplitude": np.ones((2, 400)),
             "fg_r": [self.init_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds],
             "fg_i": [self.init_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds],
@@ -655,7 +662,7 @@ class TestGradientDescent:
         # Run gradient descent
         _, metadata = nucal._nucal_post_redcal(
             data_r, data_i, wgts, deepcopy(self.model_parameters), spectral_filters=self.frc.spectral_filters,
-            spatial_filters=self.spatial_filters, idealized_blvecs=self.blvecs, optimizer=optimizer, major_cycle_maxiter=100,
+            spatial_filters=self.spatial_filters, idealized_blvecs=self.blvecs, optimizer=optimizer, major_cycle_maxiter=10,
         )
 
         # Check that the gradient descent decreases the value of the loss function
@@ -664,8 +671,8 @@ class TestGradientDescent:
         # Run gradient descent w/ minor cycle
         _, _metadata = nucal._nucal_post_redcal(
             data_r, data_i, wgts, deepcopy(self.model_parameters), spectral_filters=self.frc.spectral_filters,
-            spatial_filters=self.spatial_filters, idealized_blvecs=self.blvecs, optimizer=optimizer, major_cycle_maxiter=100,
-            minor_cycle_maxiter=1
+            spatial_filters=self.spatial_filters, idealized_blvecs=self.blvecs, optimizer=optimizer, major_cycle_maxiter=10,
+            minor_cycle_maxiter=3
         )
 
         # Check that the gradient descent decreases the value of the loss function
@@ -760,7 +767,7 @@ class TestSpectrallyRedundantCalibrator:
 
         # Recompute model with the new gains
         model = nucal.fit_nucal_foreground_model(
-            dc, self.data_wgts, self.radial_reds, self.frc.spatial_filters, spectral_filters=self.frc.spectral_filters, tol=1e-12,
+            dc, self.data_wgts, self.radial_reds, self.frc.spatial_filters, spectral_filters=self.frc.spectral_filters, alpha=1e-12,
             share_fg_model=True
         )
 
@@ -782,7 +789,7 @@ class TestSpectrallyRedundantCalibrator:
 
         # Recompute model with the new gains
         model = nucal.fit_nucal_foreground_model(
-            dc, self.data_wgts, self.radial_reds, self.frc.spatial_filters, spectral_filters=self.frc.spectral_filters, tol=1e-12,
+            dc, self.data_wgts, self.radial_reds, self.frc.spatial_filters, spectral_filters=self.frc.spectral_filters, alpha=1e-12,
             share_fg_model=True
         )
 
