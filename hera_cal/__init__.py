@@ -24,7 +24,6 @@ from . import redcal
 from . import io
 from . import delay_filter
 from . import abscal
-from . import lstbin
 from . import smooth_cal
 from . import apply_cal
 from . import frf
