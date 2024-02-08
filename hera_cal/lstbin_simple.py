@@ -311,6 +311,23 @@ def reduce_lst_bins(
         per baseline, frequency, and polarization.
     sigma_clip_min_N
         The minimum number of unflagged samples required to perform sigma clipping.
+    sigma_clip_type
+        The type of sigma clipping to perform. If ``direct``, each datum is flagged
+        individually. If ``mean`` or ``median``, an entire sub-band of the data is
+        flagged if its mean (absolute) zscore is beyond the threshold.
+    sigma_clip_subbands
+        A list of tuples specifying the start and end indices of the threshold axis
+        over which to perform sigma clipping. They are used in a ``slice`` object,
+        so that the end is exclusive but the start is inclusive. If None, the entire
+        threshold axis is used at once.
+    sigma_clip_scale
+        If given, interpreted as the expected standard deviation of the data
+        (over nights). If not given, estimated from the data using the median
+        absolute deviation. If given, must be an array with either the same
+        shape as ``array`` OR the same shape as ``array`` with the ``median_axis``
+        removed. If the former, each variate over the ``median_axis`` is scaled
+        independently. If the latter, the same scale is applied to all variates
+        (generally nights).
     flag_below_min_N
         Whether to flag data that has fewer than ``sigma_clip_min_N`` unflagged samples.
     flag_thresh
@@ -320,6 +337,7 @@ def reduce_lst_bins(
     get_mad
         Whether to compute the median and median absolute deviation of the data in each
         LST bin, in addition to the mean and standard deviation.
+
 
     Returns
     -------
@@ -686,6 +704,14 @@ def lst_average(
         The type of sigma clipping to perform. If ``direct``, each datum is flagged
         individually. If ``mean`` or ``median``, an entire sub-band of the data is
         flagged if its mean (absolute) zscore is beyond the threshold.
+    sigma_clip_scale
+        If given, interpreted as the expected standard deviation of the data
+        (over nights). If not given, estimated from the data using the median
+        absolute deviation. If given, must be an array with either the same
+        shape as ``array`` OR the same shape as ``array`` with the ``median_axis``
+        removed. If the former, each variate over the ``median_axis`` is scaled
+        independently. If the latter, the same scale is applied to all variates
+        (generally nights).
 
     Returns
     -------
