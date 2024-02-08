@@ -9,9 +9,19 @@ from . import utils
 from .datacontainer import DataContainer
 
 
-def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
-                     Nmirror=0, keys=None, edgeflag=0, xthin=None,
-                     freq_avg=True, verbose=False):
+def gains_from_autos(
+    data,
+    times,
+    flags=None,
+    smooth_frate=1.0,
+    nl=1e-10,
+    Nmirror=0,
+    keys=None,
+    edgeflag=0,
+    xthin=None,
+    freq_avg=True,
+    verbose=False,
+):
     """
     Model temperature fluctuations in auto-correlations
     by dividing auto-correlation by its time-smoothed counterpart.
@@ -72,8 +82,17 @@ def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
         for key in keys:
             utils.echo("starting {}".format(key), verbose=verbose)
             gkey = utils.split_bl(key)[0]
-            g, gf, s = gains_from_autos(data[key], times, flags=flags[key], smooth_frate=smooth_frate,
-                                        nl=nl, Nmirror=Nmirror, edgeflag=edgeflag, freq_avg=freq_avg, verbose=False)
+            g, gf, s = gains_from_autos(
+                data[key],
+                times,
+                flags=flags[key],
+                smooth_frate=smooth_frate,
+                nl=nl,
+                Nmirror=Nmirror,
+                edgeflag=edgeflag,
+                freq_avg=freq_avg,
+                verbose=False,
+            )
             gains[gkey], gflags[gkey], smooth[key] = g, gf, s
         return gains, gflags, smooth
 
@@ -88,17 +107,24 @@ def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
             edgeflag = (edgeflag, edgeflag)
         assert len(edgeflag) == 2
         if edgeflag[0] > 0:
-            flags[:, :edgeflag[0]] = True
+            flags[:, : edgeflag[0]] = True
         if edgeflag[1] > 0:
-            flags[:, -edgeflag[1]:] = True
+            flags[:, -edgeflag[1] :] = True
 
     # get length scale in JD
     length_scale = 1.0 / (smooth_frate * 1e-3) / (24.0 * 3600.0)
 
     # smooth
     data_shape = data.shape
-    smooth = utils.gp_interp1d(times, data, flags=flags, length_scale=length_scale, nl=nl,
-                               Nmirror=Nmirror, xthin=xthin)
+    smooth = utils.gp_interp1d(
+        times,
+        data,
+        flags=flags,
+        length_scale=length_scale,
+        nl=nl,
+        Nmirror=Nmirror,
+        xthin=xthin,
+    )
 
     # take ratio and compute gain term
     gflags = np.isclose(smooth, 0.0)
@@ -169,7 +195,9 @@ def avg_gain_ants(gains, antkeys, gflags=None, inplace=True):
 
     # iterate over antenna lists
     gkeys = [k for k in antkeys if k in gains]
-    avg = np.sum([gains[k] * (~gflags[k]).astype(float) for k in gkeys], axis=0) / np.sum([~gflags[k] for k in gkeys], axis=0).clip(1e-10, np.inf)
+    avg = np.sum(
+        [gains[k] * (~gflags[k]).astype(float) for k in gkeys], axis=0
+    ) / np.sum([~gflags[k] for k in gkeys], axis=0).clip(1e-10, np.inf)
     avgf = np.any([gflags[k] for k in gkeys], axis=0)
 
     # update gain dicts

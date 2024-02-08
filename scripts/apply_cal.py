@@ -17,7 +17,7 @@ a = ac.apply_cal_argparser()
 args = parse_args(a)
 
 if args.vis_units is not None:
-    kwargs['vis_units'] = args.vis_units
+    kwargs["vis_units"] = args.vis_units
 
 if args.nbl_per_load == "none":
     args.nbl_per_load = None
@@ -45,9 +45,9 @@ run_with_profiling(
     gain_convention=args.gain_convention,
     redundant_solution=args.redundant_solution,
     redundant_average=args.redundant_average,
-    add_to_history=' '.join(sys.argv),
+    add_to_history=" ".join(sys.argv),
     clobber=args.clobber,
     dont_red_average_flagged_data=args.dont_red_average_flagged_data,
     exclude_from_redundant_mode=args.exclude_from_redundant_mode,
-    **kwargs
+    **kwargs,
 )

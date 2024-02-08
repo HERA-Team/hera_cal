@@ -28,16 +28,30 @@ class DelayFilter(VisClean):
     Used for delay CLEANing and filtering.
     See vis_clean.VisClean for CLEAN functions.
     """
+
     def run_filter(self, **kwargs):
-        '''
+        """
         wrapper for run_delay_filter. Backwards compatibility. See run_delay_filter for documentation.
-        '''
+        """
         self.run_delay_filter(**kwargs)
 
-    def run_delay_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15, min_dly=0.0, mode='clean',
-                         skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False, write_cache=False,
-                         skip_flagged_edges=False, **filter_kwargs):
-        '''
+    def run_delay_filter(
+        self,
+        to_filter=None,
+        weight_dict=None,
+        horizon=1.0,
+        standoff=0.15,
+        min_dly=0.0,
+        mode="clean",
+        skip_wgt=0.1,
+        tol=1e-9,
+        cache_dir=None,
+        read_cache=False,
+        write_cache=False,
+        skip_flagged_edges=False,
+        **filter_kwargs,
+    ):
+        """
         Run hera_filters.dspec.vis_filter on data.
 
         Run a delay-filter on (a subset of) the data stored in the object.
@@ -71,9 +85,9 @@ class DelayFilter(VisClean):
             self.clean_resid: DataContainer formatted like self.data with only high-delay components
             self.clean_model: DataContainer formatted like self.data with only low-delay components
             self.clean_info: Dictionary of info from hera_filters.dspec.delay_filter with the same keys as self.data
-        '''
+        """
         # read in cache
-        if not mode == 'clean':
+        if not mode == "clean":
             if read_cache:
                 filter_cache = io.read_filter_cache_scratch(cache_dir)
             else:
@@ -82,26 +96,58 @@ class DelayFilter(VisClean):
         else:
             filter_cache = None
         # loop over all baselines in increments of Nbls
-        self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
-                       ax='freq', x=self.freqs, cache=filter_cache, mode=mode,
-                       horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
-                       skip_wgt=skip_wgt, overwrite=True,
-                       skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-        if not mode == 'clean':
+        self.vis_clean(
+            keys=to_filter,
+            data=self.data,
+            flags=self.flags,
+            wgts=weight_dict,
+            ax="freq",
+            x=self.freqs,
+            cache=filter_cache,
+            mode=mode,
+            horizon=horizon,
+            standoff=standoff,
+            min_dly=min_dly,
+            tol=tol,
+            skip_wgt=skip_wgt,
+            overwrite=True,
+            skip_flagged_edges=skip_flagged_edges,
+            **filter_kwargs,
+        )
+        if not mode == "clean":
             if write_cache:
-                filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
+                filter_cache = io.write_filter_cache_scratch(
+                    filter_cache, cache_dir, skip_keys=keys_before
+                )
 
 
-def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=None,
-                                Nbls_per_load=None, spw_range=None, cache_dir=None,
-                                read_cache=False, write_cache=False, avg_red_bllens=False,
-                                factorize_flags=False, time_thresh=0.05, external_flags=None,
-                                res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                clobber=False, add_to_history='', polarizations=None,
-                                skip_flagged_edges=False, overwrite_flags=False,
-                                flag_yaml=None, read_axis=None, apply_flag_to_nsample=False,
-                                **filter_kwargs):
-    '''
+def load_delay_filter_and_write(
+    datafile_list,
+    baseline_list=None,
+    calfile_list=None,
+    Nbls_per_load=None,
+    spw_range=None,
+    cache_dir=None,
+    read_cache=False,
+    write_cache=False,
+    avg_red_bllens=False,
+    factorize_flags=False,
+    time_thresh=0.05,
+    external_flags=None,
+    res_outfilename=None,
+    CLEAN_outfilename=None,
+    filled_outfilename=None,
+    clobber=False,
+    add_to_history="",
+    polarizations=None,
+    skip_flagged_edges=False,
+    overwrite_flags=False,
+    flag_yaml=None,
+    read_axis=None,
+    apply_flag_to_nsample=False,
+    **filter_kwargs,
+):
+    """
     Uses partial data loading and writing to perform delay filtering.
     While this function reads from multiple files (in datafile_list)
     it always writes to a single file for the resid, filled, and model files.
@@ -141,14 +187,19 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         apply_flag_to_nsample: bool, optional
             apply flag to nsample before performing delay filtering, default is False
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
-    '''
+    """
     if baseline_list is not None and Nbls_per_load is not None:
-        raise NotImplementedError("baseline loading and partial i/o not yet implemented.")
-    hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
+        raise NotImplementedError(
+            "baseline loading and partial i/o not yet implemented."
+        )
+    hd = io.HERAData(datafile_list, filetype="uvh5", axis="blt")
     if baseline_list is not None and len(baseline_list) == 0:
-        warnings.warn("Length of baseline list is zero."
-                      "This can happen under normal circumstances when there are more files in datafile_list then baselines."
-                      "in your dataset. Exiting without writing any output.", RuntimeWarning)
+        warnings.warn(
+            "Length of baseline list is zero."
+            "This can happen under normal circumstances when there are more files in datafile_list then baselines."
+            "in your dataset. Exiting without writing any output.",
+            RuntimeWarning,
+        )
     else:
         if baseline_list is None:
             if len(hd.filepaths) > 1:
@@ -157,7 +208,7 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
                 baseline_list = hd.antpairs
         if spw_range is None:
             spw_range = [0, hd.Nfreqs]
-        freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
+        freqs = hd.freq_array.flatten()[spw_range[0] : spw_range[1]]
         baseline_antennas = []
         for blpolpair in baseline_list:
             baseline_antennas += list(blpolpair[:2])
@@ -175,7 +226,9 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         if Nbls_per_load is None:
             Nbls_per_load = len(baseline_list)
         nbl_groups = int(np.ceil(len(baseline_list) / Nbls_per_load))
-        logger.info(f"Number of baselines in file: {len(baseline_list)}. Chunking in {nbl_groups} groups of {Nbls_per_load}.")
+        logger.info(
+            f"Number of baselines in file: {len(baseline_list)}. Chunking in {nbl_groups} groups of {Nbls_per_load}."
+        )
 
         for i in range(0, nbl_groups):
             logger.info(f"Delay-Filtering baseline group {i+1}/{nbl_groups}")
@@ -183,8 +236,12 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
             df = DelayFilter(hd, input_cal=cals)
 
             df.read(
-                bls=baseline_list[i * Nbls_per_load:min((i + 1) * Nbls_per_load, len(baseline_list))],
-                frequencies=freqs, polarizations=polarizations, axis=read_axis
+                bls=baseline_list[
+                    i * Nbls_per_load : min((i + 1) * Nbls_per_load, len(baseline_list))
+                ],
+                frequencies=freqs,
+                polarizations=polarizations,
+                axis=read_axis,
             )
             if avg_red_bllens:
                 logger.info("  Averaging redundant baseline vector coordinates")
@@ -194,14 +251,16 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
                 df.apply_flags(external_flags, overwrite_flags=overwrite_flags)
             if flag_yaml is not None:
                 logger.info("  Applying flag_yaml flags")
-                df.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype='yaml')
+                df.apply_flags(
+                    flag_yaml, overwrite_flags=overwrite_flags, filetype="yaml"
+                )
             if factorize_flags:
                 logger.info("  Factorizing flags")
                 df.factorize_flags(time_thresh=time_thresh, inplace=True)
             if apply_flag_to_nsample:
                 logger.info("  Applying flags to nsample arrays")
                 # Modify self.hd.nsamples
-                for bl in baseline_list[i:i + Nbls_per_load]:
+                for bl in baseline_list[i : i + Nbls_per_load]:
                     _nsample = np.copy(df.hd.get_nsamples(bl))
                     _nsample[df.hd.get_flags(bl)] = 0
                     if _nsample.ndim == 2:
@@ -214,20 +273,27 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
                     df.nsamples[blk] = _nsample
 
             logger.info("  Running Delay Filter")
-            df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+            df.run_delay_filter(
+                cache_dir=cache_dir,
+                read_cache=read_cache,
+                write_cache=write_cache,
+                skip_flagged_edges=skip_flagged_edges,
+                **filter_kwargs,
+            )
             logger.info("  Writing filtered data")
             df.write_filtered_data(
-                res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                res_outfilename=res_outfilename,
+                CLEAN_outfilename=CLEAN_outfilename,
                 filled_outfilename=filled_outfilename,
                 partial_write=Nbls_per_load < len(baseline_list),
-                clobber=clobber, add_to_history=add_to_history,
+                clobber=clobber,
+                add_to_history=add_to_history,
                 extra_attrs={
-                    'Nfreqs': df.Nfreqs,
-                    'freq_array': df.hd.freq_array,
-                    'channel_width': df.hd.channel_width,
-                    'flex_spw_id_array': df.hd.flex_spw_id_array,
-                }
+                    "Nfreqs": df.Nfreqs,
+                    "freq_array": df.hd.freq_array,
+                    "channel_width": df.hd.channel_width,
+                    "flex_spw_id_array": df.hd.flex_spw_id_array,
+                },
             )
             df.hd.data_array = None  # this forces a reload in the next loop
 
@@ -239,7 +305,7 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
 
 
 def delay_filter_argparser():
-    '''
+    """
     Arg parser for commandline operation of delay filters.
 
     Parameters:
@@ -250,11 +316,26 @@ def delay_filter_argparser():
             arguments.
     Returns:
         argparser for delay-domain filtering for specified filtering mode
-    '''
+    """
     a = vis_clean._filter_argparser()
-    filt_options = a.add_argument_group(title='Options for the delay filter')
-    filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (default 15 ns)')
-    filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1.0 (default) is the horizon\
-                              (full light travel time)')
-    filt_options.add_argument("--min_dly", type=float, default=0.0, help="A minimum delay threshold [ns] used for filtering.")
+    filt_options = a.add_argument_group(title="Options for the delay filter")
+    filt_options.add_argument(
+        "--standoff",
+        type=float,
+        default=15.0,
+        help="fixed additional delay beyond the horizon (default 15 ns)",
+    )
+    filt_options.add_argument(
+        "--horizon",
+        type=float,
+        default=1.0,
+        help="proportionality constant for bl_len where 1.0 (default) is the horizon\
+                              (full light travel time)",
+    )
+    filt_options.add_argument(
+        "--min_dly",
+        type=float,
+        default=0.0,
+        help="A minimum delay threshold [ns] used for filtering.",
+    )
     return a

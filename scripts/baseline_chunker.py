@@ -15,8 +15,8 @@ a = parse_args(parser)
 run_with_profiling(
     io.generate_antpairpol_parallelization_files,
     a,
-    filename=a.template_file, 
+    filename=a.template_file,
     writedir=a.directory,
     bls_per_chunk=a.bls_per_chunk,
-    polarizations=a.polarizations
+    polarizations=a.polarizations,
 )

@@ -15,13 +15,17 @@ from ..utils import split_pol
 from ..apply_cal import apply_cal
 
 
-@pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
+@pytest.mark.filterwarnings(
+    "ignore:It seems that the latitude and longitude are in radians"
+)
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class Test_Autos(object):
     def test_read_and_write_autocorrelations(self):
-        infile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
-        outfile = os.path.join(DATA_PATH, 'test_output/autos.uvh5')
-        autos.read_and_write_autocorrelations(infile, outfile, clobber=True, add_to_history='testing')
+        infile = os.path.join(DATA_PATH, "zen.2458098.43124.downsample.uvh5")
+        outfile = os.path.join(DATA_PATH, "test_output/autos.uvh5")
+        autos.read_and_write_autocorrelations(
+            infile, outfile, clobber=True, add_to_history="testing"
+        )
 
         hd_full = io.HERAData(infile)
         d_full, f_full, _ = hd_full.read()
@@ -32,16 +36,22 @@ class Test_Autos(object):
             assert split_pol(bl[2])[0] == split_pol(bl[2])[1]
             np.testing.assert_array_equal(d_full[bl], d[bl])
             np.testing.assert_array_equal(f_full[bl], f[bl])
-        assert 'testing' in hd.history.replace('\n', '').replace(' ', '')
-        assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
+        assert "testing" in hd.history.replace("\n", "").replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in hd.history.replace(
+            "\n", ""
+        ).replace(" ", "")
         os.remove(outfile)
 
     def test_read_calibrate_and_write_autocorrelations(self):
-        infile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
-        outfile = os.path.join(DATA_PATH, 'test_output/autos.uvh5')
-        calfile = os.path.join(DATA_PATH, 'test_input/zen.2458098.43124.downsample.omni.calfits')
-        calibrated = os.path.join(DATA_PATH, 'test_output/calibrated.uvh5')
-        autos.read_and_write_autocorrelations(infile, outfile, calfile=calfile, clobber=True)
+        infile = os.path.join(DATA_PATH, "zen.2458098.43124.downsample.uvh5")
+        outfile = os.path.join(DATA_PATH, "test_output/autos.uvh5")
+        calfile = os.path.join(
+            DATA_PATH, "test_input/zen.2458098.43124.downsample.omni.calfits"
+        )
+        calibrated = os.path.join(DATA_PATH, "test_output/calibrated.uvh5")
+        autos.read_and_write_autocorrelations(
+            infile, outfile, calfile=calfile, clobber=True
+        )
         apply_cal(infile, calibrated, calfile, clobber=True)
 
         hd_full_cal = io.HERAData(calibrated)
@@ -57,9 +67,9 @@ class Test_Autos(object):
         os.remove(calibrated)
 
     def test_extract_autos_argparser(self):
-        sys.argv = [sys.argv[0], 'a', 'b', '--calfile', 'd']
+        sys.argv = [sys.argv[0], "a", "b", "--calfile", "d"]
         a = autos.extract_autos_argparser()
         args = a.parse_args()
-        assert args.infile == 'a'
-        assert args.outfile == 'b'
-        assert args.calfile == ['d']
+        assert args.infile == "a"
+        assert args.outfile == "b"
+        assert args.calfile == ["d"]

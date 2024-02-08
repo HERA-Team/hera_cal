@@ -66,8 +66,14 @@ def find_discontinuity_edges(x, xtol=1e-3):
             x = [0, 1, 2, 4, 5, 6, 7, 11, 12] -> [(0, 3), (3, 7), (7, 9)]
     """
     xdiff = np.diff(x)
-    discontinuities = np.where(~np.isclose(xdiff, np.min(np.abs(xdiff)) * np.sign(xdiff[0]),
-                               rtol=0.0, atol=np.abs(np.min(xdiff)) * xtol))[0]
+    discontinuities = np.where(
+        ~np.isclose(
+            xdiff,
+            np.min(np.abs(xdiff)) * np.sign(xdiff[0]),
+            rtol=0.0,
+            atol=np.abs(np.min(xdiff)) * xtol,
+        )
+    )[0]
     if len(discontinuities) == 0:
         edges = [(0, len(x))]
     elif len(discontinuities) == 1:
@@ -80,7 +86,7 @@ def find_discontinuity_edges(x, xtol=1e-3):
     return edges
 
 
-def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
+def truncate_flagged_edges(data_in, weights_in, x, ax="freq"):
     """
     cut away edge channels and integrations that are completely flagged
 
@@ -123,13 +129,15 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
     """
     # if axis == 'time', just use freq mode
     # on transposed arrays.
-    if ax == 'time':
-        xout, dout, wout, edges, chunks = truncate_flagged_edges(data_in.T, weights_in.T, x)
+    if ax == "time":
+        xout, dout, wout, edges, chunks = truncate_flagged_edges(
+            data_in.T, weights_in.T, x
+        )
         dout = dout.T
         wout = wout.T
     else:
         # Identify all contiguous chunks.
-        if ax == 'both':
+        if ax == "both":
             chunks = find_discontinuity_edges(x[1])
         else:
             chunks = find_discontinuity_edges(x)
@@ -140,7 +148,9 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
             ind_left = 0  # If there are no unflagged channels, then the chunk should have zero width.
             ind_right = 0
             chunkslice = slice(chunk[0], chunk[1])
-            unflagged_chans = np.where(~np.all(np.isclose(weights_in[:, chunkslice], 0.0), axis=0))[0]
+            unflagged_chans = np.where(
+                ~np.all(np.isclose(weights_in[:, chunkslice], 0.0), axis=0)
+            )[0]
             if np.count_nonzero(unflagged_chans) > 0:
                 # truncate data to be filtered where appropriate.
                 ind_left = np.min(unflagged_chans)
@@ -149,21 +159,44 @@ def truncate_flagged_edges(data_in, weights_in, x, ax='freq'):
             inds_left.append(ind_left)
             inds_right.append(ind_right)
 
-        dout = np.hstack([data_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
-        wout = np.hstack([weights_in[:, chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
-        edges = [(ind_left, chunk[1] - chunk[0] - ind_right) for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)]
-        if ax == 'both':
-            x1 = np.hstack([x[1][chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
-            x0, dout, wout, e0, c0 = truncate_flagged_edges(dout, wout, x[0], ax='time')
+        dout = np.hstack(
+            [
+                data_in[:, chunk[0] + ind_left : chunk[0] + ind_right]
+                for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)
+            ]
+        )
+        wout = np.hstack(
+            [
+                weights_in[:, chunk[0] + ind_left : chunk[0] + ind_right]
+                for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)
+            ]
+        )
+        edges = [
+            (ind_left, chunk[1] - chunk[0] - ind_right)
+            for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)
+        ]
+        if ax == "both":
+            x1 = np.hstack(
+                [
+                    x[1][chunk[0] + ind_left : chunk[0] + ind_right]
+                    for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)
+                ]
+            )
+            x0, dout, wout, e0, c0 = truncate_flagged_edges(dout, wout, x[0], ax="time")
             xout = [x0, x1]
             edges = [e0, edges]
             chunks = [c0, chunks]
         else:
-            xout = np.hstack([x[chunk[0] + ind_left: chunk[0] + ind_right] for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)])
+            xout = np.hstack(
+                [
+                    x[chunk[0] + ind_left : chunk[0] + ind_right]
+                    for ind_left, ind_right, chunk in zip(inds_left, inds_right, chunks)
+                ]
+            )
     return xout, dout, wout, edges, chunks
 
 
-def restore_flagged_edges(data, chunks, edges, ax='freq'):
+def restore_flagged_edges(data, chunks, edges, ax="freq"):
     """
     fill in flagged regions of data array produced
     by truncate_flagged_edges with zeros.
@@ -189,12 +222,12 @@ def restore_flagged_edges(data, chunks, edges, ax='freq'):
     data_restored: array-like
         2d array with truncated edges restored.
     """
-    if ax == 'time':
+    if ax == "time":
         # if axis is time, process everything like its the time axis with 0 <-> 1 reversed.
         # switch everything back later.
         data_restored = restore_flagged_edges(data.T, chunks, edges).T
     else:
-        if ax == 'both':
+        if ax == "both":
             zgen = zip(chunks[1], edges[1])
         else:
             zgen = zip(chunks, edges)
@@ -202,19 +235,23 @@ def restore_flagged_edges(data, chunks, edges, ax='freq'):
         start_ind = 0
         for chunk, edge in zgen:
             stop_ind = start_ind + chunk[1] - chunk[0] - edge[1] - edge[0]
-            data_restored.append(np.pad(data[:, start_ind: stop_ind], [(0, 0), edge]))
+            data_restored.append(np.pad(data[:, start_ind:stop_ind], [(0, 0), edge]))
             start_ind = stop_ind
         if len(data_restored) > 1:
             data_restored = np.hstack(data_restored)
         else:
             data_restored = data_restored[0]
-        if ax == 'both':
+        if ax == "both":
             # if axis is both, then process time-axis after freq axis.
-            data_restored = restore_flagged_edges(data_restored, chunks[0], edges[0], ax='time')
+            data_restored = restore_flagged_edges(
+                data_restored, chunks[0], edges[0], ax="time"
+            )
     return data_restored
 
 
-def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_distance, ax='freq'):
+def flag_rows_with_flags_within_edge_distance(
+    x, weights_in, min_flag_edge_distance, ax="freq"
+):
     """
     flag integrations (and/or channels) with flags within min_flag_edge_distance of edge.
 
@@ -239,10 +276,16 @@ def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_dista
         within min_flag_edge_distance set entirely to zero.
 
     """
-    if ax == 'time':
-        wout = flag_rows_with_flags_within_edge_distance(x, weights_in.T, min_flag_edge_distance).T
+    if ax == "time":
+        wout = flag_rows_with_flags_within_edge_distance(
+            x, weights_in.T, min_flag_edge_distance
+        ).T
     else:
-        if isinstance(x, (tuple, list)) and len(x) == 2 and isinstance(x[0], (list, tuple, np.ndarray)):
+        if (
+            isinstance(x, (tuple, list))
+            and len(x) == 2
+            and isinstance(x[0], (list, tuple, np.ndarray))
+        ):
             chunks = find_discontinuity_edges(x[1])
         else:
             chunks = find_discontinuity_edges(x)
@@ -250,24 +293,30 @@ def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_dista
         for rownum, wrow in enumerate(wout):
             flagrow = False
             for chunk in chunks:
-                if ax == 'both':
+                if ax == "both":
                     cslice0 = slice(chunk[0], chunk[0] + min_flag_edge_distance[1] + 1)
                     cslice1 = slice(chunk[1] - min_flag_edge_distance[1] - 1, chunk[1])
-                    if np.any(np.isclose(wout[rownum, cslice0], 0.0)) | np.any(np.isclose(wout[rownum, cslice1], 0.0)):
+                    if np.any(np.isclose(wout[rownum, cslice0], 0.0)) | np.any(
+                        np.isclose(wout[rownum, cslice1], 0.0)
+                    ):
                         flagrow = True
                 else:
                     cslice0 = slice(chunk[0], chunk[0] + min_flag_edge_distance + 1)
                     cslice1 = slice(chunk[1] - min_flag_edge_distance - 1, chunk[1])
-                    if np.any(np.isclose(wout[rownum, cslice0], 0.0)) | np.any(np.isclose(wout[rownum, cslice1], 0.0)):
+                    if np.any(np.isclose(wout[rownum, cslice0], 0.0)) | np.any(
+                        np.isclose(wout[rownum, cslice1], 0.0)
+                    ):
                         flagrow = True
             if flagrow:
-                wout[rownum, :] = 0.
-        if ax == 'both':
-            wout = flag_rows_with_flags_within_edge_distance(x[0], wout, min_flag_edge_distance[0], ax='time')
+                wout[rownum, :] = 0.0
+        if ax == "both":
+            wout = flag_rows_with_flags_within_edge_distance(
+                x[0], wout, min_flag_edge_distance[0], ax="time"
+            )
     return wout
 
 
-def flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag, ax='freq'):
+def flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag, ax="freq"):
     """
     flag any row or column with contiguous zero-weights over a specified limit.
 
@@ -283,17 +332,19 @@ def flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag, ax='freq'):
     ax : str, optional
         axis to perform flagging over. options=['time', 'freq', 'both'], default='freq'
     """
-    if ax == 'time':
+    if ax == "time":
         wout = flag_rows_with_contiguous_flags(weights_in.T, max_contiguous_flag).T
     else:
         wout = copy.deepcopy(weights_in)
         for rownum, wrow in enumerate(wout):
-            max_contiguous = 0  # keeps track of the largest contig flags in integration.
+            max_contiguous = (
+                0  # keeps track of the largest contig flags in integration.
+            )
             current_flag_length = 0  # keeps track of current contig flag size.
             on_flag = False  # keep track if currently on a flag.
             # iterate over each channel in integration.
             for wr in wrow:
-                on_flag = (wr == 0)  # if weights are zero, on a flag.
+                on_flag = wr == 0  # if weights are zero, on a flag.
                 # if on a flag, +1 current flag size.
                 if on_flag:
                     current_flag_length += 1
@@ -303,13 +354,15 @@ def flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag, ax='freq'):
                     if current_flag_length >= max_contiguous:
                         max_contiguous = current_flag_length
                     current_flag_length = 0
-            if ax == 'both':
+            if ax == "both":
                 if max_contiguous >= max_contiguous_flag[1]:
-                    wout[rownum][:] = 0.
+                    wout[rownum][:] = 0.0
             elif max_contiguous >= max_contiguous_flag:
-                wout[rownum][:] = 0.
-        if ax == 'both':
-            wout = flag_rows_with_contiguous_flags(wout, max_contiguous_flag[0], ax='time')
+                wout[rownum][:] = 0.0
+        if ax == "both":
+            wout = flag_rows_with_contiguous_flags(
+                wout, max_contiguous_flag[0], ax="time"
+            )
     return wout
 
 
@@ -331,24 +384,60 @@ def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_w
     max_contiguous_flag: int or 2-list containing the width of a region corresponding
         to the largest delay in the filter centers and filter_widths
     """
-    if isinstance(x, (tuple, list)) and len(x) == 2 and isinstance(x[0], (list, tuple, np.ndarray)):
+    if (
+        isinstance(x, (tuple, list))
+        and len(x) == 2
+        and isinstance(x[0], (list, tuple, np.ndarray))
+    ):
         if not len(x[0]) > 1 and len(x[1]) > 1:
             raise ValueError("x-axes with only a single element are not supported.")
         else:
             dx = [np.median(np.diff(x[0])), np.median(np.diff(x[1]))]
-        max_filter_freq = [np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[0], filter_half_widths[0])]))),
-                           np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers[1], filter_half_widths[1])])))]
-        return [int(1. / (max_filter_freq[0] * dx[0])), int(1. / (max_filter_freq[1] * dx[1]))]
+        max_filter_freq = [
+            np.max(
+                np.abs(
+                    np.hstack(
+                        [
+                            [fc - fw, fc + fw]
+                            for fc, fw in zip(filter_centers[0], filter_half_widths[0])
+                        ]
+                    )
+                )
+            ),
+            np.max(
+                np.abs(
+                    np.hstack(
+                        [
+                            [fc - fw, fc + fw]
+                            for fc, fw in zip(filter_centers[1], filter_half_widths[1])
+                        ]
+                    )
+                )
+            ),
+        ]
+        return [
+            int(1.0 / (max_filter_freq[0] * dx[0])),
+            int(1.0 / (max_filter_freq[1] * dx[1])),
+        ]
     else:
         if len(x) > 1:
             dx = np.median(np.diff(x))
         else:
             raise ValueError("x-axes with only a single element are not supported.")
-        max_filter_freq = np.max(np.abs(np.hstack([[fc - fw, fc + fw] for fc, fw in zip(filter_centers, filter_half_widths)])))
-        return int(1. / (max_filter_freq * dx))
+        max_filter_freq = np.max(
+            np.abs(
+                np.hstack(
+                    [
+                        [fc - fw, fc + fw]
+                        for fc, fw in zip(filter_centers, filter_half_widths)
+                    ]
+                )
+            )
+        )
+        return int(1.0 / (max_filter_freq * dx))
 
 
-def flag_model_rms(skipped, d, w, mdl, mdl_w=None, model_rms_threshold=1.1, ax='freq'):
+def flag_model_rms(skipped, d, w, mdl, mdl_w=None, model_rms_threshold=1.1, ax="freq"):
     """
     flag integrations or channels where the RMS of the model > RMS of the data
 
@@ -375,15 +464,29 @@ def flag_model_rms(skipped, d, w, mdl, mdl_w=None, model_rms_threshold=1.1, ax='
     """
     if mdl_w is None:
         mdl_w = np.ones_like(w)
-    if ax == 'freq' or ax == 'both':
+    if ax == "freq" or ax == "both":
         for i in range(mdl.shape[0]):
             if np.any(~skipped[i]):
-                if np.mean(np.abs(mdl[i, ~np.isclose(np.abs(mdl_w[i]), 0.0)]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
+                if (
+                    np.mean(np.abs(mdl[i, ~np.isclose(np.abs(mdl_w[i]), 0.0)]) ** 2.0)
+                    ** 0.5
+                    >= model_rms_threshold
+                    * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.0)
+                    ** 0.5
+                ):
                     skipped[i] = True
-    if ax == 'time' or ax == 'both':
+    if ax == "time" or ax == "both":
         for i in range(mdl.shape[1]):
             if np.any(~skipped[:, i]):
-                if np.mean(np.abs(mdl[~np.isclose(np.abs(mdl_w[:, i]), 0.0), i]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
+                if (
+                    np.mean(
+                        np.abs(mdl[~np.isclose(np.abs(mdl_w[:, i]), 0.0), i]) ** 2.0
+                    )
+                    ** 0.5
+                    >= model_rms_threshold
+                    * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.0)
+                    ** 0.5
+                ):
                     skipped[:, i] = True
     return skipped
 
@@ -392,8 +495,10 @@ class VisClean(object):
     """
     VisClean object for visibility CLEANing and filtering.
     """
-    def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True,
-                 **read_kwargs):
+
+    def __init__(
+        self, input_data, filetype="uvh5", input_cal=None, link_data=True, **read_kwargs
+    ):
         """
         Initialize the object.
 
@@ -491,23 +596,34 @@ class VisClean(object):
         # link the metadata if they exist
         if self.hd.antenna_numbers is not None:
             mdict = self.hd.get_metadata_dict()
-            self.antpos = mdict['antpos']
-            self.ants = mdict['ants']
-            self.data_ants = mdict['data_ants']
-            self.freqs = mdict['freqs']
-            self.times = mdict['times']
-            self.lsts = mdict['lsts']
-            self.pols = mdict['pols']
+            self.antpos = mdict["antpos"]
+            self.ants = mdict["ants"]
+            self.data_ants = mdict["data_ants"]
+            self.freqs = mdict["freqs"]
+            self.times = mdict["times"]
+            self.lsts = mdict["lsts"]
+            self.pols = mdict["pols"]
             self.Nfreqs = len(self.freqs)
             self.Ntimes = len(self.times)  # Does not support BDA for now
             self.dlst = np.median(np.diff(self.lsts))
             self.dtime = np.median(np.diff(self.times)) * 24 * 3600
             self.dnu = np.median(np.diff(self.freqs))
             self.bls = sorted(set(self.hd.get_antpairs()))
-            self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
-            self.bllens = odict([(bl, np.linalg.norm(self.blvecs[bl]) / constants.c.value) for bl in self.bls])
-            self.lat = self.hd.telescope_location_lat_lon_alt[0] * 180 / np.pi  # degrees
-            self.lon = self.hd.telescope_location_lat_lon_alt[1] * 180 / np.pi  # degrees
+            self.blvecs = odict(
+                [(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls]
+            )
+            self.bllens = odict(
+                [
+                    (bl, np.linalg.norm(self.blvecs[bl]) / constants.c.value)
+                    for bl in self.bls
+                ]
+            )
+            self.lat = (
+                self.hd.telescope_location_lat_lon_alt[0] * 180 / np.pi
+            )  # degrees
+            self.lon = (
+                self.hd.telescope_location_lat_lon_alt[1] * 180 / np.pi
+            )  # degrees
             self.Nfreqs = len(self.freqs)
         # link the data if they exist
         if self.hd.data_array is not None and link_data:
@@ -518,7 +634,7 @@ class VisClean(object):
             self.nsamples = nsamples
 
             # apply calibration solutions if they exist
-            if hasattr(self, 'hc'):
+            if hasattr(self, "hc"):
                 self.apply_calibration(self.hc)
 
     def clear_containers(self, exclude=[]):
@@ -551,8 +667,8 @@ class VisClean(object):
         """
         Remove calibration object self.hc to clear memory
         """
-        if hasattr(self, 'hc'):
-            delattr(self, 'hc')
+        if hasattr(self, "hc"):
+            delattr(self, "hc")
 
     def apply_calibration(self, input_cal, unapply=False):
         """
@@ -574,7 +690,9 @@ class VisClean(object):
             if True in match:
                 cal_freqs_in_data.append(np.argmax(match))
         # assert all frequencies in data are found in uvcal
-        assert len(cal_freqs_in_data) == len(self.freqs), "Not all freqs in uvd are in uvc"
+        assert len(cal_freqs_in_data) == len(
+            self.freqs
+        ), "Not all freqs in uvd are in uvc"
 
         for ant in cal_gains:
             cal_gains[ant] = cal_gains[ant][:, cal_freqs_in_data]
@@ -587,14 +705,15 @@ class VisClean(object):
         # apply calibration solutions to data and flags
         gain_convention = hc.gain_convention
         if unapply:
-            if gain_convention == 'multiply':
-                gain_convention = 'divide'
-            elif gain_convention == 'divide':
-                gain_convention = 'multiply'
-        apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags,
-                                     gain_convention=gain_convention)
+            if gain_convention == "multiply":
+                gain_convention = "divide"
+            elif gain_convention == "divide":
+                gain_convention = "multiply"
+        apply_cal.calibrate_in_place(
+            self.data, cal_gains, self.flags, cal_flags, gain_convention=gain_convention
+        )
 
-    def apply_flags(self, external_flags, overwrite_flags=False, filetype='uvflag'):
+    def apply_flags(self, external_flags, overwrite_flags=False, filetype="uvflag"):
         """
         Apply external set of flags to self.hd.flag_array (inplace!), and re-attach the data and flags.
         Default is to OR existing flags, unless overwrite_flags is True.
@@ -616,13 +735,18 @@ class VisClean(object):
             full_flags = [bl for bl in self.flags if np.all(self.flags[bl])]
 
         # apply flags
-        if filetype == 'uvflag':
+        if filetype == "uvflag":
             if isinstance(external_flags, str):
                 external_flags = UVFlag(external_flags)
-            uvutils.apply_uvflag(self.hd, external_flags, unflag_first=overwrite_flags, inplace=True)
-        elif filetype == 'yaml':
+            uvutils.apply_uvflag(
+                self.hd, external_flags, unflag_first=overwrite_flags, inplace=True
+            )
+        elif filetype == "yaml":
             from hera_qm.utils import apply_yaml_flags
-            self.hd = apply_yaml_flags(self.hd, external_flags, unflag_first=overwrite_flags)
+
+            self.hd = apply_yaml_flags(
+                self.hd, external_flags, unflag_first=overwrite_flags
+            )
         else:
             raise ValueError(f"{type} is an invalid type! Must be 'yaml' or 'uvflag'.")
         # re-flag fully flagged baselines if necessary
@@ -648,9 +772,22 @@ class VisClean(object):
         # attach data
         self.attach_data()
 
-    def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None,
-                   times=None, lsts=None, filetype='uvh5', partial_write=False,
-                   add_to_history='', verbose=True, extra_attrs={}, **kwargs):
+    def write_data(
+        self,
+        data,
+        filename,
+        overwrite=False,
+        flags=None,
+        nsamples=None,
+        times=None,
+        lsts=None,
+        filetype="uvh5",
+        partial_write=False,
+        add_to_history="",
+        verbose=True,
+        extra_attrs={},
+        **kwargs,
+    ):
         """
         Write data to file.
 
@@ -682,12 +819,18 @@ class VisClean(object):
         # if time_array is fed, select out appropriate times
         if times is not None:
             assert lsts is not None, "Both times and lsts must be fed"
-            _times = np.unique(self.hd.time_array)[:len(times)]
+            _times = np.unique(self.hd.time_array)[: len(times)]
         else:
             _times = None
 
         # select out a copy of hd
-        hd = self.hd.select(bls=keys, inplace=False, times=_times, frequencies=self.freqs, run_check=False)
+        hd = self.hd.select(
+            bls=keys,
+            inplace=False,
+            times=_times,
+            frequencies=self.freqs,
+            run_check=False,
+        )
 
         # update HERAData data arrays
         hd.update(data=data, flags=flags, nsamples=nsamples)
@@ -708,25 +851,42 @@ class VisClean(object):
             hd.__setattr__(attribute, value)
 
         # write to disk
-        if filetype == 'miriad':
+        if filetype == "miriad":
             hd.write_miriad(filename, clobber=overwrite, **kwargs)
-        elif filetype == 'uvh5':
+        elif filetype == "uvh5":
             if partial_write:
                 hd.partial_write(filename, clobber=overwrite, inplace=True, **kwargs)
                 self.hd._writers.update(hd._writers)
             else:
                 hd.write_uvh5(filename, clobber=overwrite, **kwargs)
-        elif filetype == 'uvfits':
+        elif filetype == "uvfits":
             hd.write_uvfits(filename, **kwargs)
         else:
             raise ValueError("filetype {} not recognized".format(filetype))
         echo("...writing to {}".format(filename), verbose=verbose)
 
-    def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
-                  ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
-                  min_dly=10.0, max_frate=None, output_prefix='clean', output_postfix='',
-                  skip_wgt=0.1, verbose=False, tol=1e-9,
-                  overwrite=False, **filter_kwargs):
+    def vis_clean(
+        self,
+        keys=None,
+        x=None,
+        data=None,
+        flags=None,
+        wgts=None,
+        ax="freq",
+        horizon=1.0,
+        standoff=0.0,
+        cache=None,
+        mode="clean",
+        min_dly=10.0,
+        max_frate=None,
+        output_prefix="clean",
+        output_postfix="",
+        skip_wgt=0.1,
+        verbose=False,
+        tol=1e-9,
+        overwrite=False,
+        **filter_kwargs,
+    ):
         """
         Perform visibility cleaning and filtering given flags.
 
@@ -768,7 +928,7 @@ class VisClean(object):
                         Do not pass suppression_factors (non-clean)!
                         instead, use tol to set suppression levels in linear filtering.
         """
-        if cache is None and not mode == 'clean':
+        if cache is None and not mode == "clean":
             cache = {}
         if data is None:
             data = self.data
@@ -777,48 +937,106 @@ class VisClean(object):
         if keys is None:
             keys = data.keys()
         if wgts is None:
-            wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=float)) for k in keys]))
+            wgts = DataContainer(
+                dict([(k, np.ones_like(flags[k], dtype=float)) for k in keys])
+            )
         # make sure flagged channels have zero weight, regardless of what user supplied.
-        wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
+        wgts = DataContainer(
+            dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys])
+        )
         # convert max_frate to DataContainer
         if max_frate is not None:
             if isinstance(max_frate, (int, np.integer, float, np.floating)):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
             if not isinstance(max_frate, DataContainer):
-                raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
+                raise ValueError(
+                    "If fed, max_frate must be a float, or a DataContainer of floats"
+                )
             # convert kwargs to proper units
-            max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
+            max_frate = DataContainer(
+                dict([(k, np.asarray(max_frate[k])) for k in max_frate])
+            )
 
         for k in keys:
             # get filter properties
             mfrate = max_frate[k] if max_frate is not None else None
-            filter_centers, filter_half_widths = gen_filter_properties(ax=ax, horizon=horizon,
-                                                                       standoff=standoff, min_dly=min_dly,
-                                                                       bl_len=self.bllens[k[:2]], max_frate=mfrate)
-            if mode != 'clean':
-                suppression_factors = [[tol], [tol]] if ax == 'both' else [tol]
-                self.fourier_filter(filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                                    keys=[k], mode=mode, suppression_factors=suppression_factors,
-                                    x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    ax=ax, cache=cache, skip_wgt=skip_wgt, verbose=verbose,
-                                    overwrite=overwrite, **filter_kwargs)
+            filter_centers, filter_half_widths = gen_filter_properties(
+                ax=ax,
+                horizon=horizon,
+                standoff=standoff,
+                min_dly=min_dly,
+                bl_len=self.bllens[k[:2]],
+                max_frate=mfrate,
+            )
+            if mode != "clean":
+                suppression_factors = [[tol], [tol]] if ax == "both" else [tol]
+                self.fourier_filter(
+                    filter_centers=filter_centers,
+                    filter_half_widths=filter_half_widths,
+                    keys=[k],
+                    mode=mode,
+                    suppression_factors=suppression_factors,
+                    x=x,
+                    data=data,
+                    flags=flags,
+                    wgts=wgts,
+                    output_prefix=output_prefix,
+                    ax=ax,
+                    cache=cache,
+                    skip_wgt=skip_wgt,
+                    verbose=verbose,
+                    overwrite=overwrite,
+                    **filter_kwargs,
+                )
             else:
-                self.fourier_filter(filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                                    keys=[k], mode=mode, tol=tol, x=x, data=data, flags=flags, wgts=wgts,
-                                    output_prefix=output_prefix, ax=ax, skip_wgt=skip_wgt, verbose=verbose,
-                                    overwrite=overwrite, **filter_kwargs)
+                self.fourier_filter(
+                    filter_centers=filter_centers,
+                    filter_half_widths=filter_half_widths,
+                    keys=[k],
+                    mode=mode,
+                    tol=tol,
+                    x=x,
+                    data=data,
+                    flags=flags,
+                    wgts=wgts,
+                    output_prefix=output_prefix,
+                    ax=ax,
+                    skip_wgt=skip_wgt,
+                    verbose=verbose,
+                    overwrite=overwrite,
+                    **filter_kwargs,
+                )
 
-    def fourier_filter(self, filter_centers, filter_half_widths, mode='clean',
-                       x=None, keys=None, data=None, flags=None, wgts=None,
-                       output_prefix='clean', output_postfix='', zeropad=None, cache=None,
-                       ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
-                       skip_flagged_edges=False, filter_spw_ranges=None,
-                       skip_contiguous_flags=False, max_contiguous_flag=None,
-                       keep_flags=False, clean_flags_in_resid_flags=True,
-                       skip_if_flag_within_edge_distance=0,
-                       flag_model_rms_outliers=False, model_rms_threshold=1.1,
-                       interleave=False,
-                       **filter_kwargs):
+    def fourier_filter(
+        self,
+        filter_centers,
+        filter_half_widths,
+        mode="clean",
+        x=None,
+        keys=None,
+        data=None,
+        flags=None,
+        wgts=None,
+        output_prefix="clean",
+        output_postfix="",
+        zeropad=None,
+        cache=None,
+        ax="freq",
+        skip_wgt=0.1,
+        verbose=False,
+        overwrite=False,
+        skip_flagged_edges=False,
+        filter_spw_ranges=None,
+        skip_contiguous_flags=False,
+        max_contiguous_flag=None,
+        keep_flags=False,
+        clean_flags_in_resid_flags=True,
+        skip_if_flag_within_edge_distance=0,
+        flag_model_rms_outliers=False,
+        model_rms_threshold=1.1,
+        interleave=False,
+        **filter_kwargs,
+    ):
         """
         Generalized fourier filtering wrapper for hera_filters.dspec.fourier_filter.
         It can filter 1d or 2d data with x-axis(es) x and wgts in fourier domain
@@ -1017,23 +1235,23 @@ class VisClean(object):
                     'alpha': float, if window is 'tukey', this is its alpha parameter.
         """
         # type checks
-        if ax == 'both':
+        if ax == "both":
             if zeropad is None:
                 zeropad = [0, 0]
             filterdim = [1, 0]
             filter2d = True
             if x is None:
-                x = [(self.times - np.mean(self.times)) * 3600. * 24., self.freqs]
+                x = [(self.times - np.mean(self.times)) * 3600.0 * 24.0, self.freqs]
             if skip_if_flag_within_edge_distance == 0:
                 skip_if_flag_within_edge_distance = (0, 0)
-        elif ax == 'time':
+        elif ax == "time":
             filterdim = 0
             filter2d = False
             if x is None:
-                x = (self.times - np.mean(self.times)) * 3600. * 24.
+                x = (self.times - np.mean(self.times)) * 3600.0 * 24.0
             if zeropad is None:
                 zeropad = 0
-        elif ax == 'freq':
+        elif ax == "freq":
             filterdim = 1
             filter2d = False
             if zeropad is None:
@@ -1045,27 +1263,52 @@ class VisClean(object):
         if filter_spw_ranges is None:
             filter_spw_ranges = [(0, self.Nfreqs)]
         # total number of frequencies in all spw ranges.
-        n_spw_chans_sum = np.sum([spw_range[1] - spw_range[0] for spw_range in filter_spw_ranges])
+        n_spw_chans_sum = np.sum(
+            [spw_range[1] - spw_range[0] for spw_range in filter_spw_ranges]
+        )
         # frequencies from spw-ranges concatenated together.
-        spw_freqs_concatenated = self.freqs[np.hstack([np.arange(spw_range[0], spw_range[1]).astype(int) for spw_range in filter_spw_ranges])]
+        spw_freqs_concatenated = self.freqs[
+            np.hstack(
+                [
+                    np.arange(spw_range[0], spw_range[1]).astype(int)
+                    for spw_range in filter_spw_ranges
+                ]
+            )
+        ]
 
         # check that combined spw-freqs are equal to original freq axis
         # first conditional is faster (to short-circuit)
-        if len(self.freqs) != n_spw_chans_sum or not np.allclose(self.freqs, spw_freqs_concatenated):
-            raise NotImplementedError("Channels detected in original frequency array that do not fall into any of the specified SPWS."
-                                      "We currently only support SPWs that together include every channel in the original frequency axis.")
+        if len(self.freqs) != n_spw_chans_sum or not np.allclose(
+            self.freqs, spw_freqs_concatenated
+        ):
+            raise NotImplementedError(
+                "Channels detected in original frequency array that do not fall into any of the specified SPWS."
+                "We currently only support SPWs that together include every channel in the original frequency axis."
+            )
         # initialize containers
-        if output_postfix != '':
-            containers = ["{}_{}_{}".format(output_prefix, dc, output_postfix) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
+        if output_postfix != "":
+            containers = [
+                "{}_{}_{}".format(output_prefix, dc, output_postfix)
+                for dc in ["model", "resid", "flags", "data", "resid_flags"]
+            ]
         else:
-            containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
+            containers = [
+                "{}_{}".format(output_prefix, dc)
+                for dc in ["model", "resid", "flags", "data", "resid_flags"]
+            ]
 
         for i, dc in enumerate(containers):
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
             containers[i] = getattr(self, dc)
-        filtered_model, filtered_resid, filtered_flags, filtered_data, resid_flags = containers
-        filtered_info = "{}_{}".format(output_prefix, 'info')
+        (
+            filtered_model,
+            filtered_resid,
+            filtered_flags,
+            filtered_data,
+            resid_flags,
+        ) = containers
+        filtered_info = "{}_{}".format(output_prefix, "info")
         if not hasattr(self, filtered_info):
             setattr(self, filtered_info, {})
         filtered_info = getattr(self, filtered_info)
@@ -1085,19 +1328,31 @@ class VisClean(object):
             wgts = DataContainer(dict([(k, (~flags[k]).astype(float)) for k in keys]))
         else:
             # make sure flagged channels have zero weight, regardless of what user supplied.
-            wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
-        if mode != 'clean':
+            wgts = DataContainer(
+                dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys])
+            )
+        if mode != "clean":
             if cache is None:
                 cache = {}
-            filter_kwargs['cache'] = cache
+            filter_kwargs["cache"] = cache
         # iterate over keys
         for k in keys:
             if k not in filtered_info:
                 filtered_info[k] = {}
             if k in filtered_model and overwrite is False:
-                echo("{} exists in clean_model and overwrite is False, skipping...".format(k), verbose=verbose)
+                echo(
+                    "{} exists in clean_model and overwrite is False, skipping...".format(
+                        k
+                    ),
+                    verbose=verbose,
+                )
                 continue
-            echo("Starting fourier filter of {} at {}".format(k, str(datetime.datetime.now())), verbose=verbose)
+            echo(
+                "Starting fourier filter of {} at {}".format(
+                    k, str(datetime.datetime.now())
+                ),
+                verbose=verbose,
+            )
             for spw_range in filter_spw_ranges:
                 if spw_range not in filtered_info[k]:
                     filtered_info[k][spw_range] = {}
@@ -1108,36 +1363,71 @@ class VisClean(object):
                 w = fw * wgts[k][:, spw_slice]
                 # avoid modifying x in-place with zero-padding.
                 xp = copy.deepcopy(x)
-                if ax == 'freq':
+                if ax == "freq":
                     xp = xp[spw_slice]
                     # zeropad the data
                     if zeropad > 0:
                         d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
                         w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
-                        xp = np.hstack([xp.min() - (1 + np.arange(zeropad)[::-1]) * np.median(np.diff(xp)), xp,
-                                        xp.max() + (1 + np.arange(zeropad)) * np.median(np.diff(xp))])
-                elif ax == 'time':
+                        xp = np.hstack(
+                            [
+                                xp.min()
+                                - (1 + np.arange(zeropad)[::-1])
+                                * np.median(np.diff(xp)),
+                                xp,
+                                xp.max()
+                                + (1 + np.arange(zeropad)) * np.median(np.diff(xp)),
+                            ]
+                        )
+                elif ax == "time":
                     # zeropad the data
                     if zeropad > 0:
                         d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
                         w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
-                        xp = np.hstack([xp.min() - (1 + np.arange(zeropad)[::-1]) * np.median(np.diff(xp)), xp,
-                                        xp.max() + (1 + np.arange(zeropad)) * np.median(np.diff(xp))])
-                elif ax == 'both':
+                        xp = np.hstack(
+                            [
+                                xp.min()
+                                - (1 + np.arange(zeropad)[::-1])
+                                * np.median(np.diff(xp)),
+                                xp,
+                                xp.max()
+                                + (1 + np.arange(zeropad)) * np.median(np.diff(xp)),
+                            ]
+                        )
+                elif ax == "both":
                     xp[1] = xp[1][spw_slice]
                     if not isinstance(zeropad, (list, tuple)) or not len(zeropad) == 2:
-                        raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
-                    if not (isinstance(zeropad[0], (int, np.integer)) and isinstance(zeropad[1], (int, np.integer))):
-                        raise ValueError("zeropad values must all be integers. You provided %s" % (zeropad))
+                        raise ValueError(
+                            "zeropad must be a 2-tuple or 2-list of integers"
+                        )
+                    if not (
+                        isinstance(zeropad[0], (int, np.integer))
+                        and isinstance(zeropad[1], (int, np.integer))
+                    ):
+                        raise ValueError(
+                            "zeropad values must all be integers. You provided %s"
+                            % (zeropad)
+                        )
                     for m in range(2):
                         if zeropad[m] > 0:
                             d, _ = zeropad_array(d, zeropad=zeropad[m], axis=m)
                             w, _ = zeropad_array(w, zeropad=zeropad[m], axis=m)
-                            xp[m] = np.hstack([xp[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.median(np.diff(xp[m])),
-                                               xp[m], xp[m].max() + (1 + np.arange(zeropad[m])) * np.median(np.diff(xp[m]))])
+                            xp[m] = np.hstack(
+                                [
+                                    xp[m].min()
+                                    - (np.arange(zeropad[m])[::-1] + 1)
+                                    * np.median(np.diff(xp[m])),
+                                    xp[m],
+                                    xp[m].max()
+                                    + (1 + np.arange(zeropad[m]))
+                                    * np.median(np.diff(xp[m])),
+                                ]
+                            )
                 # if we are not including flagged edges in filtering, skip them here.
                 if skip_flagged_edges:
-                    xp, din, win, edges, chunks = truncate_flagged_edges(d, w, xp, ax=ax)
+                    xp, din, win, edges, chunks = truncate_flagged_edges(
+                        d, w, xp, ax=ax
+                    )
                 else:
                     din = d
                     win = w
@@ -1145,58 +1435,89 @@ class VisClean(object):
                 # (or precomputed limit) here.
                 if skip_contiguous_flags:
                     if max_contiguous_flag is None:
-                        max_contiguous_flag = get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_widths)
-                    win = flag_rows_with_contiguous_flags(win, max_contiguous_flag, ax=ax)
+                        max_contiguous_flag = (
+                            get_max_contiguous_flag_from_filter_periods(
+                                x, filter_centers, filter_half_widths
+                            )
+                        )
+                    win = flag_rows_with_contiguous_flags(
+                        win, max_contiguous_flag, ax=ax
+                    )
                 # skip integrations with flags within some minimum distance of the edges here.
                 if np.any(np.asarray(skip_if_flag_within_edge_distance) > 0):
-                    win = flag_rows_with_flags_within_edge_distance(xp, win, skip_if_flag_within_edge_distance, ax=ax)
+                    win = flag_rows_with_flags_within_edge_distance(
+                        xp, win, skip_if_flag_within_edge_distance, ax=ax
+                    )
 
                 mdl, res = np.zeros_like(d), np.zeros_like(d)
 
                 if 0 not in din.shape:
-                    mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
-                                                          filter_half_widths=filter_half_widths,
-                                                          mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
-                                                          **filter_kwargs)
+                    mdl, res, info = dspec.fourier_filter(
+                        x=xp,
+                        data=din,
+                        wgts=win,
+                        filter_centers=filter_centers,
+                        filter_half_widths=filter_half_widths,
+                        mode=mode,
+                        filter_dims=filterdim,
+                        skip_wgt=skip_wgt,
+                        **filter_kwargs,
+                    )
                     # insert back the filtered model if we are skipping flagged edgs.
                     if skip_flagged_edges:
                         mdl = restore_flagged_edges(mdl, chunks, edges, ax=ax)
                         res = restore_flagged_edges(res, chunks, edges, ax=ax)
                     # unzeropad array and put in skip flags.
-                    if ax == 'freq':
+                    if ax == "freq":
                         if zeropad > 0:
-                            mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
-                            res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
-                    elif ax == 'time':
+                            mdl, _ = zeropad_array(
+                                mdl, zeropad=zeropad, axis=1, undo=True
+                            )
+                            res, _ = zeropad_array(
+                                res, zeropad=zeropad, axis=1, undo=True
+                            )
+                    elif ax == "time":
                         if zeropad > 0:
-                            mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
-                            res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
-                    elif ax == 'both':
+                            mdl, _ = zeropad_array(
+                                mdl, zeropad=zeropad, axis=0, undo=True
+                            )
+                            res, _ = zeropad_array(
+                                res, zeropad=zeropad, axis=0, undo=True
+                            )
+                    elif ax == "both":
                         for i in range(2):
                             if zeropad[i] > 0:
-                                mdl, _ = zeropad_array(mdl, zeropad=zeropad[i], axis=i, undo=True)
-                                res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
+                                mdl, _ = zeropad_array(
+                                    mdl, zeropad=zeropad[i], axis=i, undo=True
+                                )
+                                res, _ = zeropad_array(
+                                    res, zeropad=zeropad[i], axis=i, undo=True
+                                )
                             _trim_status(info, i, zeropad[i - 1])
                         # need to adjust info based on edges and chunks!
                         # restore indices in info necessary if ax=='both'.
                         if skip_flagged_edges:
                             _adjust_info_indices(xp, info, edges, spw_range[0])
                 else:
-                    info = {'status': {'axis_0': {}, 'axis_1': {}}}
-                    if ax == 'freq' or ax == 'both':
-                        info['status']['axis_1'] = {i: 'skipped' for i in range(self.Ntimes)}
-                    if ax == 'time' or ax == 'both':
-                        info['status']['axis_0'] = {i: 'skipped' for i in range(spw_range[1] - spw_range[0])}
+                    info = {"status": {"axis_0": {}, "axis_1": {}}}
+                    if ax == "freq" or ax == "both":
+                        info["status"]["axis_1"] = {
+                            i: "skipped" for i in range(self.Ntimes)
+                        }
+                    if ax == "time" or ax == "both":
+                        info["status"]["axis_0"] = {
+                            i: "skipped" for i in range(spw_range[1] - spw_range[0])
+                        }
                 # flag integrations and channels that were skipped.
                 skipped = np.zeros_like(mdl, dtype=bool)
                 # this is not the correct thing to do for 2d filtering.
                 # For 2d filter, only look at time-axis skips.
                 # for 1d filter look at both time and freq axes.
-                for dim in range(int(ax.lower() == 'both'), 2):
+                for dim in range(int(ax.lower() == "both"), 2):
                     dim = 1 - dim
-                    if len(info['status']['axis_%d' % dim]) > 0:
-                        for i in info['status']['axis_%d' % dim]:
-                            if info['status']['axis_%d' % dim][i] == 'skipped':
+                    if len(info["status"]["axis_%d" % dim]) > 0:
+                        for i in info["status"]["axis_%d" % dim]:
+                            if info["status"]["axis_%d" % dim][i] == "skipped":
                                 if dim == 0:
                                     skipped[:, i] = True
                                 elif dim == 1:
@@ -1205,11 +1526,18 @@ class VisClean(object):
                 # flag integrations or channels where the RMS of the model exceeds the RMS of the unflagged data
                 # by some threshold.
                 if flag_model_rms_outliers:
-                    skipped = flag_model_rms(skipped, d, w, mdl, model_rms_threshold=model_rms_threshold, ax=ax)
+                    skipped = flag_model_rms(
+                        skipped,
+                        d,
+                        w,
+                        mdl,
+                        model_rms_threshold=model_rms_threshold,
+                        ax=ax,
+                    )
 
                 # also flag skipped edge channels and integrations.
                 if skip_flagged_edges:
-                    if ax == 'both':
+                    if ax == "both":
                         for chunk, edge in zip(chunks[1], edges[1]):
                             cslice0 = slice(chunk[0], chunk[0] + edge[0])
                             cslice1 = slice(chunk[1] - edge[1], chunk[1])
@@ -1224,10 +1552,10 @@ class VisClean(object):
                         for chunk, edge in zip(chunks, edges):
                             cslice0 = slice(chunk[0], chunk[0] + edge[0])
                             cslice1 = slice(chunk[1] - edge[1], chunk[1])
-                            if ax == 'freq':
+                            if ax == "freq":
                                 skipped[:, cslice0] = True
                                 skipped[:, cslice1] = True
-                            elif ax == 'time':
+                            elif ax == "time":
                                 skipped[cslice0, :] = True
                                 skipped[cslice1, :] = True
                 if k not in filtered_model:
@@ -1237,17 +1565,23 @@ class VisClean(object):
                     filtered_flags[k] = np.zeros_like(flags[k])
                     resid_flags[k] = np.zeros_like(flags[k])
                 filtered_model[k][:, spw_slice] = mdl
-                filtered_model[k][:, spw_slice][skipped] = 0.
+                filtered_model[k][:, spw_slice][skipped] = 0.0
                 filtered_resid[k][:, spw_slice] = res * fw
-                filtered_resid[k][:, spw_slice][skipped] = 0.
-                filtered_data[k][:, spw_slice] = filtered_model[k][:, spw_slice] + filtered_resid[k][:, spw_slice]
+                filtered_resid[k][:, spw_slice][skipped] = 0.0
+                filtered_data[k][:, spw_slice] = (
+                    filtered_model[k][:, spw_slice] + filtered_resid[k][:, spw_slice]
+                )
                 if not keep_flags:
                     filtered_flags[k][:, spw_slice] = skipped
                 else:
-                    filtered_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice]) | skipped
+                    filtered_flags[k][:, spw_slice] = (
+                        copy.deepcopy(flags[k][:, spw_slice]) | skipped
+                    )
                 filtered_info[k][spw_range] = info
                 if clean_flags_in_resid_flags:
-                    resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice]) | skipped
+                    resid_flags[k][:, spw_slice] = (
+                        copy.deepcopy(flags[k][:, spw_slice]) | skipped
+                    )
                 else:
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice])
 
@@ -1256,15 +1590,32 @@ class VisClean(object):
         discard_autocorr_imag(filtered_resid, keys=keys)
         discard_autocorr_imag(filtered_data, keys=keys)
 
-        if hasattr(data, 'times'):
+        if hasattr(data, "times"):
             filtered_data.times = data.times
             filtered_model.times = data.times
             filtered_resid.times = data.times
             filtered_flags.times = data.times
 
-    def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
-                 overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True,
-                 zeropad=0, dtime=None, dnu=None, verbose=True):
+    def fft_data(
+        self,
+        data=None,
+        flags=None,
+        keys=None,
+        assign="dfft",
+        ax="freq",
+        window="none",
+        alpha=0.1,
+        overwrite=False,
+        edgecut_low=0,
+        edgecut_hi=0,
+        ifft=False,
+        ifftshift=False,
+        fftshift=True,
+        zeropad=0,
+        dtime=None,
+        dnu=None,
+        verbose=True,
+    ):
         """
         Take FFT of data and attach to self.
 
@@ -1305,7 +1656,7 @@ class VisClean(object):
                 If dfft[key] already exists, overwrite its contents.
         """
         # type checks
-        if ax not in ['freq', 'time', 'both']:
+        if ax not in ["freq", "time", "both"]:
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
 
         # generate home
@@ -1321,7 +1672,9 @@ class VisClean(object):
         if flags is not None:
             wgts = DataContainer(dict([(k, (~flags[k]).astype(float)) for k in flags]))
         else:
-            wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=float)) for k in data]))
+            wgts = DataContainer(
+                dict([(k, np.ones_like(data[k], dtype=float)) for k in data])
+            )
 
         # get keys
         if keys is None:
@@ -1330,10 +1683,10 @@ class VisClean(object):
             raise ValueError("No keys found")
 
         # get delta bin
-        if ax == 'freq':
+        if ax == "freq":
             _, delta_bin = self._get_delta_bin(dtime=dtime, dnu=dnu)
             axis = 1
-        elif ax == 'time':
+        elif ax == "time":
             delta_bin, _ = self._get_delta_bin(dtime=dtime, dnu=dnu)
             axis = 0
         else:
@@ -1347,24 +1700,40 @@ class VisClean(object):
                 echo("{} not in data, skipping...".format(k), verbose=verbose)
                 continue
             if k in dfft and not overwrite:
-                echo("{} in self.{} and overwrite == False, skipping...".format(k, assign), verbose=verbose)
+                echo(
+                    "{} in self.{} and overwrite == False, skipping...".format(
+                        k, assign
+                    ),
+                    verbose=verbose,
+                )
                 continue
 
             # FFT
-            dfft[k], fourier_axes = fft_data(data[k], delta_bin, wgts=wgts[k], axis=axis, window=window,
-                                             alpha=alpha, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
-                                             ifft=ifft, ifftshift=ifftshift, fftshift=fftshift, zeropad=zeropad)
+            dfft[k], fourier_axes = fft_data(
+                data[k],
+                delta_bin,
+                wgts=wgts[k],
+                axis=axis,
+                window=window,
+                alpha=alpha,
+                edgecut_low=edgecut_low,
+                edgecut_hi=edgecut_hi,
+                ifft=ifft,
+                ifftshift=ifftshift,
+                fftshift=fftshift,
+                zeropad=zeropad,
+            )
             j += 1
 
         if j == 0:
             raise ValueError("No FFT run with keys {}".format(keys))
 
-        if hasattr(data, 'times'):
+        if hasattr(data, "times"):
             dfft.times = data.times
-        if ax == 'freq':
+        if ax == "freq":
             self.delays = fourier_axes
             self.delays *= 1e9
-        elif ax == 'time':
+        elif ax == "time":
             self.frates = fourier_axes
             self.frates *= 1e3
         else:
@@ -1372,7 +1741,9 @@ class VisClean(object):
             self.delays *= 1e9
             self.frates *= 1e3
 
-    def factorize_flags(self, keys=None, spw_ranges=None, time_thresh=0.05, inplace=False):
+    def factorize_flags(
+        self, keys=None, spw_ranges=None, time_thresh=0.05, inplace=False
+    ):
         """
         Factorize self.flags into two 1D time and frequency masks.
 
@@ -1411,14 +1782,27 @@ class VisClean(object):
 
         # iterate over keys
         for k in keys:
-            factorize_flags(flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True)
+            factorize_flags(
+                flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True
+            )
 
         if not inplace:
             return flags
 
-    def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
-                            partial_write=False, clobber=False, add_to_history='', extra_attrs={}, prefix='clean', **kwargs):
-        '''
+    def write_filtered_data(
+        self,
+        res_outfilename=None,
+        CLEAN_outfilename=None,
+        filled_outfilename=None,
+        filetype="uvh5",
+        partial_write=False,
+        clobber=False,
+        add_to_history="",
+        extra_attrs={},
+        prefix="clean",
+        **kwargs,
+    ):
+        """
         Method for writing data products.
 
         Can write filtered residuals, CLEAN models, and/or original data with flags filled
@@ -1436,33 +1820,64 @@ class VisClean(object):
             extra_attrs : additional UVData/HERAData attributes to update before writing
             prefix : string, the prefix for the datacontainers to write.
             kwargs : extra kwargs to pass to UVData.write_*() call
-        '''
-        if not hasattr(self, 'data'):
+        """
+        if not hasattr(self, "data"):
             raise ValueError("Cannot write data without first loading")
-        if (res_outfilename is None) and (CLEAN_outfilename is None) and (filled_outfilename is None):
-            raise ValueError('You must specifiy at least one outfilename.')
+        if (
+            (res_outfilename is None)
+            and (CLEAN_outfilename is None)
+            and (filled_outfilename is None)
+        ):
+            raise ValueError("You must specifiy at least one outfilename.")
         else:
             # loop over the three output modes if a corresponding outfilename is supplied
-            for mode, outfilename in zip(['residual', 'CLEAN', 'filled'],
-                                         [res_outfilename, CLEAN_outfilename, filled_outfilename]):
+            for mode, outfilename in zip(
+                ["residual", "CLEAN", "filled"],
+                [res_outfilename, CLEAN_outfilename, filled_outfilename],
+            ):
                 if outfilename is not None:
-                    if mode == 'residual':
-                        data_out, flags_out = getattr(self, prefix + '_resid'), getattr(self, prefix + '_resid_flags')
-                    elif mode == 'CLEAN':
-                        data_out, flags_out = getattr(self, prefix + '_model'), getattr(self, prefix + '_flags')
-                    elif mode == 'filled':
+                    if mode == "residual":
+                        data_out, flags_out = (
+                            getattr(self, prefix + "_resid"),
+                            getattr(self, prefix + "_resid_flags"),
+                        )
+                    elif mode == "CLEAN":
+                        data_out, flags_out = (
+                            getattr(self, prefix + "_model"),
+                            getattr(self, prefix + "_flags"),
+                        )
+                    elif mode == "filled":
                         data_out, flags_out = self.get_filled_data(prefix=prefix)
                     if partial_write:
                         # add extra_attrs to kwargs
                         for k in extra_attrs:
                             kwargs[k] = extra_attrs[k]
-                        if not ((filetype == 'uvh5') and (getattr(self.hd, 'filetype', None) == 'uvh5')):
-                            raise NotImplementedError('Partial writing requires input and output types to be "uvh5".')
-                        self.hd.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber,
-                                              add_to_history=utils.history_string(add_to_history), **kwargs)
+                        if not (
+                            (filetype == "uvh5")
+                            and (getattr(self.hd, "filetype", None) == "uvh5")
+                        ):
+                            raise NotImplementedError(
+                                'Partial writing requires input and output types to be "uvh5".'
+                            )
+                        self.hd.partial_write(
+                            outfilename,
+                            data=data_out,
+                            flags=flags_out,
+                            clobber=clobber,
+                            add_to_history=utils.history_string(add_to_history),
+                            **kwargs,
+                        )
                     else:
-                        self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
-                                        add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
+                        self.write_data(
+                            data_out,
+                            outfilename,
+                            filetype=filetype,
+                            overwrite=clobber,
+                            flags=flags_out,
+                            add_to_history=add_to_history,
+                            extra_attrs=extra_attrs,
+                            **kwargs,
+                        )
 
     def zeropad_data(self, data, binvals=None, zeropad=0, axis=-1, undo=False):
         """
@@ -1480,7 +1895,9 @@ class VisClean(object):
         """
         # iterate over data
         for k in data:
-            data[k], bvals = zeropad_array(data[k], binvals=binvals, zeropad=zeropad, axis=axis, undo=undo)
+            data[k], bvals = zeropad_array(
+                data[k], binvals=binvals, zeropad=zeropad, axis=axis, undo=undo
+            )
 
         data.binvals = bvals
 
@@ -1505,7 +1922,7 @@ class VisClean(object):
 
         return dtime, dnu
 
-    def get_filled_data(self, prefix='clean'):
+    def get_filled_data(self, prefix="clean"):
         """Get data with flagged pixels filled with clean_model.
         Parameters
             prefix : string label for data-containers of filtering outputs to get.
@@ -1513,10 +1930,18 @@ class VisClean(object):
             filled_data: DataContainer with original data and flags filled with CLEAN model
             filled_flags: DataContainer with flags set to False unless the time is skipped in delay filter
         """
-        assert np.all([hasattr(self, n) for n in [prefix + '_model', prefix + '_flags', 'data', 'flags']]), "self.data, self.flags, self.%s_model and self.%s_flags must all exist to get filled data" % (prefix, prefix)
+        assert np.all(
+            [
+                hasattr(self, n)
+                for n in [prefix + "_model", prefix + "_flags", "data", "flags"]
+            ]
+        ), (
+            "self.data, self.flags, self.%s_model and self.%s_flags must all exist to get filled data"
+            % (prefix, prefix)
+        )
         # construct filled data and filled flags
-        filled_data = copy.deepcopy(getattr(self, prefix + '_model'))
-        filled_flags = copy.deepcopy(getattr(self, prefix + '_flags'))
+        filled_data = copy.deepcopy(getattr(self, prefix + "_model"))
+        filled_flags = copy.deepcopy(getattr(self, prefix + "_flags"))
 
         # iterate over filled_data keys
         for k in filled_data.keys():
@@ -1528,8 +1953,20 @@ class VisClean(object):
         return filled_data, filled_flags
 
 
-def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edgecut_low=0,
-             edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True, zeropad=0):
+def fft_data(
+    data,
+    delta_bin,
+    wgts=None,
+    axis=-1,
+    window="none",
+    alpha=0.2,
+    edgecut_low=0,
+    edgecut_hi=0,
+    ifft=False,
+    ifftshift=False,
+    fftshift=True,
+    zeropad=0,
+):
     """
     FFT data along specified axis.
 
@@ -1605,7 +2042,13 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
         Nbins = data.shape[ax]
 
         # generate and apply window
-        win = dspec.gen_window(window[i], Nbins, alpha=alpha[i], edgecut_low=edgecut_low[i], edgecut_hi=edgecut_hi[i])
+        win = dspec.gen_window(
+            window[i],
+            Nbins,
+            alpha=alpha[i],
+            edgecut_low=edgecut_low[i],
+            edgecut_hi=edgecut_hi[i],
+        )
         wshape = np.ones(data.ndim, dtype=int)
         wshape[ax] = Nbins
         win.shape = tuple(wshape)
@@ -1637,8 +2080,19 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
     return data, fourier_axes
 
 
-def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay_cut=3000,
-               kernel_size=None, edgecut_low=0, edgecut_hi=0, polyfit_deg=None, verbose=True):
+def trim_model(
+    clean_model,
+    clean_resid,
+    dnu,
+    keys=None,
+    noise_thresh=2.0,
+    delay_cut=3000,
+    kernel_size=None,
+    edgecut_low=0,
+    edgecut_hi=0,
+    polyfit_deg=None,
+    verbose=True,
+):
     """
     Truncate CLEAN model components in delay space below some amplitude threshold.
 
@@ -1679,7 +2133,11 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
     """
     # get keys
     if keys is None:
-        keys = [k for k in sorted(set(list(clean_model.keys()) + list(clean_resid.keys()))) if k in clean_model and k in clean_resid]
+        keys = [
+            k
+            for k in sorted(set(list(clean_model.keys()) + list(clean_resid.keys())))
+            if k in clean_model and k in clean_resid
+        ]
 
     # estimate noise in Fourier space by taking amplitude of high delay modes
     # above delay_cut
@@ -1687,7 +2145,17 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
     noise = DataContainer({})
     for k in keys:
         # get rfft
-        rfft, delays = fft_data(clean_resid[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)
+        rfft, delays = fft_data(
+            clean_resid[k],
+            dnu,
+            axis=1,
+            window="none",
+            edgecut_low=edgecut_low,
+            edgecut_hi=edgecut_hi,
+            ifft=False,
+            ifftshift=False,
+            fftshift=False,
+        )
         delays *= 1e9
 
         # get NEB of clean_resid: a top-hat window nulled where resid == 0 (i.e. flag pattern)
@@ -1695,35 +2163,66 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
         neb = noise_eq_bandwidth(w[:, None])
 
         # get time-dependent noise level in Fourier space from FFT at high delays
-        noise[k] = np.median(np.abs((rfft * neb)[:, np.abs(delays) > delay_cut]), axis=1)
+        noise[k] = np.median(
+            np.abs((rfft * neb)[:, np.abs(delays) > delay_cut]), axis=1
+        )
 
         # median filter it
         if kernel_size is not None:
             n = noise[k]
             nlen = len(n)
-            n = np.pad(n, nlen, 'reflect', reflect_type='odd')
+            n = np.pad(n, nlen, "reflect", reflect_type="odd")
             noise[k] = signal.medfilt(n, kernel_size=kernel_size)[nlen:-nlen]
 
         # fit a polynomial if desired
         if polyfit_deg is not None:
             x = np.arange(noise[k].size, dtype=float)
-            f = ~np.isnan(noise[k]) & ~np.isfinite(noise[k]) & ~np.isclose(noise[k], 0.0)
+            f = (
+                ~np.isnan(noise[k])
+                & ~np.isfinite(noise[k])
+                & ~np.isclose(noise[k], 0.0)
+            )
             # only fit if it is well-conditioned: Ntimes > polyfit_deg + 1
             if f.sum() >= (polyfit_deg + 1):
                 fit = np.polyfit(x[f], noise[k][f], deg=polyfit_deg)
                 noise[k] = np.polyval(fit, x)
             else:
                 # not enough points to fit polynomial
-                echo("Need more suitable data points for {} to fit {}-deg polynomial".format(k, polyfit_deg), verbose=verbose)
+                echo(
+                    "Need more suitable data points for {} to fit {}-deg polynomial".format(
+                        k, polyfit_deg
+                    ),
+                    verbose=verbose,
+                )
 
         # get mfft
-        mfft, _ = fft_data(clean_model[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)
+        mfft, _ = fft_data(
+            clean_model[k],
+            dnu,
+            axis=1,
+            window="none",
+            edgecut_low=edgecut_low,
+            edgecut_hi=edgecut_hi,
+            ifft=False,
+            ifftshift=False,
+            fftshift=False,
+        )
 
         # set all mfft modes below some threshold to zero
         mfft[np.abs(mfft) < (noise[k][:, None] * noise_thresh)] = 0.0
 
         # re-fft
-        mdl, _ = fft_data(mfft, dnu, axis=1, window='none', edgecut_low=0, edgecut_hi=0, ifft=True, ifftshift=False, fftshift=False)
+        mdl, _ = fft_data(
+            mfft,
+            dnu,
+            axis=1,
+            window="none",
+            edgecut_low=0,
+            edgecut_hi=0,
+            ifft=True,
+            ifftshift=False,
+            fftshift=False,
+        )
         model[k] = mdl
 
     return model, noise
@@ -1761,7 +2260,9 @@ def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
         binvals = [binvals]
     if not isinstance(zeropad, (list, tuple, np.ndarray)):
         zeropad = [zeropad]
-    if isinstance(axis, (list, tuple, np.ndarray)) and not isinstance(zeropad, (list, tuple, np.ndarray)):
+    if isinstance(axis, (list, tuple, np.ndarray)) and not isinstance(
+        zeropad, (list, tuple, np.ndarray)
+    ):
         raise ValueError("If axis is an iterable, so must be zeropad.")
     if len(axis) != len(zeropad):
         raise ValueError("len(axis) must equal len(zeropad)")
@@ -1788,7 +2289,13 @@ def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
                     dx = np.median(np.diff(binvals[i]))
                     Nbin = binvals[i].size
                     z = np.arange(1, zeropad[i] + 1)
-                    binvals[i] = np.concatenate([binvals[i][0] - z[::-1] * dx, binvals[i], binvals[i][-1] + z * dx])
+                    binvals[i] = np.concatenate(
+                        [
+                            binvals[i][0] - z[::-1] * dx,
+                            binvals[i],
+                            binvals[i][-1] + z * dx,
+                        ]
+                    )
 
     if len(binvals) == 1:
         binvals = binvals[0]
@@ -1812,11 +2319,16 @@ def noise_eq_bandwidth(window, axis=-1):
         neb : float or ndarray
             Noise equivalent bandwidth of the window
     """
-    return np.sqrt(window.shape[axis] * np.max(window, axis=axis)**2 / np.sum(window**2, dtype=float, axis=axis))
+    return np.sqrt(
+        window.shape[axis]
+        * np.max(window, axis=axis) ** 2
+        / np.sum(window**2, dtype=float, axis=axis)
+    )
 
 
-def gen_filter_properties(ax='freq', horizon=1, standoff=0, min_dly=0, bl_len=None,
-                          max_frate=0):
+def gen_filter_properties(
+    ax="freq", horizon=1, standoff=0, min_dly=0, bl_len=None, max_frate=0
+):
     """
     Convert standard delay and fringe-rate filtering parameters
     into hera_filters.dspec.fourier_filter parameters.
@@ -1837,25 +2349,27 @@ def gen_filter_properties(ax='freq', horizon=1, standoff=0, min_dly=0, bl_len=No
         filter_half_widths
             list of filter half widths in units Hz or sec
     """
-    if ax == 'freq' or ax == 'both':
-        filter_centers_freq = [0.]
+    if ax == "freq" or ax == "both":
+        filter_centers_freq = [0.0]
         assert bl_len is not None
         # bl_dly in nanosec
-        bl_dly = dspec._get_bl_dly(bl_len * 1e9, horizon=horizon, standoff=standoff, min_dly=min_dly)
+        bl_dly = dspec._get_bl_dly(
+            bl_len * 1e9, horizon=horizon, standoff=standoff, min_dly=min_dly
+        )
         filter_half_widths_freq = [bl_dly * 1e-9]
-    if ax == 'time' or ax == 'both':
+    if ax == "time" or ax == "both":
         if max_frate is not None:
-            filter_centers_time = [0.]
+            filter_centers_time = [0.0]
             filter_half_widths_time = [max_frate * 1e-3]
         else:
             raise AssertionError("must supply max_frate if ax=='time' or ax=='both'!")
-    if ax == 'both':
+    if ax == "both":
         filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
         filter_centers = [filter_centers_time, filter_centers_freq]
-    elif ax == 'freq':
+    elif ax == "freq":
         filter_centers = filter_centers_freq
         filter_half_widths = filter_half_widths_freq
-    elif ax == 'time':
+    elif ax == "time":
         filter_centers = filter_centers_time
         filter_half_widths = filter_half_widths_time
 
@@ -1863,7 +2377,7 @@ def gen_filter_properties(ax='freq', horizon=1, standoff=0, min_dly=0, bl_len=No
 
 
 def _trim_status(info_dict, axis, zeropad):
-    '''
+    """
     Trims the info status dictionary for a zero-padded
     filter so that the status of integrations that were
     in the zero-pad region are deleted
@@ -1877,9 +2391,9 @@ def _trim_status(info_dict, axis, zeropad):
     Returns
     -------
     Nothing, modifies the provided dictionary in place.
-    '''
+    """
     # delete statuses in zero-pad region
-    statuses = info_dict['status']['axis_%d' % axis]
+    statuses = info_dict["status"]["axis_%d" % axis]
     nints = len(statuses)
     for i in range(zeropad):
         del statuses[i]
@@ -1915,7 +2429,7 @@ def _adjust_info_indices(x, info_dict, edges, freq_baseind):
     edges = [edges[1], edges[0]]
     baseinds = [freq_baseind, 0]
     for axind, axchunks, axedges in zip(axinds, chunks, edges):
-        statuses = info_dict['status']['axis_%d' % axind]
+        statuses = info_dict["status"]["axis_%d" % axind]
         offset = np.sum(np.hstack(axedges))
         for chunk, edge in zip(chunks[axind][::-1], edges[axind][::-1]):
             offset -= edge[1]
@@ -1941,73 +2455,289 @@ def _filter_argparser():
         Argparser with core (but not complete) functionality that is called by _linear_argparser and
         _clean_argparser.
     """
+
     def list_of_int_tuples(v):
-        if '~' in v:
-            v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        if "~" in v:
+            v = [tuple([int(_x) for _x in x.split("~")]) for x in v.split(",")]
         else:
             v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         return v
+
     ap = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
-    ap.add_argument("datafilelist", default=None, type=str, nargs="+", help="list of data files to read in and perform filtering on.")
-    ap.add_argument("--mode", type=str, default="clean", help="filtering mode to use. Can be dpss_leastsq, clean, dayenu.")
-    ap.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files (default "uvh5")')
-    ap.add_argument("--filetype_out", type=str, default='uvh5', help='filetype for output data files (default "uvh5")')
-    ap.add_argument("--res_outfilename", default=None, type=str, help="path for writing the filtered visibilities with flags")
-    ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
-    ap.add_argument("--spw_range", type=int, default=None, nargs=2, help="spectral window of data to foreground filter.")
-    ap.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground and xtalk subtraction (default 1e-9)')
-    ap.add_argument("--cornerturnfile", type=str, default=None, help="path to visibility data file to use as an index for baseline chunk in cornerturn."
-                                                                     "Warning: Providing this file will result in outputs with significantly different structure "
-                                                                     "then inputs. Only use it if you know what you are doing. Default is None.")
-    ap.add_argument("--zeropad", default=None, type=int, help="number of bins to zeropad on both sides of FFT axis")
-    ap.add_argument("--Nbls_per_load", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
-    ap.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
-    ap.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
-    ap.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
-    ap.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter.")
-    ap.add_argument("--verbose", default=False, action="store_true", help="Lots of text.")
-    ap.add_argument("--filter_spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections to filter independently. Two acceptable formats are "
-                                                                                       "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
-                                                                                       "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
+    ap.add_argument(
+        "datafilelist",
+        default=None,
+        type=str,
+        nargs="+",
+        help="list of data files to read in and perform filtering on.",
+    )
+    ap.add_argument(
+        "--mode",
+        type=str,
+        default="clean",
+        help="filtering mode to use. Can be dpss_leastsq, clean, dayenu.",
+    )
+    ap.add_argument(
+        "--filetype_in",
+        type=str,
+        default="uvh5",
+        help='filetype of input data files (default "uvh5")',
+    )
+    ap.add_argument(
+        "--filetype_out",
+        type=str,
+        default="uvh5",
+        help='filetype for output data files (default "uvh5")',
+    )
+    ap.add_argument(
+        "--res_outfilename",
+        default=None,
+        type=str,
+        help="path for writing the filtered visibilities with flags",
+    )
+    ap.add_argument(
+        "--clobber",
+        default=False,
+        action="store_true",
+        help="overwrites existing file at outfile",
+    )
+    ap.add_argument(
+        "--spw_range",
+        type=int,
+        default=None,
+        nargs=2,
+        help="spectral window of data to foreground filter.",
+    )
+    ap.add_argument(
+        "--tol",
+        type=float,
+        default=1e-9,
+        help="Threshold for foreground and xtalk subtraction (default 1e-9)",
+    )
+    ap.add_argument(
+        "--cornerturnfile",
+        type=str,
+        default=None,
+        help="path to visibility data file to use as an index for baseline chunk in cornerturn."
+        "Warning: Providing this file will result in outputs with significantly different structure "
+        "then inputs. Only use it if you know what you are doing. Default is None.",
+    )
+    ap.add_argument(
+        "--zeropad",
+        default=None,
+        type=int,
+        help="number of bins to zeropad on both sides of FFT axis",
+    )
+    ap.add_argument(
+        "--Nbls_per_load",
+        default=None,
+        type=int,
+        help="the number of baselines to load at once (default None means load full data",
+    )
+    ap.add_argument(
+        "--calfilelist",
+        default=None,
+        type=str,
+        nargs="+",
+        help="list of calibration files.",
+    )
+    ap.add_argument(
+        "--CLEAN_outfilename",
+        default=None,
+        type=str,
+        help="path for writing the filtered model visibilities (with the same flags)",
+    )
+    ap.add_argument(
+        "--filled_outfilename",
+        default=None,
+        type=str,
+        help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible",
+    )
+    ap.add_argument(
+        "--polarizations",
+        default=None,
+        type=str,
+        nargs="+",
+        help="list of polarizations to filter.",
+    )
+    ap.add_argument(
+        "--verbose", default=False, action="store_true", help="Lots of text."
+    )
+    ap.add_argument(
+        "--filter_spw_ranges",
+        default=None,
+        type=list_of_int_tuples,
+        help="List of spw channel selections to filter independently. Two acceptable formats are "
+        "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
+        "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]",
+    )
 
     # Flagging options
     flag_options = ap.add_argument_group(title="Options relating to flagging.")
-    flag_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
-    flag_options.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
-    flag_options.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
-    flag_options.add_argument("--external_flags", default=None, type=str, nargs="+", help="path(s) to external flag files that you wish to apply.")
-    flag_options.add_argument("--overwrite_flags", default=False, action="store_true", help="overwrite existing flags.")
-    flag_options.add_argument("--flag_yaml", default=None, type=str, help="path to a flagging yaml containing apriori antenna, freq, and time flags.")
-    flag_options.add_argument("--skip_if_flag_within_edge_distance", type=int, default=0, help="skip integrations channels if there is a flag within this integer distance of edge. Default 0 means do nothing.")
-    flag_options.add_argument("--dont_skip_contiguous_flags", default=False, action="store_true", help="Don't skip integrations or channels with gaps that are larger then integer specified in max_contiguous_flag")
-    flag_options.add_argument("--max_contiguous_flag", type=int, default=None, help="Used if skip_contiguous_flags is True. Gaps larger then this value will be skipped. Default None uses filter periods.")
-    flag_options.add_argument("--dont_skip_flagged_edges", default=False, action="store_true", help="Attept to filter over flagged edge times and/or channels.")
-    flag_options.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
-    flag_options.add_argument("--dont_flag_model_rms_outliers", default=False, action="store_true", help="Do not flag integrations or channels where the rms of the filter model exceeds the rms of the unflagged data.")
-    flag_options.add_argument("--model_rms_threshold", type=float, default=1.1, help="Factor that rms of model in a channel or integration needs to exceed the rms of unflagged data to be flagged.")
-    flag_options.add_argument("--clean_flags_not_in_resid_flags", default=False, action="store_true", help="Do not include flags from times/channels skipped in the resid flags.")
-    flag_options.add_argument("--apply_flag_to_nsample", default=False, action="store_true", help="Set nsample to 0 where flag is True before filtering.")
+    flag_options.add_argument(
+        "--skip_wgt",
+        type=float,
+        default=0.1,
+        help="skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)",
+    )
+    flag_options.add_argument(
+        "--factorize_flags", default=False, action="store_true", help="Factorize flags."
+    )
+    flag_options.add_argument(
+        "--time_thresh",
+        type=float,
+        default=0.05,
+        help="time threshold above which to completely flag channels and below which to flag times with flagged channel.",
+    )
+    flag_options.add_argument(
+        "--external_flags",
+        default=None,
+        type=str,
+        nargs="+",
+        help="path(s) to external flag files that you wish to apply.",
+    )
+    flag_options.add_argument(
+        "--overwrite_flags",
+        default=False,
+        action="store_true",
+        help="overwrite existing flags.",
+    )
+    flag_options.add_argument(
+        "--flag_yaml",
+        default=None,
+        type=str,
+        help="path to a flagging yaml containing apriori antenna, freq, and time flags.",
+    )
+    flag_options.add_argument(
+        "--skip_if_flag_within_edge_distance",
+        type=int,
+        default=0,
+        help="skip integrations channels if there is a flag within this integer distance of edge. Default 0 means do nothing.",
+    )
+    flag_options.add_argument(
+        "--dont_skip_contiguous_flags",
+        default=False,
+        action="store_true",
+        help="Don't skip integrations or channels with gaps that are larger then integer specified in max_contiguous_flag",
+    )
+    flag_options.add_argument(
+        "--max_contiguous_flag",
+        type=int,
+        default=None,
+        help="Used if skip_contiguous_flags is True. Gaps larger then this value will be skipped. Default None uses filter periods.",
+    )
+    flag_options.add_argument(
+        "--dont_skip_flagged_edges",
+        default=False,
+        action="store_true",
+        help="Attept to filter over flagged edge times and/or channels.",
+    )
+    flag_options.add_argument(
+        "--max_contiguous_edge_flags",
+        type=int,
+        default=1,
+        help="Skip integrations with at least this number of contiguous edge flags.",
+    )
+    flag_options.add_argument(
+        "--dont_flag_model_rms_outliers",
+        default=False,
+        action="store_true",
+        help="Do not flag integrations or channels where the rms of the filter model exceeds the rms of the unflagged data.",
+    )
+    flag_options.add_argument(
+        "--model_rms_threshold",
+        type=float,
+        default=1.1,
+        help="Factor that rms of model in a channel or integration needs to exceed the rms of unflagged data to be flagged.",
+    )
+    flag_options.add_argument(
+        "--clean_flags_not_in_resid_flags",
+        default=False,
+        action="store_true",
+        help="Do not include flags from times/channels skipped in the resid flags.",
+    )
+    flag_options.add_argument(
+        "--apply_flag_to_nsample",
+        default=False,
+        action="store_true",
+        help="Set nsample to 0 where flag is True before filtering.",
+    )
 
     # Arguments for CLEAN. Not used in linear filtering methods.
-    clean_options = ap.add_argument_group(title='Options for CLEAN (arguments only used if mode=="clean"!)')
-    clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
-                              see hera_filters.dspec.gen_window for options')
-    clean_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
-    clean_options.add_argument("--edgecut_low", default=0, type=int, help="Number of channels to flag on lower band edge and exclude from window function.")
-    clean_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
-    clean_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
-    clean_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
+    clean_options = ap.add_argument_group(
+        title='Options for CLEAN (arguments only used if mode=="clean"!)'
+    )
+    clean_options.add_argument(
+        "--window",
+        type=str,
+        default="blackman-harris",
+        help='window function for frequency filtering (default "blackman-harris",\
+                              see hera_filters.dspec.gen_window for options',
+    )
+    clean_options.add_argument(
+        "--maxiter",
+        type=int,
+        default=100,
+        help="maximum iterations for aipy.deconv.clean to converge (default 100)",
+    )
+    clean_options.add_argument(
+        "--edgecut_low",
+        default=0,
+        type=int,
+        help="Number of channels to flag on lower band edge and exclude from window function.",
+    )
+    clean_options.add_argument(
+        "--edgecut_hi",
+        default=0,
+        type=int,
+        help="Number of channels to flag on upper band edge and exclude from window function.",
+    )
+    clean_options.add_argument(
+        "--gain",
+        type=float,
+        default=0.1,
+        help="Fraction of residual to use in each iteration.",
+    )
+    clean_options.add_argument(
+        "--alpha",
+        type=float,
+        default=0.5,
+        help="If window='tukey', use this alpha parameter (default .5).",
+    )
 
     # Options for caching for linear filtering.
-    cache_options = ap.add_argument_group(title='Options for caching (arguments only used if mode!="clean")')
-    cache_options.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
-    cache_options.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
-    cache_options.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
+    cache_options = ap.add_argument_group(
+        title='Options for caching (arguments only used if mode!="clean")'
+    )
+    cache_options.add_argument(
+        "--write_cache",
+        default=False,
+        action="store_true",
+        help="if True, writes newly computed filter matrices to cache.",
+    )
+    cache_options.add_argument(
+        "--cache_dir",
+        type=str,
+        default=None,
+        help="directory to store cached filtering matrices in.",
+    )
+    cache_options.add_argument(
+        "--read_cache",
+        default=False,
+        action="store_true",
+        help="If true, read in cache files in directory specified by cache_dir.",
+    )
 
     return ap
 
 
-def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, outfilename, clobber=False, time_bounds=False):
+def time_chunk_from_baseline_chunks(
+    time_chunk_template,
+    baseline_chunk_files,
+    outfilename,
+    clobber=False,
+    time_bounds=False,
+):
     """Combine multiple waterfall files (with disjoint baseline sets) into time-limited file with all baselines.
 
     The methods delay_filter.load_delay_filter_and_write_baseline_list and
@@ -2062,17 +2792,17 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
             # find times that are close.
             tload = []
             # use tolerance in times that is set by the time resolution of the dataset.
-            atol = np.median(np.diff(hd_baseline_chunk.times)) / 10.
+            atol = np.median(np.diff(hd_baseline_chunk.times)) / 10.0
             all_times = np.unique(hd_baseline_chunk.times)
             for t in all_times:
                 if np.any(np.isclose(t, hd_time_chunk.times, atol=atol, rtol=0)):
                     tload.append(t)
-            d, f, n = hd_baseline_chunk.read(times=tload, axis='blt')
+            d, f, n = hd_baseline_chunk.read(times=tload, axis="blt")
             hd_time_chunk.update(flags=f, data=d, nsamples=n)
         # now that we've updated everything, we write the output file.
         hd_time_chunk.write_uvh5(outfilename, clobber=clobber)
     else:
-        dt_time_chunk = np.median(np.diff(hd_time_chunk.times)) / 2.
+        dt_time_chunk = np.median(np.diff(hd_time_chunk.times)) / 2.0
         tmax = hd_time_chunk.times.max() + dt_time_chunk
 
         tmin = hd_time_chunk.times.min() - dt_time_chunk
@@ -2083,7 +2813,7 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         # when we perform reconstitution.
         t_select = (hd_baseline_chunk.times >= tmin) & (hd_baseline_chunk.times < tmax)
         if np.any(t_select):
-            hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
+            hd_combined.read(times=hd_baseline_chunk.times[t_select], axis="blt")
             hd_combined.write_uvh5(outfilename, clobber=clobber)
         else:
             warnings.warn("no times selected. No outputfile produced.", RuntimeWarning)
@@ -2093,10 +2823,30 @@ def time_chunk_from_baseline_chunks_argparser():
     """
     Arg parser for file reconstitution.
     """
-    a = argparse.ArgumentParser(description="Construct time-chunk file from baseline-chunk files.")
+    a = argparse.ArgumentParser(
+        description="Construct time-chunk file from baseline-chunk files."
+    )
     a.add_argument("time_chunk_template", type=str, help="name of template file.")
-    a.add_argument("--baseline_chunk_files", type=str, nargs="+", help="list of file baseline-chunk files to select time-chunk from", required=True)
-    a.add_argument("--outfilename", type=str, help="Name of output file. Provide the full path string.", required=True)
-    a.add_argument("--clobber", action="store_true", help="Include to overwrite old files.")
-    a.add_argument("--time_bounds", action="store_true", default=False, help="read times between min and max times of template, regardless of whether they match.")
+    a.add_argument(
+        "--baseline_chunk_files",
+        type=str,
+        nargs="+",
+        help="list of file baseline-chunk files to select time-chunk from",
+        required=True,
+    )
+    a.add_argument(
+        "--outfilename",
+        type=str,
+        help="Name of output file. Provide the full path string.",
+        required=True,
+    )
+    a.add_argument(
+        "--clobber", action="store_true", help="Include to overwrite old files."
+    )
+    a.add_argument(
+        "--time_bounds",
+        action="store_true",
+        default=False,
+        help="read times between min and max times of template, regardless of whether they match.",
+    )
     return a

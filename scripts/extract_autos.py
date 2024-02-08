@@ -16,6 +16,10 @@ args = parse_args(a)
 run_with_profiling(
     autos.read_and_write_autocorrelations,
     args,
-    args.infile, args.outfile, calfile=args.calfile, gain_convention=args.gain_convention,
-    add_to_history=' '.join(sys.argv), clobber=args.clobber
+    args.infile,
+    args.outfile,
+    calfile=args.calfile,
+    gain_convention=args.gain_convention,
+    add_to_history=" ".join(sys.argv),
+    clobber=args.clobber,
 )

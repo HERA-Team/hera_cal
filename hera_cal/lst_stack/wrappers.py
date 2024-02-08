@@ -41,7 +41,7 @@ def lst_bin_files_single_outfile(
     sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
     sigma_clip_subbands: list[int] | None = None,
-    sigma_clip_type: Literal['direct', 'mean', 'median'] = 'direct',
+    sigma_clip_type: Literal["direct", "mean", "median"] = "direct",
     sigma_clip_use_autos: bool = False,
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
@@ -378,7 +378,7 @@ def lst_bin_files_single_outfile(
     all_baselines = [bl for bl in all_baselines if bl[0] != bl[1]]
 
     bl_chunks = [
-        all_baselines[i * Nbls_to_load: (i + 1) * Nbls_to_load]
+        all_baselines[i * Nbls_to_load : (i + 1) * Nbls_to_load]
         for i in range(n_bl_chunks)
     ]
     bl_chunks = [blg for blg in bl_chunks if len(blg) > 0]
@@ -473,7 +473,7 @@ def lst_bin_files_single_outfile(
         reds=reds,
         freq_min=freq_min,
         freq_max=freq_max,
-        where_inpainted_files=where_inpainted_files
+        where_inpainted_files=where_inpainted_files,
     )
 
     def _process_blchunk(
@@ -531,8 +531,12 @@ def lst_bin_files_single_outfile(
 
         # Get the sigma clip scale
         if sigma_clip_use_autos and mean_autos is not None:
-            dtdf = np.median(np.ediff1d(meta.times)) * (meta.freq_array[1] - meta.freq_array[0])
-            predicted_var = [np.abs(auto)**2 / dtdf / ns for ns, auto in zip(nsamples, mean_autos)]
+            dtdf = np.median(np.ediff1d(meta.times)) * (
+                meta.freq_array[1] - meta.freq_array[0]
+            )
+            predicted_var = [
+                np.abs(auto) ** 2 / dtdf / ns for ns, auto in zip(nsamples, mean_autos)
+            ]
             sigma_clip_scale = [np.sqrt(p) for p in predicted_var]
         else:
             sigma_clip_scale = None
@@ -823,14 +827,14 @@ def lst_bin_arg_parser():
     a.add_argument(
         "--sigma-clip-type",
         type=str,
-        default='direct',
-        choices=['direct', 'mean', 'median'],
-        help="How to threshold the absolute zscores for sigma clipping."
+        default="direct",
+        choices=["direct", "mean", "median"],
+        help="How to threshold the absolute zscores for sigma clipping.",
     )
     a.add_argument(
         "--sigma-clip-use-autos",
         action="store_true",
-        help="whether to use the autos to predict the variance for sigma-clipping"
+        help="whether to use the autos to predict the variance for sigma-clipping",
     )
     a.add_argument(
         "--flag-below-min-N",

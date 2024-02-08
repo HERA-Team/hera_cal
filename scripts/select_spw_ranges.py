@@ -12,8 +12,4 @@ ap = utils.select_spw_ranges_argparser()
 args = parse_args(ap)
 
 kw = filter_kwargs(vars(args))
-run_with_profiling(
-    utils.select_spw_ranges,
-    args,
-    **kw
-)
+run_with_profiling(utils.select_spw_ranges, args, **kw)

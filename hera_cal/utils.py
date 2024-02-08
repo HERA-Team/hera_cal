@@ -15,7 +15,12 @@ from scipy import signal, interpolate
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
-from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT, _x_orientation_rep_dict
+from pyuvdata.utils import (
+    POL_STR2NUM_DICT,
+    JONES_STR2NUM_DICT,
+    JONES_NUM2STR_DICT,
+    _x_orientation_rep_dict,
+)
 from pyuvdata.uvdata import FastUVH5Meta
 from typing import Sequence
 from pathlib import Path
@@ -37,60 +42,84 @@ except ImportError:
 
 
 # Taken from a H1C data file and confirmed to match a H3C data file
-HERA_TELESCOPE_LOCATION = np.array([5109325.855210627429187297821044921875,
-                                    2005235.091429826803505420684814453125,
-                                    -3239928.424753960222005844116210937500])
+HERA_TELESCOPE_LOCATION = np.array(
+    [
+        5109325.855210627429187297821044921875,
+        2005235.091429826803505420684814453125,
+        -3239928.424753960222005844116210937500,
+    ]
+)
 
 # Defines characters to look for to see if the polarization string is in east/north format. Nominally {'e', 'n'}.
-_KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').values()])
+_KEY_CARDINAL_CHARS = set(
+    [c.lower() for c in _x_orientation_rep_dict("north").values()]
+)
 # Define characters that appear in all Jones polarization strings. Nominally {'j'}.
-_KEY_JONES_CHARS = set([c.lower() for val in JONES_NUM2STR_DICT.values() for c in val
-                       if np.all([c in v for v in JONES_NUM2STR_DICT.values()])])
+_KEY_JONES_CHARS = set(
+    [
+        c.lower()
+        for val in JONES_NUM2STR_DICT.values()
+        for c in val
+        if np.all([c in v for v in JONES_NUM2STR_DICT.values()])
+    ]
+)
 # set of characters that appear in either _KEY_CARDINAL_CHARS or _KEY_JONES_CHARS
 _KEY_POL_CHARS = _KEY_CARDINAL_CHARS | _KEY_JONES_CHARS
 
 # Get set of standard visibility polarization strings. Nominally {'rr', 'xy', 'ne', 'nn', 'lr', 'en', 'yx', 'xx', 'ee', 'rl', 'll', 'yy'}
-_VISPOLS = set([pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0 and pol == polnum2str(polstr2num(pol))])
+_VISPOLS = set(
+    [
+        pol
+        for pol in list(POL_STR2NUM_DICT.keys())
+        if polstr2num(pol) < 0 and pol == polnum2str(polstr2num(pol))
+    ]
+)
 # Add east/north polarizations to _VISPOLS while relying only on pyuvdata definitions
 for pol in copy.deepcopy(_VISPOLS):
     try:
-        _VISPOLS.add(polnum2str(polstr2num(pol), x_orientation='north'))
+        _VISPOLS.add(polnum2str(polstr2num(pol), x_orientation="north"))
     except KeyError:
         pass
 
 # Get set of standard antenna polarization strings. Nominally {'Jee', 'Jen', 'Jll', 'Jlr', 'Jne', 'Jnn', 'Jrl', 'Jrr', 'Jxx', 'Jxy', 'Jyx', 'Jyy'}
-_ANTPOLS = set([antpol for antpol in list(JONES_STR2NUM_DICT.keys()) if jstr2num(antpol) < 0 and antpol == jnum2str(jstr2num(antpol))])
+_ANTPOLS = set(
+    [
+        antpol
+        for antpol in list(JONES_STR2NUM_DICT.keys())
+        if jstr2num(antpol) < 0 and antpol == jnum2str(jstr2num(antpol))
+    ]
+)
 # Add east/north polarizations to _ANTPOLS while relying only on pyuvdata definitions
 for antpol in copy.deepcopy(_ANTPOLS):
     try:
-        _ANTPOLS.add(jnum2str(jstr2num(antpol), x_orientation='north'))
+        _ANTPOLS.add(jnum2str(jstr2num(antpol), x_orientation="north"))
     except KeyError:
         pass
 
 
 def _is_cardinal(polstr):
-    '''Returns true if all characters in polstr match those in _KEY_CARDINAL_CHARS or _KEY_JONES_CHARS.'''
+    """Returns true if all characters in polstr match those in _KEY_CARDINAL_CHARS or _KEY_JONES_CHARS."""
     return set(polstr.lower()).issubset(_KEY_POL_CHARS)
 
 
 def _comply_antpol(antpol):
-    '''Maps an input antenna polarization string onto a string compliant with pyuvdata
-    and hera_cal.'''
+    """Maps an input antenna polarization string onto a string compliant with pyuvdata
+    and hera_cal."""
     if antpol in _ANTPOLS:
         return antpol
     if _is_cardinal(antpol):
-        return jnum2str(jstr2num(antpol, x_orientation='north'), x_orientation='north')
+        return jnum2str(jstr2num(antpol, x_orientation="north"), x_orientation="north")
     else:
         return jnum2str(jstr2num(antpol))
 
 
 def _comply_vispol(pol):
-    '''Maps an input visibility polarization string onto a string compliant with pyuvdata
-    and hera_cal.'''
+    """Maps an input visibility polarization string onto a string compliant with pyuvdata
+    and hera_cal."""
     if pol in _VISPOLS:
         return pol
     elif _is_cardinal(pol):
-        return polnum2str(polstr2num(pol, x_orientation='north'), x_orientation='north')
+        return polnum2str(polstr2num(pol, x_orientation="north"), x_orientation="north")
     else:
         return polnum2str(polstr2num(pol))
 
@@ -99,8 +128,8 @@ SPLIT_POL = {pol: (_comply_antpol(pol[0]), _comply_antpol(pol[1])) for pol in _V
 
 
 def split_pol(pol):
-    '''Splits visibility polarization string (pyuvdata's polstr) into
-    antenna polarization strings (pyuvdata's jstr).'''
+    """Splits visibility polarization string (pyuvdata's polstr) into
+    antenna polarization strings (pyuvdata's jstr)."""
     return SPLIT_POL[_comply_vispol(pol)]
 
 
@@ -108,15 +137,14 @@ JOIN_POL = {v: k for k, v in SPLIT_POL.items()}
 
 
 def join_pol(p1, p2):
-    '''Joins antenna polarization strings (pyuvdata's jstr) into
-    visibility polarization string (pyuvdata's polstr).'''
-    return JOIN_POL[(_comply_antpol(p1),
-                     _comply_antpol(p2))]
+    """Joins antenna polarization strings (pyuvdata's jstr) into
+    visibility polarization string (pyuvdata's polstr)."""
+    return JOIN_POL[(_comply_antpol(p1), _comply_antpol(p2))]
 
 
 def comply_pol(pol):
-    '''Maps an input (visibility or antenna) polarization string onto a string
-    compliant with pyuvdata and hera_cal.'''
+    """Maps an input (visibility or antenna) polarization string onto a string
+    compliant with pyuvdata and hera_cal."""
     try:
         return _comply_vispol(pol)
     except KeyError:  # happens if we have an antpol, not vispol
@@ -124,19 +152,19 @@ def comply_pol(pol):
 
 
 def split_bl(bl):
-    '''Splits a (i,j,pol) baseline key into ((i,pi),(j,pj)), where pol=pi+pj.'''
+    """Splits a (i,j,pol) baseline key into ((i,pi),(j,pj)), where pol=pi+pj."""
     pi, pj = split_pol(bl[2])
     return ((bl[0], pi), (bl[1], pj))
 
 
 def join_bl(ai, aj):
-    '''Joins two (i,pi) antenna keys to make a (i,j,pol) baseline key.'''
+    """Joins two (i,pi) antenna keys to make a (i,j,pol) baseline key."""
     return (ai[0], aj[0], join_pol(ai[1], aj[1]))
 
 
 def reverse_bl(bl):
-    '''Reverses a (i,j) or (i,j,pol) baseline key to make (j,i)
-    or (j,i,pol[::-1]), respectively.'''
+    """Reverses a (i,j) or (i,j,pol) baseline key to make (j,i)
+    or (j,i,pol[::-1]), respectively."""
     i, j = bl[:2]
     if len(bl) == 2:
         return (j, i)
@@ -145,8 +173,8 @@ def reverse_bl(bl):
 
 
 def comply_bl(bl):
-    '''Translates an input (i,j,pol) baseline to ensure pol is compliant with
-    pyuvdata and hera_cal. Inputs of length 2, e.g. (i,j) are unmodified.'''
+    """Translates an input (i,j,pol) baseline to ensure pol is compliant with
+    pyuvdata and hera_cal. Inputs of length 2, e.g. (i,j) are unmodified."""
     if len(bl) == 2:
         return bl
     else:
@@ -155,8 +183,8 @@ def comply_bl(bl):
 
 
 def make_bl(*args):
-    '''Create an (i,j,pol) baseline key that is compliant with pyuvdata
-    and hera_cal.  Accepts (bl, pol) or (i, j, pol) as input.'''
+    """Create an (i,j,pol) baseline key that is compliant with pyuvdata
+    and hera_cal.  Accepts (bl, pol) or (i, j, pol) as input."""
     if len(args) == 1:
         args = args[0]  # this handles the case where the input is a tuple
     if len(args) == 2:
@@ -166,8 +194,16 @@ def make_bl(*args):
     return (i, j, _comply_vispol(pol))
 
 
-def filter_bls(bls, ants=None, ex_ants=None, pols=None, antpos=None, min_bl_cut=None, max_bl_cut=None):
-    '''Filter a list of baseline tuples on one of more of the following criteria.
+def filter_bls(
+    bls,
+    ants=None,
+    ex_ants=None,
+    pols=None,
+    antpos=None,
+    min_bl_cut=None,
+    max_bl_cut=None,
+):
+    """Filter a list of baseline tuples on one of more of the following criteria.
 
     Arguments:
         bls: list of baseline tuples like (0, 1, 'ee')
@@ -181,11 +217,13 @@ def filter_bls(bls, ants=None, ex_ants=None, pols=None, antpos=None, min_bl_cut=
 
     Returns:
         filtered_bls: list of baseline tuples like (0, 1, 'ee'), a subset of bls
-    '''
+    """
     filtered_bls = []
 
     if (min_bl_cut is not None) or (max_bl_cut is not None):
-        assert antpos is not None, 'antpos must be passed in if min_bl_cut or max_bl_cut is specified.'
+        assert (
+            antpos is not None
+        ), "antpos must be passed in if min_bl_cut or max_bl_cut is specified."
 
     for bl in bls:
         ant1, ant2 = split_bl(bl)
@@ -268,7 +306,7 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     # XXX is edge_cut ever used?
     if edge_cut > 0:
         assert 2 * edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
-        dw = dw[:, edge_cut:(-edge_cut + 1)]
+        dw = dw[:, edge_cut : (-edge_cut + 1)]
     dw[np.isnan(dw)] = 0
     fftfreqs = np.fft.fftfreq(dw.shape[1], df)
     dtau = fftfreqs[1] - fftfreqs[0]
@@ -284,24 +322,26 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     fSlice = slice(edge_cut, len(freqs) - edge_cut)
     offset = np.angle(
         np.sum(
-            wgts[:, fSlice] * data[:, fSlice] * np.exp(
-                -np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)
-            ),
-            axis=1, keepdims=True
-        ) / np.sum(wgts[:, fSlice], axis=1, keepdims=True)
+            wgts[:, fSlice]
+            * data[:, fSlice]
+            * np.exp(-np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)),
+            axis=1,
+            keepdims=True,
+        )
+        / np.sum(wgts[:, fSlice], axis=1, keepdims=True)
     )
 
     return dlys, offset
 
 
 def quinn_tau(x):
-    '''Quinn subgrid interpolation parameter (see https://ieeexplore.ieee.org/document/558515)'''
-    t = .25 * np.log(3 * x**2 + 6 * x + 1)
-    t -= 6**.5 / 24 * np.log((x + 1 - (2 / 3)**.5) / (x + 1 + (2 / 3)**.5))
+    """Quinn subgrid interpolation parameter (see https://ieeexplore.ieee.org/document/558515)"""
+    t = 0.25 * np.log(3 * x**2 + 6 * x + 1)
+    t -= 6**0.5 / 24 * np.log((x + 1 - (2 / 3) ** 0.5) / (x + 1 + (2 / 3) ** 0.5))
     return t
 
 
-def interp_peak(data, method='quinn', reject_edges=False):
+def interp_peak(data, method="quinn", reject_edges=False):
     """
     Spectral interpolation for finding peak and amplitude of data along last axis.
 
@@ -342,8 +382,10 @@ def interp_peak(data, method='quinn', reject_edges=False):
                 dabs[i, ncut:] = 0.0
 
     # get argmaxes along last axis
-    if method not in ('quinn', 'quadratic'):
-        raise ValueError("'{}' is not a recognized peak interpolation method.".format(method))
+    if method not in ("quinn", "quadratic"):
+        raise ValueError(
+            "'{}' is not a recognized peak interpolation method.".format(method)
+        )
 
     indices = np.argmax(dabs, axis=-1)
     peaks = data[range(N1), indices]
@@ -353,24 +395,30 @@ def interp_peak(data, method='quinn', reject_edges=False):
     k1 = data[range(N1), indices]
     k2 = data[range(N1), (indices + 1) % N2]
 
-    if method == 'quinn':
+    if method == "quinn":
         alpha1 = (k0 / k1).real
         alpha2 = (k2 / k1).real
         delta1 = alpha1 / (1 - alpha1)
         delta2 = -alpha2 / (1 - alpha2)
-        d = (delta1 + delta2) / 2 + quinn_tau(delta1 ** 2) - quinn_tau(delta2 ** 2)
-        d[~np.isfinite(d)] = 0.
+        d = (delta1 + delta2) / 2 + quinn_tau(delta1**2) - quinn_tau(delta2**2)
+        d[~np.isfinite(d)] = 0.0
 
         numerator_ck = np.exp(2.0j * np.pi * d) - 1
-        ck = np.array([np.true_divide(numerator_ck, 2.0j * np.pi * (d - k),
-                                      where=~(d == 0)) for k in [-1, 0, 1]])
-        rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck ** 2))
+        ck = np.array(
+            [
+                np.true_divide(numerator_ck, 2.0j * np.pi * (d - k), where=~(d == 0))
+                for k in [-1, 0, 1]
+            ]
+        )
+        rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck**2))
         rho[d == 0] = np.abs(k1[d == 0])
         return indices, d, np.abs(peaks), rho
 
-    elif method == 'quadratic':
-        denom = (k0 - 2 * k1 + k2)
-        bin_shifts = 0.5 * np.true_divide((k0 - k2), denom, where=~np.isclose(denom, 0.0))
+    elif method == "quadratic":
+        denom = k0 - 2 * k1 + k2
+        bin_shifts = 0.5 * np.true_divide(
+            (k0 - k2), denom, where=~np.isclose(denom, 0.0)
+        )
         new_peaks = k1 - 0.25 * (k0 - k2) * bin_shifts
         return indices, bin_shifts, peaks, new_peaks
 
@@ -380,23 +428,24 @@ def echo(message, type=0, verbose=True):
         if type == 0:
             print(message)
         elif type == 1:
-            print('')
+            print("")
             print(message)
             print("-" * 40)
 
 
 if AIPY:
+
     class AntennaArray(aipy.pol.AntennaArray):
         def __init__(self, *args, **kwargs):
             aipy.pol.AntennaArray.__init__(self, *args, **kwargs)
-            self.antpos_ideal = kwargs.pop('antpos_ideal')
+            self.antpos_ideal = kwargs.pop("antpos_ideal")
             # yes, this is a thing. cm per meter
-            self.cm_p_m = 100.
+            self.cm_p_m = 100.0
 
         def update(self):
             aipy.pol.AntennaArray.update(self)
 
-        def get_params(self, ant_prms={'*': '*'}):
+        def get_params(self, ant_prms={"*": "*"}):
             try:
                 prms = aipy.pol.AntennaArray.get_params(self, ant_prms)
             except IndexError:
@@ -409,23 +458,27 @@ if AIPY:
                 ant_changed = False
                 top_pos = np.dot(self._eq2zen, ant.pos)
                 try:
-                    top_pos[0] = prms[str(i)]['top_x']
+                    top_pos[0] = prms[str(i)]["top_x"]
                     ant_changed = True
                 except KeyError:
                     pass
                 try:
-                    top_pos[1] = prms[str(i)]['top_y']
+                    top_pos[1] = prms[str(i)]["top_y"]
                     ant_changed = True
                 except KeyError:
                     pass
                 try:
-                    top_pos[2] = prms[str(i)]['top_z']
+                    top_pos[2] = prms[str(i)]["top_z"]
                     ant_changed = True
                 except KeyError:
                     pass
                 if ant_changed:
                     # rotate from zenith to equatorial, convert from meters to ns
-                    ant.pos = np.dot(np.linalg.inv(self._eq2zen), top_pos) / aipy.const.len_ns * self.cm_p_m
+                    ant.pos = (
+                        np.dot(np.linalg.inv(self._eq2zen), top_pos)
+                        / aipy.const.len_ns
+                        * self.cm_p_m
+                    )
                 changed |= ant_changed
             if changed:
                 self.update()
@@ -433,7 +486,7 @@ if AIPY:
 
 
 def get_aa_from_uv(uvd, freqs=[0.15]):
-    '''
+    """
     Generate an AntennaArray object from a pyuvdata UVData object.
 
     This function creates an AntennaArray object from the metadata
@@ -457,7 +510,7 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     ====================
     aa: AntennaArray object that can be used to calculate redundancies from
        antenna positions.
-    '''
+    """
     assert AIPY, "you need aipy to run this function"
     # center of array values from file
     cofa_lat, cofa_lon, cofa_alt = uvd.telescope_location_lat_lon_alt
@@ -469,37 +522,48 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
         # we need to add the CofA location to the relative coordinates
         pos = uvd.antenna_positions[i, :] + uvd.telescope_location
         # convert from meters to nanoseconds
-        c_ns = const.c.to('m/ns').value
+        c_ns = const.c.to("m/ns").value
         pos = pos / c_ns
 
         # rotate from ECEF -> rotECEF
         rotECEF = uvutils.rotECEF_from_ECEF(pos, cofa_lon)
 
         # make a dict for parameter-setting purposes later
-        antpos[antnum] = {'x': rotECEF[0], 'y': rotECEF[1], 'z': rotECEF[2]}
+        antpos[antnum] = {"x": rotECEF[0], "y": rotECEF[1], "z": rotECEF[2]}
 
     # make antpos_ideal array
     nants = np.max(list(antpos.keys())) + 1
     antpos_ideal = np.zeros(shape=(nants, 3), dtype=float) - 1
     # unpack from dict -> numpy array
     for k in list(antpos.keys()):
-        antpos_ideal[k, :] = np.array([antpos[k]['x'], antpos[k]['y'], antpos[k]['z']])
+        antpos_ideal[k, :] = np.array([antpos[k]["x"], antpos[k]["y"], antpos[k]["z"]])
     freqs = np.asarray(freqs)
     # Make list of antennas.
     # These are values for a zenith-pointing antenna, with a dummy Gaussian beam.
     antennas = []
     for i in range(nants):
         beam = aipy.fit.Beam(freqs)
-        phsoff = {'x': [0., 0.], 'y': [0., 0.]}
-        amp = 1.
-        amp = {'x': amp, 'y': amp}
-        bp_r = [1.]
-        bp_r = {'x': bp_r, 'y': bp_r}
-        bp_i = [0., 0., 0.]
-        bp_i = {'x': bp_i, 'y': bp_i}
-        twist = 0.
-        antennas.append(aipy.pol.Antenna(0., 0., 0., beam, phsoff=phsoff,
-                                         amp=amp, bp_r=bp_r, bp_i=bp_i, pointing=(0., np.pi / 2, twist)))
+        phsoff = {"x": [0.0, 0.0], "y": [0.0, 0.0]}
+        amp = 1.0
+        amp = {"x": amp, "y": amp}
+        bp_r = [1.0]
+        bp_r = {"x": bp_r, "y": bp_r}
+        bp_i = [0.0, 0.0, 0.0]
+        bp_i = {"x": bp_i, "y": bp_i}
+        twist = 0.0
+        antennas.append(
+            aipy.pol.Antenna(
+                0.0,
+                0.0,
+                0.0,
+                beam,
+                phsoff=phsoff,
+                amp=amp,
+                bp_r=bp_r,
+                bp_i=bp_i,
+                pointing=(0.0, np.pi / 2, twist),
+            )
+        )
 
     # Make the AntennaArray and set position parameters
     aa = AntennaArray(location, antennas, antpos_ideal=antpos_ideal)
@@ -510,7 +574,12 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     return aa
 
 
-def JD2LST(JD, latitude=-30.721526120689507, longitude=21.428303826863015, altitude=1051.690000018105):
+def JD2LST(
+    JD,
+    latitude=-30.721526120689507,
+    longitude=21.428303826863015,
+    altitude=1051.690000018105,
+):
     """
     Input:
     ------
@@ -549,8 +618,15 @@ def JD2LST(JD, latitude=-30.721526120689507, longitude=21.428303826863015, altit
         return LST[0]
 
 
-def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30.721526120689507,
-           longitude=21.428303826863015, altitude=1051.690000018105):
+def LST2JD(
+    LST,
+    start_jd,
+    allow_other_jd=False,
+    lst_branch_cut=0.0,
+    latitude=-30.721526120689507,
+    longitude=21.428303826863015,
+    altitude=1051.690000018105,
+):
     """
     Convert Local Apparent Sidereal Time -> Julian Date via a linear fit
     at the 'start_JD' anchor point.
@@ -593,9 +669,15 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
     # create interpolator for a given start date that puts the lst_branch_cut on start_jd
     jd_grid = start_jd + np.linspace(-1, 2, 31)  # include previous and next days
     while True:
-        lst_grid = (JD2LST(jd_grid, latitude=latitude, longitude=longitude, altitude=altitude))
-        interpolator = interpolate.interp1d(np.unwrap(lst_grid - 2 * np.pi), jd_grid,
-                                            kind='linear', fill_value='extrapolate')
+        lst_grid = JD2LST(
+            jd_grid, latitude=latitude, longitude=longitude, altitude=altitude
+        )
+        interpolator = interpolate.interp1d(
+            np.unwrap(lst_grid - 2 * np.pi),
+            jd_grid,
+            kind="linear",
+            fill_value="extrapolate",
+        )
         if np.floor(interpolator(lst_branch_cut)) > np.floor(start_jd):
             jd_grid -= unt.sday.to(unt.day)
 
@@ -629,7 +711,9 @@ def LST2JD(LST, start_jd, allow_other_jd=False, lst_branch_cut=0.0, latitude=-30
         return jd_array[0]
 
 
-def JD2RA(JD, latitude=-30.721526120689507, longitude=21.428303826863015, epoch='current'):
+def JD2RA(
+    JD, latitude=-30.721526120689507, longitude=21.428303826863015, epoch="current"
+):
     """
     Convert from Julian date to Equatorial Right Ascension at zenith
     during a specified epoch.
@@ -665,17 +749,18 @@ def JD2RA(JD, latitude=-30.721526120689507, longitude=21.428303826863015, epoch=
 
     # iterate over jd
     for jd in JD:
-
         # use current epoch calculation
-        if epoch == 'current':
+        if epoch == "current":
             ra = JD2LST(jd, longitude=longitude) * 180 / np.pi
             RA.append(ra)
 
         # use J2000 epoch
-        elif epoch == 'J2000':
+        elif epoch == "J2000":
             loc = crd.EarthLocation(lat=latitude * unt.deg, lon=longitude * unt.deg)
-            t = Time(jd, format='jd', scale='utc')
-            zen = crd.SkyCoord(frame='altaz', alt=90 * unt.deg, az=0 * unt.deg, obstime=t, location=loc)
+            t = Time(jd, format="jd", scale="utc")
+            zen = crd.SkyCoord(
+                frame="altaz", alt=90 * unt.deg, az=0 * unt.deg, obstime=t, location=loc
+            )
             RA.append(zen.icrs.ra.degree)
 
         else:
@@ -722,7 +807,7 @@ def get_sun_alt(jds, latitude=-30.721526120689507, longitude=21.428303826863015)
     a = crd.AltAz(location=e)
 
     # get Sun locations
-    alts = crd.get_sun(Time(jds, format='jd')).transform_to(a).alt.value
+    alts = crd.get_sun(Time(jds, format="jd")).transform_to(a).alt.value
 
     if array:
         return alts
@@ -730,7 +815,9 @@ def get_sun_alt(jds, latitude=-30.721526120689507, longitude=21.428303826863015)
         return alts[0]
 
 
-def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
+def combine_calfits(
+    files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True
+):
     """
     multiply together multiple calfits gain solutions (overlapping in time and frequency)
 
@@ -788,13 +875,13 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
 
 
 def lst_rephase(
-    data: 'DataContainer' | np.ndarray,
+    data: "DataContainer" | np.ndarray,
     bls: dict[tp.Baseline, np.ndarray] | np.ndarray,
     freqs: np.ndarray,
     dlst: float | list | np.ndarray,
     lat=-30.721526120689507,
     inplace=True,
-    array=False
+    array=False,
 ):
     """
     Shift phase center of each integration in data by amount dlst [radians] along right
@@ -857,7 +944,7 @@ def lst_rephase(
 
     # get new s-hat vector
     s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
-    s_diff_over_c = (s_prime - np.array([0., 0., 1.0])) / const.c.value
+    s_diff_over_c = (s_prime - np.array([0.0, 0.0, 1.0])) / const.c.value
 
     orig_type = type(data)
 
@@ -897,7 +984,7 @@ def lst_rephase(
         else:
             blvecs = np.atleast_2d(bls)
 
-            if hasattr(dlst, '__len__'):
+            if hasattr(dlst, "__len__"):
                 assert data.shape[0] == len(dlst)
 
             if array:
@@ -943,8 +1030,19 @@ def lst_rephase(
                     return data
 
 
-def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_antpol=False,
-          reds=None, chisq=None, nObs=None, chisq_per_ant=None, nObs_per_ant=None):
+def chisq(
+    data,
+    model,
+    data_wgts=None,
+    gains=None,
+    gain_flags=None,
+    split_by_antpol=False,
+    reds=None,
+    chisq=None,
+    nObs=None,
+    chisq_per_ant=None,
+    nObs_per_ant=None,
+):
     """Computes chi^2 defined as:
 
     chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)|^2 * wgts_ij)
@@ -1004,14 +1102,16 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
             chisq = np.zeros(list(data.values())[0].shape, dtype=float)
             nObs = np.zeros(list(data.values())[0].shape, dtype=int)
     elif (chisq is None) ^ (nObs is None):
-        raise ValueError('Both chisq and nObs must be specified or nor neither can be.')
+        raise ValueError("Both chisq and nObs must be specified or nor neither can be.")
 
     # build containers for chisq_per_ant and nObs_per_ant if not supplied
     if chisq_per_ant is None and nObs_per_ant is None:
         chisq_per_ant = {}
         nObs_per_ant = {}
     elif (chisq_per_ant is None) ^ (nObs_per_ant is None):
-        raise ValueError('Both chisq_per_ant and nObs_per_ant must be specified or nor neither can be.')
+        raise ValueError(
+            "Both chisq_per_ant and nObs_per_ant must be specified or nor neither can be."
+        )
 
     # if data_wgts is unspecified, make it 1.0
     if data_wgts is None:
@@ -1050,7 +1150,9 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
             nObs_from_wgts = np.array(wgts > 0, dtype=int)
 
             # calculate chi^2
-            chisq_here = np.asarray(np.abs(model_here - data[bl]) ** 2 * wgts, dtype=np.float64)
+            chisq_here = np.asarray(
+                np.abs(model_here - data[bl]) ** 2 * wgts, dtype=np.float64
+            )
             if split_by_antpol:
                 if ap1 in chisq:
                     assert ap1 in nObs
@@ -1062,7 +1164,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
                     nObs[ap1] = nObs_from_wgts
             else:
                 chisq += chisq_here
-                nObs += (wgts > 0)
+                nObs += wgts > 0
 
             # assign chisq and observations to both chisq_per_ant and nObs_per_ant
             for ant in [ant1, ant2]:
@@ -1096,11 +1198,10 @@ def per_antenna_modified_z_scores(metric):
     zscores = {}
     antpols = set([key[1] for key in metric])
     for antpol in antpols:
-        values = np.array([val for (key, val) in metric.items()
-                           if key[1] == antpol])
+        values = np.array([val for (key, val) in metric.items() if key[1] == antpol])
         median = np.nanmedian(values)
         medAbsDev = np.nanmedian(np.abs(values - median))
-        for (key, val) in metric.items():
+        for key, val in metric.items():
             if key[1] == antpol:
                 # this factor makes it comparable to a
                 # standard z-score for gaussian data
@@ -1108,8 +1209,18 @@ def per_antenna_modified_z_scores(metric):
     return zscores
 
 
-def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
-                kernel=None, Nmirror=0, optimizer=None, xthin=None):
+def gp_interp1d(
+    x,
+    y,
+    x_eval=None,
+    flags=None,
+    length_scale=1.0,
+    nl=1e-10,
+    kernel=None,
+    Nmirror=0,
+    optimizer=None,
+    xthin=None,
+):
     """
     Gaussian Process interpolation.
 
@@ -1162,10 +1273,14 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
 
     # setup kernel
     if kernel is None:
-        kernel = 1**2 * gp.kernels.RBF(length_scale=length_scale) + gp.kernels.WhiteKernel(noise_level=nl)
+        kernel = 1**2 * gp.kernels.RBF(
+            length_scale=length_scale
+        ) + gp.kernels.WhiteKernel(noise_level=nl)
 
     # initialize GP
-    GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=False, copy_X_train=False)
+    GP = gp.GaussianProcessRegressor(
+        kernel=kernel, optimizer=optimizer, normalize_y=False, copy_X_train=False
+    )
 
     # get flags
     if flags is None:
@@ -1181,9 +1296,19 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
     # mirror if desired
     if Nmirror > 0:
         assert Nmirror < x.size, "Nmirror can't be equal or larger than x"
-        x = np.pad(x, Nmirror, mode='reflect', reflect_type='odd')
-        y = np.concatenate([y[1:Nmirror + 1, :][::-1, :], y, y[-Nmirror - 1:-1, :][::-1, :]], axis=0)
-        flags = np.concatenate([flags[1:Nmirror + 1, :][::-1, :], flags, flags[-Nmirror - 1:-1, :][::-1, :]], axis=0)
+        x = np.pad(x, Nmirror, mode="reflect", reflect_type="odd")
+        y = np.concatenate(
+            [y[1 : Nmirror + 1, :][::-1, :], y, y[-Nmirror - 1 : -1, :][::-1, :]],
+            axis=0,
+        )
+        flags = np.concatenate(
+            [
+                flags[1 : Nmirror + 1, :][::-1, :],
+                flags,
+                flags[-Nmirror - 1 : -1, :][::-1, :],
+            ],
+            axis=0,
+        )
 
     # setup training values
     X = x.reshape(-1, 1)
@@ -1230,7 +1355,11 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
                 # pick out unflagged data for training
                 GP.fit(X[select, :], _y[select, :][:, inds])
                 # insert predicted data at x_eval points into output vector
-                ypred[:, inds] = GP.predict(x_eval).reshape(x_eval.shape[0], len(inds)) * ymad[:, inds] + ymed[:, inds]
+                ypred[:, inds] = (
+                    GP.predict(x_eval).reshape(x_eval.shape[0], len(inds))
+                    * ymad[:, inds]
+                    + ymed[:, inds]
+                )
 
         # append
         ypredict.append(ypred)
@@ -1269,27 +1398,43 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
         denom = old_gains
     relative_diff = {}
     for ant in new_gains:
-        assert ~np.any(denom[ant] == 0) or np.all(np.where(np.isclose(np.abs(denom[ant]), 0.0), flags[ant], True))
-        relative_diff[ant] = np.true_divide(np.abs(old_gains[ant] - new_gains[ant]), np.abs(denom[ant]),
-                                            where=~np.isclose(np.abs(denom[ant]), 0))
+        assert ~np.any(denom[ant] == 0) or np.all(
+            np.where(np.isclose(np.abs(denom[ant]), 0.0), flags[ant], True)
+        )
+        relative_diff[ant] = np.true_divide(
+            np.abs(old_gains[ant] - new_gains[ant]),
+            np.abs(denom[ant]),
+            where=~np.isclose(np.abs(denom[ant]), 0),
+        )
 
     # compute average relative diff over all antennas for each polarizations separately
     avg_relative_diff = {}
     pols = set([ant[1] for ant in new_gains])
     for pol in pols:
-        diffs = {ant: copy.deepcopy(relative_diff[ant]) for ant in new_gains if ant[1] == pol}
+        diffs = {
+            ant: copy.deepcopy(relative_diff[ant]) for ant in new_gains if ant[1] == pol
+        }
         for ant in diffs:
             diffs[ant][flags[ant]] = np.nan
         avg_relative_diff[pol] = np.nanmean(list(diffs.values()), axis=0)
-        avg_relative_diff[pol][~np.isfinite(avg_relative_diff[pol])] = 0.0  # if completely flagged
+        avg_relative_diff[pol][
+            ~np.isfinite(avg_relative_diff[pol])
+        ] = 0.0  # if completely flagged
 
     return relative_diff, avg_relative_diff
 
 
-def red_average(data, reds=None, bl_tol=1.0, inplace=False,
-                wgts=None, flags=None, nsamples=None,
-                red_bl_keys=None,
-                propagate_flags=False):
+def red_average(
+    data,
+    reds=None,
+    bl_tol=1.0,
+    inplace=False,
+    wgts=None,
+    flags=None,
+    nsamples=None,
+    red_bl_keys=None,
+    propagate_flags=False,
+):
     """
     Redundantly average visibilities in a DataContainer, HERAData or UVData object.
     Average is weighted by integration_time * nsamples * ~flags unless wgts are fed.
@@ -1349,16 +1494,27 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             flags = copy.deepcopy(flags)
             nsamples = copy.deepcopy(nsamples)
         if flags is None:
-            flags = datacontainer.DataContainer({k: np.zeros_like(data[k], bool) for k in data})
+            flags = datacontainer.DataContainer(
+                {k: np.zeros_like(data[k], bool) for k in data}
+            )
         if nsamples is None:
-            nsamples = datacontainer.DataContainer({k: np.ones_like(data[k], float) for k in data})
+            nsamples = datacontainer.DataContainer(
+                {k: np.ones_like(data[k], float) for k in data}
+            )
 
     # get weights: if wgts are not fed, then use flags and nsamples
     if wgts is None:
         if fed_container:
-            wgts = datacontainer.DataContainer({k: nsamples[k] * ~flags[k] for k in data})
+            wgts = datacontainer.DataContainer(
+                {k: nsamples[k] * ~flags[k] for k in data}
+            )
         else:
-            wgts = datacontainer.DataContainer({k: data.get_nsamples(k) * ~data.get_flags(k) for k in data.get_antpairpols()})
+            wgts = datacontainer.DataContainer(
+                {
+                    k: data.get_nsamples(k) * ~data.get_flags(k)
+                    for k in data.get_antpairpols()
+                }
+            )
 
     # deepcopy
     if not inplace:
@@ -1368,14 +1524,19 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     if fed_container:
         pols = sorted(data.pols())
     else:
-        pols = [polnum2str(pol, x_orientation=data.x_orientation) for pol in data.polarization_array]
+        pols = [
+            polnum2str(pol, x_orientation=data.x_orientation)
+            for pol in data.polarization_array
+        ]
 
     # get redundant groups
     if reds is None:
         # if DataContainer, check for antpos
         if fed_container:
-            if not hasattr(data, 'antpos') or data.antpos is None:
-                raise ValueError("DataContainer must have antpos dictionary to calculate reds")
+            if not hasattr(data, "antpos") or data.antpos is None:
+                raise ValueError(
+                    "DataContainer must have antpos dictionary to calculate reds"
+                )
             antposd = data.antpos
         else:
             antpos, ants = data.get_ENU_antpos()
@@ -1387,7 +1548,9 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
         antpairs = sorted(data.antpairs())
     else:
         antpairs = data.get_antpairs()
-    reds = [[bl for bl in blg if bl in antpairs or bl[::-1] in antpairs] for blg in reds]
+    reds = [
+        [bl for bl in blg if bl in antpairs or bl[::-1] in antpairs] for blg in reds
+    ]
     reds = [blg for blg in reds if len(blg) > 0]
 
     # iterate over redundant groups and polarizations
@@ -1406,7 +1569,9 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
 
             else:
                 d = np.asarray([data.get_data(bl + (pol,)) for bl in blg])
-                f = np.asarray([(~data.get_flags(bl + (pol,))).astype(float) for bl in blg])
+                f = np.asarray(
+                    [(~data.get_flags(bl + (pol,))).astype(float) for bl in blg]
+                )
                 n = np.asarray([data.get_nsamples(bl + (pol,)) for bl in blg])
                 tint = []
                 for bl in blg:
@@ -1422,11 +1587,19 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             # set flagged data to 1.0+0.0j
             flagged_f = np.all(f == 0, axis=0)
             davg[flagged_f] = 1.0
-            fmax = np.max(f, axis=2)  # collapse along freq: marks any fully flagged integrations
-            if tint.squeeze().ndim == 1:  # tint.squeeze() can be one-dimensional if we have one time sample in our data.
-                iavg = np.sum(tint.squeeze()[:, None] * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
+            fmax = np.max(
+                f, axis=2
+            )  # collapse along freq: marks any fully flagged integrations
+            if (
+                tint.squeeze().ndim == 1
+            ):  # tint.squeeze() can be one-dimensional if we have one time sample in our data.
+                iavg = np.sum(tint.squeeze()[:, None] * fmax, axis=0) / np.sum(
+                    fmax, axis=0
+                ).clip(1e-10, np.inf)
             else:
-                iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
+                iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(
+                    fmax, axis=0
+                ).clip(1e-10, np.inf)
 
             binary_wgts = (~np.isclose(w, 0)).astype(float)  # binary weights.
             navg = np.sum(n * binary_wgts, axis=0)
@@ -1456,7 +1629,9 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     # select out averaged bls
     bls = [blk + (pol,) for pol in pols for blk in red_bl_keys]
     if fed_container:
-        to_del = [bl for bl in data.keys() if bl not in bls and reverse_bl(bl) not in bls]
+        to_del = [
+            bl for bl in data.keys() if bl not in bls and reverse_bl(bl) not in bls
+        ]
         del data[to_del], flags[to_del], nsamples[to_del]
     else:
         data.select(bls=bls)
@@ -1538,7 +1713,7 @@ def match_files_to_lst_bins(
     meta = FastUVH5Meta(
         file_list[0],
         blts_are_rectangular=blts_are_rectangular,
-        time_axis_faster_than_bls=time_axis_faster_than_bls
+        time_axis_faster_than_bls=time_axis_faster_than_bls,
     )
     if blts_are_rectangular is None:
         blts_are_rectangular = meta.blts_are_rectangular
@@ -1549,8 +1724,9 @@ def match_files_to_lst_bins(
         FastUVH5Meta(
             fl,
             blts_are_rectangular=blts_are_rectangular,
-            time_axis_faster_than_bls=time_axis_faster_than_bls
-        ) for fl in file_list
+            time_axis_faster_than_bls=time_axis_faster_than_bls,
+        )
+        for fl in file_list
     ]
 
     # Ensure lst-edges are always ascending, and stay within a range of 2pi
@@ -1563,17 +1739,23 @@ def match_files_to_lst_bins(
     lst_edges[1:][lst_edges[1:] == lst_edges[0]] += 2 * np.pi
 
     if np.any(np.diff(lst_edges) < 0):
-        raise ValueError("lst_edges must not extend beyond 2pi total radians from start to finish.")
+        raise ValueError(
+            "lst_edges must not extend beyond 2pi total radians from start to finish."
+        )
 
     lstmin, lstmax = lst_edges[0], lst_edges[-1]
 
     # The files in the list MUST NOT wrap around in LST, i.e.
     # there is 24 hours or less of time in the files.
     if metadata_list[-1].times[-1] < metadata_list[0].times[0]:
-        raise ValueError("After sorting, the last file in the list is is before the first.")
+        raise ValueError(
+            "After sorting, the last file in the list is is before the first."
+        )
 
     if metadata_list[-1].times[-1] > meta.times[0] + 1.0:
-        raise ValueError("The input files span greater than 24 hours, cannot use this function. Use match_times instead.")
+        raise ValueError(
+            "The input files span greater than 24 hours, cannot use this function. Use match_times instead."
+        )
 
     jd_edges = LST2JD(
         np.array(lst_edges),
@@ -1679,7 +1861,9 @@ def match_files_to_lst_bins(
 
     # Now, we have to actually go through the bins in lst_edges and assign files.
     lstbin_files = [[] for _ in range(len(lst_edges) - 1)]
-    _meta_list = metadata_list[first_file:] + metadata_list[:first_file]  # roll the files
+    _meta_list = (
+        metadata_list[first_file:] + metadata_list[:first_file]
+    )  # roll the files
 
     for i, fl in enumerate(_meta_list):
         thistime = get_first_time(fl.path)
@@ -1687,7 +1871,10 @@ def match_files_to_lst_bins(
         for lstbin, (jdstart, jdend) in enumerate(zip(jd_edges[:-1], jd_edges[1:])):
             # Go through each lst bin
             cmp = operator.and_ if (jdstart < jdend) else operator.or_
-            if cmp(jdstart - (ntimes_per_file - 1) * tint - atol <= thistime, thistime < jdend + atol):
+            if cmp(
+                jdstart - (ntimes_per_file - 1) * tint - atol <= thistime,
+                thistime < jdend + atol,
+            ):
                 lstbin_files[lstbin].append(fl)
             fl_in_range = True
 
@@ -1707,9 +1894,13 @@ def eq2top_m(ha, dec):
     Borrowed from pyuvdata which borrowed from aipy"""
     sin_H, cos_H = np.sin(ha), np.cos(ha)
     sin_d, cos_d = np.sin(dec), np.cos(dec)
-    mat = np.array([[sin_H, cos_H, np.zeros_like(ha)],
-                    [-sin_d * cos_H, sin_d * sin_H, cos_d],
-                    [cos_d * cos_H, -cos_d * sin_H, sin_d]])
+    mat = np.array(
+        [
+            [sin_H, cos_H, np.zeros_like(ha)],
+            [-sin_d * cos_H, sin_d * sin_H, cos_d],
+            [cos_d * cos_H, -cos_d * sin_H, sin_d],
+        ]
+    )
     if len(mat.shape) == 3:
         mat = mat.transpose([2, 0, 1])
     return mat
@@ -1726,9 +1917,13 @@ def top2eq_m(ha, dec):
     Borrowed from pyuvdata."""
     sin_H, cos_H = np.sin(ha), np.cos(ha)
     sin_d, cos_d = np.sin(dec), np.cos(dec)
-    mat = np.array([[sin_H, -cos_H * sin_d, cos_d * cos_H],
-                    [cos_H, sin_d * sin_H, -cos_d * sin_H],
-                    [np.zeros_like(ha), cos_d, sin_d]])
+    mat = np.array(
+        [
+            [sin_H, -cos_H * sin_d, cos_d * cos_H],
+            [cos_H, sin_d * sin_H, -cos_d * sin_H],
+            [np.zeros_like(ha), cos_d, sin_d],
+        ]
+    )
     if len(mat.shape) == 3:
         mat = mat.transpose([2, 0, 1])
     return mat
@@ -1765,10 +1960,13 @@ def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
         if len(grp) > max_chunk_size:
             # if red group is larger then the chunk size.
             # then give a warning and treate the red group as a chunk anyways.
-            warnings.warn("Warning: baseline group of length %d encountered with number"
-                          " of baselines exceeding max_chunk_size=%d."
-                          " First baseline is %s"
-                          " Loading group anyways." % (len(reds[group_index]), max_chunk_size, str(reds[group_index][0])))
+            warnings.warn(
+                "Warning: baseline group of length %d encountered with number"
+                " of baselines exceeding max_chunk_size=%d."
+                " First baseline is %s"
+                " Loading group anyways."
+                % (len(reds[group_index]), max_chunk_size, str(reds[group_index][0]))
+            )
             baseline_chunks.append(grp)
         else:
             # if baseline_chunks is empty, initialize the first chunk.
@@ -1815,23 +2013,48 @@ def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=Fa
     if spw_ranges is None:
         spw_ranges = [(0, hd.Nfreqs)]
     # read in selected spw_ranges
-    hd.read(inputfilename, freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]))
+    hd.read(
+        inputfilename,
+        freq_chans=np.hstack(
+            [np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]
+        ),
+    )
     hd.write_uvh5(outputfilename, clobber=clobber)
 
 
 def select_spw_ranges_argparser():
-    '''Arg parser for commandline operation of select_spw_ranges.'''
+    """Arg parser for commandline operation of select_spw_ranges."""
+
     def list_of_int_tuples(v):
-        if '~' in v:
-            v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        if "~" in v:
+            v = [tuple([int(_x) for _x in x.split("~")]) for x in v.split(",")]
         else:
             v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         return v
+
     ap = argparse.ArgumentParser(description="Select spw-ranges from a file.")
-    ap.add_argument("inputfilename", type=str, help="path to visibility data to select spw_ranges from.")
-    ap.add_argument("outputfilename", type=str, help="path to spw selected visibility file to write out.")
-    ap.add_argument("--spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections. Two acceptable formats are "
-                                                                                "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
-                                                                                "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
-    ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
+    ap.add_argument(
+        "inputfilename",
+        type=str,
+        help="path to visibility data to select spw_ranges from.",
+    )
+    ap.add_argument(
+        "outputfilename",
+        type=str,
+        help="path to spw selected visibility file to write out.",
+    )
+    ap.add_argument(
+        "--spw_ranges",
+        default=None,
+        type=list_of_int_tuples,
+        help="List of spw channel selections. Two acceptable formats are "
+        "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
+        "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]",
+    )
+    ap.add_argument(
+        "--clobber",
+        default=False,
+        action="store_true",
+        help="overwrites existing file at outfile",
+    )
     return ap

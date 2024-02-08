@@ -255,7 +255,7 @@ def config_lst_bin_files(
 
     nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
     lst_grid = [
-        lst_grid[ntimes_per_file * i: ntimes_per_file * (i + 1)] for i in range(nfiles)
+        lst_grid[ntimes_per_file * i : ntimes_per_file * (i + 1)] for i in range(nfiles)
     ]
 
     # Only keep output files that have data associated

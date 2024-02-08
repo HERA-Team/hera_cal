@@ -2,15 +2,15 @@
 
 This module contains functions that add groups of arguments to an argparse.ArgumentParser.
 For instance, it adds a group of arguments that determine how logging proceeds, and
-also a group of arguments that determine if line-profiling is run, and how. 
+also a group of arguments that determine if line-profiling is run, and how.
 
 What This Module Adds to the Logging Experience
 ===============================================
 See the :func:`setup_logger` function for details on what is added to the logger by
-this module. Note that this function must be called for logging to be altered at all 
-(see the "how to use" section below for details). 
+this module. Note that this function must be called for logging to be altered at all
+(see the "how to use" section below for details).
 
-Note that logging in python is only used if you actually use the ``logging`` module 
+Note that logging in python is only used if you actually use the ``logging`` module
 and make logging statements. To get the most out of this, do the following in all
 ``hera_cal`` modules::
 
@@ -25,7 +25,7 @@ statements::
     logger.error("This is an error message")
     logger.debug("This is a debug message")
 
-By setting the ``--log-level`` argument to a script (that is set up according to the 
+By setting the ``--log-level`` argument to a script (that is set up according to the
 guidelines in this module), you can control how much actually is printed out on any
 given run. Furthermore, the logged messages include extra information, such as the
 current time, the log level of the message, and optionally other info. For example,
@@ -45,9 +45,9 @@ memory, and understanding how much memory scripts are consuming.
 
 What This Module Does for Line-Profiling
 ========================================
-Line-profiling is a way to see how much time is spent in each line of code. This is 
+Line-profiling is a way to see how much time is spent in each line of code. This is
 useful for identifying bottlenecks in code. This module adds the ability to run a
-script with line-profiling, and to save the results to a human-readable file. 
+script with line-profiling, and to save the results to a human-readable file.
 Importantly, it also adds the ability to specify from the command line which functions
 are included in the line-profilng. See :func:`run_with_profiling` for details.
 
@@ -58,7 +58,7 @@ This module is intended to be imported into scripts that use argparse. For insta
 say you have written a script called ``script.py``, with the following contents::
 
     import argparse
-    
+
     # An argument parser for the script. Could be constructed from an imported function.
     parser = argparse.ArgumentParser()
     parser.add_argument("foo", type=int)
@@ -75,7 +75,7 @@ say you have written a script called ``script.py``, with the following contents:
         run_script(**kwargs)
 
 You can add better logging options and line-profiling options to this script simply by
-applying ``parse_args`` to the ``args``, and running the main function through the 
+applying ``parse_args`` to the ``args``, and running the main function through the
 ``run_with_profiling`` function::
 
     import argparse
@@ -131,17 +131,18 @@ import warnings
 
 logger = logging.getLogger(__name__)
 
+
 def setup_logger(
-    level: str = 'INFO', 
-    width: int=160, 
-    show_time_as_diff: bool=True, 
-    rich_tracebacks: bool=True,
+    level: str = "INFO",
+    width: int = 160,
+    show_time_as_diff: bool = True,
+    rich_tracebacks: bool = True,
     show_mem: bool = True,
     mem_backend: Literal["tracemalloc", "psutil"] = "tracemalloc",
     show_path: bool = False,
 ):
     """Setup the logger for hera_cal scripts.
-    
+
     Parameters
     ----------
     level : str, optional
@@ -181,7 +182,7 @@ def setup_logger(
         ],
         force=True,
     )
-    
+
 
 class DeltaTemplate(Template):
     delimiter = "%"
@@ -232,7 +233,7 @@ class LogRender:
     ) -> None:
         """
         A class for rendering a log message.
-        
+
         Parameters
         ----------
         show_time : bool, optional
@@ -324,7 +325,6 @@ class LogRender:
         line_no: int | None = None,
         link_path: str | None = None,
     ) -> Table:
-
         output = Table.grid(padding=(0, 1))
         output.expand = True
         if self.show_time:
@@ -404,7 +404,7 @@ class RicherHandler(RichHandler):
     ):
         """
         A RichHandler that adds memory usage and time difference to the log.
-        
+
         See https://rich.readthedocs.io/en/stable/logging.html for details on the base
         class.
 
@@ -437,39 +437,45 @@ class RicherHandler(RichHandler):
 def add_logging_args(parser: ArgumentParser):
     """
     Add logging arguments to an argparse parser.
-    
+
     All arguments are optional and have sensible defaults. All arguments begin
     with "log-" so they can be easily identified.
     """
     grp = parser.add_argument_group(title="Options for logging")
 
     grp.add_argument(
-        "--log-level", type=str, default='INFO', 
-        choices=['INFO', 'ERROR', 'WARNING', 'CRITICAL', "DEBUG"],
-        help="logging level to display. "
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["INFO", "ERROR", "WARNING", "CRITICAL", "DEBUG"],
+        help="logging level to display. ",
     )
     grp.add_argument(
-        "--log-width", type=int, default=160,
-        help="width of logging output"
+        "--log-width", type=int, default=160, help="width of logging output"
     )
     grp.add_argument(
-        "--log-plain-tracebacks", action='store_true', 
-        help="use plain instead of rich tracebacks"
+        "--log-plain-tracebacks",
+        action="store_true",
+        help="use plain instead of rich tracebacks",
     )
     grp.add_argument(
-        "--log-absolute-time", action='store_true',
-        help="show logger time as absolute instead of relative to start"
+        "--log-absolute-time",
+        action="store_true",
+        help="show logger time as absolute instead of relative to start",
     )
     grp.add_argument(
-        "--log-no-mem", action='store_true', help='do not show memory usage'
+        "--log-no-mem", action="store_true", help="do not show memory usage"
     )
     grp.add_argument(
-        "--log-mem-backend", type=str, default='tracemalloc', choices=['tracemalloc', 'psutil'],
+        "--log-mem-backend",
+        type=str,
+        default="tracemalloc",
+        choices=["tracemalloc", "psutil"],
     )
     grp.add_argument(
-        "--log-show-path", action='store_true', help='show path of code in log msg'
+        "--log-show-path", action="store_true", help="show path of code in log msg"
     )
-        
+
 
 def init_logger_from_args(args):
     """Call :func:`setup_logger` with arguments from an argparse parser."""
@@ -496,6 +502,7 @@ def _add_profile_funcs(profiler, profile_funcs):
                 for att in fnc.split(":")[-1].split("."):
                     _fnc = getattr(_fnc, att)
                 profiler.add_function(_fnc)
+
 
 def run_with_profiling(function: Callable, args: Namespace, *posargs, **kwargs):
     """Run a function with profiling if the user has requested it.
@@ -532,7 +539,7 @@ def run_with_profiling(function: Callable, args: Namespace, *posargs, **kwargs):
         # "path.to.module:Class.method".
         if args.profile_funcs:
             _add_profile_funcs(profiler, args.profile_funcs)
-            
+
         pth = Path(args.profile_output)
         if not pth.parent.exists():
             pth.parent.mkdir(parents=True)
@@ -541,30 +548,34 @@ def run_with_profiling(function: Callable, args: Namespace, *posargs, **kwargs):
 
         with open(pth, "w") as fl:
             profiler.print_stats(stream=fl, stripzeros=True)
-        
+
         return out
 
     else:
         return function(*posargs, **kwargs)
 
+
 def add_profiling_args(parser: ArgumentParser):
     """
     Add profiling arguments to an argparse parser.
-    
+
     All arguments are optional and have sensible defaults. All arguments begin with
     "profile-" so they can be easily identified.
     """
     grp = parser.add_argument_group(title="Options for line-profiling")
 
-    grp.add_argument("--profile", action="store_true",
-                        help="Line-Profile the script")
-    grp.add_argument("--profile-funcs", type=str, default='',
-                        help="List of functions to profile")
-    grp.add_argument("--profile-output", type=str, help="Output file for profiling info.")
+    grp.add_argument("--profile", action="store_true", help="Line-Profile the script")
+    grp.add_argument(
+        "--profile-funcs", type=str, default="", help="List of functions to profile"
+    )
+    grp.add_argument(
+        "--profile-output", type=str, help="Output file for profiling info."
+    )
+
 
 def parse_args(parser: ArgumentParser):
     """Convenience function for setting up CLI goodies from this module.
-    
+
     This function adds both profiling and logging arguments to the parser, parses the
     args, and sets up the logger. It returns the parsed args.
     """
@@ -574,12 +585,13 @@ def parse_args(parser: ArgumentParser):
     init_logger_from_args(args)
     return args
 
+
 def filter_kwargs(kwargs: dict) -> dict:
     """Filter out kwargs that are used for logging and profiling."""
     return {
-        k: v for k, v in kwargs.items() if (
-            k != "profile" and 
-            not k.startswith("profile_") and 
-            not k.startswith("log_")
+        k: v
+        for k, v in kwargs.items()
+        if (
+            k != "profile" and not k.startswith("profile_") and not k.startswith("log_")
         )
     }

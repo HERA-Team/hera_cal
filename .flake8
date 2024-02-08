@@ -6,6 +6,7 @@ ignore =
     W293
     W503
     W601
+    E203
 max-line-length = 88
 exclude =
     development/*

@@ -39,43 +39,42 @@ from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
 
 a = lstbin.lst_bin_arg_parser()
 args = parse_args(a)
-history = ' '.join(sys.argv)
+history = " ".join(sys.argv)
 
 # get kwargs
 kwargs = filter_kwargs(dict(vars(args)))
 
 # configure history
-kwargs['history'] += history
+kwargs["history"] += history
 
 # configure data_files
 data_files = [sorted(glob.glob(s.strip("'").strip('"'))) for s in args.data_files]
-del kwargs['data_files']
+del kwargs["data_files"]
 
 # configure input_cals
-input_cals = kwargs['input_cals']
-del kwargs['input_cals']
+input_cals = kwargs["input_cals"]
+del kwargs["input_cals"]
 if input_cals is not None:
     input_cals = [sorted(glob.glob(s.strip("'").strip('"'))) for s in args.input_cals]
 
 # ensure data_files is a set of nested lists
 if not isinstance(data_files[0], list):
-    raise ValueError("data_files is not a set of nested lists. check input to data_files. See lstbin_run.py doc-string for examples.")
+    raise ValueError(
+        "data_files is not a set of nested lists. check input to data_files. See lstbin_run.py doc-string for examples."
+    )
 
 # configure verbose
-kwargs['verbose'] = kwargs['silence'] is False
-del kwargs['silence']
+kwargs["verbose"] = kwargs["silence"] is False
+del kwargs["silence"]
 
 # configure vis_units
 if args.vis_units is None:
-    del kwargs['vis_units']
+    del kwargs["vis_units"]
 
 # handle output_file_select fed as None
-if kwargs['output_file_select'] == ['None']:
-    del kwargs['output_file_select']
+if kwargs["output_file_select"] == ["None"]:
+    del kwargs["output_file_select"]
 
 run_with_profiling(
-    lstbin.lst_bin_files,
-    args,
-    data_files, input_cals=input_cals, **kwargs
+    lstbin.lst_bin_files, args, data_files, input_cals=input_cals, **kwargs
 )
-

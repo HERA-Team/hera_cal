@@ -8,22 +8,27 @@
 from hera_cal import lstbin_simple as lstbin
 import sys
 import json
-from hera_cal._cli_tools import setup_logger, parse_args, filter_kwargs, run_with_profiling
+from hera_cal._cli_tools import (
+    setup_logger,
+    parse_args,
+    filter_kwargs,
+    run_with_profiling,
+)
 from pathlib import Path
 
 a = lstbin.lst_bin_arg_parser()
 args = parse_args(a)
 
-history = ' '.join(sys.argv)
+history = " ".join(sys.argv)
 
 # get kwargs
 kwargs = filter_kwargs(dict(vars(args)))
 
 
 # configure history
-kwargs['history'] += history
+kwargs["history"] += history
 
-write_kwargs = json.loads(kwargs.pop('write_kwargs'))
+write_kwargs = json.loads(kwargs.pop("write_kwargs"))
 if not write_kwargs:
     write_kwargs = {}
 
@@ -32,14 +37,14 @@ if not isinstance(write_kwargs, dict):
 
 # configure vis_units
 if args.vis_units is None:
-    del kwargs['vis_units']
+    del kwargs["vis_units"]
 
-if 'vis_units' in kwargs:
-    write_kwargs['vis_units'] = kwargs.pop('vis_units')
+if "vis_units" in kwargs:
+    write_kwargs["vis_units"] = kwargs.pop("vis_units")
 
 # handle output_file_select fed as None
-if kwargs['output_file_select'] == ['None']:
-    del kwargs['output_file_select']
+if kwargs["output_file_select"] == ["None"]:
+    del kwargs["output_file_select"]
 
 # Handle calfile rules
 # Turn a list into a list of 2-tuples.
@@ -55,19 +60,21 @@ if inprules is not None:
 else:
     inpaint_rules = None
 
-kwargs['save_channels'] = tuple(int(ch) for ch in kwargs['save_channels'].split(','))
-kwargs['golden_lsts'] = tuple(float(lst) for lst in kwargs['golden_lsts'].split(','))
+kwargs["save_channels"] = tuple(int(ch) for ch in kwargs["save_channels"].split(","))
+kwargs["golden_lsts"] = tuple(float(lst) for lst in kwargs["golden_lsts"].split(","))
 
-kwargs['output_flagged'] = not kwargs.pop('no_flagged_mode')
-kwargs['output_inpainted'] = kwargs.pop("do_inpaint_mode")
-kwargs['sigma_clip_subbands'] = [int(b) for b in kwargs["sigma_clip_subbands"].split(",")]
+kwargs["output_flagged"] = not kwargs.pop("no_flagged_mode")
+kwargs["output_inpainted"] = kwargs.pop("do_inpaint_mode")
+kwargs["sigma_clip_subbands"] = [
+    int(b) for b in kwargs["sigma_clip_subbands"].split(",")
+]
 
 run_with_profiling(
     lstbin.lst_bin_files,
     args,
-    config_file=kwargs.pop('configfile'),
+    config_file=kwargs.pop("configfile"),
     calfile_rules=calfile_rules,
     where_inpainted_file_rules=inpaint_rules,
     write_kwargs=write_kwargs,
-    **kwargs
+    **kwargs,
 )

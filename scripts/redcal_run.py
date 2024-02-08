@@ -47,6 +47,6 @@ run_with_profiling(
     check_after=a.check_after,
     gain=a.gain,
     max_dims=a.max_dims,
-    add_to_history=' '.join(sys.argv),
-    verbose=a.verbose
+    add_to_history=" ".join(sys.argv),
+    verbose=a.verbose,
 )

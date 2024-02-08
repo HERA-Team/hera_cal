@@ -655,7 +655,9 @@ class Test_LSTAverage:
         nsamples = np.ones(_data.shape, dtype=float)
         flags = np.zeros(_data.shape, dtype=bool)
 
-        with pytest.warns(UserWarning, match="Direct-mode sigma-clipping in in-painted mode"):
+        with pytest.warns(
+            UserWarning, match="Direct-mode sigma-clipping in in-painted mode"
+        ):
             lstbin_simple.lst_average(
                 data=_data,
                 nsamples=nsamples,
@@ -864,7 +866,7 @@ class Test_LSTBinFilesForBaselines:
             ants=np.arange(7),
             creator=mockuvd.create_uvd_identifiable,
             freqs=mockuvd.PHASEII_FREQS[:25],
-            pols=['xx', 'xy'],
+            pols=["xx", "xy"],
             redundantly_averaged=True,
         )
 
@@ -883,7 +885,10 @@ class Test_LSTBinFilesForBaselines:
             rephase=False,
             antpairs=ap,
             reds=reds,
-            where_inpainted_files=[str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])],
+            where_inpainted_files=[
+                str(Path(f).with_suffix(".where_inpainted.h5"))
+                for f in sum(uvd_files, [])
+            ],
         )
         assert len(lstbins) == 1
 
@@ -907,7 +912,7 @@ class Test_LSTBinFilesForBaselines:
             ants=np.arange(5),  # less than the original
             creator=mockuvd.create_uvd_identifiable,
             freqs=mockuvd.PHASEII_FREQS[:25],
-            pols=['xx', 'xy'],
+            pols=["xx", "xy"],
             redundantly_averaged=True,
         )
 
@@ -930,7 +935,10 @@ class Test_LSTBinFilesForBaselines:
                 rephase=False,
                 antpairs=ap,
                 reds=reds,
-                where_inpainted_files=[str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])],
+                where_inpainted_files=[
+                    str(Path(f).with_suffix(".where_inpainted.h5"))
+                    for f in sum(uvd_files, [])
+                ],
             )
 
 
@@ -1785,13 +1793,20 @@ class TestSigmaClip:
     @pytest.mark.parametrize(
         "threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands",
         [
-            (4.0, 4, 0, 0, 'direct', None),
-            (3.0, 4, 1, 1, 'mean', [(1, 3), (4, 5)]),
-            (5.0, 4, 2, 2, 'median', [(2, 4)]),
-        ]
+            (4.0, 4, 0, 0, "direct", None),
+            (3.0, 4, 1, 1, "mean", [(1, 3), (4, 5)]),
+            (5.0, 4, 2, 2, "median", [(2, 4)]),
+        ],
     )
     def test_sigma_clip_happy_path(
-        self, array_shape, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands
+        self,
+        array_shape,
+        threshold,
+        min_N,
+        median_axis,
+        threshold_axis,
+        clip_type,
+        flag_bands,
     ):
         # Arrange
         np.random.seed(42)
@@ -1810,30 +1825,60 @@ class TestSigmaClip:
             median_axis=median_axis,
             threshold_axis=threshold_axis,
             clip_type=clip_type,
-            flag_bands=flag_bands
+            flag_bands=flag_bands,
         )
 
         # Assert
         assert isinstance(clip_flags, np.ndarray), "The output should be an ndarray."
         assert clip_flags.dtype == bool, "The output array should be of boolean type."
-        assert clip_flags.shape == array.shape, "The output flags should have the same shape as the input array."
+        assert (
+            clip_flags.shape == array.shape
+        ), "The output flags should have the same shape as the input array."
 
     # Edge cases
-    @pytest.mark.parametrize("array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id", [
-        (np.array([]), 4.0, 4, 0, 0, 'direct', None, 'edge_empty_array'),
-        (np.array([np.nan, np.nan]), 4.0, 4, 0, 0, 'direct', None, 'edge_all_nan'),
-        (np.random.normal(size=(5, 5)), 4.0, 6, 0, 0, 'direct', None, 'edge_below_min_N'),
-    ])
-    def test_sigma_clip_edge_cases(self, array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id):
+    @pytest.mark.parametrize(
+        "array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id",
+        [
+            (np.array([]), 4.0, 4, 0, 0, "direct", None, "edge_empty_array"),
+            (np.array([np.nan, np.nan]), 4.0, 4, 0, 0, "direct", None, "edge_all_nan"),
+            (
+                np.random.normal(size=(5, 5)),
+                4.0,
+                6,
+                0,
+                0,
+                "direct",
+                None,
+                "edge_below_min_N",
+            ),
+        ],
+    )
+    def test_sigma_clip_edge_cases(
+        self,
+        array,
+        threshold,
+        min_N,
+        median_axis,
+        threshold_axis,
+        clip_type,
+        flag_bands,
+        test_id,
+    ):
         # Act
         clip_flags = lstbin_simple.sigma_clip(
             array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands
         )
 
         # Assert
-        assert isinstance(clip_flags, np.ndarray), f"Test ID: {test_id} - The output should be an ndarray."
-        assert clip_flags.dtype == bool, f"Test ID: {test_id} - The output array should be of boolean type."
-        assert clip_flags.shape == array.shape, f"Test ID: {test_id} - The output flags should have the same shape as the input array."
+        assert isinstance(
+            clip_flags, np.ndarray
+        ), f"Test ID: {test_id} - The output should be an ndarray."
+        assert (
+            clip_flags.dtype == bool
+        ), f"Test ID: {test_id} - The output array should be of boolean type."
+        assert (
+            clip_flags.shape == array.shape
+        ), f"Test ID: {test_id} - The output flags should have the same shape as the input array."
 
     # Error cases
     def test_sigma_clip_error_cases(self):
@@ -1844,14 +1889,10 @@ class TestSigmaClip:
 
         array = np.array([1, 2])
         with pytest.raises(ValueError, match=".*clip_type.*"):
-            lstbin_simple.sigma_clip(array, min_N=0, clip_type='wrong_clip_type')
+            lstbin_simple.sigma_clip(array, min_N=0, clip_type="wrong_clip_type")
 
-    @pytest.mark.parametrize(
-        "clip_type", ['direct', 'mean', 'median']
-    )
-    @pytest.mark.parametrize(
-        "flag_bands", [None, [(0, 12)], [(0, 1), (1, 12)]]
-    )
+    @pytest.mark.parametrize("clip_type", ["direct", "mean", "median"])
+    @pytest.mark.parametrize("flag_bands", [None, [(0, 12)], [(0, 1), (1, 12)]])
     def test_constant_data_no_flags(self, clip_type, flag_bands):
         """Test an array with a reasonable expected shape, but constant values.
 
@@ -1883,7 +1924,7 @@ class TestSigmaClip:
 
         clip_flags = lstbin_simple.sigma_clip(
             array,
-            clip_type='direct',
+            clip_type="direct",
             median_axis=0,
             threshold_axis=2,
             min_N=0,
@@ -1896,12 +1937,8 @@ class TestSigmaClip:
         assert clip_flags[0, 0, 1, 0]
         assert clip_flags[0, 0, 0, 1]
 
-    @pytest.mark.parametrize(
-        "flag_bands", [[(0, 12)], [(0, 2), (2, 12)]]
-    )
-    @pytest.mark.parametrize(
-        "clip_type", ['mean', 'median']
-    )
+    @pytest.mark.parametrize("flag_bands", [[(0, 12)], [(0, 2), (2, 12)]])
+    @pytest.mark.parametrize("clip_type", ["mean", "median"])
     def test_spiky_data_mean_clip(self, flag_bands, clip_type):
         """Test an array with a reasonable expected shape with spiky outliers.
 
@@ -1910,7 +1947,7 @@ class TestSigmaClip:
         """
         array = np.random.normal(size=(100, 8, 12, 4))
 
-        array[0, 0, flag_bands[0][0]:flag_bands[0][1], 0] = 1000
+        array[0, 0, flag_bands[0][0] : flag_bands[0][1], 0] = 1000
 
         clip_flags = lstbin_simple.sigma_clip(
             array,
@@ -1924,14 +1961,14 @@ class TestSigmaClip:
 
         # The entire first band should be clipped, but nothing else.
         assert np.sum(clip_flags) == flag_bands[0][1] - flag_bands[0][0]
-        assert np.all(clip_flags[0, 0, flag_bands[0][0]:flag_bands[0][1], 0])
+        assert np.all(clip_flags[0, 0, flag_bands[0][0] : flag_bands[0][1], 0])
 
     def test_passing_list(self):
         """Test that passing a list of arrays works."""
         array = np.random.normal(size=(8, 12, 4))
         clip_flags = lstbin_simple.sigma_clip(
             [array, array],
-            clip_type='direct',
+            clip_type="direct",
             median_axis=0,
             threshold_axis=2,
             min_N=0,
@@ -1942,18 +1979,19 @@ class TestSigmaClip:
         assert clip_flags[1].shape == array.shape
 
     @pytest.mark.parametrize(
-        "scale", [
+        "scale",
+        [
             np.random.normal(size=(8, 12, 4)),  # no median_axis
             np.random.normal(size=(1, 8, 12, 4)),  # dummy median axis
             np.random.normal(size=(10, 8, 12, 4)),  # full median axis
-        ]
+        ],
     )
     def test_passing_good_scale(self, scale):
         """Test that passing a scale works."""
         array = np.random.normal(size=(10, 8, 12, 4))
         clip_flags = lstbin_simple.sigma_clip(
             array,
-            clip_type='direct',
+            clip_type="direct",
             median_axis=0,
             threshold_axis=2,
             min_N=0,
@@ -1964,18 +2002,19 @@ class TestSigmaClip:
         assert clip_flags.shape == array.shape
 
     @pytest.mark.parametrize(
-        "scale", [
+        "scale",
+        [
             np.random.normal(size=(12, 4)),  # no median_axis
             np.random.normal(size=(11, 8, 12, 4)),  # dummy median axis
-        ]
+        ],
     )
     def test_passing_bad_scale(self, scale):
         """Test that passing a scale works."""
         array = np.random.normal(size=(10, 8, 12, 4))
-        with pytest.raises(ValueError, match='scale must have same shape as array'):
+        with pytest.raises(ValueError, match="scale must have same shape as array"):
             clip_flags = lstbin_simple.sigma_clip(
                 array,
-                clip_type='direct',
+                clip_type="direct",
                 median_axis=0,
                 threshold_axis=2,
                 min_N=0,

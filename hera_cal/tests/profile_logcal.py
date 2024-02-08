@@ -27,19 +27,19 @@ def build_hex_array(hexNum, sep=14.7):
     for row in range(hexNum - 1, -(hexNum), -1):
         for col in range(2 * hexNum - abs(row) - 1):
             xPos = ((-(2 * hexNum - abs(row)) + 2) / 2.0 + col) * sep
-            yPos = row * sep * 3**.5 / 2
+            yPos = row * sep * 3**0.5 / 2
             antpos[i] = np.array([xPos, yPos, 0])
             i += 1
     return antpos
 
 
 antpos = build_linear_array(NANTS)
-reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+reds = om.get_reds(antpos, pols=["xx"], pol_mode="1pol")
 info = om.RedundantCalibrator(reds)
-gains, true_vis, d = om.sim_red_data(reds, shape=SHAPE, gain_scatter=.0099999)
+gains, true_vis, d = om.sim_red_data(reds, shape=SHAPE, gain_scatter=0.0099999)
 d = {key: value + 1e-3 * om.noise(value.shape) for key, value in d.items()}
 d = {key: value.astype(np.complex64) for key, value in d.items()}
-w = dict([(k, 1.) for k in d.keys()])
+w = dict([(k, 1.0) for k in d.keys()])
 
 
 class TestRedundantCalibrator(unittest.TestCase):
@@ -50,29 +50,29 @@ class TestRedundantCalibrator(unittest.TestCase):
     def tearDown(self):
         p = pstats.Stats(self.pr)
         p.strip_dirs()
-        p.sort_stats('cumtime')
+        p.sort_stats("cumtime")
         p.print_stats(20)
 
     def test_logcal(self):
         NANTS = 18
         antpos = build_linear_array(NANTS)
-        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        reds = om.get_reds(antpos, pols=["xx"], pol_mode="1pol")
         info = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, shape=SHAPE, gain_scatter=.05)
+        gains, true_vis, d = om.sim_red_data(reds, shape=SHAPE, gain_scatter=0.05)
         d = {key: value.astype(np.complex64) for key, value in d.items()}
-        w = dict([(k, 1.) for k in d.keys()])
+        w = dict([(k, 1.0) for k in d.keys()])
         t0 = time.time()
         for i in xrange(1):
             sol = info.logcal(d)
         # print('logcal', time.time() - t0)
         for i in xrange(NANTS):
-            self.assertEqual(sol[(i, 'x')].shape, SHAPE)
+            self.assertEqual(sol[(i, "x")].shape, SHAPE)
         for bls in reds:
             ubl = sol[bls[0]]
             self.assertEqual(ubl.shape, SHAPE)
             for bl in bls:
                 d_bl = d[bl]
-                mdl = sol[(bl[0], 'x')] * sol[(bl[1], 'x')].conj() * ubl
+                mdl = sol[(bl[0], "x")] * sol[(bl[1], "x")].conj() * ubl
                 # np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 # np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 5)
@@ -81,18 +81,20 @@ class TestRedundantCalibrator(unittest.TestCase):
     def test_omnilogcal(self):
         NANTS = 18
         antpos = build_linear_array(NANTS)
-        hcreds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
-        pols = ['x']
+        hcreds = om.get_reds(antpos, pols=["xx"], pol_mode="1pol")
+        pols = ["x"]
         antpos_ideal = np.array(antpos.values())
         xs, ys, zs = antpos_ideal.T
         layout = np.arange(len(xs))
         antpos = -np.ones((NANTS * len(pols), 3))
         for ant, x, y in zip(layout.flatten(), xs.flatten(), ys.flatten()):
             for z, pol in enumerate(pols):
-                z = 2**z  # exponential ensures diff xpols aren't redundant w/ each other
+                z = (
+                    2**z
+                )  # exponential ensures diff xpols aren't redundant w/ each other
                 i = hera_cal.omni.Antpol(ant, pol, NANTS)
                 antpos[int(i), 0], antpos[int(i), 1], antpos[int(i), 2] = x, y, z
-        reds = hera_cal.omni.compute_reds(NANTS, pols, antpos[:NANTS], tol=.01)
+        reds = hera_cal.omni.compute_reds(NANTS, pols, antpos[:NANTS], tol=0.01)
         # reds = hera_cal.omni.filter_reds(reds, **kwargs)
         info = hera_cal.omni.RedundantInfo(NANTS)
         info.init_from_reds(reds, antpos_ideal)
@@ -108,24 +110,24 @@ class TestRedundantCalibrator(unittest.TestCase):
             m1, g1, v1 = omnical.calib.logcal(data, info)
         # print('omnilogcal', time.time() - t0)
         for i in xrange(NANTS):
-            self.assertEqual(g1['x'][i].shape, SHAPE)
+            self.assertEqual(g1["x"][i].shape, SHAPE)
         for bls in reds:
-            ubl = v1['xx'][(int(bls[0][0]), int(bls[0][1]))]
+            ubl = v1["xx"][(int(bls[0][0]), int(bls[0][1]))]
             self.assertEqual(ubl.shape, SHAPE)
             for bl in bls:
-                d_bl = data[(int(bl[0]), int(bl[1]))]['xx']
-                mdl = g1['x'][bl[0]] * g1['x'][bl[1]].conj() * ubl
+                d_bl = data[(int(bl[0]), int(bl[1]))]["xx"]
+                mdl = g1["x"][bl[0]] * g1["x"][bl[1]].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 5)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 5)
 
     def test_lincal(self):
         NANTS = 18
         antpos = build_linear_array(NANTS)
-        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        reds = om.get_reds(antpos, pols=["xx"], pol_mode="1pol")
         info = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, shape=SHAPE, gain_scatter=.0099999)
+        gains, true_vis, d = om.sim_red_data(reds, shape=SHAPE, gain_scatter=0.0099999)
         d = {key: value.astype(np.complex64) for key, value in d.items()}
-        w = dict([(k, 1.) for k in d.keys()])
+        w = dict([(k, 1.0) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
         sol0 = {k: v.astype(np.complex64) for k, v in sol0.items()}
@@ -133,56 +135,60 @@ class TestRedundantCalibrator(unittest.TestCase):
         # for k in sol0: sol0[k] += .01*capo.oqe.noise(sol0[k].shape)
         meta, sol = info.lincal(d, sol0)
         for i in xrange(NANTS):
-            self.assertEqual(sol[(i, 'x')].shape, SHAPE)
+            self.assertEqual(sol[(i, "x")].shape, SHAPE)
         for bls in reds:
             ubl = sol[bls[0]]
             self.assertEqual(ubl.shape, SHAPE)
             for bl in bls:
                 d_bl = d[bl]
-                mdl = sol[(bl[0], 'x')] * sol[(bl[1], 'x')].conj() * ubl
+                mdl = sol[(bl[0], "x")] * sol[(bl[1], "x")].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 5)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 5)
 
     def test_omnical(self):
         NANTS = 18
         antpos = build_linear_array(NANTS)
-        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        reds = om.get_reds(antpos, pols=["xx"], pol_mode="1pol")
         info = om.RedundantCalibrator(reds)
         # gains, true_vis, d = om.sim_red_data(reds, shape=SHAPE, gain_scatter=.0099999)
         # d = {key:value.astype(np.complex64) for key,value in d.items()}
-        w = dict([(k, 1.) for k in d.keys()])
+        w = dict([(k, 1.0) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
         sol0 = {k: v.astype(np.complex64) for k, v in sol0.items()}
-        meta, sol = info.omnical(d, sol0, gain=.5, maxiter=500, check_after=30, check_every=6)
+        meta, sol = info.omnical(
+            d, sol0, gain=0.5, maxiter=500, check_after=30, check_every=6
+        )
         # meta, sol = info.omnical(d, sol0, gain=.5, maxiter=50, check_after=1, check_every=1)
         # print(meta)
         for i in xrange(NANTS):
-            self.assertEqual(sol[(i, 'x')].shape, SHAPE)
+            self.assertEqual(sol[(i, "x")].shape, SHAPE)
         for bls in reds:
             ubl = sol[bls[0]]
             self.assertEqual(ubl.shape, SHAPE)
             for bl in bls:
                 d_bl = d[bl]
-                mdl = sol[(bl[0], 'x')] * sol[(bl[1], 'x')].conj() * ubl
+                mdl = sol[(bl[0], "x")] * sol[(bl[1], "x")].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 5)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 5)
 
     def test_omnical_original(self):
         NANTS = 18
         antpos = build_linear_array(NANTS)
-        hcreds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
-        pols = ['x']
+        hcreds = om.get_reds(antpos, pols=["xx"], pol_mode="1pol")
+        pols = ["x"]
         antpos_ideal = np.array(antpos.values())
         xs, ys, zs = antpos_ideal.T
         layout = np.arange(len(xs))
         antpos = -np.ones((NANTS * len(pols), 3))
         for ant, x, y in zip(layout.flatten(), xs.flatten(), ys.flatten()):
             for z, pol in enumerate(pols):
-                z = 2**z  # exponential ensures diff xpols aren't redundant w/ each other
+                z = (
+                    2**z
+                )  # exponential ensures diff xpols aren't redundant w/ each other
                 i = hera_cal.omni.Antpol(ant, pol, NANTS)
                 antpos[int(i), 0], antpos[int(i), 1], antpos[int(i), 2] = x, y, z
-        reds = hera_cal.omni.compute_reds(NANTS, pols, antpos[:NANTS], tol=.01)
+        reds = hera_cal.omni.compute_reds(NANTS, pols, antpos[:NANTS], tol=0.01)
         # reds = hera_cal.omni.filter_reds(reds, **kwargs)
         info = hera_cal.omni.RedundantInfo(NANTS)
         info.init_from_reds(reds, antpos_ideal)
@@ -198,18 +204,18 @@ class TestRedundantCalibrator(unittest.TestCase):
             m1, g1, v1 = omnical.calib.lincal(data, info, maxiter=50)
         # print('omnilincal', time.time() - t0)
         for i in xrange(NANTS):
-            self.assertEqual(g1['x'][i].shape, SHAPE)
+            self.assertEqual(g1["x"][i].shape, SHAPE)
         for bls in reds:
-            ubl = v1['xx'][(int(bls[0][0]), int(bls[0][1]))]
+            ubl = v1["xx"][(int(bls[0][0]), int(bls[0][1]))]
             self.assertEqual(ubl.shape, SHAPE)
             for bl in bls:
-                d_bl = data[(int(bl[0]), int(bl[1]))]['xx']
-                mdl = g1['x'][bl[0]] * g1['x'][bl[1]].conj() * ubl
+                d_bl = data[(int(bl[0]), int(bl[1]))]["xx"]
+                mdl = g1["x"][bl[0]] * g1["x"][bl[1]].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 5)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 5)
 
 
-'''
+"""
 
     def test_lincal_hex_end_to_end_1pol_with_remove_degen_and_firstcal(self):
         antpos = build_hex_array(3)
@@ -279,8 +285,8 @@ class TestRedundantCalibrator(unittest.TestCase):
         rc.pol_mode = 'unrecognized_pol_mode'
         with self.assertRaises(ValueError):
             sol_rd = rc.remove_degen(antpos, sol)
-'''
+"""
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

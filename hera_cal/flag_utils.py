@@ -11,8 +11,17 @@ from . import datacontainer
 from .utils import split_pol, get_sun_alt
 
 
-def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, inplace=False,
-               interp=False, interp_Nsteps=11, verbose=True):
+def solar_flag(
+    flags,
+    times=None,
+    flag_alt=0.0,
+    longitude=21.42830,
+    latitude=-30.72152,
+    inplace=False,
+    interp=False,
+    interp_Nsteps=11,
+    verbose=True,
+):
     """
     Apply flags at times when the Sun is above some minimum altitude.
 
@@ -57,17 +66,19 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
     """
     # type check
     if isinstance(flags, datacontainer.DataContainer):
-        dtype = 'DC'
+        dtype = "DC"
     elif isinstance(flags, np.ndarray):
-        dtype = 'ndarr'
+        dtype = "ndarr"
     elif isinstance(flags, UVData):
         if verbose:
             print("Note: using latitude and longitude in given UVData object")
         latitude, longitude, altitude = flags.telescope_location_lat_lon_alt_degrees
         times = np.unique(flags.time_array)
-        dtype = 'uvd'
-    if dtype in ['ndarr', 'DC']:
-        assert times is not None, "if flags is an ndarray or DataContainer, must feed in times"
+        dtype = "uvd"
+    if dtype in ["ndarr", "DC"]:
+        assert (
+            times is not None
+        ), "if flags is an ndarray or DataContainer, must feed in times"
 
     # inplace
     if not inplace:
@@ -80,18 +91,18 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
         _alts = get_sun_alt(_times, longitude=longitude, latitude=latitude)
 
         # interpolate _alts
-        alts = interp1d(_times, _alts, kind='quadratic')(times)
+        alts = interp1d(_times, _alts, kind="quadratic")(times)
     else:
         # directly evaluate solar altitude at times
         alts = get_sun_alt(times, longitude=longitude, latitude=latitude)
 
     # apply flags
-    if dtype == 'DC':
+    if dtype == "DC":
         for k in flags.keys():
             flags[k][alts > flag_alt, :] = True
-    elif dtype == 'ndarr':
+    elif dtype == "ndarr":
         flags[alts > flag_alt, :] = True
-    elif dtype == 'uvd':
+    elif dtype == "uvd":
         for t, a in zip(times, alts):
             if a > flag_alt:
                 flags.flag_array[np.isclose(flags.time_array, t)] = True
@@ -101,7 +112,7 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
 
 
 def synthesize_ant_flags(flags, threshold=0.0):
-    '''
+    """
     Synthesizes flags on visibilities into flags on antennas. For a given antenna and
     a given time and frequency, if the fraction of flagged pixels in all visibilities with that
     antenna exceeds 'threshold', the antenna gain is flagged at that time and frequency. This
@@ -114,10 +125,14 @@ def synthesize_ant_flags(flags, threshold=0.0):
 
     Returns:
         ant_flags: dictionary mapping antenna-pol keys like (1,'x') to boolean flag waterfalls
-    '''
+    """
     # type check
-    assert isinstance(flags, datacontainer.DataContainer), "flags must be fed as a datacontainer"
-    assert threshold >= 0.0 and threshold <= 1.0, "threshold must be 0.0 <= threshold <= 1.0"
+    assert isinstance(
+        flags, datacontainer.DataContainer
+    ), "flags must be fed as a datacontainer"
+    assert (
+        threshold >= 0.0 and threshold <= 1.0
+    ), "threshold must be 0.0 <= threshold <= 1.0"
     if np.isclose(threshold, 1.0):
         threshold = threshold - 1e-10
 
@@ -125,8 +140,13 @@ def synthesize_ant_flags(flags, threshold=0.0):
     Ntimes, Nfreqs = flags[list(flags.keys())[0]].shape
 
     # get antenna-pol keys
-    antpols = set([ap for (i, j, pol) in flags.keys() for ap in [(i, split_pol(pol)[0]),
-                                                                 (j, split_pol(pol)[1])]])
+    antpols = set(
+        [
+            ap
+            for (i, j, pol) in flags.keys()
+            for ap in [(i, split_pol(pol)[0]), (j, split_pol(pol)[1])]
+        ]
+    )
 
     # get dictionary of completely flagged ants to exclude
     is_excluded = {ap: True for ap in antpols}
@@ -206,7 +226,6 @@ def factorize_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
     """
     # parse datatype
     if isinstance(flags, np.ndarray):
-
         # spw type check
         Ntimes, Nfreqs = flags.shape
         if spw_ranges is None:
@@ -219,15 +238,17 @@ def factorize_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
             flags = copy.deepcopy(flags)
 
         # iterate over spws
-        for (spw1, spw2) in spw_ranges:
-
+        for spw1, spw2 in spw_ranges:
             # identify fully flagged integrations
             fully_flagged_ints = np.isclose(np.sum(flags, axis=1), Nfreqs, atol=1e-6)
             unflagged_Ntimes = np.sum(~fully_flagged_ints, dtype=float)
 
             # identify channels where flagged fraction exceeds time threshold
-            exceeds_thresh = (np.sum(flags[~fully_flagged_ints, spw1:spw2], axis=0, dtype=float)
-                              / unflagged_Ntimes > time_thresh)
+            exceeds_thresh = (
+                np.sum(flags[~fully_flagged_ints, spw1:spw2], axis=0, dtype=float)
+                / unflagged_Ntimes
+                > time_thresh
+            )
             exceeds_thresh = np.where(exceeds_thresh)[0]
 
             # identify integrations with flags that didn't meet broadcasting limit
@@ -247,7 +268,9 @@ def factorize_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
         if not inplace:
             flags = copy.deepcopy(flags)
         for k in flags.keys():
-            factorize_flags(flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True)
+            factorize_flags(
+                flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True
+            )
 
         return flags
 

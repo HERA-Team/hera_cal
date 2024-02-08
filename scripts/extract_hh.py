@@ -11,11 +11,17 @@ from pyuvdata import UVData
 from pyuvdata.uvh5 import _hera_corr_dtype
 
 # create an argument parser and parse args
-ap = argparse.ArgumentParser(description="Extract only connected antennas from full correlator data")
+ap = argparse.ArgumentParser(
+    description="Extract only connected antennas from full correlator data"
+)
 ap.add_argument("input_file", type=str, help="Full path to target file")
 ap.add_argument("output_file", type=str, help="Full path to output file")
-ap.add_argument("--overwrite", action="store_true", default=False,
-                help="Optional flag to overwrite output file if it exists")
+ap.add_argument(
+    "--overwrite",
+    action="store_true",
+    default=False,
+    help="Optional flag to overwrite output file if it exists",
+)
 args = ap.parse_args()
 
 # read in file metadata
@@ -48,5 +54,10 @@ uvd.antenna_numbers = uvd.antenna_numbers[data_ants]
 uvd.antenna_positions = uvd.antenna_positions[data_ants, :]
 uvd.antenna_diameters = uvd.antenna_diameters[data_ants]
 print("writing {}...".format(fn_out))
-uvd.write_uvh5(fn_out, data_write_dtype=_hera_corr_dtype, flags_compression='lzf',
-               nsample_compression='lzf', clobber=True)
+uvd.write_uvh5(
+    fn_out,
+    data_write_dtype=_hera_corr_dtype,
+    flags_compression="lzf",
+    nsample_compression="lzf",
+    clobber=True,
+)
