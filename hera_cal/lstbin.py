@@ -60,7 +60,6 @@ def baselines_same_across_nights(data_list):
     return same_across_nights
 
 
-@profile
 def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None, begin_lst=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
             sig_clip=False, sigma=4.0, min_N=4, flag_below_min_N=False, return_no_avg=False, antpos=None,

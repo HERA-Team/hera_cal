@@ -614,7 +614,6 @@ def lst_bin_files_single_outfile(
     return out_files
 
 
-@profile
 def lst_bin_files(
     config_file: str | Path,
     output_file_select: int | Sequence[int] | None = None,
