@@ -648,7 +648,10 @@ def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_l
                 raise NotImplementedError(f'No known position for telescope {telescope_name}. lat_lon_alt_degrees must be specified.')
 
         # calculate LST grid in hours from time grid and lat_lon_alt
-        lst_grid = pyuvdata.utils.get_lst_for_time(time_grid, *lat_lon_alt_degrees) * 12 / np.pi
+        lat, lon, alt = lat_lon_alt_degrees
+        lst_grid = pyuvdata.utils.get_lst_for_time(
+            time_grid, latitude=lat, longitude=lon, altitude=alt
+        ) * 12 / np.pi
 
         # add blacklisted times from lst_blacklists
         for bounds in lst_blacklists:

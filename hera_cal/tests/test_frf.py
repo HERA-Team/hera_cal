@@ -13,6 +13,7 @@ import glob
 from pyuvdata import UVData
 from pyuvdata import utils as uvutils
 import unittest
+import yaml
 from scipy import stats
 from scipy import constants
 from pyuvdata import UVFlag, UVBeam
@@ -160,7 +161,6 @@ class Test_FRFilter(object):
 
         # exceptions
         pytest.raises(AssertionError, self.F.timeavg_data, self.F.data, self.F.times, self.F.lsts, 1.0)
-        
 
     def test_filter_data(self):
         # construct high-pass filter
@@ -205,7 +205,7 @@ class Test_FRFilter(object):
 
         pytest.raises(AssertionError, self.F.write_data, self.F.avg_data, "./out.uv", times=self.F.avg_times)
         pytest.raises(ValueError, self.F.write_data, self.F.data, "hi", filetype='foo')
-        
+
     @pytest.mark.parametrize("equalize_times", [True, False])
     def test_time_avg_data_and_write(self, tmpdir, equalize_times):
         # time-averaged data written too file will be compared to this.
@@ -223,12 +223,11 @@ class Test_FRFilter(object):
             assert np.allclose(data_out.flags[k], self.F.avg_flags[k])
             assert np.allclose(data_out.nsamples[k], self.F.avg_nsamples[k])
 
-
     @pytest.mark.parametrize(
         "ninterleave, equalize_times", [(2, True), (2, False), (3, True), (3, False),
                                         (4, True), (4, False), (5, True),
                                         (5, False), (6, True), (6, False)])
-    def test_time_avg_data_and_write_interleave(self, tmpdir, ninterleave, equalize_times):        
+    def test_time_avg_data_and_write_interleave(self, tmpdir, ninterleave, equalize_times):
         tmp_path = tmpdir.strpath
         input_name = os.path.join(tmp_path, 'test_input.uvh5')
         uvd = UVData()
@@ -243,7 +242,7 @@ class Test_FRFilter(object):
         # check that the correct number of files exist.
         interleaved_data = {}
         for inum in range(ninterleave):
-            iname = output_name.replace('.uvh5', f'.interleave_{inum}.uvh5')
+            iname = os.path.join(os.path.dirname(output_name), os.path.basename(output_name).replace('.uvh5', f'.interleave_{inum}.uvh5'))
             assert os.path.exists(iname)
             hd = io.HERAData(iname)
             hd.read()
@@ -255,11 +254,10 @@ class Test_FRFilter(object):
             if inum > 0:
                 for tn in range(interleaved_data[inum].Ntimes):
                     if not equalize_times:
-                        assert interleaved_data[inum].times[tn] > interleaved_data[inum-1].times[tn]
+                        assert interleaved_data[inum].times[tn] > interleaved_data[inum - 1].times[tn]
                     else:
-                        assert interleaved_data[inum].times[tn] == interleaved_data[inum-1].times[tn]
-                        assert interleaved_data[inum].lsts[tn] == interleaved_data[inum-1].lsts[tn]
-                        
+                        assert interleaved_data[inum].times[tn] == interleaved_data[inum - 1].times[tn]
+                        assert interleaved_data[inum].lsts[tn] == interleaved_data[inum - 1].lsts[tn]
 
     def test_time_avg_data_and_write_baseline_list(self, tmpdir):
         # compare time averaging over baseline list versus time averaging
@@ -616,7 +614,6 @@ class Test_FRFilter(object):
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
 
-
     def test_load_tophat_frfilter_and_write_cal(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
@@ -695,7 +692,7 @@ class Test_FRFilter(object):
         CLEAN_outfilename = os.path.join(tmp_path, 'temp_clean.h5')
         filled_outfilename = os.path.join(tmp_path, 'temp_filled.h5')
         # test skip_autos
-        
+
         frf.load_tophat_frfilter_and_write(uvh5, calfile_list=None, tol=1e-4, res_outfilename=outfilename,
                                            filled_outfilename=filled_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                            Nbls_per_load=2, clobber=True, skip_autos=True, case='sky')
@@ -719,7 +716,6 @@ class Test_FRFilter(object):
                 assert not np.allclose(do[bl], d[bl])
                 assert np.allclose(no[bl], n[bl])
 
-                
     def test_load_tophat_frfilter_and_write_broadcast_flags(self, tmpdir):
         # test flag broadcasting with frf.
         tmp_path = tmpdir.strpath
@@ -727,7 +723,7 @@ class Test_FRFilter(object):
         outfilename = os.path.join(tmp_path, 'temp.h5')
         CLEAN_outfilename = os.path.join(tmp_path, 'temp_clean.h5')
         filled_outfilename = os.path.join(tmp_path, 'temp_filled.h5')
-        
+
         # prepare an input file for broadcasting flags
         input_file = os.path.join(tmp_path, 'temp_special_flags.h5')
         shutil.copy(uvh5, input_file)
@@ -784,7 +780,7 @@ class Test_FRFilter(object):
         time_thresh = 2. / hd.Ntimes
         # test delay filtering and writing with factorized flags and partial i/o
         time_thresh = 2. / hd.Ntimes
-        
+
         frf.load_tophat_frfilter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, case='sky',
                                            factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
@@ -804,7 +800,6 @@ class Test_FRFilter(object):
             assert np.all(f[bl][0, :])
             assert np.all(f[bl][:, -1])
             assert not np.all(np.isclose(d[bl], 0.))
-
 
     def test_load_tophat_frfilter_and_write_yaml(self, tmpdir):
         # test apriori flags and flag_yaml
@@ -929,6 +924,87 @@ class Test_FRFilter(object):
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
         shutil.rmtree(cdir)
+
+    @pytest.mark.parametrize("flip", [True, False])
+    def test_load_tophat_frfilter_and_write_with_filter_yaml(self, tmpdir, flip):
+        tmp_path = tmpdir.strpath
+        uvh5 = os.path.join(
+            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
+        )
+        frate_centers = {(53, 54): 0.1}
+        frate_half_widths = {(53, 54): 0.05}
+        if flip:
+            filter_info = dict(
+                filter_centers={
+                    str(k[::-1]): -v for k, v in frate_centers.items()
+                },
+                filter_half_widths={
+                    str(k[::-1]): v for k, v in frate_half_widths.items()
+                },
+            )
+        else:
+            filter_info = dict(
+                filter_centers={str(k): v for k, v in frate_centers.items()},
+                filter_half_widths={str(k): v for k, v in frate_half_widths.items()},
+            )
+        frate_centers = {k + ("ee",): v for k, v in frate_centers.items()}
+        frate_half_widths = {k + ("ee",): v for k, v in frate_half_widths.items()}
+
+        with open(tmpdir / "filter_info.yaml", "w") as f:
+            yaml.dump(filter_info, f)
+
+        outfilename = os.path.join(tmp_path, 'temp.h5')
+        frf.load_tophat_frfilter_and_write(
+            uvh5,
+            res_outfilename=outfilename,
+            tol=1e-4,
+            clobber=True,
+            Nbls_per_load=1,
+            param_file=str(tmpdir / "filter_info.yaml"),
+            case="param_file",
+            skip_autos=True,
+        )
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for bl in d:
+            assert not np.allclose(d[bl], 0)
+
+        frfil = frf.FRFilter(uvh5, filetype='uvh5')
+        frfil.read(bls=[(53, 54, 'ee')])
+        frfil.tophat_frfilter(
+            keys=[(53, 54, 'ee')],
+            tol=1e-4,
+            verbose=True,
+            frate_centers=frate_centers,
+            frate_half_widths=frate_half_widths,
+        )
+
+        # Check that the filtered data both ways matches.
+        np.testing.assert_almost_equal(
+            d[(53, 54, 'ee')], frfil.clean_resid[(53, 54, 'ee')], decimal=5
+        )
+
+        # Check that the flags match.
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], frfil.flags[(53, 54, 'ee')])
+
+    def test_load_tophat_frfilter_and_write_with_bad_filter_yaml(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        uvh5 = os.path.join(
+            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
+        )
+        param_file = os.path.join(DATA_PATH, "example_filter_params.yaml")
+
+        outfilename = os.path.join(tmp_path, 'temp.h5')
+        with pytest.raises(ValueError, match="(53, 54)"):
+            frf.load_tophat_frfilter_and_write(
+                uvh5,
+                res_outfilename=outfilename,
+                tol=1e-4,
+                clobber=True,
+                Nbls_per_load=1,
+                param_file=param_file,
+                case="param_file",
+            )
 
     def test_tophat_clean_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris', '--max_frate_coeffs', '0.024', '-0.229']

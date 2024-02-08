@@ -9,6 +9,7 @@ import operator
 import os
 import copy
 import warnings
+import inspect
 from functools import reduce
 from collections.abc import Iterable
 from pyuvdata import UVCal, UVData
@@ -31,6 +32,7 @@ from astropy.time import Time
 from contextlib import contextmanager
 from functools import lru_cache
 from pyuvdata.uvdata import FastUVH5Meta
+import pyuvdata
 
 try:
     import aipy
@@ -108,26 +110,31 @@ class HERACal(UVCal):
             total_qual: dict mapping polarization to (Nint, Nfreq) float total quality array
         '''
         self._extract_metadata()
-        gains, flags, quals, total_qual = odict(), odict(), odict(), odict()
+        gains, flags = odict(), odict()
+
+        if self.total_quality_array is not None:
+            total_qual = odict()
+        else:
+            total_qual = None
+
+        if self.quality_array is not None:
+            quals = odict()
+        else:
+            quals = None
 
         # build dict of gains, flags, and quals
         for (ant, pol) in self.ants:
             i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
             gains[(ant, pol)] = np.array(self.gain_array[i, :, :, ip].T)
             flags[(ant, pol)] = np.array(self.flag_array[i, :, :, ip].T)
-            if self.quality_array is not None:
+            if quals is not None:
                 quals[(ant, pol)] = np.array(self.quality_array[i, :, :, ip].T)
-    
-        if not quals:
-            quals = None
 
         # build dict of total_qual if available
-        if self.total_quality_array is not None:
+        if total_qual is not None:
             for pol in self.pols:
                 ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
                 total_qual[pol] = np.array(self.total_quality_array[:, :, ip].T)
-        else:
-            total_qual = None
 
         return gains, flags, quals, total_qual
 
@@ -458,7 +465,7 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     if getattr(uvo, 'blts_are_rectangular', False):
         if uvo.time_axis_faster_than_bls:
             for i in range(uvo.Nbls):
-                start = i*uvo.Ntimes
+                start = i * uvo.Ntimes
                 antp = (uvo.ant_1_array[start], uvo.ant_2_array[start])
                 blt_slices[antp] = slice(start, start + uvo.Ntimes, 1)
             assert uvo.Nbls == len(blt_slices)
@@ -477,8 +484,10 @@ def get_blt_slices(uvo, tried_to_reorder=False):
                     uvo.reorder_blts(order='time')
                     return get_blt_slices(uvo, tried_to_reorder=True)
                 else:
-                    raise NotImplementedError('UVData objects with non-regular spacing of '
-                                            'baselines in its baseline-times are not supported.')
+                    raise NotImplementedError(
+                        'UVData objects with non-regular spacing of '
+                        'baselines in its baseline-times are not supported.'
+                    )
             else:
                 blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
     return blt_slices
@@ -795,7 +804,7 @@ class HERAData(UVData):
         locs = locals()
         partials = ['bls', 'polarizations', 'times', 'time_range', 'lsts', 'lst_range', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
-        
+
         # if filepaths is None, this was converted to HERAData
         # from a different pre-loaded object with no history of filepath
         if self.filepaths is not None:
@@ -1026,9 +1035,18 @@ class HERAData(UVData):
         # else:  # make a copy of this object and then update the relevant arrays using DataContainers
         #     this = copy.deepcopy(self)
 
-        hd_writer.write_uvh5_part(output_path, d, f, n,
-                                  run_check_acceptability=(output_path in self._writers),
-                                  **self.last_read_kwargs)
+        write_kwargs = {
+            "data_array": d,
+            "nsample_array": n,
+            "run_check_acceptability": (output_path in self._writers),
+            **self.last_read_kwargs,
+        }
+        # before pyuvdata 3.0, the "flag_array" parameter was called "flags_array"
+        if "flag_array" in inspect.signature(UVData.write_uvh5_part).parameters:
+            write_kwargs["flag_array"] = f
+        else:
+            write_kwargs["flags_array"] = f
+        hd_writer.write_uvh5_part(output_path, **write_kwargs)
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
                          bl_error_tol=1.0, include_autos=True, frequencies=None):
@@ -1431,8 +1449,12 @@ class HERADataFastReader():
         info_dict['antpairs'] = sorted(info_dict['bls'])
         info_dict['bls'] = sorted(set([ap + (pol, ) for ap in info_dict['antpairs'] for pol in info_dict['pols']]))
         XYZ = XYZ_from_LatLonAlt(info_dict['latitude'] * np.pi / 180, info_dict['longitude'] * np.pi / 180, info_dict['altitude'])
-        enu_antpos = ENU_from_ECEF(np.array([antpos for ant, antpos in info_dict['antpos'].items()]) + XYZ,
-                                   info_dict['latitude'] * np.pi / 180, info_dict['longitude'] * np.pi / 180, info_dict['altitude'])
+        enu_antpos = ENU_from_ECEF(
+            np.array([antpos for ant, antpos in info_dict['antpos'].items()]) + XYZ,
+            latitude=info_dict['latitude'] * np.pi / 180,
+            longitude=info_dict['longitude'] * np.pi / 180,
+            altitude=info_dict['altitude']
+        )
         info_dict['antpos'] = {ant: enu for enu, ant in zip(enu_antpos, info_dict['antpos'])}
         info_dict['data_antpos'] = {ant: info_dict['antpos'][ant] for ant in info_dict['data_ants']}
         info_dict['times'] = np.unique(info_dict['times'])
@@ -1596,7 +1618,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
     elif filetype == 'h5':
         from pyuvdata import UVFlag
         uvf = UVFlag(flagfile)
-        assert uvf.mode == 'flag', 'The input h5-based UVFlag object must be in flag mode.'
+        assert uvf.mode == 'flag', f'The input h5-based UVFlag object must be in flag mode, got {uvf.mode}'
         assert (np.issubsctype(uvf.polarization_array.dtype, np.signedinteger)
                 or np.issubsctype(uvf.polarization_array.dtype, np.str_)), \
             "The input h5-based UVFlag object's polarization_array must be integers or byte strings."
@@ -1616,6 +1638,8 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             # data container only supports standard polarizations strings
             if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                 flags = DataContainer(flags)
+                flags.times = times
+                flags.freqs = freqs
 
         elif uvf.type == 'antenna':  # one time x freq waterfall per antenna
             for i, ant in enumerate(uvf.ant_array):
@@ -1728,9 +1752,11 @@ def get_file_times(filepaths, filetype='uvh5'):
                                                                   _f[u'Header'][u'altitude'][()]))
 
                 # figure out which baseline has the most times in order to handle BDA appropriately
-                baseline_array = uvutils.antnums_to_baseline(np.array(_f[u'Header'][u'ant_1_array']),
-                                                             np.array(_f[u'Header'][u'ant_2_array']),
-                                                             np.array(_f[u'Header'][u'Nants_telescope']))
+                baseline_array = uvutils.antnums_to_baseline(
+                    np.array(_f[u'Header'][u'ant_1_array']),
+                    np.array(_f[u'Header'][u'ant_2_array']),
+                    Nants_telescope=np.array(_f[u'Header'][u'Nants_telescope'])
+                )
                 most_common_bl_num = scipy.stats.mode(baseline_array, keepdims=True)[0][0]
                 time_array = time_array[baseline_array == most_common_bl_num]
                 lst_array = lst_array[baseline_array == most_common_bl_num]
@@ -1809,9 +1835,9 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
                          return_data=False, **kwargs)
         except ValueError as err:
             # check to see if the read failed because of the time range or lst range
-            if 'No elements in time range between ' in str(err):
+            if 'No elements in time range between ' in str(err) or 'No elements in time_array between ' in str(err):
                 continue  # no matching times, skip this file
-            elif 'No elements in LST range between ' in str(err):
+            elif 'No elements in LST range between ' in str(err) or 'No elements in lst_array between ' in str(err):
                 continue  # no matchings lsts, skip this file
             else:
                 raise
@@ -2108,18 +2134,25 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     antenna_names = [f"HH{a}" for a in antenna_numbers]
 
     # get antenna positions in ITRF frame
-    tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
+    lat, lon, alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
     antenna_positions = np.array([antpos[k] for k in antenna_numbers])
-    antenna_positions = uvutils.ECEF_from_ENU(antenna_positions, *tel_lat_lon_alt) - telescope_location
+    antenna_positions = uvutils.ECEF_from_ENU(
+        antenna_positions, latitude=lat, longitude=lon, altitude=alt
+    ) - telescope_location
 
     # get times
     if time_array is None:
         if start_jd is None:
             raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = LST2JD(lst_array, start_jd, allow_other_jd=True, lst_branch_cut=lst_branch_cut,
-                            latitude=(tel_lat_lon_alt[0] * 180 / np.pi),
-                            longitude=(tel_lat_lon_alt[1] * 180 / np.pi),
-                            altitude=tel_lat_lon_alt[2])
+        time_array = LST2JD(
+            lst_array,
+            start_jd,
+            allow_other_jd=True,
+            lst_branch_cut=lst_branch_cut,
+            latitude=(lat * 180 / np.pi),
+            longitude=(lon * 180 / np.pi),
+            altitude=alt
+        )
     Ntimes = len(time_array)
 
     # get freqs
@@ -2174,9 +2207,13 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # configure baselines
     antpairs = np.repeat(np.array(antpairs), Ntimes, axis=0)
 
+    antpairs_int = antpairs.astype(np.uint64)
+    if not np.allclose(antpairs, antpairs_int):
+        raise ValueError("antenna numbers must be non-negative integers")
+
     # get ant_1_array, ant_2_array
-    ant_1_array = antpairs[:, 0]
-    ant_2_array = antpairs[:, 1]
+    ant_1_array = antpairs_int[:, 0]
+    ant_2_array = antpairs_int[:, 1]
 
     # get baseline array
     baseline_array = 2048 * (ant_1_array + 1) + (ant_2_array + 1) + 2**16
@@ -2230,9 +2267,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     if return_uvd:
         return uvd
-
-
-
 
 
 def update_uvdata(uvd, data=None, flags=None, nsamples=None, add_to_history='', **kwargs):
@@ -2447,7 +2481,6 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
     # get time info
     time_array = np.array(times, float)
     Ntimes = len(time_array)
-    time_range = np.array([time_array.min(), time_array.max()], float)
     if len(time_array) > 1:
         integration_time = np.median(np.diff(time_array)) * 24. * 3600.
     else:
@@ -2516,7 +2549,7 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
               "ant_array", "antenna_numbers", "antenna_names", "cal_style", "history",
               "channel_width", "flag_array", "gain_array", "quality_array", "jones_array",
               "time_array", "lst_array", "spw_array", "freq_array", "history", "integration_time",
-              "time_range", "x_orientation", "telescope_name", "gain_convention", "total_quality_array"]
+              "x_orientation", "telescope_name", "gain_convention", "total_quality_array"]
 
     # create local parameter dict
     local_params = locals()
@@ -2717,6 +2750,7 @@ def throw_away_flagged_ants_parser():
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
 
+
 def uvdata_from_fastuvh5(
     meta: FastUVH5Meta,
     antpairs: list[tuple[int, int]] | None = None,
@@ -2724,7 +2758,8 @@ def uvdata_from_fastuvh5(
     lsts: np.ndarray | None = None,
     start_jd: float | None = None,
     lst_branch_cut: float = 0.0,
-    **kwargs) -> UVData:
+    **kwargs
+) -> UVData:
     """Convert a FastUVH5Meta object to a UVData object.
 
     This is a convenience function to convert a FastUVH5Meta object to a UVData

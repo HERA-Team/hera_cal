@@ -63,13 +63,11 @@ setup_args = {
         "rich",
         "jax",
         "jaxlib",
+        "optax",
         'attrs',
         'frozendict',
     ],
     'extras_require': {
-        "all": [
-            'optax'
-        ],
         'dev': [
             "pytest",
             "pre-commit",

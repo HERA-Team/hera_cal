@@ -1,9 +1,9 @@
 from . import utils
 from . import redcal
 from . import abscal
-from . import apply_cal
 from .datacontainer import DataContainer, RedDataContainer
 
+import inspect
 import warnings
 import numpy as np
 from scipy import linalg
@@ -12,8 +12,19 @@ import astropy.constants as const
 from scipy.cluster.hierarchy import fclusterdata
 
 import jax
+import optax
 from jax import numpy as jnp
 jax.config.update("jax_enable_x64", True)
+
+
+# Approved Optax Optimizers
+OPTIMIZERS = {
+    'adabelief': optax.adabelief, 'adafactor': optax.adafactor, 'adagrad': optax.adagrad, 'adam': optax.adam,
+    'adamax': optax.adamax, 'adamaxw': optax.adamaxw, 'amsgrad': optax.amsgrad, 'adamw': optax.adamw, 
+    'fromage': optax.fromage, 'lamb': optax.lamb, 'lars': optax.lars, 'lion': optax.lion, 'novograd': optax.novograd,
+    'noisy_sgd': optax.noisy_sgd, 'dpsgd': optax.dpsgd, 'radam': optax.radam, 'rmsprop': optax.rmsprop,
+    'sgd': optax.sgd, 'sm3': optax.sm3, 'yogi': optax.yogi, 'optimistic_gradient_descent': optax.optimistic_gradient_descent
+}
 
 # Constants
 SPEED_OF_LIGHT = const.c.si.value
@@ -187,7 +198,7 @@ def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=
 
         # Cluster orientations
         clusters = fclusterdata(normalized_vecs, blvec_error_tol, criterion="distance")
-        uors = [[] for i in range(np.max(clusters))]
+        uors = [[] for _ in range(np.max(clusters))]
 
         for cluster, bl in zip(clusters, ubl_pairs):
             uors[cluster - 1].append(bl)
@@ -503,7 +514,7 @@ def compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=
     return dspec.dpss_operator(freqs, [0], [spectral_filter_half_width], eigenval_cutoff=[eigenval_cutoff])[0].real
 
 
-def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filter_half_width=1, eigenval_cutoff=1e-12):
+def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None):
     """
     Compute prolate spheroidal wave function (PSWF) filters for a single radially redundant group.
 
@@ -522,6 +533,14 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
         the uv-plane to be modeled at half-wavelength scales.
     eigenval_cutoff : float
         Cutoff for the eigenvalues of the PSWF filter
+    umin : float, optional, default=None
+        Minimum u-mode at which the filters are computed. If None, filter bounds will be computed from the minimum frequency value and shortest
+        baseline length. Restricting the minimum u-mode can decrease the degrees of freedom in a nucal model if one is uininterested in u-modes below
+        umin.
+    umax : float, optional, default=None
+        Maximum u-mode at which the filters are computed. If None, filter bounds will be computed from the maximum frequency value and longest
+        baseline length. Restricting the maximum u-mode can significantly decrease the degrees of freedom in a nucal model particularly if the 
+        baseline group has a few long baselines an one is uininterested in u-modes above umax.
     
     Returns:
     -------
@@ -531,8 +550,10 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
 
     # Compute the minimum and maximum u values for the spatial filter
     group_bls_lengths = [bls_lengths[bl] for bl in group]
-    umin = np.min(group_bls_lengths) / SPEED_OF_LIGHT * np.min(freqs)
-    umax = np.max(group_bls_lengths) / SPEED_OF_LIGHT * np.max(freqs)
+    if umin is None:
+        umin = np.min(group_bls_lengths) / SPEED_OF_LIGHT * np.min(freqs)
+    if umax is None:
+        umax = np.max(group_bls_lengths) / SPEED_OF_LIGHT * np.max(freqs)
 
     # Create dictionary for storing spatial filters
     spatial_filters = {}
@@ -550,7 +571,7 @@ def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filt
 
     return spatial_filters
 
-def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eigenval_cutoff=1e-12, cache={}):
+def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None):
     """
     Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds. 
     Note that if you are using a large array with a large range of short and long baselines in an individual radially
@@ -568,8 +589,15 @@ def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eig
         modeling foregrounds out to the horizon.
     eigenval_cutoff : float, default=1e-12
         Sinc matrix eigenvalue cutoffs to use for included PSWF modes.
-    cache : dictionary, default={}
-        Dictionary containing cached PSWF eigenvectors to speed up computation
+    umin : float, optional, default=None
+        Minimum u-mode at which the filters are computed. If None, filter bounds will be computed from the minimum frequency value and shortest
+        baseline length. Restricting the minimum u-mode can decrease the degrees of freedom in a nucal model if one is uininterested in u-modes below
+        umin. If umin is not None, umin will be applied to all baseline groups in radial reds.
+    umax : float, optional, default=None
+        Maximum u-mode at which the filters are computed. If None, filter bounds will be computed from the maximum frequency value and longest
+        baseline length. Restricting the maximum u-mode can significantly decrease the degrees of freedom in a nucal model particularly if the 
+        baseline group has a few long baselines an one is uininterested in u-modes above umax. If umax is not None, umax will be applied to all 
+        baseline groups in radial reds.
 
     Returns:
     -------
@@ -584,7 +612,7 @@ def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eig
     for group in radial_reds:
         # Compute spatial filters for each baseline in the group
         spatial_filters.update(compute_spatial_filters_single_group(
-            group, freqs, radial_reds.baseline_lengths, spatial_filter_half_width, eigenval_cutoff
+            group, freqs, radial_reds.baseline_lengths, spatial_filter_half_width, eigenval_cutoff, umin=umin, umax=umax
             )
         )
 
@@ -688,7 +716,7 @@ def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_re
 
     return wgts
 
-def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
+def _linear_fit(XTX, Xy, solver='lu_solve', alpha=1e-15, cached_input={}):
     """
     Solves a linear system of equations using a variety of methods. This is a light wrapper
     around np.linalg.solve, np.linalg.lstsq, and scipy.linalg.lu_solve which helps fit nucal
@@ -705,8 +733,8 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
             'lu_solve' uses scipy.linalg.lu_solve to solve the linear system of equations, 'solve' uses np.linalg.solve.
             'pinv' uses np.linalg.pinv to solve the linear system of equations, and 'lstsq' uses np.linalg.lstsq. 'lu_solve' 
             and 'solve' tend to be the faster methods, but 'lstsq' and 'pinv' are more robust.
-        tol : float, default=1e-15
-            Tolerance to use for regularization. If method is 'lu_solve' or 'solve', this is added to the diagonal of XTX. 
+        alpha : float, default=1e-15
+            Parameter used for regularization. If method is 'lu_solve' or 'solve', this is added to the diagonal of XTX. 
             If method is 'pinv' or 'lstsq', this is used as the rcond parameter for np.linalg.pinv and np.linalg.lstsq respectively.
         cached_input : dictionary, default={}
             Dictionary used to speed-up computation of linear fits for the 'lu_solve' and 'pinv' solvers. 
@@ -731,14 +759,14 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
     ], "method must be one of {}".format(["lu_solve", "solve", "pinv", "lstsq"])
 
     # Assert that the regularization tolerance is non-negative
-    assert tol >= 0.0, "tol must be non-negative."
+    assert alpha >= 0.0, "alpha must be non-negative."
 
     # Add regularization tolerance to the diagonal of XTX
     # If XTX is a jax array, use the jax array indexing syntax
     if (solver == "lu_solve" or solver == "solve") and isinstance(XTX, jnp.ndarray):
-        XTX = XTX.at[np.diag_indices_from(XTX)].add(tol)
+        XTX = XTX.at[np.diag_indices_from(XTX)].add(alpha)
     elif solver == "lu_solve" or solver == "solve":
-        XTX[np.diag_indices_from(XTX)] += tol
+        XTX[np.diag_indices_from(XTX)] += alpha
 
     if solver == "lu_solve":
         # Factor XTX using scipy.linalg.lu_factor
@@ -765,7 +793,7 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
         if "XTXinv" in cached_input:
             XTXinv = cached_input.get('XTXinv')
         else:
-            XTXinv = np.linalg.pinv(XTX, rcond=tol)
+            XTXinv = np.linalg.pinv(XTX, rcond=alpha)
 
         # Compute the model parameters using the pseudo-inverse
         beta = np.dot(XTXinv, Xy)
@@ -774,7 +802,7 @@ def _linear_fit(XTX, Xy, solver='lu_solve', tol=1e-15, cached_input={}):
 
     elif solver == "lstsq":
         # Compute the model parameters using np.linalg.lstsq
-        beta, res, rank, s = np.linalg.lstsq(XTX, Xy, rcond=tol)
+        beta, res, rank, s = np.linalg.lstsq(XTX, Xy, rcond=alpha)
         
         # Save info
         cached_output = {}
@@ -835,14 +863,19 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
         for bl in group:
             # Compute the model components for this baseline
             if use_spectral_filters:
-                model[bl] = jnp.einsum(einsum_path, spectral_filters, spatial_filters[bl], fg_model_comps[group[0]])
+                model[bl] = np.array(jnp.einsum(
+                    einsum_path, spectral_filters, spatial_filters[bl], fg_model_comps[group[0]]
+                ))
             else:
-                model[bl] = jnp.einsum(einsum_path, spatial_filters[bl], fg_model_comps[group[0]])
+                model[bl] = np.array(jnp.einsum(
+                    einsum_path, spatial_filters[bl], fg_model_comps[group[0]]
+                ))
 
-    return model
+    # Return the model as a RedDataContainer
+    return RedDataContainer(model, radial_reds.reds)
 
 
-def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters=None, tol=1e-15,
+def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters=None, alpha=1e-12,
                                share_fg_model=False, return_model_comps=False, solver="lu_solve"):
     """
     Compute a foreground model for a set of radially redundant baselines. The model is computed by performing a linear
@@ -870,8 +903,8 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
         the model is assumed to be restricted to the spatial axis with no spectral variation.
     solver : str, optional, Default is 'lu_solve'
         Solver to use for linear least-squares fit. Options are 'lu_solve', 'solve', 'pinv', and 'lstsq'.
-    tol : float, optional, Default is 1e-15.
-        Regularization tolerance for linear least-squares fit. 
+    alpha : float, optional, Default is 1e-15.
+        Regularization for linear least-squares fit. 
     share_fg_model : bool, optional, Default is False.
         If True, the foreground model for each radially-redundant group is shared across the time axis. 
         Otherwise, a nucal foreground will be independently computed for each time integration individually.
@@ -915,7 +948,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                 Xy = jnp.einsum("afm,atf->m", design_matrix, data_here * wgts_here)
 
                 # Solve for model components
-                beta, _ = _linear_fit(XTX, Xy, solver=solver, tol=tol)
+                beta, _ = _linear_fit(XTX, Xy, solver=solver, alpha=alpha)
             else:
                 XTX = jnp.einsum("fm,afn,atf,fk,afj->mnkj", 
                     spectral_filters, design_matrix, wgts_here, spectral_filters, design_matrix
@@ -923,7 +956,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                 Xy = jnp.einsum("fm,afn,atf->mn", spectral_filters, design_matrix, data_here * wgts_here).reshape(ndim)
 
                 # Solve for the foreground model components
-                beta, _ = _linear_fit(XTX, Xy, tol=tol, solver=solver)
+                beta, _ = _linear_fit(XTX, Xy, alpha=alpha, solver=solver)
                 beta = beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1])
 
             # Expand the model components to have time index
@@ -941,7 +974,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                     Xy = jnp.einsum("afm,af->m", design_matrix, data_here[:, i] * wgts_here[:, i])
 
                     # Solve for model components
-                    beta.append(_linear_fit(XTX, Xy, solver=solver, tol=tol)[0])
+                    beta.append(_linear_fit(XTX, Xy, solver=solver, alpha=alpha)[0])
 
                 else:
                     XTX = jnp.einsum("fm,afn,af,fk,afj->mnkj", 
@@ -950,7 +983,7 @@ def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, sp
                     Xy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_here[:, i] * wgts_here[:, i]).reshape(ndim)
                     
                     # Solve for the foreground model components
-                    _beta, _ = _linear_fit(XTX, Xy, tol=tol, solver=solver)
+                    _beta, _ = _linear_fit(XTX, Xy, alpha=alpha, solver=solver)
                     beta.append(_beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1]))
             
             # Pack solution into an array
@@ -996,3 +1029,560 @@ def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
         model_comps[key] = np.expand_dims(u_model_comps[key], axis=1) * const_eigen_vals
 
     return model_comps
+
+
+@jax.jit
+def _foreground_model(model_parameters, spectral_filters, spatial_filters):
+    """
+    Function for computing the foreground model from the foreground parameters and filters
+    in the gradient descent loop.
+
+    Parameters:
+    ----------
+    model_parameters : dictionary
+        Foreground model components for computing the foreground model
+    spectral_filters : jnp.ndarray
+        Array of spectral filters with shape (Nfreqs, Nfilters)
+    spatial_filters : List of jnp.ndarray
+        List of jax arrays containing spatial DPSS filters for each baseline in the 
+        spectrally redundant group
+
+    Returns:
+    -------
+    model_r : np.ndarray
+        Array of real component of foreground model with shape (Ntimes, Nbls)
+    model_i : np.ndarray
+        Array of imaginary component of foreground model with shape (Ntimes, Nbls)
+    """
+    model_r, model_i = [], []
+
+    # Loop over each radially redundant group
+    # Below the indicies correspond to f -> frequency, b -> baseline, m -> spectral modes
+    # n -> spatial modes, and t -> time
+    for sf, fgr, fgi in zip(spatial_filters, model_parameters['fg_r'], model_parameters['fg_i']):
+        model_r.append(jnp.einsum('fm,bfn,tmn->btf', spectral_filters, sf, fgr))
+        model_i.append(jnp.einsum('fm,bfn,tmn->btf', spectral_filters, sf, fgi))
+
+    # Stack models
+    return jnp.vstack(model_r), jnp.vstack(model_i)
+
+@jax.jit
+def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
+    """
+    Computes the mean squared error between the data and foreground model multiplied by the 
+    redundant calibration degenerate parameters. Used as the loss function in the gradient descent
+    in SpectralRedundantCalibrator.post_redcal to solve for the redundant calibration degrees of freedom
+
+    Parameters:
+    ----------
+    model_parameters : dictionary
+        Parameters used to fit the DPSS-based foreground model and redundant calibration degeneracies.
+        Keys are "fg_r", "fg_i", "amplitude", and "tip_tilt". Parameters "fg_r" and "fg_i" are the
+        real and imaginary components of the DPSS foreground model but are not used in this function.
+        "amplitude" is redundant calibration amplitude degeneracy and "tip_tilt" are the redundant 
+        calibration phase gradient degeneracies.
+    data_r : np.ndarray
+        Array of real component of data with shape (Ntimes, Nbls)
+    data_i : np.ndarray
+        Array of imaginary component of data with shape (Ntimes, Nbls)
+    wgts : np.ndarray
+        Array of weights with shape (Ntimes, Nbls)
+    fg_model_r : np.ndarray
+        Array of real component of foreground model with shape (Ntimes, Nbls)
+    fg_model_i : np.ndarray
+        Array of imaginary component of foreground model with shape (Ntimes, Nbls)
+    idealized_blvecs : np.ndarray
+        Array of baseline vectors with shape (Nbls, Ndims)
+
+    Returns:
+    -------
+    loss : float
+        Mean squared error between data and foreground model
+    """
+    # Dot baseline vector into tip-tilt parameters
+    # Below the indicies correspond to b -> baseline, n -> tip-tilt parameters, t -> time, and f -> frequency
+    phase = jnp.einsum('bn,ntf->btf', idealized_blvecs, model_parameters["tip_tilt"])
+
+    # Compute model from foreground estimates and amplitude
+    model_r = (model_parameters["amplitude"]) * (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
+    model_i = (model_parameters["amplitude"]) * (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
+    
+    # Compute loss using weights and foreground model
+    return jnp.sum((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
+
+@jax.jit
+def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs, alpha=0):
+    """
+    Function which computes the value of the loss from the degenerate parameters, DPSS foreground components, and the data 
+    
+    Parameters:
+    ----------
+    model_parameters : dictionary
+        Parameters for fitting
+    data_r : np.ndarray
+        Array of real component of data with shape (Ntimes, Nbls)
+    data_i : np.ndarray
+        Array of imaginary component of data with shape (Ntimes, Nbls)
+    wgts : np.ndarray
+        Array of weights with shape (Ntimes, Nbls)
+    spectral_filters : np.ndarray
+        Array of spectral filters with shape (Nfreqs, Nfilters)
+    spatial_filters : List
+        List of spatial filters for each baseline in the group
+    idealized_blvecs : np.ndarray
+        Array of idealized baseline vectors with shape (Nbls, Ndims)
+    alpha : float, optional, default=0
+        Regularization parameter to use for the loss function. If alpha is non-zero, the loss function will be regularized
+        by the sum of the squares of the foreground model parameters.
+
+    Returns:
+    -------
+    loss : float
+        Mean squared error between data and foreground model
+    """
+    # Compute foreground model from the model_parameters and DPSS filters
+    fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
+
+    # Regularize the loss
+    param_loss = 0
+    for fgr, fgi in zip(model_parameters['fg_r'], model_parameters['fg_i']):
+        param_loss += (jnp.square(fgr).sum() + jnp.square(fgi).sum()) * alpha
+        
+    # Compute loss
+    return _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs) + param_loss
+
+def _nucal_post_redcal(
+        data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
+        major_cycle_maxiter=100, convergence_criteria=1e-10, minor_cycle_maxiter=10, alpha=1e-12
+    ):
+    """
+    Function to perform frequency redundant calibration using gradient descent. Calibrates the 
+    data by fitting a foreground model to the data using DPSS filters and estimating the redundant
+    calibration degeneracies that lead to the smoothest calibrated visibilities. Intended to only
+    be only after performing redundant calibration with redcal.RedundantCalibrator.
+
+    Parameters:
+    ----------
+    data_r : jnp.ndarray (or np.ndarray)
+        Array of real component of data with shape (Ntimes, Nbls)
+    data_i : jnp.ndarray (or np.ndarray)
+        Array of imaginary component of data with shape (Ntimes, Nbls)
+    wgts : np.ndarray
+        Array of weights with shape (Ntimes, Nbls)
+    model_parameters : dictionary
+        Parameters used to fit the DPSS-based foreground model and redundant calibration degeneracies.
+        Keys are "fg_r", "fg_i", "amplitude", and "tip_tilt". Parameters "fg_r" and "fg_i" are the
+        real and imaginary components of the DPSS foreground model but are not used in this function.
+        "amplitude" is redundant calibration amplitude degeneracy and "tip_tilt" are the redundant 
+        calibration phase gradient degeneracies.
+    optimizer : optax optimizer
+        Optimizer to use for gradient descent.
+    spectral_filters : np.ndarray
+        Array of spectral filters with shape (Nfreqs, Nfilters)
+    spatial_filters : List
+        List of spatial filters for each baseline in the group
+    idealized_blvecs : np.ndarray
+        Array of idealized baseline vectors with shape (Nbls, Ndims)
+    major_cycle_maxiter : int, optional, default=100
+        Maximum number of iterations to perform in the major portion of the gradient descent loop. A major cycle is defined as a gradient descent step
+        in which the foreground model parameters and redundant calibration degeneracies are fit to the data.
+        If convergence_criteria is not met after major_cycle_maxiter iterations, the optimization will stop.
+    tol : float, optional, default=1e-10
+        Tolerance for stopping criterion. If the difference of the loss between two iterations is less than tol,
+        the optimization will stop.
+    minor_cycle_maxiter : int, optional, default=0
+        Maximum number of iterations of the minor cycle to perform after each major cycle. Minor cycles are performed by fixing the foreground
+        model and solving for the calibration parameters. When minor_cycle_maxiter is 0, no minor cycles are performed. If subsequent losses
+        are within convergence_criterea, the minor cycle will stop.
+    alpha : float, optional, default=0
+        Regularization parameter to use for the loss function. If alpha is non-zero, the loss function will be regularized
+        by the sum of the squares of the foreground model parameters.
+    
+    Returns:
+    -------
+    model_parameters : dictionary
+        Optimized parameters
+    metadata : dictionary
+        Dictionary containing metadata from the optimization. Contains the number of iterations ("niter") and the loss history
+        ("loss_history"). The loss history is an array that stores the value of the loss at each major and minor cycle iteration.
+    """
+    # Initialize optimizer state using parameter guess
+    opt_state = optimizer.init(model_parameters)
+
+    # Initialize variables used in calibration loop
+    losses = []
+    previous_loss = np.inf
+
+    # Start gradient descent
+    for step in range(major_cycle_maxiter):
+        # Compute loss and gradient
+        loss, gradient = jax.value_and_grad(_calibration_loss_function)(
+            model_parameters, data_r, data_i, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters, 
+            idealized_blvecs=idealized_blvecs, alpha=alpha
+        )
+        # Update optimizer state and parameters
+        updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
+        model_parameters = optax.apply_updates(model_parameters, updates)
+        
+        if minor_cycle_maxiter > 0:
+            minor_cycle_losses = []
+
+            # Compute foreground model from the model_parameters and DPSS filters
+            fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
+            for minor_step in range(minor_cycle_maxiter):
+                # Since the foreground model is fixed, we can just use the _mean_square_error
+                # function as our loss function
+                minor_cycle_loss, gradient = jax.value_and_grad(_mean_squared_error)(
+                    model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs=idealized_blvecs,
+                )
+                # Update optimizer state and parameters
+                updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
+                model_parameters = optax.apply_updates(model_parameters, updates)
+
+                # Store minor cycle loss values
+                minor_cycle_losses.append(minor_cycle_loss)
+
+                # Stop if subsequent losses are within tolerance
+                if minor_step >= 1 and np.abs(minor_cycle_losses[-1] - minor_cycle_losses[-2]) < convergence_criteria:
+                    break
+
+            losses += minor_cycle_losses
+
+        # Store loss values
+        losses.append(loss)
+        
+        # Stop if subsequent losses are within tolerance
+        if step >= 1 and np.abs(losses[-1] - previous_loss) < convergence_criteria:
+            break
+
+        previous_loss = loss
+
+    # Save the metadata in dictionary
+    metadata = {"niter": step + 1, "loss_history": np.array(losses)}
+
+    return model_parameters, metadata
+
+class SpectrallyRedundantCalibrator:
+    """
+    Class for performing spectral redundant calibration using the nucal implementation. This class is designed to 
+    be an easy-to-use, high-level interface for performing spectral redundant calibration, similarly to the redcal.RedundantCalibrator
+    class. The main driver function, SpectrallyRedundantCalibrator.calibrate, estimates the DPSS-based foreground model components and
+    redundant calibration degeneracies using gradient descent. The class also provides a number of helper functions for computing
+    DPSS filters and estimating the degeneracies from the data.
+    """
+    def __init__(self, radial_reds):
+        """
+        Initialize the SpectrallyRedundantCalibrator class. Takes a RadialRedundancy object as input for
+        computing the DPSS filters and determining which baselines are in each radially redundant group.
+
+        Parameters:
+        ----------
+        radial_reds : RadialRedundancy object
+            RadialRedundancy object containing a list of list baseline tuples of radially redundant
+            groups. Can be generated using nucal.RadialRedundancy.
+        """
+        # Store the radial redundancy object and antpos
+        self.radial_reds = radial_reds
+        self.antpos = radial_reds.antpos
+
+        # Initialize variables for tracking whether filters have been computed
+        self._filters_computed = False
+        self._most_recent_filter_params = {}
+
+    def _compute_filters(self, freqs, spectral_filter_half_width, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None):
+        """
+        """
+        # Get all parameter names and local variables
+        local_vars = locals()
+        local_vars.pop("self")
+        
+        if self._filters_computed:
+            # Variable for tracking if the filters need to be recomputed - by default, assume they do not
+            recompute_filters = False
+
+            # Loop over all parameters and check if they have changed
+            for key in local_vars:
+                if not np.array_equal(local_vars[key], self._most_recent_filter_params[key]):
+                    recompute_filters = True
+                    break
+            
+            if recompute_filters:
+                self.spectral_filters = compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=eigenval_cutoff)
+                self.spatial_filters = compute_spatial_filters(
+                    self.radial_reds, freqs, spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff, umin=umin, umax=umax
+                )
+
+                # Set most recent set of filter parameters
+                for key in local_vars:
+                    self._most_recent_filter_params[key] = local_vars[key]
+
+                # Set filters computed to True
+                self._filters_computed = True
+
+        else:
+            # Compute the spectral and spatial filters
+            self.spectral_filters = compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=eigenval_cutoff)
+            self.spatial_filters = compute_spatial_filters(
+                self.radial_reds, freqs, spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff, umin=umin, umax=umax
+            )
+
+            # Set most recent parameters
+            for key in local_vars:
+                self._most_recent_filter_params[key] = local_vars[key]
+
+            # Set filters computed to True
+            self._filters_computed = True
+
+    def _estimate_degeneracies(self, data, model, wgts):
+        """
+        Estimate the redundant degeneracies from the data using traditional abscal techniques.
+
+        Parameters:
+        ----------
+        data : DataContainer
+            Data to be calibrated. Data is assumed to be redundantly averaged. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
+        model : DataContainer
+            Model visibilities to use for estimating the bandpass. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
+        wgts : DataContainer
+            Weights associated with data. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
+
+        Returns:
+        -------
+        amplitude : np.ndarray
+            Array of shape (Nbls, Ntimes) containing the amplitude of the model visibilities
+        tip_tilt : np.ndarray
+            Array of shape (Nbls, Ntimes, Ndims) containing the tip-tilt parameters for each baseline
+        """
+        # Get the baselines in the model
+        data_bls = [blkeys for blkeys in data]
+    
+        # Estimate the amplitude degeneracies from the model
+        # abs_amp_logcal returns the amplitude degeneracies and works on both pols simulataneously
+        amp_sol = abscal.abs_amp_logcal(
+            data=data, model=model, wgts=wgts, verbose=False, return_gains=False
+        )
+        
+        # Unpack solution into dictionary
+        # Degeneracy as written in gradient descent is exp(2 * eta) because the amplitude degeneracy
+        # in nucal is written as the square of the amplitude degeneracy in the abscal solution
+        amplitude = {
+            pol: np.exp(2 * amp_sol[f"eta_J{pol}"]) for pol in data.pols()
+        }
+
+        # Estimate the tip-tilt degeneracies from the model
+        tip_tilt = {}
+        for pol in data.pols():
+            # Get the baselines in the model
+            data_bls = [blkeys for blkeys in model if blkeys[2] == pol and blkeys[0] != blkeys[1]]
+
+            # complex_phase_abscal returns the tip-tilt degeneracies
+            meta, _ = abscal.complex_phase_abscal(
+                data=data, model=model, reds=self.radial_reds.reds, data_bls=data_bls, model_bls=data_bls
+            )
+
+            # Tranpose the tip-tilt parameters to have shape (ndims, ntimes, nfreq)
+            tip_tilt[pol] = np.transpose(meta["Lambda_sol"], (2, 0, 1))
+
+        return amplitude, tip_tilt
+    
+    def post_redcal_nucal(self, data, data_wgts, cal_flags={}, spatial_estimate_only=False, linear_solver="lu_solve", alpha=0, share_fg_model=False, 
+                  spectral_filter_half_width=30e-9, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, estimate_degeneracies=False,
+                  optimizer_name='novograd', learning_rate=1e-3, major_cycle_maxiter=100, minor_cycle_maxiter=0, convergence_criteria=1e-10, return_model=False):
+        """
+        Estimates redundant calibration degeneracies by building a DPSS-based, sky-model and solving for the parameters which lead to the smoothest
+        calibrated visibilities. Function starts by estimating a sky-model by using DPSS filters (which can start with spatial dependence or spectral 
+        and spatial dependence) which are fit to the data using linear-least squares. The sky-model is then used to estimate the degeneracies using 
+        traditional abscal techniques, or can be set such that the antenna gains are equal to 1+0j if one assumes that the data are well-calibrated. 
+        The degeneracies and sky-model are then refined using gradient descent. Once the gradient descent has converged, or reached the maximum number 
+        of iterations, the degeneracies and sky-model are returned. This function assumes that the input data are redundantly calibrated and redundantly averaged.
+        
+        Parameters:
+        ----------
+        data : DataContainer (or RedDataContainer)
+            Data to be calibrated. Data is assumed to be redundantly averaged. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
+        data_wgts : DataContainer (or RedDataContainer)
+            Weights associated with data. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
+        cal_flags : dictionary, default={}
+            Dictionary mapping keys like (1, 'Jnn') to flag waterfalls. This dictionary is primarily used for computing the 
+            idealized antenna positions.
+        spatial_estimate_only : bool, default=False
+            If True, the initial estimate of the foreground model will be computed from the data assuming that the evolution foreground model
+            is entirely restricted to the spatial axis. This estimate will then be projected onto the eigenmodes of the spectral DPSS modes
+            for refinement in the gradient descent step. If False, the initial estimate of the foreground model will be computed from the 
+            data giving the model the flexibility to model the spatial and spectral axes. This option fits for fewer foreground parameters 
+            in the least-squares step, but can lead to slower convergence in the gradient descent step.
+        linear_solver : str, default="lu_solve"
+            Method to use for solving the linear system of equations when fitting the foreground models. Options are
+            "lu_solve", "solve", "pinv", and "lstsq". "lu_solve" uses scipy.linalg.lu_solve to solve the linear system of
+            equations, "solve" uses np.linalg.solve. "pinv" uses np.linalg.pinv to solve the linear system of equations, and
+            "lstsq" uses np.linalg.lstsq. "lu_solve" and "solve" tend to be the faster methods, but "lstsq" and "pinv" are more
+            robust.
+        alpha : float, default=1e-12
+            Regularization parameter for linear least-squares fit when computing the initial estimate of the foreground model.
+            Regularization parameter is also used as a regularizer in the gradient descent step.
+        share_fg_model : bool, default=False
+            If True, the foreground model for each radially-redundant group is shared across the time axis for both the least-squares and 
+            gradient descent steps. One useful application of this option is when performing calibration of data across multiple nights at
+            the same LST where the data have shape (N_nights, Nfreqs). In this case, the foreground model is expected to be the same across nights, so sharing the foreground model
+            across nights can greatly reduce the number of parameters to fit. This parameter could also be used for subsequent times to share a 
+            sky model assuming the sky doesn't evolve much in the subsequent integrations. If False, a nucal foreground will be solved for independently
+            for each time integration.
+        spectral_filter_half_width : float, default=20e-9
+            Fourier half-width of the spectral axis DPSS filters in units of seconds.
+        spatial_filter_half_width : float, default=1
+            Half-width of the spatial axis DPSS filters in units of wavelengths.
+        eigenval_cutoff : float, default=1e-12
+            Cutoff for the eigenvalues of the DPSS filters. Only DPSS eigenvectors with eigenvalues greater than eigenval_cutoff will be used
+            for least-squares and gradient descent steps.
+        umin : float, default=None
+            Minimum u-magnitude value to include in calbration. All u-modes with magnitudes less than
+            min_u_cut will have their weights set to 0. Can also be useful for decreasing the number 
+            for foreground eigenmodes as the number of eigenmodes is roughly proportional to (umax - umin).
+        umax : float, default=None
+            Maximum u-magnitude value to include in calbration. All u-modes with magnitudes greater than
+            max_u_cut will have their weights set to 0. Can also be useful for decreasing the number 
+            for foreground eigenmodes as the number of eigenmodes is roughly proportional to (umax - umin).
+        estimate_degeneracies : bool, default=False
+            If True, the initial estimates of the redcal degeneracies will be computed from the data using traditional 
+            abscal techniques and the initial nucal model as the sky model. If False, the amplitude degeneracies will be 
+            initialized to 1 and tip-tilt degeneracies will be initialized to 0. If the data are well-calibrated,
+            setting this option to False can improve the runtime of the calibration.
+        optimizer_name : str, default="novograd"
+            Name of the optimizer to use for gradient descent. Options are keys in nucal.OPTIMIZERS.
+        learning_rate : float, default=1e-3
+            Learning rate for the gradient descent optimizer
+        major_cycle_maxiter : int, default=100
+            Maximum number of iterations to run when performing gradient descent. Major cycles are defined as a gradient descent step
+            in which the foreground model parameters and redundant calibration degeneracies are fit to the data. If the difference of the loss
+            between two major cycle iterations is less than convergence_criteria, the optimization will stop.
+        minor_cycle_maxiter : int, default=0
+            Number of minor cycles to perform after each major cycle. Minor cycles are performed by fixing the foreground
+            model and solving for the calibration parameters. Can be useful for improving convergence. If subsequent minor losses
+            are within convergence_criteria, the minor cycle will stop for a given major cycle.
+        convergence_criteria : float, default=1e-10
+            Convergence criteria for stopping the optimization. If the difference in loss between two iterations is less than
+            convergence_criteria, the optimization will stop.
+        return_model : bool, default=False
+            If True, the model visibilities will be returned.
+
+        Returns:
+        -------
+        gains : dictionary
+            Dictionary mapping antenna numbers to complex gains. Keys are antenna numbers and values are complex gains.
+        model_parameters : dictionary
+            Dictionary containing the model parameters for each polarization. Keys are polarization strings and values are
+        metadata : dictionary
+            Dictionary containing metadata from the optimization. Contains dictionaries for each polarization with the number of 
+            iterations ("niter") and the loss history of the gradient descent ("loss_history").
+        
+        If return_model:
+            model : DataContainer
+                DataContainer containing the model visibilities. DataContainer is of the form {(ant1, ant2, pol): np.array([Ntimes, Nfreqs])}
+        """
+        # Compute spectral and spatial filters
+        self._compute_filters(
+            freqs=data.freqs, spectral_filter_half_width=spectral_filter_half_width, 
+            spatial_filter_half_width=spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff,
+            umin=umin, umax=umax
+        )
+
+        # Assert that the optimizer is valid
+        assert optimizer_name in OPTIMIZERS, f"Optimizer must be one of {OPTIMIZERS}. Got {optimizer_name}."
+        optimizer = OPTIMIZERS[optimizer_name](learning_rate=learning_rate)
+
+        # Compute the estimates of the model components from the data
+        if spatial_estimate_only:
+            init_model_comps = fit_nucal_foreground_model(
+                data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model, 
+                return_model_comps=True, alpha=alpha
+            )
+            init_model_comps = project_u_model_comps_on_spec_axis(init_model_comps, self.spectral_filters)
+        else:
+            init_model_comps = fit_nucal_foreground_model(
+                data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model, 
+                spectral_filters=self.spectral_filters, return_model_comps=True, alpha=alpha
+            )
+            
+        # Compute idealized baseline vectors from antenna positions and calibration flags
+        idealized_antpos = abscal._get_idealized_antpos(cal_flags, self.antpos, data.pols())
+
+        if estimate_degeneracies:
+            model = evaluate_foreground_model(
+                self.radial_reds, init_model_comps, spatial_filters=self.spatial_filters, spectral_filters=self.spectral_filters
+            )
+            amplitude, tip_tilt = self._estimate_degeneracies(data, model, data_wgts)
+        else:
+            amplitude = {pol: np.ones((data.shape)) for pol in data.pols()}
+            tip_tilt = {
+                pol: np.zeros((idealized_antpos[list(idealized_antpos.keys())[0]].shape[0], data.shape[0], data.shape[1])) 
+                for pol in data.pols()
+            }
+        
+        # Initialize model parameters and metadata dictionaries for storing results
+        model_parameters = {}
+        metadata = {}
+
+        for pol in data.pols():
+            # Initialize model parameters
+            init_model_parameters = {}
+
+            # Separate data into real and imaginary components
+            data_real = jnp.array([
+                data[blkey].real for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
+            data_imag = jnp.array([
+                data[blkey].imag for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
+
+            # Initialize model parameters
+            init_model_parameters = {
+                "fg_r": [init_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds.get_pol(pol)],
+                "fg_i": [init_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds.get_pol(pol)],
+                "amplitude": amplitude[pol],
+                "tip_tilt": tip_tilt[pol]
+            }
+            # unpack wgts/filters
+            wgts = jnp.array([
+                data_wgts[blkey] for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
+
+            # Set spectral filters 
+            spatial_filters = [
+                jnp.array([self.spatial_filters[blkey] for blkey in rdgrp]) 
+                for rdgrp in self.radial_reds.get_pol(pol)
+            ]
+
+            # Compute idealized baseline vectors
+            idealized_blvecs = jnp.array([
+                idealized_antpos[blkey[1]] - idealized_antpos[blkey[0]]
+                for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
+
+            # Run optimization
+            model_parameters[pol], metadata[pol] = _nucal_post_redcal(
+                data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters, 
+                spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, major_cycle_maxiter=major_cycle_maxiter, 
+                convergence_criteria=convergence_criteria, minor_cycle_maxiter=minor_cycle_maxiter, alpha=alpha
+            )
+
+        if return_model:
+            # Compute the foreground model from the model parameters
+            fg_model_comps = {
+                rdgrp[0]: model_parameters[pol][f"fg_r"][ri] + 1j * model_parameters[pol][f"fg_i"][ri]
+                for pol in data.pols() for ri, rdgrp in enumerate(self.radial_reds.get_pol(pol))
+            }
+            model = evaluate_foreground_model(self.radial_reds, fg_model_comps, self.spatial_filters, self.spectral_filters)
+
+        
+        # Compute the gains from the model parameters
+        gains = {}
+        for pol in data.pols():
+            for ant in idealized_antpos:
+                gains[(ant, f"J{pol}")] = np.sqrt(model_parameters[pol][f"amplitude"]) * np.exp(
+                    1j * np.tensordot(idealized_antpos[ant], model_parameters[pol][f"tip_tilt"], axes=(0, 0))
+                )
+
+        if return_model:
+            return gains, model_parameters, metadata, model
+        else:
+            return gains, model_parameters, metadata
