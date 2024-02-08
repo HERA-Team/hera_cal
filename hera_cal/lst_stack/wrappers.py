@@ -11,6 +11,9 @@ import logging
 from . import config as cfg
 import numpy as np
 from .binning import get_lst_bins
+import yaml
+from .binning import lst_bin_files_for_baselines
+from .averaging import reduce_lst_bins
 
 logger = logging.getLogger(__name__)
 
@@ -423,7 +426,7 @@ def lst_bin_files_single_outfile(
 
     # make it a bit easier to create the outfiles
     create_outfile = partial(
-        create_lstbin_output_file,
+        io.create_lstbin_output_file,
         outdir=outdir,
         pols=all_pols,
         file_list=file_list,
@@ -512,7 +515,7 @@ def lst_bin_files_single_outfile(
 
         if len(golden_bins) > 0:
             for fl, nbin in zip(out_files["GOLDEN"], golden_bins):
-                write_baseline_slc_to_file(
+                io.write_baseline_slc_to_file(
                     fl=fl,
                     slc=slc,
                     data=data[nbin].transpose((1, 0, 2, 3)),
@@ -521,7 +524,7 @@ def lst_bin_files_single_outfile(
                 )
 
         if "REDUCEDCHAN" in out_files:
-            write_baseline_slc_to_file(
+            io.write_baseline_slc_to_file(
                 fl=out_files["REDUCEDCHAN"],
                 slc=slc,
                 data=data[0][:, :, save_channels].transpose((1, 0, 2, 3)),
@@ -563,7 +566,7 @@ def lst_bin_files_single_outfile(
                 sigma_clip_scale=sigma_clip_scale,
             )
 
-            write_baseline_slc_to_file(
+            io.write_baseline_slc_to_file(
                 fl=out_files[("LST", inpainted)],
                 slc=slc,
                 data=rdc["data"],
@@ -571,7 +574,7 @@ def lst_bin_files_single_outfile(
                 nsamples=rdc["nsamples"],
             )
 
-            write_baseline_slc_to_file(
+            io.write_baseline_slc_to_file(
                 fl=out_files[("STD", inpainted)],
                 slc=slc,
                 data=rdc["std"],
@@ -580,14 +583,14 @@ def lst_bin_files_single_outfile(
             )
 
             if write_med_mad:
-                write_baseline_slc_to_file(
+                io.write_baseline_slc_to_file(
                     fl=out_files[("MED", inpainted)],
                     slc=slc,
                     data=rdc["median"],
                     flags=rdc["flags"],
                     nsamples=rdc["nsamples"],
                 )
-                write_baseline_slc_to_file(
+                io.write_baseline_slc_to_file(
                     fl=out_files[("MAD", inpainted)],
                     slc=slc,
                     data=rdc["mad"],
