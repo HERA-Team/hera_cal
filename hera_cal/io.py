@@ -1548,7 +1548,6 @@ def read_hera_hdf5(
                     if not all([bl[:2] in inds[_hash] for bl in bls]):
                         missing_bls = [bl for bl in bls if bl[:2] not in inds[_hash]]
                         raise ValueError(f"File {filename} missing:" + str(missing_bls))
-                        assert bl[:2] in inds[_hash]
                 if "bls" not in info:
                     info["bls"] = set(inds[_hash].keys())
                     info["data_ants"] = data_ants

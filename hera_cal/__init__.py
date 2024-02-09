@@ -19,6 +19,27 @@ except ModuleNotFoundError:  # pragma: no cover
 del version
 del PackageNotFoundError
 
+__all__ = [
+    "lstbin",
+    "omnical",
+    "redcal",
+    "abscal",
+    "apply_cal",
+    "flag",
+    "io",
+    "smooth_cal",
+    "frf",
+    "flag_utils",
+    "reflections",
+    "vis_clean",
+    "autos",
+    "noise",
+    "tempcal",
+    "nucal",
+    "utils",
+    "delay_filter",
+]
+
 from . import utils
 from . import redcal
 from . import io

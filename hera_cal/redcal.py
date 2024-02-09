@@ -298,8 +298,8 @@ def filter_reds(
         ]
         reds = [
             gp
-            for gp, l in zip(reds, lengths)
-            if ((min_bl_cut is None or l > min_bl_cut) and (max_bl_cut is None or l < max_bl_cut))
+            for gp, length in zip(reds, lengths)
+            if ((min_bl_cut is None or length > min_bl_cut) and (max_bl_cut is None or length < max_bl_cut))
         ]
 
     if max_dims is not None:

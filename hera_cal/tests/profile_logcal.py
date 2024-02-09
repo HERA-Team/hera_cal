@@ -61,10 +61,10 @@ class TestRedundantCalibrator(unittest.TestCase):
         d = {key: value.astype(np.complex64) for key, value in d.items()}
         w = dict([(k, 1.0) for k in d.keys()])
         t0 = time.time()
-        for i in xrange(1):
+        for i in range(1):
             sol = info.logcal(d)
         # print('logcal', time.time() - t0)
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(sol[(i, "x")].shape, SHAPE)
         for bls in reds:
             ubl = sol[bls[0]]
@@ -103,10 +103,10 @@ class TestRedundantCalibrator(unittest.TestCase):
                 data[key[:2]] = {}
             data[key[:2]][key[-1]] = d[key].astype(np.complex64)
         t0 = time.time()
-        for i in xrange(1):
+        for i in range(1):
             m1, g1, v1 = omnical.calib.logcal(data, info)
         # print('omnilogcal', time.time() - t0)
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(g1["x"][i].shape, SHAPE)
         for bls in reds:
             ubl = v1["xx"][(int(bls[0][0]), int(bls[0][1]))]
@@ -131,7 +131,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         # sol0 = info.logcal(d)
         # for k in sol0: sol0[k] += .01*capo.oqe.noise(sol0[k].shape)
         meta, sol = info.lincal(d, sol0)
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(sol[(i, "x")].shape, SHAPE)
         for bls in reds:
             ubl = sol[bls[0]]
@@ -156,7 +156,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         meta, sol = info.omnical(d, sol0, gain=0.5, maxiter=500, check_after=30, check_every=6)
         # meta, sol = info.omnical(d, sol0, gain=.5, maxiter=50, check_after=1, check_every=1)
         # print(meta)
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(sol[(i, "x")].shape, SHAPE)
         for bls in reds:
             ubl = sol[bls[0]]
@@ -193,10 +193,10 @@ class TestRedundantCalibrator(unittest.TestCase):
                 data[key[:2]] = {}
             data[key[:2]][key[-1]] = d[key].astype(np.complex64)
         t0 = time.time()
-        for i in xrange(1):
+        for i in range(1):
             m1, g1, v1 = omnical.calib.lincal(data, info, maxiter=50)
         # print('omnilincal', time.time() - t0)
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(g1["x"][i].shape, SHAPE)
         for bls in reds:
             ubl = v1["xx"][(int(bls[0][0]), int(bls[0][1]))]
@@ -231,7 +231,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'], 0, 10)
-        for i in xrange(len(antpos)):
+        for i in range(len(antpos)):
             self.assertEqual(sol[(i, 'x')].shape, (1, len(freqs)))
         for bls in reds:
             ubl = sol[bls[0]]

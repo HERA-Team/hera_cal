@@ -19,7 +19,7 @@ def test_solar_flag():
     uvd = UVData()
     uvd.read_miriad(data_fname)
     uvd.use_future_array_shapes()
-    data, flags, antp, ant, f, t, l, p = io.load_vis(uvd, return_meta=True)
+    _, flags, _, _, _, t, _, _ = io.load_vis(uvd, return_meta=True)
     # get solar altitude
     a = utils.get_sun_alt(2458043)
     assert isinstance(a, (float, np.floating, np.float64))

@@ -8,7 +8,7 @@ import numpy as np
 import copy
 from frozendict import frozendict
 
-from typing import Sequence, Tuple, List, Union
+from typing import Sequence, Tuple, List, Union, Iterable, Callable
 
 AntPair = Tuple[int, int]
 Baseline = Tuple[int, int, str]

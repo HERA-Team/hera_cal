@@ -1210,7 +1210,7 @@ class Test_ReadHeraCalfits(object):
             assert qual.dtype == np.float32
             assert qual.shape == shape
         for key, qual in rv["total_quality"].items():
-            assert type(key) == str
+            assert isinstance(key, str)
             assert qual.dtype == np.float32
             assert qual.shape == shape
         assert rv["info"]["pols"] == set(["Jnn", "Jee"])
@@ -1302,7 +1302,7 @@ class Test_Visibility_IO_Legacy(object):
         assert flags[(24, 25, "ee")].shape == (120, 64)
 
         # test w/ meta
-        d, f, ap, a, f, t, l, p = io.load_vis([fname, fname2], return_meta=True)
+        _, f, ap, a, f, _, _, _ = io.load_vis([fname, fname2], return_meta=True)
         assert len(ap[24]) == 3
         assert len(f) == len(self.freq_array)
 
@@ -1313,7 +1313,7 @@ class Test_Visibility_IO_Legacy(object):
 
         # test w/ meta pick_data_ants
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        d, f, ap, a, f, t, l, p = io.load_vis(fname, return_meta=True, pick_data_ants=False)
+        _, f, ap, a, f, _, _, _ = io.load_vis(fname, return_meta=True, pick_data_ants=False)
         assert len(ap[24]) == 3
         assert len(a) == 47
         assert len(f) == len(self.freq_array)
@@ -1391,7 +1391,7 @@ class Test_Visibility_IO_Legacy(object):
         uvd = UVData()
         uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458044.41632.xx.HH.XRAA.uvh5"))
         uvd.use_future_array_shapes()
-        data, flgs, ap, a, f, t, l, p = io.load_vis(uvd, return_meta=True)
+        data, flgs, ap, _, f, _, lsts, _ = io.load_vis(uvd, return_meta=True)
         nsample = copy.deepcopy(data)
         for k in nsample.keys():
             nsample[k] = np.ones_like(nsample[k], float)
@@ -1400,7 +1400,7 @@ class Test_Visibility_IO_Legacy(object):
         uvd = io.write_vis(
             "ex.uvh5",
             data,
-            l,
+            lsts,
             f,
             ap,
             start_jd=2458044,
@@ -1427,7 +1427,7 @@ class Test_Visibility_IO_Legacy(object):
         uvd = io.write_vis(
             "ex.uv",
             data,
-            l,
+            lsts,
             f,
             ap,
             start_jd=2458044,
@@ -1446,13 +1446,13 @@ class Test_Visibility_IO_Legacy(object):
         assert uvd.x_orientation.lower() == "east"
 
         # test exceptions
-        pytest.raises(AttributeError, io.write_vis, "ex.uv", data, l, f, ap)
+        pytest.raises(AttributeError, io.write_vis, "ex.uv", data, lsts, f, ap)
         pytest.raises(
             AttributeError,
             io.write_vis,
             "ex.uv",
             data,
-            l,
+            lsts,
             f,
             ap,
             start_jd=2458044,

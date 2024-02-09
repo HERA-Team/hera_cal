@@ -1011,7 +1011,7 @@ class Test_AbsCal(object):
         self.input_cal = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA.abs.calfits")
 
         # make custom gain keys
-        d, fl, ap, a, f, t, l, p = io.load_vis(
+        _, _, ap, a, f, _, _, p = io.load_vis(
             self.data_fname, return_meta=True, pick_data_ants=False
         )
         self.freq_array = f
@@ -1347,7 +1347,7 @@ class Test_AbsCal(object):
     def test_mock_data(self):
         # load into pyuvdata object
         data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        data, flgs, ap, a, f, t, l, p = io.load_vis(data_file, return_meta=True)
+        data, flgs, ap, _, f, _, _, _ = io.load_vis(data_file, return_meta=True)
         wgts = odict()
         for k in flgs.keys():
             wgts[k] = (~flgs[k]).astype(float)
@@ -2477,7 +2477,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         assert a.model_files[0] == "c"
         assert a.model_files[1] == "d"
         assert len(a.model_files) == 2
-        assert type(a.model_files) == list
+        assert isinstance(a.model_files, list)
         assert a.nInt_to_load == 6
         assert a.verbose is True
 

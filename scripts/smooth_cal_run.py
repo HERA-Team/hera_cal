@@ -12,6 +12,7 @@ See help for a more detailed explanation of the parameters.
 
 from hera_cal.smooth_cal import CalibrationSmoother, smooth_cal_argparser
 import sys
+import warnings
 from hera_cal._cli_tools import parse_args, run_with_profiling
 
 a = smooth_cal_argparser()

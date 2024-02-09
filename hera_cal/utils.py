@@ -27,12 +27,15 @@ from pathlib import Path
 import operator
 import functools
 import re
+from typing import Tuple
 
 import sklearn.gaussian_process as gp
 import warnings
 import argparse
 import inspect
 from . import __version__
+from . import types as tp
+from .datacontainer import DataContainer
 
 try:
     AIPY = True

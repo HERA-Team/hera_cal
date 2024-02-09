@@ -392,7 +392,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         for ant in flags.keys():
             flags[ant][4, 0:6] = True
             flags[ant][0:4, 4] = True
-        flag_threshold_and_broadcast(
+        smooth_cal.flag_threshold_and_broadcast(
             flags, freq_threshold=0.35, time_threshold=0.5, ant_threshold=1.0
         )
         for ant in flags.keys():
@@ -401,7 +401,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
 
         assert not np.all(flags[(0, "Jxx")])
         flags[(0, "Jxx")][0:8, :] = True
-        flag_threshold_and_broadcast(
+        smooth_cal.flag_threshold_and_broadcast(
             flags, freq_threshold=1.0, time_threshold=1.0, ant_threshold=0.5
         )
         assert np.all(flags[0, "Jxx"])
