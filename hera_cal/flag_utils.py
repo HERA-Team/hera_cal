@@ -76,9 +76,7 @@ def solar_flag(
         times = np.unique(flags.time_array)
         dtype = "uvd"
     if dtype in ["ndarr", "DC"]:
-        assert (
-            times is not None
-        ), "if flags is an ndarray or DataContainer, must feed in times"
+        assert times is not None, "if flags is an ndarray or DataContainer, must feed in times"
 
     # inplace
     if not inplace:
@@ -127,12 +125,8 @@ def synthesize_ant_flags(flags, threshold=0.0):
         ant_flags: dictionary mapping antenna-pol keys like (1,'x') to boolean flag waterfalls
     """
     # type check
-    assert isinstance(
-        flags, datacontainer.DataContainer
-    ), "flags must be fed as a datacontainer"
-    assert (
-        threshold >= 0.0 and threshold <= 1.0
-    ), "threshold must be 0.0 <= threshold <= 1.0"
+    assert isinstance(flags, datacontainer.DataContainer), "flags must be fed as a datacontainer"
+    assert threshold >= 0.0 and threshold <= 1.0, "threshold must be 0.0 <= threshold <= 1.0"
     if np.isclose(threshold, 1.0):
         threshold = threshold - 1e-10
 
@@ -268,9 +262,7 @@ def factorize_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
         if not inplace:
             flags = copy.deepcopy(flags)
         for k in flags.keys():
-            factorize_flags(
-                flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True
-            )
+            factorize_flags(flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True)
 
         return flags
 

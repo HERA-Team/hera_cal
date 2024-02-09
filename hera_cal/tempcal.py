@@ -195,9 +195,9 @@ def avg_gain_ants(gains, antkeys, gflags=None, inplace=True):
 
     # iterate over antenna lists
     gkeys = [k for k in antkeys if k in gains]
-    avg = np.sum(
-        [gains[k] * (~gflags[k]).astype(float) for k in gkeys], axis=0
-    ) / np.sum([~gflags[k] for k in gkeys], axis=0).clip(1e-10, np.inf)
+    avg = np.sum([gains[k] * (~gflags[k]).astype(float) for k in gkeys], axis=0) / np.sum(
+        [~gflags[k] for k in gkeys], axis=0
+    ).clip(1e-10, np.inf)
     avgf = np.any([gflags[k] for k in gkeys], axis=0)
 
     # update gain dicts

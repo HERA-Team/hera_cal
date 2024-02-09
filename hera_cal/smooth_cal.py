@@ -133,9 +133,7 @@ def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1
     return time_filters, freq_filters
 
 
-def solve_2D_DPSS(
-    gains, weights, time_filters, freq_filters, method="pinv", cached_input={}
-):
+def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cached_input={}):
     """
     Filters gain solutions by solving the weighted linear least squares problem
     for a design matrix that can be factored by a kronecker product in the following way
@@ -200,14 +198,10 @@ def solve_2D_DPSS(
         XTX = np.reshape(XTX, (ncomps, ncomps))
 
     # Calculate X^T W y using the property (A \otimes B) vec(y) = (A Y B)
-    XTWy = jnp.ravel(
-        jnp.dot(jnp.dot(jnp.transpose(time_filters), (gains * weights)), freq_filters)
-    )
+    XTWy = jnp.ravel(jnp.dot(jnp.dot(jnp.transpose(time_filters), (gains * weights)), freq_filters))
 
     # Compute beta and reshape into a 2D array
-    beta, cached_output = _linear_fit(
-        XTX, XTWy, solver=method, cached_input=cached_input
-    )
+    beta, cached_output = _linear_fit(XTX, XTWy, solver=method, cached_input=cached_input)
     beta = np.reshape(beta, (time_filters.shape[1], freq_filters.shape[1]))
 
     # Produce an estimate of the filtered gains
@@ -269,9 +263,7 @@ def filter_1d(
         mode = "dpss_leastsq"
         # Check to see if the grid size changes after removing the flagged edges
         if skip_flagged_edges:
-            xin, din, win, edges, chunks = truncate_flagged_edges(
-                gains, wgts, xvals, ax=ax
-            )
+            xin, din, win, edges, chunks = truncate_flagged_edges(gains, wgts, xvals, ax=ax)
         else:
             xin = xvals
             win = wgts
@@ -365,14 +357,10 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
     nInt, nFreq = padded_gains.shape
     conv_gains = padded_gains * padded_wgts
     conv_weights = padded_wgts
-    kernel = time_kernel(
-        nInt, np.median(np.diff(times)) * 24 * 60 * 60, filter_scale=filter_scale
-    )
+    kernel = time_kernel(nInt, np.median(np.diff(times)) * 24 * 60 * 60, filter_scale=filter_scale)
     for i in range(nFreq):
         conv_gains[:, i] = scipy.signal.convolve(conv_gains[:, i], kernel, mode="same")
-        conv_weights[:, i] = scipy.signal.convolve(
-            conv_weights[:, i], kernel, mode="same"
-        )
+        conv_weights[:, i] = scipy.signal.convolve(conv_weights[:, i], kernel, mode="same")
     conv_gains /= conv_weights
     conv_gains[np.logical_not(np.isfinite(conv_gains))] = 0
     return conv_gains[nBefore : nBefore + len(times), :]
@@ -467,9 +455,7 @@ def time_freq_2D_filter(
     rephasor = rephasor = np.exp(-2.0j * np.pi * dly * freqs)
     if fix_phase_flips:
         # average delay-rephased gain, compute phase of average, and then find phase flips
-        avg_rephased_gain = np.ma.average(
-            gains * rephasor, weights=wgts, axis=1, keepdims=True
-        )
+        avg_rephased_gain = np.ma.average(gains * rephasor, weights=wgts, axis=1, keepdims=True)
         phases = np.where(avg_rephased_gain.mask, np.nan, np.angle(avg_rephased_gain))
         phase_flips = np.where(detect_phase_flips(phases), -1, 1)
         if np.any(phase_flips == -1):
@@ -521,9 +507,7 @@ def time_freq_2D_filter(
                 ((tstart, tend),), ((fstart, fend),) = edges
                 # Create a mask to fill-in flagged region
                 mask = np.ones(gains.shape, dtype=bool)
-                mask[
-                    tstart : gains.shape[0] - tend, fstart : gains.shape[1] - fend
-                ] = False
+                mask[tstart : gains.shape[0] - tend, fstart : gains.shape[1] - fend] = False
                 # Restore flagged region with zeros and fill-in with original data
                 filtered = restore_flagged_edges(filtered, chunks, edges, ax="both")
                 filtered[mask] = gains[mask]
@@ -537,9 +521,7 @@ def time_freq_2D_filter(
 
         else:
             raise ValueError(
-                "DPSS mode {} not recognized. Must be 'rect' or 'plus'.".format(
-                    filter_mode
-                )
+                "DPSS mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode)
             )
 
     elif method == "CLEAN":
@@ -561,9 +543,7 @@ def time_freq_2D_filter(
             area[:, 0] = np.where(np.abs(fringes) < fringe_scale, 1, 0)
         else:
             raise ValueError(
-                "CLEAN mode {} not recognized. Must be 'rect' or 'plus'.".format(
-                    filter_mode
-                )
+                "CLEAN mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode)
             )
 
         # perform deconvolution
@@ -584,9 +564,7 @@ def time_freq_2D_filter(
     return filtered / rephasor, info
 
 
-def flag_threshold_and_broadcast(
-    flags, freq_threshold=0.35, time_threshold=0.5, ant_threshold=0.5
-):
+def flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5, ant_threshold=0.5):
     """Thesholds and broadcast flags along three axes. First, it loops through frequency and time thresholding
     until no new flags are found. Then it does antenna thresholding.
 
@@ -614,14 +592,10 @@ def flag_threshold_and_broadcast(
         sum_flagged = np.sum(all_flagged)
         # consider times that are not flagged for all chans, then flag chans that are flagged too often
         flagged_chans = np.mean(all_flagged, axis=0) == 1
-        all_flagged[
-            np.mean(all_flagged[:, ~flagged_chans], axis=1) > freq_threshold, :
-        ] = True
+        all_flagged[np.mean(all_flagged[:, ~flagged_chans], axis=1) > freq_threshold, :] = True
         # consider chans that are not flagged for all times, then flag times that are flagged too often
         flagged_times = np.mean(all_flagged, axis=1) == 1
-        all_flagged[
-            :, np.mean(all_flagged[~flagged_times, :], axis=0) > time_threshold
-        ] = True
+        all_flagged[:, np.mean(all_flagged[~flagged_times, :], axis=0) > time_threshold] = True
 
     # apply flags to all antennas
     for ant in flags.keys():
@@ -660,9 +634,7 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
         least noisy phases in other antennas when its the reference antenna (after taking out delays)"""
         median_angle_noise_as_refant = {}
         for ref in candidates:
-            refant_rephasor = np.abs(gains[ref] * rephasors[ref]) / (
-                gains[ref] * rephasors[ref]
-            )
+            refant_rephasor = np.abs(gains[ref] * rephasors[ref]) / (gains[ref] * rephasors[ref])
             angle_noise = [
                 interleaved_noise_variance_estimate(
                     np.angle(gains[ant] * rephasors[ant] * refant_rephasor),
@@ -671,9 +643,7 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
                 for ant in candidates
             ]
             median_angle_noise_as_refant[ref] = np.median(angle_noise)
-        return sorted(
-            median_angle_noise_as_refant, key=median_angle_noise_as_refant.__getitem__
-        )[0]
+        return sorted(median_angle_noise_as_refant, key=median_angle_noise_as_refant.__getitem__)[0]
 
     # loop over pols (if per_pol)
     refant = {}
@@ -688,15 +658,12 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
                 if nflags == np.min(list(flags_per_ant.values()))
             ]
         )
-        while (
-            len(refant_candidates) > 1
-        ):  # loop over groups of 3 (the smallest, non-trivial size)
+        while len(refant_candidates) > 1:  # loop over groups of 3 (the smallest, non-trivial size)
             # compare phase noise imparted by reference antenna candidates on two other reference antenna candidates
             refant_candidates = [
                 narrow_refant_candidates(candidates)
                 for candidates in [
-                    refant_candidates[i : i + 3]
-                    for i in range(0, len(refant_candidates), 3)
+                    refant_candidates[i : i + 3] for i in range(0, len(refant_candidates), 3)
                 ]
             ]
         if not per_pol:
@@ -720,9 +687,7 @@ def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
             there exists times and frequencies where the reference antenna is flagged but another antenna
             is not flagged, a ValueError will be raised.
     """
-    for pol, ref in (
-        refant.items() if not isinstance(refant, tuple) else [(None, refant)]
-    ):
+    for pol, ref in refant.items() if not isinstance(refant, tuple) else [(None, refant)]:
         refant_phasor = np.exp(-1.0j * np.angle(gains[ref]))
         for ant in gains.keys():
             if (pol is None) or (ant[1] == pol):
@@ -771,12 +736,8 @@ def build_time_blacklist(
             assert (
                 isinstance(bounds, Iterable) and len(bounds) == 2
             ), "time_blacklists must be list of pairs of bounds"
-            assert (
-                bounds[0] <= bounds[1]
-            ), "time_blacklist bounds must be in chronological order"
-            time_blacklist_array[
-                (time_grid >= bounds[0]) & (time_grid <= bounds[1])
-            ] = True
+            assert bounds[0] <= bounds[1], "time_blacklist bounds must be in chronological order"
+            time_blacklist_array[(time_grid >= bounds[0]) & (time_grid <= bounds[1])] = True
 
     # Calculate blacklisted LSTs
     if len(lst_blacklists) > 0:
@@ -795,9 +756,7 @@ def build_time_blacklist(
         # calculate LST grid in hours from time grid and lat_lon_alt
         lat, lon, alt = lat_lon_alt_degrees
         lst_grid = (
-            pyuvdata.utils.get_lst_for_time(
-                time_grid, latitude=lat, longitude=lon, altitude=alt
-            )
+            pyuvdata.utils.get_lst_for_time(time_grid, latitude=lat, longitude=lon, altitude=alt)
             * 12
             / np.pi
         )
@@ -808,13 +767,9 @@ def build_time_blacklist(
                 isinstance(bounds, Iterable) and len(bounds) == 2
             ), "lst_blacklists must be list of pairs of bounds"
             if bounds[0] < bounds[1]:
-                time_blacklist_array[
-                    (lst_grid >= bounds[0]) & (lst_grid <= bounds[1])
-                ] = True
+                time_blacklist_array[(lst_grid >= bounds[0]) & (lst_grid <= bounds[1])] = True
             else:  # the bounds span the 24 hours --> 0 hours branch cut
-                time_blacklist_array[
-                    (lst_grid >= bounds[0]) | (lst_grid <= bounds[1])
-                ] = True
+                time_blacklist_array[(lst_grid >= bounds[0]) | (lst_grid <= bounds[1])] = True
 
     return time_blacklist_array
 
@@ -840,9 +795,7 @@ def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
             assert (
                 isinstance(bounds, Iterable) and len(bounds) == 2
             ), "freq_blacklists must be list of pairs of bounds"
-            assert (
-                bounds[0] <= bounds[1]
-            ), "freq_blacklists bounds must be in ascending order"
+            assert bounds[0] <= bounds[1], "freq_blacklists bounds must be in ascending order"
             freq_blacklist_array[(freqs >= bounds[0]) & (freqs <= bounds[1])] = True
 
     # Calculate blacklisted channels
@@ -851,20 +804,15 @@ def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
             assert (
                 isinstance(bounds, Iterable) and len(bounds) == 2
             ), "chan_blacklists must be list of pairs of bounds"
-            assert (
-                bounds[0] <= bounds[1]
-            ), "chan_blacklists bounds must be in ascending order"
+            assert bounds[0] <= bounds[1], "chan_blacklists bounds must be in ascending order"
             freq_blacklist_array[
-                (np.arange(len(freqs)) >= bounds[0])
-                & (np.arange(len(freqs)) <= bounds[1])
+                (np.arange(len(freqs)) >= bounds[0]) & (np.arange(len(freqs)) <= bounds[1])
             ] = True
 
     return freq_blacklist_array
 
 
-def _build_wgts_grid(
-    flag_grid, time_blacklist=None, freq_blacklist=None, blacklist_wgt=0.0
-):
+def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None, blacklist_wgt=0.0):
     """Builds a wgts_grid float array (Ntimes, Nfreqs) with 0s flagged or blacklisted data and 1s otherwise."""
     wgts_grid = np.ones_like(flag_grid, dtype=float)
     if time_blacklist is not None:
@@ -1006,9 +954,7 @@ class CalibrationSmoother:
                 chisq[cal] = total_qual
             self.cal_freqs[cal], self.cal_times[cal] = hc.freqs, hc.times
         self.freqs = self.cal_freqs[self.cals[0]]
-        self.ants = sorted(
-            list(set([k for gain in gains.values() for k in gain.keys()]))
-        )
+        self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
 
         # load flag files
         self.flag_files = flag_file_list
@@ -1016,9 +962,7 @@ class CalibrationSmoother:
             utils.echo("Now loading external flag files...", verbose=self.verbose)
             self.ext_flags, self.flag_freqs, self.flag_times = {}, {}, {}
             for ff in self.flag_files:
-                flags, meta = io.load_flags(
-                    ff, filetype=flag_filetype, return_meta=True
-                )
+                flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
                 self.ext_flags[ff] = _to_antflags(flags, self.ants, antflag_thresh)
                 self.flag_freqs[ff] = meta["freqs"]
                 self.flag_times[ff] = meta["times"]
@@ -1026,31 +970,25 @@ class CalibrationSmoother:
         # set up time grid (note that it is offset by .5 dt so that times always map to the same
         # index, even if they are slightly different between the flag_files and the calfits files)
         utils.echo("Now setting up gain and flag grids...", verbose=self.verbose)
-        all_file_times = sorted(
-            np.array([t for times in self.cal_times.values() for t in times])
-        )
+        all_file_times = sorted(np.array([t for times in self.cal_times.values() for t in times]))
         self.dt = np.median(np.diff(all_file_times))
         self.time_grid = np.arange(
             all_file_times[0] + self.dt / 2.0, all_file_times[-1] + self.dt, self.dt
         )
         self.time_indices = {
-            cal: np.searchsorted(self.time_grid, times)
-            for cal, times in self.cal_times.items()
+            cal: np.searchsorted(self.time_grid, times) for cal, times in self.cal_times.items()
         }
         if len(self.flag_files) > 0:
             self.flag_time_indices = {
-                ff: np.searchsorted(self.time_grid, times)
-                for ff, times in self.flag_times.items()
+                ff: np.searchsorted(self.time_grid, times) for ff, times in self.flag_times.items()
             }
 
         # build empty multi-file grids for each antenna's gains and flags (and optionally for cspa)
         self.gain_grids = {
-            ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=complex)
-            for ant in self.ants
+            ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=complex) for ant in self.ants
         }
         self.flag_grids = {
-            ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool)
-            for ant in self.ants
+            ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants
         }
         if load_cspa:
             self.cspa_grids = {
@@ -1070,9 +1008,9 @@ class CalibrationSmoother:
             if len(self.flag_files) > 0:
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
-                        self.flag_grids[ant][
-                            self.flag_time_indices[ff], :
-                        ] += self.ext_flags[ff][ant]
+                        self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][
+                            ant
+                        ]
             # make sure there are no unflagged infs or nans, replace flagged ones with 1.0s
             _check_finite_gains(self.gain_grids[ant], self.flag_grids[ant])
 
@@ -1080,8 +1018,7 @@ class CalibrationSmoother:
         if load_chisq:
             jpols = set([ant[1] for ant in self.ants])
             self.chisq_grids = {
-                jpol: np.ones((len(self.time_grid), len(self.freqs)), dtype=float)
-                for jpol in jpols
+                jpol: np.ones((len(self.time_grid), len(self.freqs)), dtype=float) for jpol in jpols
             }
             for jpol in jpols:
                 for cal in self.cals:
@@ -1135,9 +1072,7 @@ class CalibrationSmoother:
         Ensures that all files have the same frequencies, that they are time-ordered, that
         times are internally contiguous in a file and that calibration and flagging times match.
         """
-        all_time_indices = np.array(
-            [i for indices in self.time_indices.values() for i in indices]
-        )
+        all_time_indices = np.array([i for indices in self.time_indices.values() for i in indices])
         assert len(all_time_indices) == len(
             np.unique(all_time_indices)
         ), "Multiple calibration integrations map to the same time index."
@@ -1186,9 +1121,7 @@ class CalibrationSmoother:
                 effects can be ignored.
         """
         # Make sure that the gain_grid will be sufficiently padded on each side to avoid edge effects
-        needed_buffer = (
-            filter_scale / (2 * (2 * np.log(2)) ** 0.5) * mirror_kernel_min_sigmas
-        )
+        needed_buffer = filter_scale / (2 * (2 * np.log(2)) ** 0.5) * mirror_kernel_min_sigmas
         duration = self.dt * len(self.time_grid) * 24 * 60 * 60
         nMirrors = 0
         while nMirrors * duration < needed_buffer:
@@ -1197,11 +1130,7 @@ class CalibrationSmoother:
         # Now loop through and apply running Gaussian averages
         for ant, gain_grid in self.gain_grids.items():
             utils.echo(
-                "    Now smoothing antenna"
-                + str(ant[0])
-                + " "
-                + str(ant[1])
-                + " in time...",
+                "    Now smoothing antenna" + str(ant[0]) + " " + str(ant[1]) + " in time...",
                 verbose=self.verbose,
             )
             if not np.all(self.flag_grids[ant]):
@@ -1252,11 +1181,7 @@ class CalibrationSmoother:
         cache = {}
         for ant, gain_grid in self.gain_grids.items():
             utils.echo(
-                "    Now filtering antenna"
-                + str(ant[0])
-                + " "
-                + str(ant[1])
-                + f" in {ax}...",
+                "    Now filtering antenna" + str(ant[0]) + " " + str(ant[1]) + f" in {ax}...",
                 verbose=self.verbose,
             )
             wgts_grid = _build_wgts_grid(
@@ -1282,15 +1207,11 @@ class CalibrationSmoother:
             if ax == "freq":
                 for i in info["status"]["axis_1"]:
                     if info["status"]["axis_1"][i] == "skipped":
-                        self.flag_grids[ant][i, :] = np.ones_like(
-                            self.flag_grids[ant][i, :]
-                        )
+                        self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
             else:
                 for i in info["status"]["axis_0"]:
                     if info["status"]["axis_0"][i] == "skipped":
-                        self.flag_grids[ant][:, i] = np.ones_like(
-                            self.flag_grids[ant][:, i]
-                        )
+                        self.flag_grids[ant][:, i] = np.ones_like(self.flag_grids[ant][:, i])
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(
@@ -1382,9 +1303,7 @@ class CalibrationSmoother:
 
                 # If the weights grid is the same as the previous, the solution matrix can be reused to speed up computation
                 if method == "DPSS" or method == "dpss_leastsq":
-                    cached_input = (
-                        info["cached_input"] if np.allclose(wgts_grid, wgts_old) else {}
-                    )
+                    cached_input = info["cached_input"] if np.allclose(wgts_grid, wgts_old) else {}
                     wgts_old = np.copy(wgts_grid)
 
                     # Check to see if the grid size changes after removing the flagged edges
@@ -1396,9 +1315,7 @@ class CalibrationSmoother:
                             ax="both",
                         )
                         # If the grid size changes, recompute filters for new grid size
-                        dpss_vectors = (
-                            info["dpss_vectors"] if edges == edges_old else None
-                        )
+                        dpss_vectors = info["dpss_vectors"] if edges == edges_old else None
                         edges_old = deepcopy(edges)
                 filtered, info = time_freq_2D_filter(
                     gain_grid,
@@ -1434,12 +1351,9 @@ class CalibrationSmoother:
                             if not np.all(self.flag_grids[ant][tind, :]):
                                 # if the flip state has changed since the most recent unflagged integration
                                 if (
-                                    info["phase_flips"][most_recent_unflagged_tind]
-                                    == -1
+                                    info["phase_flips"][most_recent_unflagged_tind] == -1
                                 ) != flipped_here:
-                                    self.flag_grids[ant][
-                                        most_recent_unflagged_tind, :
-                                    ] = True
+                                    self.flag_grids[ant][most_recent_unflagged_tind, :] = True
                                     self.flag_grids[ant][tind, :] = True
                                 most_recent_unflagged_tind = tind
 
@@ -1470,17 +1384,9 @@ class CalibrationSmoother:
             gains, flags, _, _ = hc.read()
             if hasattr(self, "refant"):
                 rephase_to_refant(gains, self.refant)
-            out_gains = {
-                ant: self.gain_grids[ant][self.time_indices[cal], :]
-                for ant in self.ants
-            }
-            out_flags = {
-                ant: self.flag_grids[ant][self.time_indices[cal], :]
-                for ant in self.ants
-            }
-            rel_diff, avg_rel_diff = utils.gain_relative_difference(
-                gains, out_gains, out_flags
-            )
+            out_gains = {ant: self.gain_grids[ant][self.time_indices[cal], :] for ant in self.ants}
+            out_flags = {ant: self.flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
+            rel_diff, avg_rel_diff = utils.gain_relative_difference(gains, out_gains, out_flags)
             hc.update(
                 gains=out_gains,
                 flags=out_flags,

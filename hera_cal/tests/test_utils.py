@@ -129,25 +129,17 @@ class TestFilterBls(object):
             2: np.array([2, 0, 0]),
         }
 
-        assert set(utils.filter_bls(bls, ants=[0, 1])) == set(
-            [(0, 1, "ee"), (0, 1, "ne")]
-        )
-        assert set(utils.filter_bls(bls, ants=[(0, "Jee"), (1, "Jee")])) == set(
-            [(0, 1, "ee")]
-        )
+        assert set(utils.filter_bls(bls, ants=[0, 1])) == set([(0, 1, "ee"), (0, 1, "ne")])
+        assert set(utils.filter_bls(bls, ants=[(0, "Jee"), (1, "Jee")])) == set([(0, 1, "ee")])
 
         assert set(utils.filter_bls(bls, ex_ants=[0])) == set([(1, 2, "ee")])
-        assert set(utils.filter_bls(bls, ex_ants=[(0, "Jee")])) == set(
-            [(1, 2, "ee"), (0, 1, "ne")]
-        )
+        assert set(utils.filter_bls(bls, ex_ants=[(0, "Jee")])) == set([(1, 2, "ee"), (0, 1, "ne")])
 
         assert set(utils.filter_bls(bls, pols=["ee"])) == set(
             [(0, 1, "ee"), (1, 2, "ee"), (0, 2, "ee")]
         )
 
-        assert set(utils.filter_bls(bls, antpos=antpos, min_bl_cut=1.5)) == set(
-            [(0, 2, "ee")]
-        )
+        assert set(utils.filter_bls(bls, antpos=antpos, min_bl_cut=1.5)) == set([(0, 2, "ee")])
         assert set(utils.filter_bls(bls, antpos=antpos, max_bl_cut=1.5)) == set(
             [(0, 1, "ee"), (1, 2, "ee"), (0, 1, "ne")]
         )
@@ -201,9 +193,9 @@ class TestFftDly(object):
     def test_noisy(self):
         true_dlys = np.random.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
-        data = np.exp(
-            2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys
-        ) + 5 * white_noise((60, 1024))
+        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * white_noise(
+            (60, 1024)
+        )
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df)
         assert np.median(np.abs(dlys - true_dlys)) < 1  # median accuracy of 1 ns
@@ -228,9 +220,7 @@ class TestFftDly(object):
         dlys, offs = utils.fft_dly(data, df)
         assert np.median(np.abs(dlys - true_dlys)) < 1e-3  # median accuracy of 1 ps
 
-    @pytest.mark.filterwarnings(
-        "ignore:The default for the `center` keyword has changed"
-    )
+    @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
     def test_realistic(self):
         # load into pyuvdata object
         data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -246,18 +236,14 @@ class TestFftDly(object):
         flat_phs = d[k1] * d[k2].conj()
         df = np.median(np.diff(freqs))
         # basic execution
-        dlys, offs = utils.fft_dly(
-            flat_phs, df, medfilt=True, f0=freqs[0]
-        )  # dlys in ns
+        dlys, offs = utils.fft_dly(flat_phs, df, medfilt=True, f0=freqs[0])  # dlys in ns
         assert dlys.shape == (60, 1)
         assert np.all(np.abs(dlys) < 1)  # all delays near zero
         true_dlys = np.random.uniform(-20, 20, size=60)
         true_dlys.shape = (60, 1)
         phs = np.exp(2j * np.pi * freqs.reshape((1, -1)) * (true_dlys + dlys))
         dlys, offs = utils.fft_dly(flat_phs * phs, df, medfilt=True, f0=freqs[0])
-        assert (
-            np.median(np.abs(dlys - true_dlys)) < 2
-        )  # median accuracy better than 2 ns
+        assert np.median(np.abs(dlys - true_dlys)) < 2  # median accuracy better than 2 ns
 
     def test_error(self):
         true_dlys = np.random.uniform(-200, 200, size=60)
@@ -271,26 +257,18 @@ class TestFftDly(object):
         x = np.linspace(0, 10, 101)
         y = (x - 5) ** 2 + np.isclose(x, 5.0).astype(float)
         # check peak is zeroth bin
-        inds, bs, peaks, p = utils.interp_peak(
-            y[None, :], method="quadratic", reject_edges=False
-        )
+        inds, bs, peaks, p = utils.interp_peak(y[None, :], method="quadratic", reject_edges=False)
         assert inds[0] == 0
         # check peak is middle bin with reject_edges
-        inds, bs, peaks, p = utils.interp_peak(
-            y[None, :], method="quadratic", reject_edges=True
-        )
+        inds, bs, peaks, p = utils.interp_peak(y[None, :], method="quadratic", reject_edges=True)
         assert inds[0] == np.argmax(y - (x - 5) ** 2)
         # check peak is last bin even w/ reject_edges
         y = x * 1.0
-        inds, bs, peaks, p = utils.interp_peak(
-            y[None, :], method="quadratic", reject_edges=True
-        )
+        inds, bs, peaks, p = utils.interp_peak(y[None, :], method="quadratic", reject_edges=True)
         assert inds[0] == np.argmax(y)
         # check peak is zero bin even w/ reject_edges
         y = np.abs(-x * 1.0 + 10)
-        inds, bs, peaks, p = utils.interp_peak(
-            y[None, :], method="quadratic", reject_edges=True
-        )
+        inds, bs, peaks, p = utils.interp_peak(y[None, :], method="quadratic", reject_edges=True)
         assert inds[0] == np.argmax(y)
 
 
@@ -376,18 +354,11 @@ def test_LST2JD():
         assert np.floor(utils.LST2JD(0, start_jd=jd, allow_other_jd=True)) == jd
     # test that lst of branch cut falls on correct day
     for jd in range(2458042, 2458042 + 365):
-        assert (
-            np.floor(
-                utils.LST2JD(1, start_jd=jd, allow_other_jd=True, lst_branch_cut=1)
-            )
-            == jd
-        )
+        assert np.floor(utils.LST2JD(1, start_jd=jd, allow_other_jd=True, lst_branch_cut=1)) == jd
     # test convert back and forth for a range of days to 1e-8 radians precision
     for start_jd in range(2458042, 2458042 + 365):
         lsts = np.arange(0, 2 * np.pi, 0.1)
-        lsts2 = utils.JD2LST(
-            utils.LST2JD(lsts, start_jd=jd, allow_other_jd=True, lst_branch_cut=1)
-        )
+        lsts2 = utils.JD2LST(utils.LST2JD(lsts, start_jd=jd, allow_other_jd=True, lst_branch_cut=1))
         is_close = (
             (np.abs(lsts - lsts2) < 1e-8)
             | (np.abs(lsts - lsts2 + 2 * np.pi) < 1e-8)
@@ -462,9 +433,7 @@ def test_lst_rephase_vectorized():
     fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        (data, flags, antpos, ants, freqs, times, lsts, pols) = io.load_vis(
-            fname, return_meta=True
-        )
+        (data, flags, antpos, ants, freqs, times, lsts, pols) = io.load_vis(fname, return_meta=True)
 
     antpairs = list(data.antpairs())
     pols = list(data._pols)
@@ -492,9 +461,7 @@ def test_lst_rephase_vectorized():
     _data = utils.lst_rephase(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
 
     # check error at transit
-    phs_err = np.angle(
-        _data[itime, ibl, ifreq, ipol] / data_drift[itime + 1, ibl, ifreq, ipol]
-    )
+    phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime + 1, ibl, ifreq, ipol])
     assert np.isclose(phs_err, 0, atol=1e-7)
     # check error across file
     phs_err = np.angle(_data[:-1, ibl, ifreq, ipol] / data_drift[1:, ibl, ifreq, ipol])
@@ -504,9 +471,7 @@ def test_lst_rephase_vectorized():
     dlst = np.array([np.median(np.diff(lsts))] * data.shape[0])
     _data = utils.lst_rephase(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
     # check error at transit
-    phs_err = np.angle(
-        _data[itime, ibl, ifreq, ipol] / data_drift[itime + 1, ibl, ifreq, ipol]
-    )
+    phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime + 1, ibl, ifreq, ipol])
     assert np.isclose(phs_err, 0, atol=1e-7)
     # check err across file
     phs_err = np.angle(_data[:-1, ibl, ifreq, ipol] / data_drift[1:, ibl, ifreq, ipol])
@@ -516,9 +481,7 @@ def test_lst_rephase_vectorized():
     dlst = lsts[50] - lsts
     _data = utils.lst_rephase(data_drift, blvec, freqs, dlst, lat=0.0, inplace=False)
     # check error at transit
-    phs_err = np.angle(
-        _data[itime, ibl, ifreq, ipol] / data_drift[itime, ibl, ifreq, ipol]
-    )
+    phs_err = np.angle(_data[itime, ibl, ifreq, ipol] / data_drift[itime, ibl, ifreq, ipol])
     assert np.isclose(phs_err, 0, atol=1e-7)
     # check error across file
     phs_err = np.angle(_data[:, ibl, ifreq, ipol] / data_drift[50, ibl, ifreq, ipol])
@@ -530,9 +493,7 @@ def test_lst_rephase():
     fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        (data, flags, antpos, ants, freqs, times, lsts, pols) = io.load_vis(
-            fname, return_meta=True
-        )
+        (data, flags, antpos, ants, freqs, times, lsts, pols) = io.load_vis(fname, return_meta=True)
     data_drift = copy.deepcopy(data)
     transit_integration = 50
 
@@ -545,9 +506,7 @@ def test_lst_rephase():
     # get phase error on shortest EW baseline
     k = (0, 1, "ee")
     # check error at transit
-    phs_err = np.angle(
-        data[k][transit_integration, 4] / data_drift[k][transit_integration + 1, 4]
-    )
+    phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration + 1, 4])
     assert np.isclose(phs_err, 0, atol=1e-7)
     # check error across file
     phs_err = np.angle(data[k][:-1, 4] / data_drift[k][1:, 4])
@@ -558,9 +517,7 @@ def test_lst_rephase():
     data = copy.deepcopy(data_drift)
     utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
     # check error at transit
-    phs_err = np.angle(
-        data[k][transit_integration, 4] / data_drift[k][transit_integration + 1, 4]
-    )
+    phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration + 1, 4])
     assert np.isclose(phs_err, 0, atol=1e-7)
     # check err across file
     phs_err = np.angle(data[k][:-1, 4] / data_drift[k][1:, 4])
@@ -571,9 +528,7 @@ def test_lst_rephase():
     data = copy.deepcopy(data_drift)
     utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
     # check error at transit
-    phs_err = np.angle(
-        data[k][transit_integration, 4] / data_drift[k][transit_integration, 4]
-    )
+    phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration, 4])
     assert np.isclose(phs_err, 0, atol=1e-7)
     # check error across file
     phs_err = np.angle(data[k][:, 4] / data_drift[k][50, 4])
@@ -582,18 +537,14 @@ def test_lst_rephase():
     # test operation on array
     k = (0, 1, "ee")
     d = data_drift[k].copy()
-    d_phs = utils.lst_rephase(
-        d, bls[k], freqs, dlst, lat=0.0, array=True, inplace=False
-    )
+    d_phs = utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True, inplace=False)
     assert np.allclose(np.abs(np.angle(d_phs[50] / data[k][50])).max(), 0.0)
 
 
 def test_chisq():
     # test basic case
     data = datacontainer.DataContainer({(0, 1, "xx"): np.ones((5, 10), dtype=complex)})
-    model = datacontainer.DataContainer(
-        {(0, 1, "xx"): 3 * np.ones((5, 10), dtype=complex)}
-    )
+    model = datacontainer.DataContainer({(0, 1, "xx"): 3 * np.ones((5, 10), dtype=complex)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model)
     assert chisq.shape == (5, 10)
     assert nObs.shape == (5, 10)
@@ -613,9 +564,7 @@ def test_chisq():
             (1, 2, "xx"): np.ones((5, 10), dtype=complex),
         }
     )
-    model = datacontainer.DataContainer(
-        {(0, 1, "xx"): 2 * np.ones((5, 10), dtype=complex)}
-    )
+    model = datacontainer.DataContainer({(0, 1, "xx"): 2 * np.ones((5, 10), dtype=complex)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(
         data, model, reds=[[(0, 1, "xx"), (1, 2, "xx")]]
     )
@@ -625,12 +574,8 @@ def test_chisq():
 
     # test with weights
     data = datacontainer.DataContainer({(0, 1, "xx"): np.ones((5, 10), dtype=complex)})
-    model = datacontainer.DataContainer(
-        {(0, 1, "xx"): 2 * np.ones((5, 10), dtype=complex)}
-    )
-    data_wgts = datacontainer.DataContainer(
-        {(0, 1, "xx"): np.zeros((5, 10), dtype=float)}
-    )
+    model = datacontainer.DataContainer({(0, 1, "xx"): 2 * np.ones((5, 10), dtype=complex)})
+    data_wgts = datacontainer.DataContainer({(0, 1, "xx"): np.zeros((5, 10), dtype=float)})
     data_wgts[(0, 1, "xx")][:, 0] = 1.0
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
     assert np.sum(chisq) == 5.0
@@ -638,12 +583,8 @@ def test_chisq():
 
     # test update case
     data = datacontainer.DataContainer({(0, 1, "xx"): np.ones((5, 10), dtype=complex)})
-    model = datacontainer.DataContainer(
-        {(0, 1, "xx"): 2 * np.ones((5, 10), dtype=complex)}
-    )
-    data_wgts = datacontainer.DataContainer(
-        {(0, 1, "xx"): np.ones((5, 10), dtype=float)}
-    )
+    model = datacontainer.DataContainer({(0, 1, "xx"): 2 * np.ones((5, 10), dtype=complex)})
+    data_wgts = datacontainer.DataContainer({(0, 1, "xx"): np.ones((5, 10), dtype=float)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(
         data,
@@ -704,12 +645,8 @@ def test_chisq():
         nObs={"Jxx": 1},
         chisq={},
     )
-    pytest.raises(
-        ValueError, utils.chisq, data, model, data_wgts, chisq_per_ant=chisq_per_ant
-    )
-    pytest.raises(
-        ValueError, utils.chisq, data, model, data_wgts, nObs_per_ant=nObs_per_ant
-    )
+    pytest.raises(ValueError, utils.chisq, data, model, data_wgts, chisq_per_ant=chisq_per_ant)
+    pytest.raises(ValueError, utils.chisq, data, model, data_wgts, nObs_per_ant=nObs_per_ant)
     pytest.raises(
         AssertionError,
         utils.chisq,
@@ -736,19 +673,13 @@ def test_chisq():
         data_wgts,
         gains={(0, "x"): np.ones((5, 10), dtype=complex)},
     )
-    data_wgts = datacontainer.DataContainer(
-        {(0, 1, "xx"): 1.0j * np.ones((5, 10), dtype=float)}
-    )
+    data_wgts = datacontainer.DataContainer({(0, 1, "xx"): 1.0j * np.ones((5, 10), dtype=float)})
     pytest.raises(AssertionError, utils.chisq, data, model, data_wgts)
 
     # test by_pol option
     data = datacontainer.DataContainer({(0, 1, "xx"): np.ones((5, 10), dtype=complex)})
-    model = datacontainer.DataContainer(
-        {(0, 1, "xx"): 2 * np.ones((5, 10), dtype=complex)}
-    )
-    data_wgts = datacontainer.DataContainer(
-        {(0, 1, "xx"): np.ones((5, 10), dtype=float)}
-    )
+    model = datacontainer.DataContainer({(0, 1, "xx"): 2 * np.ones((5, 10), dtype=complex)})
+    data_wgts = datacontainer.DataContainer({(0, 1, "xx"): np.ones((5, 10), dtype=float)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(
         data, model, data_wgts, split_by_antpol=True
     )
@@ -759,12 +690,8 @@ def test_chisq():
     np.testing.assert_array_equal(chisq["Jxx"], 1.0)
     np.testing.assert_array_equal(nObs["Jxx"], 1)
     data = datacontainer.DataContainer({(0, 1, "xy"): np.ones((5, 10), dtype=complex)})
-    model = datacontainer.DataContainer(
-        {(0, 1, "xy"): 2 * np.ones((5, 10), dtype=complex)}
-    )
-    data_wgts = datacontainer.DataContainer(
-        {(0, 1, "xy"): np.ones((5, 10), dtype=float)}
-    )
+    model = datacontainer.DataContainer({(0, 1, "xy"): 2 * np.ones((5, 10), dtype=complex)})
+    data_wgts = datacontainer.DataContainer({(0, 1, "xy"): np.ones((5, 10), dtype=float)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(
         data, model, data_wgts, split_by_antpol=True
     )
@@ -821,30 +748,20 @@ def test_gp_interp1d():
     assert not np.all(np.isclose(yint, yint4))
 
     # test thinning
-    yint_0thin = utils.gp_interp1d(
-        times, y, length_scale=5.0, flags=f, nl=1e-10, xthin=None
-    )
-    yint_1thin = utils.gp_interp1d(
-        times, y, length_scale=5.0, flags=f, nl=1e-10, xthin=1
-    )
-    yint_2thin = utils.gp_interp1d(
-        times, y, length_scale=5.0, flags=f, nl=1e-10, xthin=2
-    )
+    yint_0thin = utils.gp_interp1d(times, y, length_scale=5.0, flags=f, nl=1e-10, xthin=None)
+    yint_1thin = utils.gp_interp1d(times, y, length_scale=5.0, flags=f, nl=1e-10, xthin=1)
+    yint_2thin = utils.gp_interp1d(times, y, length_scale=5.0, flags=f, nl=1e-10, xthin=2)
 
     # check 0thin and 1thin are equivalent
     assert np.all(np.isclose(np.abs(yint_0thin - yint_1thin), 0.0))
 
     # check 1thin and 2thin are *reasonably* close to within noise of original data
     # plt.plot(np.abs(y[:, 10]));plt.plot(np.abs(yint_1thin[:, 10]));plt.plot(np.abs(yint_2thin[:, 10]))
-    nstd = np.std(
-        y - yint_0thin, axis=0
-    )  # residual noise after subtraction with unthinned model
+    nstd = np.std(y - yint_0thin, axis=0)  # residual noise after subtraction with unthinned model
     rstd = np.std(
         yint_1thin - yint_2thin, axis=0
     )  # error flucturations between 1 and 2 thin models
-    assert (
-        np.nanmedian(nstd / rstd) > 2.0
-    )  # assert model error is on average less then half noise
+    assert np.nanmedian(nstd / rstd) > 2.0  # assert model error is on average less then half noise
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -934,14 +851,10 @@ def test_red_average():
     _hd.flag_array[:] = False
     hda3 = utils.red_average(_hd, inplace=False)
     # averaged data should equal original, unaveraged data due to weighting
-    assert np.isclose(
-        hda3.get_data(reds[0][0] + ("ee",)), hd.get_data(reds[0][0] + ("ee",))
-    ).all()
+    assert np.isclose(hda3.get_data(reds[0][0] + ("ee",)), hd.get_data(reds[0][0] + ("ee",))).all()
 
     # try with manual weights
-    wgts = datacontainer.DataContainer(
-        {k: _hd.get_nsamples(k) for k in _hd.get_antpairpols()}
-    )
+    wgts = datacontainer.DataContainer({k: _hd.get_nsamples(k) for k in _hd.get_antpairpols()})
     hda4 = utils.red_average(_hd, wgts=wgts, inplace=False)
     assert hda3 == hda4
 
@@ -960,26 +873,18 @@ def test_red_average_conjugate_baseline_case():
         # zeroth file is a raw correlator '.sum.uvh5' file.
         # first file is a file with flagged antennas removed and chunked.
         # second file is after foreground / xtalk filtering / time averaging.
-        input_file = os.path.join(
-            DATA_PATH, f"red_averaging_conjugate_tester_{filenum}.uvh5"
-        )
+        input_file = os.path.join(DATA_PATH, f"red_averaging_conjugate_tester_{filenum}.uvh5")
         hd = io.HERAData(input_file)
         d, f, n = hd.read()
         reds = get_pos_reds(hd.antpos)
         reds = [
-            [
-                bl[:2]
-                for bl in grp
-                if bl in hd.get_antpairs() or bl[::-1] in hd.get_antpairs()
-            ]
+            [bl[:2] for bl in grp if bl in hd.get_antpairs() or bl[::-1] in hd.get_antpairs()]
             for grp in reds
         ]
         reds = [grp for grp in reds if len(grp) > 0]
         red_grp_keys = [grp[0] for grp in reds]
         # test conjugate sets with fed_datacontainers = False
-        hd_red_average = utils.red_average(
-            hd, reds=reds, inplace=False, red_bl_keys=red_grp_keys
-        )
+        hd_red_average = utils.red_average(hd, reds=reds, inplace=False, red_bl_keys=red_grp_keys)
         # check without specifying reds or red_bl_keys.
         hd_red_average_1 = utils.red_average(hd, inplace=False)
         # test with fed_datacontainers = True
@@ -1015,9 +920,7 @@ def test_gain_relative_difference():
     flags[(1, "Jxx")][3:5, 4] = True
 
     # standard test with flags
-    relative_diff, avg_relative_diff = utils.gain_relative_difference(
-        old_gains, new_gains, flags
-    )
+    relative_diff, avg_relative_diff = utils.gain_relative_difference(old_gains, new_gains, flags)
     assert relative_diff[0, "Jxx"][0, 0] == 1.0
     assert relative_diff[1, "Jxx"][0, 0] == 3.0
     assert avg_relative_diff["Jxx"][0, 0] == 2.0
@@ -1119,12 +1022,8 @@ def test_select_spw_ranges(tmpdir):
     # validate spw_ranges.
     tmp_path = str(tmpdir)
     # test that units are propagated from calibration gains to calibrated data.
-    new_cal = os.path.join(
-        DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"
-    )
-    uvh5 = os.path.join(
-        DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-    )
+    new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+    uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
     hd = io.HERAData(uvh5)
     nf = hd.Nfreqs
     output = os.path.join(tmp_path, "test_calibrated_output.uvh5")
@@ -1136,9 +1035,7 @@ def test_select_spw_ranges(tmpdir):
     hdo = io.HERAData(output)
     assert np.allclose(
         hdo.freq_array,
-        np.hstack(
-            [hd.freq_array[:256], hd.freq_array[332:364], hd.freq_array[792:1000]]
-        ),
+        np.hstack([hd.freq_array[:256], hd.freq_array[332:364], hd.freq_array[792:1000]]),
     )
     # test case where no spw-ranges supplied
     utils.select_spw_ranges(inputfilename=uvh5, outputfilename=output, clobber=True)

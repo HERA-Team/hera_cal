@@ -98,9 +98,7 @@ def test_factorize_flags():
     assert not np.min(f, axis=1).any()
 
     # run on datacontainer
-    f2 = flag_utils.factorize_flags(
-        copy.deepcopy(flags), time_thresh=0.5 / 60, inplace=False
-    )
+    f2 = flag_utils.factorize_flags(copy.deepcopy(flags), time_thresh=0.5 / 60, inplace=False)
     np.testing.assert_array_equal(f2[(24, 25, "ee")], f)
 
     # test exceptions

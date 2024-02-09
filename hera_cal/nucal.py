@@ -159,9 +159,7 @@ def get_u_bounds(radial_reds, antpos, freqs):
     """
     ubounds = []
     for group in radial_reds:
-        umodes = [
-            np.linalg.norm(antpos[ant1] - antpos[ant2]) for (ant1, ant2, pol) in group
-        ]
+        umodes = [np.linalg.norm(antpos[ant1] - antpos[ant2]) for (ant1, ant2, pol) in group]
         umin = np.min(umodes) * freqs.min() / SPEED_OF_LIGHT
         umax = np.max(umodes) * freqs.max() / SPEED_OF_LIGHT
         ubounds.append((umin, umax))
@@ -208,9 +206,7 @@ def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=
         for red in reds:
             ant1, ant2, antpol = red[0]
             if antpol == pol:
-                vector = (antpos[ant2] - antpos[ant1]) / np.linalg.norm(
-                    antpos[ant2] - antpos[ant1]
-                )
+                vector = (antpos[ant2] - antpos[ant1]) / np.linalg.norm(antpos[ant2] - antpos[ant1])
                 # If vector has an EW component less than 0, flip it
                 if vector[0] <= 0:
                     normalized_vecs.append(-vector)
@@ -243,9 +239,7 @@ class RadialRedundancy:
     group radially redundant and spatially redundant groups by baseline key.
     """
 
-    def __init__(
-        self, antpos, reds=None, blvec_error_tol=1e-4, pols=["nn"], bl_error_tol=1.0
-    ):
+    def __init__(self, antpos, reds=None, blvec_error_tol=1e-4, pols=["nn"], bl_error_tol=1.0):
         """
         Parameters:
         ----------
@@ -343,16 +337,12 @@ class RadialRedundancy:
         elif utils.reverse_bl(key) in self._bl_to_red_key:
             group_key = utils.reverse_bl(self._bl_to_red_key[utils.reverse_bl(key)])
         else:
-            raise KeyError(
-                f"Baseline {key} is not in the group of spatial redundancies"
-            )
+            raise KeyError(f"Baseline {key} is not in the group of spatial redundancies")
 
         if group_key in self._bl_to_spec_red_key:
             group_key = self._bl_to_spec_red_key[group_key]
         else:
-            group_key = utils.reverse_bl(
-                self._bl_to_spec_red_key[utils.reverse_bl(group_key)]
-            )
+            group_key = utils.reverse_bl(self._bl_to_spec_red_key[utils.reverse_bl(group_key)])
 
         if group_key in self._mapped_spectral_reds:
             return self._mapped_spectral_reds[group_key]
@@ -381,17 +371,12 @@ class RadialRedundancy:
         elif utils.reverse_bl(key) in self._bl_to_red_key:
             group_key = utils.reverse_bl(self._bl_to_red_key[utils.reverse_bl(key)])
         else:
-            raise KeyError(
-                f"Baseline {key} is not in the group of spatial redundancies"
-            )
+            raise KeyError(f"Baseline {key} is not in the group of spatial redundancies")
 
         if group_key in self._mapped_reds:
             return self._mapped_reds[group_key]
         else:
-            return [
-                utils.reverse_bl(bl)
-                for bl in self._mapped_reds[utils.reverse_bl(group_key)]
-            ]
+            return [utils.reverse_bl(bl) for bl in self._mapped_reds[utils.reverse_bl(group_key)]]
 
     def get_pol(self, pol):
         """Get all radially redundant groups with a given polarization"""
@@ -448,9 +433,7 @@ class RadialRedundancy:
         # If group with same heading already exists, add it to that group. Otherwise, append the group to the list
         for bl in self._mapped_spectral_reds:
             if (
-                is_same_orientation(
-                    group[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol
-                )
+                is_same_orientation(group[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol)
                 and bl[-1] == group[0][-1]
             ):
                 index = self._radial_groups.index(self._mapped_spectral_reds[bl])
@@ -491,9 +474,7 @@ class RadialRedundancy:
 
         for bl in self._mapped_spectral_reds:
             if (
-                is_same_orientation(
-                    value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol
-                )
+                is_same_orientation(value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol)
                 and bl[-1] == value[0][-1]
             ):
                 raise ValueError(
@@ -525,9 +506,7 @@ class RadialRedundancy:
 
         for bl in self._mapped_spectral_reds:
             if (
-                is_same_orientation(
-                    value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol
-                )
+                is_same_orientation(value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol)
                 and bl[-1] == value[0][-1]
             ):
                 raise ValueError(
@@ -931,9 +910,7 @@ def _linear_fit(XTX, Xy, solver="lu_solve", alpha=1e-15, cached_input={}):
     return beta, cached_output
 
 
-def evaluate_foreground_model(
-    radial_reds, fg_model_comps, spatial_filters, spectral_filters=None
-):
+def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spectral_filters=None):
     """
     Evaluates a foreground model using the model components, spatial filters, and spectral filters.
     If the model components are time-dependent, the model is evaluated for each time sample in the data.
@@ -975,8 +952,7 @@ def evaluate_foreground_model(
             ), f"The number of model components must match filter shapes."
         else:
             assert (
-                fg_model_comps[group[0]].shape[-1]
-                == spatial_filters[group[0]].shape[-1]
+                fg_model_comps[group[0]].shape[-1] == spatial_filters[group[0]].shape[-1]
             ), f"The number of model components in fg_model_comps must match the number of \
                   eigenvectors in spatial_filters for baseline {group[0]}."
 
@@ -1001,9 +977,7 @@ def evaluate_foreground_model(
                 )
             else:
                 model[bl] = np.array(
-                    jnp.einsum(
-                        einsum_path, spatial_filters[bl], fg_model_comps[group[0]]
-                    )
+                    jnp.einsum(einsum_path, spatial_filters[bl], fg_model_comps[group[0]])
                 )
 
     # Return the model as a RedDataContainer
@@ -1088,9 +1062,7 @@ def fit_nucal_foreground_model(
             # Below the indices "a" corresponds to the baseline axis, "f" corresponds to the frequency axis,
             # and "t" corresponds to the time axis. The indices "m" and "n" correspond to the model components.
             if spectral_filters is None:
-                XTX = jnp.einsum(
-                    "afm,atf,afn->mn", design_matrix, wgts_here, design_matrix
-                )
+                XTX = jnp.einsum("afm,atf,afn->mn", design_matrix, wgts_here, design_matrix)
                 Xy = jnp.einsum("afm,atf->m", design_matrix, data_here * wgts_here)
 
                 # Solve for model components
@@ -1129,9 +1101,7 @@ def fit_nucal_foreground_model(
                     XTX = jnp.einsum(
                         "afm,af,afn->mn", design_matrix, wgts_here[:, i], design_matrix
                     )
-                    Xy = jnp.einsum(
-                        "afm,af->m", design_matrix, data_here[:, i] * wgts_here[:, i]
-                    )
+                    Xy = jnp.einsum("afm,af->m", design_matrix, data_here[:, i] * wgts_here[:, i])
 
                     # Solve for model components
                     beta.append(_linear_fit(XTX, Xy, solver=solver, alpha=alpha)[0])
@@ -1154,11 +1124,7 @@ def fit_nucal_foreground_model(
 
                     # Solve for the foreground model components
                     _beta, _ = _linear_fit(XTX, Xy, alpha=alpha, solver=solver)
-                    beta.append(
-                        _beta.reshape(
-                            spectral_filters.shape[-1], design_matrix.shape[-1]
-                        )
-                    )
+                    beta.append(_beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1]))
 
             # Pack solution into an array
             beta = np.array(beta)
@@ -1239,9 +1205,7 @@ def _foreground_model(model_parameters, spectral_filters, spatial_filters):
     # Loop over each radially redundant group
     # Below the indicies correspond to f -> frequency, b -> baseline, m -> spectral modes
     # n -> spatial modes, and t -> time
-    for sf, fgr, fgi in zip(
-        spatial_filters, model_parameters["fg_r"], model_parameters["fg_i"]
-    ):
+    for sf, fgr, fgi in zip(spatial_filters, model_parameters["fg_r"], model_parameters["fg_i"]):
         model_r.append(jnp.einsum("fm,bfn,tmn->btf", spectral_filters, sf, fgr))
         model_i.append(jnp.einsum("fm,bfn,tmn->btf", spectral_filters, sf, fgi))
 
@@ -1340,9 +1304,7 @@ def _calibration_loss_function(
         Mean squared error between data and foreground model
     """
     # Compute foreground model from the model_parameters and DPSS filters
-    fg_model_r, fg_model_i = _foreground_model(
-        model_parameters, spectral_filters, spatial_filters
-    )
+    fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
 
     # Regularize the loss
     param_loss = 0
@@ -1473,9 +1435,7 @@ def _nucal_post_redcal(
                     idealized_blvecs=idealized_blvecs,
                 )
                 # Update optimizer state and parameters
-                updates, opt_state = optimizer.update(
-                    gradient, opt_state, model_parameters
-                )
+                updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
                 model_parameters = optax.apply_updates(model_parameters, updates)
 
                 # Store minor cycle loss values
@@ -1554,9 +1514,7 @@ class SpectrallyRedundantCalibrator:
 
             # Loop over all parameters and check if they have changed
             for key in local_vars:
-                if not np.array_equal(
-                    local_vars[key], self._most_recent_filter_params[key]
-                ):
+                if not np.array_equal(local_vars[key], self._most_recent_filter_params[key]):
                     recompute_filters = True
                     break
 
@@ -1639,11 +1597,7 @@ class SpectrallyRedundantCalibrator:
         tip_tilt = {}
         for pol in data.pols():
             # Get the baselines in the model
-            data_bls = [
-                blkeys
-                for blkeys in model
-                if blkeys[2] == pol and blkeys[0] != blkeys[1]
-            ]
+            data_bls = [blkeys for blkeys in model if blkeys[2] == pol and blkeys[0] != blkeys[1]]
 
             # complex_phase_abscal returns the tip-tilt degeneracies
             meta, _ = abscal.complex_phase_abscal(
@@ -1817,9 +1771,7 @@ class SpectrallyRedundantCalibrator:
             )
 
         # Compute idealized baseline vectors from antenna positions and calibration flags
-        idealized_antpos = abscal._get_idealized_antpos(
-            cal_flags, self.antpos, data.pols()
-        )
+        idealized_antpos = abscal._get_idealized_antpos(cal_flags, self.antpos, data.pols())
 
         if estimate_degeneracies:
             model = evaluate_foreground_model(
@@ -1852,40 +1804,26 @@ class SpectrallyRedundantCalibrator:
 
             # Separate data into real and imaginary components
             data_real = jnp.array(
-                [
-                    data[blkey].real
-                    for rdgrp in self.radial_reds.get_pol(pol)
-                    for blkey in rdgrp
-                ]
+                [data[blkey].real for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp]
             )
             data_imag = jnp.array(
-                [
-                    data[blkey].imag
-                    for rdgrp in self.radial_reds.get_pol(pol)
-                    for blkey in rdgrp
-                ]
+                [data[blkey].imag for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp]
             )
 
             # Initialize model parameters
             init_model_parameters = {
                 "fg_r": [
-                    init_model_comps[rdgrp[0]].real
-                    for rdgrp in self.radial_reds.get_pol(pol)
+                    init_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds.get_pol(pol)
                 ],
                 "fg_i": [
-                    init_model_comps[rdgrp[0]].imag
-                    for rdgrp in self.radial_reds.get_pol(pol)
+                    init_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds.get_pol(pol)
                 ],
                 "amplitude": amplitude[pol],
                 "tip_tilt": tip_tilt[pol],
             }
             # unpack wgts/filters
             wgts = jnp.array(
-                [
-                    data_wgts[blkey]
-                    for rdgrp in self.radial_reds.get_pol(pol)
-                    for blkey in rdgrp
-                ]
+                [data_wgts[blkey] for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp]
             )
 
             # Set spectral filters
@@ -1938,9 +1876,7 @@ class SpectrallyRedundantCalibrator:
         gains = {}
         for pol in data.pols():
             for ant in idealized_antpos:
-                gains[(ant, f"J{pol}")] = np.sqrt(
-                    model_parameters[pol][f"amplitude"]
-                ) * np.exp(
+                gains[(ant, f"J{pol}")] = np.sqrt(model_parameters[pol][f"amplitude"]) * np.exp(
                     1j
                     * np.tensordot(
                         idealized_antpos[ant],

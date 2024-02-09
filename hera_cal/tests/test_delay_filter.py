@@ -19,9 +19,7 @@ import glob
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
-@pytest.mark.filterwarnings(
-    "ignore:It seems that the latitude and longitude are in radians"
-)
+@pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 class Test_DelayFilter(object):
     def test_run_delay_filter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -58,9 +56,7 @@ class Test_DelayFilter(object):
                 skip_wgt=0.1,
                 maxiter=100,
             )
-            assert (
-                dfil.clean_info[k][(0, dfil.Nfreqs)]["status"]["axis_1"][0] == "skipped"
-            )
+            assert dfil.clean_info[k][(0, dfil.Nfreqs)]["status"]["axis_1"][0] == "skipped"
             np.testing.assert_array_equal(
                 dfil.clean_flags[k][0, :], np.ones_like(dfil.flags[k][0, :])
             )
@@ -89,9 +85,7 @@ class Test_DelayFilter(object):
             edgecut_low=0,
             edgecut_hi=0,
         )
-        outfilename = os.path.join(
-            tmp_path, "zen.2458043.12552.xx.HH.filter_test.ORAD.uvh5"
-        )
+        outfilename = os.path.join(tmp_path, "zen.2458043.12552.xx.HH.filter_test.ORAD.uvh5")
         with pytest.raises(ValueError):
             dfil.write_filtered_data()
         with pytest.raises(NotImplementedError):
@@ -108,9 +102,7 @@ class Test_DelayFilter(object):
         uvd.read_uvh5(outfilename)
         uvd.use_future_array_shapes()
         assert "Hello_world." in uvd.history.replace("\n", "").replace(" ", "")
-        assert "Thisfilewasproducedbythefunction" in uvd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in uvd.history.replace("\n", "").replace(" ", "")
         assert uvd.telescope_name == "PAPER"
 
         filtered_residuals, flags = io.load_vis(uvd)
@@ -122,13 +114,9 @@ class Test_DelayFilter(object):
         filled_data, filled_flags = io.load_vis(outfilename, filetype="uvh5")
 
         for k in data.keys():
-            np.testing.assert_array_almost_equal(
-                filled_data[k][~flags[k]], data[k][~flags[k]]
-            )
+            np.testing.assert_array_almost_equal(filled_data[k][~flags[k]], data[k][~flags[k]])
             np.testing.assert_array_almost_equal(dfil.clean_model[k], clean_model[k])
-            np.testing.assert_array_almost_equal(
-                dfil.clean_resid[k], filtered_residuals[k]
-            )
+            np.testing.assert_array_almost_equal(dfil.clean_resid[k], filtered_residuals[k])
             np.testing.assert_array_almost_equal(
                 data[k][~flags[k]],
                 (clean_model[k] + filtered_residuals[k])[~flags[k]],
@@ -138,9 +126,7 @@ class Test_DelayFilter(object):
 
     def test_load_delay_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, "temp.h5")
         # test NotImplementedError
         pytest.raises(
@@ -199,9 +185,7 @@ class Test_DelayFilter(object):
         )
         np.testing.assert_array_equal(f[(53, 54, "ee")], dfil.flags[(53, 54, "ee")])
 
-        cal = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"
-        )
+        cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(tmp_path, "temp.h5")
         df.load_delay_filter_and_write(
             uvh5,
@@ -213,9 +197,7 @@ class Test_DelayFilter(object):
             avg_red_bllens=avg_bl,
         )
         hd = io.HERAData(outfilename)
-        assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(" ", "")
         d, f, n = hd.read(bls=[(53, 54, "ee")])
         np.testing.assert_array_equal(f[(53, 54, "ee")], True)
         os.remove(outfilename)
@@ -411,9 +393,7 @@ class Test_DelayFilter(object):
         assert d[(53, 54, "ee")].shape[0] == 60
         # now test flag factorization and time thresholding.
         # prepare an input files for broadcasting flags.
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         input_file = os.path.join(tmp_path, "temp_special_flags.h5")
         shutil.copy(uvh5, input_file)
         hd = io.HERAData(input_file)
@@ -505,9 +485,7 @@ class Test_DelayFilter(object):
 
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         cdir = os.getcwd()
         cdir = os.path.join(cdir, "cache_temp")
         # make a cache directory
@@ -541,9 +519,7 @@ class Test_DelayFilter(object):
         # there should now be six cache files (one per i/o/filter). There are three baselines.
         assert len(glob.glob(cdir + "/*")) == 6
         hd = io.HERAData(outfilename)
-        assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(" ", "")
         d, f, n = hd.read(bls=[(53, 54, "ee")])
         np.testing.assert_array_equal(f[(53, 54, "ee")], True)
         os.remove(outfilename)
@@ -562,9 +538,7 @@ class Test_DelayFilter(object):
         )
         assert len(glob.glob(cdir + "/*")) == 1
         hd = io.HERAData(outfilename)
-        assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(" ", "")
         d, f, n = hd.read(bls=[(53, 54, "ee")])
         np.testing.assert_array_equal(f[(53, 54, "ee")], True)
         os.remove(outfilename)
@@ -587,9 +561,7 @@ class Test_DelayFilter(object):
         # now new cache files should be generated.
         assert len(glob.glob(cdir + "/*")) == 1
         hd = io.HERAData(outfilename)
-        assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(" ", "")
         d, f, n = hd.read(bls=[(53, 54, "ee")])
         np.testing.assert_array_equal(f[(53, 54, "ee")], True)
 

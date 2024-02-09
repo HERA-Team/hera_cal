@@ -280,9 +280,7 @@ def lst_bin_files_single_outfile(
             data_files, calfile_rules, ignore_missing=ignore_missing_calfiles
         )
 
-    where_inpainted_files = io._get_where_inpainted_files(
-        data_files, where_inpainted_file_rules
-    )
+    where_inpainted_files = io._get_where_inpainted_files(data_files, where_inpainted_file_rules)
 
     output_flagged, output_inpainted = io._configure_inpainted_mode(
         output_flagged, output_inpainted, where_inpainted_files
@@ -381,15 +379,12 @@ def lst_bin_files_single_outfile(
     all_baselines = [bl for bl in all_baselines if bl[0] != bl[1]]
 
     bl_chunks = [
-        all_baselines[i * Nbls_to_load : (i + 1) * Nbls_to_load]
-        for i in range(n_bl_chunks)
+        all_baselines[i * Nbls_to_load : (i + 1) * Nbls_to_load] for i in range(n_bl_chunks)
     ]
     bl_chunks = [blg for blg in bl_chunks if len(blg) > 0]
 
     dlst = config_opts["dlst"]
-    lst_bin_edges = np.array(
-        [x - dlst / 2 for x in lst_bins] + [lst_bins[-1] + dlst / 2]
-    )
+    lst_bin_edges = np.array([x - dlst / 2 for x in lst_bins] + [lst_bins[-1] + dlst / 2])
 
     (
         tinds,
@@ -420,8 +415,7 @@ def lst_bin_files_single_outfile(
     golden_bins, _, mask = get_lst_bins(golden_lsts, lst_bin_edges)
     golden_bins = golden_bins[mask]
     logger.info(
-        f"golden_lsts bins in this output file: {golden_bins}, "
-        f"lst_bin_edges={lst_bin_edges}"
+        f"golden_lsts bins in this output file: {golden_bins}, " f"lst_bin_edges={lst_bin_edges}"
     )
 
     # make it a bit easier to create the outfiles
@@ -534,9 +528,7 @@ def lst_bin_files_single_outfile(
 
         # Get the sigma clip scale
         if sigma_clip_use_autos and mean_autos is not None:
-            dtdf = np.median(np.ediff1d(meta.times)) * (
-                meta.freq_array[1] - meta.freq_array[0]
-            )
+            dtdf = np.median(np.ediff1d(meta.times)) * (meta.freq_array[1] - meta.freq_array[0])
             predicted_var = [
                 np.abs(auto) ** 2 / dtdf / ns for ns, auto in zip(nsamples, mean_autos)
             ]
@@ -558,9 +550,7 @@ def lst_bin_files_single_outfile(
                 inpainted_mode=inpainted,
                 flag_thresh=flag_thresh,
                 sigma_clip_thresh=(
-                    None
-                    if inpainted and not sigma_clip_in_inpainted_mode
-                    else sigma_clip_thresh
+                    None if inpainted and not sigma_clip_in_inpainted_mode else sigma_clip_thresh
                 ),
                 sigma_clip_min_N=sigma_clip_min_N,
                 flag_below_min_N=flag_below_min_N,
@@ -676,9 +666,7 @@ def lst_bin_files(
     output_file_select = [int(i) for i in output_file_select]
 
     if max(output_file_select) >= len(matched_files):
-        raise ValueError(
-            "output_file_select must be less than the number of output files"
-        )
+        raise ValueError("output_file_select must be less than the number of output files")
 
     meta = FastUVH5Meta(
         matched_files[0][0][0],
@@ -740,21 +728,15 @@ def lst_bin_arg_parser():
         default="zen.{kind}.{lst:7.5f}.uvh5",
         help="filename format for output files. See docstring for details.",
     )
-    a.add_argument(
-        "--outdir", default=None, type=str, help="directory for writing output"
-    )
-    a.add_argument(
-        "--overwrite", default=False, action="store_true", help="overwrite output files"
-    )
+    a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
+    a.add_argument("--overwrite", default=False, action="store_true", help="overwrite output files")
     a.add_argument(
         "--rephase",
         default=False,
         action="store_true",
         help="rephase data to center of LST bin before binning",
     )
-    a.add_argument(
-        "--history", default=" ", type=str, help="history to insert into output files"
-    )
+    a.add_argument("--history", default=" ", type=str, help="history to insert into output files")
     a.add_argument(
         "--output_file_select",
         default=None,
@@ -762,9 +744,7 @@ def lst_bin_arg_parser():
         type=int,
         help="list of output file integers to run on. Default is all output files.",
     )
-    a.add_argument(
-        "--vis_units", default="Jy", type=str, help="visibility units of output files."
-    )
+    a.add_argument("--vis_units", default="Jy", type=str, help="visibility units of output files.")
     a.add_argument(
         "--ignore_flags",
         default=False,
@@ -784,9 +764,7 @@ def lst_bin_arg_parser():
         nargs="+",
         help="list of paths to yamls with lists of antennas from each night to exclude lstbinned data files.",
     )
-    a.add_argument(
-        "--ignore-ants", default=(), type=int, nargs="+", help="ants to ignore"
-    )
+    a.add_argument("--ignore-ants", default=(), type=int, nargs="+", help="ants to ignore")
     a.add_argument(
         "--ignore-missing-calfiles",
         default=False,

@@ -13,9 +13,7 @@ from hera_cal import io, utils, redcal
 ap = argparse.ArgumentParser(
     description="Redundantly average a data file that's already been calibrated."
 )
-ap.add_argument(
-    "infilename", type=str, help="path to visibility data file to redundantly average"
-)
+ap.add_argument("infilename", type=str, help="path to visibility data file to redundantly average")
 ap.add_argument("outfilename", type=str, help="path to new visibility results file")
 ap.add_argument(
     "--bl_error_tol",
@@ -36,9 +34,7 @@ hd = io.HERAData(args.infilename)
 hd.read()
 
 # Redundantly average
-reds = redcal.get_pos_reds(
-    hd.data_antpos, bl_error_tol=args.bl_error_tol, include_autos=True
-)
+reds = redcal.get_pos_reds(hd.data_antpos, bl_error_tol=args.bl_error_tol, include_autos=True)
 utils.red_average(hd, reds=reds, inplace=True)
 
 # Write data

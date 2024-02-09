@@ -241,19 +241,12 @@ class ReflectionFitter(FRFilter):
         # get flags
         if clean_flags is None:
             clean_flags = DataContainer(
-                dict(
-                    [
-                        (k, np.zeros_like(clean_resid[k], dtype=bool))
-                        for k in clean_resid
-                    ]
-                )
+                dict([(k, np.zeros_like(clean_resid[k], dtype=bool)) for k in clean_resid])
             )
 
         # get keys: only use auto correlations and auto pols to model reflections
         if keys is None:
-            keys = [
-                k for k in clean_resid.keys() if k[0] == k[1] and k[2][0] == k[2][1]
-            ]
+            keys = [k for k in clean_resid.keys() if k[0] == k[1] and k[2][0] == k[2][1]]
 
         # iterate over keys
         for k in keys:
@@ -302,9 +295,7 @@ class ReflectionFitter(FRFilter):
             self.ref_dly[rkey] = dly
             self.ref_significance[rkey] = sig
             self.ref_flags[rkey] = (
-                np.all(clean_flags[k], axis=1, keepdims=True)
-                + (sig < ref_sig_cut)
-                + bad_sols
+                np.all(clean_flags[k], axis=1, keepdims=True) + (sig < ref_sig_cut) + bad_sols
             )
 
         # form gains
@@ -318,13 +309,9 @@ class ReflectionFitter(FRFilter):
                 for p in autopols:
                     k = (a, split_pol(p)[0])
                     if k not in self.ref_gains:
-                        self.ref_gains[k] = np.ones_like(
-                            self.ref_gains[antpol], dtype=complex
-                        )
+                        self.ref_gains[k] = np.ones_like(self.ref_gains[antpol], dtype=complex)
                     if k not in self.ref_flags:
-                        self.ref_flags[k] = np.zeros_like(
-                            self.ref_flags[antpol], dtype=bool
-                        )
+                        self.ref_flags[k] = np.zeros_like(self.ref_flags[antpol], dtype=bool)
 
     def refine_auto_reflections(
         self,
@@ -411,9 +398,7 @@ class ReflectionFitter(FRFilter):
         # check inputs
         if clean_flags is None:
             clean_flags = DataContainer(
-                dict(
-                    [(k, np.zeros_like(clean_data[k], dtype=bool)) for k in clean_data]
-                )
+                dict([(k, np.zeros_like(clean_data[k], dtype=bool)) for k in clean_data])
             )
         if clean_model is None:
             clean_model = DataContainer(
@@ -721,15 +706,11 @@ class ReflectionFitter(FRFilter):
         """
         # get flags
         if flags is None:
-            flags = DataContainer(
-                dict([(k, np.zeros_like(dfft[k], dtype=bool)) for k in dfft])
-            )
+            flags = DataContainer(dict([(k, np.zeros_like(dfft[k], dtype=bool)) for k in dfft]))
 
         # get weights
         if wgts is None:
-            wgts = DataContainer(
-                dict([(k, np.ones_like(dfft[k], dtype=float)) for k in dfft])
-            )
+            wgts = DataContainer(dict([(k, np.ones_like(dfft[k], dtype=float)) for k in dfft]))
 
         # get keys
         if keys is None:
@@ -807,9 +788,7 @@ class ReflectionFitter(FRFilter):
             for k in dfft:
                 if k not in svals or k not in vmodes:
                     continue
-                output[k] = dfft[k].dot(
-                    np.conj(vmodes[k].T).dot(np.eye(len(svals[k])) / svals[k])
-                )
+                output[k] = dfft[k].dot(np.conj(vmodes[k].T).dot(np.eye(len(svals[k])) / svals[k]))
 
         elif svals is None:
             assert (
@@ -819,9 +798,7 @@ class ReflectionFitter(FRFilter):
                 if k not in umodes or k not in vmodes:
                     continue
                 output[k] = np.abs(
-                    np.conj(umodes[k].T)
-                    .dot(dfft[k].dot(np.conj(vmodes[k].T)))
-                    .diagonal()
+                    np.conj(umodes[k].T).dot(dfft[k].dot(np.conj(vmodes[k].T))).diagonal()
                 )
 
         elif vmodes is None:
@@ -833,9 +810,7 @@ class ReflectionFitter(FRFilter):
                 if k not in svals or k not in umodes:
                     continue
                 output[k] = (
-                    (np.eye(len(svals[k])) / svals[k])
-                    .dot(np.conj(umodes[k]).T)
-                    .dot(dfft[k])
+                    (np.eye(len(svals[k])) / svals[k]).dot(np.conj(umodes[k]).T).dot(dfft[k])
                 )
 
         else:
@@ -890,9 +865,7 @@ class ReflectionFitter(FRFilter):
         for k in keys:
             if k in self.pcomp_model and (not overwrite and not increment):
                 echo(
-                    "{} in pcomp_model and overwrite == increment == False, skipping...".format(
-                        k
-                    ),
+                    "{} in pcomp_model and overwrite == increment == False, skipping...".format(k),
                     verbose=verbose,
                 )
                 continue
@@ -1126,9 +1099,9 @@ class ReflectionFitter(FRFilter):
                 gp_len = 1.0 / (gp_f * 1e-3) / (24.0 * 3600.0)
 
                 # setup GP kernel
-                kernel = 1**2 * gp.kernels.RBF(
-                    length_scale=gp_len
-                ) + gp.kernels.WhiteKernel(noise_level=gp_nl)
+                kernel = 1**2 * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(
+                    noise_level=gp_nl
+                )
 
             # interpolate
             y = umodes[k][:, :Ninterp]
@@ -1199,9 +1172,7 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
     return eps
 
 
-def fit_reflection_delay(
-    rfft, dly_range, dlys, dfft=None, return_peak=False, reject_edges=True
-):
+def fit_reflection_delay(rfft, dly_range, dlys, dfft=None, return_peak=False, reject_edges=True):
     """
     Take FFT'd data and fit for peak delay and amplitude.
 
@@ -1252,9 +1223,7 @@ def fit_reflection_delay(
         abs_rfft, method="quadratic", reject_edges=reject_edges
     )
     ref_dly_inds += select.min()
-    ref_dlys = dlys[ref_dly_inds, None] + bin_shifts[:, None] * np.median(
-        np.abs(np.diff(dlys))
-    )
+    ref_dlys = dlys[ref_dly_inds, None] + bin_shifts[:, None] * np.median(np.abs(np.diff(dlys)))
     ref_peaks = ref_peaks[:, None]
 
     if return_peak:
@@ -1325,19 +1294,13 @@ def fit_reflection_phase(
     filt /= np.max(np.abs(filt), axis=-1, keepdims=True)
     freqs = np.linspace(0, freqs.max() - freqs.min(), Ndlys, endpoint=True)
     phases = np.linspace(0, 2 * np.pi, Nphs, endpoint=False)
-    cosines = np.array(
-        [construct_reflection(freqs[::fthin], 1, ref_dlys / 1e9, p) for p in phases]
-    )
+    cosines = np.array([construct_reflection(freqs[::fthin], 1, ref_dlys / 1e9, p) for p in phases])
     residuals = np.sum((filt[None, :, ::fthin].real - cosines.real) ** 2, axis=-1)
 
     # quadratic interp of residuals to get reflection phase
     resids = -residuals.T
-    inds, bin_shifts, _, _ = interp_peak(
-        resids + np.abs(resids.min()), method="quadratic"
-    )
-    ref_phs = (phases[inds] + bin_shifts * np.median(np.diff(phases)))[:, None] % (
-        2 * np.pi
-    )
+    inds, bin_shifts, _, _ = interp_peak(resids + np.abs(resids.min()), method="quadratic")
+    ref_phs = (phases[inds] + bin_shifts * np.median(np.diff(phases)))[:, None] % (2 * np.pi)
 
     # fill nans
     ref_phs[np.isnan(ref_phs)] = 0.0
@@ -1732,9 +1695,7 @@ def auto_reflection_argparser():
         type=str,
         help="data file paths to CLEAN and run auto reflection modeling on",
     )
-    a.add_argument(
-        "--output_fname", type=str, help="Full path to the output .calfits file"
-    )
+    a.add_argument("--output_fname", type=str, help="Full path to the output .calfits file")
     a.add_argument(
         "--dly_ranges",
         type=str,
@@ -1775,9 +1736,7 @@ def auto_reflection_argparser():
         help="List of polarization strings to operate on.",
     )
     a.add_argument("--window", default="None", type=str, help="FFT window for CLEAN")
-    a.add_argument(
-        "--alpha", default=0.2, type=float, help="Alpha parameter if window is tukey"
-    )
+    a.add_argument("--alpha", default=0.2, type=float, help="Alpha parameter if window is tukey")
     a.add_argument("--tol", default=1e-6, type=float, help="CLEAN tolerance")
     a.add_argument("--gain", default=1e-1, type=float, help="CLEAN gain")
     a.add_argument("--maxiter", default=100, type=int, help="CLEAN maximum Niter")
@@ -1872,9 +1831,7 @@ def auto_reflection_argparser():
         type=str,
         help="Optimization algorithm. See scipy.optimize.minimize for details",
     )
-    a.add_argument(
-        "--opt_tol", default=1e-3, type=float, help="Optimization stopping tolerance."
-    )
+    a.add_argument("--opt_tol", default=1e-3, type=float, help="Optimization stopping tolerance.")
     a.add_argument(
         "--opt_buffer",
         default=[25, 25],

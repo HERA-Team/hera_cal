@@ -48,9 +48,7 @@ class MixtureModel(rv_continuous):
         return cdf
 
     def rvs(self, size):
-        submodel_choices = np.random.choice(
-            len(self.submodels), size=size, p=self.weights
-        )
+        submodel_choices = np.random.choice(len(self.submodels), size=size, p=self.weights)
         submodel_samples = [submodel.rvs(size=size) for submodel in self.submodels]
         rvs = np.choose(submodel_choices, submodel_samples)
         return rvs
@@ -149,9 +147,7 @@ class LSTBinStats:
                 days_binned[bl] = np.sum(gn > 0, axis=0)
 
                 all_predicted_binned_var[bl] = np.sum(wgts_arr, axis=0) ** -1
-                all_predicted_var[bl] = (
-                    days_binned[bl] - 1
-                ) * all_predicted_binned_var[bl]
+                all_predicted_var[bl] = (days_binned[bl] - 1) * all_predicted_binned_var[bl]
             else:
                 # Although the above code WOULD work for non-redundantly-averaged
                 # data, it is highly inefficient, because we don't need to know
@@ -169,9 +165,7 @@ class LSTBinStats:
                 per_night_var_pred[bl] = expected_var[None, :]
 
             excess_binned_var[bl] = all_obs_var[bl] / all_predicted_var[bl]
-            excess_interleaved_var[bl] = (
-                all_interleaved_var[bl] / all_predicted_binned_var[bl]
-            )
+            excess_interleaved_var[bl] = all_interleaved_var[bl] / all_predicted_binned_var[bl]
 
         return cls(
             days_binned=dcls(days_binned),
@@ -191,34 +185,24 @@ class LSTBinStats:
     @cached_property
     def n2n_var_pred(self) -> DataContainer:
         return self._cls(
-            {
-                bl: self.lstavg_var_pred[bl] * (self.days_binned[bl] - 1)
-                for bl in self.bls()
-            }
+            {bl: self.lstavg_var_pred[bl] * (self.days_binned[bl] - 1) for bl in self.bls()}
         )
 
     @cached_property
     def n2n_excess_var(self) -> DataContainer:
-        return self._cls(
-            {bl: self.n2n_var_obs[bl] / self.n2n_var_pred[bl] for bl in self.bls()}
-        )
+        return self._cls({bl: self.n2n_var_obs[bl] / self.n2n_var_pred[bl] for bl in self.bls()})
 
     @cached_property
     def lstavg_excess_var(self) -> DataContainer:
         return self._cls(
-            {
-                bl: self.lstavg_var_obs[bl] / self.lstavg_var_pred[bl]
-                for bl in self.bls()
-            }
+            {bl: self.lstavg_var_obs[bl] / self.lstavg_var_pred[bl] for bl in self.bls()}
         )
 
     @classmethod
     def n2n_excess_var_distribution(cls, ndays_binned: int):
         return gamma(a=(ndays_binned - 1) / 2, scale=2 / (ndays_binned - 1))
 
-    def n2n_excess_var_pred_dist(
-        self, bls, freq_inds=slice(None), min_n: int = 1
-    ) -> rv_continuous:
+    def n2n_excess_var_pred_dist(self, bls, freq_inds=slice(None), min_n: int = 1) -> rv_continuous:
         """Get a scipy distribution representing the theoretical distribution of excess variance.
 
         This will return a MixtureModel -- i.e. it will be the expected distribution of all frequencies
@@ -253,9 +237,7 @@ class LSTBinStats:
         if not hasattr(bls[0], "__len__"):
             bls = [bls]
 
-        ndays_binned = np.concatenate(
-            tuple(self.days_binned[bl][freq_inds] for bl in bls)
-        )
+        ndays_binned = np.concatenate(tuple(self.days_binned[bl][freq_inds] for bl in bls))
         ndays_binned = ndays_binned[ndays_binned >= min_n]
 
         M = len(ndays_binned)
@@ -267,9 +249,7 @@ class LSTBinStats:
     def bls(self):
         return self.days_binned.bls()
 
-    def getmean(
-        self, rdc: str | RedDataContainer | DataContainer, bls=None, min_days: int = 7
-    ):
+    def getmean(self, rdc: str | RedDataContainer | DataContainer, bls=None, min_days: int = 7):
         if isinstance(rdc, str):
             rdc = getattr(self, rdc)
         if bls is None:

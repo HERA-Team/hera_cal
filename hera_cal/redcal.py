@@ -27,7 +27,9 @@ from .apply_cal import calibrate_in_place
 
 
 SEC_PER_DAY = 86400.0
-IDEALIZED_BL_TOL = 1e-8  # bl_error_tol for redcal.get_reds when using antenna positions calculated from reds
+IDEALIZED_BL_TOL = (
+    1e-8  # bl_error_tol for redcal.get_reds when using antenna positions calculated from reds
+)
 
 
 def get_pos_reds(antpos, bl_error_tol=1.0, include_autos=False):
@@ -51,13 +53,10 @@ def get_pos_reds(antpos, bl_error_tol=1.0, include_autos=False):
         [len(pos) <= 3 for pos in antpos.values()]
     ), "Get_pos_reds only works in up to 3 dimensions."
     ap = {
-        ant: np.pad(pos, (0, 3 - len(pos)), mode="constant")
-        for ant, pos in antpos.items()
+        ant: np.pad(pos, (0, 3 - len(pos)), mode="constant") for ant, pos in antpos.items()
     }  # increase dimensionality
     array_is_flat = np.all(
-        np.abs(
-            np.array(list(ap.values()))[:, 2] - np.mean(list(ap.values()), axis=0)[2]
-        )
+        np.abs(np.array(list(ap.values()))[:, 2] - np.mean(list(ap.values()), axis=0)[2])
         < bl_error_tol / 4.0
     )
     p_or_m = (0, -1, 1)
@@ -87,18 +86,14 @@ def get_pos_reds(antpos, bl_error_tol=1.0, include_autos=False):
         for ant2 in keys[start_ind:]:
             bl_pair = (ant1, ant2)
             delta = tuple(
-                np.round(
-                    1.0 * (np.array(ap[ant2]) - np.array(ap[ant1])) / bl_error_tol
-                ).astype(int)
+                np.round(1.0 * (np.array(ap[ant2]) - np.array(ap[ant1])) / bl_error_tol).astype(int)
             )
             new_key = check_neighbors(delta)
             if new_key is None:  # forward baseline has no matches
                 new_key = check_neighbors(tuple([-d for d in delta]))
                 if new_key is not None:  # reverse baseline does have a match
                     bl_pair = (ant2, ant1)
-            if (
-                new_key is not None
-            ):  # either the forward or reverse baseline has a match
+            if new_key is not None:  # either the forward or reverse baseline has a match
                 reds[new_key].append(bl_pair)
             else:  # this baseline is entirely new
                 if (
@@ -158,9 +153,7 @@ def add_pol_reds(reds, pols=["nn"], pol_mode="1pol"):
     return redsWithPols
 
 
-def get_reds(
-    antpos, pols=["nn"], pol_mode="1pol", bl_error_tol=1.0, include_autos=False
-):
+def get_reds(antpos, pols=["nn"], pol_mode="1pol", bl_error_tol=1.0, include_autos=False):
     """Combines redcal.get_pos_reds() and redcal.add_pol_reds(). See their documentation.
 
     Args:
@@ -182,9 +175,7 @@ def get_reds(
             Each interior list is sorted so that the lowest index is first in the first baseline.
 
     """
-    pos_reds = get_pos_reds(
-        antpos, bl_error_tol=bl_error_tol, include_autos=include_autos
-    )
+    pos_reds = get_pos_reds(antpos, bl_error_tol=bl_error_tol, include_autos=include_autos)
     return add_pol_reds(pos_reds, pols=pols, pol_mode=pol_mode)
 
 
@@ -293,11 +284,7 @@ def filter_reds(
         bls = set(join_bl(i, j) for i, j in split_bls(bls) if i in ants and j in ants)
     if ex_ants:
         ex_ants = expand_ants(ex_ants)
-        bls = set(
-            join_bl(i, j)
-            for i, j in split_bls(bls)
-            if i not in ex_ants and j not in ex_ants
-        )
+        bls = set(join_bl(i, j) for i, j in split_bls(bls) if i not in ex_ants and j not in ex_ants)
     bls |= set(reverse_bl(k) for k in bls)  # put in reverse baselines
     reds = [[key for key in gp if key in bls] for gp in reds]
     reds = [gp for gp in reds if len(gp) > 0]
@@ -307,16 +294,12 @@ def filter_reds(
             antpos is not None
         ), "antpos must be passed in if min_bl_cut or max_bl_cut is specified."
         lengths = [
-            np.mean([np.linalg.norm(antpos[bl[1]] - antpos[bl[0]]) for bl in gp])
-            for gp in reds
+            np.mean([np.linalg.norm(antpos[bl[1]] - antpos[bl[0]]) for bl in gp]) for gp in reds
         ]
         reds = [
             gp
             for gp, l in zip(reds, lengths)
-            if (
-                (min_bl_cut is None or l > min_bl_cut)
-                and (max_bl_cut is None or l < max_bl_cut)
-            )
+            if ((min_bl_cut is None or l > min_bl_cut) and (max_bl_cut is None or l < max_bl_cut))
         ]
 
     if max_dims is not None:
@@ -344,9 +327,7 @@ def filter_reds(
             # calibrated without adding more degeneracies than desired.
             mode_count, mode_value, mode_dim = 0, 0, 0
             for dim, coords in enumerate(np.array(list(idealized_antpos.values())).T):
-                rounded_coords = coords.round(
-                    decimals=int(np.floor(-np.log10(IDEALIZED_BL_TOL)))
-                )
+                rounded_coords = coords.round(decimals=int(np.floor(-np.log10(IDEALIZED_BL_TOL))))
                 unique, counts = np.unique(rounded_coords, return_counts=True)
                 if np.max(counts) > mode_count:
                     mode_count = np.max(counts)
@@ -357,8 +338,7 @@ def filter_reds(
             new_ex_ants = [
                 ant
                 for ant in idealized_antpos
-                if np.abs(idealized_antpos[ant][mode_dim] - mode_value)
-                > IDEALIZED_BL_TOL
+                if np.abs(idealized_antpos[ant][mode_dim] - mode_value) > IDEALIZED_BL_TOL
             ]
 
             # If we're down to the reqested number of dimensions and if the next filtering would
@@ -411,8 +391,7 @@ def combine_reds(reds1, reds2, unfiltered_reds=None):
 
     # sort result in a useful way
     combined_reds = [
-        sorted(red, key=lambda x: x[0])
-        for red in sorted(combined_reds, key=len, reverse=True)
+        sorted(red, key=lambda x: x[0]) for red in sorted(combined_reds, key=len, reverse=True)
     ]
     return combined_reds
 
@@ -439,23 +418,15 @@ def reds_to_antpos(reds, tol=1e-10):
     for red in reds:
         for bl in red:
             # look for vectors in the higher dimensional space that are equal to 0
-            delta = (antpos[bl[1]] - antpos[bl[0]]) - (
-                antpos[red[0][1]] - antpos[red[0][0]]
-            )
-            if (
-                np.linalg.norm(delta) > tol
-            ):  # this baseline can help us reduce the dimensionality
+            delta = (antpos[bl[1]] - antpos[bl[0]]) - (antpos[red[0][1]] - antpos[red[0][0]])
+            if np.linalg.norm(delta) > tol:  # this baseline can help us reduce the dimensionality
                 dim_to_elim = np.max(np.arange(len(delta))[np.abs(delta) > tol])
                 antpos = {
-                    ant: np.delete(
-                        pos - pos[dim_to_elim] / delta[dim_to_elim] * delta, dim_to_elim
-                    )
+                    ant: np.delete(pos - pos[dim_to_elim] / delta[dim_to_elim] * delta, dim_to_elim)
                     for ant, pos in antpos.items()
                 }
     # remove any all-zero dimensions
-    dim_to_elim = np.argwhere(
-        np.sum(np.abs(list(antpos.values())), axis=0) == 0
-    ).flatten()
+    dim_to_elim = np.argwhere(np.sum(np.abs(list(antpos.values())), axis=0) == 0).flatten()
     antpos = {ant: np.delete(pos, dim_to_elim) for ant, pos in antpos.items()}
 
     # sort dims so that most-used dimensions come first
@@ -503,12 +474,8 @@ def remove_degen_gains(reds, gains, degen_gains=None, mode="phase", pol_mode="1p
         "4pol_minV",
     ], f"Unrecognized pol_mode: {pol_mode}"
     assert mode in ("phase", "complex"), "Unrecognized mode: %s" % mode
-    ants = list(
-        set(ant for gp in reds for bl in gp for ant in split_bl(bl) if ant in gains)
-    )
-    gainPols = np.array(
-        [ant[1] for ant in ants]
-    )  # gainPols is list of antpols, one per antenna
+    ants = list(set(ant for gp in reds for bl in gp for ant in split_bl(bl) if ant in gains))
+    gainPols = np.array([ant[1] for ant in ants])  # gainPols is list of antpols, one per antenna
     antpols = list(set(gainPols))
 
     # if mode is 2pol, run as two 1pol remove degens
@@ -558,12 +525,8 @@ def remove_degen_gains(reds, gains, degen_gains=None, mode="phase", pol_mode="1p
         gainSols -= np.einsum("ij,jkl", Rgains, degenToRemove)
     else:  # working on complex data
         # Fix phase terms
-        degenToRemove = np.einsum(
-            "ij,jkl", Mgains, np.angle(gainSols * np.conj(degenGains))
-        )
-        gainSols *= np.exp(
-            np.complex64(-1j) * np.einsum("ij,jkl", Rgains, degenToRemove)
-        )
+        degenToRemove = np.einsum("ij,jkl", Mgains, np.angle(gainSols * np.conj(degenGains)))
+        gainSols *= np.exp(np.complex64(-1j) * np.einsum("ij,jkl", Rgains, degenToRemove))
         # Fix abs terms: fixes the mean abs product of gains (as they appear in visibilities)
         for pol in antpols:
             meanSqAmplitude = np.mean(
@@ -614,9 +577,7 @@ class RedSol:
         """
         if len(sol_dict) > 0:
             if (len(gains) > 0) or (len(vis) > 0):
-                raise ValueError(
-                    "If sol_dict is not empty, both gains and vis must be."
-                )
+                raise ValueError("If sol_dict is not empty, both gains and vis must be.")
             self.gains = {key: val for key, val in sol_dict.items() if len(key) == 2}
             vis = {key: val for key, val in sol_dict.items() if len(key) == 3}
         else:
@@ -786,9 +747,7 @@ class RedSol:
                 not_totally_flagged_bls = [
                     bl for bl, wgt in zip(grp, wgts_here) if not np.all(wgt == 0)
                 ]
-                flag_waterfall = np.all(
-                    [wgts[bl] == 0 for bl in not_totally_flagged_bls], axis=0
-                )
+                flag_waterfall = np.all([wgts[bl] == 0 for bl in not_totally_flagged_bls], axis=0)
                 wgts_here = [
                     np.where(flag_waterfall, 1, wgts[bl])
                     if bl in not_totally_flagged_bls
@@ -919,9 +878,7 @@ class RedSol:
             chisq_per_ant: dictionary mapping ant-pol tuples like (1,'Jnn') to the sum of all chisqs for
                 visibilities that an antenna participates in, DoF normalized using predict_chisq_per_ant
         """
-        chisq, chisq_per_ant = normalized_chisq(
-            data, data_wgts, self.reds, self.vis, self.gains
-        )
+        chisq, chisq_per_ant = normalized_chisq(data, data_wgts, self.reds, self.vis, self.gains)
         return chisq, chisq_per_ant
 
 
@@ -964,9 +921,7 @@ def parse_pol_mode(reds):
     antpols = list(set([antpol for pol in pols for antpol in split_pol(pol)]))
     if len(pols) == 1 and len(antpols) == 1:
         return "1pol"
-    elif len(pols) == 2 and np.all(
-        [split_pol(pol)[0] == split_pol(pol)[1] for pol in pols]
-    ):
+    elif len(pols) == 2 and np.all([split_pol(pol)[0] == split_pol(pol)[1] for pol in pols]):
         return "2pol"
     elif len(pols) == 4 and len(antpols) == 2:
         polLists = [list(set([bl[2] for bl in bls])) for bls in reds]
@@ -1008,9 +963,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
         linsolve.LinProductSolver.__init__(
             self, data, sol0, wgts=wgts, build_solver=False, **kwargs
         )
-        self.gain = np.float32(
-            gain
-        )  # float32 to avoid accidentally promoting data to doubles.
+        self.gain = np.float32(gain)  # float32 to avoid accidentally promoting data to doubles.
 
     def _get_ans0(self, sol, keys=None, to_update_inplace=None):
         """Evaluate the system of equations given input sol.
@@ -1066,12 +1019,8 @@ class OmnicalSolver(linsolve.LinProductSolver):
             for (gi, gj, uij) in term
         ]
         dmdl_u = self._get_ans0(sol)
-        abs2_u = {
-            k: np.abs(self.data[k] - dmdl_u[k]) ** 2 * self.wgts[k] for k in self.keys
-        }
-        chisq = sum(
-            [(v if wgt_func is None else v * wgt_func(v)) for v in abs2_u.values()]
-        )
+        abs2_u = {k: np.abs(self.data[k] - dmdl_u[k]) ** 2 * self.wgts[k] for k in self.keys}
+        chisq = sum([(v if wgt_func is None else v * wgt_func(v)) for v in abs2_u.values()])
         update = np.where(chisq > 0)
         for k, v in abs2_u.items():
             abs2_u[k] = v[update]
@@ -1087,9 +1036,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
         # abs2_u holds abs(data - mdl)**2 * wgt (i.e. noise-weighted deviations), which is
         # passed to wgt_func to determine any additional weighting (to, e.g., clamp outliers).
         clamp_wgts_u = (
-            wgts_u
-            if wgt_func is None
-            else {k: v * wgt_func(abs2_u[k]) for k, v in wgts_u.items()}
+            wgts_u if wgt_func is None else {k: v * wgt_func(abs2_u[k]) for k, v in wgts_u.items()}
         )
         sol_u = {k: v[update].flatten() for k, v in sol.items()}
         iters = np.zeros(chisq.shape, dtype=int)
@@ -1130,10 +1077,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 for k, v in self.data.items():
                     abs2_u[k] = np.abs(v[update] - dmdl_u[k]) ** 2 * wgts_u[k]
                 new_chisq_u = sum(
-                    [
-                        (v if wgt_func is None else v * wgt_func(v))
-                        for v in abs2_u.values()
-                    ]
+                    [(v if wgt_func is None else v * wgt_func(v)) for v in abs2_u.values()]
                 )
                 chisq_u = chisq[update]
                 gotbetter_u = chisq_u > new_chisq_u
@@ -1247,11 +1191,7 @@ def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=(np.pi / 2)):
         alpha2 = (k2 / k1).real
         delta1 = alpha1 / (1 - alpha1)
         delta2 = -alpha2 / (1 - alpha2)
-        bin_shifts = (
-            (delta1 + delta2) / 2
-            + utils.quinn_tau(delta1**2)
-            - utils.quinn_tau(delta2**2)
-        )
+        bin_shifts = (delta1 + delta2) / 2 + utils.quinn_tau(delta1**2) - utils.quinn_tau(delta2**2)
 
         dly = (fftfreqs[inds] + bin_shifts * dtau).reshape(-1, 1)
         phasor = np.exp(np.complex64(2j * np.pi) * dly * freqs)
@@ -1259,9 +1199,7 @@ def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=(np.pi / 2)):
 
         # Now that we know the slope, estimate the remaining phase offset
         dly_off_gps[gp2] = dly, off
-        _data[gp1 + gp2] = _data[gp1] + _data[gp2] * phasor * np.exp(
-            np.complex64(1j) * off
-        )
+        _data[gp1 + gp2] = _data[gp1] + _data[gp2] * phasor * np.exp(np.complex64(1j) * off)
         return gp1 + gp2
 
     # Main N log N loop
@@ -1279,9 +1217,7 @@ def _firstcal_align_bls(bls, freqs, data, norm=True, wrap_pnt=(np.pi / 2)):
         for bl in gp:
             dly0, off0 = dly_offs.get((bl0, bl), (0, 0))
             dly_offs[(bl0, bl)] = (dly0 + dly, off0 + off)
-    dly_offs = {
-        k: (v[0], _wrap_phs(v[1], wrap_pnt=wrap_pnt)) for k, v in dly_offs.items()
-    }
+    dly_offs = {k: (v[0], _wrap_phs(v[1], wrap_pnt=wrap_pnt)) for k, v in dly_offs.items()}
     return dly_offs
 
 
@@ -1306,18 +1242,14 @@ class RedundantCalibrator:
                 nPhaseSlopes = len(list(reds_to_antpos(self.reds).values())[0])
                 raise ValueError(
                     "{} degeneracies found, but {} ".format(nDegens, nDegensExpected)
-                    + "degeneracies expected (assuming {} phase slopes).".format(
-                        nPhaseSlopes
-                    )
+                    + "degeneracies expected (assuming {} phase slopes).".format(nPhaseSlopes)
                 )
 
     def _set_reds(self, reds):
         """Sets reds interally, updating self._ubl_to_reds_index and self._ants_in_reds."""
         self.reds = reds
         self._ubl_to_reds_index = {red[0]: i for i, red in enumerate(self.reds)}
-        self._ants_in_reds = set(
-            [ant for red in self.reds for bl in red for ant in split_bl(bl)]
-        )
+        self._ants_in_reds = set([ant for red in self.reds for bl in red for ant in split_bl(bl)])
 
     def build_eqs(self, dc=None):
         """Function for generating linsolve equation strings. Optionally takes in a DataContainer to check
@@ -1328,9 +1260,7 @@ class RedundantCalibrator:
             for ant_i, ant_j, pol in blgrp:
                 if dc is not None and (ant_i, ant_j, pol) not in dc:
                     raise KeyError(
-                        "Baseline {} not in provided DataContainer".format(
-                            (ant_i, ant_j, pol)
-                        )
+                        "Baseline {} not in provided DataContainer".format((ant_i, ant_j, pol))
                     )
                 params = (
                     ant_i,
@@ -1366,9 +1296,7 @@ class RedundantCalibrator:
             for grp in self.reds:
                 self.phs_avg[grp[0]] = np.exp(
                     -np.complex64(1j)
-                    * np.median(
-                        np.unwrap([np.log(dc[bl]).imag for bl in grp], axis=0), axis=0
-                    )
+                    * np.median(np.unwrap([np.log(dc[bl]).imag for bl in grp], axis=0), axis=0)
                 )
                 for bl in grp:
                     self.phs_avg[bl] = self.phs_avg[grp[0]].astype(dc[bl].dtype)
@@ -1475,15 +1403,9 @@ class RedundantCalibrator:
         dlys = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
         offs = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
         # add back in antennas in reds but not in the system of equations
-        ants = set(
-            [ant for red in self.reds for bl in red for ant in utils.split_bl(bl)]
-        )
-        dlys = {
-            ant: dlys.get(ant, (np.zeros_like(list(dlys.values())[0]))) for ant in ants
-        }
-        offs = {
-            ant: offs.get(ant, (np.zeros_like(list(offs.values())[0]))) for ant in ants
-        }
+        ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
+        dlys = {ant: dlys.get(ant, (np.zeros_like(list(dlys.values())[0]))) for ant in ants}
+        offs = {ant: offs.get(ant, (np.zeros_like(list(offs.values())[0]))) for ant in ants}
 
         for ant in flipped:
             offs[ant] = _wrap_phs(offs[ant] + np.pi)
@@ -1579,14 +1501,10 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-        sol0pack = {
-            self.pack_sol_key(ant): sol0.gains[ant] for ant in self._ants_in_reds
-        }
+        sol0pack = {self.pack_sol_key(ant): sol0.gains[ant] for ant in self._ants_in_reds}
         for ubl in self._ubl_to_reds_index.keys():
             sol0pack[self.pack_sol_key(ubl)] = sol0[ubl]
-        ls = self._solver(
-            linsolve.LinProductSolver, data, sol0=sol0pack, wgts=wgts, sparse=sparse
-        )
+        ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0pack, wgts=wgts, sparse=sparse)
         meta, prms = ls.solve_iteratively(
             conv_crit=conv_crit, maxiter=maxiter, verbose=verbose, mode=mode
         )
@@ -1630,9 +1548,7 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-        sol0pack = {
-            self.pack_sol_key(ant): sol0.gains[ant] for ant in self._ants_in_reds
-        }
+        sol0pack = {self.pack_sol_key(ant): sol0.gains[ant] for ant in self._ants_in_reds}
         for ubl in self._ubl_to_reds_index.keys():
             sol0pack[self.pack_sol_key(ubl)] = sol0[ubl]
         ls = self._solver(OmnicalSolver, data, sol0=sol0pack, wgts=wgts, gain=gain)
@@ -1664,9 +1580,7 @@ class RedundantCalibrator:
                 list(reds_to_antpos(self.reds).values())[0]
             )  # number of phase slope degeneracies
             if self.pol_mode == "1pol":
-                return (
-                    1 + 1 + nPhaseSlopes
-                )  # 1 amplitude degen, 1 phase degen, N phase slopes
+                return 1 + 1 + nPhaseSlopes  # 1 amplitude degen, 1 phase degen, N phase slopes
             elif self.pol_mode == "2pol":
                 return (
                     2 + 2 + 2 * nPhaseSlopes
@@ -1686,8 +1600,7 @@ class RedundantCalibrator:
             solver = self._solver(linsolve.LogProductSolver, dummy_data)
             return np.sum(
                 [
-                    A.shape[1]
-                    - np.linalg.matrix_rank(np.dot(np.squeeze(A).T, np.squeeze(A)))
+                    A.shape[1] - np.linalg.matrix_rank(np.dot(np.squeeze(A).T, np.squeeze(A)))
                     for A in [solver.ls_amp.get_A(), solver.ls_phs.get_A()]
                 ]
             )
@@ -1709,9 +1622,7 @@ def is_redundantly_calibratable(antpos, bl_error_tol=1.0, require_coplanarity=Tr
     reds = get_reds(antpos, pol_mode="1pol", bl_error_tol=bl_error_tol)
     rc = RedundantCalibrator(reds)
     if require_coplanarity:
-        if (
-            len(list(reds_to_antpos(reds).values())[0]) > 2
-        ):  # not a monolithic, coplanar array
+        if len(list(reds_to_antpos(reds).values())[0]) > 2:  # not a monolithic, coplanar array
             return False
     return rc.count_degens() == rc.count_degens(assume_redundant=False)
 
@@ -1740,9 +1651,7 @@ def predict_chisq_per_bl(reds, pol_separable=None):
             reds_by_pol[pol] = reds_by_pol.get(pol, []) + [gp]
         predicted_chisq_per_bl = {}
         for pol, polreds in reds_by_pol.items():
-            predicted_chisq_per_bl.update(
-                predict_chisq_per_bl(polreds, pol_separable=False)
-            )
+            predicted_chisq_per_bl.update(predict_chisq_per_bl(polreds, pol_separable=False))
         return predicted_chisq_per_bl
     else:
         # pols are not further separable and we need to build full equations
@@ -1866,17 +1775,11 @@ def normalized_chisq(data, data_wgts, reds, vis_sols, gains):
         split_by_antpol=(pol_mode in ["1pol", "2pol"]),
     )
     predicted_chisq_per_ant = predict_chisq_per_ant(reds)
-    chisq_per_ant = {
-        ant: cs / predicted_chisq_per_ant[ant] for ant, cs in chisq_per_ant.items()
-    }
+    chisq_per_ant = {ant: cs / predicted_chisq_per_ant[ant] for ant, cs in chisq_per_ant.items()}
     if pol_mode in ["1pol", "2pol"]:  # in this case, chisq is split by antpol
         for antpol in chisq.keys():
             chisq[antpol] /= np.sum(
-                [
-                    cspa / 2.0
-                    for ant, cspa in predicted_chisq_per_ant.items()
-                    if antpol in ant
-                ],
+                [cspa / 2.0 for ant, cspa in predicted_chisq_per_ant.items() if antpol in ant],
                 axis=0,
             )
     else:
@@ -1888,9 +1791,7 @@ def _get_pol_load_list(pols, pol_mode="1pol"):
     """Get a list of lists of polarizations to load simultaneously, depending on the polarizations
     in the data and the pol_mode (which can be 1pol, 2pol, 4pol, or 4pol_minV)"""
     if pol_mode in ["1pol", "2pol"]:
-        pol_load_list = [
-            [pol] for pol in pols if split_pol(pol)[0] == split_pol(pol)[1]
-        ]
+        pol_load_list = [[pol] for pol in pols if split_pol(pol)[0] == split_pol(pol)[1]]
     elif pol_mode in ["4pol", "4pol_minV"]:
         assert (
             len(pols) == 4
@@ -2030,9 +1931,7 @@ def redundantly_calibrate(
     return meta, sol
 
 
-def expand_omni_vis(
-    sol, expanded_reds, data, nsamples=None, chisq=None, chisq_per_ant=None
-):
+def expand_omni_vis(sol, expanded_reds, data, nsamples=None, chisq=None, chisq_per_ant=None):
     """Updates sol by solving for unique visibilities not in sol.vis but for which there is at
     least one baseline with both antennas in sol.gains. Constructs inverse-variance weights from
     noise inferred from autocorrelations (and nsamples, if provided).
@@ -2050,9 +1949,7 @@ def expand_omni_vis(
     # figure out which reds are solvable using the baselines for which we have gains for both antennas
     solved_ants = set(sol.gains.keys())
     good_ants_reds = filter_reds(expanded_reds, ants=solved_ants)
-    reds_to_solve = [
-        red for red in good_ants_reds if not np.any([bl in sol.vis for bl in red])
-    ]
+    reds_to_solve = [red for red in good_ants_reds if not np.any([bl in sol.vis for bl in red])]
     data_bls_to_use = [
         bl
         for red in reds_to_solve
@@ -2066,8 +1963,7 @@ def expand_omni_vis(
             nsamples = DataContainer({bl: 1.0 for bl in data_bls_to_use})
         dts_by_bl = DataContainer(
             {
-                bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1)
-                * SEC_PER_DAY
+                bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY
                 for bl in data_bls_to_use
             }
         )
@@ -2113,10 +2009,7 @@ def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=Non
                 for bl in red
                 if (
                     np.any([bl in sol.vis for bl in red])
-                    and (
-                        (split_bl(bl)[0] not in sol.gains)
-                        ^ (split_bl(bl)[1] not in sol.gains)
-                    )
+                    and ((split_bl(bl)[0] not in sol.gains) ^ (split_bl(bl)[1] not in sol.gains))
                 )
             ]
         )
@@ -2131,8 +2024,7 @@ def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=Non
         data_subset = DataContainer({bl: data[bl] for bl in bls_to_use})
         dts_by_bl = DataContainer(
             {
-                bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1)
-                * SEC_PER_DAY
+                bl: infer_dt(data.times_by_bl, bl, default_dt=SEC_PER_DAY**-1) * SEC_PER_DAY
                 for bl in bls_to_use
             }
         )
@@ -2152,9 +2044,7 @@ def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=Non
                 for bl in red
                 if (
                     (red[0] in sol.vis)
-                    and (
-                        (split_bl(bl)[0] in sol.gains) | (split_bl(bl)[1] in sol.gains)
-                    )
+                    and ((split_bl(bl)[0] in sol.gains) | (split_bl(bl)[1] in sol.gains))
                 )
             ]
             reds_for_chisq = filter_reds(expanded_reds, bls=bls_for_chisq)
@@ -2179,22 +2069,16 @@ def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=Non
             for ant, cs in cspa.items():
                 if ant not in chisq_per_ant:
                     chisq_per_ant[ant] = cs / predicted_chisq_per_ant[ant]
-                    chisq_per_ant[ant][~np.isfinite(cs)] = np.zeros_like(
-                        cs[~np.isfinite(cs)]
-                    )
+                    chisq_per_ant[ant][~np.isfinite(cs)] = np.zeros_like(cs[~np.isfinite(cs)])
 
 
 def _init_redcal_meta_dict(nTimes, nFreqs, ants, pol_load_list):
     """Helper for redcal_iteration. Creates dictionary to contain firstcal and omnical metas for the full file."""
     redcal_meta = {}
     redcal_meta["fc_meta"] = {"dlys": {ant: np.full(nTimes, np.nan) for ant in ants}}
-    redcal_meta["fc_meta"]["polarity_flips"] = {
-        ant: np.full(nTimes, np.nan) for ant in ants
-    }
+    redcal_meta["fc_meta"]["polarity_flips"] = {ant: np.full(nTimes, np.nan) for ant in ants}
     redcal_meta["omni_meta"] = {
-        "chisq": {
-            str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list
-        }
+        "chisq": {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
     }
     redcal_meta["omni_meta"]["iter"] = {
         str(pols): np.zeros((nTimes, nFreqs), dtype=int) for pols in pol_load_list
@@ -2215,15 +2099,11 @@ def _update_redcal_meta(redcal_meta, meta_slice, tSlice, fSlice, pols):
         ][ant]
 
     # update omnical metadata
-    redcal_meta["omni_meta"]["chisq"][str(pols)][tSlice, fSlice] = meta_slice[
-        "omni_meta"
-    ]["chisq"]
-    redcal_meta["omni_meta"]["iter"][str(pols)][tSlice, fSlice] = meta_slice[
-        "omni_meta"
-    ]["iter"]
-    redcal_meta["omni_meta"]["conv_crit"][str(pols)][tSlice, fSlice] = meta_slice[
-        "omni_meta"
-    ]["conv_crit"]
+    redcal_meta["omni_meta"]["chisq"][str(pols)][tSlice, fSlice] = meta_slice["omni_meta"]["chisq"]
+    redcal_meta["omni_meta"]["iter"][str(pols)][tSlice, fSlice] = meta_slice["omni_meta"]["iter"]
+    redcal_meta["omni_meta"]["conv_crit"][str(pols)][tSlice, fSlice] = meta_slice["omni_meta"][
+        "conv_crit"
+    ]
 
 
 def count_redundant_nsamples(nsamples, reds, good_ants=None):
@@ -2311,9 +2191,7 @@ def redcal_iteration(
             can be extracted using hd_vissol.build_datacontainers().
     """
     if nInt_to_load is None:
-        if (
-            hd.data_array is None
-        ):  # if data loading hasn't happened yet, load the whole file
+        if hd.data_array is None:  # if data loading hasn't happened yet, load the whole file
             hd.read()
         if hd.times is None:  # load metadata into HERAData object if necessary
             for key, value in hd.get_metadata_dict().items():
@@ -2334,9 +2212,7 @@ def redcal_iteration(
         pol_mode=pol_mode,
         pols=set([pol for pols in pol_load_list for pol in pols]),
     )
-    filtered_reds = filter_reds(
-        all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs
-    )
+    filtered_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
 
     # initialize HERAData and HERACal to contain the full set of data and metadata
     hd_vissol = HERAData(hd.filepaths, upsample=hd.upsample, downsample=hd.downsample)
@@ -2437,18 +2313,12 @@ def redcal_iteration(
 
             # rekey sol.vis so that iterating over it will use red[0] in all_reds
             sol.vis = RedDataContainer(
-                {
-                    red[0]: sol.vis[red[0]]
-                    for red in all_reds_this_pol
-                    if red[0] in sol.vis
-                },
+                {red[0]: sol.vis[red[0]] for red in all_reds_this_pol if red[0] in sol.vis},
                 reds=all_reds_this_pol,
             )
 
             # make dicts and data containers not in meta or sol. Everything not yet solved for stays flagged.
-            first_flags = {
-                ant: np.zeros_like(g, dtype=bool) for ant, g in meta["fc_gains"].items()
-            }
+            first_flags = {ant: np.zeros_like(g, dtype=bool) for ant, g in meta["fc_gains"].items()}
             omni_flags = {ant: ~np.isfinite(g) for ant, g in sol.gains.items()}
             vissol_flags = RedDataContainer(
                 {bl: ~np.isfinite(v) for bl, v in sol.vis.items()}, reds=sol.vis.reds
@@ -2473,9 +2343,7 @@ def redcal_iteration(
             sol.make_sol_finite()
 
             # update various objects containing information about the full file
-            hc_first.update(
-                gains=meta["fc_gains"], flags=first_flags, tSlice=tSlice, fSlice=fSlice
-            )
+            hc_first.update(gains=meta["fc_gains"], flags=first_flags, tSlice=tSlice, fSlice=fSlice)
             total_qual = meta["chisq"]
             if pol_mode in [
                 "4pol",
@@ -2706,9 +2574,7 @@ def redcal_run(
         # If there is going to be a re-run and if iter0_prefix is not the empty string, then save the iter0 results.
         if run_number == 1 and len(iter0_prefix) > 0:
             out_prefix = os.path.join(outdir, filename_no_ext + iter0_prefix)
-            _add_to_history = utils.history_string(
-                add_to_history + "\n" + "Iteration 0 Results.\n"
-            )
+            _add_to_history = utils.history_string(add_to_history + "\n" + "Iteration 0 Results.\n")
             for h in [hc_first, hc_omni, hd_vissol]:
                 h.history += _add_to_history
             hc_first.write_calfits(out_prefix + firstcal_ext, clobber=clobber)
@@ -2755,9 +2621,7 @@ def redcal_argparser():
         description="Redundantly calibrate a file using hera_cal.redcal. This includes firstcal, logcal, and omnical. \
                                 Iteratively re-runs by flagging antennas with large chi^2. Saves the result to calfits and uvh5 files."
     )
-    a.add_argument(
-        "input_data", type=str, help="path to uvh5 visibility data file to calibrate."
-    )
+    a.add_argument("input_data", type=str, help="path to uvh5 visibility data file to calibrate.")
     a.add_argument(
         "--firstcal_ext",
         default=".first.calfits",

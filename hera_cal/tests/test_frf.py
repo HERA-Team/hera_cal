@@ -123,18 +123,14 @@ def test_timeavg_waterfall():
 
     # Test Error
     with pytest.raises(ValueError):
-        frf.timeavg_waterfall(
-            d, 25, verbose=False, wgt_by_nsample=True, wgt_by_favg_nsample=True
-        )
+        frf.timeavg_waterfall(d, 25, verbose=False, wgt_by_nsample=True, wgt_by_favg_nsample=True)
 
     # test weightings
     d = np.ones((4, 10))
     d[0, :] *= 2
     n = np.ones((4, 10))
     n[0, 0:5] *= 2
-    ad, _, _, _, _ = frf.timeavg_waterfall(
-        d, 2, rephase=False, nsamples=n, wgt_by_nsample=True
-    )
+    ad, _, _, _, _ = frf.timeavg_waterfall(d, 2, rephase=False, nsamples=n, wgt_by_nsample=True)
     np.testing.assert_array_equal(ad[1, :], 1.0)
     np.testing.assert_array_equal(ad[0, 0:5], 5.0 / 3)
     np.testing.assert_array_equal(ad[0, 5:10], 1.5)
@@ -218,15 +214,9 @@ class Test_FRFilter(object):
             overwrite=True,
             wgt_by_nsample=True,
         )
-        assert np.all(
-            np.isclose(F.avg_data[k][0], 0.0)
-        )  # assert data is zero b/c I zeroed nsample
-        assert np.all(
-            np.isclose(F.avg_nsamples[k][0], 0.0)
-        )  # assert avg_nsample is also zero
-        assert np.all(
-            np.isclose(F.avg_nsamples[k][1:], 3.0)
-        )  # assert non-zeroed nsample is 3
+        assert np.all(np.isclose(F.avg_data[k][0], 0.0))  # assert data is zero b/c I zeroed nsample
+        assert np.all(np.isclose(F.avg_nsamples[k][0], 0.0))  # assert avg_nsample is also zero
+        assert np.all(np.isclose(F.avg_nsamples[k][1:], 3.0))  # assert non-zeroed nsample is 3
 
         # repeat without nsample wgt
         F.timeavg_data(
@@ -242,9 +232,7 @@ class Test_FRFilter(object):
         assert not np.any(
             np.isclose(F.avg_data[k][0, 5:-5], 0.0)
         )  # assert non-edge data is now not zero
-        assert np.all(
-            np.isclose(F.avg_nsamples[k][0], 0.0)
-        )  # avg_nsample should still be zero
+        assert np.all(np.isclose(F.avg_nsamples[k][0], 0.0))  # avg_nsample should still be zero
 
         # exceptions
         pytest.raises(
@@ -274,9 +262,7 @@ class Test_FRFilter(object):
             (self.F.Ntimes, self.F.Nfreqs),
         )
         # fr filter noise
-        self.F.filter_data(
-            self.F.data, frps, overwrite=True, verbose=False, axis=0, keys=[bl]
-        )
+        self.F.filter_data(self.F.data, frps, overwrite=True, verbose=False, axis=0, keys=[bl])
 
         # check key continue w/ ridiculous edgecut
         self.F.filter_data(
@@ -332,9 +318,7 @@ class Test_FRFilter(object):
         hd = io.HERAData("./out.uv", filetype="miriad")
         hd.read()
         assert "testing" in hd.history.replace("\n", "").replace(" ", "")
-        assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(" ", "")
         shutil.rmtree("./out.uv")
 
         pytest.raises(
@@ -395,9 +379,7 @@ class Test_FRFilter(object):
             (6, False),
         ],
     )
-    def test_time_avg_data_and_write_interleave(
-        self, tmpdir, ninterleave, equalize_times
-    ):
+    def test_time_avg_data_and_write_interleave(self, tmpdir, ninterleave, equalize_times):
         tmp_path = tmpdir.strpath
         input_name = os.path.join(tmp_path, "test_input.uvh5")
         uvd = UVData()
@@ -421,9 +403,7 @@ class Test_FRFilter(object):
         for inum in range(ninterleave):
             iname = os.path.join(
                 os.path.dirname(output_name),
-                os.path.basename(output_name).replace(
-                    ".uvh5", f".interleave_{inum}.uvh5"
-                ),
+                os.path.basename(output_name).replace(".uvh5", f".interleave_{inum}.uvh5"),
             )
             assert os.path.exists(iname)
             hd = io.HERAData(iname)
@@ -437,17 +417,14 @@ class Test_FRFilter(object):
                 for tn in range(interleaved_data[inum].Ntimes):
                     if not equalize_times:
                         assert (
-                            interleaved_data[inum].times[tn]
-                            > interleaved_data[inum - 1].times[tn]
+                            interleaved_data[inum].times[tn] > interleaved_data[inum - 1].times[tn]
                         )
                     else:
                         assert (
-                            interleaved_data[inum].times[tn]
-                            == interleaved_data[inum - 1].times[tn]
+                            interleaved_data[inum].times[tn] == interleaved_data[inum - 1].times[tn]
                         )
                         assert (
-                            interleaved_data[inum].lsts[tn]
-                            == interleaved_data[inum - 1].lsts[tn]
+                            interleaved_data[inum].lsts[tn] == interleaved_data[inum - 1].lsts[tn]
                         )
 
     def test_time_avg_data_and_write_baseline_list(self, tmpdir):
@@ -460,9 +437,7 @@ class Test_FRFilter(object):
             baseline_list = io.baselines_from_filelist_position(file, uvh5s)
             output = tmp_path + "/" + file.split("/")[-1]
             output_files.append(output)
-            output_flags = (
-                tmp_path + "/" + file.split("/")[-1].replace(".uvh5", ".flags.h5")
-            )
+            output_flags = tmp_path + "/" + file.split("/")[-1].replace(".uvh5", ".flags.h5")
             with pytest.warns(RuntimeWarning):
                 frf.time_avg_data_and_write(
                     baseline_list=[],
@@ -484,9 +459,7 @@ class Test_FRFilter(object):
             )
         # now do everything at once:
         output = tmp_path + "/combined.uvh5"
-        frf.time_avg_data_and_write(
-            uvh5s, output, t_avg=35.0, rephase=True, wgt_by_nsample=True
-        )
+        frf.time_avg_data_and_write(uvh5s, output, t_avg=35.0, rephase=True, wgt_by_nsample=True)
         data_out = frf.FRFilter(output)
         data_out_bls = frf.FRFilter(output_files)
         data_out.read()
@@ -576,10 +549,7 @@ class Test_FRFilter(object):
                 pre_filter_modes_between_lobe_minimum_and_zero=pre_filter,
                 **data_kwargs,
             )
-            assert (
-                frfil.clean_info[k][(0, frfil.Nfreqs)]["status"]["axis_0"][0]
-                == "skipped"
-            )
+            assert frfil.clean_info[k][(0, frfil.Nfreqs)]["status"]["axis_0"][0] == "skipped"
             np.testing.assert_array_equal(
                 frfil.clean_flags[k][:, 0], np.ones_like(frfil.flags[k][:, 0])
             )
@@ -676,9 +646,7 @@ class Test_FRFilter(object):
             assert d[(53, 54, "ee")].shape[0] == 60
         # now test flag factorization and time thresholding.
         # prepare an input files for broadcasting flags
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         input_file = os.path.join(tmp_path, "temp_special_flags.h5")
         shutil.copy(uvh5, input_file)
         hd = io.HERAData(input_file)
@@ -813,14 +781,10 @@ class Test_FRFilter(object):
         uvb = UVBeam()
         uvb.read_beamfits(test_beam)
         uvb.use_future_array_shapes()
-        c_frs, w_frs = frf.get_fringe_rate_limits(
-            uvd, uvb, percentile_low=10, percentile_high=90
-        )
+        c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb, percentile_low=10, percentile_high=90)
         for bl in c_frs:
             # fft data
-            myfrf.fft_data(
-                data=myfrf.data, ax="time", keys=[bl], overwrite=True, window="bh"
-            )
+            myfrf.fft_data(data=myfrf.data, ax="time", keys=[bl], overwrite=True, window="bh")
             csum = np.cumsum(np.abs(myfrf.dfft[bl]) ** 2.0)
             csum /= csum.max()
             csum = np.hstack([[0], csum, [1.0]])
@@ -886,18 +850,14 @@ class Test_FRFilter(object):
         data_f, flags_f, nsamples_f = hd_filled.read()
 
         for bl in data:
-            assert np.mean(np.abs(data_r[bl]) ** 2.0) <= 0.2 * np.mean(
-                np.abs(data[bl]) ** 2.0
-            )
+            assert np.mean(np.abs(data_r[bl]) ** 2.0) <= 0.2 * np.mean(np.abs(data[bl]) ** 2.0)
 
     def test_sky_frates_minfrate_and_to_filter(self):
         # test edge frates
         V = frf.FRFilter(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
         V.read()
         for to_filter in [None, list(V.data.keys())[:1]]:
-            cfrates, wfrates = frf.sky_frates(
-                V.hd, min_frate_width=1000, blkeys=to_filter
-            )
+            cfrates, wfrates = frf.sky_frates(V.hd, min_frate_width=1000, blkeys=to_filter)
             # to_filter set to None -> all keys should be present.
             if to_filter is None:
                 for k in V.data:
@@ -909,9 +869,7 @@ class Test_FRFilter(object):
 
     def test_load_tophat_frfilter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, "temp.h5")
         CLEAN_outfilename = os.path.join(tmp_path, "temp_clean.h5")
         filled_outfilename = os.path.join(tmp_path, "temp_filled.h5")
@@ -964,9 +922,7 @@ class Test_FRFilter(object):
         CLEAN_outfilename = os.path.join(tmp_path, "temp_clean.h5")
         filled_outfilename = os.path.join(tmp_path, "temp_filled.h5")
         # test loading and writing all baselines at once.
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, "temp.h5")
         for avg_bl in [True, False]:
             frf.load_tophat_frfilter_and_write(
@@ -1002,15 +958,11 @@ class Test_FRFilter(object):
 
     def test_load_tophat_frfilter_and_write_cal(self, tmpdir):
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, "temp.h5")
         CLEAN_outfilename = os.path.join(tmp_path, "temp_clean.h5")
         filled_outfilename = os.path.join(tmp_path, "temp_filled.h5")
-        cal = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"
-        )
+        cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         for avg_bl in [True, False]:
             frf.load_tophat_frfilter_and_write(
                 uvh5,
@@ -1023,9 +975,9 @@ class Test_FRFilter(object):
                 case="sky",
             )
             hd = io.HERAData(outfilename)
-            assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-                "\n", ""
-            ).replace(" ", "")
+            assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(
+                " ", ""
+            )
             d, f, n = hd.read()
             for bl in d:
                 if not np.all(f[bl]):
@@ -1035,9 +987,7 @@ class Test_FRFilter(object):
 
     def test_load_tophat_frfilter_and_write_wgt_by_nsample(self, tmpdir):
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, "temp.h5")
         CLEAN_outfilename = os.path.join(tmp_path, "temp_clean.h5")
         filled_outfilename = os.path.join(tmp_path, "temp_filled.h5")
@@ -1085,9 +1035,7 @@ class Test_FRFilter(object):
     def test_load_tophat_frfilter_and_write_lst_blacklist(self, tmpdir):
         # test lst_blacklists
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, "temp.h5")
         CLEAN_outfilename = os.path.join(tmp_path, "temp_clean.h5")
         filled_outfilename = os.path.join(tmp_path, "temp_filled.h5")
@@ -1134,9 +1082,7 @@ class Test_FRFilter(object):
 
     def test_load_tophat_frfilter_and_write_skip_autos(self, tmpdir):
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, "temp.h5")
         CLEAN_outfilename = os.path.join(tmp_path, "temp_clean.h5")
         filled_outfilename = os.path.join(tmp_path, "temp_filled.h5")
@@ -1165,9 +1111,7 @@ class Test_FRFilter(object):
         # test that the resids are are equal to original data.
         for bl in do:
             if bl[0] == bl[1]:
-                assert np.allclose(
-                    do[bl], d[bl]
-                )  # check that resid equals original data.
+                assert np.allclose(do[bl], d[bl])  # check that resid equals original data.
                 assert np.allclose(fo[bl], f[bl])
                 assert np.allclose(no[bl], n[bl])
                 assert np.allclose(
@@ -1183,9 +1127,7 @@ class Test_FRFilter(object):
     def test_load_tophat_frfilter_and_write_broadcast_flags(self, tmpdir):
         # test flag broadcasting with frf.
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, "temp.h5")
         CLEAN_outfilename = os.path.join(tmp_path, "temp_clean.h5")
         filled_outfilename = os.path.join(tmp_path, "temp_filled.h5")
@@ -1227,9 +1169,7 @@ class Test_FRFilter(object):
 
     def test_load_tophat_frfilter_and_write_partial_io(self, tmpdir):
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, "temp.h5")
         CLEAN_outfilename = os.path.join(tmp_path, "temp_clean.h5")
         filled_outfilename = os.path.join(tmp_path, "temp_filled.h5")
@@ -1294,9 +1234,7 @@ class Test_FRFilter(object):
     def test_load_tophat_frfilter_and_write_yaml(self, tmpdir):
         # test apriori flags and flag_yaml
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, "temp.h5")
         CLEAN_outfilename = os.path.join(tmp_path, "temp_clean.h5")
         filled_outfilename = os.path.join(tmp_path, "temp_filled.h5")
@@ -1342,9 +1280,7 @@ class Test_FRFilter(object):
     @pytest.mark.parametrize("ninterleave", [2, 3, 4, 5, 6])
     def test_load_tophat_frfilter_and_write_interleave(self, tmpdir, ninterleave):
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, "temp.h5")
         frf.load_tophat_frfilter_and_write(
             uvh5,
@@ -1366,9 +1302,7 @@ class Test_FRFilter(object):
         V = frf.FRFilter(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
         V.read()
         for to_filter in [None, list(V.data.keys())[:1]]:
-            cfrates, wfrates = frf.sky_frates(
-                uvd=V.hd, min_frate_half_width=1000, keys=to_filter
-            )
+            cfrates, wfrates = frf.sky_frates(uvd=V.hd, min_frate_half_width=1000, keys=to_filter)
             # to_filter set to None -> all keys should be present.
             if to_filter is None:
                 for k in V.data:
@@ -1380,9 +1314,7 @@ class Test_FRFilter(object):
 
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         cdir = os.path.join(tmp_path, "cache_temp")
         # make a cache directory
         if os.path.isdir(cdir):
@@ -1420,9 +1352,7 @@ class Test_FRFilter(object):
         # there should now be six cache files (one per i/o/filter). There are three baselines.
         assert len(glob.glob(cdir + "/*")) == 6
         hd = io.HERAData(outfilename)
-        assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(" ", "")
         d, f, n = hd.read(bls=[(53, 54, "ee")])
         np.testing.assert_array_equal(f[(53, 54, "ee")], True)
         os.remove(outfilename)
@@ -1445,9 +1375,9 @@ class Test_FRFilter(object):
             if avg_bl:
                 assert len(glob.glob(cdir + "/*")) == 1
             hd = io.HERAData(outfilename)
-            assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-                "\n", ""
-            ).replace(" ", "")
+            assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(
+                " ", ""
+            )
             d, f, n = hd.read(bls=[(53, 54, "ee")])
             np.testing.assert_array_equal(f[(53, 54, "ee")], True)
             os.remove(outfilename)
@@ -1474,9 +1404,7 @@ class Test_FRFilter(object):
         # no new cache files should be generated.
         assert len(glob.glob(cdir + "/*")) == 1
         hd = io.HERAData(outfilename)
-        assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(" ", "")
         d, f, n = hd.read(bls=[(53, 54, "ee")])
         np.testing.assert_array_equal(f[(53, 54, "ee")], True)
         os.remove(outfilename)
@@ -1485,17 +1413,13 @@ class Test_FRFilter(object):
     @pytest.mark.parametrize("flip", [True, False])
     def test_load_tophat_frfilter_and_write_with_filter_yaml(self, tmpdir, flip):
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         frate_centers = {(53, 54): 0.1}
         frate_half_widths = {(53, 54): 0.05}
         if flip:
             filter_info = dict(
                 filter_centers={str(k[::-1]): -v for k, v in frate_centers.items()},
-                filter_half_widths={
-                    str(k[::-1]): v for k, v in frate_half_widths.items()
-                },
+                filter_half_widths={str(k[::-1]): v for k, v in frate_half_widths.items()},
             )
         else:
             filter_info = dict(
@@ -1544,9 +1468,7 @@ class Test_FRFilter(object):
 
     def test_load_tophat_frfilter_and_write_with_bad_filter_yaml(self, tmpdir):
         tmp_path = tmpdir.strpath
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         param_file = os.path.join(DATA_PATH, "example_filter_params.yaml")
 
         outfilename = os.path.join(tmp_path, "temp.h5")

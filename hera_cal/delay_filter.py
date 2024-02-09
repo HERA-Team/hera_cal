@@ -189,9 +189,7 @@ def load_delay_filter_and_write(
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     """
     if baseline_list is not None and Nbls_per_load is not None:
-        raise NotImplementedError(
-            "baseline loading and partial i/o not yet implemented."
-        )
+        raise NotImplementedError("baseline loading and partial i/o not yet implemented.")
     hd = io.HERAData(datafile_list, filetype="uvh5", axis="blt")
     if baseline_list is not None and len(baseline_list) == 0:
         warnings.warn(
@@ -251,9 +249,7 @@ def load_delay_filter_and_write(
                 df.apply_flags(external_flags, overwrite_flags=overwrite_flags)
             if flag_yaml is not None:
                 logger.info("  Applying flag_yaml flags")
-                df.apply_flags(
-                    flag_yaml, overwrite_flags=overwrite_flags, filetype="yaml"
-                )
+                df.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype="yaml")
             if factorize_flags:
                 logger.info("  Factorizing flags")
                 df.factorize_flags(time_thresh=time_thresh, inplace=True)

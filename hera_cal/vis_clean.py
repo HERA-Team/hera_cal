@@ -130,9 +130,7 @@ def truncate_flagged_edges(data_in, weights_in, x, ax="freq"):
     # if axis == 'time', just use freq mode
     # on transposed arrays.
     if ax == "time":
-        xout, dout, wout, edges, chunks = truncate_flagged_edges(
-            data_in.T, weights_in.T, x
-        )
+        xout, dout, wout, edges, chunks = truncate_flagged_edges(data_in.T, weights_in.T, x)
         dout = dout.T
         wout = wout.T
     else:
@@ -145,12 +143,14 @@ def truncate_flagged_edges(data_in, weights_in, x, ax="freq"):
         inds_right = []
         # Identify edge channels that are flagged.
         for chunk in chunks:
-            ind_left = 0  # If there are no unflagged channels, then the chunk should have zero width.
+            ind_left = (
+                0  # If there are no unflagged channels, then the chunk should have zero width.
+            )
             ind_right = 0
             chunkslice = slice(chunk[0], chunk[1])
-            unflagged_chans = np.where(
-                ~np.all(np.isclose(weights_in[:, chunkslice], 0.0), axis=0)
-            )[0]
+            unflagged_chans = np.where(~np.all(np.isclose(weights_in[:, chunkslice], 0.0), axis=0))[
+                0
+            ]
             if np.count_nonzero(unflagged_chans) > 0:
                 # truncate data to be filtered where appropriate.
                 ind_left = np.min(unflagged_chans)
@@ -243,15 +243,11 @@ def restore_flagged_edges(data, chunks, edges, ax="freq"):
             data_restored = data_restored[0]
         if ax == "both":
             # if axis is both, then process time-axis after freq axis.
-            data_restored = restore_flagged_edges(
-                data_restored, chunks[0], edges[0], ax="time"
-            )
+            data_restored = restore_flagged_edges(data_restored, chunks[0], edges[0], ax="time")
     return data_restored
 
 
-def flag_rows_with_flags_within_edge_distance(
-    x, weights_in, min_flag_edge_distance, ax="freq"
-):
+def flag_rows_with_flags_within_edge_distance(x, weights_in, min_flag_edge_distance, ax="freq"):
     """
     flag integrations (and/or channels) with flags within min_flag_edge_distance of edge.
 
@@ -277,9 +273,7 @@ def flag_rows_with_flags_within_edge_distance(
 
     """
     if ax == "time":
-        wout = flag_rows_with_flags_within_edge_distance(
-            x, weights_in.T, min_flag_edge_distance
-        ).T
+        wout = flag_rows_with_flags_within_edge_distance(x, weights_in.T, min_flag_edge_distance).T
     else:
         if (
             isinstance(x, (tuple, list))
@@ -337,9 +331,7 @@ def flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag, ax="freq"):
     else:
         wout = copy.deepcopy(weights_in)
         for rownum, wrow in enumerate(wout):
-            max_contiguous = (
-                0  # keeps track of the largest contig flags in integration.
-            )
+            max_contiguous = 0  # keeps track of the largest contig flags in integration.
             current_flag_length = 0  # keeps track of current contig flag size.
             on_flag = False  # keep track if currently on a flag.
             # iterate over each channel in integration.
@@ -360,9 +352,7 @@ def flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag, ax="freq"):
             elif max_contiguous >= max_contiguous_flag:
                 wout[rownum][:] = 0.0
         if ax == "both":
-            wout = flag_rows_with_contiguous_flags(
-                wout, max_contiguous_flag[0], ax="time"
-            )
+            wout = flag_rows_with_contiguous_flags(wout, max_contiguous_flag[0], ax="time")
     return wout
 
 
@@ -384,11 +374,7 @@ def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_w
     max_contiguous_flag: int or 2-list containing the width of a region corresponding
         to the largest delay in the filter centers and filter_widths
     """
-    if (
-        isinstance(x, (tuple, list))
-        and len(x) == 2
-        and isinstance(x[0], (list, tuple, np.ndarray))
-    ):
+    if isinstance(x, (tuple, list)) and len(x) == 2 and isinstance(x[0], (list, tuple, np.ndarray)):
         if not len(x[0]) > 1 and len(x[1]) > 1:
             raise ValueError("x-axes with only a single element are not supported.")
         else:
@@ -427,10 +413,7 @@ def get_max_contiguous_flag_from_filter_periods(x, filter_centers, filter_half_w
         max_filter_freq = np.max(
             np.abs(
                 np.hstack(
-                    [
-                        [fc - fw, fc + fw]
-                        for fc, fw in zip(filter_centers, filter_half_widths)
-                    ]
+                    [[fc - fw, fc + fw] for fc, fw in zip(filter_centers, filter_half_widths)]
                 )
             )
         )
@@ -468,24 +451,18 @@ def flag_model_rms(skipped, d, w, mdl, mdl_w=None, model_rms_threshold=1.1, ax="
         for i in range(mdl.shape[0]):
             if np.any(~skipped[i]):
                 if (
-                    np.mean(np.abs(mdl[i, ~np.isclose(np.abs(mdl_w[i]), 0.0)]) ** 2.0)
-                    ** 0.5
+                    np.mean(np.abs(mdl[i, ~np.isclose(np.abs(mdl_w[i]), 0.0)]) ** 2.0) ** 0.5
                     >= model_rms_threshold
-                    * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.0)
-                    ** 0.5
+                    * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.0) ** 0.5
                 ):
                     skipped[i] = True
     if ax == "time" or ax == "both":
         for i in range(mdl.shape[1]):
             if np.any(~skipped[:, i]):
                 if (
-                    np.mean(
-                        np.abs(mdl[~np.isclose(np.abs(mdl_w[:, i]), 0.0), i]) ** 2.0
-                    )
-                    ** 0.5
+                    np.mean(np.abs(mdl[~np.isclose(np.abs(mdl_w[:, i]), 0.0), i]) ** 2.0) ** 0.5
                     >= model_rms_threshold
-                    * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.0)
-                    ** 0.5
+                    * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.0) ** 0.5
                 ):
                     skipped[:, i] = True
     return skipped
@@ -496,9 +473,7 @@ class VisClean(object):
     VisClean object for visibility CLEANing and filtering.
     """
 
-    def __init__(
-        self, input_data, filetype="uvh5", input_cal=None, link_data=True, **read_kwargs
-    ):
+    def __init__(self, input_data, filetype="uvh5", input_cal=None, link_data=True, **read_kwargs):
         """
         Initialize the object.
 
@@ -609,21 +584,12 @@ class VisClean(object):
             self.dtime = np.median(np.diff(self.times)) * 24 * 3600
             self.dnu = np.median(np.diff(self.freqs))
             self.bls = sorted(set(self.hd.get_antpairs()))
-            self.blvecs = odict(
-                [(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls]
-            )
+            self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
             self.bllens = odict(
-                [
-                    (bl, np.linalg.norm(self.blvecs[bl]) / constants.c.value)
-                    for bl in self.bls
-                ]
+                [(bl, np.linalg.norm(self.blvecs[bl]) / constants.c.value) for bl in self.bls]
             )
-            self.lat = (
-                self.hd.telescope_location_lat_lon_alt[0] * 180 / np.pi
-            )  # degrees
-            self.lon = (
-                self.hd.telescope_location_lat_lon_alt[1] * 180 / np.pi
-            )  # degrees
+            self.lat = self.hd.telescope_location_lat_lon_alt[0] * 180 / np.pi  # degrees
+            self.lon = self.hd.telescope_location_lat_lon_alt[1] * 180 / np.pi  # degrees
             self.Nfreqs = len(self.freqs)
         # link the data if they exist
         if self.hd.data_array is not None and link_data:
@@ -690,9 +656,7 @@ class VisClean(object):
             if True in match:
                 cal_freqs_in_data.append(np.argmax(match))
         # assert all frequencies in data are found in uvcal
-        assert len(cal_freqs_in_data) == len(
-            self.freqs
-        ), "Not all freqs in uvd are in uvc"
+        assert len(cal_freqs_in_data) == len(self.freqs), "Not all freqs in uvd are in uvc"
 
         for ant in cal_gains:
             cal_gains[ant] = cal_gains[ant][:, cal_freqs_in_data]
@@ -744,9 +708,7 @@ class VisClean(object):
         elif filetype == "yaml":
             from hera_qm.utils import apply_yaml_flags
 
-            self.hd = apply_yaml_flags(
-                self.hd, external_flags, unflag_first=overwrite_flags
-            )
+            self.hd = apply_yaml_flags(self.hd, external_flags, unflag_first=overwrite_flags)
         else:
             raise ValueError(f"{type} is an invalid type! Must be 'yaml' or 'uvflag'.")
         # re-flag fully flagged baselines if necessary
@@ -937,25 +899,17 @@ class VisClean(object):
         if keys is None:
             keys = data.keys()
         if wgts is None:
-            wgts = DataContainer(
-                dict([(k, np.ones_like(flags[k], dtype=float)) for k in keys])
-            )
+            wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=float)) for k in keys]))
         # make sure flagged channels have zero weight, regardless of what user supplied.
-        wgts = DataContainer(
-            dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys])
-        )
+        wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
         # convert max_frate to DataContainer
         if max_frate is not None:
             if isinstance(max_frate, (int, np.integer, float, np.floating)):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
             if not isinstance(max_frate, DataContainer):
-                raise ValueError(
-                    "If fed, max_frate must be a float, or a DataContainer of floats"
-                )
+                raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
             # convert kwargs to proper units
-            max_frate = DataContainer(
-                dict([(k, np.asarray(max_frate[k])) for k in max_frate])
-            )
+            max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
 
         for k in keys:
             # get filter properties
@@ -1263,9 +1217,7 @@ class VisClean(object):
         if filter_spw_ranges is None:
             filter_spw_ranges = [(0, self.Nfreqs)]
         # total number of frequencies in all spw ranges.
-        n_spw_chans_sum = np.sum(
-            [spw_range[1] - spw_range[0] for spw_range in filter_spw_ranges]
-        )
+        n_spw_chans_sum = np.sum([spw_range[1] - spw_range[0] for spw_range in filter_spw_ranges])
         # frequencies from spw-ranges concatenated together.
         spw_freqs_concatenated = self.freqs[
             np.hstack(
@@ -1328,9 +1280,7 @@ class VisClean(object):
             wgts = DataContainer(dict([(k, (~flags[k]).astype(float)) for k in keys]))
         else:
             # make sure flagged channels have zero weight, regardless of what user supplied.
-            wgts = DataContainer(
-                dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys])
-            )
+            wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
         if mode != "clean":
             if cache is None:
                 cache = {}
@@ -1341,16 +1291,12 @@ class VisClean(object):
                 filtered_info[k] = {}
             if k in filtered_model and overwrite is False:
                 echo(
-                    "{} exists in clean_model and overwrite is False, skipping...".format(
-                        k
-                    ),
+                    "{} exists in clean_model and overwrite is False, skipping...".format(k),
                     verbose=verbose,
                 )
                 continue
             echo(
-                "Starting fourier filter of {} at {}".format(
-                    k, str(datetime.datetime.now())
-                ),
+                "Starting fourier filter of {} at {}".format(k, str(datetime.datetime.now())),
                 verbose=verbose,
             )
             for spw_range in filter_spw_ranges:
@@ -1371,12 +1317,9 @@ class VisClean(object):
                         w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
                         xp = np.hstack(
                             [
-                                xp.min()
-                                - (1 + np.arange(zeropad)[::-1])
-                                * np.median(np.diff(xp)),
+                                xp.min() - (1 + np.arange(zeropad)[::-1]) * np.median(np.diff(xp)),
                                 xp,
-                                xp.max()
-                                + (1 + np.arange(zeropad)) * np.median(np.diff(xp)),
+                                xp.max() + (1 + np.arange(zeropad)) * np.median(np.diff(xp)),
                             ]
                         )
                 elif ax == "time":
@@ -1386,27 +1329,21 @@ class VisClean(object):
                         w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
                         xp = np.hstack(
                             [
-                                xp.min()
-                                - (1 + np.arange(zeropad)[::-1])
-                                * np.median(np.diff(xp)),
+                                xp.min() - (1 + np.arange(zeropad)[::-1]) * np.median(np.diff(xp)),
                                 xp,
-                                xp.max()
-                                + (1 + np.arange(zeropad)) * np.median(np.diff(xp)),
+                                xp.max() + (1 + np.arange(zeropad)) * np.median(np.diff(xp)),
                             ]
                         )
                 elif ax == "both":
                     xp[1] = xp[1][spw_slice]
                     if not isinstance(zeropad, (list, tuple)) or not len(zeropad) == 2:
-                        raise ValueError(
-                            "zeropad must be a 2-tuple or 2-list of integers"
-                        )
+                        raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
                     if not (
                         isinstance(zeropad[0], (int, np.integer))
                         and isinstance(zeropad[1], (int, np.integer))
                     ):
                         raise ValueError(
-                            "zeropad values must all be integers. You provided %s"
-                            % (zeropad)
+                            "zeropad values must all be integers. You provided %s" % (zeropad)
                         )
                     for m in range(2):
                         if zeropad[m] > 0:
@@ -1415,19 +1352,15 @@ class VisClean(object):
                             xp[m] = np.hstack(
                                 [
                                     xp[m].min()
-                                    - (np.arange(zeropad[m])[::-1] + 1)
-                                    * np.median(np.diff(xp[m])),
+                                    - (np.arange(zeropad[m])[::-1] + 1) * np.median(np.diff(xp[m])),
                                     xp[m],
                                     xp[m].max()
-                                    + (1 + np.arange(zeropad[m]))
-                                    * np.median(np.diff(xp[m])),
+                                    + (1 + np.arange(zeropad[m])) * np.median(np.diff(xp[m])),
                                 ]
                             )
                 # if we are not including flagged edges in filtering, skip them here.
                 if skip_flagged_edges:
-                    xp, din, win, edges, chunks = truncate_flagged_edges(
-                        d, w, xp, ax=ax
-                    )
+                    xp, din, win, edges, chunks = truncate_flagged_edges(d, w, xp, ax=ax)
                 else:
                     din = d
                     win = w
@@ -1435,14 +1368,10 @@ class VisClean(object):
                 # (or precomputed limit) here.
                 if skip_contiguous_flags:
                     if max_contiguous_flag is None:
-                        max_contiguous_flag = (
-                            get_max_contiguous_flag_from_filter_periods(
-                                x, filter_centers, filter_half_widths
-                            )
+                        max_contiguous_flag = get_max_contiguous_flag_from_filter_periods(
+                            x, filter_centers, filter_half_widths
                         )
-                    win = flag_rows_with_contiguous_flags(
-                        win, max_contiguous_flag, ax=ax
-                    )
+                    win = flag_rows_with_contiguous_flags(win, max_contiguous_flag, ax=ax)
                 # skip integrations with flags within some minimum distance of the edges here.
                 if np.any(np.asarray(skip_if_flag_within_edge_distance) > 0):
                     win = flag_rows_with_flags_within_edge_distance(
@@ -1470,29 +1399,17 @@ class VisClean(object):
                     # unzeropad array and put in skip flags.
                     if ax == "freq":
                         if zeropad > 0:
-                            mdl, _ = zeropad_array(
-                                mdl, zeropad=zeropad, axis=1, undo=True
-                            )
-                            res, _ = zeropad_array(
-                                res, zeropad=zeropad, axis=1, undo=True
-                            )
+                            mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
+                            res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
                     elif ax == "time":
                         if zeropad > 0:
-                            mdl, _ = zeropad_array(
-                                mdl, zeropad=zeropad, axis=0, undo=True
-                            )
-                            res, _ = zeropad_array(
-                                res, zeropad=zeropad, axis=0, undo=True
-                            )
+                            mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
+                            res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
                     elif ax == "both":
                         for i in range(2):
                             if zeropad[i] > 0:
-                                mdl, _ = zeropad_array(
-                                    mdl, zeropad=zeropad[i], axis=i, undo=True
-                                )
-                                res, _ = zeropad_array(
-                                    res, zeropad=zeropad[i], axis=i, undo=True
-                                )
+                                mdl, _ = zeropad_array(mdl, zeropad=zeropad[i], axis=i, undo=True)
+                                res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
                             _trim_status(info, i, zeropad[i - 1])
                         # need to adjust info based on edges and chunks!
                         # restore indices in info necessary if ax=='both'.
@@ -1501,9 +1418,7 @@ class VisClean(object):
                 else:
                     info = {"status": {"axis_0": {}, "axis_1": {}}}
                     if ax == "freq" or ax == "both":
-                        info["status"]["axis_1"] = {
-                            i: "skipped" for i in range(self.Ntimes)
-                        }
+                        info["status"]["axis_1"] = {i: "skipped" for i in range(self.Ntimes)}
                     if ax == "time" or ax == "both":
                         info["status"]["axis_0"] = {
                             i: "skipped" for i in range(spw_range[1] - spw_range[0])
@@ -1579,9 +1494,7 @@ class VisClean(object):
                     )
                 filtered_info[k][spw_range] = info
                 if clean_flags_in_resid_flags:
-                    resid_flags[k][:, spw_slice] = (
-                        copy.deepcopy(flags[k][:, spw_slice]) | skipped
-                    )
+                    resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice]) | skipped
                 else:
                     resid_flags[k][:, spw_slice] = copy.deepcopy(flags[k][:, spw_slice])
 
@@ -1672,9 +1585,7 @@ class VisClean(object):
         if flags is not None:
             wgts = DataContainer(dict([(k, (~flags[k]).astype(float)) for k in flags]))
         else:
-            wgts = DataContainer(
-                dict([(k, np.ones_like(data[k], dtype=float)) for k in data])
-            )
+            wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=float)) for k in data]))
 
         # get keys
         if keys is None:
@@ -1701,9 +1612,7 @@ class VisClean(object):
                 continue
             if k in dfft and not overwrite:
                 echo(
-                    "{} in self.{} and overwrite == False, skipping...".format(
-                        k, assign
-                    ),
+                    "{} in self.{} and overwrite == False, skipping...".format(k, assign),
                     verbose=verbose,
                 )
                 continue
@@ -1741,9 +1650,7 @@ class VisClean(object):
             self.delays *= 1e9
             self.frates *= 1e3
 
-    def factorize_flags(
-        self, keys=None, spw_ranges=None, time_thresh=0.05, inplace=False
-    ):
+    def factorize_flags(self, keys=None, spw_ranges=None, time_thresh=0.05, inplace=False):
         """
         Factorize self.flags into two 1D time and frequency masks.
 
@@ -1782,9 +1689,7 @@ class VisClean(object):
 
         # iterate over keys
         for k in keys:
-            factorize_flags(
-                flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True
-            )
+            factorize_flags(flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True)
 
         if not inplace:
             return flags
@@ -1853,8 +1758,7 @@ class VisClean(object):
                         for k in extra_attrs:
                             kwargs[k] = extra_attrs[k]
                         if not (
-                            (filetype == "uvh5")
-                            and (getattr(self.hd, "filetype", None) == "uvh5")
+                            (filetype == "uvh5") and (getattr(self.hd, "filetype", None) == "uvh5")
                         ):
                             raise NotImplementedError(
                                 'Partial writing requires input and output types to be "uvh5".'
@@ -1931,10 +1835,7 @@ class VisClean(object):
             filled_flags: DataContainer with flags set to False unless the time is skipped in delay filter
         """
         assert np.all(
-            [
-                hasattr(self, n)
-                for n in [prefix + "_model", prefix + "_flags", "data", "flags"]
-            ]
+            [hasattr(self, n) for n in [prefix + "_model", prefix + "_flags", "data", "flags"]]
         ), (
             "self.data, self.flags, self.%s_model and self.%s_flags must all exist to get filled data"
             % (prefix, prefix)
@@ -2163,9 +2064,7 @@ def trim_model(
         neb = noise_eq_bandwidth(w[:, None])
 
         # get time-dependent noise level in Fourier space from FFT at high delays
-        noise[k] = np.median(
-            np.abs((rfft * neb)[:, np.abs(delays) > delay_cut]), axis=1
-        )
+        noise[k] = np.median(np.abs((rfft * neb)[:, np.abs(delays) > delay_cut]), axis=1)
 
         # median filter it
         if kernel_size is not None:
@@ -2177,11 +2076,7 @@ def trim_model(
         # fit a polynomial if desired
         if polyfit_deg is not None:
             x = np.arange(noise[k].size, dtype=float)
-            f = (
-                ~np.isnan(noise[k])
-                & ~np.isfinite(noise[k])
-                & ~np.isclose(noise[k], 0.0)
-            )
+            f = ~np.isnan(noise[k]) & ~np.isfinite(noise[k]) & ~np.isclose(noise[k], 0.0)
             # only fit if it is well-conditioned: Ntimes > polyfit_deg + 1
             if f.sum() >= (polyfit_deg + 1):
                 fit = np.polyfit(x[f], noise[k][f], deg=polyfit_deg)
@@ -2326,9 +2221,7 @@ def noise_eq_bandwidth(window, axis=-1):
     )
 
 
-def gen_filter_properties(
-    ax="freq", horizon=1, standoff=0, min_dly=0, bl_len=None, max_frate=0
-):
+def gen_filter_properties(ax="freq", horizon=1, standoff=0, min_dly=0, bl_len=None, max_frate=0):
     """
     Convert standard delay and fringe-rate filtering parameters
     into hera_filters.dspec.fourier_filter parameters.
@@ -2560,9 +2453,7 @@ def _filter_argparser():
         nargs="+",
         help="list of polarizations to filter.",
     )
-    ap.add_argument(
-        "--verbose", default=False, action="store_true", help="Lots of text."
-    )
+    ap.add_argument("--verbose", default=False, action="store_true", help="Lots of text.")
     ap.add_argument(
         "--filter_spw_ranges",
         default=None,
@@ -2823,9 +2714,7 @@ def time_chunk_from_baseline_chunks_argparser():
     """
     Arg parser for file reconstitution.
     """
-    a = argparse.ArgumentParser(
-        description="Construct time-chunk file from baseline-chunk files."
-    )
+    a = argparse.ArgumentParser(description="Construct time-chunk file from baseline-chunk files.")
     a.add_argument("time_chunk_template", type=str, help="name of template file.")
     a.add_argument(
         "--baseline_chunk_files",
@@ -2840,9 +2729,7 @@ def time_chunk_from_baseline_chunks_argparser():
         help="Name of output file. Provide the full path string.",
         required=True,
     )
-    a.add_argument(
-        "--clobber", action="store_true", help="Include to overwrite old files."
-    )
+    a.add_argument("--clobber", action="store_true", help="Include to overwrite old files.")
     a.add_argument(
         "--time_bounds",
         action="store_true",

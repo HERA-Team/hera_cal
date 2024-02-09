@@ -93,13 +93,9 @@ def get_all_unflagged_baselines(
 
     if redundantly_averaged:
         if ignore_ants:
-            raise ValueError(
-                "Cannot ignore antennas if the files are redundantly averaged."
-            )
+            raise ValueError("Cannot ignore antennas if the files are redundantly averaged.")
         if ex_ant_yaml_files:
-            raise ValueError(
-                "Cannot exclude antennas if the files are redundantly averaged."
-            )
+            raise ValueError("Cannot exclude antennas if the files are redundantly averaged.")
 
     for night, fl_list in enumerate(data_files):
         if ex_ant_yaml_files:
@@ -254,14 +250,10 @@ def config_lst_bin_files(
             matched_files[i].append(m)
 
     nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
-    lst_grid = [
-        lst_grid[ntimes_per_file * i : ntimes_per_file * (i + 1)] for i in range(nfiles)
-    ]
+    lst_grid = [lst_grid[ntimes_per_file * i : ntimes_per_file * (i + 1)] for i in range(nfiles)]
 
     # Only keep output files that have data associated
-    lst_grid = [
-        lg for lg, mf in zip(lst_grid, matched_files) if any(len(mff) > 0 for mff in mf)
-    ]
+    lst_grid = [lg for lg, mf in zip(lst_grid, matched_files) if any(len(mff) > 0 for mff in mf)]
     matched_files = [mf for mf in matched_files if any(len(mff) > 0 for mff in mf)]
     return lst_grid, matched_files
 
@@ -385,8 +377,7 @@ def make_lst_bin_config_file(
         )
 
     matched_files = [
-        [[str(m.path) for m in night] for night in outfiles]
-        for outfiles in matched_files
+        [[str(m.path) for m in night] for night in outfiles] for outfiles in matched_files
     ]
 
     output = {

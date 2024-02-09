@@ -24,9 +24,7 @@ from hera_qm import metrics_io
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
-@pytest.mark.filterwarnings(
-    "ignore:It seems that the latitude and longitude are in radians"
-)
+@pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 class Test_Update_Cal(object):
     def test_check_polarization_consistency(self):
@@ -47,13 +45,9 @@ class Test_Update_Cal(object):
     def test_build_gains_by_cadences(self):
         # test upsampling
         data = {(0, 1, "nn"): np.ones((8, 10), dtype=complex)}
-        gains = {
-            (0, "Jnn"): np.array([np.arange(10)]).repeat(2, axis=0).astype(complex)
-        }
+        gains = {(0, "Jnn"): np.array([np.arange(10)]).repeat(2, axis=0).astype(complex)}
         flags = {(0, "Jnn"): np.zeros((2, 10), dtype=bool)}
-        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(
-            data, gains, cal_flags=flags
-        )
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, gains, cal_flags=flags)
         for Nt in [2, 4, 8]:
             assert Nt in gains_by_Nt
             assert Nt in cal_flags_by_Nt
@@ -80,18 +74,14 @@ class Test_Update_Cal(object):
                     gains_by_Nt[Nt][(0, "Jnn")], np.outer([0.5, 2.5], np.ones(3))
                 )
             if Nt == 4:
-                np.testing.assert_array_equal(
-                    gains_by_Nt[Nt][(0, "Jnn")], gains[0, "Jnn"]
-                )
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, "Jnn")], gains[0, "Jnn"])
 
         # test downsampling
         data = {(0, 1, "nn"): np.ones((1, 3), dtype=complex)}
         gains = {(0, "Jnn"): np.outer(np.arange(4), np.ones(3)).astype(complex)}
         flags = {(0, "Jnn"): np.zeros((4, 3), dtype=bool)}
         flags[(0, "Jnn")][::3, 0] = True
-        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(
-            data, gains, cal_flags=flags
-        )
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, gains, cal_flags=flags)
         for Nt in [1, 2, 4]:
             assert Nt in gains_by_Nt
             assert Nt in cal_flags_by_Nt
@@ -107,9 +97,7 @@ class Test_Update_Cal(object):
                     gains_by_Nt[Nt][(0, "Jnn")][:, 1:], np.outer([0.5, 2.5], np.ones(2))
                 )
             if Nt == 4:
-                np.testing.assert_array_equal(
-                    gains_by_Nt[Nt][(0, "Jnn")], gains[0, "Jnn"]
-                )
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, "Jnn")], gains[0, "Jnn"])
 
         # test downsampling with flags as weights
         data = {(0, 1, "nn"): np.ones((1, 3), dtype=complex)}
@@ -134,18 +122,14 @@ class Test_Update_Cal(object):
                     gains_by_Nt[Nt][(0, "Jnn")][:, 1:], np.outer([0.5, 2.5], np.ones(2))
                 )
             if Nt == 4:
-                np.testing.assert_array_equal(
-                    gains_by_Nt[Nt][(0, "Jnn")], gains[0, "Jnn"]
-                )
+                np.testing.assert_array_equal(gains_by_Nt[Nt][(0, "Jnn")], gains[0, "Jnn"])
 
         # test empty dicts
         data = {
             (0, 1, "nn"): np.ones((1, 3), dtype=complex),
             (0, 2, "nn"): np.ones((2, 3), dtype=complex),
         }
-        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(
-            data, {}, cal_flags={}
-        )
+        gains_by_Nt, cal_flags_by_Nt = ac.build_gains_by_cadences(data, {}, cal_flags={})
         assert gains_by_Nt == {1: {}, 2: {}}
         assert cal_flags_by_Nt == {1: {}, 2: {}}
 
@@ -156,9 +140,7 @@ class Test_Update_Cal(object):
                 (0, 2, "nn"): np.ones((3, 3), dtype=complex),
             }
             ac.build_gains_by_cadences(data, {})
-        with pytest.warns(
-            UserWarning, match="cannot be calibrated with any of gain cadences"
-        ):
+        with pytest.warns(UserWarning, match="cannot be calibrated with any of gain cadences"):
             data = {
                 (0, 1, "nn"): np.ones((2, 3), dtype=complex),
                 (0, 2, "nn"): np.ones((3, 3), dtype=complex),
@@ -206,12 +188,7 @@ class Test_Update_Cal(object):
             / g_new[(0, "Jxx")]
             / np.conj(g_new[(1, "Jxx")])
         )
-        flagged = (
-            f_old[(0, "Jxx")]
-            | f_old[(1, "Jxx")]
-            | f_new[(0, "Jxx")]
-            | f_new[(1, "Jxx")]
-        )
+        flagged = f_old[(0, "Jxx")] | f_old[(1, "Jxx")] | f_new[(0, "Jxx")] | f_new[(1, "Jxx")]
         gain_ratios[flagged] = np.nan
         avg_gains = np.nanmean(np.array([gain_ratios]), axis=0)
         avg_flags = ~np.isfinite(avg_gains)
@@ -220,15 +197,11 @@ class Test_Update_Cal(object):
         for i in range(10):
             for j in range(10):
                 if not np.isfinite(dc[(0, 1, "xx")][i, j]):
-                    assert np.allclose(
-                        dc[(0, 1, "xx")][i, j], vis[i, j] * avg_gains[i, j]
-                    )
+                    assert np.allclose(dc[(0, 1, "xx")][i, j], vis[i, j] * avg_gains[i, j])
 
     def test_apply_redundant_solutions(self, tmpdir):
         tmp_path = tmpdir.strpath
-        miriad = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only"
-        )
+        miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
         outname_uvh5 = os.path.join(tmp_path, "red_out.uvh5")
         old_cal = os.path.join(
             DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"
@@ -256,9 +229,7 @@ class Test_Update_Cal(object):
         inp_data, inp_flags, _ = inp_hc.read()
         out_hc = io.HERAData(outname_uvh5)
         out_data, out_flags, _ = out_hc.read()
-        np.testing.assert_almost_equal(
-            inp_data[(54, 54, "ee")], out_data[(54, 54, "ee")]
-        )
+        np.testing.assert_almost_equal(inp_data[(54, 54, "ee")], out_data[(54, 54, "ee")])
         os.remove(outname_uvh5)
 
         # Now test with partial I/O
@@ -289,9 +260,7 @@ class Test_Update_Cal(object):
         inp_data, inp_flags, _ = inp_hc.read()
         out_hc = io.HERAData(outname_uvh5)
         out_data, out_flags, _ = out_hc.read()
-        np.testing.assert_almost_equal(
-            inp_data[(54, 54, "ee")], out_data[(54, 54, "ee")]
-        )
+        np.testing.assert_almost_equal(inp_data[(54, 54, "ee")], out_data[(54, 54, "ee")])
         os.remove(outname_uvh5)
 
     def test_calibrate_in_place(self):
@@ -324,11 +293,7 @@ class Test_Update_Cal(object):
                     / g0_new[i, j]
                     / np.conj(g1_new[i, j]),
                 )
-                if (
-                    f[i, j]
-                    or cal_flags[(0, "Jxx")][i, j]
-                    or cal_flags[(1, "Jxx")][i, j]
-                ):
+                if f[i, j] or cal_flags[(0, "Jxx")][i, j] or cal_flags[(1, "Jxx")][i, j]:
                     assert np.all(flags[(0, 1, "xx")][i, j])
                 else:
                     assert not np.any(flags[(0, 1, "xx")][i, j])
@@ -368,9 +333,7 @@ class Test_Update_Cal(object):
         np.testing.assert_array_equal(flags[(0, 1, "xx")], True)
         dc = DataContainer({(0, 1, "xx"): deepcopy(vis)})
         flags = DataContainer({(0, 1, "xx"): deepcopy(f)})
-        ac.calibrate_in_place(
-            dc, g_new, flags, cal_flags, old_gains={}, gain_convention="divide"
-        )
+        ac.calibrate_in_place(dc, g_new, flags, cal_flags, old_gains={}, gain_convention="divide")
         np.testing.assert_array_equal(flags[(0, 1, "xx")], True)
 
         # test error
@@ -392,28 +355,18 @@ class Test_Update_Cal(object):
         assert np.allclose(wgts[(0, 1, "xx")].max(), 0.0)
 
         # test BDA runs without error
-        dc = DataContainer(
-            {(0, 1, "xx"): deepcopy(vis), (0, 2, "xx"): deepcopy(vis[0:5, :])}
-        )
-        flags = DataContainer(
-            {(0, 1, "xx"): deepcopy(f), (0, 2, "xx"): deepcopy(f[0:5, :])}
-        )
+        dc = DataContainer({(0, 1, "xx"): deepcopy(vis), (0, 2, "xx"): deepcopy(vis[0:5, :])})
+        flags = DataContainer({(0, 1, "xx"): deepcopy(f), (0, 2, "xx"): deepcopy(f[0:5, :])})
         g_here = deepcopy(g_new)
         g_here[2, "Jxx"] = deepcopy(g_here[1, "Jxx"])
         ac.calibrate_in_place(dc, g_here, flags)
 
         # test BDA cadence errors
-        dc = DataContainer(
-            {(0, 1, "xx"): deepcopy(vis), (0, 2, "xx"): deepcopy(vis[0:5, :])}
-        )
-        flags = DataContainer(
-            {(0, 1, "xx"): deepcopy(f), (0, 2, "xx"): deepcopy(f[0:5, :])}
-        )
+        dc = DataContainer({(0, 1, "xx"): deepcopy(vis), (0, 2, "xx"): deepcopy(vis[0:5, :])})
+        flags = DataContainer({(0, 1, "xx"): deepcopy(f), (0, 2, "xx"): deepcopy(f[0:5, :])})
         g_here = {(0, "Jxx"): g0_new[0:3, :], (1, "Jxx"): g1_new[0:3, :]}
         with pytest.raises(ValueError, match="new_gains with"):
-            ac.calibrate_in_place(
-                dc, g_here, data_flags=flags, cal_flags=None, old_gains=None
-            )
+            ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=None, old_gains=None)
         g_here = {(0, "Jxx"): g0_new[0:1, :], (1, "Jxx"): g1_new[0:1, :]}
         cal_flags_here = {
             (0, "Jxx"): cal_flags[(0, "Jxx")][0:7, :],
@@ -431,12 +384,8 @@ class Test_Update_Cal(object):
 
     def test_apply_cal(self, tmpdir):
         tmp_path = tmpdir.strpath
-        miriad = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only"
-        )
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outname_miriad = os.path.join(tmp_path, "out.uv")
         outname_uvh5 = os.path.join(tmp_path, "out.h5")
         calout = os.path.join(tmp_path, "out.cal")
@@ -453,9 +402,7 @@ class Test_Update_Cal(object):
 
         hd_old = io.HERAData(miriad, filetype="miriad")
         hd_old.read()
-        hd_old.flag_array = np.logical_or(
-            hd_old.flag_array, np.load(flags_npz)["flag_array"]
-        )
+        hd_old.flag_array = np.logical_or(hd_old.flag_array, np.load(flags_npz)["flag_array"])
         data, data_flags, _ = hd_old.build_datacontainers()
 
         new_gains, new_flags = io.load_cal(new_cal)
@@ -482,17 +429,13 @@ class Test_Update_Cal(object):
         hd = io.HERAData(outname_miriad, filetype="miriad")
         new_data, new_flags, _ = hd.read()
         assert "testing" in hd.history.replace("\n", "").replace(" ", "")
-        assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(" ", "")
         assert hd.vis_units == "Jy"
         for k in new_data.keys():
             for i in range(new_data[k].shape[0]):
                 for j in range(new_data[k].shape[1]):
                     if not new_flags[k][i, j]:
-                        assert np.allclose(
-                            new_data[k][i, j] / 25.0 / data[k][i, j], 1.0, atol=1e-4
-                        )
+                        assert np.allclose(new_data[k][i, j] / 25.0 / data[k][i, j], 1.0, atol=1e-4)
                     # from flag_nchan_low and flag_nchan_high above with 1024 total channels
                     if j < 450 or j > 623:
                         assert np.all(new_flags[k][i, j])
@@ -520,9 +463,7 @@ class Test_Update_Cal(object):
             for i in range(new_data[k].shape[0]):
                 for j in range(new_data[k].shape[1]):
                     if not new_flags[k][i, j]:
-                        assert np.allclose(
-                            new_data[k][i, j] / 25.0 / data[k][i, j], 1.0, atol=1e-4
-                        )
+                        assert np.allclose(new_data[k][i, j] / 25.0 / data[k][i, j], 1.0, atol=1e-4)
                     # from flag_nchan_low and flag_nchan_high above with 1024 total channels
                     if j < 450 or j > 623:
                         assert np.all(new_flags[k][i, j])
@@ -532,15 +473,11 @@ class Test_Update_Cal(object):
         with pytest.raises(ValueError):
             ac.apply_cal(miriad, outname_miriad, None)
         with pytest.raises(NotImplementedError):
-            ac.apply_cal(
-                miriad, outname_uvh5, new_cal, filetype_in="miriad", nbl_per_load=1
-            )
+            ac.apply_cal(miriad, outname_uvh5, new_cal, filetype_in="miriad", nbl_per_load=1)
         shutil.rmtree(outname_miriad)
 
         # test flagging yaml
-        flag_yaml = os.path.join(
-            DATA_PATH, "test_input/a_priori_flags_sample_53_flagged.yaml"
-        )
+        flag_yaml = os.path.join(DATA_PATH, "test_input/a_priori_flags_sample_53_flagged.yaml")
         ac.apply_cal(
             uvh5,
             outname_uvh5,
@@ -561,9 +498,7 @@ class Test_Update_Cal(object):
             flag_yaml, times=hd.times, lsts=hd.lsts * 12 / np.pi
         )
         flagged_chans = metrics_io.read_a_priori_chan_flags(flag_yaml, freqs=hd.freqs)
-        flagged_ants = metrics_io.read_a_priori_ant_flags(
-            flag_yaml, ant_indices_only=True
-        )
+        flagged_ants = metrics_io.read_a_priori_ant_flags(flag_yaml, ant_indices_only=True)
         for bl in new_flags:
             if bl[0] in flagged_ants or bl[1] in flagged_ants:
                 assert np.all(new_flags[bl])
@@ -576,9 +511,7 @@ class Test_Update_Cal(object):
         new_cal = os.path.join(
             DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"
         )
-        uvh5 = os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
 
         uvd_with_units = UVData()
         uvd_with_units.read_uvh5(uvh5)
@@ -604,9 +537,7 @@ class Test_Update_Cal(object):
         assert hdc.vis_units == "k str"
         # test red_average mode.
         with pytest.warns(RuntimeWarning):
-            ac.apply_cal(
-                uvh5_units, output, calfile, clobber=True, redundant_average=True
-            )
+            ac.apply_cal(uvh5_units, output, calfile, clobber=True, redundant_average=True)
         hdc = io.HERAData(output)
         assert hdc.vis_units == "Jy"
         ac.apply_cal(
@@ -624,9 +555,7 @@ class Test_Update_Cal(object):
             ac.apply_cal(uvh5_units, output, calfile, nbl_per_load=4, clobber=True)
         hdc = io.HERAData(output)
         assert hdc.vis_units == "Jy"
-        ac.apply_cal(
-            uvh5, output, calfile, vis_units="k str", clobber=True, nbl_per_load=4
-        )
+        ac.apply_cal(uvh5, output, calfile, vis_units="k str", clobber=True, nbl_per_load=4)
         hdc = io.HERAData(output)
         assert hdc.vis_units == "k str"
         # test red_average mode.
@@ -715,9 +644,7 @@ class Test_Update_Cal(object):
         # we will do this by applying a calibration to a data set and then running red_average
         # on its output. We will then check that this gives the same results as activating the
         # red_average option in apply_cal.
-        hd_calibrated = io.HERAData(
-            os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
-        )
+        hd_calibrated = io.HERAData(os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5"))
         d, f, n = hd_calibrated.read()
         uncalibrated_file = os.path.join(
             DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uncalibrated.uvh5"
@@ -725,17 +652,13 @@ class Test_Update_Cal(object):
         calibrated_redundant_averaged_file = os.path.join(
             tmp_path, "zen.2458043.40141.xx.HH.XRAA.redundantly_averaged.uvh5"
         )
-        calibrated_file = os.path.join(
-            tmp_path, "zen.2458043.40141.xx.HH.XRAA.calibrated.uvh5"
-        )
+        calibrated_file = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.calibrated.uvh5")
         calfile = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.abs.calfits")
         calfile_unity = os.path.join(
             DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.unity_gains.abs.calfits"
         )
         # redundantly average the calibrated data file.
-        reds = redcal.get_reds(
-            hd_calibrated.antpos, bl_error_tol=1.0, include_autos=True
-        )
+        reds = redcal.get_reds(hd_calibrated.antpos, bl_error_tol=1.0, include_autos=True)
 
         # apply_cal without redundant averaging and check that data arrays etc... are the same
         ac.apply_cal(
@@ -751,21 +674,11 @@ class Test_Update_Cal(object):
         g, gf, _, _ = hc_unity.read()
         ac.calibrate_in_place(data=d, new_gains=g, cal_flags=gf, data_flags=f)
         hd_calibrated.update(flags=f, data=d)
+        assert np.all(np.isclose(hd_calibrated.data_array, hd_calibrated_with_apply_cal.data_array))
         assert np.all(
-            np.isclose(
-                hd_calibrated.data_array, hd_calibrated_with_apply_cal.data_array
-            )
+            np.isclose(hd_calibrated.nsample_array, hd_calibrated_with_apply_cal.nsample_array)
         )
-        assert np.all(
-            np.isclose(
-                hd_calibrated.nsample_array, hd_calibrated_with_apply_cal.nsample_array
-            )
-        )
-        assert np.all(
-            np.isclose(
-                hd_calibrated.flag_array, hd_calibrated_with_apply_cal.flag_array
-            )
-        )
+        assert np.all(np.isclose(hd_calibrated.flag_array, hd_calibrated_with_apply_cal.flag_array))
 
         # remove polarizations for red_average
         reds = [[bl[:2] for bl in redgrp] for redgrp in reds]
@@ -797,14 +710,10 @@ class Test_Update_Cal(object):
             )
         )
         assert np.all(
-            np.isclose(
-                hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array
-            )
+            np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array)
         )
         assert np.all(
-            np.isclose(
-                hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array
-            )
+            np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array)
         )
 
         # now do chunked redundant groups.
@@ -827,14 +736,10 @@ class Test_Update_Cal(object):
             )
         )
         assert np.all(
-            np.isclose(
-                hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array
-            )
+            np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array)
         )
         assert np.all(
-            np.isclose(
-                hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array
-            )
+            np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array)
         )
 
         # now do chunked redundant groups with a large group size to catch a bug.
@@ -857,14 +762,10 @@ class Test_Update_Cal(object):
             )
         )
         assert np.all(
-            np.isclose(
-                hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array
-            )
+            np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array)
         )
         assert np.all(
-            np.isclose(
-                hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array
-            )
+            np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array)
         )
         dcal, fcal, ncal = hd_calibrated.build_datacontainers()
 
@@ -941,16 +842,10 @@ class Test_Update_Cal(object):
             )
             for rc in range(ngrps):
                 hda_calibrated_groups.append(
-                    io.HERAData(
-                        calibrated_redundant_averaged_file.replace(
-                            ".uvh5", f".{rc}.uvh5"
-                        )
-                    )
+                    io.HERAData(calibrated_redundant_averaged_file.replace(".uvh5", f".{rc}.uvh5"))
                 )
                 hda_calibrated_groups[-1].read()
-                os.remove(
-                    calibrated_redundant_averaged_file.replace(".uvh5", f".{rc}.uvh5")
-                )
+                os.remove(calibrated_redundant_averaged_file.replace(".uvh5", f".{rc}.uvh5"))
             # check that the sum of nsample arrays is equal to the nsamples in the redgroup in the original data.
             for m in range(len(hda_calibrated_groups)):
                 _, _, nt = hda_calibrated_groups[m].build_datacontainers()

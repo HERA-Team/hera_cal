@@ -113,9 +113,7 @@ def lst_align(
         raise ValueError(f"data has more than 4 pols! Got {npols} (last axis of data)")
 
     if data.shape != required_shape:
-        raise ValueError(
-            f"data should have shape {required_shape} but got {data.shape}"
-        )
+        raise ValueError(f"data should have shape {required_shape} but got {data.shape}")
 
     if flags is None:
         flags = np.zeros(data.shape, dtype=bool)
@@ -127,9 +125,7 @@ def lst_align(
         nsamples = np.ones(data.shape, dtype=float)
 
     if nsamples.shape != data.shape:
-        raise ValueError(
-            f"nsamples should have shape {data.shape} but got {nsamples.shape}"
-        )
+        raise ValueError(f"nsamples should have shape {data.shape} but got {nsamples.shape}")
 
     if len(lst_bin_edges) < 2:
         raise ValueError("lst_bin_edges must have at least 2 elements")
@@ -213,9 +209,7 @@ def _allocate_dfn(shape: tuple[int], d=0.0, f=0, n=0):
     return data, flags, nsamples
 
 
-def get_lst_bins(
-    lsts: np.ndarray, edges: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def get_lst_bins(lsts: np.ndarray, edges: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Get the LST bin indices for a set of LSTs.
 
     Parameters
@@ -350,11 +344,7 @@ def lst_bin_files_for_baselines(
         The JDs that are in each LST bin -- a list of arrays.
     """
     metas = [
-        (
-            fl
-            if isinstance(fl, FastUVH5Meta)
-            else FastUVH5Meta(fl, blts_are_rectangular=True)
-        )
+        (fl if isinstance(fl, FastUVH5Meta) else FastUVH5Meta(fl, blts_are_rectangular=True))
         for fl in data_files
     ]
 
@@ -399,9 +389,7 @@ def lst_bin_files_for_baselines(
             time_idx.append(op(_lsts >= lst_bin_edges[0], _lsts < lst_bin_edges[-1]))
 
     if time_arrays is None:
-        time_arrays = [
-            meta.get_transactional("times")[idx] for meta, idx in zip(metas, time_idx)
-        ]
+        time_arrays = [meta.get_transactional("times")[idx] for meta, idx in zip(metas, time_idx)]
 
     if lsts is None:
         lsts = np.concatenate(
@@ -445,14 +433,11 @@ def lst_bin_files_for_baselines(
             bls_to_load = [
                 bl
                 for bl in data_antpairs
-                if reds.get_ubl_key(bl) in antpairs
-                or reds.get_ubl_key(bl[::-1]) in antpairs
+                if reds.get_ubl_key(bl) in antpairs or reds.get_ubl_key(bl[::-1]) in antpairs
             ]
         else:
             bls_to_load = [
-                bl
-                for bl in antpairs
-                if bl in data_antpairs or bl[::-1] in data_antpairs
+                bl for bl in antpairs if bl in data_antpairs or bl[::-1] in data_antpairs
             ]
 
         if not bls_to_load or not np.any(tind):

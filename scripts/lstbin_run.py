@@ -75,6 +75,4 @@ if args.vis_units is None:
 if kwargs["output_file_select"] == ["None"]:
     del kwargs["output_file_select"]
 
-run_with_profiling(
-    lstbin.lst_bin_files, args, data_files, input_cals=input_cals, **kwargs
-)
+run_with_profiling(lstbin.lst_bin_files, args, data_files, input_cals=input_cals, **kwargs)

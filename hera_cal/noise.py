@@ -16,9 +16,7 @@ from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
 
 
-def interleaved_noise_variance_estimate(
-    vis, kernel=[[1, -2, 1], [-2, 4, -2], [1, -2, 1]]
-):
+def interleaved_noise_variance_estimate(vis, kernel=[[1, -2, 1], [-2, 4, -2], [1, -2, 1]]):
     """Estimate the noise on a visibility per frequency and time using weighted differecing of
     neighboring frequency and time samples.
 
@@ -30,13 +28,9 @@ def interleaved_noise_variance_estimate(
     Returns:
         variance: estimate of the noise variance on the input visibility with the same shape
     """
-    assert (
-        np.sum(kernel) == 0
-    ), "The kernal must sum to zero for difference-based noise estimation."
+    assert np.sum(kernel) == 0, "The kernal must sum to zero for difference-based noise estimation."
     assert np.array(kernel).ndim == 2, "The kernel must be 2D."
-    variance = (
-        np.abs(scipy.signal.convolve2d(vis, kernel, mode="same", boundary="wrap")) ** 2
-    )
+    variance = np.abs(scipy.signal.convolve2d(vis, kernel, mode="same", boundary="wrap")) ** 2
     variance /= np.sum(np.array(kernel) ** 2)
     return variance
 
@@ -94,9 +88,7 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None)
     if dt is None:
         dt = infer_dt(data.times_by_bl, bl) * units.si.day.in_units(units.si.s)
     if df is None:
-        assert (
-            len(data.freqs) > 1
-        )  # cannot infer channel width if only one channel is present
+        assert len(data.freqs) > 1  # cannot infer channel width if only one channel is present
         df = np.median(np.ediff1d(data.freqs))
 
     ap1, ap2 = split_pol(bl[2])
@@ -126,9 +118,7 @@ def per_antenna_noise_std(autos, dt=None, df=None):
     noise = {}
     for bl in autos:
         if (bl[0] == bl[1]) and (split_pol(bl[2])[0] == split_pol(bl[2])[1]):
-            noise[bl] = np.sqrt(
-                predict_noise_variance_from_autos(bl, autos, dt=dt, df=df)
-            )
+            noise[bl] = np.sqrt(predict_noise_variance_from_autos(bl, autos, dt=dt, df=df))
     return DataContainer(noise)
 
 
@@ -156,9 +146,7 @@ def write_per_antenna_noise_std_from_autos(
     """
     hd = io.HERAData(infile)
     auto_bls = [
-        bl
-        for bl in hd.bls
-        if (bl[0] == bl[1] and split_pol(bl[2])[0] == split_pol(bl[2])[1])
+        bl for bl in hd.bls if (bl[0] == bl[1] and split_pol(bl[2])[0] == split_pol(bl[2])[1])
     ]
     autos, auto_flags, _ = hd.read(bls=auto_bls)
     if calfile is not None:

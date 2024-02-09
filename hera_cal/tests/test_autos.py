@@ -15,9 +15,7 @@ from ..utils import split_pol
 from ..apply_cal import apply_cal
 
 
-@pytest.mark.filterwarnings(
-    "ignore:It seems that the latitude and longitude are in radians"
-)
+@pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class Test_Autos(object):
     def test_read_and_write_autocorrelations(self):
@@ -37,21 +35,15 @@ class Test_Autos(object):
             np.testing.assert_array_equal(d_full[bl], d[bl])
             np.testing.assert_array_equal(f_full[bl], f[bl])
         assert "testing" in hd.history.replace("\n", "").replace(" ", "")
-        assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(" ", "")
         os.remove(outfile)
 
     def test_read_calibrate_and_write_autocorrelations(self):
         infile = os.path.join(DATA_PATH, "zen.2458098.43124.downsample.uvh5")
         outfile = os.path.join(DATA_PATH, "test_output/autos.uvh5")
-        calfile = os.path.join(
-            DATA_PATH, "test_input/zen.2458098.43124.downsample.omni.calfits"
-        )
+        calfile = os.path.join(DATA_PATH, "test_input/zen.2458098.43124.downsample.omni.calfits")
         calibrated = os.path.join(DATA_PATH, "test_output/calibrated.uvh5")
-        autos.read_and_write_autocorrelations(
-            infile, outfile, calfile=calfile, clobber=True
-        )
+        autos.read_and_write_autocorrelations(infile, outfile, calfile=calfile, clobber=True)
         apply_cal(infile, calibrated, calfile, clobber=True)
 
         hd_full_cal = io.HERAData(calibrated)

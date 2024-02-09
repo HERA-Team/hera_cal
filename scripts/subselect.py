@@ -20,20 +20,14 @@ import logging
 
 logger = logging.getLogger("hera_cal.subselect")
 
-ap = ArgumentParser(
-    description="Sub-select parts of a data file and write out the results."
-)
+ap = ArgumentParser(description="Sub-select parts of a data file and write out the results.")
 
 ap.add_argument("infile", type=str, help="Path to input file.")
 ap.add_argument("outfile", type=str, help="Path to output file.")
 
 freq_grp = ap.add_argument_group("Frequency Selection")
-freq_grp.add_argument(
-    "--freq-min", type=float, help="Minimum frequency to select.", default=None
-)
-freq_grp.add_argument(
-    "--freq-max", type=float, help="Maximum frequency to select.", default=None
-)
+freq_grp.add_argument("--freq-min", type=float, help="Minimum frequency to select.", default=None)
+freq_grp.add_argument("--freq-max", type=float, help="Maximum frequency to select.", default=None)
 freq_grp.add_argument(
     "--freq-spws",
     type=str,
@@ -42,24 +36,16 @@ freq_grp.add_argument(
 )
 
 time_grp = ap.add_argument_group("Time Selection")
-time_grp.add_argument(
-    "--time-min", type=float, help="Minimum time to select, JD", default=None
-)
-time_grp.add_argument(
-    "--time-max", type=float, help="Maximum time to select, JD", default=None
-)
+time_grp.add_argument("--time-min", type=float, help="Minimum time to select, JD", default=None)
+time_grp.add_argument("--time-max", type=float, help="Maximum time to select, JD", default=None)
 time_grp.add_argument(
     "--time-idxs",
     type=str,
     help="Comma-separated list of time indices to select, eg '0~100,200~300'.",
     default=None,
 )
-time_grp.add_argument(
-    "--lst-min", type=float, help="Minimum LST to select", default=None
-)
-time_grp.add_argument(
-    "--lst-max", type=float, help="Maximum time to select", default=None
-)
+time_grp.add_argument("--lst-min", type=float, help="Minimum LST to select", default=None)
+time_grp.add_argument("--lst-max", type=float, help="Maximum time to select", default=None)
 time_grp.add_argument(
     "--lst-in-hours",
     action="store_true",
@@ -95,12 +81,8 @@ bl_grp.add_argument(
     help="Comma-separated list of baselines to select, eg '3:5,15:27'",
     default=None,
 )
-bl_grp.add_argument(
-    "--only-autos", action="store_true", help="Only select auto-correlations."
-)
-bl_grp.add_argument(
-    "--only-cross", action="store_true", help="Only select cross-correlations."
-)
+bl_grp.add_argument("--only-autos", action="store_true", help="Only select auto-correlations.")
+bl_grp.add_argument("--only-cross", action="store_true", help="Only select cross-correlations.")
 bl_grp.add_argument(
     "--min-bl-length",
     type=float,
@@ -127,9 +109,7 @@ bl_grp.add_argument(
 )
 
 io_grp = ap.add_argument_group("I/O")
-io_grp.add_argument(
-    "--clobber", action="store_true", help="Overwrite output file if it exists."
-)
+io_grp.add_argument("--clobber", action="store_true", help="Overwrite output file if it exists.")
 
 check_grp = ap.add_argument_group("Checking Arguments")
 check_grp.add_argument(
@@ -147,12 +127,8 @@ check_grp.add_argument(
     action="store_true",
     help="Check whether UVW's are strictly consistent with antpos.",
 )
-check_grp.add_argument(
-    "--check-autos", action="store_true", help="Check that autos are real"
-)
-check_grp.add_argument(
-    "--fix-autos", action="store_true", help="Fix autos if they are not real"
-)
+check_grp.add_argument("--check-autos", action="store_true", help="Check that autos are real")
+check_grp.add_argument("--fix-autos", action="store_true", help="Fix autos if they are not real")
 
 args = parse_args(ap)
 kw = filter_kwargs(vars(args))
@@ -206,9 +182,7 @@ def select(
         if freq_max is not None:
             freqs = freqs[freqs <= freq_max]
         if freq_spws is not None:
-            freq_spws = [
-                tuple(map(int, spw.split("~"))) for spw in freq_spws.split(",")
-            ]
+            freq_spws = [tuple(map(int, spw.split("~"))) for spw in freq_spws.split(",")]
             freqs = freqs[np.concatenate([np.arange(*spw) for spw in freq_spws])]
     else:
         freqs = None
@@ -220,9 +194,7 @@ def select(
 
         if time_idxs is not None:
             time_bools = np.zeros_like(times, dtype=bool)
-            time_idxs = [
-                tuple(map(int, idx.split("~"))) for idx in time_idxs.split(",")
-            ]
+            time_idxs = [tuple(map(int, idx.split("~"))) for idx in time_idxs.split(",")]
 
             for idx in time_idxs:
                 time_bools[idx[0] : idx[1]] = True
@@ -309,11 +281,7 @@ def select(
                         return np.sqrt(np.sum(np.square(antpos[bl[0]] - antpos[bl[1]])))
 
                     # bllens = np.sqrt(np.sum(np.square(hd.uvw_array), axis=1))
-                    bls = [
-                        bl
-                        for bl in bls
-                        if min_bl_length <= bl_length(bl) <= max_bl_length
-                    ]
+                    bls = [bl for bl in bls if min_bl_length <= bl_length(bl) <= max_bl_length]
 
                 if min_ew_length is not None or max_ew_length is not None:
                     min_ew_length = min_ew_length or 0
@@ -322,11 +290,7 @@ def select(
                     def ew_length(bl):
                         return np.abs(antpos[bl[0]][0] - antpos[bl[1]][0])
 
-                    bls = [
-                        bl
-                        for bl in bls
-                        if min_ew_length <= ew_length(bl) <= max_ew_length
-                    ]
+                    bls = [bl for bl in bls if min_ew_length <= ew_length(bl) <= max_ew_length]
     else:
         bls = None
 

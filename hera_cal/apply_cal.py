@@ -172,9 +172,7 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
             cal_flags_by_Nt = {Nt: {} for Nt in data_Nts}
         else:
             if np.isscalar(list(cal_flags.values())[0]):
-                cal_flags_by_Nt = {
-                    1: {ant: np.array([[cf]]) for ant, cf in cal_flags.items()}
-                }
+                cal_flags_by_Nt = {1: {ant: np.array([[cf]]) for ant, cf in cal_flags.items()}}
             else:
                 cal_flags_by_Nt = {list(cal_flags.values())[0].shape[0]: cal_flags}
 
@@ -192,8 +190,7 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
         if max_gain_Nt >= np.max(list(data_Nts)):
             break
         gains_by_Nt[max_gain_Nt * 2] = {
-            ant: gains_by_Nt[max_gain_Nt][ant].repeat(2, axis=0)
-            for ant in gains_by_Nt[max_gain_Nt]
+            ant: gains_by_Nt[max_gain_Nt][ant].repeat(2, axis=0) for ant in gains_by_Nt[max_gain_Nt]
         }
         if cal_flags_by_Nt is not None:
             cal_flags_by_Nt[max_gain_Nt * 2] = {
@@ -220,9 +217,7 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
                 if flags_are_wgts:
                     weights = [even_flags, odd_flags]
                     # average weights
-                    cal_flags_by_Nt[min_gain_Nt // 2][ant] = (
-                        even_flags + odd_flags
-                    ) / 2
+                    cal_flags_by_Nt[min_gain_Nt // 2][ant] = (even_flags + odd_flags) / 2
                 else:
                     weights = [(~even_flags).astype(float), (~odd_flags).astype(float)]
                     # OR flags
@@ -233,9 +228,7 @@ def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
                 ).data
             else:
                 # just do a straight average
-                gains_by_Nt[min_gain_Nt // 2][ant] = np.average(
-                    [even_gains, odd_gains], axis=0
-                )
+                gains_by_Nt[min_gain_Nt // 2][ant] = np.average([even_gains, odd_gains], axis=0)
 
     # Warn if there cadences in the data that are missing that still aren't in gains_by_Nt
     for Nt in data_Nts:
@@ -327,9 +320,7 @@ def calibrate_in_place(
                 flag_all = True
             if old_gains is not None:
                 try:
-                    data[(i, j, pol)] *= (
-                        np.abs(old_gains_here[(i, ap1)]) ** 2
-                    ) ** exponent
+                    data[(i, j, pol)] *= (np.abs(old_gains_here[(i, ap1)]) ** 2) ** exponent
                 except KeyError:
                     flag_all = True
         else:
@@ -361,12 +352,8 @@ def calibrate_in_place(
                 # update data_flags in the case where flags are weights, flag all if cal_flags are missing
                 if flags_are_wgts:
                     try:
-                        data_flags[(i, j, pol)] *= (~cal_flags_here[(i, ap1)]).astype(
-                            float
-                        )
-                        data_flags[(i, j, pol)] *= (~cal_flags_here[(j, ap2)]).astype(
-                            float
-                        )
+                        data_flags[(i, j, pol)] *= (~cal_flags_here[(i, ap1)]).astype(float)
+                        data_flags[(i, j, pol)] *= (~cal_flags_here[(j, ap2)]).astype(float)
                     except KeyError:
                         flag_all = True
                 # update data_flags in the case where flags are booleans, flag all if cal_flags are missing
@@ -380,13 +367,9 @@ def calibrate_in_place(
             # if the flag object is given, update it for this baseline to be totally flagged
             if flag_all:
                 if flags_are_wgts:
-                    data_flags[(i, j, pol)] = np.zeros_like(
-                        data[(i, j, pol)], dtype=float
-                    )
+                    data_flags[(i, j, pol)] = np.zeros_like(data[(i, j, pol)], dtype=float)
                 else:
-                    data_flags[(i, j, pol)] = np.ones_like(
-                        data[(i, j, pol)], dtype=bool
-                    )
+                    data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=bool)
 
 
 def apply_cal(
@@ -489,9 +472,7 @@ def apply_cal(
     if exclude_from_redundant_mode not in ["yaml", "data"]:
         raise ValueError("exclude_from_redundant_mode must be 'yaml' or 'data'.")
     if flag_file is not None:
-        ext_flags, flag_meta = io.load_flags(
-            flag_file, filetype=flag_filetype, return_meta=True
-        )
+        ext_flags, flag_meta = io.load_flags(flag_file, filetype=flag_filetype, return_meta=True)
         add_to_history += "\nFLAGS_HISTORY: " + str(flag_meta["history"]) + "\n"
 
     # load new calibration solution
@@ -522,9 +503,7 @@ def apply_cal(
                 freqs_to_load.append(f)
         if spw_range is not None:
             freqs_to_load = freqs_to_load[spw_range[0] : spw_range[1]]
-        old_hc.select(
-            frequencies=np.asarray(freqs_to_load)
-        )  # match up frequencies with hc.freqs
+        old_hc.select(frequencies=np.asarray(freqs_to_load))  # match up frequencies with hc.freqs
         old_gains, old_flags, _, _ = old_hc.build_calcontainers()
         add_to_history += "\nOLD_CALFITS_HISTORY: " + old_hc.history + "\n"
     else:
@@ -563,9 +542,7 @@ def apply_cal(
     no_red_weights = redundant_weights is None
     if nbl_per_load is not None:
         if not ((filetype_in == "uvh5") and (filetype_out == "uvh5")):
-            raise NotImplementedError(
-                "Partial writing is not implemented for non-uvh5 I/O."
-            )
+            raise NotImplementedError("Partial writing is not implemented for non-uvh5 I/O.")
         if not redundant_groups == 1:
             raise NotImplementedError(
                 "Splitting redundant groups into subgroups is not yet implemented for partial I/O!"
@@ -591,9 +568,7 @@ def apply_cal(
             all_red_antpairs = [
                 [bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]
             ]
-            hd_red = io.HERAData(
-                data_infilename, upsample=upsample, downsample=downsample
-            )
+            hd_red = io.HERAData(data_infilename, upsample=upsample, downsample=downsample)
             # go through all redundant groups and remove the groups that do not
             # have baselines in the data. Each group is still labeled by the
             # first baseline of each group regardless if that baseline is in
@@ -652,10 +627,7 @@ def apply_cal(
                         if exclude_from_redundant_mode == "data":
                             if np.all(data_flags[bl]):
                                 redundant_weights[bl][:] = 0.0
-                        elif (
-                            exclude_from_redundant_mode == "yaml"
-                            and ex_ants is not None
-                        ):
+                        elif exclude_from_redundant_mode == "yaml" and ex_ants is not None:
                             if bl[0] in ex_ants or bl[1] in ex_ants:
                                 redundant_weights[bl][:] = 0.0
                 # redundantly average
@@ -729,9 +701,7 @@ def apply_cal(
                 [bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == pols[0]
             ]
             data_antpairs = hd.get_antpairs()
-            reds_data = [
-                [bl for bl in blg if bl in data_antpairs] for blg in all_red_antpairs
-            ]
+            reds_data = [[bl for bl in blg if bl in data_antpairs] for blg in all_red_antpairs]
             reds_data = [blg for blg in reds_data if len(blg) > 0]
         for bl in data_flags.keys():
             # apply band edge flags
@@ -797,10 +767,7 @@ def apply_cal(
                         if exclude_from_redundant_mode == "data":
                             if np.all(data_flags[bl]):
                                 redundant_weights[bl][:] = 0.0
-                        elif (
-                            exclude_from_redundant_mode == "yaml"
-                            and ex_ants is not None
-                        ):
+                        elif exclude_from_redundant_mode == "yaml" and ex_ants is not None:
                             if bl[0] in ex_ants or bl[1] in ex_ants:
                                 redundant_weights[bl][:] = 0.0
             for red_chunk in range(redundant_groups):
@@ -837,18 +804,14 @@ def apply_cal(
                     propagate_flags=True,
                 )
                 # update redundant data. Don't partial write.
-                hd_red = io.HERAData(
-                    data_infilename, upsample=upsample, downsample=downsample
-                )
+                hd_red = io.HERAData(data_infilename, upsample=upsample, downsample=downsample)
                 if len(reds_data_bls) > 0:
                     hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
                     # update redundant data. Don't partial write.
                     hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
                     hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
                     if redundant_groups > 1:
-                        outfile = data_outfilename.replace(
-                            ".uvh5", f".{red_chunk}.uvh5"
-                        )
+                        outfile = data_outfilename.replace(".uvh5", f".{red_chunk}.uvh5")
                     else:
                         outfile = data_outfilename
                     if filetype_out == "uvh5":
@@ -872,9 +835,7 @@ def apply_cal(
                             "redundant averaging only supported for uvh5 outputs."
                         )
                 else:
-                    warnings.warn(
-                        "No unflagged data so no calibration or outputs produced."
-                    )
+                    warnings.warn("No unflagged data so no calibration or outputs produced.")
 
 
 def apply_cal_argparser():
@@ -882,9 +843,7 @@ def apply_cal_argparser():
     a = argparse.ArgumentParser(
         description="Apply (and optionally, also unapply) a calfits file to visibility file."
     )
-    a.add_argument(
-        "infilename", type=str, help="path to visibility data file to calibrate"
-    )
+    a.add_argument("infilename", type=str, help="path to visibility data file to calibrate")
     a.add_argument("outfilename", type=str, help="path to new visibility results file")
     a.add_argument(
         "--new_cal",
@@ -924,12 +883,8 @@ def apply_cal_argparser():
         default=0,
         help="integer number of channels at the high frequency end of the band to always flag (default 0)",
     )
-    a.add_argument(
-        "--filetype_in", type=str, default="uvh5", help="filetype of input data files"
-    )
-    a.add_argument(
-        "--filetype_out", type=str, default="uvh5", help="filetype of output data files"
-    )
+    a.add_argument("--filetype_in", type=str, default="uvh5", help="filetype of input data files")
+    a.add_argument("--filetype_out", type=str, default="uvh5", help="filetype of output data files")
     a.add_argument(
         "--nbl_per_load",
         type=str,

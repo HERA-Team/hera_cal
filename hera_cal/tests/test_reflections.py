@@ -56,9 +56,7 @@ def simulate_reflections(
         cable_ants = uvd.antenna_numbers
 
     def noise(n, sig):
-        return stats.norm.rvs(0, sig / np.sqrt(2), n) + 1j * stats.norm.rvs(
-            0, sig / np.sqrt(2), n
-        )
+        return stats.norm.rvs(0, sig / np.sqrt(2), n) + 1j * stats.norm.rvs(0, sig / np.sqrt(2), n)
 
     np.random.seed(0)
 
@@ -80,10 +78,7 @@ def simulate_reflections(
             cphase = [cphase]
 
         cable_gains = dict(
-            [
-                (k, np.ones((uvd.Ntimes, uvd.Nfreqs), dtype=complex))
-                for k in uvd.antenna_numbers
-            ]
+            [(k, np.ones((uvd.Ntimes, uvd.Nfreqs), dtype=complex)) for k in uvd.antenna_numbers]
         )
 
         for ca, cd, cp in zip(camp, cdelay, cphase):
@@ -122,9 +117,7 @@ def simulate_reflections(
     # get fourier modes
     uvd.frates = (
         np.fft.fftshift(
-            np.fft.fftfreq(
-                uvd.Ntimes, np.diff(np.unique(uvd.time_array))[0] * 24 * 3600
-            )
+            np.fft.fftfreq(uvd.Ntimes, np.diff(np.unique(uvd.time_array))[0] * 24 * 3600)
         )
         * 1e3
     )
@@ -150,9 +143,7 @@ class Test_ReflectionFitter_Cables(object):
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (23, 23, "ee")
         g_k = (23, "Jee")
-        RF.fft_data(
-            window="blackmanharris", overwrite=True, ax="freq"
-        )  # for inspection
+        RF.fft_data(window="blackmanharris", overwrite=True, ax="freq")  # for inspection
 
         # basic run through
         RF.model_auto_reflections(
@@ -279,9 +270,7 @@ class Test_ReflectionFitter_Cables(object):
         )
         assert np.allclose(np.ravel(list(RF.ref_dly.values())), -255.0, atol=1e-1)
         assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
-        assert np.allclose(
-            np.ravel(list(RF.ref_phs.values())), 2 * np.pi - 2.0, atol=1e-1
-        )
+        assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2 * np.pi - 2.0, atol=1e-1)
 
         output = RF.refine_auto_reflections(
             RF.avg_data,
@@ -334,9 +323,7 @@ class Test_ReflectionFitter_Cables(object):
 
         # non-even Nfreqs
         RF = reflections.ReflectionFitter(
-            self.uvd.select(
-                frequencies=np.unique(self.uvd.freq_array)[:-1], inplace=False
-            )
+            self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[:-1], inplace=False)
         )
         RF.model_auto_reflections(
             RF.data,
@@ -484,9 +471,7 @@ class Test_ReflectionFitter_Cables(object):
         )
         assert RF.ref_gains[a_k].shape == (1, 128)
         # test write without input calfits results in Ntimes = 1
-        uvc = RF.write_auto_reflections(
-            "./ex2.calfits", time_array=RF.avg_times, overwrite=True
-        )
+        uvc = RF.write_auto_reflections("./ex2.calfits", time_array=RF.avg_times, overwrite=True)
         assert uvc.Ntimes == 1
         # test by feeding full-time calfits that output times are full-time
         uvc = RF.write_auto_reflections(
@@ -504,9 +489,7 @@ class Test_ReflectionFitter_Cables(object):
         T = reflections.ReflectionFitter(self.uvd, input_cal=uvc)
         assert isinstance(T.hc, io.HERACal)
         uvc.freq_array += 1e2  # now test it fails with a large shift
-        pytest.raises(
-            AssertionError, reflections.ReflectionFitter, self.uvd, input_cal=uvc
-        )
+        pytest.raises(AssertionError, reflections.ReflectionFitter, self.uvd, input_cal=uvc)
 
         os.remove("./ex.calfits")
         os.remove("./ex2.calfits")
@@ -611,9 +594,7 @@ class Test_ReflectionFitter_Cables(object):
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class Test_ReflectionFitter_XTalk(object):
     # simulate
-    uvd = simulate_reflections(
-        add_cable=False, xdelay=250.0, xphase=0, xamp=1e-3, add_xtalk=True
-    )
+    uvd = simulate_reflections(add_cable=False, xdelay=250.0, xphase=0, xamp=1e-3, add_xtalk=True)
 
     def test_svd_functions(self):
         RF = reflections.ReflectionFitter(self.uvd)
@@ -627,16 +608,11 @@ class Test_ReflectionFitter_XTalk(object):
         RF.sv_decomp(RF.dfft, wgts=wgts, keys=[bl], overwrite=True, sparse_svd=True)
 
         # build a model
-        RF.build_pc_model(
-            RF.umodes, RF.vmodes, RF.svals, Nkeep=1, increment=False, overwrite=True
-        )
+        RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=1, increment=False, overwrite=True)
 
         # test containers exist
         assert np.all(
-            [
-                hasattr(RF, o)
-                for o in ["umodes", "vmodes", "svals", "uflags", "pcomp_model", "dfft"]
-            ]
+            [hasattr(RF, o) for o in ["umodes", "vmodes", "svals", "uflags", "pcomp_model", "dfft"]]
         )
         # test good information compression
         assert RF.svals[bl][0] / RF.svals[bl][1] > 20
@@ -644,9 +620,7 @@ class Test_ReflectionFitter_XTalk(object):
         # assert its a good fit to the xtalk at 250 ns delay
         ind = np.argmin(np.abs(RF.delays - 250))
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, ind].real ** 2))
-        Rrms = np.sqrt(
-            np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real) ** 2)
-        )
+        Rrms = np.sqrt(np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real) ** 2))
         # says that residual is small compared to original array
         assert Rrms / Vrms < 0.01
 
@@ -658,24 +632,18 @@ class Test_ReflectionFitter_XTalk(object):
         # says that the two are similar to each other at -250 ns, which they should be
         ind = np.argmin(np.abs(RF.delays - -250))
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, ind].real ** 2))
-        Rrms = np.sqrt(
-            np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real) ** 2)
-        )
+        Rrms = np.sqrt(np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real) ** 2))
         # says that residual is small compared to original array
         assert Rrms / Vrms < 0.01
 
         # overwrite the model with double side modeling
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side="both")
         RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True, sparse_svd=True)
-        RF.build_pc_model(
-            RF.umodes, RF.vmodes, RF.svals, Nkeep=2, increment=False, overwrite=True
-        )
+        RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=2, increment=False, overwrite=True)
         # says the residual is small compared to original array
         ind = np.argmin(np.abs(RF.delays - 250))
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, ind].real ** 2))
-        Rrms = np.sqrt(
-            np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real) ** 2)
-        )
+        Rrms = np.sqrt(np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real) ** 2))
         assert Rrms / Vrms < 0.01
 
         # subtract the model from the data
@@ -698,18 +666,14 @@ class Test_ReflectionFitter_XTalk(object):
         for k in RF.data:
             RF.data += stats.norm.rvs(0, Namp, RF.Ntimes * RF.Nfreqs).reshape(
                 RF.Ntimes, RF.Nfreqs
-            ) + 1j * stats.norm.rvs(0, Namp, RF.Ntimes * RF.Nfreqs).reshape(
-                RF.Ntimes, RF.Nfreqs
-            )
+            ) + 1j * stats.norm.rvs(0, Namp, RF.Ntimes * RF.Nfreqs).reshape(RF.Ntimes, RF.Nfreqs)
         bl = (23, 24, "ee")
 
         # fft data
         RF.fft_data(data=RF.data, window="blackmanharris", overwrite=True)
 
         # sparse sv decomp
-        svd_wgts = RF.svd_weights(
-            RF.dfft, RF.delays, min_dly=150, max_dly=500, side="both"
-        )
+        svd_wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=150, max_dly=500, side="both")
         RF.sv_decomp(
             RF.dfft,
             wgts=svd_wgts,
@@ -721,9 +685,7 @@ class Test_ReflectionFitter_XTalk(object):
         assert RF.umodes[bl].shape == (100, 98)
         assert RF.vmodes[bl].shape == (98, 128)
 
-        RF.sv_decomp(
-            RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=10, sparse_svd=True
-        )
+        RF.sv_decomp(RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=10, sparse_svd=True)
         assert RF.umodes[bl].shape == (100, 10)
         assert RF.vmodes[bl].shape == (10, 128)
 
@@ -805,18 +767,12 @@ class Test_ReflectionFitter_XTalk(object):
         RF.build_pc_model(umodes, vmodes, RF.svals, overwrite=True, Nkeep=10)
         pcomp2 = RF.pcomp_model[bl]
         # assert pcomp model with projected vmode has less noise in it for a delay with no systematic
-        ind = np.argmin(
-            np.abs(RF.delays - 400)
-        )  # no systematic at this delay, only noise
+        ind = np.argmin(np.abs(RF.delays - 400))  # no systematic at this delay, only noise
         assert np.mean(np.abs(pcomp1[:, ind])) > np.mean(np.abs(pcomp2[:, ind]))
 
         # test projection of other SVD matrices
-        _svals = RF.project_svd_modes(
-            RF.dfft * svd_wgts, umodes=RF.umodes, vmodes=RF.vmodes
-        )
-        _umodes = RF.project_svd_modes(
-            RF.dfft * svd_wgts, vmodes=RF.vmodes, svals=RF.svals
-        )
+        _svals = RF.project_svd_modes(RF.dfft * svd_wgts, umodes=RF.umodes, vmodes=RF.vmodes)
+        _umodes = RF.project_svd_modes(RF.dfft * svd_wgts, vmodes=RF.vmodes, svals=RF.svals)
 
         # assert original is nearly the same as projected
         assert np.allclose(_svals[bl], RF.svals[bl], atol=1e-10)
@@ -847,13 +803,8 @@ class Test_ReflectionFitter_XTalk(object):
         uinterp2 = copy.deepcopy(RF.umode_interp)
         # assert higher order umodes don't diverge as much at time boundaries with Nmirror > 0
         for i in range(3, 10):
-            assert (
-                np.mean(np.abs(uinterp1[bl][:2, i]) / np.abs(uinterp2[bl][:2, i])) > 1.0
-            )
-            assert (
-                np.mean(np.abs(uinterp1[bl][-2:, i]) / np.abs(uinterp2[bl][-2:, i]))
-                > 1.0
-            )
+            assert np.mean(np.abs(uinterp1[bl][:2, i]) / np.abs(uinterp2[bl][:2, i])) > 1.0
+            assert np.mean(np.abs(uinterp1[bl][-2:, i]) / np.abs(uinterp2[bl][-2:, i])) > 1.0
 
         # test too large Nmirror
         pytest.raises(
@@ -884,9 +835,7 @@ class Test_ReflectionFitter_XTalk(object):
             assign="adfft",
             dtime=np.diff(RF.avg_times)[0] * 24 * 3600,
         )
-        wgts = RF.svd_weights(
-            RF.adfft, RF.delays, min_dly=200, max_dly=300, side="both"
-        )
+        wgts = RF.svd_weights(RF.adfft, RF.delays, min_dly=200, max_dly=300, side="both")
         RF.sv_decomp(RF.adfft, wgts=wgts, keys=[bl], overwrite=True, sparse_svd=True)
         assert RF.umodes[bl].shape == (34, 32)
         RF.interp_u(

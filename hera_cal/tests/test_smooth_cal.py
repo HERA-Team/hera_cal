@@ -67,9 +67,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         np.testing.assert_array_equal(
             phase_flipped, np.array([False, False, False, True, True, True])
         )
-        phase_flipped = smooth_cal.detect_phase_flips(
-            np.array([np.nan, 1, 1, 4, np.nan, 4])
-        )
+        phase_flipped = smooth_cal.detect_phase_flips(np.array([np.nan, 1, 1, 4, np.nan, 4]))
         np.testing.assert_array_equal(
             phase_flipped, np.array([False, False, False, True, True, True])
         )
@@ -112,9 +110,9 @@ class Test_Smooth_Cal_Helper_Functions(object):
         for i in range(v.shape[1]):
             np.testing.assert_allclose(v[:, i], time_filters[:, i])
 
-        v = dspec.dpss_operator(
-            freqs, [0], [freq_scale / 1e6 / 1.01], eigenval_cutoff=[1e-9]
-        )[0].real
+        v = dspec.dpss_operator(freqs, [0], [freq_scale / 1e6 / 1.01], eigenval_cutoff=[1e-9])[
+            0
+        ].real
         for i in range(v.shape[1]):
             np.testing.assert_allclose(v[:, i], freq_filters[:, i])
 
@@ -123,9 +121,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         freq_filters = np.random.uniform(0, 1, size=(40, 5))
         weights = np.random.uniform(0, 1, size=(50, 40))
         gains = np.random.uniform(0, 1, size=(50, 40))
-        fit1, cached_output = smooth_cal.solve_2D_DPSS(
-            gains, weights, time_filters, freq_filters
-        )
+        fit1, cached_output = smooth_cal.solve_2D_DPSS(gains, weights, time_filters, freq_filters)
         assert fit1.shape == gains.shape
 
         # Check that the cached filtering provides the same result
@@ -223,12 +219,8 @@ class Test_Smooth_Cal_Helper_Functions(object):
             xaxis = times
             filter_scale = 10e6 * dt / df
 
-        ff, info = smooth_cal.filter_1d(
-            gains, wgts, xaxis, ax=ax, filter_scale=filter_scale
-        )
-        np.testing.assert_array_almost_equal(
-            ff, np.ones((10, 10), dtype=complex), decimal=5
-        )
+        ff, info = smooth_cal.filter_1d(gains, wgts, xaxis, ax=ax, filter_scale=filter_scale)
+        np.testing.assert_array_almost_equal(ff, np.ones((10, 10), dtype=complex), decimal=5)
 
         # test rephasing
         if ax == "freq":
@@ -311,9 +303,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts = np.ones((10, 100), dtype=float)
         wgts[0, 0:80] = 0
         freqs = np.linspace(100.0, 200.0, 100, endpoint=False) * 1e6
-        ff, info = smooth_cal.filter_1d(
-            gains, wgts, freqs, skip_wgt=0.5, mode="dpss_leastsq"
-        )
+        ff, info = smooth_cal.filter_1d(gains, wgts, freqs, skip_wgt=0.5, mode="dpss_leastsq")
         np.testing.assert_array_almost_equal(ff[0, :], gains[0, :])
         info["status"]["axis_1"][0] == "skipped"
 
@@ -330,9 +320,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
     def test_freq_filter_dpss_skip_flagged_edges(self):
         # run freq_filter tests dpss modes.
         # test skip_wgt
-        gains = (np.random.randn(10) + 1.0j * np.random.randn(10))[:, None] * np.ones(
-            (10, 100)
-        )
+        gains = (np.random.randn(10) + 1.0j * np.random.randn(10))[:, None] * np.ones((10, 100))
         wgts = np.ones((10, 100), dtype=float)
         wgts[0, 0:80] = 0.0
         wgts[7, 10:90] = 0.0
@@ -363,13 +351,9 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts[3, 5] = 0
         freqs = np.linspace(100.0, 200.0, 100, endpoint=False) * 1e6
         times = np.linspace(0, 10 * 10 / 60.0 / 60.0 / 24.0, 100, endpoint=False)
-        ff, info = smooth_cal.time_freq_2D_filter(
-            gains, wgts, freqs, times, filter_mode="rect"
-        )
+        ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode="rect")
         np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
-        ff, info = smooth_cal.time_freq_2D_filter(
-            gains, wgts, freqs, times, filter_mode="plus"
-        )
+        ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode="plus")
         np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
         ff, info = smooth_cal.time_freq_2D_filter(
             gains, wgts, freqs, times, method="DPSS", eigenval_cutoff=1e-12
@@ -395,17 +379,13 @@ class Test_Smooth_Cal_Helper_Functions(object):
 
         # test errors
         with pytest.raises(ValueError):
-            ff, info = smooth_cal.time_freq_2D_filter(
-                gains, wgts, freqs, times, filter_mode="blah"
-            )
+            ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode="blah")
         with pytest.raises(ValueError):
             ff, info = smooth_cal.time_freq_2D_filter(
                 gains, wgts, freqs, times, method="DPSS", filter_mode="blah"
             )
         with pytest.raises(ValueError):
-            ff, info = smooth_cal.time_freq_2D_filter(
-                gains, wgts, freqs, times, method="blah"
-            )
+            ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, method="blah")
         with pytest.raises(NotImplementedError):
             ff, info = smooth_cal.time_freq_2D_filter(
                 gains, wgts, freqs, times, method="DPSS", filter_mode="plus"
@@ -442,12 +422,8 @@ class Test_Smooth_Cal_Helper_Functions(object):
             gains[(n, "Jxx")] *= np.exp(
                 0.1j * np.pi * np.random.rand(10, 10)
             )  # want this to be << 2pi to avoid phase wraps
-        assert smooth_cal.pick_reference_antenna(
-            gains, flags, freqs, per_pol=False
-        ) == (9, "Jxx")
-        assert smooth_cal.pick_reference_antenna(gains, flags, freqs) == {
-            "Jxx": (9, "Jxx")
-        }
+        assert smooth_cal.pick_reference_antenna(gains, flags, freqs, per_pol=False) == (9, "Jxx")
+        assert smooth_cal.pick_reference_antenna(gains, flags, freqs) == {"Jxx": (9, "Jxx")}
 
     def test_rephase_to_refant(self):
         gains = {
@@ -464,9 +440,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         }
         with pytest.raises(ValueError):
             smooth_cal.rephase_to_refant(gains, (0, "Jxx"), flags=flags)
-        smooth_cal.rephase_to_refant(
-            gains, (0, "Jxx"), flags=flags, propagate_refant_flags=True
-        )
+        smooth_cal.rephase_to_refant(gains, (0, "Jxx"), flags=flags, propagate_refant_flags=True)
         np.testing.assert_array_equal(flags[0, "Jxx"], np.array([False, True]))
         np.testing.assert_array_equal(flags[1, "Jxx"], np.array([True, True]))
 
@@ -489,17 +463,13 @@ class Test_Smooth_Cal_Helper_Functions(object):
         time_blacklist = smooth_cal.build_time_blacklist(
             time_grid, time_blacklists=[(2458838.3000, 2458838.3004)]
         )
-        np.testing.assert_array_equal(
-            time_blacklist, [True, True, True, False, False, False]
-        )
+        np.testing.assert_array_equal(time_blacklist, [True, True, True, False, False, False])
 
         # test LST cuts
         time_blacklist = smooth_cal.build_time_blacklist(
             time_grid, lst_blacklists=[(2.5692, 2.5746)]
         )
-        np.testing.assert_array_equal(
-            time_blacklist, [True, True, True, False, False, False]
-        )
+        np.testing.assert_array_equal(time_blacklist, [True, True, True, False, False, False])
 
         # try shifting hera position so that the time_grd spans the branch cut in LSTs
         hera_lat_lon_alt_degrees = (
@@ -513,9 +483,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
             lst_blacklists=[(23.995, 0.005)],
             lat_lon_alt_degrees=shifted_llad,
         )
-        np.testing.assert_array_equal(
-            time_blacklist, [False, True, True, True, False, False]
-        )
+        np.testing.assert_array_equal(time_blacklist, [False, True, True, True, False, False])
 
         # test errors
         with pytest.raises(AssertionError):
@@ -527,9 +495,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
                 time_grid, time_blacklists=[(2458838.3004, 2458838.3000)]
             )
         with pytest.raises(AssertionError):
-            time_blacklist = smooth_cal.build_time_blacklist(
-                time_grid, lst_blacklists=[(2.5692)]
-            )
+            time_blacklist = smooth_cal.build_time_blacklist(time_grid, lst_blacklists=[(2.5692)])
         with pytest.raises(NotImplementedError):
             time_blacklist = smooth_cal.build_time_blacklist(
                 time_grid,
@@ -539,37 +505,21 @@ class Test_Smooth_Cal_Helper_Functions(object):
 
     def test_build_freq_blacklist(self):
         freqs = np.array([100e6, 120e6, 140e6, 160e6, 180e6, 200e6])
-        freq_blacklist = smooth_cal.build_freq_blacklist(
-            freqs, freq_blacklists=[(0e6, 137e6)]
-        )
-        np.testing.assert_array_equal(
-            freq_blacklist, [True, True, False, False, False, False]
-        )
+        freq_blacklist = smooth_cal.build_freq_blacklist(freqs, freq_blacklists=[(0e6, 137e6)])
+        np.testing.assert_array_equal(freq_blacklist, [True, True, False, False, False, False])
 
-        freq_blacklist = smooth_cal.build_freq_blacklist(
-            freqs, chan_blacklists=[(4, 5)]
-        )
-        np.testing.assert_array_equal(
-            freq_blacklist, [False, False, False, False, True, True]
-        )
+        freq_blacklist = smooth_cal.build_freq_blacklist(freqs, chan_blacklists=[(4, 5)])
+        np.testing.assert_array_equal(freq_blacklist, [False, False, False, False, True, True])
 
         # test errors
         with pytest.raises(AssertionError):
-            time_blacklist = smooth_cal.build_freq_blacklist(
-                freqs, freq_blacklists=[(137e6)]
-            )
+            time_blacklist = smooth_cal.build_freq_blacklist(freqs, freq_blacklists=[(137e6)])
         with pytest.raises(AssertionError):
-            time_blacklist = smooth_cal.build_freq_blacklist(
-                freqs, freq_blacklists=[(137e6, 0e6)]
-            )
+            time_blacklist = smooth_cal.build_freq_blacklist(freqs, freq_blacklists=[(137e6, 0e6)])
         with pytest.raises(AssertionError):
-            time_blacklist = smooth_cal.build_freq_blacklist(
-                freqs, chan_blacklists=[(1)]
-            )
+            time_blacklist = smooth_cal.build_freq_blacklist(freqs, chan_blacklists=[(1)])
         with pytest.raises(AssertionError):
-            time_blacklist = smooth_cal.build_freq_blacklist(
-                freqs, chan_blacklists=[(3, 1)]
-            )
+            time_blacklist = smooth_cal.build_freq_blacklist(freqs, chan_blacklists=[(3, 1)])
 
     def test_build_wgts_grid(self):
         flag_grid = np.zeros((2, 3), dtype=bool)
@@ -596,15 +546,11 @@ class Test_Smooth_Cal_Helper_Functions(object):
         uvf = UVFlag(uvc, mode="flag")
         uvflag_file = calfits_list[0].replace("/test_input/", "/test_output")
         uvf.write(uvflag_file, clobber=True)
-        assert (54, "Jee") in smooth_cal._to_antflags(
-            io.load_flags(uvflag_file), [(54, "Jee")], 0
-        )
+        assert (54, "Jee") in smooth_cal._to_antflags(io.load_flags(uvflag_file), [(54, "Jee")], 0)
 
         uvf = UVFlag(uvc, mode="flag", waterfall=True)
         uvf.write(uvflag_file, clobber=True)
-        assert (54, "Jee") in smooth_cal._to_antflags(
-            io.load_flags(uvflag_file), [(54, "Jee")], 0
-        )
+        assert (54, "Jee") in smooth_cal._to_antflags(io.load_flags(uvflag_file), [(54, "Jee")], 0)
         os.remove(uvflag_file)
 
     def test_check_finite_gains(self):
@@ -625,11 +571,7 @@ class Test_Calibration_Smoother(object):
             glob.glob(os.path.join(DATA_PATH, "test_input/*.abs.calfits_54x_only"))
         )[0::2]
         flag_file_list = sorted(
-            glob.glob(
-                os.path.join(
-                    DATA_PATH, "test_input/*.uvOCR_53x_54x_only.flags.applied.npz"
-                )
-            )
+            glob.glob(os.path.join(DATA_PATH, "test_input/*.uvOCR_53x_54x_only.flags.applied.npz"))
         )[0::2]
         self.cs = smooth_cal.CalibrationSmoother(
             calfits_list,
@@ -650,11 +592,7 @@ class Test_Calibration_Smoother(object):
             glob.glob(os.path.join(DATA_PATH, "test_input/*.abs.calfits_54x_only"))
         )[0::2]
         flag_file_list = sorted(
-            glob.glob(
-                os.path.join(
-                    DATA_PATH, "test_input/*.uvOCR_53x_54x_only.flags.applied.npz"
-                )
-            )
+            glob.glob(os.path.join(DATA_PATH, "test_input/*.uvOCR_53x_54x_only.flags.applied.npz"))
         )[0::2]
         cs = smooth_cal.CalibrationSmoother(
             calfits_list,
@@ -696,9 +634,7 @@ class Test_Calibration_Smoother(object):
         self.cs.flag_freqs[self.cs.flag_files[0]] -= 1
 
         temp_time = self.cs.flag_times[self.cs.flag_files[0]][0]
-        self.cs.flag_times[self.cs.flag_files[0]][0] = self.cs.flag_times[
-            self.cs.flag_files[0]
-        ][1]
+        self.cs.flag_times[self.cs.flag_files[0]][0] = self.cs.flag_times[self.cs.flag_files[0]][1]
         self.cs.flag_time_indices = {
             ff: np.searchsorted(self.cs.time_grid, times)
             for ff, times in self.cs.flag_times.items()
@@ -747,8 +683,7 @@ class Test_Calibration_Smoother(object):
 
         self.setup_method()
         assert not np.all(
-            self.cs.flag_grids[(54, "Jee")]
-            == np.ones_like(self.cs.flag_grids[(54, "Jee")])
+            self.cs.flag_grids[(54, "Jee")] == np.ones_like(self.cs.flag_grids[(54, "Jee")])
         )
         self.cs.flag_grids[(54, "Jee")] = np.zeros_like(self.cs.flag_grids[(54, "Jee")])
         if ax == "freq":
@@ -801,9 +736,7 @@ class Test_Calibration_Smoother(object):
         cs2 = deepcopy(self.cs)
         cs2.ants.append((55, "Jee"))
         cs2.ants.append((56, "Jee"))
-        cs2.flag_grids[cs2.ants[1]] = np.ones_like(
-            cs2.flag_grids[cs2.ants[0]], dtype=bool
-        )
+        cs2.flag_grids[cs2.ants[1]] = np.ones_like(cs2.flag_grids[cs2.ants[0]], dtype=bool)
         cs2.flag_grids[cs2.ants[1]][10:-10, 10:-10] = False
         cs2.flag_grids[cs2.ants[2]] = deepcopy(cs2.flag_grids[cs2.ants[0]])
         cs2.gain_grids[cs2.ants[1]] = deepcopy(cs2.gain_grids[cs2.ants[0]])
@@ -870,13 +803,11 @@ class Test_Calibration_Smoother(object):
             old_cal = io.HERACal(cal)
             old_gains, _, _, _ = old_cal.read()
             assert "helloworld" in new_cal.history.replace("\n", "").replace(" ", "")
-            assert "Thisfilewasproducedbythefunction" in new_cal.history.replace(
-                "\n", ""
-            ).replace(" ", "")
-            assert new_cal.telescope_name == "PAPER"
-            np.testing.assert_array_equal(
-                gains[54, "Jee"], g[self.cs.time_indices[cal], :]
+            assert "Thisfilewasproducedbythefunction" in new_cal.history.replace("\n", "").replace(
+                " ", ""
             )
+            assert new_cal.telescope_name == "PAPER"
+            np.testing.assert_array_equal(gains[54, "Jee"], g[self.cs.time_indices[cal], :])
 
             relative_diff, avg_relative_diff = utils.gain_relative_difference(
                 gains, old_gains, flags

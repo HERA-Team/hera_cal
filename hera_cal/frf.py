@@ -60,9 +60,7 @@ def deinterleave_data_in_time(times, data: np.ndarray, ninterleave=1):
         list of data arrays sorted into ninterleave different interleaves.
     """
     if len(times) < ninterleave or len(data) < ninterleave:
-        raise ValueError(
-            "Number of times provided is less then the number of interleaves"
-        )
+        raise ValueError("Number of times provided is less then the number of interleaves")
     tsets, dsets = [], []
     for i in range(ninterleave):
         tsets.append(times[i::ninterleave])
@@ -248,8 +246,7 @@ def select_tophat_frates(
         frate_half_widths = {
             k: np.max(
                 [
-                    max_frate_coeffs[0] * np.abs(blvecs[k[:2]][0])
-                    + max_frate_coeffs[1],
+                    max_frate_coeffs[0] * np.abs(blvecs[k[:2]][0]) + max_frate_coeffs[1],
                     0.0,
                 ]
             )
@@ -365,24 +362,14 @@ def sky_frates(
         blvec = antpos[ind1] - antpos[ind2]
         blcos = blvec[0] / np.linalg.norm(blvec[:2])
         if np.isfinite(blcos):
-            frateamp_df = (
-                np.linalg.norm(blvec[:2])
-                / (SDAY_SEC * 1e-3)
-                / SPEED_OF_LIGHT
-                * 2
-                * np.pi
-            )
+            frateamp_df = np.linalg.norm(blvec[:2]) / (SDAY_SEC * 1e-3) / SPEED_OF_LIGHT * 2 * np.pi
             # set autocorrs to have blcose of 0.0
 
             if blcos >= 0:
-                max_frate_df = frateamp_df * np.sqrt(
-                    sinlat**2.0 + blcos**2.0 * (1 - sinlat**2.0)
-                )
+                max_frate_df = frateamp_df * np.sqrt(sinlat**2.0 + blcos**2.0 * (1 - sinlat**2.0))
                 min_frate_df = -frateamp_df * sinlat
             else:
-                min_frate_df = -frateamp_df * np.sqrt(
-                    sinlat**2.0 + blcos**2.0 * (1 - sinlat**2.0)
-                )
+                min_frate_df = -frateamp_df * np.sqrt(sinlat**2.0 + blcos**2.0 * (1 - sinlat**2.0))
                 max_frate_df = frateamp_df * sinlat
 
             min_frate = np.min([f0 * min_frate_df for f0 in uvd.freq_array])
@@ -395,8 +382,7 @@ def sky_frates(
         frate_centers[utils.reverse_bl(k)] = -frate_centers[k]
 
         frate_half_widths[k] = (
-            np.abs(max_frate - min_frate) / 2.0 * frate_width_multiplier
-            + frate_standoff
+            np.abs(max_frate - min_frate) / 2.0 * frate_width_multiplier + frate_standoff
         )
         frate_half_widths[k] = np.max(
             [frate_half_widths[k], min_frate_half_width]
@@ -511,9 +497,7 @@ def build_fringe_rate_profiles(
     antnums = uvd.antenna_numbers  # antenna numbers.
 
     lat, lon, alt = uvd.telescope_location_lat_lon_alt_degrees
-    location = EarthLocation(
-        lon=lon * units.deg, lat=lat * units.deg, height=alt * units.m
-    )
+    location = EarthLocation(lon=lon * units.deg, lat=lat * units.deg, height=alt * units.m)
 
     # get topocentricl AzEl Beam coordinates.
     hp = HEALPix(nside=uvb.nside, order=uvb.ordering)
@@ -532,9 +516,7 @@ def build_fringe_rate_profiles(
     eq_xyz = np.vstack([eq_coords.x, eq_coords.y, eq_coords.z])
 
     # generate fringe_rate grid in mHz.
-    dt = (
-        1e-3 * SDAY_SEC * np.median(np.diff(np.unique(uvd.time_array)))
-    )  # times in kSec
+    dt = 1e-3 * SDAY_SEC * np.median(np.diff(np.unique(uvd.time_array)))  # times in kSec
     if nfr is None:
         nfr = uvd.Ntimes
     if dfr is None:
@@ -573,8 +555,7 @@ def build_fringe_rate_profiles(
         # sum beams from all frequencies
         # get polarization index
         polindex = np.where(
-            uvutils.polstr2num(bl[-1], x_orientation=uvb.x_orientation)
-            == uvb.polarization_array
+            uvutils.polstr2num(bl[-1], x_orientation=uvb.x_orientation) == uvb.polarization_array
         )[0][0]
         # get baseline vector in equitorial coordinates.
         blvec = antpos_trf[antnums == bl[1]] - antpos_trf[antnums == bl[0]]
@@ -591,13 +572,9 @@ def build_fringe_rate_profiles(
         unflagged_chans &= uvd.freq_array.squeeze() <= (
             freq_max if freq_max is not None else np.inf
         )
-        chans_to_use = np.arange(uvd.Nfreqs).astype(int)[unflagged_chans][
-            ::fr_freq_skip
-        ]
+        chans_to_use = np.arange(uvd.Nfreqs).astype(int)[unflagged_chans][::fr_freq_skip]
         frate_coeff = 2 * np.pi / SPEED_OF_LIGHT / (1e-3 * SDAY_SEC)
-        frate_over_freq = (
-            np.dot(np.cross(np.array([0, 0, 1.0]), blvec), eq_xyz) * frate_coeff
-        )
+        frate_over_freq = np.dot(np.cross(np.array([0, 0, 1.0]), blvec), eq_xyz) * frate_coeff
         # histogram all frequencies together in one step.
         frates = np.hstack(
             [frate_over_freq * freq for freq in uvd.freq_array[chans_to_use]]
@@ -612,9 +589,7 @@ def build_fringe_rate_profiles(
                 )
                 ** 2.0
                 * freqweight**2.0
-                for freq, freqweight in zip(
-                    uvd.freq_array[chans_to_use], ftaper[chans_to_use]
-                )
+                for freq, freqweight in zip(uvd.freq_array[chans_to_use], ftaper[chans_to_use])
             ]
         )
         # histogram fringe rates weighted by beam square values.
@@ -639,9 +614,7 @@ def build_fringe_rate_profiles(
     # combine polarizations by summing over all profiles for each antenna-pair.
     if combine_pols:
         for ap in ap_blkeys:
-            profile_summed_over_pols = np.sum(
-                [profiles[bl] for bl in ap_blkeys[ap]], axis=0
-            )
+            profile_summed_over_pols = np.sum([profiles[bl] for bl in ap_blkeys[ap]], axis=0)
             for bl in ap_blkeys[ap]:
                 profiles[bl] = profile_summed_over_pols
     # normalize if desired
@@ -759,9 +732,7 @@ def get_fringe_rate_limits(
         if nfr is None:
             nfr = uvd.Ntimes
         if dfr is None:
-            dfr = 1.0 / (
-                nfr * np.mean(np.diff(np.unique(uvd.time_array))) * 1e-3 * SDAY_SEC
-            )
+            dfr = 1.0 / (nfr * np.mean(np.diff(np.unique(uvd.time_array))) * 1e-3 * SDAY_SEC)
         fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
 
     reds = _get_key_reds(dict(zip(*uvd.get_ENU_antpos()[::-1])), keys)
@@ -782,9 +753,7 @@ def get_fringe_rate_limits(
             nfr = len(fr_grid)
             dfr = np.median(np.diff(fr_grid))
             cspower_interp = np.hstack([[0], cspower, [100.0]])
-            fr_grid_interp = np.hstack(
-                [[fr_grid.min() - dfr], fr_grid, [fr_grid.max() + dfr]]
-            )
+            fr_grid_interp = np.hstack([[fr_grid.min() - dfr], fr_grid, [fr_grid.max() + dfr]])
             cspower_func = interp1d(cspower_interp, fr_grid_interp)
             # find low and high bins containing mass between percentile_low and percentile_high.
             frlows.append(cspower_func(percentile_low))
@@ -798,12 +767,8 @@ def get_fringe_rate_limits(
                     0.5 * np.abs(frlows[cnum] - frhighs[cnum]) * frate_width_multiplier
                     + frate_standoff
                 )
-                frate_half_widths[bl] = np.max(
-                    [frate_half_widths[bl], min_frate_half_width]
-                )
-                frate_half_widths[bl] = np.min(
-                    [frate_half_widths[bl], max_frate_half_width]
-                )
+                frate_half_widths[bl] = np.max([frate_half_widths[bl], min_frate_half_width])
+                frate_half_widths[bl] = np.min([frate_half_widths[bl], max_frate_half_width])
 
     return frate_centers, frate_half_widths
 
@@ -980,9 +945,7 @@ def timeavg_waterfall(
         if rephase:
             # get dlst and rephase
             dlst = mean_l - lst
-            d = utils.lst_rephase(
-                d, bl_vec, freqs, dlst, lat=lat, inplace=False, array=True
-            )
+            d = utils.lst_rephase(d, bl_vec, freqs, dlst, lat=lat, inplace=False, array=True)
 
         # form data weights
         if wgt_by_nsample:
@@ -1004,9 +967,7 @@ def timeavg_waterfall(
 
         # average arrays in extra_arrays
         for a in extra_arrays:
-            avg_extra_arrays["avg_{}".format(a)].append(
-                np.mean(extra_arrays[a][start:end])
-            )
+            avg_extra_arrays["avg_{}".format(a)].append(np.mean(extra_arrays[a][start:end]))
 
     avg_data = np.asarray(avg_data, complex)
     win_flags = np.asarray(win_flags, bool)
@@ -1064,9 +1025,7 @@ def apply_fir(data, fir, wgts=None, axis=0):
         slices = [i, i]
         slices[axis] = slice(None)
         slices = tuple(slices)
-        new_data[slices] = np.convolve(
-            data[slices] * wgts[slices], fir[slices], mode="same"
-        )
+        new_data[slices] = np.convolve(data[slices] * wgts[slices], fir[slices], mode="same")
 
     return new_data
 
@@ -1296,9 +1255,7 @@ class FRFilter(VisClean):
         Ntimes = len(times)
         dtime = np.median(np.abs(np.diff(times))) * 24 * 3600
         Navg = int(np.round((t_avg / dtime)))
-        assert Navg > 0, "A t_avg of {:0.5f} makes Navg=0, which is too small.".format(
-            t_avg
-        )
+        assert Navg > 0, "A t_avg of {:0.5f} makes Navg=0, which is too small.".format(t_avg)
         if Navg > Ntimes:
             Navg = Ntimes
         old_t_avg = t_avg
@@ -1329,13 +1286,9 @@ class FRFilter(VisClean):
 
         # setup averaging quantities
         if flags is None:
-            flags = DataContainer(
-                dict([(k, np.zeros_like(data[k], bool)) for k in data])
-            )
+            flags = DataContainer(dict([(k, np.zeros_like(data[k], bool)) for k in data]))
         if nsamples is None:
-            nsamples = DataContainer(
-                dict([(k, np.ones_like(data[k], float)) for k in data])
-            )
+            nsamples = DataContainer(dict([(k, np.ones_like(data[k], float)) for k in data]))
 
         if keys is None:
             keys = data.keys()
@@ -1377,9 +1330,7 @@ class FRFilter(VisClean):
                 "{}_times_{}".format(output_prefix, output_postfix),
                 np.asarray(at),
             )
-            setattr(
-                self, "{}_lsts_{}".format(output_prefix, output_postfix), np.asarray(al)
-            )
+            setattr(self, "{}_lsts_{}".format(output_prefix, output_postfix), np.asarray(al))
         else:
             setattr(self, "{}_times".format(output_prefix), np.asarray(at))
             setattr(self, "{}_lsts".format(output_prefix), np.asarray(al))
@@ -1436,13 +1387,9 @@ class FRFilter(VisClean):
 
         # setup averaging quantities
         if flags is None:
-            flags = DataContainer(
-                dict([(k, np.zeros_like(data[k], bool)) for k in data])
-            )
+            flags = DataContainer(dict([(k, np.zeros_like(data[k], bool)) for k in data]))
         if nsamples is None:
-            nsamples = DataContainer(
-                dict([(k, np.ones_like(data[k], float)) for k in data])
-            )
+            nsamples = DataContainer(dict([(k, np.ones_like(data[k], float)) for k in data]))
 
         if keys is None:
             keys = data.keys()
@@ -1571,9 +1518,7 @@ class FRFilter(VisClean):
             filter_cache = None
 
         if wgts is None:
-            wgts = io.DataContainer(
-                {k: (~self.flags[k]).astype(float) for k in self.flags}
-            )
+            wgts = io.DataContainer({k: (~self.flags[k]).astype(float) for k in self.flags})
         if pre_filter_modes_between_lobe_minimum_and_zero:
             self.pre_filter_resid = DataContainer({})
             self.pre_filter_resid_flags = DataContainer({})
@@ -1797,12 +1742,8 @@ def time_avg_data_and_write(
         # deinterleave data to be averaged separately.
         if ninterleave > 1:
             fr._deinterleave_data_in_time("data", ninterleave=ninterleave)
-            fr._deinterleave_data_in_time(
-                "flags", ninterleave=ninterleave, set_time_sets=False
-            )
-            fr._deinterleave_data_in_time(
-                "nsamples", ninterleave=ninterleave, set_time_sets=False
-            )
+            fr._deinterleave_data_in_time("flags", ninterleave=ninterleave, set_time_sets=False)
+            fr._deinterleave_data_in_time("nsamples", ninterleave=ninterleave, set_time_sets=False)
             # run time average on each interleaved data set
             for inum in range(ninterleave):
                 data = getattr(fr, f"data_interleave_{inum}")
@@ -1822,10 +1763,7 @@ def time_avg_data_and_write(
                     rephase=rephase,
                 )
 
-            timesets = [
-                getattr(fr, f"avg_times_interleave_{inum}")
-                for inum in range(ninterleave)
-            ]
+            timesets = [getattr(fr, f"avg_times_interleave_{inum}") for inum in range(ninterleave)]
             ntimes = np.min([len(tset) for tset in timesets])
 
             if equalize_interleave_times:
@@ -1859,9 +1797,7 @@ def time_avg_data_and_write(
                 # write data
                 output_data_name = os.path.join(
                     os.path.dirname(output_data),
-                    os.path.basename(output_data).replace(
-                        ".uvh5", f".interleave_{inum}.uvh5"
-                    ),
+                    os.path.basename(output_data).replace(".uvh5", f".interleave_{inum}.uvh5"),
                 )
                 fr.write_data(
                     data=avg_data,
@@ -1882,9 +1818,7 @@ def time_avg_data_and_write(
                     uvf.write(
                         os.path.join(
                             os.path.dirname(flag_output),
-                            os.path.basename(flag_output).replace(
-                                ".h5", f".interleave_{inum}.h5"
-                            ),
+                            os.path.basename(flag_output).replace(".h5", f".interleave_{inum}.h5"),
                         ),
                         clobber=clobber,
                     )
@@ -2210,9 +2144,7 @@ def load_tophat_frfilter_and_write(
         filter_kwargs: additional keyword arguments to be passed to FRFilter.tophat_frfilter()
     """
     if baseline_list is not None and Nbls_per_load is not None:
-        raise NotImplementedError(
-            "baseline loading and partial i/o not yet implemented."
-        )
+        raise NotImplementedError("baseline loading and partial i/o not yet implemented.")
     if baseline_list is not None and len(baseline_list) == 0:
         warnings.warn(
             "Length of baseline list is zero. This can happen under normal "
@@ -2313,9 +2245,7 @@ def load_tophat_frfilter_and_write(
         if external_flags is not None:
             frfil.apply_flags(external_flags, overwrite_flags=overwrite_flags)
         if flag_yaml is not None:
-            frfil.apply_flags(
-                flag_yaml, overwrite_flags=overwrite_flags, filetype="yaml"
-            )
+            frfil.apply_flags(flag_yaml, overwrite_flags=overwrite_flags, filetype="yaml")
         if factorize_flags:
             frfil.factorize_flags(time_thresh=time_thresh, inplace=True)
 
@@ -2336,9 +2266,7 @@ def load_tophat_frfilter_and_write(
         if len(keys) > 0:
             # Deal with interleaved sets
             frfil._deinterleave_data_in_time("data", ninterleave=ninterleave)
-            frfil._deinterleave_data_in_time(
-                "flags", ninterleave=ninterleave, set_time_sets=False
-            )
+            frfil._deinterleave_data_in_time("flags", ninterleave=ninterleave, set_time_sets=False)
             frfil._deinterleave_data_in_time(
                 "nsamples", ninterleave=ninterleave, set_time_sets=False
             )
@@ -2352,16 +2280,12 @@ def load_tophat_frfilter_and_write(
                     ai, aj = key[:2]
                     if (ai, aj) in filter_antpairs:
                         frate_centers[key] = filter_info["filter_centers"][(ai, aj)]
-                        frate_half_widths[key] = filter_info["filter_half_widths"][
-                            (ai, aj)
-                        ]
+                        frate_half_widths[key] = filter_info["filter_half_widths"][(ai, aj)]
                     else:
                         # We've already enforced that all the data baselines
                         # are in the filter file, so we should be safe here.
                         frate_centers[key] = -filter_info["filter_centers"][(aj, ai)]
-                        frate_half_widths[key] = filter_info["filter_half_widths"][
-                            (aj, ai)
-                        ]
+                        frate_half_widths[key] = filter_info["filter_half_widths"][(aj, ai)]
             else:
                 # Otherwise, we need to compute the filter parameters.
                 if case not in ("sky", "max_frate_coeffs", "uvbeam"):
@@ -2388,18 +2312,10 @@ def load_tophat_frfilter_and_write(
                 )
             # Lists of names of datacontainers that will hold each interleaved
             # data set until they are recombined.
-            filtered_data_names = [
-                f"clean_data_interleave_{inum}" for inum in range(ninterleave)
-            ]
-            filtered_flag_names = [
-                fstr.replace("data", "flags") for fstr in filtered_data_names
-            ]
-            filtered_resid_names = [
-                fstr.replace("data", "resid") for fstr in filtered_data_names
-            ]
-            filtered_model_names = [
-                fstr.replace("data", "model") for fstr in filtered_data_names
-            ]
+            filtered_data_names = [f"clean_data_interleave_{inum}" for inum in range(ninterleave)]
+            filtered_flag_names = [fstr.replace("data", "flags") for fstr in filtered_data_names]
+            filtered_resid_names = [fstr.replace("data", "resid") for fstr in filtered_data_names]
+            filtered_model_names = [fstr.replace("data", "model") for fstr in filtered_data_names]
             filtered_resid_flag_names = [
                 fstr.replace("data", "resid_flags") for fstr in filtered_data_names
             ]
@@ -2424,9 +2340,7 @@ def load_tophat_frfilter_and_write(
                                 is_blacklisted = (lsts >= lb[0] * np.pi / 12) | (
                                     lsts <= lb[1] * np.pi / 12
                                 )
-                            wgts[k][is_blacklisted, :] = (
-                                wgts[k][is_blacklisted, :] * blacklist_wgt
-                            )
+                            wgts[k][is_blacklisted, :] = wgts[k][is_blacklisted, :] * blacklist_wgt
                 # run tophat filter
                 frfil.tophat_frfilter(
                     frate_centers=frate_centers,
@@ -2444,9 +2358,7 @@ def load_tophat_frfilter_and_write(
             frfil._interleave_data_in_time(filtered_data_names, "clean_data")
             frfil._interleave_data_in_time(filtered_flag_names, "clean_flags")
             frfil._interleave_data_in_time(filtered_resid_names, "clean_resid")
-            frfil._interleave_data_in_time(
-                filtered_resid_flag_names, "clean_resid_flags"
-            )
+            frfil._interleave_data_in_time(filtered_resid_flag_names, "clean_resid_flags")
             frfil._interleave_data_in_time(filtered_model_names, "clean_model")
 
         else:
@@ -2504,18 +2416,14 @@ def time_average_argparser():
         nargs="+",
         help="list of data files to use for determining baseline chunk if performing cornerturn.",
     )
-    ap.add_argument(
-        "output_data", type=str, help="name of data file to write out time-average."
-    )
+    ap.add_argument("output_data", type=str, help="name of data file to write out time-average.")
     ap.add_argument(
         "--cornerturnfile",
         type=str,
         help="name of data file to determine baselines based on posotion in input_data_list."
         "If provided, will perform cornerturn from time to baselines.",
     )
-    ap.add_argument(
-        "--t_avg", type=float, help="number of seconds to average over.", default=None
-    )
+    ap.add_argument("--t_avg", type=float, help="number of seconds to average over.", default=None)
     ap.add_argument(
         "--rephase",
         default=False,
@@ -2534,12 +2442,8 @@ def time_average_argparser():
         action="store_true",
         help="weight each integration by frequency-averaged nsamples.",
     )
-    ap.add_argument(
-        "--clobber", default=False, action="store_true", help="Overwrite output files."
-    )
-    ap.add_argument(
-        "--verbose", default=False, action="store_true", help="verbose output."
-    )
+    ap.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
+    ap.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
     ap.add_argument(
         "--flag_output",
         default=None,
@@ -2562,12 +2466,8 @@ def time_average_argparser():
     )
     ap.add_argument("--ninterleave", default=1, type=int, help=desc)
     desc = "If set to True, times of interleave files are set to averages over the interleavd sets."
-    ap.add_argument(
-        "--equalize_interleave_times", action="store_true", default=False, help=desc
-    )
+    ap.add_argument("--equalize_interleave_times", action="store_true", default=False, help=desc)
     desc = "If set to True, truncate files with more excess interleaved times so all files have the same number of times."
-    ap.add_argument(
-        "--equalize_interleave_ntimes", action="store_true", default=False, help=desc
-    )
+    ap.add_argument("--equalize_interleave_ntimes", action="store_true", default=False, help=desc)
 
     return ap

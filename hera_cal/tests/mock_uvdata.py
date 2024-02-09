@@ -17,9 +17,7 @@ from pathlib import Path
 from hera_cal.red_groups import RedundantGroups
 from astropy import units
 
-HERA_LOC = EarthLocation.from_geocentric(
-    *get_telescope("HERA").telescope_location, unit="m"
-)
+HERA_LOC = EarthLocation.from_geocentric(*get_telescope("HERA").telescope_location, unit="m")
 
 with open(f"{DATA_PATH}/hera_antpos.yaml", "r") as fl:
     HERA_ANTPOS = yaml.safe_load(fl)
@@ -120,9 +118,7 @@ def identifiable_data_from_uvd(
             if ap[0] == ap[1] and p in (-5, -6):
                 d = np.outer(-p * lsts * 1000, (ones.freq_array / 75e6) ** -2)
             else:
-                d = np.outer(
-                    p * lsts, np.cos(normfreqs * ap[0]) + np.sin(normfreqs * ap[1]) * 1j
-                )
+                d = np.outer(p * lsts, np.cos(normfreqs * ap[0]) + np.sin(normfreqs * ap[1]) * 1j)
 
             data[i, :, :, j] = d
     if reshape:
@@ -168,9 +164,9 @@ def add_noise_to_uvd(uvd, autos: bool = False):
         variance = noise.predict_noise_variance_from_autos(
             bl, data, dt=dt, df=df, nsamples=nsamples
         )
-        data[bl] += np.random.normal(
+        data[bl] += np.random.normal(scale=np.sqrt(variance / 2)) + 1j * np.random.normal(
             scale=np.sqrt(variance / 2)
-        ) + 1j * np.random.normal(scale=np.sqrt(variance / 2))
+        )
     hd.update(data=data)
 
 
@@ -234,9 +230,7 @@ def write_files_in_hera_format(
         return fls
 
 
-def make_day(
-    nfiles: int, creator: callable = create_mock_hera_obs, **kwargs
-) -> list[UVData]:
+def make_day(nfiles: int, creator: callable = create_mock_hera_obs, **kwargs) -> list[UVData]:
     """Make a day of UVData objects."""
 
     uvds = []
@@ -273,11 +267,7 @@ def make_dataset(
     for i in range(ndays):
         if random_ants_to_drop > 0:
             drop_ants = np.random.choice(data_ants, random_ants_to_drop, replace=False)
-            _antpairs = [
-                ap
-                for ap in antpairs
-                if ap[0] not in drop_ants and ap[1] not in drop_ants
-            ]
+            _antpairs = [ap for ap in antpairs if ap[0] not in drop_ants and ap[1] not in drop_ants]
             kwargs["antpairs"] = _antpairs
         uvds.append(make_day(nfiles, jdint=start_jdint + i, creator=creator, **kwargs))
 
@@ -297,20 +287,14 @@ def make_uvc_ones(
     )
 
     if flag_full_ant > 0:
-        badants = np.random.choice(
-            np.arange(uvc.Nants_data), flag_full_ant, replace=False
-        )
+        badants = np.random.choice(np.arange(uvc.Nants_data), flag_full_ant, replace=False)
         uvc.flag_array[badants] = True
     if flag_ant_time > 0:
-        badants = np.random.choice(
-            np.arange(uvc.Nants_data), flag_ant_time, replace=False
-        )
+        badants = np.random.choice(np.arange(uvc.Nants_data), flag_ant_time, replace=False)
         badtime = np.random.randint(0, uvc.Ntimes)
         uvc.flag_array[badants, :, badtime] = True
     if flag_ant_freq > 0:
-        badants = np.random.choice(
-            np.arange(uvc.Nants_data), flag_ant_freq, replace=False
-        )
+        badants = np.random.choice(np.arange(uvc.Nants_data), flag_ant_freq, replace=False)
         badfreq = np.random.randint(0, uvc.Nfreqs)
         uvc.flag_array[badants, badfreq, :] = True
     return uvc

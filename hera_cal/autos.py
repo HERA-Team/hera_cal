@@ -35,9 +35,7 @@ def read_and_write_autocorrelations(
     hd = io.HERAData(infile)
     # remove cross correlations (bl[0] != bl[1]) and cross-polarizations ('xy' or 'yx')
     auto_bls = [
-        bl
-        for bl in hd.bls
-        if (bl[0] == bl[1] and split_pol(bl[2])[0] == split_pol(bl[2])[1])
+        bl for bl in hd.bls if (bl[0] == bl[1] and split_pol(bl[2])[0] == split_pol(bl[2])[1])
     ]
     if calfile is not None:
         data, data_flags, _ = hd.read(bls=auto_bls)

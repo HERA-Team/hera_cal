@@ -89,9 +89,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         antpos = -np.ones((NANTS * len(pols), 3))
         for ant, x, y in zip(layout.flatten(), xs.flatten(), ys.flatten()):
             for z, pol in enumerate(pols):
-                z = (
-                    2**z
-                )  # exponential ensures diff xpols aren't redundant w/ each other
+                z = 2**z  # exponential ensures diff xpols aren't redundant w/ each other
                 i = hera_cal.omni.Antpol(ant, pol, NANTS)
                 antpos[int(i), 0], antpos[int(i), 1], antpos[int(i), 2] = x, y, z
         reds = hera_cal.omni.compute_reds(NANTS, pols, antpos[:NANTS], tol=0.01)
@@ -156,9 +154,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
         sol0 = {k: v.astype(np.complex64) for k, v in sol0.items()}
-        meta, sol = info.omnical(
-            d, sol0, gain=0.5, maxiter=500, check_after=30, check_every=6
-        )
+        meta, sol = info.omnical(d, sol0, gain=0.5, maxiter=500, check_after=30, check_every=6)
         # meta, sol = info.omnical(d, sol0, gain=.5, maxiter=50, check_after=1, check_every=1)
         # print(meta)
         for i in xrange(NANTS):
@@ -183,9 +179,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         antpos = -np.ones((NANTS * len(pols), 3))
         for ant, x, y in zip(layout.flatten(), xs.flatten(), ys.flatten()):
             for z, pol in enumerate(pols):
-                z = (
-                    2**z
-                )  # exponential ensures diff xpols aren't redundant w/ each other
+                z = 2**z  # exponential ensures diff xpols aren't redundant w/ each other
                 i = hera_cal.omni.Antpol(ant, pol, NANTS)
                 antpos[int(i), 0], antpos[int(i), 1], antpos[int(i), 2] = x, y, z
         reds = hera_cal.omni.compute_reds(NANTS, pols, antpos[:NANTS], tol=0.01)

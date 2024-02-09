@@ -132,9 +132,7 @@ class TestMethods(object):
             [(0, 3, "xx"), (1, 4, "xx"), (2, 5, "xx"), (3, 6, "xx")],
         ]
         # exclude ubls
-        red = om.filter_reds(
-            reds, ex_ubls=[(0, 2), (1, 4), (4, 5), (0, 5), (2, 3), (0, 6)]
-        )
+        red = om.filter_reds(reds, ex_ubls=[(0, 2), (1, 4), (4, 5), (0, 5), (2, 3), (0, 6)])
         assert red == [[(0, 4, "xx"), (1, 5, "xx"), (2, 6, "xx")]]
         # exclude crosspols
         # reds = omni.filter_reds(self.info.get_reds(), ex_crosspols=()
@@ -200,44 +198,32 @@ class TestMethods(object):
 
         # Max 1 dimension means largest 1D array
         new_reds = om.filter_reds(reds, max_dims=1)
-        ant_inds = set(
-            [ant[0] for red in new_reds for bl in red for ant in split_bl(bl)]
-        )
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
         assert ant_inds == set(range(4, 9))
 
         # Max 2 dimensions means only rows 1 and 2
         new_reds = om.filter_reds(reds, max_dims=2)
-        ant_inds = set(
-            [ant[0] for red in new_reds for bl in red for ant in split_bl(bl)]
-        )
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
         assert ant_inds == set(range(0, 9))
 
         # Max 3 dimensions means all 3 good rows, but keeps out the off-grid antenna
         new_reds = om.filter_reds(reds, max_dims=3)
-        ant_inds = set(
-            [ant[0] for red in new_reds for bl in red for ant in split_bl(bl)]
-        )
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
         assert ant_inds == (set(range(0, 9)) | set(range(33, 37)))
 
         # Remove dimenions of size less than 5, which should kill everything except 4, 5, 6, 7, 8
         new_reds = om.filter_reds(reds, max_dims=3, min_dim_size=5)
-        ant_inds = set(
-            [ant[0] for red in new_reds for bl in red for ant in split_bl(bl)]
-        )
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
         assert ant_inds == set(range(4, 9))
 
         # remove dimenions of size less than 2, which should eliminate 37
         new_reds = om.filter_reds(reds, max_dims=4, min_dim_size=2)
-        ant_inds = set(
-            [ant[0] for red in new_reds for bl in red for ant in split_bl(bl)]
-        )
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
         assert ant_inds == (set(range(0, 9)) | set(range(33, 37)))
 
         # remove dimensions of size less than 10, which should remove everything
         new_reds = om.filter_reds(reds, max_dims=4, min_dim_size=10)
-        ant_inds = set(
-            [ant[0] for red in new_reds for bl in red for ant in split_bl(bl)]
-        )
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
         assert ant_inds == set([])
 
     def test_add_pol_reds(self):
@@ -253,17 +239,13 @@ class TestMethods(object):
             [(1, 2, "yx")],
             [(1, 2, "yy")],
         ]
-        polReds = om.add_pol_reds(
-            reds, pols=["xx", "xy", "yx", "yy"], pol_mode="4pol_minV"
-        )
+        polReds = om.add_pol_reds(reds, pols=["xx", "xy", "yx", "yy"], pol_mode="4pol_minV")
         assert polReds == [[(1, 2, "xx")], [(1, 2, "xy"), (1, 2, "yx")], [(1, 2, "yy")]]
 
     def test_reds_to_antpos(self):
         # Test 1D
         true_antpos = linear_array(10)
-        reds = om.get_reds(
-            true_antpos, pols=["xx", "yy"], pol_mode="2pol", bl_error_tol=1e-10
-        )
+        reds = om.get_reds(true_antpos, pols=["xx", "yy"], pol_mode="2pol", bl_error_tol=1e-10)
         inferred_antpos = om.reds_to_antpos(
             reds,
         )
@@ -282,15 +264,11 @@ class TestMethods(object):
 
         # Test 2D
         true_antpos = hex_array(5, split_core=False, outriggers=0)
-        reds = om.get_reds(
-            true_antpos, pols=["xx"], pol_mode="1pol", bl_error_tol=1e-10
-        )
+        reds = om.get_reds(true_antpos, pols=["xx"], pol_mode="1pol", bl_error_tol=1e-10)
         inferred_antpos = om.reds_to_antpos(reds)
         for pos in inferred_antpos.values():
             assert len(pos) == 2
-        new_reds = om.get_reds(
-            inferred_antpos, pols=["xx"], pol_mode="1pol", bl_error_tol=1e-10
-        )
+        new_reds = om.get_reds(inferred_antpos, pols=["xx"], pol_mode="1pol", bl_error_tol=1e-10)
         for nred in new_reds:
             for red in reds:
                 if nred[0] in red:
@@ -491,16 +469,12 @@ class TestRedSol(object):
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
         # try with weights
-        sol.update_vis_from_data(
-            DataContainer(d), wgts={bl: 1.0 + i for i, bl in enumerate(d)}
-        )
+        sol.update_vis_from_data(DataContainer(d), wgts={bl: 1.0 + i for i, bl in enumerate(d)})
         for red in reds:
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
         # try with all 0s for weights:
-        sol.update_vis_from_data(
-            DataContainer(d), wgts={bl: 0 for i, bl in enumerate(d)}
-        )
+        sol.update_vis_from_data(DataContainer(d), wgts={bl: 0 for i, bl in enumerate(d)})
         for red in reds:
             for bl in red:
                 np.testing.assert_array_almost_equal(true_vis[red[0]], sol.vis[bl])
@@ -577,9 +551,7 @@ class TestRedSol(object):
         gains, true_vis, d = sim_red_data(reds, gain_scatter=0.05)
         w = dict([(k, 1.0) for k in d.keys()])
         meta, sol = info.logcal(d)
-        sol.remove_degen(
-            degen_sol=dict(list(gains.items()) + list(true_vis.items())), inplace=True
-        )
+        sol.remove_degen(degen_sol=dict(list(gains.items()) + list(true_vis.items())), inplace=True)
         sol2 = sol.remove_degen(
             degen_sol=dict(list(gains.items()) + list(true_vis.items())), inplace=False
         )
@@ -597,9 +569,7 @@ class TestRedSol(object):
             vis={(0, 1, "ee"): np.ones((1, 1))},
         )
         assert len(rs) == 3
-        rs = om.RedSol(
-            reds, gains={(0, "Jee"): np.ones((1, 1)), (1, "Jee"): np.ones((1, 1))}
-        )
+        rs = om.RedSol(reds, gains={(0, "Jee"): np.ones((1, 1)), (1, "Jee"): np.ones((1, 1))})
         assert len(rs) == 2
         rs = om.RedSol(reds, vis={(0, 1, "ee"): np.ones((1, 1))})
         assert len(rs) == 1
@@ -778,9 +748,7 @@ class TestRedundantCalibrator(object):
 
         # test firstcal where the degeneracies of the phases and delays have already been removed so no abscal is necessary
         gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
-        fc_delays = {
-            ant: [[100e-9 * np.random.randn()]] for ant in gains.keys()
-        }  # in s
+        fc_delays = {ant: [[100e-9 * np.random.randn()]] for ant in gains.keys()}  # in s
         fc_delays = om.remove_degen_gains(reds, fc_delays)
         fc_offsets = {
             ant: [[0.49 * np.pi * (np.random.rand() > 0.90)]] for ant in gains.keys()
@@ -850,9 +818,7 @@ class TestRedundantCalibrator(object):
                 d_bl = d[bl]
                 mdl = sol[(bl[0], "Jxx")] * sol[(bl[1], "Jxx")].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=10
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         for k in d.keys():
             d[k] = np.zeros_like(d[k])
@@ -901,12 +867,8 @@ class TestRedundantCalibrator(object):
                 for bl in bls:
                     d_bl = d[bl]
                     mdl = sol[(bl[0], "Jxx")] * sol[(bl[1], "Jxx")].conj() * ubl
-                    np.testing.assert_almost_equal(
-                        np.abs(d_bl), np.abs(mdl), decimal=10
-                    )
-                    np.testing.assert_almost_equal(
-                        np.angle(d_bl * mdl.conj()), 0, decimal=10
-                    )
+                    np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
+                    np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
     def test_omnical64(self):
         NANTS = 18
@@ -981,12 +943,8 @@ class TestRedundantCalibrator(object):
                 for bl in bls:
                     d_bl = d[bl]
                     mdl = sol[(bl[0], "Jxx")] * sol[(bl[1], "Jxx")].conj() * ubl
-                    np.testing.assert_almost_equal(
-                        np.abs(d_bl), np.abs(mdl), decimal=10
-                    )
-                    np.testing.assert_almost_equal(
-                        np.angle(d_bl * mdl.conj()), 0, decimal=10
-                    )
+                    np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
+                    np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
     def test_omnical_outliers(self):
         NANTS = 18 * 5  # need a largish array to retain 2 dec accuracy
@@ -1026,9 +984,7 @@ class TestRedundantCalibrator(object):
                 d_bl = d[bl]
                 mdl = sol[(bl[0], "Jxx")] * sol[(bl[1], "Jxx")].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=2)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=2
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=2)
 
     def test_lincal(self):
         NANTS = 18
@@ -1072,9 +1028,7 @@ class TestRedundantCalibrator(object):
                 d_bl = d[bl]
                 mdl = sol[(bl[0], "Jxx")] * sol[(bl[1], "Jxx")].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=6)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=6
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=6)
 
     def test_lincal128(self):
         NANTS = 18
@@ -1096,9 +1050,7 @@ class TestRedundantCalibrator(object):
                 d_bl = d[bl]
                 mdl = sol[(bl[0], "Jxx")] * sol[(bl[1], "Jxx")].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=10
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
     def test_svd_convergence(self):
         for hexnum in (2, 3, 4):
@@ -1132,9 +1084,7 @@ class TestRedundantCalibrator(object):
         dlys = om.remove_degen_gains(reds, true_dlys, mode="phase")
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], 0, decimal=10)
-        dlys = om.remove_degen_gains(
-            reds, true_dlys, degen_gains=true_dlys, mode="phase"
-        )
+        dlys = om.remove_degen_gains(reds, true_dlys, degen_gains=true_dlys, mode="phase")
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], true_dlys[k], decimal=10)
 
@@ -1150,12 +1100,7 @@ class TestRedundantCalibrator(object):
         # put in a linear slope in delays, see that it is taken out
         true_dlys = {
             (i, split_pol(pol)[0]): np.array(
-                [
-                    [
-                        np.dot(xhat, antpos[i]) * dtau_dx
-                        + np.dot(yhat, antpos[i]) * dtau_dy
-                    ]
-                ]
+                [[np.dot(xhat, antpos[i]) * dtau_dx + np.dot(yhat, antpos[i]) * dtau_dy]]
             )
             for i in range(len(antpos))
         }
@@ -1187,9 +1132,7 @@ class TestRedundantCalibrator(object):
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta["iter"], 50 * np.ones_like(meta["iter"]))
-        np.testing.assert_almost_equal(
-            meta["chisq"], np.zeros_like(meta["chisq"]), decimal=10
-        )
+        np.testing.assert_almost_equal(meta["chisq"], np.zeros_like(meta["chisq"]), decimal=10)
 
         np.testing.assert_almost_equal(meta["chisq"], 0, decimal=10)
         for i in range(len(antpos)):
@@ -1201,9 +1144,7 @@ class TestRedundantCalibrator(object):
                 d_bl = d[bl]
                 mdl = sol[(bl[0], "Jxx")] * sol[(bl[1], "Jxx")].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=10
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = sol.remove_degen(inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
@@ -1228,9 +1169,7 @@ class TestRedundantCalibrator(object):
                 d_bl = d[bl]
                 mdl = sol_rd[(bl[0], "Jxx")] * sol_rd[(bl[1], "Jxx")].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=10
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = sol.remove_degen(degen_sol=gains, inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
@@ -1253,9 +1192,7 @@ class TestRedundantCalibrator(object):
             ],
             axis=0,
         )
-        np.testing.assert_almost_equal(
-            meanSqAmplitude, degenMeanSqAmplitude, decimal=10
-        )
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, decimal=10)
 
         for key, val in sol_rd.items():
             if len(key) == 2:
@@ -1268,9 +1205,7 @@ class TestRedundantCalibrator(object):
         reds = om.get_reds(antpos, pols=["xx", "xy", "yx", "yy"], pol_mode="4pol")
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(0.1, 0.2, 10)
-        gains, true_vis, d = sim_red_data(
-            reds, gain_scatter=0.09, shape=(1, len(freqs))
-        )
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=0.09, shape=(1, len(freqs)))
         fc_delays = {ant: 100 * np.random.randn() for ant in gains.keys()}  # in ns
         fc_gains = {
             ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs)))
@@ -1289,9 +1224,7 @@ class TestRedundantCalibrator(object):
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta["iter"], 50 * np.ones_like(meta["iter"]))
-        np.testing.assert_almost_equal(
-            meta["chisq"], np.zeros_like(meta["chisq"]), decimal=10
-        )
+        np.testing.assert_almost_equal(meta["chisq"], np.zeros_like(meta["chisq"]), decimal=10)
 
         np.testing.assert_almost_equal(meta["chisq"], 0, decimal=10)
         for i in range(len(antpos)):
@@ -1308,9 +1241,7 @@ class TestRedundantCalibrator(object):
                     * ubl
                 )
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=10
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = sol.remove_degen(inplace=False)
 
@@ -1318,9 +1249,7 @@ class TestRedundantCalibrator(object):
         gainPols = np.array([ant[1] for ant in ants])
         bl_pairs = [key for key in sol.keys() if len(key) == 3]
         visPols = np.array([[bl[2][0], bl[2][1]] for bl in bl_pairs])
-        bl_vecs = np.array(
-            [antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs]
-        )
+        bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
         gainSols = np.array([sol_rd[ant] for ant in ants])
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
         v = {k: v for k, v in sol_rd.items() if len(k) == 3}
@@ -1356,9 +1285,7 @@ class TestRedundantCalibrator(object):
                     * ubl
                 )
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=10
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = sol.remove_degen(degen_sol=gains, inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
@@ -1381,9 +1308,7 @@ class TestRedundantCalibrator(object):
             ],
             axis=0,
         )
-        np.testing.assert_almost_equal(
-            meanSqAmplitude, degenMeanSqAmplitude, decimal=10
-        )
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, decimal=10)
         meanSqAmplitude = np.mean(
             [
                 np.abs(g[key1] * g[key2])
@@ -1402,9 +1327,7 @@ class TestRedundantCalibrator(object):
             ],
             axis=0,
         )
-        np.testing.assert_almost_equal(
-            meanSqAmplitude, degenMeanSqAmplitude, decimal=10
-        )
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, decimal=10)
 
         gainSols = np.array([sol_rd[ant] for ant in ants])
         degenGains = np.array([gains[ant] for ant in ants])
@@ -1449,9 +1372,7 @@ class TestRedundantCalibrator(object):
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         assert np.all(meta["iter"] < 50 * np.ones_like(meta["iter"]))
-        np.testing.assert_almost_equal(
-            meta["chisq"], np.zeros_like(meta["chisq"]), decimal=10
-        )
+        np.testing.assert_almost_equal(meta["chisq"], np.zeros_like(meta["chisq"]), decimal=10)
 
         np.testing.assert_almost_equal(meta["chisq"], 0, decimal=10)
         for i in range(len(antpos)):
@@ -1468,9 +1389,7 @@ class TestRedundantCalibrator(object):
                     * ubl
                 )
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=10
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = sol.remove_degen(inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
@@ -1480,9 +1399,7 @@ class TestRedundantCalibrator(object):
         bl_pairs = [key for key in sol.keys() if len(key) == 3]
         visPols = np.array([[bl[2][0], bl[2][1]] for bl in bl_pairs])
         visPolsStr = np.array([bl[2] for bl in bl_pairs])
-        bl_vecs = np.array(
-            [antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs]
-        )
+        bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
         gainSols = np.array([sol_rd[ant] for ant in ants])
         meanSqAmplitude = np.mean(
             [
@@ -1516,9 +1433,7 @@ class TestRedundantCalibrator(object):
                     * ubl
                 )
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=10
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = sol.remove_degen(degen_sol=gains, inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
@@ -1535,9 +1450,7 @@ class TestRedundantCalibrator(object):
                     * ubl
                 )
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=10
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         gainSols = np.array([sol_rd[ant] for ant in ants])
         degenGains = np.array([gains[ant] for ant in ants])
@@ -1565,9 +1478,7 @@ class TestRedundantCalibrator(object):
             ],
             axis=0,
         )
-        np.testing.assert_almost_equal(
-            meanSqAmplitude, degenMeanSqAmplitude, decimal=10
-        )
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, decimal=10)
         meanSqAmplitude = np.mean(
             [
                 np.abs(g[key1] * g[key2])
@@ -1586,9 +1497,7 @@ class TestRedundantCalibrator(object):
             ],
             axis=0,
         )
-        np.testing.assert_almost_equal(
-            meanSqAmplitude, degenMeanSqAmplitude, decimal=10
-        )
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, decimal=10)
 
         visSols = np.array([sol_rd[bl] for bl in bl_pairs])
         degenVis = np.array([true_vis[bl] for bl in bl_pairs])
@@ -1628,9 +1537,7 @@ class TestRedundantCalibrator(object):
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         assert np.all(meta["iter"] < 50 * np.ones_like(meta["iter"]))
-        np.testing.assert_almost_equal(
-            meta["chisq"], np.zeros_like(meta["chisq"]), decimal=10
-        )
+        np.testing.assert_almost_equal(meta["chisq"], np.zeros_like(meta["chisq"]), decimal=10)
 
         np.testing.assert_almost_equal(meta["chisq"], 0, decimal=10)
         for i in range(len(antpos)):
@@ -1647,18 +1554,14 @@ class TestRedundantCalibrator(object):
                     * ubl
                 )
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=10
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = sol.remove_degen(inplace=False)
         ants = [key for key in sol_rd.keys() if len(key) == 2]
         gainPols = np.array([ant[1] for ant in ants])
         bl_pairs = [key for key in sol.keys() if len(key) == 3]
         visPols = np.array([[bl[2][0], bl[2][1]] for bl in bl_pairs])
-        bl_vecs = np.array(
-            [antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs]
-        )
+        bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
         gainSols = np.array([sol_rd[ant] for ant in ants])
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
         v = {k: v for k, v in sol_rd.items() if len(k) == 3}
@@ -1695,9 +1598,7 @@ class TestRedundantCalibrator(object):
                     * ubl
                 )
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), decimal=10)
-                np.testing.assert_almost_equal(
-                    np.angle(d_bl * mdl.conj()), 0, decimal=10
-                )
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
         sol_rd = sol.remove_degen(degen_sol=gains, inplace=False)
         g = {k: v for k, v in sol_rd.items() if len(k) == 2}
@@ -1723,9 +1624,7 @@ class TestRedundantCalibrator(object):
             ],
             axis=0,
         )
-        np.testing.assert_almost_equal(
-            meanSqAmplitude, degenMeanSqAmplitude, decimal=10
-        )
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, decimal=10)
         meanSqAmplitude = np.mean(
             [
                 np.abs(g[key1] * g[key2])
@@ -1744,9 +1643,7 @@ class TestRedundantCalibrator(object):
             ],
             axis=0,
         )
-        np.testing.assert_almost_equal(
-            meanSqAmplitude, degenMeanSqAmplitude, decimal=10
-        )
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, decimal=10)
 
         np.testing.assert_almost_equal(
             np.mean(np.angle(gainSols[gainPols == "Jxx"]), axis=0),
@@ -1829,10 +1726,7 @@ class TestRedundantCalibrator(object):
         rc = om.RedundantCalibrator(reds)
         # show that the total degrees of freedom adds up for total chi^2 (see HERA memo #61)
         dof = (
-            len(antpos) * (len(antpos) - 1) / 2
-            - len(reds)
-            - len(antpos)
-            + rc.count_degens() / 2.0
+            len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
         )
         np.testing.assert_approx_equal(np.sum(list(chisq_per_bl.values())), dof)
         # show that all baselines have DoF less than 1 (this is just a sense check)
@@ -1848,10 +1742,7 @@ class TestRedundantCalibrator(object):
         chisq_per_bl = om.predict_chisq_per_bl(reds)
         rc = om.RedundantCalibrator(reds)
         dof = (
-            len(antpos) * (len(antpos) - 1) / 2
-            - len(reds)
-            - len(antpos)
-            + rc.count_degens() / 2.0
+            len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
         )
         np.testing.assert_approx_equal(np.sum(list(chisq_per_bl.values())), dof)
         np.testing.assert_array_less(list(chisq_per_bl.values()), 1.0)
@@ -1890,15 +1781,11 @@ class TestRedundantCalibrator(object):
         rc = om.RedundantCalibrator(reds)
         # show that the total degrees of freedom adds up for total chi^2 (see HERA memo #61)
         dof = (
-            len(antpos) * (len(antpos) - 1) / 2
-            - len(reds)
-            - len(antpos)
-            + rc.count_degens() / 2.0
+            len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
         )
         np.testing.assert_approx_equal(np.sum(list(chisq_per_red.values())), dof)
         non_degen_dof_per_ubl = {
-            red[0]: len(red) - 1 - nant * (len(red) - 1.0) / (nbl - nubl)
-            for red in reds
+            red[0]: len(red) - 1 - nant * (len(red) - 1.0) / (nbl - nubl) for red in reds
         }
         for red in reds:
             # show that, up to the degeneracies, the above formula is a correct apportionment of the degrees of freedom
@@ -1920,15 +1807,11 @@ class TestRedundantCalibrator(object):
         chisq_per_red = om.predict_chisq_per_red(reds)
         rc = om.RedundantCalibrator(reds)
         dof = (
-            len(antpos) * (len(antpos) - 1) / 2
-            - len(reds)
-            - len(antpos)
-            + rc.count_degens() / 2.0
+            len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
         )
         np.testing.assert_approx_equal(np.sum(list(chisq_per_red.values())), dof)
         non_degen_dof_per_ubl = {
-            red[0]: len(red) - 1 - nant * (len(red) - 1.0) / (nbl - nubl)
-            for red in reds
+            red[0]: len(red) - 1 - nant * (len(red) - 1.0) / (nbl - nubl) for red in reds
         }
         for red in reds:
             assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] < 1
@@ -1953,8 +1836,7 @@ class TestRedundantCalibrator(object):
         )
         np.testing.assert_approx_equal(np.sum(list(chisq_per_red.values())), dof)
         non_degen_dof_per_ubl = {
-            red[0]: len(red) - 1 - nant * (len(red) - 1.0) / (nbl / 2 - nubl / 2)
-            for red in reds
+            red[0]: len(red) - 1 - nant * (len(red) - 1.0) / (nbl / 2 - nubl / 2) for red in reds
         }
         for red in reds:
             assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] < 1
@@ -1978,10 +1860,7 @@ class TestRedundantCalibrator(object):
         rc = om.RedundantCalibrator(reds)
         # show that the total degrees of freedom adds up for total chi^2 (see HERA memo #61)
         dof = (
-            len(antpos) * (len(antpos) - 1) / 2
-            - len(reds)
-            - len(antpos)
-            + rc.count_degens() / 2.0
+            len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
         )
         np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
         # factor of 2 comes from the fact that all baselines go into two antennas' chisq_per_ant
@@ -2007,10 +1886,7 @@ class TestRedundantCalibrator(object):
         chisq_per_ant = om.predict_chisq_per_ant(reds)
         rc = om.RedundantCalibrator(reds)
         dof = (
-            len(antpos) * (len(antpos) - 1) / 2
-            - len(reds)
-            - len(antpos)
-            + rc.count_degens() / 2.0
+            len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
         )
         np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
         non_degen_dof_per_ant = {ant: -2 for ant in ants}
@@ -2072,9 +1948,9 @@ class TestRedundantCalibrator(object):
 
         # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance
         for antnum in antpos.keys():
-            noisy_data[(antnum, antnum, "xx")] = np.ones(
-                (len(times), len(freqs))
-            ) * np.sqrt(noise_var * dt * df)
+            noisy_data[(antnum, antnum, "xx")] = np.ones((len(times), len(freqs))) * np.sqrt(
+                noise_var * dt * df
+            )
         noisy_data.freqs = deepcopy(freqs)
         noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
         cal, sol = om.redundantly_calibrate(noisy_data, reds)
@@ -2083,9 +1959,7 @@ class TestRedundantCalibrator(object):
         }
         cal["g_omnical"] = sol.gains
         cal["v_omnical"] = sol.vis
-        cal["gf_omnical"] = {
-            ant: ~np.isfinite(g) for ant, g in cal["g_omnical"].items()
-        }
+        cal["gf_omnical"] = {ant: ~np.isfinite(g) for ant, g in cal["g_omnical"].items()}
         cal["vf_omnical"] = DataContainer(
             {bl: ~np.isfinite(v) for bl, v in cal["v_omnical"].items()}
         )
@@ -2105,9 +1979,7 @@ class TestRedundantCalibrator(object):
                 ant0, ant1 = split_bl(bl)
                 g1, g2 = cal["g_omnical"][ant0], cal["g_omnical"][ant1]
                 v_here = cal["v_omnical"][red[0]]
-                chisq_per_bl[bl] = (
-                    np.abs(d_here - g1 * np.conj(g2) * v_here) ** 2 / noise_var
-                )
+                chisq_per_bl[bl] = np.abs(d_here - g1 * np.conj(g2) * v_here) ** 2 / noise_var
                 chisq_per_red[red[0]] += chisq_per_bl[bl]
                 chisq_per_ant[ant0] += chisq_per_bl[bl]
                 chisq_per_ant[ant1] += chisq_per_bl[bl]
@@ -2160,9 +2032,9 @@ class TestRedundantCalibrator(object):
 
         # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance
         for antnum in antpos.keys():
-            noisy_data[(antnum, antnum, "xx")] = np.ones(
-                (len(times), len(freqs))
-            ) * np.sqrt(noise_var * dt * df)
+            noisy_data[(antnum, antnum, "xx")] = np.ones((len(times), len(freqs))) * np.sqrt(
+                noise_var * dt * df
+            )
         noisy_data.freqs = deepcopy(freqs)
         noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
         filtered_reds = om.filter_reds(reds, ex_ants=[6])
@@ -2177,9 +2049,7 @@ class TestRedundantCalibrator(object):
             chisq=meta["chisq"],
             chisq_per_ant=meta["chisq_per_ant"],
         )
-        om.expand_omni_gains(
-            sol, reds, noisy_data, nsamples, chisq_per_ant=meta["chisq_per_ant"]
-        )
+        om.expand_omni_gains(sol, reds, noisy_data, nsamples, chisq_per_ant=meta["chisq_per_ant"])
         om.expand_omni_vis(sol, reds, noisy_data, nsamples)
 
         # Compute various chi^2s
@@ -2192,17 +2062,13 @@ class TestRedundantCalibrator(object):
                 ant0, ant1 = split_bl(bl)
                 g1, g2 = sol[ant0], sol[ant1]
                 v_here = sol[red[0]]
-                chisq_per_bl[bl] = (
-                    np.abs(d_here - g1 * np.conj(g2) * v_here) ** 2 / noise_var
-                )
+                chisq_per_bl[bl] = np.abs(d_here - g1 * np.conj(g2) * v_here) ** 2 / noise_var
                 chisq_per_red[red[0]] += chisq_per_bl[bl]
                 chisq_per_ant[ant0] += chisq_per_bl[bl]
                 chisq_per_ant[ant1] += chisq_per_bl[bl]
 
         # compare predictions at the 3% level for non-excluded antennas
-        np.testing.assert_almost_equal(
-            np.mean(meta["chisq"]["Jxx"]), 1.0, -np.log10(0.03)
-        )
+        np.testing.assert_almost_equal(np.mean(meta["chisq"]["Jxx"]), 1.0, -np.log10(0.03))
 
         predicted_chisq_per_bl = om.predict_chisq_per_bl(filtered_reds)
         for bl in predicted_chisq_per_bl:
@@ -2229,9 +2095,7 @@ class TestRedundantCalibrator(object):
         # make sure excluded antenna has the highest chi^2, but not inexplicably large
         assert np.mean(meta["chisq_per_ant"][6, "Jxx"]) <= len(antpos)
         for ant in meta["chisq_per_ant"]:
-            assert np.mean(meta["chisq_per_ant"][ant]) <= np.mean(
-                meta["chisq_per_ant"][6, "Jxx"]
-            )
+            assert np.mean(meta["chisq_per_ant"][ant]) <= np.mean(meta["chisq_per_ant"][6, "Jxx"])
 
 
 class TestRedcalAndAbscal(object):
@@ -2270,9 +2134,7 @@ class TestRedcalAndAbscal(object):
                     d[0, 1, "xx"]
                 )  # these are used only for calculating chi^2 and not relevant
         d.freqs = freqs
-        d.times_by_bl = {
-            bl[0:2]: np.array([2458110.18523274, 2458110.18535701]) for bl in d.keys()
-        }
+        d.times_by_bl = {bl[0:2]: np.array([2458110.18523274, 2458110.18535701]) for bl in d.keys()}
         d.antpos = antpos
 
         # run redcal
@@ -2284,9 +2146,7 @@ class TestRedcalAndAbscal(object):
         }
         cal["g_omnical"] = sol.gains
         cal["v_omnical"] = sol.vis
-        cal["gf_omnical"] = {
-            ant: ~np.isfinite(g) for ant, g in cal["g_omnical"].items()
-        }
+        cal["gf_omnical"] = {ant: ~np.isfinite(g) for ant, g in cal["g_omnical"].items()}
         cal["vf_omnical"] = DataContainer(
             {bl: ~np.isfinite(v) for bl, v in cal["v_omnical"].items()}
         )
@@ -2298,23 +2158,18 @@ class TestRedcalAndAbscal(object):
 
         # set up abscal
         d_omnicaled = deepcopy(d)
-        f_omnicaled = DataContainer(
-            {bl: np.zeros_like(d[bl], dtype=bool) for bl in d.keys()}
-        )
+        f_omnicaled = DataContainer({bl: np.zeros_like(d[bl], dtype=bool) for bl in d.keys()})
         calibrate_in_place(
             d_omnicaled,
             cal["g_omnical"],
             data_flags=f_omnicaled,
             cal_flags=cal["gf_omnical"],
         )
-        wgts = DataContainer(
-            {k: (~f_omnicaled[k]).astype(float) for k in f_omnicaled.keys()}
-        )
+        wgts = DataContainer({k: (~f_omnicaled[k]).astype(float) for k in f_omnicaled.keys()})
         model = DataContainer({bl: true_vis[red[0]] for red in reds for bl in red})
         model.freqs = freqs
         model.times_by_bl = {
-            bl[0:2]: np.array([2458110.18523274, 2458110.18535701])
-            for bl in model.keys()
+            bl[0:2]: np.array([2458110.18523274, 2458110.18535701]) for bl in model.keys()
         }
         model.antpos = antpos
 
@@ -2331,8 +2186,7 @@ class TestRedcalAndAbscal(object):
 
         # evaluate solutions, rephasing to antenna 0 as a reference
         abscal_gains = {
-            ant: cal["g_omnical"][ant] * abscal_delta_gains[ant]
-            for ant in cal["g_omnical"]
+            ant: cal["g_omnical"][ant] * abscal_delta_gains[ant] for ant in cal["g_omnical"]
         }
         refant = {"Jxx": (0, "Jxx"), "Jyy": (0, "Jyy")}
         agr = {
@@ -2342,18 +2196,14 @@ class TestRedcalAndAbscal(object):
             for ant in abscal_gains.keys()
         }
         tgr = {
-            ant: true_gains[ant]
-            * np.abs(true_gains[refant[ant[1]]])
-            / true_gains[refant[ant[1]]]
+            ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]]
             for ant in true_gains.keys()
         }
         gain_errors = [agr[ant] - tgr[ant] for ant in tgr if ant[1] == "Jxx"]
         np.testing.assert_almost_equal(np.abs(gain_errors), 0, decimal=10)
 
 
-@pytest.mark.filterwarnings(
-    "ignore:It seems that the latitude and longitude are in radians"
-)
+@pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class TestRunMethods(object):
     def test_get_pol_load_list(self):
@@ -2362,9 +2212,9 @@ class TestRunMethods(object):
         assert om._get_pol_load_list(["xx", "yy", "xy", "yx"], pol_mode="4pol") == [
             ["xx", "yy", "xy", "yx"]
         ]
-        assert om._get_pol_load_list(
-            ["xx", "yy", "xy", "yx"], pol_mode="4pol_minV"
-        ) == [["xx", "yy", "xy", "yx"]]
+        assert om._get_pol_load_list(["xx", "yy", "xy", "yx"], pol_mode="4pol_minV") == [
+            ["xx", "yy", "xy", "yx"]
+        ]
         with pytest.raises(AssertionError):
             om._get_pol_load_list(["xx"], pol_mode="4pol")
         with pytest.raises(ValueError):
@@ -2449,15 +2299,11 @@ class TestRunMethods(object):
 
         for antnum in antpos.keys():
             for pol in pols:
-                d[(antnum, antnum, pol)] = np.ones(
-                    (len(times), len(freqs)), dtype=complex
-                )
+                d[(antnum, antnum, pol)] = np.ones((len(times), len(freqs)), dtype=complex)
         d.freqs = deepcopy(freqs)
         d.times_by_bl = {bl[0:2]: deepcopy(times) for bl in d.keys()}
 
-        filtered_reds = om.filter_reds(
-            reds, ex_ants=ex_ants, antpos=antpos, max_bl_cut=30
-        )
+        filtered_reds = om.filter_reds(reds, ex_ants=ex_ants, antpos=antpos, max_bl_cut=30)
         cal, sol = om.redundantly_calibrate(d, filtered_reds, run_logcal=True)
 
         om.expand_omni_vis(
@@ -2512,9 +2358,7 @@ class TestRunMethods(object):
         hd = io.HERAData(os.path.join(DATA_PATH, "zen.2458098.43124.downsample.uvh5"))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_iteration(
-                hd, pol_mode="4pol"
-            )
+            redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_iteration(hd, pol_mode="4pol")
         _, _, _, chisq = hc_omni.build_calcontainers()
         np.testing.assert_array_equal(chisq["Jee"], chisq["Jnn"])
 
@@ -2523,9 +2367,7 @@ class TestRunMethods(object):
             121.4,
             1051.7,
         )  # move array longitude
-        redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_iteration(
-            hd, solar_horizon=0.0
-        )
+        redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_iteration(hd, solar_horizon=0.0)
         _, cal_flags, _, _ = hc_first.build_calcontainers()
         for flag in cal_flags.values():
             np.testing.assert_array_equal(flag, True)
@@ -2552,9 +2394,7 @@ class TestRunMethods(object):
                 # test that completely excluded baselines from redcal are still represented
                 assert (23, 27, pol) in rdc
             # test redundant baseline counting
-            np.testing.assert_array_equal(
-                nsamples[(1, 12, pol)][~flags[(1, 12, pol)]], 4.0
-            )
+            np.testing.assert_array_equal(nsamples[(1, 12, pol)][~flags[(1, 12, pol)]], 4.0)
             np.testing.assert_array_equal(nsamples[(23, 27, pol)], 0.0)
             np.testing.assert_array_equal(nsamples[(1, 27, pol)], 0.0)
 
@@ -2610,9 +2450,7 @@ class TestRunMethods(object):
                 quals_here,
                 total_qual_here,
             ) = hc_here.build_calcontainers()
-            np.testing.assert_almost_equal(
-                np.unique(hc.lst_array), np.unique(hd.lst_array)
-            )
+            np.testing.assert_almost_equal(np.unique(hc.lst_array), np.unique(hd.lst_array))
             np.testing.assert_almost_equal(hc.telescope_location, hd.telescope_location)
             for antnum, antpos in zip(hc.antenna_numbers, hc.antenna_positions):
                 np.testing.assert_almost_equal(
@@ -2629,12 +2467,10 @@ class TestRunMethods(object):
                 # assert 'Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', '')
                 pass
             else:
-                assert "Iteration0Results." in hc.history.replace("\n", "").replace(
-                    " ", ""
-                )
-            assert "Thisfilewasproducedbythefunction" in hc.history.replace(
-                "\n", ""
-            ).replace(" ", "")
+                assert "Iteration0Results." in hc.history.replace("\n", "").replace(" ", "")
+            assert "Thisfilewasproducedbythefunction" in hc.history.replace("\n", "").replace(
+                " ", ""
+            )
 
         for prefix, hc_here, hd_here, bad_ants in [
             ("", hc_omni, hd_vissol, [11, 50, 12, 24]),
@@ -2648,9 +2484,7 @@ class TestRunMethods(object):
                 quals_here,
                 total_qual_here,
             ) = hc_here.build_calcontainers()
-            np.testing.assert_almost_equal(
-                np.unique(hc.lst_array), np.unique(hd.lst_array)
-            )
+            np.testing.assert_almost_equal(np.unique(hc.lst_array), np.unique(hd.lst_array))
             np.testing.assert_almost_equal(hc.telescope_location, hd.telescope_location)
             for antnum, antpos in zip(hc.antenna_numbers, hc.antenna_positions):
                 np.testing.assert_almost_equal(
@@ -2671,24 +2505,18 @@ class TestRunMethods(object):
                 if ant[0] in bad_ants:
                     np.testing.assert_array_equal(flags[ant], True)
             for antpol in total_qual.keys():
-                np.testing.assert_array_almost_equal(
-                    total_qual[antpol], total_qual_here[antpol]
-                )
+                np.testing.assert_array_almost_equal(total_qual[antpol], total_qual_here[antpol])
             assert "testing" in hc.history.replace("\n", "").replace(" ", "")
             if prefix == "":
                 # assert 'Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', '')
                 pass
             else:
-                assert "Iteration0Results." in hc.history.replace("\n", "").replace(
-                    " ", ""
-                )
-            assert "Thisfilewasproducedbythefunction" in hc.history.replace(
-                "\n", ""
-            ).replace(" ", "")
-
-            hd = io.HERAData(
-                os.path.splitext(input_data)[0] + prefix + ".omni_vis.uvh5"
+                assert "Iteration0Results." in hc.history.replace("\n", "").replace(" ", "")
+            assert "Thisfilewasproducedbythefunction" in hc.history.replace("\n", "").replace(
+                " ", ""
             )
+
+            hd = io.HERAData(os.path.splitext(input_data)[0] + prefix + ".omni_vis.uvh5")
             data, flags, nsamples = hd.read()
             data_here, flags_here, nsamples_here = hd_here.build_datacontainers()
             for bl in data_here:
@@ -2705,12 +2533,10 @@ class TestRunMethods(object):
                 # assert 'Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', '')
                 pass
             else:
-                assert "Iteration0Results." in hc.history.replace("\n", "").replace(
-                    " ", ""
-                )
-            assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-                "\n", ""
-            ).replace(" ", "")
+                assert "Iteration0Results." in hc.history.replace("\n", "").replace(" ", "")
+            assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(
+                " ", ""
+            )
 
         for prefix, meta_here, bad_ants in [
             ("", redcal_meta, [11, 50, 12, 24]),
@@ -2745,12 +2571,8 @@ class TestRunMethods(object):
                 # assert 'Throwingoutantenna12' in history.replace('\n', '').replace(' ', '')
                 pass
             else:
-                assert "Iteration0Results." in history.replace("\n", "").replace(
-                    " ", ""
-                )
-            assert "Thisfilewasproducedbythefunction" in history.replace(
-                "\n", ""
-            ).replace(" ", "")
+                assert "Iteration0Results." in history.replace("\n", "").replace(" ", "")
+            assert "Thisfilewasproducedbythefunction" in history.replace("\n", "").replace(" ", "")
 
         os.remove(os.path.splitext(input_data)[0] + ".first.calfits")
         os.remove(os.path.splitext(input_data)[0] + ".omni.calfits")
@@ -2782,26 +2604,10 @@ class TestRunMethods(object):
         gains, _, _, _ = hc_omni.build_calcontainers()
         for gain in gains.values():
             assert gain.shape[0] == 1
-        os.remove(
-            os.path.join(
-                DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.first.calfits"
-            )
-        )
-        os.remove(
-            os.path.join(
-                DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.omni.calfits"
-            )
-        )
-        os.remove(
-            os.path.join(
-                DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.omni_vis.uvh5"
-            )
-        )
-        os.remove(
-            os.path.join(
-                DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.redcal_meta.hdf5"
-            )
-        )
+        os.remove(os.path.join(DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.first.calfits"))
+        os.remove(os.path.join(DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.omni.calfits"))
+        os.remove(os.path.join(DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.omni_vis.uvh5"))
+        os.remove(os.path.join(DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.redcal_meta.hdf5"))
 
     def test_redcal_argparser(self):
         sys.argv = [

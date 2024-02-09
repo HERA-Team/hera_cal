@@ -16,13 +16,9 @@ from ..data import DATA_PATH
 
 class Test_tempcal:
     def setup_method(self):
-        dfiles = sorted(
-            glob.glob(os.path.join(DATA_PATH, "zen.2458043.*.xx.HH.XRAA.uvh5"))
-        )
+        dfiles = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458043.*.xx.HH.XRAA.uvh5")))
         self.hd = io.HERAData(dfiles)
-        self.data, self.flags, self.nsamps = self.hd.read(
-            bls=[(24, 24), (25, 25), (37, 37)]
-        )
+        self.data, self.flags, self.nsamps = self.hd.read(bls=[(24, 24), (25, 25), (37, 37)])
         self.times = np.unique(self.hd.time_array)
 
     def test_gains_from_autos(self):
@@ -47,12 +43,7 @@ class Test_tempcal:
         assert np.isclose(gain[gkey][0], gain[gkey][0, 0]).all()
 
         # assert residual std below a value that is set by-hand when it works properly
-        assert (
-            np.std(
-                (self.data[key] - smooth[key])[:, 10:-10][~self.flags[key][:, 10:-10]]
-            )
-            < 20
-        )
+        assert np.std((self.data[key] - smooth[key])[:, 10:-10][~self.flags[key][:, 10:-10]]) < 20
 
         # test applying calibration is a good match to smoothed data
         assert (
@@ -92,17 +83,13 @@ class Test_tempcal:
             verbose=False,
         )
         # test avg_ants
-        ag, af = tempcal.avg_gain_ants(
-            gain, list(gain.keys()), gflags=gflag, inplace=False
-        )
+        ag, af = tempcal.avg_gain_ants(gain, list(gain.keys()), gflags=gflag, inplace=False)
         assert not np.all(np.isclose(gain[(24, "Jee")], gain[(25, "Jee")]))
         assert np.all([np.isclose(ag[_k] - ag[(24, "Jee")], 0.0).all() for _k in ag])
 
         # test inplace
         tempcal.avg_gain_ants(gain, list(gain.keys()), gflags=gflag, inplace=True)
-        assert np.all(
-            [np.isclose(gain[_k] - gain[(24, "Jee")], 0.0).all() for _k in gain]
-        )
+        assert np.all([np.isclose(gain[_k] - gain[(24, "Jee")], 0.0).all() for _k in gain])
 
     def test_normalize_tempgains(self):
         key = (24, 24, "ee")
@@ -120,11 +107,7 @@ class Test_tempcal:
 
         normtime = 2458043.41427365
         ng = tempcal.normalize_tempgains(gain, self.times, normtime, inplace=False)
-        assert np.isclose(
-            np.abs(ng[gkey][np.argmin(np.abs(self.times - normtime)), :]), 1.0
-        ).all()
+        assert np.isclose(np.abs(ng[gkey][np.argmin(np.abs(self.times - normtime)), :]), 1.0).all()
 
     def test_gains_from_tempdata(self):
-        pytest.raises(
-            NotImplementedError, tempcal.gains_from_tempdata, None, None, None
-        )
+        pytest.raises(NotImplementedError, tempcal.gains_from_tempdata, None, None, None)

@@ -176,19 +176,13 @@ class TestDataContainer(object):
         assert "xx" in dc.pols()
         assert "yy" in dc.pols()
 
-        with pytest.raises(
-            ValueError, match="Tuple keys to delete must be in the format"
-        ):
+        with pytest.raises(ValueError, match="Tuple keys to delete must be in the format"):
             del dc["bad_key"]
 
-        with pytest.raises(
-            ValueError, match="Tuple keys to delete must be in the format"
-        ):
+        with pytest.raises(ValueError, match="Tuple keys to delete must be in the format"):
             del dc[(1, 2, 3, 4)]
 
-        with pytest.raises(
-            ValueError, match="Tuple keys to delete must be in the format"
-        ):
+        with pytest.raises(ValueError, match="Tuple keys to delete must be in the format"):
             del dc[[1, 2, "xx"]]
 
     def test_getitem(self):
@@ -405,8 +399,7 @@ class TestDataContainerWithRealData:
         d2 = d // 2.0
         assert np.allclose(
             d2[(24, 25, "ee")][30, 30],
-            d[(24, 25, "ee")][30, 30].real // 2.0
-            + d[(24, 25, "ee")][30, 30].imag // 2.0,
+            d[(24, 25, "ee")][30, 30].real // 2.0 + d[(24, 25, "ee")][30, 30].imag // 2.0,
         )
         # now convert d to floats and do the same thing.
         for k in d:
@@ -475,9 +468,7 @@ class TestDataContainerWithRealData:
                 assert np.all(dc.times == new_times)
                 assert np.all(dc.times_by_bl[0, 1] == new_times)
                 assert np.all(dc.lsts == (np.arange(10) * 2 * np.pi / 10)[new_times])
-                assert np.all(
-                    dc.lsts_by_bl[0, 1] == (np.arange(10) * 2 * np.pi / 10)[new_times]
-                )
+                assert np.all(dc.lsts_by_bl[0, 1] == (np.arange(10) * 2 * np.pi / 10)[new_times])
 
     def test_select_freqs(self):
         fq = np.linspace(0, 1, 10)
@@ -544,10 +535,7 @@ def test_RedDataContainer():
     rdata3 = datacontainer.RedDataContainer(deepcopy(data))
     reverse_reds = [[reverse_bl(bl) for bl in red] for red in reds]
     reverse_data = datacontainer.DataContainer(
-        {
-            red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1])
-            for red in reverse_reds
-        }
+        {red[0]: np.ones((10, 10)) * (red[0][0] + 1.0j * red[0][1]) for red in reverse_reds}
     )
     rdata4 = datacontainer.RedDataContainer(deepcopy(reverse_data), reverse_reds)
     rdata5 = datacontainer.RedDataContainer(deepcopy(reverse_data), reds)
@@ -590,11 +578,7 @@ def test_RedDataContainer():
     # test error where the the data has multiple redundant baselines per group
     with pytest.raises(ValueError):
         data = datacontainer.DataContainer(
-            {
-                bl: np.ones((10, 10)) * (bl[0] + 1.0j * bl[1])
-                for red in reds
-                for bl in red
-            }
+            {bl: np.ones((10, 10)) * (bl[0] + 1.0j * bl[1]) for red in reds for bl in red}
         )
         rdata = datacontainer.RedDataContainer(data, reds)
 

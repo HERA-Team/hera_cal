@@ -15,9 +15,7 @@ from ..utils import split_pol
 from ..apply_cal import apply_cal
 
 
-@pytest.mark.filterwarnings(
-    "ignore:It seems that the latitude and longitude are in radians"
-)
+@pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class Test_Noise(object):
     def test_interleaved_noise_variance_estimate(self):
@@ -25,9 +23,7 @@ class Test_Noise(object):
         np.testing.assert_array_equal(const_test, 0)
 
         np.random.seed(21)
-        gauss_test = np.mean(
-            noise.interleaved_noise_variance_estimate(np.random.randn(1000, 1000))
-        )
+        gauss_test = np.mean(noise.interleaved_noise_variance_estimate(np.random.randn(1000, 1000)))
         np.testing.assert_almost_equal(gauss_test, 1, decimal=2)
 
         kernels = [
@@ -53,9 +49,7 @@ class Test_Noise(object):
                 np.random.randn(10, 10), kernel=[[0.5, 1.0, 0.5]]
             )
         with pytest.raises(AssertionError):
-            noise.interleaved_noise_variance_estimate(
-                np.random.randn(10, 10), kernel=[-1, 1]
-            )
+            noise.interleaved_noise_variance_estimate(np.random.randn(10, 10), kernel=[-1, 1])
 
     def test_infer_dt(self):
         times_by_bl = {(0, 0): [1.0, 2.0], (0, 1): [1.5]}
@@ -81,10 +75,7 @@ class Test_Noise(object):
                 sigmasq = noise.predict_noise_variance_from_autos(k, data)
                 noise_var = noise.interleaved_noise_variance_estimate(data[k])
                 np.testing.assert_array_equal(
-                    np.abs(
-                        np.mean(np.mean(noise_var, axis=0) / np.mean(sigmasq, axis=0))
-                        - 1
-                    )
+                    np.abs(np.mean(np.mean(noise_var, axis=0) / np.mean(sigmasq, axis=0)) - 1)
                     <= 0.1,
                     True,
                 )
@@ -99,9 +90,7 @@ class Test_Noise(object):
                 np.testing.assert_array_equal(sigmasq, sigmasq2)
 
                 nsamples[k] *= 2
-                sigmasq3 = noise.predict_noise_variance_from_autos(
-                    k, data, nsamples=nsamples
-                )
+                sigmasq3 = noise.predict_noise_variance_from_autos(k, data, nsamples=nsamples)
                 np.testing.assert_array_equal(sigmasq / 2.0, sigmasq3)
 
     def test_per_antenna_noise_std(self):
@@ -119,9 +108,7 @@ class Test_Noise(object):
 
     def test_write_per_antenna_noise_std_from_autos(self):
         infile = os.path.join(DATA_PATH, "zen.2458098.43124.downsample.uvh5")
-        calfile = os.path.join(
-            DATA_PATH, "test_input/zen.2458098.43124.downsample.omni.calfits"
-        )
+        calfile = os.path.join(DATA_PATH, "test_input/zen.2458098.43124.downsample.omni.calfits")
         outfile = os.path.join(DATA_PATH, "test_output/noise.uvh5")
         noise.write_per_antenna_noise_std_from_autos(
             infile, outfile, calfile=calfile, add_to_history="testing", clobber=True
@@ -129,9 +116,7 @@ class Test_Noise(object):
 
         hd = io.HERAData(outfile)
         assert "testing" in hd.history.replace("\n", "").replace(" ", "")
-        assert "Thisfilewasproducedbythefunction" in hd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in hd.history.replace("\n", "").replace(" ", "")
         n, f, _ = hd.read()
         hc = io.HERACal(calfile)
         g, gf, _, _ = hc.read()

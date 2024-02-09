@@ -131,14 +131,10 @@ def chunk_parser():
         An argument parser.
     """
     ap = argparse.ArgumentParser(description="Chunk visibility files.")
-    ap.add_argument(
-        "filenames", type=str, nargs="+", help="list of filenames to chunk together."
-    )
+    ap.add_argument("filenames", type=str, nargs="+", help="list of filenames to chunk together.")
     ap.add_argument("inputfile", type=str, help="name of input file to start chunk at.")
     ap.add_argument("outputfile", type=str, help="Name of output file.")
-    ap.add_argument(
-        "chunk_size", type=int, help="Number of files after filenames to chunk."
-    )
+    ap.add_argument("chunk_size", type=int, help="Number of files after filenames to chunk.")
     ap.add_argument(
         "--type",
         type=str,
@@ -171,7 +167,5 @@ def chunk_parser():
         action="store_true",
         help="throw away flagged baselines.",
     )
-    ap.add_argument(
-        "--ant_flag_yaml", default=None, help="path to yaml file with flagged data."
-    )
+    ap.add_argument("--ant_flag_yaml", default=None, help="path to yaml file with flagged data.")
     return ap

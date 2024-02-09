@@ -49,9 +49,7 @@ class DataContainer:
             self.__dict__.update(data.__dict__)
         else:
             self._data = odict()
-            if np.all(
-                [isinstance(k, str) for k in data.keys()]
-            ):  # Nested POL:{antpairs}
+            if np.all([isinstance(k, str) for k in data.keys()]):  # Nested POL:{antpairs}
                 for pol in data.keys():
                     for antpair in data[pol]:
                         self._data[make_bl(antpair, pol)] = data[pol][antpair]
@@ -60,13 +58,9 @@ class DataContainer:
                     for pol in data[antpair]:
                         self._data[make_bl(antpair, pol)] = data[antpair][pol]
             elif np.all([len(k) == 3 for k in data.keys()]):
-                self._data = odict(
-                    [(comply_bl(k), data[k]) for k in sorted(data.keys())]
-                )
+                self._data = odict([(comply_bl(k), data[k]) for k in sorted(data.keys())])
             else:
-                raise KeyError(
-                    "Unrecognized key type or mix of key types in data dictionary."
-                )
+                raise KeyError("Unrecognized key type or mix of key types in data dictionary.")
             self._antpairs = set([k[:2] for k in self._data])
             self._pols = set([k[-1] for k in self._data])
 
@@ -149,9 +143,7 @@ class DataContainer:
                     )
                 )
             elif len(key) == 2:  # asking for a bl
-                return dict(
-                    zip(self._pols, [self[make_bl(key, pol)] for pol in self._pols])
-                )
+                return dict(zip(self._pols, [self[make_bl(key, pol)] for pol in self._pols]))
             else:
                 bl = comply_bl(key)
                 try:
@@ -199,8 +191,7 @@ class DataContainer:
         for k in key:
             if not isinstance(k, tuple) or len(k) != 3:
                 raise ValueError(
-                    "Tuple keys to delete must be in the format (ant1, ant2, pol), "
-                    f"{k} is not."
+                    "Tuple keys to delete must be in the format (ant1, ant2, pol), " f"{k} is not."
                 )
             k = comply_bl(k)
             del self._data[k]
@@ -221,26 +212,20 @@ class DataContainer:
             # check 1 axis is identical for all D
             for d in D:
                 if d.shape[1] != self.shape[1]:
-                    raise ValueError(
-                        "[1] axis of dictionary values aren't identical in length"
-                    )
+                    raise ValueError("[1] axis of dictionary values aren't identical in length")
 
         if axis == 1:
             # check 0 axis is identical for all D
             for d in D:
                 if d.shape[0] != self.shape[0]:
-                    raise ValueError(
-                        "[0] axis of dictionary values aren't identical in length"
-                    )
+                    raise ValueError("[0] axis of dictionary values aren't identical in length")
 
         # get shared keys
         keys = set(sum((list(d.keys()) for d in D), []))
         keys = [k for k in keys if k in self]
 
         # iterate over D keys
-        newD = {
-            k: np.concatenate([self[k]] + [d[k] for d in D], axis=axis) for k in keys
-        }
+        newD = {k: np.concatenate([self[k]] + [d[k] for d in D], axis=axis) for k in keys}
 
         return DataContainer(newD)
 
@@ -256,15 +241,9 @@ class DataContainer:
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
-            if (
-                D[list(D.keys())[0]].shape[0]
-                != self.__getitem__(list(self.keys())[0]).shape[0]
-            ):
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
                 raise ValueError("[0] axis of dictionary values don't match")
-            if (
-                D[list(D.keys())[0]].shape[1]
-                != self.__getitem__(list(self.keys())[0]).shape[1]
-            ):
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
             # start new object
@@ -296,15 +275,9 @@ class DataContainer:
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
-            if (
-                D[list(D.keys())[0]].shape[0]
-                != self.__getitem__(list(self.keys())[0]).shape[0]
-            ):
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
                 raise ValueError("[0] axis of dictionary values don't match")
-            if (
-                D[list(D.keys())[0]].shape[1]
-                != self.__getitem__(list(self.keys())[0]).shape[1]
-            ):
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
             # start new object
@@ -336,15 +309,9 @@ class DataContainer:
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
-            if (
-                D[list(D.keys())[0]].shape[0]
-                != self.__getitem__(list(self.keys())[0]).shape[0]
-            ):
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
                 raise ValueError("[0] axis of dictionary values don't match")
-            if (
-                D[list(D.keys())[0]].shape[1]
-                != self.__getitem__(list(self.keys())[0]).shape[1]
-            ):
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
             # start new object
@@ -376,15 +343,9 @@ class DataContainer:
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
-            if (
-                D[list(D.keys())[0]].shape[0]
-                != self.__getitem__(list(self.keys())[0]).shape[0]
-            ):
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
                 raise ValueError("[0] axis of dictionary values don't match")
-            if (
-                D[list(D.keys())[0]].shape[1]
-                != self.__getitem__(list(self.keys())[0]).shape[1]
-            ):
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
             # start new object
@@ -393,15 +354,11 @@ class DataContainer:
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
-                    if not (
-                        np.iscomplexobj(self.__getitem__(k)) or np.iscomplexobj(D[k])
-                    ):
+                    if not (np.iscomplexobj(self.__getitem__(k)) or np.iscomplexobj(D[k])):
                         newD[k] = self.__getitem__(k) // D[k]
                     else:
                         div = self.__getitem__(k) / D[k]
-                        newD[k] = np.real(div).astype(int) + 1j * np.imag(div).astype(
-                            int
-                        )
+                        newD[k] = np.real(div).astype(int) + 1j * np.imag(div).astype(int)
 
             return DataContainer(newD)
 
@@ -428,15 +385,9 @@ class DataContainer:
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
-            if (
-                D[list(D.keys())[0]].shape[0]
-                != self.__getitem__(list(self.keys())[0]).shape[0]
-            ):
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
                 raise ValueError("[0] axis of dictionary values don't match")
-            if (
-                D[list(D.keys())[0]].shape[1]
-                != self.__getitem__(list(self.keys())[0]).shape[1]
-            ):
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
             # start new object
@@ -498,7 +449,9 @@ class DataContainer:
         try:
             bl = comply_bl(key)
             return bl in self.keys() or reverse_bl(bl) in self.keys()
-        except BaseException:  # if key is unparsable by comply_bl or reverse_bl, then it's not in self.keys()
+        except (
+            BaseException
+        ):  # if key is unparsable by comply_bl or reverse_bl, then it's not in self.keys()
             return False
 
     def __iter__(self):
@@ -721,9 +674,7 @@ class RedDataContainer(DataContainer):
         if isinstance(reds, RedundantGroups):
             self.reds = reds
         else:
-            self.reds = RedundantGroups(
-                red_list=reds, antpos=getattr(self, "antpos", None)
-            )
+            self.reds = RedundantGroups(red_list=reds, antpos=getattr(self, "antpos", None))
 
         self._reds_keyed_on_data = self.reds.keyed_on_bls(bls=self.bls())
 

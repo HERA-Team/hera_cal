@@ -51,9 +51,7 @@ HERA_TELESCOPE_LOCATION = np.array(
 )
 
 # Defines characters to look for to see if the polarization string is in east/north format. Nominally {'e', 'n'}.
-_KEY_CARDINAL_CHARS = set(
-    [c.lower() for c in _x_orientation_rep_dict("north").values()]
-)
+_KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict("north").values()])
 # Define characters that appear in all Jones polarization strings. Nominally {'j'}.
 _KEY_JONES_CHARS = set(
     [
@@ -383,9 +381,7 @@ def interp_peak(data, method="quinn", reject_edges=False):
 
     # get argmaxes along last axis
     if method not in ("quinn", "quadratic"):
-        raise ValueError(
-            "'{}' is not a recognized peak interpolation method.".format(method)
-        )
+        raise ValueError("'{}' is not a recognized peak interpolation method.".format(method))
 
     indices = np.argmax(dabs, axis=-1)
     peaks = data[range(N1), indices]
@@ -416,9 +412,7 @@ def interp_peak(data, method="quinn", reject_edges=False):
 
     elif method == "quadratic":
         denom = k0 - 2 * k1 + k2
-        bin_shifts = 0.5 * np.true_divide(
-            (k0 - k2), denom, where=~np.isclose(denom, 0.0)
-        )
+        bin_shifts = 0.5 * np.true_divide((k0 - k2), denom, where=~np.isclose(denom, 0.0))
         new_peaks = k1 - 0.25 * (k0 - k2) * bin_shifts
         return indices, bin_shifts, peaks, new_peaks
 
@@ -669,9 +663,7 @@ def LST2JD(
     # create interpolator for a given start date that puts the lst_branch_cut on start_jd
     jd_grid = start_jd + np.linspace(-1, 2, 31)  # include previous and next days
     while True:
-        lst_grid = JD2LST(
-            jd_grid, latitude=latitude, longitude=longitude, altitude=altitude
-        )
+        lst_grid = JD2LST(jd_grid, latitude=latitude, longitude=longitude, altitude=altitude)
         interpolator = interpolate.interp1d(
             np.unwrap(lst_grid - 2 * np.pi),
             jd_grid,
@@ -711,9 +703,7 @@ def LST2JD(
         return jd_array[0]
 
 
-def JD2RA(
-    JD, latitude=-30.721526120689507, longitude=21.428303826863015, epoch="current"
-):
+def JD2RA(JD, latitude=-30.721526120689507, longitude=21.428303826863015, epoch="current"):
     """
     Convert from Julian date to Equatorial Right Ascension at zenith
     during a specified epoch.
@@ -815,9 +805,7 @@ def get_sun_alt(jds, latitude=-30.721526120689507, longitude=21.428303826863015)
         return alts[0]
 
 
-def combine_calfits(
-    files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True
-):
+def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
     """
     multiply together multiple calfits gain solutions (overlapping in time and frequency)
 
@@ -1150,9 +1138,7 @@ def chisq(
             nObs_from_wgts = np.array(wgts > 0, dtype=int)
 
             # calculate chi^2
-            chisq_here = np.asarray(
-                np.abs(model_here - data[bl]) ** 2 * wgts, dtype=np.float64
-            )
+            chisq_here = np.asarray(np.abs(model_here - data[bl]) ** 2 * wgts, dtype=np.float64)
             if split_by_antpol:
                 if ap1 in chisq:
                     assert ap1 in nObs
@@ -1273,9 +1259,9 @@ def gp_interp1d(
 
     # setup kernel
     if kernel is None:
-        kernel = 1**2 * gp.kernels.RBF(
-            length_scale=length_scale
-        ) + gp.kernels.WhiteKernel(noise_level=nl)
+        kernel = 1**2 * gp.kernels.RBF(length_scale=length_scale) + gp.kernels.WhiteKernel(
+            noise_level=nl
+        )
 
     # initialize GP
     GP = gp.GaussianProcessRegressor(
@@ -1356,8 +1342,7 @@ def gp_interp1d(
                 GP.fit(X[select, :], _y[select, :][:, inds])
                 # insert predicted data at x_eval points into output vector
                 ypred[:, inds] = (
-                    GP.predict(x_eval).reshape(x_eval.shape[0], len(inds))
-                    * ymad[:, inds]
+                    GP.predict(x_eval).reshape(x_eval.shape[0], len(inds)) * ymad[:, inds]
                     + ymed[:, inds]
                 )
 
@@ -1411,15 +1396,11 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     avg_relative_diff = {}
     pols = set([ant[1] for ant in new_gains])
     for pol in pols:
-        diffs = {
-            ant: copy.deepcopy(relative_diff[ant]) for ant in new_gains if ant[1] == pol
-        }
+        diffs = {ant: copy.deepcopy(relative_diff[ant]) for ant in new_gains if ant[1] == pol}
         for ant in diffs:
             diffs[ant][flags[ant]] = np.nan
         avg_relative_diff[pol] = np.nanmean(list(diffs.values()), axis=0)
-        avg_relative_diff[pol][
-            ~np.isfinite(avg_relative_diff[pol])
-        ] = 0.0  # if completely flagged
+        avg_relative_diff[pol][~np.isfinite(avg_relative_diff[pol])] = 0.0  # if completely flagged
 
     return relative_diff, avg_relative_diff
 
@@ -1494,26 +1475,17 @@ def red_average(
             flags = copy.deepcopy(flags)
             nsamples = copy.deepcopy(nsamples)
         if flags is None:
-            flags = datacontainer.DataContainer(
-                {k: np.zeros_like(data[k], bool) for k in data}
-            )
+            flags = datacontainer.DataContainer({k: np.zeros_like(data[k], bool) for k in data})
         if nsamples is None:
-            nsamples = datacontainer.DataContainer(
-                {k: np.ones_like(data[k], float) for k in data}
-            )
+            nsamples = datacontainer.DataContainer({k: np.ones_like(data[k], float) for k in data})
 
     # get weights: if wgts are not fed, then use flags and nsamples
     if wgts is None:
         if fed_container:
-            wgts = datacontainer.DataContainer(
-                {k: nsamples[k] * ~flags[k] for k in data}
-            )
+            wgts = datacontainer.DataContainer({k: nsamples[k] * ~flags[k] for k in data})
         else:
             wgts = datacontainer.DataContainer(
-                {
-                    k: data.get_nsamples(k) * ~data.get_flags(k)
-                    for k in data.get_antpairpols()
-                }
+                {k: data.get_nsamples(k) * ~data.get_flags(k) for k in data.get_antpairpols()}
             )
 
     # deepcopy
@@ -1525,8 +1497,7 @@ def red_average(
         pols = sorted(data.pols())
     else:
         pols = [
-            polnum2str(pol, x_orientation=data.x_orientation)
-            for pol in data.polarization_array
+            polnum2str(pol, x_orientation=data.x_orientation) for pol in data.polarization_array
         ]
 
     # get redundant groups
@@ -1534,9 +1505,7 @@ def red_average(
         # if DataContainer, check for antpos
         if fed_container:
             if not hasattr(data, "antpos") or data.antpos is None:
-                raise ValueError(
-                    "DataContainer must have antpos dictionary to calculate reds"
-                )
+                raise ValueError("DataContainer must have antpos dictionary to calculate reds")
             antposd = data.antpos
         else:
             antpos, ants = data.get_ENU_antpos()
@@ -1548,9 +1517,7 @@ def red_average(
         antpairs = sorted(data.antpairs())
     else:
         antpairs = data.get_antpairs()
-    reds = [
-        [bl for bl in blg if bl in antpairs or bl[::-1] in antpairs] for blg in reds
-    ]
+    reds = [[bl for bl in blg if bl in antpairs or bl[::-1] in antpairs] for blg in reds]
     reds = [blg for blg in reds if len(blg) > 0]
 
     # iterate over redundant groups and polarizations
@@ -1569,9 +1536,7 @@ def red_average(
 
             else:
                 d = np.asarray([data.get_data(bl + (pol,)) for bl in blg])
-                f = np.asarray(
-                    [(~data.get_flags(bl + (pol,))).astype(float) for bl in blg]
-                )
+                f = np.asarray([(~data.get_flags(bl + (pol,))).astype(float) for bl in blg])
                 n = np.asarray([data.get_nsamples(bl + (pol,)) for bl in blg])
                 tint = []
                 for bl in blg:
@@ -1587,19 +1552,17 @@ def red_average(
             # set flagged data to 1.0+0.0j
             flagged_f = np.all(f == 0, axis=0)
             davg[flagged_f] = 1.0
-            fmax = np.max(
-                f, axis=2
-            )  # collapse along freq: marks any fully flagged integrations
+            fmax = np.max(f, axis=2)  # collapse along freq: marks any fully flagged integrations
             if (
                 tint.squeeze().ndim == 1
             ):  # tint.squeeze() can be one-dimensional if we have one time sample in our data.
-                iavg = np.sum(tint.squeeze()[:, None] * fmax, axis=0) / np.sum(
-                    fmax, axis=0
-                ).clip(1e-10, np.inf)
+                iavg = np.sum(tint.squeeze()[:, None] * fmax, axis=0) / np.sum(fmax, axis=0).clip(
+                    1e-10, np.inf
+                )
             else:
-                iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(
-                    fmax, axis=0
-                ).clip(1e-10, np.inf)
+                iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(
+                    1e-10, np.inf
+                )
 
             binary_wgts = (~np.isclose(w, 0)).astype(float)  # binary weights.
             navg = np.sum(n * binary_wgts, axis=0)
@@ -1629,9 +1592,7 @@ def red_average(
     # select out averaged bls
     bls = [blk + (pol,) for pol in pols for blk in red_bl_keys]
     if fed_container:
-        to_del = [
-            bl for bl in data.keys() if bl not in bls and reverse_bl(bl) not in bls
-        ]
+        to_del = [bl for bl in data.keys() if bl not in bls and reverse_bl(bl) not in bls]
         del data[to_del], flags[to_del], nsamples[to_del]
     else:
         data.select(bls=bls)
@@ -1739,18 +1700,14 @@ def match_files_to_lst_bins(
     lst_edges[1:][lst_edges[1:] == lst_edges[0]] += 2 * np.pi
 
     if np.any(np.diff(lst_edges) < 0):
-        raise ValueError(
-            "lst_edges must not extend beyond 2pi total radians from start to finish."
-        )
+        raise ValueError("lst_edges must not extend beyond 2pi total radians from start to finish.")
 
     lstmin, lstmax = lst_edges[0], lst_edges[-1]
 
     # The files in the list MUST NOT wrap around in LST, i.e.
     # there is 24 hours or less of time in the files.
     if metadata_list[-1].times[-1] < metadata_list[0].times[0]:
-        raise ValueError(
-            "After sorting, the last file in the list is is before the first."
-        )
+        raise ValueError("After sorting, the last file in the list is is before the first.")
 
     if metadata_list[-1].times[-1] > meta.times[0] + 1.0:
         raise ValueError(
@@ -1861,9 +1818,7 @@ def match_files_to_lst_bins(
 
     # Now, we have to actually go through the bins in lst_edges and assign files.
     lstbin_files = [[] for _ in range(len(lst_edges) - 1)]
-    _meta_list = (
-        metadata_list[first_file:] + metadata_list[:first_file]
-    )  # roll the files
+    _meta_list = metadata_list[first_file:] + metadata_list[:first_file]  # roll the files
 
     for i, fl in enumerate(_meta_list):
         thistime = get_first_time(fl.path)
@@ -2015,9 +1970,7 @@ def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=Fa
     # read in selected spw_ranges
     hd.read(
         inputfilename,
-        freq_chans=np.hstack(
-            [np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]
-        ),
+        freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]),
     )
     hd.write_uvh5(outputfilename, clobber=clobber)
 

@@ -192,9 +192,7 @@ class RedundantGroups:
                         )
 
     def __attrs_post_init__(self):
-        self._data_ants = {
-            ant for red in self._red_list for ap in red for ant in ap[:2]
-        }
+        self._data_ants = {ant for red in self._red_list for ap in red for ant in ap[:2]}
         self._data_bls = {bl for red in self._red_list for bl in red}
 
         self._red_key_to_bls_map = {}
@@ -372,9 +370,7 @@ class RedundantGroups:
         from both objects. This cannot be done if one of the two doesn't have antpos.
         """
         if not isinstance(other, RedundantGroups):
-            raise TypeError(
-                "can only add RedundantGroups object to RedundantGroups object"
-            )
+            raise TypeError("can only add RedundantGroups object to RedundantGroups object")
 
         if (self.antpos is None) != (other.antpos is None):
             raise ValueError(
@@ -389,9 +385,7 @@ class RedundantGroups:
             obj._antpos = new_antpos
             return obj.extend(other._red_list, inplace=False)
 
-    def append(
-        self, red: Sequence[BlLike], inplace: bool = True, pos: int | None = None
-    ) -> None:
+    def append(self, red: Sequence[BlLike], inplace: bool = True, pos: int | None = None) -> None:
         """In-place append a new redundant group to the list of redundant groups.
 
         This maintains the list-of-lists duck-typing of the redundant groups.
@@ -468,9 +462,7 @@ class RedundantGroups:
             self._red_list[key] = value
         elif key in self:
             ukey = self.get_ubl_key(key)
-            self._red_list = [
-                value if red[0] == ukey else red for red in self._red_list
-            ]
+            self._red_list = [value if red[0] == ukey else red for red in self._red_list]
             self._reset_ubl(ukey, value)
         else:
             # We're setting a new redundant group
@@ -542,9 +534,7 @@ class RedundantGroups:
             pol_mode=pol_mode,
         )
 
-    def keyed_on_bls(
-        self, bls: Sequence[BlLike], inplace: bool = False
-    ) -> RedundantGroups:
+    def keyed_on_bls(self, bls: Sequence[BlLike], inplace: bool = False) -> RedundantGroups:
         """Return a new RedundantGroups object keyed on the given baselines.
 
         The returned object will have the same redundant groups as this object, but

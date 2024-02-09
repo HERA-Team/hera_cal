@@ -6,3 +6,23 @@ build-backend = "setuptools.build_meta"
 write_to = "hera_cal/_version.py"
 parentdir_prefix_version = "hera_cal-"
 fallback_version  = "0.0.0"
+
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100   # increased so as not to trigger so many line chops
+
+[tool.ruff.lint]
+ignore =  [
+  "E402",  # module import not at top of file
+  "E501",  # line too long
+  "W291",  # trailing whitespace
+  "W293",  # blank line contains whitespace
+]
+
+extend-select = [
+    "E",  # flake8 errors
+    "W",  # flake8 warnings
+#    "F",  # flake8 pyflakes
+    "I",  # isort
+]

@@ -175,9 +175,7 @@ def lst_bin(
 
     # test for special case of lst grid restriction
     if lst_low is not None and lst_hi is not None and lst_hi < lst_low:
-        lst_grid = lst_grid[
-            (lst_grid > (lst_low - atol)) | (lst_grid < (lst_hi + atol))
-        ]
+        lst_grid = lst_grid[(lst_grid > (lst_low - atol)) | (lst_grid < (lst_hi + atol))]
     else:
         # restrict lst_grid based on lst_low and lst_high
         if lst_low is not None:
@@ -286,9 +284,7 @@ def lst_bin(
                             (flags[key][ind], np.zeros_like(d[key][k], dtype=bool))
                         )
                     else:
-                        flags[key][ind] = np.vstack(
-                            (flags[key][ind], flags_list[i][key][k])
-                        )
+                        flags[key][ind] = np.vstack((flags[key][ind], flags_list[i][key][k]))
                     if nsamples_list is None:
                         nsamples[key][ind] = np.vstack(
                             (nsamples[key][ind], np.ones_like(d[key][k], dtype=np.int8))
@@ -305,8 +301,7 @@ def lst_bin(
                 for pol in pols:
                     key = antpair + (pol,)
                     if key not in data and (
-                        (key[0] != key[1] and utils.reverse_bl(key) not in data)
-                        or key[0] == key[1]
+                        (key[0] != key[1] and utils.reverse_bl(key) not in data) or key[0] == key[1]
                     ):
                         # last part lets us spoof ne and en for autocorrs. If we dont include it, only en xor ne will be spoofed.
                         # using np.int8 and complex64 to allow numpy to promote the precision of these arrays only if needed
@@ -323,10 +318,7 @@ def lst_bin(
                             }
                         )
                         flags[key] = odict(
-                            {
-                                ind: np.empty((0, Nfreqs), dtype=bool)
-                                for ind in range(len(lst_grid))
-                            }
+                            {ind: np.empty((0, Nfreqs), dtype=bool) for ind in range(len(lst_grid))}
                         )
 
                     # Since different nights have different sets of baselines and different LST bins have different sets of nights,
@@ -364,13 +356,9 @@ def lst_bin(
                     # fill data with blank data
                     # if the index is not present.
                     if index not in data[key]:
-                        data[key][index] = np.array(
-                            [np.zeros(Nfreqs, dtype=np.complex64)]
-                        )
+                        data[key][index] = np.array([np.zeros(Nfreqs, dtype=np.complex64)])
                         flags[key][index] = np.array([np.ones(Nfreqs, dtype=bool)])
-                        nsamples[key][index] = np.array(
-                            [np.zeros(Nfreqs, dtype=np.int8)]
-                        )
+                        nsamples[key][index] = np.array([np.zeros(Nfreqs, dtype=np.int8)])
 
         # use all LST bins
         lst_bins = lst_grid
@@ -381,12 +369,8 @@ def lst_bin(
     # return un-averaged data if desired
     if return_no_avg:
         # return all binned data instead of just the bin average
-        data_bins = odict(
-            [(k1, [data[k1][k2] for k2 in data[k1].keys()]) for k1 in data.keys()]
-        )
-        flag_bins = odict(
-            [(k1, [flags[k1][k2] for k2 in flags[k1].keys()]) for k1 in flags.keys()]
-        )
+        data_bins = odict([(k1, [data[k1][k2] for k2 in data[k1].keys()]) for k1 in data.keys()])
+        flag_bins = odict([(k1, [flags[k1][k2] for k2 in flags[k1].keys()]) for k1 in flags.keys()])
 
         return lst_bins, data_bins, flag_bins
 
@@ -489,9 +473,7 @@ def lst_bin(
 
             # get other stats
             with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore", message="Degrees of freedom <= 0 for slice."
-                )
+                warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
                 real_std.append(np.nanstd(d.real, axis=0))
                 imag_std.append(np.nanstd(d.imag, axis=0))
             bin_count.append(np.nansum(~np.isnan(d) * n, axis=0))
@@ -524,9 +506,7 @@ def lst_bin(
     return lst_bins, data_avg, flags_min, data_std, data_count
 
 
-def lst_align(
-    data, data_lsts, flags=None, dlst=None, verbose=True, atol=1e-10, **interp_kwargs
-):
+def lst_align(data, data_lsts, flags=None, dlst=None, verbose=True, atol=1e-10, **interp_kwargs):
     """
     Interpolate complex visibilities to align time integrations with an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -579,8 +559,7 @@ def lst_align(
     begin_lst = data_lsts[0]
     lst_end = data_lsts[-1]
     lst_grid = lst_grid[
-        (lst_grid > begin_lst - dlst / 2 - atol)
-        & (lst_grid < lst_end + dlst / 2 + atol)
+        (lst_grid > begin_lst - dlst / 2 - atol) & (lst_grid < lst_end + dlst / 2 + atol)
     ]
 
     # interpolate data
@@ -633,12 +612,8 @@ def lst_bin_arg_parser():
         default="{type}.{time:7.5f}.uvh5",
         help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.",
     )
-    a.add_argument(
-        "--outdir", default=None, type=str, help="directory for writing output"
-    )
-    a.add_argument(
-        "--overwrite", default=False, action="store_true", help="overwrite output files"
-    )
+    a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
+    a.add_argument("--overwrite", default=False, action="store_true", help="overwrite output files")
     a.add_argument(
         "--lst_start",
         type=float,
@@ -651,9 +626,7 @@ def lst_bin_arg_parser():
         action="store_true",
         help="perform robust sigma clipping before binning",
     )
-    a.add_argument(
-        "--sigma", type=float, default=4.0, help="sigma threshold for sigma clipping"
-    )
+    a.add_argument("--sigma", type=float, default=4.0, help="sigma threshold for sigma clipping")
     a.add_argument(
         "--min_N",
         type=int,
@@ -672,27 +645,21 @@ def lst_bin_arg_parser():
         action="store_true",
         help="rephase data to center of LST bin before binning",
     )
-    a.add_argument(
-        "--history", default=" ", type=str, help="history to insert into output files"
-    )
+    a.add_argument("--history", default=" ", type=str, help="history to insert into output files")
     a.add_argument(
         "--atol",
         default=1e-6,
         type=float,
         help="absolute tolerance when comparing LST bin floats",
     )
-    a.add_argument(
-        "--silence", default=False, action="store_true", help="stop feedback to stdout"
-    )
+    a.add_argument("--silence", default=False, action="store_true", help="stop feedback to stdout")
     a.add_argument(
         "--output_file_select",
         default=None,
         nargs="*",
         help="list of output file integers ot run on. Default is all output files.",
     )
-    a.add_argument(
-        "--vis_units", default="Jy", type=str, help="visibility units of output files."
-    )
+    a.add_argument("--vis_units", default="Jy", type=str, help="visibility units of output files.")
     a.add_argument(
         "--ignore_flags",
         default=False,
@@ -935,9 +902,7 @@ def lst_bin_files(
     last_day_index = np.argmax(
         [np.min([time for tarr in tarrs for time in tarr]) for tarrs in time_arrs]
     )
-    zeroth_file_on_last_day_index = np.argmin(
-        [np.min(tarr) for tarr in time_arrs[last_day_index]]
-    )
+    zeroth_file_on_last_day_index = np.argmin([np.min(tarr) for tarr in time_arrs[last_day_index]])
     hd = io.HERAData(data_files[last_day_index][zeroth_file_on_last_day_index])
     x_orientation = hd.x_orientation
 
@@ -982,17 +947,14 @@ def lst_bin_files(
             Nbls_to_load += 1
 
     blgroups = [
-        bl_nightly_dicts[i * Nbls_to_load : (i + 1) * Nbls_to_load]
-        for i in range(Nblgroups)
+        bl_nightly_dicts[i * Nbls_to_load : (i + 1) * Nbls_to_load] for i in range(Nblgroups)
     ]
     blgroups = [blg for blg in blgroups if len(blg) > 0]
 
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         utils.echo(
-            "LST file {} / {}: {}".format(
-                i + 1, len(file_lsts), datetime.datetime.now()
-            ),
+            "LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()),
             type=1,
             verbose=verbose,
         )
@@ -1057,17 +1019,13 @@ def lst_bin_files(
                             # only load group if present in the current night.
                             if j in bl_nightly_dict:
                                 # key to earliest night with this redundant group.
-                                key_bl = bl_nightly_dict[
-                                    np.min(list(bl_nightly_dict.keys()))
-                                ][0]
+                                key_bl = bl_nightly_dict[np.min(list(bl_nightly_dict.keys()))][0]
                                 key_baselines.append(key_bl)
                                 reds.append(bl_nightly_dict[j])
                                 bls_to_load.extend(bl_nightly_dict[j])
 
                         utils.echo("Reading file...")
-                        data, flags, nsamps = hd.read(
-                            bls=bls_to_load, times=tarr[tinds]
-                        )
+                        data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
                         utils.echo("... done.")
                         # if we want to throw away data associated with flagged antennas, throw it away.
                         if ex_ant_yaml_files is not None:
@@ -1094,10 +1052,7 @@ def lst_bin_files(
                         )
                         # check that the current night is not present in any of the baselines in the current blgroup.
                         if np.all(
-                            [
-                                j not in list(bl_nightly_dict.keys())
-                                for bl_nightly_dict in blgroup
-                            ]
+                            [j not in list(bl_nightly_dict.keys()) for bl_nightly_dict in blgroup]
                         ):
                             utils.echo(
                                 f"The current night {j} is not present in any of the baseline dicts in the current blgroup.",
@@ -1107,9 +1062,7 @@ def lst_bin_files(
 
                     # load calibration
                     if input_cals is not None and input_cals[j][k] is not None:
-                        utils.echo(
-                            f"Opening and applying {input_cals[j][k]}", verbose=verbose
-                        )
+                        utils.echo(f"Opening and applying {input_cals[j][k]}", verbose=verbose)
                         uvc = io.to_HERACal(input_cals[j][k])
                         gains, cal_flags, quals, totquals = uvc.read()
                         # down select times in necessary
@@ -1246,14 +1199,10 @@ def lst_bin_files(
 
         # join DataContainers across blgroups
         bin_data = DataContainer(
-            dict(
-                functools.reduce(operator.add, [list(dc.items()) for dc in data_conts])
-            )
+            dict(functools.reduce(operator.add, [list(dc.items()) for dc in data_conts]))
         )
         flag_data = DataContainer(
-            dict(
-                functools.reduce(operator.add, [list(dc.items()) for dc in flag_conts])
-            )
+            dict(functools.reduce(operator.add, [list(dc.items()) for dc in flag_conts]))
         )
         std_data = DataContainer(
             dict(functools.reduce(operator.add, [list(dc.items()) for dc in std_conts]))
@@ -1264,9 +1213,7 @@ def lst_bin_files(
 
         # update history
         file_history = (
-            history
-            + " Input files: "
-            + "-".join([os.path.basename(ff) for ff in file_list])
+            history + " Input files: " + "-".join([os.path.basename(ff) for ff in file_list])
         )
         kwargs["history"] = file_history + utils.history_string()
 
@@ -1356,9 +1303,7 @@ def make_lst_grid(
     lst_grid
         Uniform LST grid marking the center of each LST bin.
     """
-    assert (
-        dlst >= 6.283e-6
-    ), "dlst must be greater than 6.283e-6 radians, or .0864 seconds."
+    assert dlst >= 6.283e-6, "dlst must be greater than 6.283e-6 radians, or .0864 seconds."
     assert dlst < 2 * np.pi, "dlst must be less than 2pi radians, or 24 hours."
 
     # check 2pi is equally divisible by dlst
@@ -1535,13 +1480,9 @@ def gen_bl_nightly_dicts(
                     # if it did, add it to the appropriate bl_nightly_dict.
                     for i in bl_nightly_dict:
                         if (
-                            np.linalg.norm(
-                                blvecs[grp[0]] - blvecs[bl_nightly_dict[i][0]]
-                            )
+                            np.linalg.norm(blvecs[grp[0]] - blvecs[bl_nightly_dict[i][0]])
                             <= bl_error_tol
-                            or np.linalg.norm(
-                                blvecs[grp[0]] + blvecs[bl_nightly_dict[i][0]]
-                            )
+                            or np.linalg.norm(blvecs[grp[0]] + blvecs[bl_nightly_dict[i][0]])
                             <= bl_error_tol
                         ):
                             # I was having a lot of trouble getting a unittest for two separate cases here because
@@ -1549,9 +1490,7 @@ def gen_bl_nightly_dicts(
                             # two cases is more readable then one so I'd prefer to have two.
                             sign = -1
                             if (
-                                np.linalg.norm(
-                                    blvecs[grp[0]] - blvecs[bl_nightly_dict[i][0]]
-                                )
+                                np.linalg.norm(blvecs[grp[0]] - blvecs[bl_nightly_dict[i][0]])
                                 <= bl_error_tol
                             ):
                                 sign = 1
@@ -1569,18 +1508,13 @@ def gen_bl_nightly_dicts(
                     # if it did, add it to its corresponding baseline dictionary.
                     for bl_nightly_dict in bl_nightly_dicts:
                         for i in bl_nightly_dict:
-                            if (
-                                bl in bl_nightly_dict[i]
-                                or bl[::-1] in bl_nightly_dict[i]
-                            ):
+                            if bl in bl_nightly_dict[i] or bl[::-1] in bl_nightly_dict[i]:
                                 # I was having a lot of trouble getting a unittest for two separate cases here because
                                 # I'm not sure how to conveniently create a UVData object with baselines conjugated.
                                 # two cases is more readable then one so I'd prefer to have two.
                                 sign = -1
                                 if (
-                                    np.linalg.norm(
-                                        blvecs[grp[0]] - blvecs[bl_nightly_dict[i][0]]
-                                    )
+                                    np.linalg.norm(blvecs[grp[0]] - blvecs[bl_nightly_dict[i][0]])
                                     <= bl_error_tol
                                 ):
                                     sign = 1

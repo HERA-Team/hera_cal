@@ -245,9 +245,7 @@ def threshold_flags(
     # Flag entire LST bins if there are too many flags over time
     flag_frac = np.sum(flags, axis=0) / flags.shape[0]
     nflags = np.sum(flags)
-    logger.info(
-        f"Percent of data flagged before thresholding: {100*nflags/flags.size:.2f}%"
-    )
+    logger.info(f"Percent of data flagged before thresholding: {100*nflags/flags.size:.2f}%")
     flags |= flag_frac > flag_thresh
     logger.info(
         f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to flag_frac > {flag_thresh}"
@@ -341,9 +339,7 @@ def sigma_clip(
     elif scale.ndim == array.ndim - 1:
         scale = np.expand_dims(scale, axis=median_axis)
 
-    if (
-        scale.shape != array.shape and scale.shape[median_axis] != 1
-    ) or scale.ndim != array.ndim:
+    if (scale.shape != array.shape and scale.shape[median_axis] != 1) or scale.ndim != array.ndim:
         raise ValueError(
             "scale must have same shape as array or array with median_axis removed."
             f"Got {scale.shape}, needed {array.shape}"
@@ -376,9 +372,7 @@ def sigma_clip(
             thisf = getattr(np.ma, clip_type)(subz, axis=threshold_axis) > threshold
             subflags[:] = np.expand_dims(thisf, axis=threshold_axis)
         else:
-            raise ValueError(
-                f"clip_type must be 'direct', 'mean' or 'median', got {clip_type}"
-            )
+            raise ValueError(f"clip_type must be 'direct', 'mean' or 'median', got {clip_type}")
 
     return clip_flags
 
@@ -450,9 +444,7 @@ def lst_average(
         # the flags or the 'non-inpainted flags', as obtained by `threshold_flags`.
         # However, if this hasn't been called, and we just have an array, apply flags
         # appropriately here.
-        data, flags = get_masked_data(
-            data, nsamples, flags, inpainted_mode=inpainted_mode
-        )
+        data, flags = get_masked_data(data, nsamples, flags, inpainted_mode=inpainted_mode)
 
     # Now do sigma-clipping.
     if sigma_clip_thresh is not None:
@@ -536,9 +528,7 @@ def lst_average(
     logger.info("Calculating std")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
-        std = np.square(data.real - meandata.real) + 1j * np.square(
-            data.imag - meandata.imag
-        )
+        std = np.square(data.real - meandata.real) + 1j * np.square(data.imag - meandata.imag)
         std = np.sum(std * nsamples, axis=0)
         std[normalizable] /= norm[normalizable]
         std = np.sqrt(std.real) + 1j * np.sqrt(std.imag)

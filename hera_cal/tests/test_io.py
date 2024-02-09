@@ -36,12 +36,8 @@ class Test_HERACal(object):
         self.fname_yy = os.path.join(
             DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits"
         )
-        self.fname_2pol = os.path.join(
-            DATA_PATH, "test_input/zen.2457698.40355.HH.omni.calfits"
-        )
-        self.fname = os.path.join(
-            DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits"
-        )
+        self.fname_2pol = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.omni.calfits")
+        self.fname = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
         self.fname_t0 = os.path.join(
             DATA_PATH, "test_input/zen.2458101.44615.xx.HH.uv.abs.calfits_54x_only"
         )
@@ -188,9 +184,7 @@ class Test_HERACal(object):
             np.testing.assert_array_almost_equal(g[ant].flatten(), g2[ant][is_updated])
             np.testing.assert_array_equal(f[ant].flatten(), f2[ant][is_updated])
             np.testing.assert_array_equal(q[ant].flatten(), q2[ant][is_updated])
-            np.testing.assert_array_almost_equal(
-                g0[ant][~is_updated], g2[ant][~is_updated]
-            )
+            np.testing.assert_array_almost_equal(g0[ant][~is_updated], g2[ant][~is_updated])
             np.testing.assert_array_equal(f0[ant][~is_updated], f2[ant][~is_updated])
             np.testing.assert_array_equal(q0[ant][~is_updated], q2[ant][~is_updated])
         for pol in hc.pols:
@@ -219,30 +213,20 @@ class Test_HERACal(object):
             np.testing.assert_array_equal(np.logical_not(flags_in[key]), flags_out[key])
             np.testing.assert_array_equal(quals_in[key] * (2.0), quals_out[key])
         for key in total_qual.keys():
-            np.testing.assert_array_equal(
-                total_qual_in[key] * (2.0), total_qual_out[key]
-            )
+            np.testing.assert_array_equal(total_qual_in[key] * (2.0), total_qual_out[key])
 
         os.remove("test.calfits")
 
 
-@pytest.mark.filterwarnings(
-    "ignore:It seems that the latitude and longitude are in radians"
-)
+@pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in double_scalars")
 class Test_HERAData(object):
     def setup_method(self):
-        self.uvh5_1 = os.path.join(
-            DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5"
-        )
-        self.uvh5_2 = os.path.join(
-            DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5"
-        )
-        self.uvh5_bda = os.path.join(
-            DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.uvh5"
-        )
+        self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5")
+        self.uvh5_2 = os.path.join(DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5")
+        self.uvh5_bda = os.path.join(DATA_PATH, "zen.2459122.30030.sum.bda.downsampled.uvh5")
         self.miriad_1 = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.miriad_2 = os.path.join(DATA_PATH, "zen.2458043.13298.xx.HH.uvORA")
         self.uvfits = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvA.vis.uvfits")
@@ -376,9 +360,7 @@ class Test_HERAData(object):
         np.testing.assert_array_equal(
             metas["times"], np.unique(list(metas["times_by_bl"].values()))
         )
-        np.testing.assert_array_equal(
-            metas["lsts"], np.unique(list(metas["lsts_by_bl"].values()))
-        )
+        np.testing.assert_array_equal(metas["lsts"], np.unique(list(metas["lsts_by_bl"].values())))
 
     def test_determine_blt_slicing(self):
         hd = HERAData(self.uvh5_1)
@@ -386,9 +368,7 @@ class Test_HERAData(object):
             assert isinstance(s, slice)
         for bl, s in hd._blt_slices.items():
             np.testing.assert_array_equal(
-                np.arange(180)[
-                    np.logical_and(hd.ant_1_array == bl[0], hd.ant_2_array == bl[1])
-                ],
+                np.arange(180)[np.logical_and(hd.ant_1_array == bl[0], hd.ant_2_array == bl[1])],
                 np.arange(180)[s],
             )
         # test check for non-regular spacing
@@ -407,9 +387,7 @@ class Test_HERAData(object):
         hd = HERAData(self.uvh5_1)
         hd.read()
         for bl in hd.bls:
-            np.testing.assert_array_equal(
-                hd._get_slice(hd.data_array, bl), hd.get_data(bl)
-            )
+            np.testing.assert_array_equal(hd._get_slice(hd.data_array, bl), hd.get_data(bl))
         np.testing.assert_array_equal(
             hd._get_slice(hd.data_array, (54, 53, "EE")), hd.get_data((54, 53, "EE"))
         )
@@ -447,9 +425,7 @@ class Test_HERAData(object):
 
         new_vis = np.random.randn(60, 1024) + np.random.randn(60, 1024) * 1.0j
         hd._set_slice(hd.data_array, (54, 53, "xx"), new_vis)
-        np.testing.assert_array_almost_equal(
-            np.conj(new_vis), hd.get_data((53, 54, "xx"))
-        )
+        np.testing.assert_array_almost_equal(np.conj(new_vis), hd.get_data((53, 54, "xx")))
 
         new_vis = np.random.randn(60, 1024) + np.random.randn(60, 1024) * 1.0j
         hd._set_slice(hd.data_array, (53, 54), {"xx": new_vis})
@@ -511,16 +487,12 @@ class Test_HERAData(object):
     def test_read(self):
         # uvh5
         hd = HERAData(self.uvh5_1)
-        d, f, n = hd.read(
-            bls=(53, 54, "xx"), frequencies=hd.freqs[0:100], times=hd.times[0:10]
-        )
+        d, f, n = hd.read(bls=(53, 54, "xx"), frequencies=hd.freqs[0:100], times=hd.times[0:10])
         assert hd.last_read_kwargs["bls"] == (53, 54, parse_polstr("XX"))
         assert hd.last_read_kwargs["polarizations"] is None
         for dc in [d, f, n]:
             assert len(dc) == 1
-            assert list(dc.keys()) == [
-                (53, 54, parse_polstr("XX", x_orientation=hd.x_orientation))
-            ]
+            assert list(dc.keys()) == [(53, 54, parse_polstr("XX", x_orientation=hd.x_orientation))]
             assert dc[53, 54, "ee"].shape == (10, 100)
         with pytest.raises(ValueError):
             d, f, n = hd.read(polarizations=["xy"])
@@ -539,9 +511,7 @@ class Test_HERAData(object):
 
         # test read with extra UVData kwargs
         hd = HERAData(self.uvh5_1)
-        d, f, n = hd.read(
-            bls=hd.bls[:2], frequencies=hd.freqs[:100], multidim_index=True
-        )
+        d, f, n = hd.read(bls=hd.bls[:2], frequencies=hd.freqs[:100], multidim_index=True)
         k = list(d.keys())[0]
         assert len(d) == 2
         assert d[k].shape == (hd.Ntimes, 100)
@@ -573,9 +543,7 @@ class Test_HERAData(object):
         assert hd.last_read_kwargs["polarizations"] == ["XX"]
         for dc in [d, f, n]:
             assert len(dc) == 1
-            assert list(dc.keys()) == [
-                (52, 53, parse_polstr("XX", x_orientation=hd.x_orientation))
-            ]
+            assert list(dc.keys()) == [(52, 53, parse_polstr("XX", x_orientation=hd.x_orientation))]
             assert dc[52, 53, "ee"].shape == (10, 30)
         with pytest.raises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
@@ -584,9 +552,7 @@ class Test_HERAData(object):
         hd = HERAData(self.uvfits, filetype="uvfits")
         hd.read(read_data=False)
         ant_pairs = hd.get_antpairs()
-        d, f, n = hd.read(
-            bls=(ant_pairs[0][0], ant_pairs[0][1], "xx"), freq_chans=list(range(10))
-        )
+        d, f, n = hd.read(bls=(ant_pairs[0][0], ant_pairs[0][1], "xx"), freq_chans=list(range(10)))
         assert hd.last_read_kwargs["freq_chans"] == list(range(10))
         for dc in [d, f, n]:
             assert len(dc) == 1
@@ -671,17 +637,13 @@ class Test_HERAData(object):
             d[bl] *= 2.0 + 1.0j
             f[bl] = np.logical_not(f[bl])
             n[bl] += 1
-        hd.update(
-            data=d, flags=f, nsamples=n, tSlice=slice(3, 10), fSlice=slice(500, 600)
-        )
+        hd.update(data=d, flags=f, nsamples=n, tSlice=slice(3, 10), fSlice=slice(500, 600))
         d2, f2, n2 = hd.build_datacontainers()
         for bl in hd.bls:
             np.testing.assert_array_almost_equal(d[bl].flatten(), d2[bl][is_updated])
             np.testing.assert_array_equal(f[bl].flatten(), f2[bl][is_updated])
             np.testing.assert_array_equal(n[bl].flatten(), n2[bl][is_updated])
-            np.testing.assert_array_almost_equal(
-                d0[bl][~is_updated], d2[bl][~is_updated]
-            )
+            np.testing.assert_array_almost_equal(d0[bl][~is_updated], d2[bl][~is_updated])
             np.testing.assert_array_equal(f0[bl][~is_updated], f2[bl][~is_updated])
             np.testing.assert_array_equal(n0[bl][~is_updated], n2[bl][~is_updated])
 
@@ -703,9 +665,7 @@ class Test_HERAData(object):
                 assert np.all(getattr(hd, meta) == getattr(hd._writers["out.h5"], meta))
             except BaseException:
                 for k in getattr(hd, meta).keys():
-                    assert np.all(
-                        getattr(hd, meta)[k] == getattr(hd._writers["out.h5"], meta)[k]
-                    )
+                    assert np.all(getattr(hd, meta)[k] == getattr(hd._writers["out.h5"], meta)[k])
 
         d, f, n = hd.read(bls=hd.bls[1])
         assert hd.last_read_kwargs["bls"] == (
@@ -771,9 +731,7 @@ class Test_HERAData(object):
 
         hd = HERAData(self.miriad_1, filetype="miriad")
         d, f, n = next(hd.iterate_over_bls(bls=[(52, 53, "xx")]))
-        assert list(d.keys()) == [
-            (52, 53, parse_polstr("XX", x_orientation=hd.x_orientation))
-        ]
+        assert list(d.keys()) == [(52, 53, parse_polstr("XX", x_orientation=hd.x_orientation))]
         with pytest.raises(NotImplementedError):
             next(hd.iterate_over_bls())
 
@@ -793,9 +751,7 @@ class Test_HERAData(object):
 
         with pytest.raises(NotImplementedError):
             hd = HERAData(self.miriad_1, filetype="miriad")
-            d, f, n = next(
-                hd.iterate_over_bls(bls=[(52, 53, "xx")], chunk_by_redundant_group=True)
-            )
+            d, f, n = next(hd.iterate_over_bls(bls=[(52, 53, "xx")], chunk_by_redundant_group=True))
 
     def test_iterate_over_freqs(self):
         hd = HERAData(self.uvh5_1)
@@ -900,18 +856,12 @@ class Test_HERAData(object):
 
 class Test_ReadHeraHdf5(object):
     def setup_method(self):
-        self.uvh5_1 = os.path.join(
-            DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5"
-        )
-        self.uvh5_2 = os.path.join(
-            DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5"
-        )
+        self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5")
+        self.uvh5_2 = os.path.join(DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5")
         self.uvh5_pol = os.path.join(
             DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5_poltranspose"
         )
-        self.uvh5_blt = os.path.join(
-            DATA_PATH, "zen.2459114.60020.sum.downsample_transpose.uvh5"
-        )
+        self.uvh5_blt = os.path.join(DATA_PATH, "zen.2459114.60020.sum.downsample_transpose.uvh5")
 
     def test_basic_read(self):
         for replace in [".uvh5", ".new_shape.uvh5"]:
@@ -1061,9 +1011,7 @@ class Test_HERADataFastReader:
         self.uvh5_2 = os.path.join(
             DATA_PATH, "test_input", "zen.2458042.61034.HH.uvRXLS.uvh5_downselected"
         )
-        self.uvh5_h4c = os.path.join(
-            DATA_PATH, "zen.2459122.30030.sum.single_time.uvh5"
-        )
+        self.uvh5_h4c = os.path.join(DATA_PATH, "zen.2459122.30030.sum.single_time.uvh5")
 
     def test_init(self):
         hd = io.HERADataFastReader(self.uvh5_1)
@@ -1181,12 +1129,8 @@ class Test_ReadHeraCalfits(object):
         self.fname_yy = os.path.join(
             DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits"
         )
-        self.fname_2pol = os.path.join(
-            DATA_PATH, "test_input/zen.2457698.40355.HH.omni.calfits"
-        )
-        self.fname = os.path.join(
-            DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits"
-        )
+        self.fname_2pol = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.omni.calfits")
+        self.fname = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
         self.fname_t0 = os.path.join(
             DATA_PATH, "test_input/zen.2458101.44615.xx.HH.uv.abs.calfits_54x_only"
         )
@@ -1288,9 +1232,7 @@ class Test_ReadHeraCalfits(object):
     def test_read_select(self):
         # test read multiple files and select ants
         ants = [(54, "Jee")]
-        rv = io.read_hera_calfits(
-            [self.fname_t0, self.fname_t1, self.fname_t2], ants=ants
-        )
+        rv = io.read_hera_calfits([self.fname_t0, self.fname_t1, self.fname_t2], ants=ants)
         assert len(rv["gains"]) == 1
         assert ants[0] in rv["gains"]
 
@@ -1321,9 +1263,7 @@ class Test_Visibility_IO_Legacy(object):
         self.uvd.read_miriad(self.data_file)
         self.uvd.use_future_array_shapes()
         self.freq_array = np.unique(self.uvd.freq_array)
-        self.antpos, self.ants = self.uvd.get_ENU_antpos(
-            center=True, pick_data_ants=True
-        )
+        self.antpos, self.ants = self.uvd.get_ENU_antpos(center=True, pick_data_ants=True)
         self.antpos = odict(list(zip(self.ants, self.antpos)))
         self.time_array = np.unique(self.uvd.time_array)
 
@@ -1374,9 +1314,7 @@ class Test_Visibility_IO_Legacy(object):
 
         # test w/ meta pick_data_ants
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        d, f, ap, a, f, t, l, p = io.load_vis(
-            fname, return_meta=True, pick_data_ants=False
-        )
+        d, f, ap, a, f, t, l, p = io.load_vis(fname, return_meta=True, pick_data_ants=False)
         assert len(ap[24]) == 3
         assert len(a) == 47
         assert len(f) == len(self.freq_array)
@@ -1479,12 +1417,8 @@ class Test_Visibility_IO_Legacy(object):
         assert os.path.exists("ex.uvh5")
         assert uvd.data_array.shape == (1680, 64, 1)
         assert hd.data_array.shape == (1680, 64, 1)
-        assert np.allclose(
-            data[(24, 25, "ee")][30, 32], uvd.get_data(24, 25, "ee")[30, 32]
-        )
-        assert np.allclose(
-            data[(24, 25, "ee")][30, 32], hd.get_data(24, 25, "ee")[30, 32]
-        )
+        assert np.allclose(data[(24, 25, "ee")][30, 32], uvd.get_data(24, 25, "ee")[30, 32])
+        assert np.allclose(data[(24, 25, "ee")][30, 32], hd.get_data(24, 25, "ee")[30, 32])
         assert hd.x_orientation.lower() == "east"
         for ant in ap:
             np.testing.assert_array_almost_equal(hd.antpos[ant], ap[ant])
@@ -1508,12 +1442,8 @@ class Test_Visibility_IO_Legacy(object):
         uvd.use_future_array_shapes()
         assert uvd.nsample_array.shape == (1680, 64, 1)
         assert uvd.flag_array.shape == (1680, 64, 1)
-        assert np.allclose(
-            nsample[(24, 25, "ee")][30, 32], uvd.get_nsamples(24, 25, "ee")[30, 32]
-        )
-        assert np.allclose(
-            flgs[(24, 25, "ee")][30, 32], uvd.get_flags(24, 25, "ee")[30, 32]
-        )
+        assert np.allclose(nsample[(24, 25, "ee")][30, 32], uvd.get_nsamples(24, 25, "ee")[30, 32])
+        assert np.allclose(flgs[(24, 25, "ee")][30, 32], uvd.get_flags(24, 25, "ee")[30, 32])
         assert uvd.x_orientation.lower() == "east"
 
         # test exceptions
@@ -1535,15 +1465,11 @@ class Test_Visibility_IO_Legacy(object):
     def test_update_vis(self):
         # load in cal
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        outname = os.path.join(
-            DATA_PATH, "test_output/zen.2458043.12552.xx.HH.modified.uvORA"
-        )
+        outname = os.path.join(DATA_PATH, "test_output/zen.2458043.12552.xx.HH.modified.uvORA")
         uvd = UVData()
         uvd.read_miriad(fname)
         uvd.use_future_array_shapes()
-        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(
-            fname, return_meta=True
-        )
+        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
 
         # make some modifications
         new_data = {key: (2.0) * val for key, val in data.items()}
@@ -1559,17 +1485,13 @@ class Test_Visibility_IO_Legacy(object):
         )
 
         # test modifications
-        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(
-            outname, return_meta=True
-        )
+        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(outname, return_meta=True)
         for k in data.keys():
             assert np.all(new_data[k] == data[k])
             assert np.all(new_flags[k] == flags[k])
         uvd2 = UVData()
         uvd2.read_miriad(outname)
-        assert pyuvdata.utils._check_histories(
-            uvd2.history, uvd.history + "hello world"
-        )
+        assert pyuvdata.utils._check_histories(uvd2.history, uvd.history + "hello world")
         assert uvd2.telescope_name == "PAPER"
         shutil.rmtree(outname)
 
@@ -1622,17 +1544,13 @@ class Test_Visibility_IO_Legacy(object):
             clobber=True,
             telescope_name="PAPER",
         )
-        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(
-            outname, return_meta=True
-        )
+        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(outname, return_meta=True)
         for k in data.keys():
             assert np.all(new_data[k] == data[k])
             assert np.all(new_flags[k] == flags[k])
         uvd2 = UVData()
         uvd2.read_miriad(outname)
-        assert pyuvdata.utils._check_histories(
-            uvd2.history, uvd.history + "hello world"
-        )
+        assert pyuvdata.utils._check_histories(uvd2.history, uvd.history + "hello world")
         assert uvd2.telescope_name == "PAPER"
         shutil.rmtree(outname)
 
@@ -1642,9 +1560,7 @@ class Test_Calibration_IO_Legacy(object):
         with pytest.raises(TypeError):
             io.load_cal(1.0)
 
-        fname = os.path.join(
-            DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits"
-        )
+        fname = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
         gains, flags = io.load_cal(fname)
         assert len(gains.keys()) == 18
         assert len(flags.keys()) == 18
@@ -1659,12 +1575,8 @@ class Test_Calibration_IO_Legacy(object):
         with pytest.raises(TypeError):
             io.load_cal([fname, cal])
 
-        fname_xx = os.path.join(
-            DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits"
-        )
-        fname_yy = os.path.join(
-            DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits"
-        )
+        fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
+        fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
         gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal(
             [fname_xx, fname_yy], return_meta=True
         )
@@ -1750,9 +1662,7 @@ class Test_Calibration_IO_Legacy(object):
             os.remove("ex.calfits")
         # test single integration write
         gains2 = odict([(k, gains[k][:1]) for k in gains.keys()])
-        uvc = io.write_cal(
-            "ex.calfits", gains2, freqs, times[:1], return_uvc=True, outdir="./"
-        )
+        uvc = io.write_cal("ex.calfits", gains2, freqs, times[:1], return_uvc=True, outdir="./")
         assert np.allclose(uvc.integration_time, 0.0)
         assert uvc.Ntimes == 1
         assert os.path.exists("ex.calfits")
@@ -1761,9 +1671,7 @@ class Test_Calibration_IO_Legacy(object):
         # test multiple pol
         for k in list(gains.keys()):
             gains[(k[0], "Jyy")] = gains[k].conj()
-        uvc = io.write_cal(
-            "ex.calfits", gains, freqs, times, return_uvc=True, outdir="./"
-        )
+        uvc = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, outdir="./")
         assert uvc.gain_array.shape == (10, 1, 64, 100, 2)
         np.testing.assert_array_almost_equal(
             uvc.gain_array[0, 0, :, :, 0], uvc.gain_array[0, 0, :, :, 1].conj()
@@ -1810,9 +1718,7 @@ class Test_Calibration_IO_Legacy(object):
 
     def test_update_cal(self):
         # load in cal
-        fname = os.path.join(
-            DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits"
-        )
+        fname = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
         outname = os.path.join(
             DATA_PATH, "test_output/zen.2457698.40355.xx.HH.uvc.modified.calfits."
         )
@@ -1848,9 +1754,7 @@ class Test_Calibration_IO_Legacy(object):
             assert np.all(new_quals[k] == quals[k])
         cal2 = UVCal()
         cal2.read_calfits(outname)
-        assert pyuvdata.utils._check_histories(
-            cal2.history, cal.history + "hello world"
-        )
+        assert pyuvdata.utils._check_histories(cal2.history, cal.history + "hello world")
         assert cal2.telescope_name == "MWA"
         os.remove(outname)
 
@@ -1874,9 +1778,7 @@ class Test_Calibration_IO_Legacy(object):
             assert np.all(new_quals[k] == quals[k])
         cal2 = UVCal()
         cal2.read_calfits(outname)
-        assert pyuvdata.utils._check_histories(
-            cal2.history, cal.history + "hello world"
-        )
+        assert pyuvdata.utils._check_histories(cal2.history, cal.history + "hello world")
         assert cal2.telescope_name == "MWA"
         os.remove(outname)
 
@@ -1901,9 +1803,7 @@ class Test_Flags_IO(object):
         assert "history" in meta
 
     def test_load_flags_h5_baseline(self):
-        h5file = os.path.join(
-            QM_DATA_PATH, "zen.2457698.40355.xx.HH.uvcAA.testuvflag.flags.h5"
-        )
+        h5file = os.path.join(QM_DATA_PATH, "zen.2457698.40355.xx.HH.uvcAA.testuvflag.flags.h5")
         flags, meta = io.load_flags(h5file, return_meta=True)
         assert len(meta["freqs"]) == 256
         assert len(meta["times"]) == 3
@@ -1925,9 +1825,7 @@ class Test_Flags_IO(object):
             assert flags[k].shape == (3, 256)
 
     def test_load_flags_h5_waterfall(self):
-        h5file = os.path.join(
-            QM_DATA_PATH, "zen.2457698.40355.xx.HH.uvcAA.omni.calfits.g.flags.h5"
-        )
+        h5file = os.path.join(QM_DATA_PATH, "zen.2457698.40355.xx.HH.uvcAA.omni.calfits.g.flags.h5")
         flags, meta = io.load_flags(h5file, return_meta=True)
         assert len(meta["freqs"]) == 256
         assert len(meta["times"]) == 3
@@ -1941,9 +1839,7 @@ class Test_Flags_IO(object):
         with pytest.raises(ValueError):
             flags = io.load_flags("some/path", filetype="not_a_type")
 
-        h5file = os.path.join(
-            QM_DATA_PATH, "zen.2457698.40355.xx.HH.uvcAA.testuvflag.h5"
-        )
+        h5file = os.path.join(QM_DATA_PATH, "zen.2457698.40355.xx.HH.uvcAA.testuvflag.h5")
         with pytest.raises(AssertionError):
             flags = io.load_flags(h5file)
 
@@ -1954,14 +1850,10 @@ class Test_Meta_IO(object):
         meta_path = os.path.join(
             DATA_PATH, "test_input/zen.2458098.43124.downsample.redcal_meta.hdf5"
         )
-        fc_meta, omni_meta, freqs, times, lsts, antpos, history = io.read_redcal_meta(
-            meta_path
-        )
+        fc_meta, omni_meta, freqs, times, lsts, antpos, history = io.read_redcal_meta(meta_path)
 
         out_path = os.path.join(DATA_PATH, "test_output/redcal_meta_io_test.hdf5")
-        io.save_redcal_meta(
-            out_path, fc_meta, omni_meta, freqs, times, lsts, antpos, history
-        )
+        io.save_redcal_meta(out_path, fc_meta, omni_meta, freqs, times, lsts, antpos, history)
         (
             fc_meta2,
             omni_meta2,
@@ -1978,9 +1870,7 @@ class Test_Meta_IO(object):
 
         for key1 in omni_meta:
             for key2 in omni_meta[key1]:
-                np.testing.assert_array_equal(
-                    omni_meta[key1][key2], omni_meta2[key1][key2]
-                )
+                np.testing.assert_array_equal(omni_meta[key1][key2], omni_meta2[key1][key2])
 
         np.testing.assert_array_equal(freqs, freqs2)
         np.testing.assert_array_equal(times, times2)
@@ -2021,9 +1911,7 @@ def test_get_file_times():
     assert np.isclose(dlsts, 0.015659698505080533)
 
     # test uvh5 no lsts in header
-    fp = os.path.join(
-        DATA_PATH, "test_input/zen.2458863.28532.HH.no_lsts_in_header.uvh5"
-    )
+    fp = os.path.join(DATA_PATH, "test_input/zen.2458863.28532.HH.no_lsts_in_header.uvh5")
     dlsts, dtimes, larrs, tarrs = io.get_file_times(fp, filetype="uvh5")
     assert np.isclose(larrs[0], 1.00925787)
     assert np.isclose(larrs[1], 1.00996256)
@@ -2138,12 +2026,8 @@ def test_partial_time_io():
 def test_baselines_from_filelist_position(tmpdir):
     tmp_path = tmpdir.strpath
     filelist = [
-        os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"
-        ),
-        os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5"
-        ),
+        os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
+        os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5"),
     ]
     # below, we test whether for each file we get a chunk of baselines whose length is either greater then 0
     # or less then then 3 (the number of total baselines in this dataset)
@@ -2274,9 +2158,7 @@ class Test_UVDataFromFastUVH5:
         np.testing.assert_equal(self.uvd_blfirst.lst_array, uvd.lst_array)
 
     def test_lsts_without_start_jd(self):
-        with pytest.raises(
-            AttributeError, match="if times is not given, start_jd must be given"
-        ):
+        with pytest.raises(AttributeError, match="if times is not given, start_jd must be given"):
             io.uvdata_from_fastuvh5(
                 self.meta_default, times=None, start_jd=None, lsts=np.array([0.1, 0.2])
             )
@@ -2297,14 +2179,10 @@ class Test_UVDataFromFastUVH5:
         np.testing.assert_allclose(np.unique(uvd.lst_array), np.array([0.1, 0.2]))
 
     def test_times_without_lsts(self):
-        uvd = io.uvdata_from_fastuvh5(
-            self.meta_default, times=np.array([2459887.0, 2459887.1])
-        )
+        uvd = io.uvdata_from_fastuvh5(self.meta_default, times=np.array([2459887.0, 2459887.1]))
 
         assert uvd.Ntimes == 2
-        np.testing.assert_allclose(
-            np.unique(uvd.time_array), np.array([2459887.0, 2459887.1])
-        )
+        np.testing.assert_allclose(np.unique(uvd.time_array), np.array([2459887.0, 2459887.1]))
 
     def test_pass_time_and_lst(self):
         with pytest.raises(AssertionError):

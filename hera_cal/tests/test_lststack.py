@@ -107,15 +107,11 @@ class Test_LSTAlign:
             lst_align_with(nsamples=np.ones(13))
 
         # Use only one bin edge
-        with pytest.raises(
-            ValueError, match="lst_bin_edges must have at least 2 elements"
-        ):
+        with pytest.raises(ValueError, match="lst_bin_edges must have at least 2 elements"):
             lst_align_with(lst_bin_edges=np.ones(1))
 
         # Try rephasing without freq_array or antpos
-        with pytest.raises(
-            ValueError, match="freq_array and antpos is needed for rephase"
-        ):
+        with pytest.raises(ValueError, match="freq_array and antpos is needed for rephase"):
             lst_align_with(rephase=True, antpos=None)
 
     def test_increasing_lsts_one_per_bin(self, benchmark):
@@ -154,9 +150,7 @@ class Test_LSTAlign:
         flags[7:] = True
         kwargs["data"][7:] = 1000.0
 
-        bins, d, f, n, inp = benchmark(
-            lstbin.lst_align, rephase=False, flags=flags, **kwargs
-        )
+        bins, d, f, n, inp = benchmark(lstbin.lst_align, rephase=False, flags=flags, **kwargs)
 
         d = np.squeeze(np.asarray(d))
         f = np.squeeze(np.asarray(f))
@@ -175,9 +169,7 @@ class Test_LSTAlign:
         nsamples[7:] = 0.0
         kwargs["data"][7:] = 1000.0
 
-        bins, d, f, n, inp = lstbin.lst_align(
-            rephase=False, nsamples=nsamples, **kwargs
-        )
+        bins, d, f, n, inp = lstbin.lst_align(rephase=False, nsamples=nsamples, **kwargs)
 
         d = np.squeeze(np.asarray(d))
         f = np.squeeze(np.asarray(f))
@@ -193,9 +185,7 @@ class Test_LSTAlign:
         """Test that rephasing where each bin is already at center does nothing."""
         kwargs = self.get_lst_align_data(ntimes=7)
 
-        bins0, d0, f0, n0, inp = benchmark(
-            lstbin.lst_align, rephase=True, **kwargs
-        )
+        bins0, d0, f0, n0, inp = benchmark(lstbin.lst_align, rephase=True, **kwargs)
         bins, d, f, n, inp = lstbin.lst_align(rephase=False, **kwargs)
         np.testing.assert_allclose(d, d0, rtol=1e-6)
         np.testing.assert_allclose(f, f0, rtol=1e-6)
@@ -209,24 +199,18 @@ class Test_LSTAlign:
         lst_bin_edges = edges.copy()
         lst_bin_edges -= 4 * np.pi
 
-        bins, d0, f0, n0, inp = benchmark(
-            lstbin.lst_align, lst_bin_edges=lst_bin_edges, **kwargs
-        )
+        bins, d0, f0, n0, inp = benchmark(lstbin.lst_align, lst_bin_edges=lst_bin_edges, **kwargs)
 
         lst_bin_edges = edges.copy()
         lst_bin_edges += 4 * np.pi
 
-        bins, d, f, n, inp = lstbin.lst_align(
-            lst_bin_edges=lst_bin_edges, **kwargs
-        )
+        bins, d, f, n, inp = lstbin.lst_align(lst_bin_edges=lst_bin_edges, **kwargs)
 
         np.testing.assert_allclose(d, d0)
         np.testing.assert_allclose(f, f0)
         np.testing.assert_allclose(n, n0)
 
-        with pytest.raises(
-            ValueError, match="lst_bin_edges must be monotonically increasing."
-        ):
+        with pytest.raises(ValueError, match="lst_bin_edges must be monotonically increasing."):
             lstbin.lst_align(lst_bin_edges=lst_bin_edges[::-1], **kwargs)
 
 
@@ -263,12 +247,7 @@ class Test_ReduceLSTBins:
         d, f, n = self.get_input_data(ntimes=(1,))
         rdc = benchmark(lstbin.reduce_lst_bins, d, f, n)
 
-        assert (
-            rdc["data"].shape
-            == rdc["flags"].shape
-            == rdc["std"].shape
-            == rdc["nsamples"].shape
-        )
+        assert rdc["data"].shape == rdc["flags"].shape == rdc["std"].shape == rdc["nsamples"].shape
 
         # reduce_data swaps the order of bls/times
         dd = rdc["data"].swapaxes(0, 1)
@@ -296,12 +275,7 @@ class Test_ReduceLSTBins:
         d, f, n = self.get_input_data(ntimes=ntimes)
         rdc = benchmark(lstbin.reduce_lst_bins, d, f, n)
 
-        assert (
-            rdc["data"].shape
-            == rdc["flags"].shape
-            == rdc["std"].shape
-            == rdc["nsamples"].shape
-        )
+        assert rdc["data"].shape == rdc["flags"].shape == rdc["std"].shape == rdc["nsamples"].shape
 
         # reduce_data swaps the order of bls/times
         dd = rdc["data"].swapaxes(0, 1)
@@ -319,12 +293,7 @@ class Test_ReduceLSTBins:
         d[0][2:] = 1000.0
         rdc = lstbin.reduce_lst_bins(d, f, n)
 
-        assert (
-            rdc["data"].shape
-            == rdc["flags"].shape
-            == rdc["std"].shape
-            == rdc["nsamples"].shape
-        )
+        assert rdc["data"].shape == rdc["flags"].shape == rdc["std"].shape == rdc["nsamples"].shape
 
         # reduce_data swaps the order of bls/times
         dd = rdc["data"].swapaxes(0, 1)
@@ -441,8 +410,7 @@ class Test_LSTAverage:
 
         std = 2.0
         data = (
-            np.random.normal(scale=std, size=shape)
-            + np.random.normal(scale=std, size=shape) * 1j
+            np.random.normal(scale=std, size=shape) + np.random.normal(scale=std, size=shape) * 1j
         )
         nsamples = np.ones_like(data, dtype=float)
         flags = np.zeros_like(data, dtype=bool)
@@ -772,9 +740,7 @@ class Test_LSTBinFilesForBaselines:
             rephase=True,
         )
 
-        assert np.all(
-            f0[0][:, -1]
-        )  # last baseline is the extra one that's all flagged.
+        assert np.all(f0[0][:, -1])  # last baseline is the extra one that's all flagged.
 
     def test_freqrange(self, uvd, uvd_file, uvc_file):
         """Test that providing freq_range works."""
@@ -864,7 +830,7 @@ class Test_LSTBinFilesForBaselines:
             ants=np.arange(7),
             creator=mockuvd.create_uvd_identifiable,
             freqs=mockuvd.PHASEII_FREQS[:25],
-            pols=['xx', 'xy'],
+            pols=["xx", "xy"],
             redundantly_averaged=True,
         )
 
@@ -883,7 +849,9 @@ class Test_LSTBinFilesForBaselines:
             rephase=False,
             antpairs=ap,
             reds=reds,
-            where_inpainted_files=[str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])],
+            where_inpainted_files=[
+                str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])
+            ],
         )
         assert len(lstbins) == 1
 
@@ -907,7 +875,7 @@ class Test_LSTBinFilesForBaselines:
             ants=np.arange(5),  # less than the original
             creator=mockuvd.create_uvd_identifiable,
             freqs=mockuvd.PHASEII_FREQS[:25],
-            pols=['xx', 'xy'],
+            pols=["xx", "xy"],
             redundantly_averaged=True,
         )
 
@@ -930,7 +898,9 @@ class Test_LSTBinFilesForBaselines:
                 rephase=False,
                 antpairs=ap,
                 reds=reds,
-                where_inpainted_files=[str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])],
+                where_inpainted_files=[
+                    str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])
+                ],
             )
 
 
@@ -1008,13 +978,9 @@ class Test_GetAllUnflaggedBaselines:
             redundantly_averaged=True,
         )
 
-        data_files = mockuvd.write_files_in_hera_format(
-            uvds + uvds_different_xorient, tmp
-        )
+        data_files = mockuvd.write_files_in_hera_format(uvds + uvds_different_xorient, tmp)
 
-        with pytest.raises(
-            ValueError, match="Not all files have the same xorientation!"
-        ):
+        with pytest.raises(ValueError, match="Not all files have the same xorientation!"):
             lstbin.config.get_all_unflagged_baselines(data_files)
 
 
@@ -1099,9 +1065,7 @@ class Test_LSTBinFiles:
             ntimes_per_file=2,
         )
 
-        out_files = lstbin.lst_bin_files(
-            config_file=cfl, save_channels=[50], rephase=False
-        )
+        out_files = lstbin.lst_bin_files(config_file=cfl, save_channels=[50], rephase=False)
 
         assert len(out_files) == 4
         # Ensure there's a REDUCEDCHAN file for each output LST
@@ -1202,9 +1166,7 @@ class Test_LSTBinFiles:
 
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
         cal_files = mockuvd.write_cals_in_hera_format(uvcs, tmp)
-        decal_files = [
-            [df.replace(".uvh5", ".decal.uvh5") for df in dfl] for dfl in data_files
-        ]
+        decal_files = [[df.replace(".uvh5", ".decal.uvh5") for df in dfl] for dfl in data_files]
 
         for flist, clist, ulist in zip(data_files, cal_files, decal_files):
             for df, cf, uf in zip(flist, clist, ulist):
@@ -1217,9 +1179,7 @@ class Test_LSTBinFiles:
                 )
 
         # First, let's go the other way to check if we get the same thing back directly
-        recaled_files = [
-            [df.replace(".uvh5", ".recal.uvh5") for df in dfl] for dfl in data_files
-        ]
+        recaled_files = [[df.replace(".uvh5", ".recal.uvh5") for df in dfl] for dfl in data_files]
         for flist, clist, ulist in zip(recaled_files, cal_files, decal_files):
             for df, cf, uf in zip(flist, clist, ulist):
                 apply_cal.apply_cal(
@@ -1291,9 +1251,7 @@ class Test_LSTBinFiles:
                             1.0,
                             uvdlstc.get_data(ap + (pol,)),
                         ),
-                        np.where(
-                            uvdlst.get_flags(ap + (pol,)), 1.0, expected[i, :, :, j]
-                        ),
+                        np.where(uvdlst.get_flags(ap + (pol,)), 1.0, expected[i, :, :, j]),
                         rtol=1e-4,
                     )
 
@@ -1336,16 +1294,11 @@ class Test_LSTBinFiles:
             random_ants_to_drop=random_ants_to_drop,
         )
 
-        uvcs = [
-            [mockuvd.make_uvc_identifiable(d, *flag_strategy) for d in uvd]
-            for uvd in uvds
-        ]
+        uvcs = [[mockuvd.make_uvc_identifiable(d, *flag_strategy) for d in uvd] for uvd in uvds]
 
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
         cal_files = mockuvd.write_cals_in_hera_format(uvcs, tmp)
-        decal_files = [
-            [df.replace(".uvh5", ".decal.uvh5") for df in dfl] for dfl in data_files
-        ]
+        decal_files = [[df.replace(".uvh5", ".decal.uvh5") for df in dfl] for dfl in data_files]
 
         for flist, clist, ulist in zip(data_files, cal_files, decal_files):
             for df, cf, uf in zip(flist, clist, ulist):
@@ -1403,9 +1356,7 @@ class Test_LSTBinFiles:
                             1.0,
                             uvdlst.get_data(ap + (pol,)),
                         ),
-                        np.where(
-                            uvdlst.get_flags(ap + (pol,)), 1.0, expected[i, :, :, j]
-                        ),
+                        np.where(uvdlst.get_flags(ap + (pol,)), 1.0, expected[i, :, :, j]),
                         rtol=1e-4
                         if (not rephase or (ap[0] == ap[1] and pol[0] == pol[1]))
                         else 1e-3,
@@ -1467,9 +1418,7 @@ class Test_LSTBinFiles:
                     # never using it...)
                     np.testing.assert_allclose(
                         uvdlst.get_data(ap + (pol,)),
-                        np.where(
-                            uvdlst.get_flags(ap + (pol,)), 1.0, expected[i, :, :, j]
-                        ),
+                        np.where(uvdlst.get_flags(ap + (pol,)), 1.0, expected[i, :, :, j]),
                         rtol=1e-4,
                     )
 
@@ -1572,9 +1521,7 @@ class Test_LSTBinFiles:
             redundantly_averaged=True,
         )
 
-        data_files = mockuvd.write_files_in_hera_format(
-            uvds, tmp, add_where_inpainted_files=True
-        )
+        data_files = mockuvd.write_files_in_hera_format(uvds, tmp, add_where_inpainted_files=True)
 
         cfl = tmp / "lstbin_config_file.yaml"
         config_info = lstbin.make_lst_bin_config_file(
@@ -1616,14 +1563,10 @@ class Test_LSTBinFiles:
             redundantly_averaged=True,
         )
 
-        data_files = mockuvd.write_files_in_hera_format(
-            uvds, tmp, add_where_inpainted_files=True
-        )
+        data_files = mockuvd.write_files_in_hera_format(uvds, tmp, add_where_inpainted_files=True)
 
         # Now create dodgy where_inpainted files
-        inp = lstbin.io._get_where_inpainted_files(
-            data_files, [(".uvh5", ".where_inpainted.h5")]
-        )
+        inp = lstbin.io._get_where_inpainted_files(data_files, [(".uvh5", ".where_inpainted.h5")])
         for fllist in inp:
             for fl in fllist:
                 uvf = UVFlag()
@@ -1693,9 +1636,7 @@ def test_get_where_inpainted(tmp_path_factory):
             these.append(tmp / f"{filename}.uvh5")
         fls.append(these)
 
-    out = lstbin.io._get_where_inpainted_files(
-        fls, [(".uvh5", ".where_inpainted.h5")]
-    )
+    out = lstbin.io._get_where_inpainted_files(fls, [(".uvh5", ".where_inpainted.h5")])
 
     assert len(out) == 2
     assert len(out[0]) == 3
@@ -1785,10 +1726,10 @@ class TestSigmaClip:
     @pytest.mark.parametrize(
         "threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands",
         [
-            (4.0, 4, 0, 0, 'direct', None),
-            (3.0, 4, 1, 1, 'mean', [(1, 3), (4, 5)]),
-            (5.0, 4, 2, 2, 'median', [(2, 4)]),
-        ]
+            (4.0, 4, 0, 0, "direct", None),
+            (3.0, 4, 1, 1, "mean", [(1, 3), (4, 5)]),
+            (5.0, 4, 2, 2, "median", [(2, 4)]),
+        ],
     )
     def test_sigma_clip_happy_path(
         self, array_shape, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands
@@ -1810,30 +1751,43 @@ class TestSigmaClip:
             median_axis=median_axis,
             threshold_axis=threshold_axis,
             clip_type=clip_type,
-            flag_bands=flag_bands
+            flag_bands=flag_bands,
         )
 
         # Assert
         assert isinstance(clip_flags, np.ndarray), "The output should be an ndarray."
         assert clip_flags.dtype == bool, "The output array should be of boolean type."
-        assert clip_flags.shape == array.shape, "The output flags should have the same shape as the input array."
+        assert (
+            clip_flags.shape == array.shape
+        ), "The output flags should have the same shape as the input array."
 
     # Edge cases
-    @pytest.mark.parametrize("array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id", [
-        (np.array([]), 4.0, 4, 0, 0, 'direct', None, 'edge_empty_array'),
-        (np.array([np.nan, np.nan]), 4.0, 4, 0, 0, 'direct', None, 'edge_all_nan'),
-        (np.random.normal(size=(5, 5)), 4.0, 6, 0, 0, 'direct', None, 'edge_below_min_N'),
-    ])
-    def test_sigma_clip_edge_cases(self, array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id):
+    @pytest.mark.parametrize(
+        "array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id",
+        [
+            (np.array([]), 4.0, 4, 0, 0, "direct", None, "edge_empty_array"),
+            (np.array([np.nan, np.nan]), 4.0, 4, 0, 0, "direct", None, "edge_all_nan"),
+            (np.random.normal(size=(5, 5)), 4.0, 6, 0, 0, "direct", None, "edge_below_min_N"),
+        ],
+    )
+    def test_sigma_clip_edge_cases(
+        self, array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id
+    ):
         # Act
         clip_flags = lstbin.sigma_clip(
             array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands
         )
 
         # Assert
-        assert isinstance(clip_flags, np.ndarray), f"Test ID: {test_id} - The output should be an ndarray."
-        assert clip_flags.dtype == bool, f"Test ID: {test_id} - The output array should be of boolean type."
-        assert clip_flags.shape == array.shape, f"Test ID: {test_id} - The output flags should have the same shape as the input array."
+        assert isinstance(
+            clip_flags, np.ndarray
+        ), f"Test ID: {test_id} - The output should be an ndarray."
+        assert (
+            clip_flags.dtype == bool
+        ), f"Test ID: {test_id} - The output array should be of boolean type."
+        assert (
+            clip_flags.shape == array.shape
+        ), f"Test ID: {test_id} - The output flags should have the same shape as the input array."
 
     # Error cases
     def test_sigma_clip_error_cases(self):
@@ -1844,14 +1798,10 @@ class TestSigmaClip:
 
         array = np.array([1, 2])
         with pytest.raises(ValueError, match=".*clip_type.*"):
-            lstbin.sigma_clip(array, min_N=0, clip_type='wrong_clip_type')
+            lstbin.sigma_clip(array, min_N=0, clip_type="wrong_clip_type")
 
-    @pytest.mark.parametrize(
-        "clip_type", ['direct', 'mean', 'median']
-    )
-    @pytest.mark.parametrize(
-        "flag_bands", [None, [(0, 12)], [(0, 1), (1, 12)]]
-    )
+    @pytest.mark.parametrize("clip_type", ["direct", "mean", "median"])
+    @pytest.mark.parametrize("flag_bands", [None, [(0, 12)], [(0, 1), (1, 12)]])
     def test_constant_data_no_flags(self, clip_type, flag_bands):
         """Test an array with a reasonable expected shape, but constant values.
 
@@ -1883,7 +1833,7 @@ class TestSigmaClip:
 
         clip_flags = lstbin.sigma_clip(
             array,
-            clip_type='direct',
+            clip_type="direct",
             median_axis=0,
             threshold_axis=2,
             min_N=0,
@@ -1896,12 +1846,8 @@ class TestSigmaClip:
         assert clip_flags[0, 0, 1, 0]
         assert clip_flags[0, 0, 0, 1]
 
-    @pytest.mark.parametrize(
-        "flag_bands", [[(0, 12)], [(0, 2), (2, 12)]]
-    )
-    @pytest.mark.parametrize(
-        "clip_type", ['mean', 'median']
-    )
+    @pytest.mark.parametrize("flag_bands", [[(0, 12)], [(0, 2), (2, 12)]])
+    @pytest.mark.parametrize("clip_type", ["mean", "median"])
     def test_spiky_data_mean_clip(self, flag_bands, clip_type):
         """Test an array with a reasonable expected shape with spiky outliers.
 
@@ -1910,7 +1856,7 @@ class TestSigmaClip:
         """
         array = np.random.normal(size=(100, 8, 12, 4))
 
-        array[0, 0, flag_bands[0][0]:flag_bands[0][1], 0] = 1000
+        array[0, 0, flag_bands[0][0] : flag_bands[0][1], 0] = 1000
 
         clip_flags = lstbin.sigma_clip(
             array,
@@ -1924,14 +1870,14 @@ class TestSigmaClip:
 
         # The entire first band should be clipped, but nothing else.
         assert np.sum(clip_flags) == flag_bands[0][1] - flag_bands[0][0]
-        assert np.all(clip_flags[0, 0, flag_bands[0][0]:flag_bands[0][1], 0])
+        assert np.all(clip_flags[0, 0, flag_bands[0][0] : flag_bands[0][1], 0])
 
     def test_passing_list(self):
         """Test that passing a list of arrays works."""
         array = np.random.normal(size=(8, 12, 4))
         clip_flags = lstbin.sigma_clip(
             [array, array],
-            clip_type='direct',
+            clip_type="direct",
             median_axis=0,
             threshold_axis=2,
             min_N=0,
@@ -1942,18 +1888,19 @@ class TestSigmaClip:
         assert clip_flags[1].shape == array.shape
 
     @pytest.mark.parametrize(
-        "scale", [
+        "scale",
+        [
             np.random.normal(size=(8, 12, 4)),  # no median_axis
             np.random.normal(size=(1, 8, 12, 4)),  # dummy median axis
             np.random.normal(size=(10, 8, 12, 4)),  # full median axis
-        ]
+        ],
     )
     def test_passing_good_scale(self, scale):
         """Test that passing a scale works."""
         array = np.random.normal(size=(10, 8, 12, 4))
         clip_flags = lstbin.sigma_clip(
             array,
-            clip_type='direct',
+            clip_type="direct",
             median_axis=0,
             threshold_axis=2,
             min_N=0,
@@ -1964,18 +1911,19 @@ class TestSigmaClip:
         assert clip_flags.shape == array.shape
 
     @pytest.mark.parametrize(
-        "scale", [
+        "scale",
+        [
             np.random.normal(size=(12, 4)),  # no median_axis
             np.random.normal(size=(11, 8, 12, 4)),  # dummy median axis
-        ]
+        ],
     )
     def test_passing_bad_scale(self, scale):
         """Test that passing a scale works."""
         array = np.random.normal(size=(10, 8, 12, 4))
-        with pytest.raises(ValueError, match='scale must have same shape as array'):
+        with pytest.raises(ValueError, match="scale must have same shape as array"):
             clip_flags = lstbin.sigma_clip(
                 array,
-                clip_type='direct',
+                clip_type="direct",
                 median_axis=0,
                 threshold_axis=2,
                 min_N=0,

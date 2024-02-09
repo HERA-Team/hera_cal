@@ -11,9 +11,7 @@ from pyuvdata import UVData
 
 # Parse arguments
 ap = argparse.ArgumentParser(description="Completely Flag a data file.")
-ap.add_argument(
-    "infilename", type=str, help="path to visibility data to completely flag."
-)
+ap.add_argument("infilename", type=str, help="path to visibility data to completely flag.")
 ap.add_argument(
     "outfilename",
     type=str,

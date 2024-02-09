@@ -54,9 +54,7 @@ class AntennaArray(a.pol.AntennaArray):
                 except ValueError:
                     continue
                 if ant_prms[k] == "*":
-                    prms[k].update(
-                        {"top_x": top_pos[0], "top_y": top_pos[1], "top_z": top_pos[2]}
-                    )
+                    prms[k].update({"top_x": top_pos[0], "top_y": top_pos[1], "top_z": top_pos[2]})
                 else:
                     for val in ant_prms[k]:
                         if val == "top_x":
@@ -88,9 +86,7 @@ class AntennaArray(a.pol.AntennaArray):
             except KeyError:
                 pass
             if ant_changed:
-                ant.pos = (
-                    n.dot(n.linalg.inv(self._eq2zen), top_pos) / a.const.len_ns * cm_p_m
-                )
+                ant.pos = n.dot(n.linalg.inv(self._eq2zen), top_pos) / a.const.len_ns * cm_p_m
             changed |= ant_changed
         try:
             self.tau_ns, changed = prms["aa"]["tau_ns"], 1

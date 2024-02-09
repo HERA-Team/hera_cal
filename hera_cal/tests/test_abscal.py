@@ -34,9 +34,7 @@ class Test_AbsCal_Funcs(object):
         self.uvd.read_miriad(self.data_file)
         self.uvd.use_future_array_shapes()
         self.freq_array = np.unique(self.uvd.freq_array)
-        self.antpos, self.ants = self.uvd.get_ENU_antpos(
-            center=True, pick_data_ants=True
-        )
+        self.antpos, self.ants = self.uvd.get_ENU_antpos(center=True, pick_data_ants=True)
         self.antpos = odict(zip(self.ants, self.antpos))
         self.time_array = np.unique(self.uvd.time_array)
 
@@ -85,20 +83,16 @@ class Test_AbsCal_Funcs(object):
             cal_style="redundant",
             metadata_only=False,
         )
-        uvc1.gain_array[:] = np.random.rand(
+        uvc1.gain_array[:] = np.random.rand(*uvc1.gain_array.shape) + 1j * np.random.rand(
             *uvc1.gain_array.shape
-        ) + 1j * np.random.rand(*uvc1.gain_array.shape)
-        uvc2.gain_array[:] = np.random.rand(
+        )
+        uvc2.gain_array[:] = np.random.rand(*uvc2.gain_array.shape) + 1j * np.random.rand(
             *uvc2.gain_array.shape
-        ) + 1j * np.random.rand(*uvc2.gain_array.shape)
+        )
 
-        flag_times_1 = np.random.randint(
-            low=0, high=self.uvd.Ntimes, size=self.uvd.Ntimes // 4
-        )
+        flag_times_1 = np.random.randint(low=0, high=self.uvd.Ntimes, size=self.uvd.Ntimes // 4)
         uvc1.flag_array[:, :, flag_times_1] = True
-        flag_times_2 = np.random.randint(
-            low=0, high=self.uvd.Ntimes, size=self.uvd.Ntimes // 4
-        )
+        flag_times_2 = np.random.randint(low=0, high=self.uvd.Ntimes, size=self.uvd.Ntimes // 4)
         uvc2.flag_array[:, :, flag_times_2] = True
 
         uvc1.quality_array = np.zeros_like(uvc1.gain_array, dtype=float) + 1.0
@@ -118,16 +112,10 @@ class Test_AbsCal_Funcs(object):
         uvc3 = UVCal()
         uvc3.read_calfits(output_path)
         if divide_gains:
-            np.testing.assert_array_almost_equal(
-                uvc1.gain_array / uvc2.gain_array, uvc3.gain_array
-            )
+            np.testing.assert_array_almost_equal(uvc1.gain_array / uvc2.gain_array, uvc3.gain_array)
         else:
-            np.testing.assert_array_almost_equal(
-                uvc1.gain_array * uvc2.gain_array, uvc3.gain_array
-            )
-        np.testing.assert_array_almost_equal(
-            uvc1.flag_array | uvc2.flag_array, uvc3.flag_array
-        )
+            np.testing.assert_array_almost_equal(uvc1.gain_array * uvc2.gain_array, uvc3.gain_array)
+        np.testing.assert_array_almost_equal(uvc1.flag_array | uvc2.flag_array, uvc3.flag_array)
         assert np.all(np.isnan(uvc3.quality_array))
         assert uvc3.total_quality_array is None
 
@@ -211,9 +199,7 @@ class Test_AbsCal_Funcs(object):
         d = abscal.wiener(self.data, window=(5, 15), medfilt=False)
         assert d[(24, 37, "ee")].shape == (60, 64)
         # test as array
-        d = abscal.wiener(
-            self.data[(24, 37, "ee")], window=(5, 15), medfilt=False, array=True
-        )
+        d = abscal.wiener(self.data[(24, 37, "ee")], window=(5, 15), medfilt=False, array=True)
         assert d.shape == (60, 64)
         assert d.dtype == complex
 
@@ -226,40 +212,24 @@ class Test_AbsCal_Funcs(object):
         i2 = keys.index(k2)
         k3 = (52, 53, "ee")  # 14.6 m E-W
         i3 = keys.index(k3)
-        bls = [
-            abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0)
-            for k in keys
-        ]
-        bls_conj = [
-            abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0)
-            for k in keys
-        ]
+        bls = [abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0) for k in keys]
+        bls_conj = [abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0) for k in keys]
         assert bls[i1] == bls[i1]
         assert bls[i1] != bls[i2]
         assert (bls[i1] == bls_conj[i1]) == "conjugated"
         # test different yet redundant baselines still agree
         assert bls[i1] == bls[i3]
         # test tolerance works as expected
-        bls = [
-            abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4)
-            for k in keys
-        ]
+        bls = [abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4) for k in keys]
         assert bls[i1] != bls[i3]
 
     def test_match_red_baselines(self):
         model = copy.deepcopy(self.data)
         model = DataContainer(
-            odict(
-                [
-                    ((k[0] + 1, k[1] + 1, k[2]), model[k])
-                    for i, k in enumerate(model.keys())
-                ]
-            )
+            odict([((k[0] + 1, k[1] + 1, k[2]), model[k]) for i, k in enumerate(model.keys())])
         )
         del model[(25, 54, "ee")]
-        model_antpos = odict(
-            [(k + 1, self.antpos[k]) for i, k in enumerate(self.antpos.keys())]
-        )
+        model_antpos = odict([(k + 1, self.antpos[k]) for i, k in enumerate(self.antpos.keys())])
         new_model = abscal.match_red_baselines(
             model, model_antpos, self.data, self.antpos, tol=2.0, verbose=False
         )
@@ -286,9 +256,7 @@ class Test_AbsCal_Funcs(object):
         li = abscal.flatten([["hi"]])
         assert np.array(li).ndim == 1
 
-    @pytest.mark.filterwarnings(
-        "ignore:Casting complex values to real discards the imaginary part"
-    )
+    @pytest.mark.filterwarnings("ignore:Casting complex values to real discards the imaginary part")
     def test_avg_data_across_red_bls(self):
         # test basic execution
         wgts = copy.deepcopy(self.wgts)
@@ -310,9 +278,7 @@ class Test_AbsCal_Funcs(object):
         assert len(rf.keys()) == 9
         assert np.allclose(rf[(24, 25, "ee")][45, 45], 0.0)
         # test averaging worked
-        rd, rf, rk = abscal.avg_data_across_red_bls(
-            data, antpos, tol=2.0, broadcast_wgts=False
-        )
+        rd, rf, rk = abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_wgts=False)
         v = np.mean(
             [
                 data[(52, 53, "ee")],
@@ -331,14 +297,8 @@ class Test_AbsCal_Funcs(object):
         assert len(rf.keys()) == 21
 
     def test_match_times(self):
-        dfiles = [
-            os.path.join(DATA_PATH, f"zen.2458043.{f}.xx.HH.uvORA")
-            for f in (12552, 13298)
-        ]
-        mfiles = [
-            os.path.join(DATA_PATH, f"zen.2458042.{f}.xx.HH.uvXA")
-            for f in (12552, 13298)
-        ]
+        dfiles = [os.path.join(DATA_PATH, f"zen.2458043.{f}.xx.HH.uvORA") for f in (12552, 13298)]
+        mfiles = [os.path.join(DATA_PATH, f"zen.2458042.{f}.xx.HH.uvXA") for f in (12552, 13298)]
 
         # test basic execution
         relevant_mfiles = abscal.match_times(dfiles[0], mfiles, filetype="miriad")
@@ -347,9 +307,7 @@ class Test_AbsCal_Funcs(object):
         relevant_mfiles = abscal.match_times(dfiles[1], mfiles, filetype="miriad")
         assert len(relevant_mfiles) == 1
         # test no overlap
-        mfiles = sorted(
-            glob.glob(os.path.join(DATA_PATH, "zen.2457698.40355.xx.HH.uvcA"))
-        )
+        mfiles = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2457698.40355.xx.HH.uvcA")))
         relevant_mfiles = abscal.match_times(dfiles[0], mfiles, filetype="miriad")
         assert len(relevant_mfiles) == 0
 
@@ -393,17 +351,12 @@ class Test_AbsCal_Funcs(object):
                 ys[i] = y + 5 * (0.5 - np.random.rand())
                 i += 1
 
-        phase_slopes_x = (
-            0.2 * np.random.rand(5, 2) - 0.1
-        )  # not too many phase wraps over the array
+        phase_slopes_x = 0.2 * np.random.rand(5, 2) - 0.1  # not too many phase wraps over the array
         phase_slopes_y = (
             0.2 * np.random.rand(5, 2) - 0.1
         )  # (i.e. avoid undersampling of very fast slopes)
         data = np.array(
-            [
-                np.exp(1.0j * x * phase_slopes_x + 1.0j * y * phase_slopes_y)
-                for x, y in zip(xs, ys)
-            ]
+            [np.exp(1.0j * x * phase_slopes_x + 1.0j * y * phase_slopes_y) for x, y in zip(xs, ys)]
         )
 
         x_slope_est, y_slope_est = abscal.dft_phase_slope_solver(xs, ys, data)
@@ -483,9 +436,7 @@ class Test_Abscal_Solvers(object):
         reds = redcal.get_reds(antpos, pols=["ee", "en", "ne", "nn"], pol_mode="4pol")
         model = {bl: np.ones((10, 5)) for red in reds for bl in red}
         gain_products = {"ee": 4.0, "en": 6.0, "ne": 6.0, "nn": 9.0}
-        data = {
-            bl: gain_products[bl[2]] * np.ones((10, 5)) for red in reds for bl in red
-        }
+        data = {bl: gain_products[bl[2]] * np.ones((10, 5)) for red in reds for bl in red}
         data[0, 1, "ee"][0, 0] = np.nan
         data[0, 1, "ee"][0, 1] = np.inf
         model[0, 1, "ee"][0, 0] = np.nan
@@ -521,20 +472,13 @@ class Test_Abscal_Solvers(object):
         gains = abscal.TT_phs_logcal(
             model, data, antpos, assume_2D=True, return_gains=True, gain_ants=ants
         )
-        rephased_gains = {
-            ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants
-        }
-        true_gains = {
-            ant: np.exp(1.0j * np.dot(antpos[ant[0]], [0.01, 0.02, 0])) for ant in ants
-        }
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [0.01, 0.02, 0])) for ant in ants}
         rephased_true_gains = {
-            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]])
-            for ant in ants
+            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants
         }
         for ant in ants:
-            np.testing.assert_array_almost_equal(
-                rephased_gains[ant], rephased_true_gains[ant]
-            )
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
     def test_TT_phs_logcal_4pol_assume_2D(self):
         antpos = hex_array(2, split_core=False, outriggers=0)
@@ -562,28 +506,19 @@ class Test_Abscal_Solvers(object):
             return_gains=True,
             gain_ants=ants,
         )
-        rephased_gains = {
-            ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants
-        }
-        true_gains = {
-            ant: np.exp(1.0j * np.dot(antpos[ant[0]], [0.01, 0.02, 0])) for ant in ants
-        }
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [0.01, 0.02, 0])) for ant in ants}
         rephased_true_gains = {
-            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]])
-            for ant in ants
+            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants
         }
         for ant in ants:
-            np.testing.assert_array_almost_equal(
-                rephased_gains[ant], rephased_true_gains[ant]
-            )
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
     def test_TT_phs_logcal_1pol_nDim(self):
         # test assume_2D=False by introducing another 6 element hex 100 m away
         antpos = hex_array(2, split_core=False, outriggers=0)
         antpos2 = hex_array(2, split_core=False, outriggers=0)
-        antpos.update(
-            {len(antpos) + ant: antpos2[ant] + np.array([100, 0, 0]) for ant in antpos2}
-        )
+        antpos.update({len(antpos) + ant: antpos2[ant] + np.array([100, 0, 0]) for ant in antpos2})
         reds = redcal.get_reds(antpos, pols=["ee"], pol_mode="1pol")
         antpos = redcal.reds_to_antpos(reds)
         reds = redcal.get_reds(antpos, pols=["ee"], pol_mode="1pol", bl_error_tol=1e-10)
@@ -606,21 +541,15 @@ class Test_Abscal_Solvers(object):
         gains = abscal.TT_phs_logcal(
             model, data, antpos, assume_2D=False, return_gains=True, gain_ants=ants
         )
-        rephased_gains = {
-            ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants
-        }
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
         true_gains = {
-            ant: np.exp(1.0j * np.dot(antpos[ant[0]], [0.01, 0.02, 0.03]))
-            for ant in ants
+            ant: np.exp(1.0j * np.dot(antpos[ant[0]], [0.01, 0.02, 0.03])) for ant in ants
         }
         rephased_true_gains = {
-            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]])
-            for ant in ants
+            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants
         }
         for ant in ants:
-            np.testing.assert_array_almost_equal(
-                rephased_gains[ant], rephased_true_gains[ant]
-            )
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
     def test_delay_slope_lincal_1pol_assume_2D(self):
         antpos = hex_array(2, split_core=False, outriggers=0)
@@ -641,9 +570,7 @@ class Test_Abscal_Solvers(object):
             ant0, ant1 = utils.split_bl(bl)
             data[bl] *= true_gains[ant0] * np.conj(true_gains[ant1])
 
-        fit = abscal.delay_slope_lincal(
-            model, data, antpos, df=df, assume_2D=True, time_avg=True
-        )
+        fit = abscal.delay_slope_lincal(model, data, antpos, df=df, assume_2D=True, time_avg=True)
         np.testing.assert_array_almost_equal(1e9 * fit["T_ew_Jee"], 1.0, decimal=3)
         np.testing.assert_array_almost_equal(1e9 * fit["T_ns_Jee"], 2.0, decimal=3)
 
@@ -658,12 +585,9 @@ class Test_Abscal_Solvers(object):
             return_gains=True,
             gain_ants=ants,
         )
-        rephased_gains = {
-            ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants
-        }
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
         rephased_true_gains = {
-            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]])
-            for ant in ants
+            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants
         }
         for ant in ants:
             np.testing.assert_array_almost_equal(
@@ -689,9 +613,7 @@ class Test_Abscal_Solvers(object):
             ant0, ant1 = utils.split_bl(bl)
             data[bl] *= true_gains[ant0] * np.conj(true_gains[ant1])
 
-        fit = abscal.delay_slope_lincal(
-            model, data, antpos, df=df, assume_2D=True, four_pol=True
-        )
+        fit = abscal.delay_slope_lincal(model, data, antpos, df=df, assume_2D=True, four_pol=True)
         np.testing.assert_array_almost_equal(1e9 * fit["T_ew"], 1.0, decimal=3)
         np.testing.assert_array_almost_equal(1e9 * fit["T_ns"], 2.0, decimal=3)
 
@@ -706,12 +628,9 @@ class Test_Abscal_Solvers(object):
             return_gains=True,
             gain_ants=ants,
         )
-        rephased_gains = {
-            ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants
-        }
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
         rephased_true_gains = {
-            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]])
-            for ant in ants
+            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants
         }
         for ant in ants:
             np.testing.assert_array_almost_equal(
@@ -721,9 +640,7 @@ class Test_Abscal_Solvers(object):
     def test_delay_slope_lincal_1pol_nDim(self):
         antpos = hex_array(2, split_core=False, outriggers=0)
         antpos2 = hex_array(2, split_core=False, outriggers=0)
-        antpos.update(
-            {len(antpos) + ant: antpos2[ant] + np.array([100, 0, 0]) for ant in antpos2}
-        )
+        antpos.update({len(antpos) + ant: antpos2[ant] + np.array([100, 0, 0]) for ant in antpos2})
         reds = redcal.get_reds(antpos, pols=["ee"], pol_mode="1pol")
         antpos = redcal.reds_to_antpos(reds)
         reds = redcal.get_reds(antpos, pols=["ee"], pol_mode="1pol", bl_error_tol=1e-10)
@@ -758,12 +675,9 @@ class Test_Abscal_Solvers(object):
             return_gains=True,
             gain_ants=ants,
         )
-        rephased_gains = {
-            ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants
-        }
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
         rephased_true_gains = {
-            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]])
-            for ant in ants
+            ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants
         }
         for ant in ants:
             np.testing.assert_array_almost_equal(
@@ -775,18 +689,14 @@ class Test_Abscal_Solvers(object):
         antpos = hex_array(3, split_core=False, outriggers=0)
         antpos[19] = np.array([101, 102, 0])
         reds = redcal.get_reds(antpos, pols=["ee", "nn"])
-        red_data = DataContainer(
-            {red[0]: np.ones((5, 128), dtype=complex) for red in reds}
-        )
+        red_data = DataContainer({red[0]: np.ones((5, 128), dtype=complex) for red in reds})
         freqs = np.linspace(50e6, 250e6, 128)
         unique_blvecs = {
-            red[0]: np.mean([antpos[bl[1]] - antpos[bl[0]] for bl in red], axis=0)
-            for red in reds
+            red[0]: np.mean([antpos[bl[1]] - antpos[bl[0]] for bl in red], axis=0) for red in reds
         }
         idealized_antpos = redcal.reds_to_antpos(reds)
         idealized_blvecs = {
-            red[0]: idealized_antpos[red[0][1]] - idealized_antpos[red[0][0]]
-            for red in reds
+            red[0]: idealized_antpos[red[0][1]] - idealized_antpos[red[0][0]] for red in reds
         }
 
         # Invent RFI stations and delay slopes
@@ -800,9 +710,7 @@ class Test_Abscal_Solvers(object):
             0.7853981,
             6.0632738,
         ]
-        rfi_headings = np.array(
-            [np.cos(rfi_angles), np.sin(rfi_angles), np.zeros_like(rfi_angles)]
-        )
+        rfi_headings = np.array([np.cos(rfi_angles), np.sin(rfi_angles), np.zeros_like(rfi_angles)])
         rfi_wgts = np.array([1, 2, 1, 3, 1, 5, 1])
         true_delay_slopes = {
             "T_ee_0": 1e-9,
@@ -817,11 +725,7 @@ class Test_Abscal_Solvers(object):
         for bl in red_data:
             for chan, heading in zip(rfi_chans, rfi_headings.T):
                 red_data[bl][:, chan] = 100 * np.exp(
-                    2j
-                    * np.pi
-                    * np.dot(unique_blvecs[bl], heading)
-                    * freqs[chan]
-                    / constants.c
+                    2j * np.pi * np.dot(unique_blvecs[bl], heading) * freqs[chan] / constants.c
                 )
             for key, slope in true_delay_slopes.items():
                 if key[2:4] == bl[2]:
@@ -834,10 +738,7 @@ class Test_Abscal_Solvers(object):
             reds, antpos, red_data, freqs, rfi_chans, rfi_headings, rfi_wgts=rfi_wgts
         )
         for key, slope in solved_dly_slopes.items():
-            assert np.all(
-                np.abs((slope - true_delay_slopes[key]) / true_delay_slopes[key])
-                < 1e-10
-            )
+            assert np.all(np.abs((slope - true_delay_slopes[key]) / true_delay_slopes[key]) < 1e-10)
 
         # test converting slopes to gains
         ants_in_reds = set([ant for red in reds for bl in red for ant in split_bl(bl)])
@@ -856,9 +757,7 @@ class Test_Abscal_Solvers(object):
         calibrate_in_place(red_data, gains)
         not_rfi_chans = [i for i in range(128) if i not in rfi_chans]
         for bl in red_data:
-            np.testing.assert_almost_equal(
-                red_data[bl][:, not_rfi_chans], 1.0, decimal=10
-            )
+            np.testing.assert_almost_equal(red_data[bl][:, not_rfi_chans], 1.0, decimal=10)
 
         with pytest.raises(NotImplementedError):
             reds = redcal.get_reds(antpos, pols=["ee", "nn", "en", "ne"])
@@ -911,10 +810,7 @@ class Test_Abscal_Solvers(object):
         antpos2 = hex_array(4, split_core=False, outriggers=0)
         for d in [100.0, 200.0, 300.0, 400.0]:
             antpos.update(
-                {
-                    len(antpos) + ant: antpos2[ant] + np.array([d, 0, 0])
-                    for ant in antpos2
-                }
+                {len(antpos) + ant: antpos2[ant] + np.array([d, 0, 0]) for ant in antpos2}
             )
         reds = redcal.get_reds(antpos, pols=["ee"], pol_mode="1pol")
         model = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
@@ -950,9 +846,7 @@ class Test_Abscal_Solvers(object):
     def test_global_phase_slope_logcal_2D(self):
         antpos = hex_array(5, split_core=False, outriggers=0)
         reds = redcal.get_reds(antpos, pols=["ee"], pol_mode="1pol")
-        model = DataContainer(
-            {bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red}
-        )
+        model = DataContainer({bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red})
         uncal_data = DataContainer(
             {bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red}
         )
@@ -974,9 +868,7 @@ class Test_Abscal_Solvers(object):
             assert f.shape == (2, 1)
             np.testing.assert_array_less(np.abs(f - answer), 0.2)
 
-        ants = sorted(
-            list(set([ant for bl in uncal_data for ant in utils.split_bl(bl)]))
-        )
+        ants = sorted(list(set([ant for bl in uncal_data for ant in utils.split_bl(bl)])))
         # try doing the first iteration with either dft or ndim_fft
         for solver in ["dft", "ndim_fft"]:
             data = copy.deepcopy(uncal_data)
@@ -1015,19 +907,12 @@ class Test_Abscal_Solvers(object):
         antpos2 = hex_array(3, split_core=False, outriggers=0)
         for d in [100.0, 200.0, 300.0]:
             antpos.update(
-                {
-                    len(antpos) + ant: antpos2[ant] + np.array([d, 0, 0])
-                    for ant in antpos2
-                }
+                {len(antpos) + ant: antpos2[ant] + np.array([d, 0, 0]) for ant in antpos2}
             )
 
         reds = redcal.get_reds(antpos, pols=["ee"], pol_mode="1pol")
-        model = DataContainer(
-            {bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red}
-        )
-        data = DataContainer(
-            {bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red}
-        )
+        model = DataContainer({bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red})
+        data = DataContainer({bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red})
         antpos = redcal.reds_to_antpos(reds)
         bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in data}
         for bl in data:
@@ -1073,19 +958,14 @@ class Test_Abscal_Solvers(object):
 
         data_bls = model_bls = [group[0] for group in reds]
         transformed_b_vecs = np.rint(
-            [
-                transformed_antpos[jj] - transformed_antpos[ii]
-                for (ii, jj, pol) in data_bls
-            ]
+            [transformed_antpos[jj] - transformed_antpos[ii] for (ii, jj, pol) in data_bls]
         ).astype(int)
 
         model, data = {}, {}
         ntimes, nfreqs = 1, 2
 
         # Test that the data is calibrated properly after being moved in phase
-        phase_deg = np.random.normal(
-            0, 1, (ntimes, nfreqs, transformed_b_vecs.shape[-1])
-        )
+        phase_deg = np.random.normal(0, 1, (ntimes, nfreqs, transformed_b_vecs.shape[-1]))
         for bi, bls in enumerate(data_bls):
             model[bls] = np.ones((ntimes, nfreqs))
             data[bls] = model[bls] * np.exp(
@@ -1093,9 +973,7 @@ class Test_Abscal_Solvers(object):
             )
 
         # Solve for the phase degeneracy
-        meta, delta_gains = abscal.complex_phase_abscal(
-            data, model, reds, data_bls, model_bls
-        )
+        meta, delta_gains = abscal.complex_phase_abscal(data, model, reds, data_bls, model_bls)
 
         # Apply calibration with new gains
         apply_cal.calibrate_in_place(data, delta_gains)
@@ -1110,17 +988,13 @@ class Test_Abscal_Solvers(object):
         data_bls = [group[0][:2] + ("ee",) for group in reds]
 
         # Test that the data is calibrated properly after being moved in phase
-        phase_deg = np.random.normal(
-            0, 1, (ntimes, nfreqs, transformed_b_vecs.shape[-1])
-        )
+        phase_deg = np.random.normal(0, 1, (ntimes, nfreqs, transformed_b_vecs.shape[-1]))
         for bi, bls in enumerate(data_bls):
             model[bls] = np.ones((ntimes, nfreqs))
             data[bls[:2] + ("ee",)] = model[bls]
 
         with pytest.raises(AssertionError):
-            meta, delta_gains = abscal.complex_phase_abscal(
-                data, model, reds, data_bls, model_bls
-            )
+            meta, delta_gains = abscal.complex_phase_abscal(data, model, reds, data_bls, model_bls)
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -1134,9 +1008,7 @@ class Test_AbsCal(object):
         self.data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
         self.AC = abscal.AbsCal(self.data_fname, self.model_fname, refant=24)
-        self.input_cal = os.path.join(
-            DATA_PATH, "zen.2458043.12552.xx.HH.uvORA.abs.calfits"
-        )
+        self.input_cal = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA.abs.calfits")
 
         # make custom gain keys
         d, fl, ap, a, f, t, l, p = io.load_vis(
@@ -1154,9 +1026,7 @@ class Test_AbsCal(object):
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
         assert AC.bls is None
         # init with meta
-        AC = abscal.AbsCal(
-            self.AC.model, self.AC.data, antpos=self.AC.antpos, freqs=self.AC.freqs
-        )
+        AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.AC.antpos, freqs=self.AC.freqs)
         assert np.allclose(AC.bls[(24, 25, "ee")][0], -14.607842046642745)
         # init with meta
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
@@ -1173,9 +1043,7 @@ class Test_AbsCal(object):
         assert AC.refant == 24
         assert np.allclose(np.linalg.norm(AC.antpos[24]), 0.0)
         # test bl cut
-        assert not np.any(
-            np.array([np.linalg.norm(AC.bls[k]) for k in AC.bls.keys()]) > 26.0
-        )
+        assert not np.any(np.array([np.linalg.norm(AC.bls[k]) for k in AC.bls.keys()]) > 26.0)
         # test bl taper
         assert np.median(AC.wgts[(24, 25, "ee")]) > np.median(AC.wgts[(24, 39, "ee")])
 
@@ -1184,16 +1052,8 @@ class Test_AbsCal(object):
         uvc = UVCal()
         uvc.read_calfits(self.input_cal)
         aa = uvc.ant_array.tolist()
-        g = (
-            (uvc.gain_array[aa.index(bl[0])] * uvc.gain_array[aa.index(bl[1])].conj())
-            .squeeze()
-            .T
-        )
-        gf = (
-            (uvc.flag_array[aa.index(bl[0])] + uvc.flag_array[aa.index(bl[1])])
-            .squeeze()
-            .T
-        )
+        g = (uvc.gain_array[aa.index(bl[0])] * uvc.gain_array[aa.index(bl[1])].conj()).squeeze().T
+        gf = (uvc.flag_array[aa.index(bl[0])] + uvc.flag_array[aa.index(bl[1])]).squeeze().T
         w = self.AC.wgts[bl] * ~gf
         AC2 = abscal.AbsCal(
             copy.deepcopy(self.AC.model),
@@ -1358,9 +1218,7 @@ class Test_AbsCal(object):
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
         pytest.raises(AttributeError, AC.delay_slope_lincal)
         # test Nones
-        AC = abscal.AbsCal(
-            self.AC.model, self.AC.data, antpos=self.antpos, freqs=self.freq_array
-        )
+        AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos, freqs=self.freq_array)
         assert AC.dly_slope is None
         assert AC.dly_slope_gain is None
         assert AC.dly_slope_arr is None
@@ -1376,9 +1234,7 @@ class Test_AbsCal(object):
         assert self.AC.dly_slope_arr.shape == (7, 2, 60, 1, 1)
         assert self.AC.dly_slope_gain_arr.shape == (7, 60, 64, 1)
         # test flags handling
-        AC = abscal.AbsCal(
-            self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs
-        )
+        AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
         AC.wgts[(24, 25, "ee")] *= 0
         AC.delay_slope_lincal(verbose=False)
         # test w/ no wgts
@@ -1406,9 +1262,7 @@ class Test_AbsCal(object):
             assert AC.phs_slope_arr is None
             assert AC.phs_slope_gain_arr is None
             assert AC.phs_slope_ant_phs_arr is None
-            AC = abscal.AbsCal(
-                self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs
-            )
+            AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
             AC.wgts[(24, 25, "ee")] *= 0
             AC.global_phase_slope_logcal(verbose=False, solver=solver)
             # test w/ no wgts
@@ -1532,24 +1386,18 @@ class Test_AbsCal(object):
             atol=1e-3,
         )
         assert np.allclose(
-            np.median(
-                AC.TT_Phi_arr[0, 0, :, :, 0][AC.wgts[(24, 25, "ee")].astype(bool)]
-            ),
+            np.median(AC.TT_Phi_arr[0, 0, :, :, 0][AC.wgts[(24, 25, "ee")].astype(bool)]),
             -1e-3,
             atol=1e-4,
         )
         assert np.allclose(
-            np.median(
-                AC.TT_Phi_arr[0, 1, :, :, 0][AC.wgts[(24, 25, "ee")].astype(bool)]
-            ),
+            np.median(AC.TT_Phi_arr[0, 1, :, :, 0][AC.wgts[(24, 25, "ee")].astype(bool)]),
             1e-3,
             atol=1e-4,
         )
 
     def test_run_model_based_calibration(self, tmpdir):
-        data_file = os.path.join(
-            DATA_PATH, "test_input/zen.2458098.45361.HH.uvh5_downselected"
-        )
+        data_file = os.path.join(DATA_PATH, "test_input/zen.2458098.45361.HH.uvh5_downselected")
         tmppath = tmpdir.strpath
 
         hd = io.HERAData(data_file)
@@ -1602,9 +1450,7 @@ class Test_AbsCal(object):
         hc = io.HERACal(cal_fname)
         gains, gain_flags, _, _ = hc.read()
         for k in gains:
-            np.testing.assert_array_almost_equal(
-                gains[k][~gain_flags[k]], scale_factor**-0.5
-            )
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor**-0.5)
 
         # Now run abscal run with dly_lincal
         cal_fname = os.path.join(tmppath, "test_cal.calfits")
@@ -1620,9 +1466,7 @@ class Test_AbsCal(object):
         hc = io.HERACal(cal_fname)
         gains, gain_flags, _, _ = hc.read()
         for k in gains:
-            np.testing.assert_array_almost_equal(
-                gains[k][~gain_flags[k]], scale_factor**-0.5
-            )
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor**-0.5)
 
         # include auto_file and specify referance antenna.
         abscal.run_model_based_calibration(
@@ -1638,9 +1482,7 @@ class Test_AbsCal(object):
         hc = io.HERACal(cal_fname)
         gains, gain_flags, _, _ = hc.read()
         for k in gains:
-            np.testing.assert_array_almost_equal(
-                gains[k][~gain_flags[k]], scale_factor**-0.5
-            )
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor**-0.5)
 
         hd = UVData()
         hdm = UVData()
@@ -1663,17 +1505,13 @@ class Test_AbsCal(object):
         hc = io.HERACal(cal_fname)
         gains, gain_flags, _, _ = hc.read()
         for k in gains:
-            np.testing.assert_array_almost_equal(
-                gains[k][~gain_flags[k]], scale_factor**-0.5
-            )
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor**-0.5)
 
     def test_run_model_based_calibration_flagged_gains(self, tmpdir):
         """
         Test case when all gains are flagged.
         """
-        data_file = os.path.join(
-            DATA_PATH, "test_input/zen.2458098.45361.HH.uvh5_downselected"
-        )
+        data_file = os.path.join(DATA_PATH, "test_input/zen.2458098.45361.HH.uvh5_downselected")
         tmppath = tmpdir.strpath
 
         hd = io.HERAData(data_file)
@@ -1717,13 +1555,9 @@ class Test_AbsCal(object):
             np.testing.assert_array_almost_equal(gain_flags[k], True)
 
     def test_run_model_based_calibration_nonuniform_channels(self, tmpdir):
-        include_chans = np.hstack(
-            [np.arange(10), np.arange(12, 15), np.arange(64 - 10, 64)]
-        )
+        include_chans = np.hstack([np.arange(10), np.arange(12, 15), np.arange(64 - 10, 64)])
 
-        data_file = os.path.join(
-            DATA_PATH, "test_input/zen.2458098.45361.HH.uvh5_downselected"
-        )
+        data_file = os.path.join(DATA_PATH, "test_input/zen.2458098.45361.HH.uvh5_downselected")
         tmppath = tmpdir.strpath
 
         hd = io.HERAData(data_file)
@@ -1763,14 +1597,10 @@ class Test_AbsCal(object):
         hc = io.HERACal(cal_fname)
         gains, gain_flags, _, _ = hc.read()
         for k in gains:
-            np.testing.assert_array_almost_equal(
-                gains[k][~gain_flags[k]], scale_factor**-0.5
-            )
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor**-0.5)
 
     def test_run_model_based_calibration_redundant(self, tmpdir):
-        data_file = os.path.join(
-            DATA_PATH, "test_input/zen.2458098.45361.HH.uvh5_downselected"
-        )
+        data_file = os.path.join(DATA_PATH, "test_input/zen.2458098.45361.HH.uvh5_downselected")
         tmppath = tmpdir.strpath
 
         hd = io.HERAData(data_file)
@@ -1819,8 +1649,7 @@ class Test_AbsCal(object):
         # create a redundantly averaged model file.
         reds = redcal.get_pos_reds(hdm.antpos, include_autos=True)
         reds = [
-            [bl for bl in redgrp if bl in antpairs or reverse_bl(bl) in antpairs]
-            for redgrp in reds
+            [bl for bl in redgrp if bl in antpairs or reverse_bl(bl) in antpairs] for redgrp in reds
         ]
         reds = [redgrp for redgrp in reds if len(redgrp) > 0]
 
@@ -1864,9 +1693,7 @@ class Test_AbsCal(object):
         hc = io.HERACal(cal_fname)
         gains, gain_flags, _, _ = hc.read()
         for k in gains:
-            np.testing.assert_array_almost_equal(
-                gains[k][~gain_flags[k]], scale_factor**-0.5
-            )
+            np.testing.assert_array_almost_equal(gains[k][~gain_flags[k]], scale_factor**-0.5)
 
     def test_model_calibration_argparser(self):
         sys.argv = [sys.argv[0], "a", "b", "c", "--auto_file", "d"]
@@ -1889,17 +1716,11 @@ class Test_Post_Redcal_Abscal_Run(object):
             DATA_PATH, "test_input/zen.2458098.45361.HH.omni.calfits_downselected"
         )
         self.model_files = [
-            os.path.join(
-                DATA_PATH, "test_input/zen.2458042.60288.HH.uvRXLS.uvh5_downselected"
-            ),
-            os.path.join(
-                DATA_PATH, "test_input/zen.2458042.61034.HH.uvRXLS.uvh5_downselected"
-            ),
+            os.path.join(DATA_PATH, "test_input/zen.2458042.60288.HH.uvRXLS.uvh5_downselected"),
+            os.path.join(DATA_PATH, "test_input/zen.2458042.61034.HH.uvRXLS.uvh5_downselected"),
         ]
         self.model_files_missing_one_int = [
-            os.path.join(
-                DATA_PATH, "test_input/zen.2458042.60288.HH.uvRXLS.uvh5_downselected"
-            ),
+            os.path.join(DATA_PATH, "test_input/zen.2458042.60288.HH.uvRXLS.uvh5_downselected"),
             os.path.join(
                 DATA_PATH,
                 "test_input/zen.2458042.61034.HH.uvRXLS.uvh5_downselected_missing_first_integration",
@@ -1985,9 +1806,7 @@ class Test_Post_Redcal_Abscal_Run(object):
 
     def test_match_baselines(self):
         with pytest.raises(NotImplementedError):
-            abscal.match_baselines(
-                None, None, None, model_is_redundant=False, data_is_redsol=True
-            )
+            abscal.match_baselines(None, None, None, model_is_redundant=False, data_is_redsol=True)
 
         # try with data files:
         hd = io.HERAData(self.data_file)
@@ -2168,17 +1987,11 @@ class Test_Post_Redcal_Abscal_Run(object):
         data_nsamples = DataContainer({bl: np.ones((3, 4), dtype=float) for bl in bls})
         data_nsamples[(0, 1, "ee")][1, 1] = 2
         model_flags = data_flags
-        autocorrs = DataContainer(
-            {bl: np.ones((3, 4), dtype=complex) for bl in auto_bls}
-        )
+        autocorrs = DataContainer({bl: np.ones((3, 4), dtype=complex) for bl in auto_bls})
         autocorrs[(1, 1, "ee")][2, 2] = 3
-        auto_flags = DataContainer(
-            {bl: np.zeros((3, 4), dtype=bool) for bl in auto_bls}
-        )
+        auto_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in auto_bls})
 
-        wgts = abscal.build_data_wgts(
-            data_flags, data_nsamples, model_flags, autocorrs, auto_flags
-        )
+        wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flags)
         for bl in wgts:
             for t in range(3):
                 for f in range(4):
@@ -2215,13 +2028,9 @@ class Test_Post_Redcal_Abscal_Run(object):
         data_nsamples[(0, 1, "ee")] *= 3
         data_nsamples[(0, 2, "ee")] *= 2
         model_flags = data_flags
-        autocorrs = DataContainer(
-            {bl: np.ones((3, 4), dtype=complex) for bl in auto_bls}
-        )
+        autocorrs = DataContainer({bl: np.ones((3, 4), dtype=complex) for bl in auto_bls})
         autocorrs[(2, 2, "ee")][2, 2] = 3
-        auto_flags = DataContainer(
-            {bl: np.zeros((3, 4), dtype=bool) for bl in auto_bls}
-        )
+        auto_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in auto_bls})
         auto_flags[(0, 0, "ee")][1, 1] = True
 
         gain_flags = {
@@ -2265,9 +2074,7 @@ class Test_Post_Redcal_Abscal_Run(object):
 
         # test with no flagged antennas
         cal_flags = {(ant, "Jee"): np.array([False]) for ant in antpos}
-        iap = abscal._get_idealized_antpos(
-            cal_flags, antpos, ["ee"], keep_flagged_ants=True
-        )
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ["ee"], keep_flagged_ants=True)
         assert len(iap) == 8  # all antennas are included
         assert len(iap[0]) == 3  # 3 degeneracies ==> 3 dimensions
         # check that the results are the same as in redcal.reds_to_antpos
@@ -2278,9 +2085,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         # test with flagged outrigger, which lowers the number of degeneracies
         cal_flags = {(ant, "Jee"): np.array([False]) for ant in antpos}
         cal_flags[(7, "Jee")] = True
-        iap = abscal._get_idealized_antpos(
-            cal_flags, antpos, ["ee"], keep_flagged_ants=True
-        )
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ["ee"], keep_flagged_ants=True)
         # because keep_flagged_ants is True, the flagged antenna is still in the antpos dict
         assert len(iap) == 8
         # because the only antenna necessitating a 3rd tip-tilt degeneracy is flagged,
@@ -2295,9 +2100,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         # test with flagged grid ant, which does not affect the number of degeneracies
         cal_flags = {(ant, "Jee"): np.array([False]) for ant in antpos}
         cal_flags[(1, "Jee")] = True
-        iap = abscal._get_idealized_antpos(
-            cal_flags, antpos, ["ee"], keep_flagged_ants=True
-        )
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ["ee"], keep_flagged_ants=True)
         assert len(iap) == 8  # all antennas included
         # removing an on-grid antenna but keeping the outrigger doesn't change the number of degeneracies
         assert len(iap[0]) == 3
@@ -2309,9 +2112,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         # test keep_flagged_ants=False
         cal_flags = {(ant, "Jee"): np.array([False]) for ant in antpos}
         cal_flags[(1, "Jee")] = True
-        iap = abscal._get_idealized_antpos(
-            cal_flags, antpos, ["ee"], keep_flagged_ants=False
-        )
+        iap = abscal._get_idealized_antpos(cal_flags, antpos, ["ee"], keep_flagged_ants=False)
         assert 1 not in iap
         assert len(iap) == 7
 
@@ -2328,17 +2129,13 @@ class Test_Post_Redcal_Abscal_Run(object):
         cal_flags = {(ant, "Jee"): np.array([False]) for ant in antpos}
         cal_flags[(7, "Jee")] = True
         with pytest.raises(ValueError):
-            iap = abscal._get_idealized_antpos(
-                cal_flags, antpos, ["ee"], data_wgts=data_wgts
-            )
+            iap = abscal._get_idealized_antpos(cal_flags, antpos, ["ee"], data_wgts=data_wgts)
 
         # test error where antenna with non-zero weight is getting placed at position 0
         cal_flags = {(ant, "Jee"): np.array([False]) for ant in antpos2}
         cal_flags[7, "Jee"] = True
         with pytest.raises(ValueError):
-            iap = abscal._get_idealized_antpos(
-                cal_flags, antpos, ["ee"], data_wgts=data_wgts
-            )
+            iap = abscal._get_idealized_antpos(cal_flags, antpos, ["ee"], data_wgts=data_wgts)
 
     def test_post_redcal_abscal(self):
         # setup
@@ -2347,9 +2144,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         hc = io.HERACal(self.redcal_file)
 
         model_bls = list(set([bl for bls in list(hdm.bls.values()) for bl in bls]))
-        model_antpos = {
-            ant: pos for antpos in hdm.antpos.values() for ant, pos in antpos.items()
-        }
+        model_antpos = {ant: pos for antpos in hdm.antpos.values() for ant, pos in antpos.items()}
         (
             data_bl_to_load,
             model_bl_to_load,
@@ -2372,12 +2167,8 @@ class Test_Post_Redcal_Abscal_Run(object):
         tinds = [0, 1, 2]
         data, flags, nsamples = hd.read(times=hd.times[tinds], bls=data_bl_to_load)
         model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
-        model, model_flags, _ = io.partial_time_io(
-            hdm, model_times_to_load, bls=model_bl_to_load
-        )
-        model_bls = {
-            bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()
-        }
+        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, bls=model_bl_to_load)
+        model_bls = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
         utils.lst_rephase(
             model,
             model_bls,
@@ -2567,9 +2358,9 @@ class Test_Post_Redcal_Abscal_Run(object):
         hcr = io.HERACal(self.redcal_file)
         rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
 
-        assert hcr.history.replace("\n", "").replace(
-            " ", ""
-        ) in hca_red.history.replace("\n", "").replace(" ", "")
+        assert hcr.history.replace("\n", "").replace(" ", "") in hca_red.history.replace(
+            "\n", ""
+        ).replace(" ", "")
         assert "testing2" in hca_red.history.replace("\n", "").replace(" ", "")
         for k in rc_gains:
             assert k in ac_gains
@@ -2631,9 +2422,9 @@ class Test_Post_Redcal_Abscal_Run(object):
             hcr.gain_array[~hcat.flag_array] * hcg.gain_array[~hcat.flag_array],
         )
 
-        assert hcr.history.replace("\n", "").replace(
-            " ", ""
-        ) in hca_red_red.history.replace("\n", "").replace(" ", "")
+        assert hcr.history.replace("\n", "").replace(" ", "") in hca_red_red.history.replace(
+            "\n", ""
+        ).replace(" ", "")
         assert "testing3" in hca_red_red.history.replace("\n", "").replace(" ", "")
         for k in rc_gains:
             assert k in ac_gains
@@ -2670,14 +2461,8 @@ class Test_Post_Redcal_Abscal_Run(object):
 
         for ant in g1:
             if not np.all(f1[ant]):
-                assert (
-                    np.abs(np.median(np.abs(g1[ant][~f1[ant]] / g2[ant][~f2[ant]])) - 1)
-                    < 0.1
-                )
-                assert (
-                    np.abs(np.median(np.abs(g1[ant][~f1[ant]] / g3[ant][~f3[ant]])) - 1)
-                    < 0.1
-                )
+                assert np.abs(np.median(np.abs(g1[ant][~f1[ant]] / g2[ant][~f2[ant]])) - 1) < 0.1
+                assert np.abs(np.median(np.abs(g1[ant][~f1[ant]] / g3[ant][~f3[ant]])) - 1) < 0.1
 
         for ant in q1:
             np.testing.assert_array_equal(q1[ant], 0.0)

@@ -140,9 +140,7 @@ def _configure_inpainted_mode(output_flagged, output_inpainted, where_inpainted_
         output_inpainted = bool(where_inpainted_files)
 
     if not output_inpainted and not output_flagged:
-        raise ValueError(
-            "Both output_inpainted and output_flagged are False. One must be True."
-        )
+        raise ValueError("Both output_inpainted and output_flagged are False. One must be True.")
 
     return output_flagged, output_inpainted
 
@@ -181,9 +179,7 @@ def create_lstbin_output_file(
         kind=kind,
         lst=lst,
         pol="".join(pols),
-        inpaint_mode=(
-            "inpaint" if inpaint_mode else ("flagged" if inpaint_mode is False else "")
-        ),
+        inpaint_mode=("inpaint" if inpaint_mode else ("flagged" if inpaint_mode is False else "")),
     )
     # There's a weird gotcha with pathlib where if you do path / "/file.name"
     # You get just "/file.name" which is in root.
@@ -241,6 +237,4 @@ def write_baseline_slc_to_file(
         slc = slice(slc.start * ntimes, slc.stop * ntimes, 1)
         f["Data"]["visdata"][slc] = data.reshape((-1, data.shape[2], data.shape[3]))
         f["Data"]["flags"][slc] = flags.reshape((-1, data.shape[2], data.shape[3]))
-        f["Data"]["nsamples"][slc] = nsamples.reshape(
-            (-1, data.shape[2], data.shape[3])
-        )
+        f["Data"]["nsamples"][slc] = nsamples.reshape((-1, data.shape[2], data.shape[3]))

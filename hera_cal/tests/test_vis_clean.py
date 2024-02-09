@@ -175,8 +175,7 @@ def test_flag_rows_with_flags_within_edge_distance_with_breaks():
     Nfreqs = 64
     Ntimes = 60
     freqs = (
-        np.hstack([np.arange(23), 30 + np.arange(24), 58 + np.arange(17)]) * 100e3
-        + 150e6
+        np.hstack([np.arange(23), 30 + np.arange(24), 58 + np.arange(17)]) * 100e3 + 150e6
     )  # freq axis with discontinuities at 23 and 47 integrations.
     times = np.hstack(
         [
@@ -222,36 +221,28 @@ def test_flag_rows_with_contiguous_flags():
     weights_in[35, 12:14] = 0.0
     weights_in[2:12, 30] = 0.0
     weights_in[-10:-8, 20] = 0.0
-    wout = vis_clean.flag_rows_with_contiguous_flags(
-        weights_in, max_contiguous_flag=8, ax="freq"
-    )
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=8, ax="freq")
     for i in range(wout.shape[0]):
         if i == 32:
             assert np.all(np.isclose(wout[i], 0.0))
         else:
             assert np.all(np.isclose(wout[i], weights_in[i]))
     # extending edge_distance to 12 should yield 33rd integration being flagged as well.
-    wout = vis_clean.flag_rows_with_contiguous_flags(
-        weights_in, max_contiguous_flag=2, ax="freq"
-    )
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=2, ax="freq")
     for i in range(wout.shape[0]):
         if i == 32 or i == 35:
             assert np.all(np.isclose(wout[i], 0.0))
         else:
             assert np.all(np.isclose(wout[i], weights_in[i]))
     # now do time axis. 30th channel should be flagged for this case.
-    wout = vis_clean.flag_rows_with_contiguous_flags(
-        weights_in, max_contiguous_flag=8, ax="time"
-    )
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=8, ax="time")
     for i in range(wout.shape[1]):
         if i == 30:
             assert np.all(np.isclose(wout[:, i], 0.0))
         else:
             assert np.all(np.isclose(wout[:, i], weights_in[:, i]))
     # 30th and 20th channels should end up flagged for this case.
-    wout = vis_clean.flag_rows_with_contiguous_flags(
-        weights_in, max_contiguous_flag=2, ax="time"
-    )
+    wout = vis_clean.flag_rows_with_contiguous_flags(weights_in, max_contiguous_flag=2, ax="time")
     for i in range(wout.shape[1]):
         if i == 30 or i == 20:
             assert np.all(np.isclose(wout[:, i], 0.0))
@@ -311,10 +302,7 @@ def test_flag_model_rms():
     times = np.arange(60) * 10.0
     freqs = np.arange(64) * 100e3
     w = np.ones((Ntimes, Nfreqs), dtype=bool)
-    d = (
-        np.random.randn(Ntimes, Nfreqs) * 1e-3
-        + 1j * np.random.randn(Ntimes, Nfreqs) * 1e-3
-    )
+    d = np.random.randn(Ntimes, Nfreqs) * 1e-3 + 1j * np.random.randn(Ntimes, Nfreqs) * 1e-3
     d += np.ones_like(d) * 100
     d[30, 12] = 3.12315132e6
     w[30, 12] = 0.0
@@ -349,9 +337,7 @@ def test_flag_model_rms():
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
-@pytest.mark.filterwarnings(
-    "ignore:It seems that the latitude and longitude are in radians"
-)
+@pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 class Test_VisClean(object):
     def test_init(self):
         # test basic init
@@ -375,9 +361,7 @@ class Test_VisClean(object):
 
         # test input cal
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        uvc = io.HERACal(
-            os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA.abs.calfits")
-        )
+        uvc = io.HERACal(os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA.abs.calfits"))
         gains, _, _, _ = uvc.read()
         V1 = VisClean(fname, filetype="miriad")
         bl = (52, 53, "ee")
@@ -406,9 +390,7 @@ class Test_VisClean(object):
         V2.clear_calibration()
         assert not hasattr(V2, "hc")
 
-    @pytest.mark.filterwarnings(
-        "ignore:Selected polarization values are not evenly spaced"
-    )
+    @pytest.mark.filterwarnings("ignore:Selected polarization values are not evenly spaced")
     def test_read_write(self):
         # test read data can be turned off for uvh5
         fname = os.path.join(DATA_PATH, "zen.2458098.43124.subband.uvh5")
@@ -428,9 +410,9 @@ class Test_VisClean(object):
         V2 = VisClean("./ex.uvh5", filetype="uvh5")
         V2.read()
         assert V2.hd.vis_units == "Jy"
-        assert "Thisfilewasproducedbythefunction" in V2.hd.history.replace(
-            "\n", ""
-        ).replace(" ", "")
+        assert "Thisfilewasproducedbythefunction" in V2.hd.history.replace("\n", "").replace(
+            " ", ""
+        )
         V.hd.history, V2.hd.history, V2.hd.vis_units = "", "", V.hd.vis_units
         if hasattr(V.hd, "filename"):
             # make sure filename attributes are what we're expecting
@@ -445,9 +427,7 @@ class Test_VisClean(object):
 
         # test write on subset of data
         V.read(read_data=True)
-        data = datacontainer.DataContainer(
-            dict([(k, V.data[k]) for k in list(V.data.keys())[:2]])
-        )
+        data = datacontainer.DataContainer(dict([(k, V.data[k]) for k in list(V.data.keys())[:2]]))
         V.write_data(data, "ex.uvh5", overwrite=True, filetype="uvh5")
         assert os.path.exists("ex.uvh5")
         os.remove("ex.uvh5")
@@ -521,9 +501,7 @@ class Test_VisClean(object):
         assert V.clean_info[k][(0, V.Nfreqs)]["status"]["axis_0"][3] == "success"
         # check that clean resid is equal to zero in flagged channels
         assert np.all(
-            V.clean_resid[(24, 25, "ee")][
-                V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]
-            ]
+            V.clean_resid[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]]
             == 0.0
         )
         assert np.any(
@@ -532,26 +510,18 @@ class Test_VisClean(object):
             ]
             != 0.0
         )
-        assert np.all(
-            V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0
-        )
-        assert np.any(
-            V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0
-        )
+        assert np.all(V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0)
+        assert np.any(V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0)
         # check that filtered_data is the same in channels that were not flagged
         atol = (
-            1e-6
-            * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0)
-            ** 0.5
+            1e-6 * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0) ** 0.5
         )
         assert np.all(
             np.isclose(
                 V.clean_data[(24, 25, "ee")][
                     ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
                 ],
-                V.data[(24, 25, "ee")][
-                    ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-                ],
+                V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
                 rtol=0.0,
                 atol=atol,
             )
@@ -594,9 +564,7 @@ class Test_VisClean(object):
         assert V.clean_info[k][(0, V.Nfreqs)]["status"]["axis_0"][3] == "success"
         # check that clean resid is equal to zero in flagged channels
         assert np.all(
-            V.clean_resid[(24, 25, "ee")][
-                V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]
-            ]
+            V.clean_resid[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]]
             == 0.0
         )
         assert np.any(
@@ -605,25 +573,15 @@ class Test_VisClean(object):
             ]
             != 0.0
         )
-        assert np.all(
-            V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0
-        )
-        assert np.any(
-            V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0
-        )
+        assert np.all(V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0)
+        assert np.any(V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0)
         # check that filtered_data is the same in channels that were not flagged
         atol = (
-            1e-6
-            * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0)
-            ** 0.5
+            1e-6 * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0) ** 0.5
         )
         assert np.allclose(
-            V.clean_data[(24, 25, "ee")][
-                ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-            ],
-            V.data[(24, 25, "ee")][
-                ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-            ],
+            V.clean_data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
+            V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
             rtol=0.0,
             atol=atol,
         )
@@ -644,9 +602,7 @@ class Test_VisClean(object):
         )
         # check that clean resid is equal to zero in flagged channels
         assert np.all(
-            V.clean_resid[(24, 25, "ee")][
-                V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]
-            ]
+            V.clean_resid[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]]
             == 0.0
         )
         assert np.any(
@@ -655,36 +611,27 @@ class Test_VisClean(object):
             ]
             != 0.0
         )
-        assert np.all(
-            V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0
-        )
-        assert np.any(
-            V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0
-        )
+        assert np.all(V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0)
+        assert np.any(V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0)
         # check that filtered_data is the same in channels that were not flagged
         # had to set atol=1e-6 here so it won't fail on travis (it runs fine on my laptop). There are some funny
         # numpy issues.
         atol = (
-            1e-6
-            * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0)
-            ** 0.5
+            1e-6 * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0) ** 0.5
         )
         assert np.all(
             np.isclose(
                 V.clean_data[(24, 25, "ee")][
                     ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
                 ],
-                V.data[(24, 25, "ee")][
-                    ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-                ],
+                V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
                 atol=atol,
                 rtol=0.0,
             )
         )
         assert np.all(
             [
-                V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i]
-                == "success"
+                V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i] == "success"
                 for i in V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"]
             ]
         )
@@ -721,19 +668,11 @@ class Test_VisClean(object):
             max_frate=1.0,
             mode="dayenu",
         )
-        assert (
-            V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][0]
-            == "skipped"
-        )
-        assert (
-            V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][3]
-            == "success"
-        )
+        assert V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][0] == "skipped"
+        assert V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][3] == "success"
         # check that clean resid is equal to zero in flagged channels
         assert np.all(
-            V.clean_resid[(24, 25, "ee")][
-                V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]
-            ]
+            V.clean_resid[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]]
             == 0.0
         )
         assert np.any(
@@ -742,25 +681,15 @@ class Test_VisClean(object):
             ]
             != 0.0
         )
-        assert np.all(
-            V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0
-        )
-        assert np.any(
-            V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0
-        )
+        assert np.all(V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0)
+        assert np.any(V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0)
         # check that filtered_data is the same in channels that were not flagged
         atol = (
-            1e-6
-            * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0)
-            ** 0.5
+            1e-6 * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0) ** 0.5
         )
         assert np.allclose(
-            V.clean_data[(24, 25, "ee")][
-                ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-            ],
-            V.data[(24, 25, "ee")][
-                ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-            ],
+            V.clean_data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
+            V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
             atol=atol,
             rtol=0.0,
         )
@@ -773,24 +702,15 @@ class Test_VisClean(object):
         )
         assert np.all(
             [
-                "success"
-                == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i]
+                "success" == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i]
                 for i in V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"]
             ]
         )
-        assert (
-            V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][0]
-            == "skipped"
-        )
-        assert (
-            V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][3]
-            == "success"
-        )
+        assert V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][0] == "skipped"
+        assert V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][3] == "success"
         # check that clean resid is equal to zero in flagged channels
         assert np.all(
-            V.clean_resid[(24, 25, "ee")][
-                V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]
-            ]
+            V.clean_resid[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]]
             == 0.0
         )
         assert np.any(
@@ -799,25 +719,15 @@ class Test_VisClean(object):
             ]
             != 0.0
         )
-        assert np.all(
-            V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0
-        )
-        assert np.any(
-            V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0
-        )
+        assert np.all(V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0)
+        assert np.any(V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0)
         # check that filtered_data is the same in channels that were not flagged
         atol = (
-            1e-6
-            * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0)
-            ** 0.5
+            1e-6 * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0) ** 0.5
         )
         assert np.allclose(
-            V.clean_data[(24, 25, "ee")][
-                ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-            ],
-            V.data[(24, 25, "ee")][
-                ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-            ],
+            V.clean_data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
+            V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
             atol=atol,
             rtol=0.0,
         )
@@ -847,9 +757,7 @@ class Test_VisClean(object):
             output_prefix="clean0",
             mode="dayenu",
         )
-        assert np.all(
-            np.isclose(V.clean_resid[(24, 25, "ee")], V.clean0_resid[(24, 25, "ee")])
-        )
+        assert np.all(np.isclose(V.clean_resid[(24, 25, "ee")], V.clean0_resid[(24, 25, "ee")]))
 
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean_dpss(self):
@@ -870,9 +778,7 @@ class Test_VisClean(object):
         )
         # check that clean resid is equal to zero in flagged channels
         assert np.all(
-            V.clean_resid[(24, 25, "ee")][
-                V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]
-            ]
+            V.clean_resid[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]]
             == 0.0
         )
         assert np.any(
@@ -881,34 +787,25 @@ class Test_VisClean(object):
             ]
             != 0.0
         )
-        assert np.all(
-            V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0
-        )
-        assert np.any(
-            V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0
-        )
+        assert np.all(V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0)
+        assert np.any(V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0)
         # check that filtered_data is the same in channels that were not flagged
         atol = (
-            1e-6
-            * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0)
-            ** 0.5
+            1e-6 * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0) ** 0.5
         )
         assert np.all(
             np.isclose(
                 V.clean_data[(24, 25, "ee")][
                     ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
                 ],
-                V.data[(24, 25, "ee")][
-                    ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-                ],
+                V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
                 atol=atol,
                 rtol=0.0,
             )
         )
         assert np.all(
             [
-                V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i]
-                == "success"
+                V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i] == "success"
                 for i in V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"]
             ]
         )
@@ -944,19 +841,11 @@ class Test_VisClean(object):
             max_frate=1.0,
             mode="dpss_leastsq",
         )
-        assert (
-            V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][0]
-            == "skipped"
-        )
-        assert (
-            V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][3]
-            == "success"
-        )
+        assert V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][0] == "skipped"
+        assert V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][3] == "success"
         # check that clean resid is equal to zero in flagged channels
         assert np.all(
-            V.clean_resid[(24, 25, "ee")][
-                V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]
-            ]
+            V.clean_resid[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]]
             == 0.0
         )
         assert np.any(
@@ -965,26 +854,18 @@ class Test_VisClean(object):
             ]
             != 0.0
         )
-        assert np.all(
-            V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0
-        )
-        assert np.any(
-            V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0
-        )
+        assert np.all(V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0)
+        assert np.any(V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0)
         # check that filtered_data is the same in channels that were not flagged
         atol = (
-            1e-6
-            * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0)
-            ** 0.5
+            1e-6 * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0) ** 0.5
         )
         assert np.all(
             np.isclose(
                 V.clean_data[(24, 25, "ee")][
                     ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
                 ],
-                V.data[(24, 25, "ee")][
-                    ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-                ],
+                V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
                 atol=atol,
                 rtol=0.0,
             )
@@ -998,16 +879,13 @@ class Test_VisClean(object):
         )
         assert np.all(
             [
-                "success"
-                == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i]
+                "success" == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i]
                 for i in V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"]
             ]
         )
         # check that clean resid is equal to zero in flagged channels
         assert np.all(
-            V.clean_resid[(24, 25, "ee")][
-                V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]
-            ]
+            V.clean_resid[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]]
             == 0.0
         )
         assert np.any(
@@ -1016,26 +894,18 @@ class Test_VisClean(object):
             ]
             != 0.0
         )
-        assert np.all(
-            V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0
-        )
-        assert np.any(
-            V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0
-        )
+        assert np.all(V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0)
+        assert np.any(V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0)
         # check that filtered_data is the same in channels that were not flagged
         atol = (
-            1e-6
-            * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0)
-            ** 0.5
+            1e-6 * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0) ** 0.5
         )
         assert np.all(
             np.isclose(
                 V.clean_data[(24, 25, "ee")][
                     ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
                 ],
-                V.data[(24, 25, "ee")][
-                    ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-                ],
+                V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
                 atol=atol,
                 rtol=0.0,
             )
@@ -1077,12 +947,8 @@ class Test_VisClean(object):
         tmp_path = tmpdir.strpath
         template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         # first run flagging channels and frequencies
-        fname_edgeflags = os.path.join(
-            tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5"
-        )
-        fname_flagged = os.path.join(
-            tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5"
-        )
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
         hdt = io.HERAData(template)
         d, f, n = hdt.read()
         for k in d:
@@ -1184,8 +1050,7 @@ class Test_VisClean(object):
         max_frate = datacontainer.DataContainer(
             {
                 (24, 25, "ee"): 2.0 / np.abs(np.median(np.diff(V.times)) * 3.6 * 24.0),
-                (24, 24, "ee"): 1.0
-                / np.abs(2 * np.median(np.diff(V.times)) * 3.6 * 24.0),
+                (24, 24, "ee"): 1.0 / np.abs(2 * np.median(np.diff(V.times)) * 3.6 * 24.0),
             }
         )
         V.vis_clean(
@@ -1237,10 +1102,7 @@ class Test_VisClean(object):
         for k in [(24, 25, "ee"), (24, 24, "ee")]:
             for i in range(V.Ntimes):
                 if i == 12:
-                    assert (
-                        V.clean_info[k][(0, V.Nfreqs)]["status"]["axis_1"][i]
-                        == "skipped"
-                    )
+                    assert V.clean_info[k][(0, V.Nfreqs)]["status"]["axis_1"][i] == "skipped"
                 else:
                     assert not np.any(V.clean_flags[k][i])
 
@@ -1303,12 +1165,8 @@ class Test_VisClean(object):
         tmp_path = tmpdir.strpath
         template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         # first run flagging channels and frequencies
-        fname_edgeflags = os.path.join(
-            tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5"
-        )
-        fname_flagged = os.path.join(
-            tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5"
-        )
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
         hdt = io.HERAData(template)
         d, f, n = hdt.read(
             frequencies=np.hstack([hdt.freqs[:30], hdt.freqs[32:48], hdt.freqs[49:]])
@@ -1373,16 +1231,10 @@ class Test_VisClean(object):
         tmp_path = tmpdir.strpath
         template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         # first run flagging channels and frequencies
-        fname_edgeflags = os.path.join(
-            tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5"
-        )
-        fname_flagged = os.path.join(
-            tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5"
-        )
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
         hdt = io.HERAData(template)
-        d, f, n = hdt.read(
-            times=np.hstack([hdt.times[:30], hdt.times[32:48], hdt.times[49:]])
-        )
+        d, f, n = hdt.read(times=np.hstack([hdt.times[:30], hdt.times[32:48], hdt.times[49:]]))
         for k in d:
             f[k][:] = False
             f[k][0, :] = True
@@ -1436,12 +1288,8 @@ class Test_VisClean(object):
         tmp_path = tmpdir.strpath
         template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         # first run flagging channels and frequencies
-        fname_edgeflags = os.path.join(
-            tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5"
-        )
-        fname_flagged = os.path.join(
-            tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5"
-        )
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
         hdt = io.HERAData(template)
         d, f, n = hdt.read(
             times=np.hstack([hdt.times[:30], hdt.times[32:48], hdt.times[49:]]),
@@ -1522,9 +1370,7 @@ class Test_VisClean(object):
         flag_yaml = os.path.join(DATA_PATH, "test_input/a_priori_flags_sample.yaml")
         pytest.raises(ValueError, V.apply_flags, flag_yaml, filetype="invalid_type")
         # cover overwrite flags
-        flag_yaml = os.path.join(
-            DATA_PATH, "test_input/a_priori_flags_sample_noflags.yaml"
-        )
+        flag_yaml = os.path.join(DATA_PATH, "test_input/a_priori_flags_sample_noflags.yaml")
         V.read()
         nk = 0
         for k in V.flags.keys():
@@ -1555,16 +1401,13 @@ class Test_VisClean(object):
         V.vis_clean(keys=[(24, 25, "ee"), (24, 24, "ee")], ax="freq", overwrite=True)
         assert np.all(
             [
-                V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i]
-                == "success"
+                V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i] == "success"
                 for i in V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"]
             ]
         )
         # check that clean resid is equal to zero in flagged channels
         assert np.all(
-            V.clean_resid[(24, 25, "ee")][
-                V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]
-            ]
+            V.clean_resid[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]]
             == 0.0
         )
         assert np.any(
@@ -1573,26 +1416,18 @@ class Test_VisClean(object):
             ]
             != 0.0
         )
-        assert np.all(
-            V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0
-        )
-        assert np.any(
-            V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0
-        )
+        assert np.all(V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0)
+        assert np.any(V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0)
         # check that filtered_data is the same in channels that were not flagged
         atol = (
-            1e-6
-            * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0)
-            ** 0.5
+            1e-6 * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0) ** 0.5
         )
         assert np.all(
             np.isclose(
                 V.clean_data[(24, 25, "ee")][
                     ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
                 ],
-                V.data[(24, 25, "ee")][
-                    ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-                ],
+                V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
                 atol=atol,
                 rtol=0.0,
             )
@@ -1604,19 +1439,11 @@ class Test_VisClean(object):
             max_frate=10.0,
             overwrite=True,
         )
-        assert (
-            "skipped"
-            == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][0]
-        )
-        assert (
-            "success"
-            == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][3]
-        )
+        assert "skipped" == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][0]
+        assert "success" == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][3]
         # check that clean resid is equal to zero in flagged channels
         assert np.all(
-            V.clean_resid[(24, 25, "ee")][
-                V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]
-            ]
+            V.clean_resid[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]]
             == 0.0
         )
         assert np.any(
@@ -1625,21 +1452,15 @@ class Test_VisClean(object):
             ]
             != 0.0
         )
-        assert np.all(
-            V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0
-        )
-        assert np.any(
-            V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0
-        )
+        assert np.all(V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0)
+        assert np.any(V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0)
         # check that filtered_data is the same in channels that were not flagged
         assert np.all(
             np.isclose(
                 V.clean_data[(24, 25, "ee")][
                     ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
                 ],
-                V.data[(24, 25, "ee")][
-                    ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-                ],
+                V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
             )
         )
         # basic 2d clean
@@ -1652,23 +1473,19 @@ class Test_VisClean(object):
         )
         assert np.all(
             [
-                "success"
-                == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][i]
+                "success" == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][i]
                 for i in V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"]
             ]
         )
         assert np.all(
             [
-                "success"
-                == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i]
+                "success" == V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i]
                 for i in V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"]
             ]
         )
         # check that clean resid is equal to zero in flagged channels
         assert np.all(
-            V.clean_resid[(24, 25, "ee")][
-                V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]
-            ]
+            V.clean_resid[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")] | V.flags[(24, 25, "ee")]]
             == 0.0
         )
         assert np.any(
@@ -1677,26 +1494,18 @@ class Test_VisClean(object):
             ]
             != 0.0
         )
-        assert np.all(
-            V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0
-        )
-        assert np.any(
-            V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0
-        )
+        assert np.all(V.clean_model[(24, 25, "ee")][V.clean_flags[(24, 25, "ee")]] == 0.0)
+        assert np.any(V.clean_model[(24, 25, "ee")][~V.clean_flags[(24, 25, "ee")]] != 0.0)
         # check that filtered_data is the same in channels that were not flagged
         atol = (
-            1e-6
-            * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0)
-            ** 0.5
+            1e-6 * np.mean(np.abs(V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")]]) ** 2.0) ** 0.5
         )
         assert np.all(
             np.isclose(
                 V.clean_data[(24, 25, "ee")][
                     ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
                 ],
-                V.data[(24, 25, "ee")][
-                    ~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]
-                ],
+                V.data[(24, 25, "ee")][~V.flags[(24, 25, "ee")] & ~V.clean_flags[(24, 25, "ee")]],
                 atol=atol,
                 rtol=0.0,
             )
@@ -1712,15 +1521,13 @@ class Test_VisClean(object):
         )
         assert np.all(
             [
-                V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i]
-                == "skipped"
+                V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"][i] == "skipped"
                 for i in V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_1"]
             ]
         )
         assert np.all(
             [
-                V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][i]
-                == "skipped"
+                V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"][i] == "skipped"
                 for i in V.clean_info[(24, 25, "ee")][(0, V.Nfreqs)]["status"]["axis_0"]
             ]
         )
@@ -1880,21 +1687,15 @@ class Test_VisClean(object):
 
         # get averaged spectra
         n1 = vis_clean.noise_eq_bandwidth(dspec.gen_window("bh", V.Nfreqs))
-        n2 = vis_clean.noise_eq_bandwidth(
-            dspec.gen_window("bh", V.Nfreqs) * ~V.flags[k][0]
-        )
+        n2 = vis_clean.noise_eq_bandwidth(dspec.gen_window("bh", V.Nfreqs) * ~V.flags[k][0])
         d1 = np.mean(np.abs(V.dfft1[k]), axis=0) * n1
         d2 = np.mean(np.abs(V.dfft2[k]), axis=0) * n2
         d3 = np.mean(np.abs(V.dfft3[k]), axis=0) * n2
 
         # confirm that dfft3 and dfft1 match while dfft2 and dfft1 do not near CLEAN boundary
         select = (np.abs(V.delays) < 300) & (np.abs(V.delays) > 100)
-        assert np.isclose(
-            np.mean(np.abs(d1)[select]), np.mean(np.abs(d3)[select]), atol=0.1
-        )
-        assert not np.isclose(
-            np.mean(np.abs(d1)[select]), np.mean(np.abs(d2)[select]), atol=0.1
-        )
+        assert np.isclose(np.mean(np.abs(d1)[select]), np.mean(np.abs(d3)[select]), atol=0.1)
+        assert not np.isclose(np.mean(np.abs(d1)[select]), np.mean(np.abs(d2)[select]), atol=0.1)
 
         # test that polynomial fitting is a good fit
         _, n1 = vis_clean.trim_model(
@@ -1915,9 +1716,7 @@ class Test_VisClean(object):
             kernel_size=None,
             polyfit_deg=5,
         )
-        assert (
-            np.std(n1[k] - n2[k]) / np.mean(n2[k])
-        ) < 0.1  # assert residual is below 10% of fit
+        assert (np.std(n1[k] - n2[k]) / np.mean(n2[k])) < 0.1  # assert residual is below 10% of fit
 
         # test well-conditioned check takes effect
         V2 = deepcopy(V)
@@ -1945,9 +1744,7 @@ class Test_VisClean(object):
         V.read()
 
         # test basic zeropad
-        d, _ = vis_clean.zeropad_array(
-            V.data[(24, 25, "ee")], zeropad=30, axis=-1, undo=False
-        )
+        d, _ = vis_clean.zeropad_array(V.data[(24, 25, "ee")], zeropad=30, axis=-1, undo=False)
         assert d.shape == (60, 124)
         assert np.allclose(d[:, :30], 0.0)
         assert np.allclose(d[:, -30:], 0.0)
@@ -1955,9 +1752,7 @@ class Test_VisClean(object):
         assert d.shape == (60, 64)
 
         # test zeropad with bool
-        f, _ = vis_clean.zeropad_array(
-            V.flags[(24, 25, "ee")], zeropad=30, axis=-1, undo=False
-        )
+        f, _ = vis_clean.zeropad_array(V.flags[(24, 25, "ee")], zeropad=30, axis=-1, undo=False)
         assert f.shape == (60, 124)
         assert np.all(f[:, :30])
         assert np.all(f[:, -30:])
@@ -1980,9 +1775,7 @@ class Test_VisClean(object):
         assert (bval[0].size, bval[1].size) == (120, 84)
 
         # un-pad with bval
-        d, bval = vis_clean.zeropad_array(
-            d, zeropad=(30, 10), axis=(0, 1), binvals=bval, undo=True
-        )
+        d, bval = vis_clean.zeropad_array(d, zeropad=(30, 10), axis=(0, 1), binvals=bval, undo=True)
         assert d.shape == (60, 64)
         assert (bval[0].size, bval[1].size) == (60, 64)
 
@@ -2155,16 +1948,12 @@ class Test_VisClean(object):
 
             vis_clean.time_chunk_from_baseline_chunks(
                 time_chunk_template=file,
-                baseline_chunk_files=glob.glob(
-                    str(tmp_path / "temp.fragment.part.*.h5")
-                ),
+                baseline_chunk_files=glob.glob(str(tmp_path / "temp.fragment.part.*.h5")),
                 clobber=True,
                 outfilename=str(tmp_path / fname),
             )
         # load in the reconstituted files.
-        hd_reconstituted = io.HERAData(
-            glob.glob(str(tmp_path / "temp.reconstituted.part.*.h5"))
-        )
+        hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / "temp.reconstituted.part.*.h5")))
         hd_reconstituted.read()
         # compare to xtalk filtering the whole file.
         frf.load_tophat_frfilter_and_write(
@@ -2191,17 +1980,13 @@ class Test_VisClean(object):
 
             vis_clean.time_chunk_from_baseline_chunks(
                 time_chunk_template=file,
-                baseline_chunk_files=glob.glob(
-                    str(tmp_path / "temp.fragment.part.*.h5")
-                ),
+                baseline_chunk_files=glob.glob(str(tmp_path / "temp.fragment.part.*.h5")),
                 clobber=True,
                 outfilename=str(tmp_path / fname),
                 time_bounds=True,
             )
         # load in the reconstituted files.
-        hd_reconstituted = io.HERAData(
-            glob.glob(str(tmp_path / "temp.reconstituted.part.*.h5"))
-        )
+        hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / "temp.reconstituted.part.*.h5")))
         hd_reconstituted.read()
         # compare to xtalk filtering the whole file.
         frf.load_tophat_frfilter_and_write(
@@ -2234,9 +2019,7 @@ class Test_VisClean(object):
 
 def test_discard_autocorr_imag():
     hd = io.HERAData(
-        os.path.join(
-            DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"
-        )
+        os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
     )
     data = hd.read()[0]
 

@@ -358,9 +358,7 @@ class LogRender:
                     row.append(log_time_display)
                     self._last_time = log_time_display
             else:
-                time_diff = _strfdelta(
-                    log_time - self._first_time, self.delta_time_format
-                )
+                time_diff = _strfdelta(log_time - self._first_time, self.delta_time_format)
                 row.append(time_diff)
 
         if self.show_level:
@@ -377,9 +375,7 @@ class LogRender:
         row.append(Renderables(renderables))
         if self.show_path and path:
             path_text = Text()
-            path_text.append(
-                path, style=f"link file://{link_path}" if link_path else ""
-            )
+            path_text.append(path, style=f"link file://{link_path}" if link_path else "")
             if line_no:
                 path_text.append(":")
                 path_text.append(
@@ -450,9 +446,7 @@ def add_logging_args(parser: ArgumentParser):
         choices=["INFO", "ERROR", "WARNING", "CRITICAL", "DEBUG"],
         help="logging level to display. ",
     )
-    grp.add_argument(
-        "--log-width", type=int, default=160, help="width of logging output"
-    )
+    grp.add_argument("--log-width", type=int, default=160, help="width of logging output")
     grp.add_argument(
         "--log-plain-tracebacks",
         action="store_true",
@@ -463,18 +457,14 @@ def add_logging_args(parser: ArgumentParser):
         action="store_true",
         help="show logger time as absolute instead of relative to start",
     )
-    grp.add_argument(
-        "--log-no-mem", action="store_true", help="do not show memory usage"
-    )
+    grp.add_argument("--log-no-mem", action="store_true", help="do not show memory usage")
     grp.add_argument(
         "--log-mem-backend",
         type=str,
         default="tracemalloc",
         choices=["tracemalloc", "psutil"],
     )
-    grp.add_argument(
-        "--log-show-path", action="store_true", help="show path of code in log msg"
-    )
+    grp.add_argument("--log-show-path", action="store_true", help="show path of code in log msg")
 
 
 def init_logger_from_args(args):
@@ -565,12 +555,8 @@ def add_profiling_args(parser: ArgumentParser):
     grp = parser.add_argument_group(title="Options for line-profiling")
 
     grp.add_argument("--profile", action="store_true", help="Line-Profile the script")
-    grp.add_argument(
-        "--profile-funcs", type=str, default="", help="List of functions to profile"
-    )
-    grp.add_argument(
-        "--profile-output", type=str, help="Output file for profiling info."
-    )
+    grp.add_argument("--profile-funcs", type=str, default="", help="List of functions to profile")
+    grp.add_argument("--profile-output", type=str, help="Output file for profiling info.")
 
 
 def parse_args(parser: ArgumentParser):
@@ -591,7 +577,5 @@ def filter_kwargs(kwargs: dict) -> dict:
     return {
         k: v
         for k, v in kwargs.items()
-        if (
-            k != "profile" and not k.startswith("profile_") and not k.startswith("log_")
-        )
+        if (k != "profile" and not k.startswith("profile_") and not k.startswith("log_"))
     }

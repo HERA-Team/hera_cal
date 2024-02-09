@@ -112,9 +112,9 @@ class TestRedundantGroups:
         with pytest.raises(
             ValueError, match="can't add RedundantGroups objects with one having antpos"
         ):
-            RedundantGroups(
-                [[(0, 1)]], antpos={0: np.array([0, 0, 0])}
-            ) + RedundantGroups([[(0, 1)]])
+            RedundantGroups([[(0, 1)]], antpos={0: np.array([0, 0, 0])}) + RedundantGroups(
+                [[(0, 1)]]
+            )
 
     def test_add_no_antpos(self):
         rg1 = RedundantGroups([[(0, 1)]])
@@ -124,21 +124,15 @@ class TestRedundantGroups:
         assert set(rg3.data_ants) == set([0, 1, 2])
 
     def test_add_antpos(self):
-        rg1 = RedundantGroups.from_antpos(
-            antpos={0: np.array([0, 0, 0]), 1: np.array([10, 0, 0])}
-        )
-        rg2 = RedundantGroups.from_antpos(
-            antpos={0: np.array([0, 0, 0]), 2: np.array([0, 10, 0])}
-        )
+        rg1 = RedundantGroups.from_antpos(antpos={0: np.array([0, 0, 0]), 1: np.array([10, 0, 0])})
+        rg2 = RedundantGroups.from_antpos(antpos={0: np.array([0, 0, 0]), 2: np.array([0, 10, 0])})
         rg3 = rg1 + rg2
         print(rg3)
         assert len(rg3) == 3
         assert set(rg3.data_ants) == set([0, 1, 2])
 
     def test_append_with_bad_ant(self):
-        rg = RedundantGroups(
-            [[(0, 1)]], antpos={0: np.array([0, 0, 0]), 1: np.array([1, 0, 0])}
-        )
+        rg = RedundantGroups([[(0, 1)]], antpos={0: np.array([0, 0, 0]), 1: np.array([1, 0, 0])})
 
         with pytest.raises(ValueError, match="not in antpos"):
             rg.append([(0, 2)])

@@ -9,19 +9,11 @@ import argparse
 from pyuvdata import UVData
 
 # Parse arguments
-ap = argparse.ArgumentParser(
-    description="Apply flags from one visibility file to another."
-)
-ap.add_argument(
-    "flag_origin", type=str, help="path fot visibility data to transfer flags from."
-)
-ap.add_argument(
-    "flag_destination", type=str, help="path fot visibility data to transfer flags to."
-)
+ap = argparse.ArgumentParser(description="Apply flags from one visibility file to another.")
+ap.add_argument("flag_origin", type=str, help="path fot visibility data to transfer flags from.")
+ap.add_argument("flag_destination", type=str, help="path fot visibility data to transfer flags to.")
 ap.add_argument("output", type=str, help="path to write outputs to.")
-ap.add_argument(
-    "--clobber", default=False, action="store_true", help="overwrite existing outputs."
-)
+ap.add_argument("--clobber", default=False, action="store_true", help="overwrite existing outputs.")
 ap.add_argument(
     "--keep_old_flags",
     default=False,

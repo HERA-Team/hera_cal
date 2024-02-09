@@ -95,9 +95,7 @@ def test_chunk_data_files(tmpdir):
 def test_chunk_cal_files(tmpdir):
     # list of data files:
     tmp_path = tmpdir.strpath
-    cal_files = sorted(
-        glob.glob(DATA_PATH + "/test_input/*.abs.calfits_54x_only.part*")
-    )
+    cal_files = sorted(glob.glob(DATA_PATH + "/test_input/*.abs.calfits_54x_only.part*"))
     nfiles = len(cal_files)
     # test ValueError
     pytest.raises(
@@ -113,9 +111,7 @@ def test_chunk_cal_files(tmpdir):
     # form chunks with three samples.
     for chunk in range(0, nfiles, 2):
         output = tmp_path + f"/chunk.{chunk}.calfits"
-        chunker.chunk_files(
-            cal_files, cal_files[chunk], output, 2, spw_range=[0, 32], type="gains"
-        )
+        chunker.chunk_files(cal_files, cal_files[chunk], output, 2, spw_range=[0, 32], type="gains")
 
     # test that chunked files contain identical data (when combined)
     # to original combined list of files.
@@ -133,9 +129,7 @@ def test_chunk_cal_files(tmpdir):
     # repeate test with None provided for spw_range and pols
     for chunk in range(0, nfiles, 2):
         output = tmp_path + f"/chunk.{chunk}.calfits"
-        chunker.chunk_files(
-            cal_files, cal_files[chunk], output, 2, type="gains", clobber=True
-        )
+        chunker.chunk_files(cal_files, cal_files[chunk], output, 2, type="gains", clobber=True)
 
     # test that chunked files contain identical data (when combined)
     # to original combined list of files.
