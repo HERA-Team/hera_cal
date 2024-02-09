@@ -801,7 +801,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
         if rephase:
             # get dlst and rephase
             dlst = mean_l - lst
-            d = utils.lst_rephase(d, bl_vec, freqs, dlst, lat=lat, inplace=False, array=True)
+            print(d.shape)
+            d = utils.lst_rephase(d[:, None], bl_vec, freqs, dlst, lat=lat, inplace=False)[:, 0]
 
         # form data weights
         if wgt_by_nsample:

@@ -25,12 +25,15 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
     # create a simulated dataset
     if uvd is None:
         uvd = UVData()
-        uvd.read(os.path.join(DATA_PATH, 'PyGSM_Jy_downselect.uvh5'),
-                 run_check_acceptability=False)
+        uvd.read(
+            os.path.join(DATA_PATH, 'PyGSM_Jy_downselect.uvh5'),
+            run_check_acceptability=False,
+            use_future_array_shapes=True
+        )
     else:
         if isinstance(uvd, str):
             _uvd = UVData()
-            _uvd.read(uvd)
+            _uvd.read(uvd, use_future_array_shapes=True)
             uvd = _uvd
         elif isinstance(uvd, UVData):
             uvd = deepcopy(uvd)
@@ -277,7 +280,7 @@ class Test_ReflectionFitter_Cables(object):
         assert uvc.Ntimes == 100
 
         # test input calibration with slightly shifted frequencies
-        uvc.read_calfits("./ex.calfits")
+        uvc.read_calfits("./ex.calfits", use_future_array_shapes=True)
         uvc.freq_array += 1e-5  # assert this doesn't fail
         uvc.use_future_array_shapes()
         T = reflections.ReflectionFitter(self.uvd, input_cal=uvc)
@@ -317,10 +320,10 @@ class Test_ReflectionFitter_Cables(object):
 
         # ensure gains have two humps at 150 and 250 ns
         uvc = UVCal()
-        uvc.read_calfits('./ex.calfits')
+        uvc.read_calfits('./ex.calfits', use_future_array_shapes=True)
         assert uvc.Ntimes == 1  # because time_avg=True
         uvc2 = UVCal()
-        uvc2.read_calfits('./ex.ref2.calfits')
+        uvc2.read_calfits('./ex.ref2.calfits', use_future_array_shapes=True)
         assert uvc2.Ntimes == 1  # because time_avg=True
         uvc.gain_array *= uvc2.gain_array
         aind = np.argmin(np.abs(uvc.ant_array - 23))
@@ -342,7 +345,7 @@ class Test_ReflectionFitter_Cables(object):
         assert os.path.exists("./ex.calfits")
         assert not os.path.exists("./ex.ref2.calfits")
         uvc3 = UVCal()
-        uvc3.read_calfits('./ex.calfits')
+        uvc3.read_calfits('./ex.calfits', use_future_array_shapes=True)
         np.testing.assert_array_almost_equal(uvc3.gain_array, uvc.gain_array, 12)
         os.remove("./ex.calfits")
 

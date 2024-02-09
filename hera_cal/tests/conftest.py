@@ -10,6 +10,7 @@ import pytest
 import six.moves.urllib as urllib
 from astropy.utils import iers
 from astropy.time import Time
+import warnings
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -30,3 +31,6 @@ def setup_and_teardown_package():
     yield
 
     iers.conf.auto_max_age = 30
+
+    warnings.filterwarnings("ignore", message="Fixing auto-correlations to be be real-only")
+    warnings.filterwarnings("ignore", message="invalid value encountered in divide")

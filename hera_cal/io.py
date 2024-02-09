@@ -167,8 +167,7 @@ class HERACal(UVCal):
 
         if self.filepaths is not None:
             # load data
-            self.read_calfits(self.filepaths[0])
-            self.use_future_array_shapes()
+            self.read_calfits(self.filepaths[0], use_future_array_shapes=True)
 
             if pols is not None:
                 pols = [jstr2num(ap, x_orientation=self.x_orientation) for ap in pols]
@@ -188,8 +187,7 @@ class HERACal(UVCal):
             if len(self.filepaths) > 1:
                 for fp in self.filepaths[1:]:
                     uvc = UVCal()
-                    uvc.read_calfits(fp)
-                    uvc.use_future_array_shapes()
+                    uvc.read_calfits(fp, use_future_array_shapes=True)
 
                     if np.any([s is not None for s in select_dict.values()]):
                         uvc.select(inplace=True, **select_dict)
@@ -816,8 +814,9 @@ class HERAData(UVData):
                     super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
                                  times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
-                                 run_check_acceptability=run_check_acceptability, **kwargs)
-                    self.use_future_array_shapes()
+                                 run_check_acceptability=run_check_acceptability,
+                                 use_future_array_shapes=True,
+                                 **kwargs)
                     if self.filetype == 'uvfits':
                         self.unproject_phase()
                 else:
@@ -826,7 +825,8 @@ class HERAData(UVData):
                     if self.filetype == 'miriad':
                         super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
                                      time_range=time_range, run_check=run_check, check_extra=check_extra,
-                                     run_check_acceptability=run_check_acceptability, **kwargs)
+                                     run_check_acceptability=run_check_acceptability,
+                                     use_future_array_shapes=True, **kwargs)
                         self.use_future_array_shapes()
                         if any([times is not None, lsts is not None, lst_range is not None,
                                 frequencies is not None, freq_chans is not None]):

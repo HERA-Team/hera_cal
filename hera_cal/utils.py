@@ -759,7 +759,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
         if i == 0:
             echo("...loading {}".format(f), verbose=verbose)
             uvc = UVCal()
-            uvc.read_calfits(f)
+            uvc.read_calfits(f, use_future_array_shapes=True)
             f1 = copy.copy(f)
 
             # set flagged data to unity
@@ -767,7 +767,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
 
         else:
             uvc2 = UVCal()
-            uvc2.read_calfits(f)
+            uvc2.read_calfits(f, use_future_array_shapes=True)
 
             # set flagged data to unity
             gain_array = uvc2.gain_array

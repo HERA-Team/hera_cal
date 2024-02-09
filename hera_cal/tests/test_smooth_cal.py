@@ -398,7 +398,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
     def test_to_anflags(self):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
         uvc = UVCal()
-        uvc.read_calfits(calfits_list)
+        uvc.read_calfits(calfits_list, use_future_array_shapes=True)
         uvf = UVFlag(uvc, mode='flag')
         uvflag_file = calfits_list[0].replace('/test_input/', '/test_output')
         uvf.write(uvflag_file, clobber=True)

@@ -271,7 +271,7 @@ class TestAAFromUV(object):
     def test_get_aa_from_uv(self):
         fn = os.path.join(DATA_PATH, self.test_file)
         uvd = UVData()
-        uvd.read_miriad(fn)
+        uvd.read_miriad(fn, use_future_array_shapes=True)
         aa = utils.get_aa_from_uv(uvd)
         # like miriad, aipy will pad the aa with non-existent antennas,
         #   because there is no concept of antenna names
@@ -287,7 +287,7 @@ class TestAA(object):
         # generate aa from file
         fn = os.path.join(DATA_PATH, self.test_file)
         uvd = UVData()
-        uvd.read_miriad(fn)
+        uvd.read_miriad(fn, use_future_array_shapes=True)
         aa = utils.get_aa_from_uv(uvd)
 
         # change one antenna position, and read it back in to check it's the same
@@ -382,15 +382,15 @@ def test_combine_calfits():
     assert os.path.exists('ex.calfits')
     # test antenna number
     uvc = UVCal()
-    uvc.read_calfits('ex.calfits')
+    uvc.read_calfits('ex.calfits', use_future_array_shapes=True)
     assert len(uvc.antenna_numbers) == 7
     # test time number
     assert uvc.Ntimes == 60
     # test gain value got properly multiplied
     uvc_dly = UVCal()
-    uvc_dly.read_calfits(test_file1)
+    uvc_dly.read_calfits(test_file1, use_future_array_shapes=True)
     uvc_abs = UVCal()
-    uvc_abs.read_calfits(test_file2)
+    uvc_abs.read_calfits(test_file2, use_future_array_shapes=True)
     assert np.allclose(uvc_dly.gain_array[0, 0, 10, 10, 0] * uvc_abs.gain_array[0, 0, 10, 10, 0], uvc.gain_array[0, 0, 10, 10, 0])
     if os.path.exists('ex.calfits'):
         os.remove('ex.calfits')
@@ -620,7 +620,7 @@ def test_gp_interp1d():
     # load data
     dfiles = glob.glob(os.path.join(DATA_PATH, "zen.2458043.4*.xx.HH.XRAA.uvh5"))
     uvd = UVData()
-    uvd.read(dfiles, bls=[(37, 39)])
+    uvd.read(dfiles, bls=[(37, 39)], use_future_array_shapes=True)
     times = np.unique(uvd.time_array) * 24 * 60
     times -= times.min()
     y = uvd.get_data(37, 39, 'ee')

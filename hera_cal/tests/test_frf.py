@@ -27,8 +27,7 @@ def test_timeavg_waterfall():
     fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
 
     uvd = UVData()
-    uvd.read_miriad(fname)
-    uvd.use_future_array_shapes()
+    uvd.read_miriad(fname, use_future_array_shapes=True)
 
     d = uvd.get_data(24, 25)
     f = uvd.get_flags(24, 25)
@@ -231,7 +230,7 @@ class Test_FRFilter(object):
         tmp_path = tmpdir.strpath
         input_name = os.path.join(tmp_path, 'test_input.uvh5')
         uvd = UVData()
-        uvd.read(self.fname)
+        uvd.read(self.fname, use_future_array_shapes=True)
         uvd.write_uvh5(input_name)
         output_name = os.path.join(tmp_path, 'test_output.uvh5')
         flag_output = tmp_path + '/test_output.flags.h5'
@@ -479,11 +478,9 @@ class Test_FRFilter(object):
         test_beam = os.path.join(DATA_PATH, "efield_test_nside16.beamfits")
         test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
         uvd = UVData()
-        uvd.read_uvh5(test_data)
-        uvd.use_future_array_shapes()
+        uvd.read_uvh5(test_data, use_future_array_shapes=True)
         uvb = UVBeam()
-        uvb.read_beamfits(test_beam)
-        uvb.use_future_array_shapes()
+        uvb.read_beamfits(test_beam, use_future_array_shapes=True)
         fr_grid, profiles = frf.build_fringe_rate_profiles(uvd, uvb)
         assert len(fr_grid) == uvd.Ntimes
 
@@ -492,14 +489,12 @@ class Test_FRFilter(object):
         test_beam = os.path.join(DATA_PATH, "fr_unittest_beam.beamfits")
         test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
         uvd = UVData()
-        uvd.read_uvh5(test_data)
-        uvd.use_future_array_shapes()
+        uvd.read_uvh5(test_data, use_future_array_shapes=True)
         myfrf = frf.FRFilter(uvd)
         sim_c_frates = {}
         sim_w_frates = {}
         uvb = UVBeam()
-        uvb.read_beamfits(test_beam)
-        uvb.use_future_array_shapes()
+        uvb.read_beamfits(test_beam, use_future_array_shapes=True)
         c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb, percentile_low=10, percentile_high=90)
         for bl in c_frs:
             # fft data

@@ -20,7 +20,10 @@ import glob
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
-class Test_DelayFilter(object):
+@pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
+@pytest.mark.filterwarnings("ignore:telescope_location is not set")
+@pytest.mark.filterwarnings("ignore:antenna_positions are not set")
+class Test_DelayFilter:
     def test_run_delay_filter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
@@ -70,8 +73,7 @@ class Test_DelayFilter(object):
         dfil.write_filtered_data(res_outfilename=outfilename, add_to_history='Hello_world.', clobber=True, extra_attrs=extra_attrs)
 
         uvd = UVData()
-        uvd.read_uvh5(outfilename)
-        uvd.use_future_array_shapes()
+        uvd.read_uvh5(outfilename, use_future_array_shapes=True)
         assert 'Hello_world.' in uvd.history.replace('\n', '').replace(' ', '')
         assert 'Thisfilewasproducedbythefunction' in uvd.history.replace('\n', '').replace(' ', '')
         assert uvd.telescope_name == 'PAPER'

@@ -13,6 +13,8 @@ from .. import io, lstbin, utils, redcal
 from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 import shutil
+
+
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:Degrees of freedom <= 0 for slice")
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
@@ -134,7 +136,7 @@ class Test_lstbin:
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
                                 verbose=False, sig_clip=True, min_N=15, flag_below_min_N=True, sigma=2)
         # test wrapping
-        lst_list = [(copy.deepcopy(l) + 6) % (2 * np.pi) for l in self.lst_list]
+        lst_list = [(copy.deepcopy(lst) + 6) % (2 * np.pi) for lst in self.lst_list]
         output = lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, begin_lst=np.pi)
         assert output[0][0] > output[0][-1]
         assert len(output[0]) == 175
@@ -317,8 +319,9 @@ class Test_lstbin:
 
         # test input_cal
         uvc = UVCal()
-        uvc.read_calfits(os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits'))
-        uvc.use_future_array_shapes()
+        uvc.read_calfits(os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits'),
+                         use_future_array_shapes=True)
+
         uvc.flag_array[uvc.ant_array.tolist().index(24)] = True
         uvc.gain_array[uvc.ant_array.tolist().index(25)] = 1e10
         input_cals = []
