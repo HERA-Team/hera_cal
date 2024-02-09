@@ -25,5 +25,5 @@ extend-select = [
     "E",  # flake8 errors
     "W",  # flake8 warnings
 #    "F",  # flake8 pyflakes
-#    "I",  # isort
+#    "I",  # isort -- TODO: cannot do this because changing import order causes circular imports.
 ]
