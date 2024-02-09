@@ -5,11 +5,11 @@ import pytest
 from pathlib import Path
 from pyuvdata import UVCal, UVFlag
 import numpy as np
-from hera_cal import lstbin_simple as lstbin_simple
+from hera_cal import lst_stack as lstbin
 import pytest
 import numpy as np
 from pyuvdata import UVCal, UVData
-from .. import io, utils, lstbin_simple
+from .. import io, utils
 from hera_cal import apply_cal
 from pyuvdata import utils as uvutils
 from hera_cal.red_groups import RedundantGroups
@@ -90,7 +90,7 @@ class Test_LSTAlign:
         kwargs = self.get_lst_align_data()
 
         def lst_align_with(**kw):
-            return lstbin_simple.lst_align(**{**kwargs, **kw})
+            return lstbin.lst_align(**{**kwargs, **kw})
 
         data = np.ones(kwargs["data"].shape[:-1] + (5,))
         with pytest.raises(ValueError, match="data has more than 4 pols"):
@@ -120,7 +120,7 @@ class Test_LSTAlign:
 
     def test_increasing_lsts_one_per_bin(self, benchmark):
         kwargs = self.get_lst_align_data(ntimes=6)
-        bins, d, f, n, inp = benchmark(lstbin_simple.lst_align, rephase=False, **kwargs)
+        bins, d, f, n, inp = benchmark(lstbin.lst_align, rephase=False, **kwargs)
 
         # We should not be changing the data at all.
         d = np.squeeze(np.asarray(d))
@@ -134,7 +134,7 @@ class Test_LSTAlign:
 
     def test_multi_days_one_per_bin(self, benchmark):
         kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
-        bins, d, f, n, inp = benchmark(lstbin_simple.lst_align, rephase=False, **kwargs)
+        bins, d, f, n, inp = benchmark(lstbin.lst_align, rephase=False, **kwargs)
 
         # We should not be changing the data at all.
         d = np.squeeze(np.asarray(d))
@@ -155,7 +155,7 @@ class Test_LSTAlign:
         kwargs["data"][7:] = 1000.0
 
         bins, d, f, n, inp = benchmark(
-            lstbin_simple.lst_align, rephase=False, flags=flags, **kwargs
+            lstbin.lst_align, rephase=False, flags=flags, **kwargs
         )
 
         d = np.squeeze(np.asarray(d))
@@ -175,7 +175,7 @@ class Test_LSTAlign:
         nsamples[7:] = 0.0
         kwargs["data"][7:] = 1000.0
 
-        bins, d, f, n, inp = lstbin_simple.lst_align(
+        bins, d, f, n, inp = lstbin.lst_align(
             rephase=False, nsamples=nsamples, **kwargs
         )
 
@@ -194,9 +194,9 @@ class Test_LSTAlign:
         kwargs = self.get_lst_align_data(ntimes=7)
 
         bins0, d0, f0, n0, inp = benchmark(
-            lstbin_simple.lst_align, rephase=True, **kwargs
+            lstbin.lst_align, rephase=True, **kwargs
         )
-        bins, d, f, n, inp = lstbin_simple.lst_align(rephase=False, **kwargs)
+        bins, d, f, n, inp = lstbin.lst_align(rephase=False, **kwargs)
         np.testing.assert_allclose(d, d0, rtol=1e-6)
         np.testing.assert_allclose(f, f0, rtol=1e-6)
         np.testing.assert_allclose(n, n0, rtol=1e-6)
@@ -210,13 +210,13 @@ class Test_LSTAlign:
         lst_bin_edges -= 4 * np.pi
 
         bins, d0, f0, n0, inp = benchmark(
-            lstbin_simple.lst_align, lst_bin_edges=lst_bin_edges, **kwargs
+            lstbin.lst_align, lst_bin_edges=lst_bin_edges, **kwargs
         )
 
         lst_bin_edges = edges.copy()
         lst_bin_edges += 4 * np.pi
 
-        bins, d, f, n, inp = lstbin_simple.lst_align(
+        bins, d, f, n, inp = lstbin.lst_align(
             lst_bin_edges=lst_bin_edges, **kwargs
         )
 
@@ -227,11 +227,11 @@ class Test_LSTAlign:
         with pytest.raises(
             ValueError, match="lst_bin_edges must be monotonically increasing."
         ):
-            lstbin_simple.lst_align(lst_bin_edges=lst_bin_edges[::-1], **kwargs)
+            lstbin.lst_align(lst_bin_edges=lst_bin_edges[::-1], **kwargs)
 
 
 def test_argparser_returns():
-    args = lstbin_simple.lst_bin_arg_parser()
+    args = lstbin.wrappers.lst_bin_arg_parser()
     assert args is not None
 
 
@@ -261,7 +261,7 @@ class Test_ReduceLSTBins:
 
     def test_one_point_per_bin(self, benchmark):
         d, f, n = self.get_input_data(ntimes=(1,))
-        rdc = benchmark(lstbin_simple.reduce_lst_bins, d, f, n)
+        rdc = benchmark(lstbin.reduce_lst_bins, d, f, n)
 
         assert (
             rdc["data"].shape
@@ -282,7 +282,7 @@ class Test_ReduceLSTBins:
     def test_zerosize_bin(self):
         d, f, n = self.get_input_data(ntimes=(0, 1))
         print(d[0].shape, len(d))
-        rdc = lstbin_simple.reduce_lst_bins(d, f, n, get_mad=True)
+        rdc = lstbin.reduce_lst_bins(d, f, n, get_mad=True)
 
         assert rdc["data"].shape[1] == 2  # 2 LST bins
         assert np.all(np.isnan(rdc["data"][:, 0]))
@@ -294,7 +294,7 @@ class Test_ReduceLSTBins:
     @pytest.mark.parametrize("ntimes", [(4,), (5, 4)])
     def test_multi_points_per_bin(self, ntimes, benchmark):
         d, f, n = self.get_input_data(ntimes=ntimes)
-        rdc = benchmark(lstbin_simple.reduce_lst_bins, d, f, n)
+        rdc = benchmark(lstbin.reduce_lst_bins, d, f, n)
 
         assert (
             rdc["data"].shape
@@ -317,7 +317,7 @@ class Test_ReduceLSTBins:
         d, f, n = self.get_input_data(ntimes=(4,))
         f[0][2:] = True
         d[0][2:] = 1000.0
-        rdc = lstbin_simple.reduce_lst_bins(d, f, n)
+        rdc = lstbin.reduce_lst_bins(d, f, n)
 
         assert (
             rdc["data"].shape
@@ -337,7 +337,7 @@ class Test_ReduceLSTBins:
 
     def test_get_med_mad(self):
         d, f, n = self.get_input_data(ntimes=(4,))
-        rdc = lstbin_simple.reduce_lst_bins(d, f, n, get_mad=True)
+        rdc = lstbin.reduce_lst_bins(d, f, n, get_mad=True)
 
         assert np.all(rdc["median"] == rdc["data"])
 
@@ -353,7 +353,7 @@ def test_apply_calfile_rules(tmpdir_factory):
     for c in cals:
         c.touch()
 
-    data_files, calfiles = lstbin_simple.apply_calfile_rules(
+    data_files, calfiles = lstbin.io.apply_calfile_rules(
         [[str(d) for d in datas]],
         calfile_rules=[(".uvh5", ".calfile")],
         ignore_missing=False,
@@ -363,13 +363,13 @@ def test_apply_calfile_rules(tmpdir_factory):
 
     cals[-1].unlink()
     with pytest.raises(IOError, match="does not exist"):
-        lstbin_simple.apply_calfile_rules(
+        lstbin.io.apply_calfile_rules(
             [[str(d) for d in datas]],
             calfile_rules=[(".uvh5", ".calfile")],
             ignore_missing=False,
         )
 
-    data_files, calfiles = lstbin_simple.apply_calfile_rules(
+    data_files, calfiles = lstbin.io.apply_calfile_rules(
         [[str(d) for d in datas]],
         calfile_rules=[(".uvh5", ".calfile")],
         ignore_missing=True,
@@ -386,7 +386,7 @@ class Test_LSTAverage:
         nsamples = np.ones_like(data)
         flags = np.zeros_like(data, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n, daysbinned = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, daysbinned = lstbin.lst_average(
             data=data,
             nsamples=nsamples,
             flags=flags,
@@ -394,7 +394,7 @@ class Test_LSTAverage:
         )
 
         data, flg, std, norm, daysbinned = benchmark(
-            lstbin_simple.lst_average,
+            lstbin.lst_average,
             data=data,
             nsamples=nsamples,
             flags=flags,
@@ -412,7 +412,7 @@ class Test_LSTAverage:
         nsamples = np.ones_like(data)
         flags = np.zeros_like(data, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
             data=data,
             nsamples=nsamples,
             flags=flags,
@@ -425,7 +425,7 @@ class Test_LSTAverage:
 
         # Now flag the last "night"
         flags[-1] = True
-        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
             data=data,
             nsamples=nsamples,
             flags=flags,
@@ -447,7 +447,7 @@ class Test_LSTAverage:
         nsamples = np.ones_like(data, dtype=float)
         flags = np.zeros_like(data, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
             data=data,
             nsamples=nsamples,
             flags=flags,
@@ -483,7 +483,7 @@ class Test_LSTAverage:
 
         flags = np.zeros(data.shape, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
             data=data,
             nsamples=nsamples,
             flags=flags,
@@ -509,11 +509,11 @@ class Test_LSTAverage:
         flags = np.zeros(_data.shape, dtype=bool)
 
         # First test -- no flags should mean inpainted_mode does nothing.
-        df, ff, stdf, nf, dbf = lstbin_simple.lst_average(
+        df, ff, stdf, nf, dbf = lstbin.lst_average(
             data=_data, nsamples=nsamples, flags=flags, inpainted_mode=False
         )
 
-        di, fi, stdi, ni, dbi = lstbin_simple.lst_average(
+        di, fi, stdi, ni, dbi = lstbin.lst_average(
             data=_data, nsamples=nsamples, flags=flags, inpainted_mode=True
         )
 
@@ -525,11 +525,11 @@ class Test_LSTAverage:
 
         # Now test with a whole LST bin flagged for a single bl-chan-pol (but inpainted)
         flags[:, 0, 0, 0] = True
-        df, ff, stdf, nf, dbf = lstbin_simple.lst_average(
+        df, ff, stdf, nf, dbf = lstbin.lst_average(
             data=_data, nsamples=nsamples, flags=flags, inpainted_mode=False
         )
 
-        di, fi, stdi, ni, dbi = lstbin_simple.lst_average(
+        di, fi, stdi, ni, dbi = lstbin.lst_average(
             data=_data, nsamples=nsamples, flags=flags, inpainted_mode=True
         )
 
@@ -546,11 +546,11 @@ class Test_LSTAverage:
         # Now test with a whole spectrum flagged for one night
         flags[:] = False
         flags[0, 0, :, 0] = True
-        df, ff, stdf, nf, dbf = lstbin_simple.lst_average(
+        df, ff, stdf, nf, dbf = lstbin.lst_average(
             data=_data, nsamples=nsamples, flags=flags, inpainted_mode=False
         )
 
-        di, fi, stdi, ni, dbi = lstbin_simple.lst_average(
+        di, fi, stdi, ni, dbi = lstbin.lst_average(
             data=_data, nsamples=nsamples, flags=flags, inpainted_mode=True
         )
 
@@ -564,20 +564,20 @@ class Test_LSTAverage:
 
         # However, if we had explicitly told the routine that the blt was inpainted,
         # we'd get a different result...
-        _d, _f = lstbin_simple.get_masked_data(
+        _d, _f = lstbin.averaging.get_masked_data(
             _data, nsamples, flags, inpainted=np.ones_like(flags), inpainted_mode=False
         )
-        df, ff, stdf, nf, dbf = lstbin_simple.lst_average(
+        df, ff, stdf, nf, dbf = lstbin.lst_average(
             data=_d,
             nsamples=nsamples,
             flags=_f,
             inpainted_mode=False,
         )
 
-        _d, _f = lstbin_simple.get_masked_data(
+        _d, _f = lstbin.averaging.get_masked_data(
             _data, nsamples, flags, inpainted=np.ones_like(flags), inpainted_mode=True
         )
-        di, fi, stdi, ni, dbi = lstbin_simple.lst_average(
+        di, fi, stdi, ni, dbi = lstbin.lst_average(
             data=_d,
             nsamples=nsamples,
             flags=_f,
@@ -600,7 +600,7 @@ class Test_LSTAverage:
         flags = np.zeros(_data.shape, dtype=bool)
 
         # No samples have more than min_N, so they should all be flagged.
-        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
             data=_data,
             nsamples=nsamples,
             flags=flags,
@@ -615,7 +615,7 @@ class Test_LSTAverage:
 
         # this time, there's enough samples, but too many are flagged...
         flags[:5] = True
-        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
             data=_data,
             nsamples=nsamples,
             flags=flags,
@@ -631,7 +631,7 @@ class Test_LSTAverage:
         # this time, only one column is flagged too much...
         flags[:] = False
         flags[:5, 0] = True
-        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
+        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
             data=_data,
             nsamples=nsamples,
             flags=flags,
@@ -655,10 +655,8 @@ class Test_LSTAverage:
         nsamples = np.ones(_data.shape, dtype=float)
         flags = np.zeros(_data.shape, dtype=bool)
 
-        with pytest.warns(
-            UserWarning, match="Direct-mode sigma-clipping in in-painted mode"
-        ):
-            lstbin_simple.lst_average(
+        with pytest.warns(UserWarning, match="Direct-mode sigma-clipping in in-painted mode"):
+            lstbin.lst_average(
                 data=_data,
                 nsamples=nsamples,
                 flags=flags,
@@ -731,14 +729,14 @@ def uvc_file(uvc, uvd_file: Path) -> Path:
 
 class Test_LSTBinFilesForBaselines:
     def test_defaults(self, uvd, uvd_file):
-        lstbins, d0, f0, n0, inpflg, times0 = lstbin_simple.lst_bin_files_for_baselines(
+        lstbins, d0, f0, n0, inpflg, times0 = lstbin.lst_bin_files_for_baselines(
             data_files=[uvd_file],
             lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max() + 0.01],
             antpairs=uvd.get_antpairs(),
             rephase=False,
         )
 
-        lstbins, d, f, n, inpflg, times = lstbin_simple.lst_bin_files_for_baselines(
+        lstbins, d, f, n, inpflg, times = lstbin.lst_bin_files_for_baselines(
             data_files=[uvd_file],
             lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max() + 0.01],
             antpairs=uvd.get_antpairs(),
@@ -756,7 +754,7 @@ class Test_LSTBinFilesForBaselines:
         np.testing.assert_allclose(times0, times)
 
     def test_empty(self, uvd, uvd_file):
-        lstbins, d0, f0, n0, inpflg, times0 = lstbin_simple.lst_bin_files_for_baselines(
+        lstbins, d0, f0, n0, inpflg, times0 = lstbin.lst_bin_files_for_baselines(
             data_files=[uvd_file],
             lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
             antpairs=[(127, 128)],
@@ -767,7 +765,7 @@ class Test_LSTBinFilesForBaselines:
 
     def test_extra(self, uvd, uvd_file):
         # Providing baselines that don't exist in the file is fine, they're just ignored.
-        lstbins, d0, f0, n0, inpflg, times0 = lstbin_simple.lst_bin_files_for_baselines(
+        lstbins, d0, f0, n0, inpflg, times0 = lstbin.lst_bin_files_for_baselines(
             data_files=[uvd_file],
             lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
             antpairs=uvd.get_antpairs() + [(127, 128)],
@@ -787,7 +785,7 @@ class Test_LSTBinFilesForBaselines:
             nsamples,
             inpflg,
             times,
-        ) = lstbin_simple.lst_bin_files_for_baselines(
+        ) = lstbin.lst_bin_files_for_baselines(
             data_files=[uvd_file],
             lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
             cal_files=[uvc_file],
@@ -800,7 +798,7 @@ class Test_LSTBinFilesForBaselines:
 
     def test_bad_pols(self, uvd, uvd_file):
         with pytest.raises(KeyError, match="7"):
-            lstbin_simple.lst_bin_files_for_baselines(
+            lstbin.lst_bin_files_for_baselines(
                 data_files=[uvd_file],
                 lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
                 pols=[3.0, 7, -1],
@@ -811,7 +809,7 @@ class Test_LSTBinFilesForBaselines:
         with pytest.raises(
             ValueError, match="reds must be provided if redundantly_averaged is True"
         ):
-            lstbin_simple.lst_bin_files_for_baselines(
+            lstbin.lst_bin_files_for_baselines(
                 data_files=[uvd_file],
                 lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
                 redundantly_averaged=True,
@@ -821,7 +819,7 @@ class Test_LSTBinFilesForBaselines:
         with pytest.raises(
             ValueError, match="Cannot apply calibration if redundantly_averaged is True"
         ):
-            lstbin_simple.lst_bin_files_for_baselines(
+            lstbin.lst_bin_files_for_baselines(
                 data_files=[uvd_file],
                 lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
                 cal_files=[uvc_file],
@@ -836,7 +834,7 @@ class Test_LSTBinFilesForBaselines:
             )
 
     def test_simple_redundant_averaged_file(self, uvd_redavg, uvd_redavg_file):
-        lstbins, d0, f0, n0, inpflg, times0 = lstbin_simple.lst_bin_files_for_baselines(
+        lstbins, d0, f0, n0, inpflg, times0 = lstbin.lst_bin_files_for_baselines(
             data_files=[uvd_redavg_file],
             lst_bin_edges=[
                 uvd_redavg.lst_array.min() - 0.1,
@@ -866,7 +864,7 @@ class Test_LSTBinFilesForBaselines:
             ants=np.arange(7),
             creator=mockuvd.create_uvd_identifiable,
             freqs=mockuvd.PHASEII_FREQS[:25],
-            pols=["xx", "xy"],
+            pols=['xx', 'xy'],
             redundantly_averaged=True,
         )
 
@@ -878,17 +876,14 @@ class Test_LSTBinFilesForBaselines:
         reds = RedundantGroups.from_antpos(
             dict(zip(uvds[0][0].antenna_numbers, uvds[0][0].antenna_positions)),
         )
-        lstbins, d0, f0, n0, inpflg, times0 = lstbin_simple.lst_bin_files_for_baselines(
+        lstbins, d0, f0, n0, inpflg, times0 = lstbin.lst_bin_files_for_baselines(
             data_files=sum(uvd_files, []),  # flatten the list-of-lists
             lst_bin_edges=[0, 1.9 * np.pi],
             redundantly_averaged=True,
             rephase=False,
             antpairs=ap,
             reds=reds,
-            where_inpainted_files=[
-                str(Path(f).with_suffix(".where_inpainted.h5"))
-                for f in sum(uvd_files, [])
-            ],
+            where_inpainted_files=[str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])],
         )
         assert len(lstbins) == 1
 
@@ -912,7 +907,7 @@ class Test_LSTBinFilesForBaselines:
             ants=np.arange(5),  # less than the original
             creator=mockuvd.create_uvd_identifiable,
             freqs=mockuvd.PHASEII_FREQS[:25],
-            pols=["xx", "xy"],
+            pols=['xx', 'xy'],
             redundantly_averaged=True,
         )
 
@@ -928,28 +923,25 @@ class Test_LSTBinFilesForBaselines:
                 (fl.parent / f"{fl.with_suffix('.bk')}").rename(fl)
 
         with pytest.raises(ValueError, match="Could not find any baseline from group"):
-            lstbin_simple.lst_bin_files_for_baselines(
+            lstbin.lst_bin_files_for_baselines(
                 data_files=sum(uvd_files, []),  # flatten the list-of-lists
                 lst_bin_edges=[0, 1.9 * np.pi],
                 redundantly_averaged=True,
                 rephase=False,
                 antpairs=ap,
                 reds=reds,
-                where_inpainted_files=[
-                    str(Path(f).with_suffix(".where_inpainted.h5"))
-                    for f in sum(uvd_files, [])
-                ],
+                where_inpainted_files=[str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])],
             )
 
 
 def test_make_lst_grid():
-    lst_grid = lstbin_simple.make_lst_grid(0.01, begin_lst=None)
+    lst_grid = lstbin.make_lst_grid(0.01, begin_lst=None)
     assert len(lst_grid) == 628
     assert np.isclose(lst_grid[0], 0.0050025360725952121)
-    lst_grid = lstbin_simple.make_lst_grid(0.01, begin_lst=np.pi)
+    lst_grid = lstbin.make_lst_grid(0.01, begin_lst=np.pi)
     assert len(lst_grid) == 628
     assert np.isclose(lst_grid[0], 3.1365901175171982)
-    lst_grid = lstbin_simple.make_lst_grid(0.01, begin_lst=-np.pi)
+    lst_grid = lstbin.make_lst_grid(0.01, begin_lst=-np.pi)
     assert len(lst_grid) == 628
     assert np.isclose(lst_grid[0], 3.1365901175171982)
 
@@ -971,7 +963,7 @@ class Test_GetAllUnflaggedBaselines:
         )
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
-        antpairs, pols = lstbin_simple.get_all_unflagged_baselines(
+        antpairs, pols = lstbin.config.get_all_unflagged_baselines(
             data_files,
             redundantly_averaged=redundantly_averaged,
             only_last_file_per_night=only_last_file_per_night,
@@ -995,13 +987,13 @@ class Test_GetAllUnflaggedBaselines:
             ValueError,
             match="Cannot ignore antennas if the files are redundantly averaged",
         ):
-            lstbin_simple.get_all_unflagged_baselines(data_files, ignore_ants=[0, 1])
+            lstbin.config.get_all_unflagged_baselines(data_files, ignore_ants=[0, 1])
 
         with pytest.raises(
             ValueError,
             match="Cannot exclude antennas if the files are redundantly averaged",
         ):
-            lstbin_simple.get_all_unflagged_baselines(
+            lstbin.config.get_all_unflagged_baselines(
                 data_files,
                 ex_ant_yaml_files=["non-existent-file.yaml"],
             )
@@ -1023,7 +1015,7 @@ class Test_GetAllUnflaggedBaselines:
         with pytest.raises(
             ValueError, match="Not all files have the same xorientation!"
         ):
-            lstbin_simple.get_all_unflagged_baselines(data_files)
+            lstbin.config.get_all_unflagged_baselines(data_files)
 
 
 class Test_LSTBinFiles:
@@ -1041,13 +1033,13 @@ class Test_LSTBinFiles:
         print(len(uvds))
         cfl = tmp / "lstbin_config_file.yaml"
         print(cfl)
-        lstbin_simple.make_lst_bin_config_file(
+        lstbin.make_lst_bin_config_file(
             cfl,
             data_files,
             ntimes_per_file=2,
         )
 
-        out_files = lstbin_simple.lst_bin_files(
+        out_files = lstbin.lst_bin_files(
             config_file=cfl,
             rephase=False,
             golden_lsts=uvds[0][1].lst_array.min() + 0.0001,
@@ -1101,13 +1093,13 @@ class Test_LSTBinFiles:
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
         cfl = tmp / "lstbin_config_file.yaml"
-        lstbin_simple.make_lst_bin_config_file(
+        lstbin.make_lst_bin_config_file(
             cfl,
             data_files,
             ntimes_per_file=2,
         )
 
-        out_files = lstbin_simple.lst_bin_files(
+        out_files = lstbin.lst_bin_files(
             config_file=cfl, save_channels=[50], rephase=False
         )
 
@@ -1155,18 +1147,18 @@ class Test_LSTBinFiles:
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
         cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin_simple.make_lst_bin_config_file(
+        config_info = lstbin.make_lst_bin_config_file(
             cfl,
             data_files,
             ntimes_per_file=2,
         )
 
-        out_files = lstbin_simple.lst_bin_files(
+        out_files = lstbin.lst_bin_files(
             config_file=cfl,
             fname_format="zen.{kind}.{lst:7.5f}.uvh5",
             write_med_mad=True,
         )
-        out_files_chunked = lstbin_simple.lst_bin_files(
+        out_files_chunked = lstbin.lst_bin_files(
             config_file=cfl,
             fname_format="zen.{kind}.{lst:7.5f}.chunked.uvh5",
             Nbls_to_load=10,
@@ -1248,13 +1240,13 @@ class Test_LSTBinFiles:
                 np.testing.assert_allclose(uvdlst.data_array, uvdlstc.data_array)
 
         cfl = tmp / "lstbin_config_file.yaml"
-        lstbin_simple.make_lst_bin_config_file(
+        lstbin.make_lst_bin_config_file(
             cfl,
             decal_files,
             ntimes_per_file=2,
         )
 
-        out_files_recal = lstbin_simple.lst_bin_files(
+        out_files_recal = lstbin.lst_bin_files(
             config_file=cfl,
             calfile_rules=[(".decal.uvh5", ".calfits")],
             fname_format="zen.{kind}.{lst:7.5f}.recal.uvh5",
@@ -1262,13 +1254,13 @@ class Test_LSTBinFiles:
             rephase=False,
         )
 
-        lstbin_simple.make_lst_bin_config_file(
+        lstbin.make_lst_bin_config_file(
             cfl,
             data_files,
             ntimes_per_file=2,
             clobber=True,
         )
-        out_files = lstbin_simple.lst_bin_files(
+        out_files = lstbin.lst_bin_files(
             config_file=cfl,
             fname_format="zen.{kind}.{lst:7.5f}.uvh5",
             Nbls_to_load=11,
@@ -1366,14 +1358,14 @@ class Test_LSTBinFiles:
                 )
 
         cfl = tmp / "lstbin_config_file.yaml"
-        lstbin_simple.make_lst_bin_config_file(
+        lstbin.make_lst_bin_config_file(
             cfl,
             data_files,
             ntimes_per_file=2,
             clobber=True,
         )
         out_files = benchmark(
-            lstbin_simple.lst_bin_files,
+            lstbin.lst_bin_files,
             config_file=cfl,
             fname_format="zen.{kind}.{lst:7.5f}.uvh5",
             Nbls_to_load=11,
@@ -1436,13 +1428,13 @@ class Test_LSTBinFiles:
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
         cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin_simple.make_lst_bin_config_file(
+        config_info = lstbin.make_lst_bin_config_file(
             cfl,
             data_files,
             ntimes_per_file=2,
             clobber=True,
         )
-        out_files = lstbin_simple.lst_bin_files(
+        out_files = lstbin.lst_bin_files(
             config_file=cfl,
             fname_format="zen.{kind}.{lst:7.5f}.uvh5",
             Nbls_to_load=11,
@@ -1496,14 +1488,14 @@ class Test_LSTBinFiles:
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
         cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin_simple.make_lst_bin_config_file(
+        config_info = lstbin.make_lst_bin_config_file(
             cfl,
             data_files,
             ntimes_per_file=2,
             clobber=True,
         )
         lstbf = partial(
-            lstbin_simple.lst_bin_files,
+            lstbin.lst_bin_files,
             config_file=cfl,
             fname_format="zen.{kind}.{lst:7.5f}.uvh5",
             Nbls_to_load=11,
@@ -1539,7 +1531,7 @@ class Test_LSTBinFiles:
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
         cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin_simple.make_lst_bin_config_file(
+        config_info = lstbin.make_lst_bin_config_file(
             cfl,
             data_files,
             ntimes_per_file=2,
@@ -1548,7 +1540,7 @@ class Test_LSTBinFiles:
 
         # Additionally try fname format with leading / which should be removed
         # automatically in the writing.
-        out_files = lstbin_simple.lst_bin_files(
+        out_files = lstbin.lst_bin_files(
             config_file=cfl,
             fname_format="/zen.{kind}.{lst:7.5f}.{inpaint_mode}.uvh5",
             rephase=False,
@@ -1585,13 +1577,13 @@ class Test_LSTBinFiles:
         )
 
         cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin_simple.make_lst_bin_config_file(
+        config_info = lstbin.make_lst_bin_config_file(
             cfl,
             data_files,
             ntimes_per_file=2,
             clobber=True,
         )
-        out_files = lstbin_simple.lst_bin_files(
+        out_files = lstbin.lst_bin_files(
             config_file=cfl,
             fname_format="zen.{kind}.{lst:7.5f}{inpaint_mode}.uvh5",
             rephase=False,
@@ -1629,7 +1621,7 @@ class Test_LSTBinFiles:
         )
 
         # Now create dodgy where_inpainted files
-        inp = lstbin_simple._get_where_inpainted_files(
+        inp = lstbin.io._get_where_inpainted_files(
             data_files, [(".uvh5", ".where_inpainted.h5")]
         )
         for fllist in inp:
@@ -1641,14 +1633,14 @@ class Test_LSTBinFiles:
                 uvf.write(fl.replace(".h5", ".waterfall.h5"), clobber=True)
 
         cfl = tmp / "lstbin_config_file.yaml"
-        lstbin_simple.make_lst_bin_config_file(
+        lstbin.make_lst_bin_config_file(
             cfl,
             data_files,
             ntimes_per_file=2,
             clobber=True,
         )
         with pytest.raises(ValueError, match="to be a DataContainer"):
-            lstbin_simple.lst_bin_files(
+            lstbin.lst_bin_files(
                 config_file=cfl,
                 fname_format="zen.{kind}.{lst:7.5f}{inpaint_mode}.uvh5",
                 output_flagged=False,
@@ -1669,13 +1661,13 @@ class Test_LSTBinFiles:
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
         cfl = tmp / "lstbin_config_file.yaml"
-        lstbin_simple.make_lst_bin_config_file(
+        lstbin.make_lst_bin_config_file(
             cfl,
             data_files,
             ntimes_per_file=2,
         )
 
-        out_files = lstbin_simple.lst_bin_files(
+        out_files = lstbin.lst_bin_files(
             config_file=cfl,
             fname_format="zen.{kind}.{lst:7.5f}.uvh5",
             write_med_mad=False,
@@ -1701,7 +1693,7 @@ def test_get_where_inpainted(tmp_path_factory):
             these.append(tmp / f"{filename}.uvh5")
         fls.append(these)
 
-    out = lstbin_simple._get_where_inpainted_files(
+    out = lstbin.io._get_where_inpainted_files(
         fls, [(".uvh5", ".where_inpainted.h5")]
     )
 
@@ -1710,54 +1702,54 @@ def test_get_where_inpainted(tmp_path_factory):
     assert len(out[1]) == 3
 
     with pytest.raises(IOError, match="Where inpainted file"):
-        lstbin_simple._get_where_inpainted_files(fls, [(".uvh5", ".non_existent.h5")])
+        lstbin.io._get_where_inpainted_files(fls, [(".uvh5", ".non_existent.h5")])
 
 
 def test_configure_inpainted_mode():
-    flg, inp = lstbin_simple._configure_inpainted_mode(
+    flg, inp = lstbin.io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=True, where_inpainted_files=[]
     )
     assert flg
     assert inp
 
-    flg, inp = lstbin_simple._configure_inpainted_mode(
+    flg, inp = lstbin.io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=True, where_inpainted_files=["a_file.h5"]
     )
     assert flg
     assert inp
 
-    flg, inp = lstbin_simple._configure_inpainted_mode(
+    flg, inp = lstbin.io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=False, where_inpainted_files=[]
     )
     assert flg
     assert not inp
 
-    flg, inp = lstbin_simple._configure_inpainted_mode(
+    flg, inp = lstbin.io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=False, where_inpainted_files=["a_file.h5"]
     )
     assert flg
     assert not inp
 
-    flg, inp = lstbin_simple._configure_inpainted_mode(
+    flg, inp = lstbin.io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=None, where_inpainted_files=[]
     )
     assert flg
     assert not inp
 
-    flg, inp = lstbin_simple._configure_inpainted_mode(
+    flg, inp = lstbin.io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=None, where_inpainted_files=["a_file.h5"]
     )
     assert flg
     assert inp
 
-    flg, inp = lstbin_simple._configure_inpainted_mode(
+    flg, inp = lstbin.io._configure_inpainted_mode(
         output_flagged=False, output_inpainted=True, where_inpainted_files=[]
     )
     assert not flg
     assert inp
 
     with pytest.raises(ValueError, match="Both output_inpainted and output_flagged"):
-        lstbin_simple._configure_inpainted_mode(
+        lstbin.io._configure_inpainted_mode(
             output_flagged=False, output_inpainted=False, where_inpainted_files=[]
         )
 
@@ -1767,7 +1759,7 @@ class TestThresholdFlags:
         flags = np.zeros((10, 12), dtype=bool)  # shape = (ntime, ...)
         flags[:8, 0] = True
 
-        new = lstbin_simple.threshold_flags(flags, flag_thresh=0.7, inplace=True)
+        new = lstbin.averaging.threshold_flags(flags, flag_thresh=0.7, inplace=True)
 
         assert np.all(flags[:, 0])
         assert np.all(new == flags)
@@ -1776,7 +1768,7 @@ class TestThresholdFlags:
         flags = np.zeros((10, 12), dtype=bool)  # shape = (ntime, ...)
         flags[:8, 0] = True
 
-        new = lstbin_simple.threshold_flags(flags, flag_thresh=0.7, inplace=False)
+        new = lstbin.averaging.threshold_flags(flags, flag_thresh=0.7, inplace=False)
 
         assert not np.all(flags[:, 0])
         assert np.all(new[:, 0])
@@ -1793,20 +1785,13 @@ class TestSigmaClip:
     @pytest.mark.parametrize(
         "threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands",
         [
-            (4.0, 4, 0, 0, "direct", None),
-            (3.0, 4, 1, 1, "mean", [(1, 3), (4, 5)]),
-            (5.0, 4, 2, 2, "median", [(2, 4)]),
-        ],
+            (4.0, 4, 0, 0, 'direct', None),
+            (3.0, 4, 1, 1, 'mean', [(1, 3), (4, 5)]),
+            (5.0, 4, 2, 2, 'median', [(2, 4)]),
+        ]
     )
     def test_sigma_clip_happy_path(
-        self,
-        array_shape,
-        threshold,
-        min_N,
-        median_axis,
-        threshold_axis,
-        clip_type,
-        flag_bands,
+        self, array_shape, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands
     ):
         # Arrange
         np.random.seed(42)
@@ -1818,88 +1803,62 @@ class TestSigmaClip:
             f"clip_type={clip_type}, flag_bands={flag_bands}"
         )
         # Act
-        clip_flags = lstbin_simple.sigma_clip(
+        clip_flags = lstbin.sigma_clip(
             array=array,
             threshold=threshold,
             min_N=min_N,
             median_axis=median_axis,
             threshold_axis=threshold_axis,
             clip_type=clip_type,
-            flag_bands=flag_bands,
+            flag_bands=flag_bands
         )
 
         # Assert
         assert isinstance(clip_flags, np.ndarray), "The output should be an ndarray."
         assert clip_flags.dtype == bool, "The output array should be of boolean type."
-        assert (
-            clip_flags.shape == array.shape
-        ), "The output flags should have the same shape as the input array."
+        assert clip_flags.shape == array.shape, "The output flags should have the same shape as the input array."
 
     # Edge cases
-    @pytest.mark.parametrize(
-        "array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id",
-        [
-            (np.array([]), 4.0, 4, 0, 0, "direct", None, "edge_empty_array"),
-            (np.array([np.nan, np.nan]), 4.0, 4, 0, 0, "direct", None, "edge_all_nan"),
-            (
-                np.random.normal(size=(5, 5)),
-                4.0,
-                6,
-                0,
-                0,
-                "direct",
-                None,
-                "edge_below_min_N",
-            ),
-        ],
-    )
-    def test_sigma_clip_edge_cases(
-        self,
-        array,
-        threshold,
-        min_N,
-        median_axis,
-        threshold_axis,
-        clip_type,
-        flag_bands,
-        test_id,
-    ):
+    @pytest.mark.parametrize("array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id", [
+        (np.array([]), 4.0, 4, 0, 0, 'direct', None, 'edge_empty_array'),
+        (np.array([np.nan, np.nan]), 4.0, 4, 0, 0, 'direct', None, 'edge_all_nan'),
+        (np.random.normal(size=(5, 5)), 4.0, 6, 0, 0, 'direct', None, 'edge_below_min_N'),
+    ])
+    def test_sigma_clip_edge_cases(self, array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id):
         # Act
-        clip_flags = lstbin_simple.sigma_clip(
+        clip_flags = lstbin.sigma_clip(
             array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands
         )
 
         # Assert
-        assert isinstance(
-            clip_flags, np.ndarray
-        ), f"Test ID: {test_id} - The output should be an ndarray."
-        assert (
-            clip_flags.dtype == bool
-        ), f"Test ID: {test_id} - The output array should be of boolean type."
-        assert (
-            clip_flags.shape == array.shape
-        ), f"Test ID: {test_id} - The output flags should have the same shape as the input array."
+        assert isinstance(clip_flags, np.ndarray), f"Test ID: {test_id} - The output should be an ndarray."
+        assert clip_flags.dtype == bool, f"Test ID: {test_id} - The output array should be of boolean type."
+        assert clip_flags.shape == array.shape, f"Test ID: {test_id} - The output flags should have the same shape as the input array."
 
     # Error cases
     def test_sigma_clip_error_cases(self):
         # Act / Assert
         array = np.array([1 + 1j, 2 + 2j])
         with pytest.raises(ValueError, match=".*must be real.*"):
-            lstbin_simple.sigma_clip(array)
+            lstbin.sigma_clip(array)
 
         array = np.array([1, 2])
         with pytest.raises(ValueError, match=".*clip_type.*"):
-            lstbin_simple.sigma_clip(array, min_N=0, clip_type="wrong_clip_type")
+            lstbin.sigma_clip(array, min_N=0, clip_type='wrong_clip_type')
 
-    @pytest.mark.parametrize("clip_type", ["direct", "mean", "median"])
-    @pytest.mark.parametrize("flag_bands", [None, [(0, 12)], [(0, 1), (1, 12)]])
+    @pytest.mark.parametrize(
+        "clip_type", ['direct', 'mean', 'median']
+    )
+    @pytest.mark.parametrize(
+        "flag_bands", [None, [(0, 12)], [(0, 1), (1, 12)]]
+    )
     def test_constant_data_no_flags(self, clip_type, flag_bands):
         """Test an array with a reasonable expected shape, but constant values.
 
         Expect that nothing is flagged in this case.
         """
         array = np.ones((10, 8, 12, 4))  # nnights, nbls, nfreqs, npols
-        clip_flags = lstbin_simple.sigma_clip(
+        clip_flags = lstbin.sigma_clip(
             array,
             clip_type=clip_type,
             flag_bands=flag_bands,
@@ -1922,9 +1881,9 @@ class TestSigmaClip:
         array[0, 0, 1, 0] = 1000
         array[0, 0, 0, 1] = 1000
 
-        clip_flags = lstbin_simple.sigma_clip(
+        clip_flags = lstbin.sigma_clip(
             array,
-            clip_type="direct",
+            clip_type='direct',
             median_axis=0,
             threshold_axis=2,
             min_N=0,
@@ -1937,8 +1896,12 @@ class TestSigmaClip:
         assert clip_flags[0, 0, 1, 0]
         assert clip_flags[0, 0, 0, 1]
 
-    @pytest.mark.parametrize("flag_bands", [[(0, 12)], [(0, 2), (2, 12)]])
-    @pytest.mark.parametrize("clip_type", ["mean", "median"])
+    @pytest.mark.parametrize(
+        "flag_bands", [[(0, 12)], [(0, 2), (2, 12)]]
+    )
+    @pytest.mark.parametrize(
+        "clip_type", ['mean', 'median']
+    )
     def test_spiky_data_mean_clip(self, flag_bands, clip_type):
         """Test an array with a reasonable expected shape with spiky outliers.
 
@@ -1947,9 +1910,9 @@ class TestSigmaClip:
         """
         array = np.random.normal(size=(100, 8, 12, 4))
 
-        array[0, 0, flag_bands[0][0] : flag_bands[0][1], 0] = 1000
+        array[0, 0, flag_bands[0][0]:flag_bands[0][1], 0] = 1000
 
-        clip_flags = lstbin_simple.sigma_clip(
+        clip_flags = lstbin.sigma_clip(
             array,
             clip_type=clip_type,
             median_axis=0,
@@ -1961,14 +1924,14 @@ class TestSigmaClip:
 
         # The entire first band should be clipped, but nothing else.
         assert np.sum(clip_flags) == flag_bands[0][1] - flag_bands[0][0]
-        assert np.all(clip_flags[0, 0, flag_bands[0][0] : flag_bands[0][1], 0])
+        assert np.all(clip_flags[0, 0, flag_bands[0][0]:flag_bands[0][1], 0])
 
     def test_passing_list(self):
         """Test that passing a list of arrays works."""
         array = np.random.normal(size=(8, 12, 4))
-        clip_flags = lstbin_simple.sigma_clip(
+        clip_flags = lstbin.sigma_clip(
             [array, array],
-            clip_type="direct",
+            clip_type='direct',
             median_axis=0,
             threshold_axis=2,
             min_N=0,
@@ -1979,19 +1942,18 @@ class TestSigmaClip:
         assert clip_flags[1].shape == array.shape
 
     @pytest.mark.parametrize(
-        "scale",
-        [
+        "scale", [
             np.random.normal(size=(8, 12, 4)),  # no median_axis
             np.random.normal(size=(1, 8, 12, 4)),  # dummy median axis
             np.random.normal(size=(10, 8, 12, 4)),  # full median axis
-        ],
+        ]
     )
     def test_passing_good_scale(self, scale):
         """Test that passing a scale works."""
         array = np.random.normal(size=(10, 8, 12, 4))
-        clip_flags = lstbin_simple.sigma_clip(
+        clip_flags = lstbin.sigma_clip(
             array,
-            clip_type="direct",
+            clip_type='direct',
             median_axis=0,
             threshold_axis=2,
             min_N=0,
@@ -2002,19 +1964,18 @@ class TestSigmaClip:
         assert clip_flags.shape == array.shape
 
     @pytest.mark.parametrize(
-        "scale",
-        [
+        "scale", [
             np.random.normal(size=(12, 4)),  # no median_axis
             np.random.normal(size=(11, 8, 12, 4)),  # dummy median axis
-        ],
+        ]
     )
     def test_passing_bad_scale(self, scale):
         """Test that passing a scale works."""
         array = np.random.normal(size=(10, 8, 12, 4))
-        with pytest.raises(ValueError, match="scale must have same shape as array"):
-            clip_flags = lstbin_simple.sigma_clip(
+        with pytest.raises(ValueError, match='scale must have same shape as array'):
+            clip_flags = lstbin.sigma_clip(
                 array,
-                clip_type="direct",
+                clip_type='direct',
                 median_axis=0,
                 threshold_axis=2,
                 min_N=0,
