@@ -22,7 +22,6 @@ import pickle
 import random
 import glob
 from pyuvdata.utils import (
-    POL_STR2NUM_DICT,
     POL_NUM2STR_DICT,
     ENU_from_ECEF,
     XYZ_from_LatLonAlt,
@@ -30,14 +29,9 @@ from pyuvdata.utils import (
 from pyuvdata.telescopes import KNOWN_TELESCOPES
 import argparse
 from hera_filters.dspec import place_data_on_uniform_grid
-from typing import Literal
 from pathlib import Path
-from functools import cached_property
-from astropy.time import Time
-from contextlib import contextmanager
 from functools import lru_cache
 from pyuvdata.uvdata import FastUVH5Meta
-import pyuvdata
 
 try:
     import aipy
@@ -54,11 +48,9 @@ from .utils import (
     polstr2num,
     jnum2str,
     jstr2num,
-    filter_bls,
     chunk_baselines_by_redundant_groups,
 )
 from .utils import (
-    split_pol,
     conj_pol,
     split_bl,
     LST2JD,

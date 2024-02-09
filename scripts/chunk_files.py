@@ -7,7 +7,7 @@
 """ Command Line Driver for data file chunker."""
 
 from hera_cal import chunker
-from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
+from hera_cal._cli_tools import parse_args, run_with_profiling
 
 ap = chunker.chunk_parser()
 args = parse_args(ap)

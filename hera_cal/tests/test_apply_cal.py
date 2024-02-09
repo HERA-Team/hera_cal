@@ -10,8 +10,6 @@ from copy import deepcopy
 import os
 import sys
 import shutil
-from scipy import constants
-import warnings
 from pyuvdata import UVCal, UVData
 
 from .. import io

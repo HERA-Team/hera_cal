@@ -21,7 +21,6 @@ from . import redcal
 from . import apply_cal
 from .datacontainer import DataContainer
 import logging
-import warnings
 
 logger = logging.getLogger(__name__)
 

@@ -8,15 +8,11 @@ from copy import deepcopy
 import os
 import glob
 import sys
-import shutil
-from scipy import constants
 import warnings
-from pyuvdata import UVCal, UVData, UVFlag
-import pytest
+from pyuvdata import UVCal, UVFlag
 from hera_filters import dspec
 
 from .. import io, smooth_cal, utils
-from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 
 

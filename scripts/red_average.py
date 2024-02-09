@@ -5,7 +5,6 @@
 
 """Command-line script for redundant averaging of (calibrated) data. To calibrate and then average, try apply_cal.py"""
 
-import sys
 import argparse
 from hera_cal import io, utils, redcal
 

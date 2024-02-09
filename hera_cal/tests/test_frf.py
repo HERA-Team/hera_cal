@@ -7,12 +7,9 @@ import os
 import shutil
 import numpy as np
 import sys
-from collections import OrderedDict as odict
 import copy
 import glob
 from pyuvdata import UVData
-from pyuvdata import utils as uvutils
-import unittest
 import yaml
 from scipy import stats
 from scipy import constants

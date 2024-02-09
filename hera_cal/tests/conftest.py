@@ -5,9 +5,7 @@
 """Testing environment setup and teardown for pytest."""
 from __future__ import absolute_import, division, print_function
 
-import os
 import pytest
-import six.moves.urllib as urllib
 from astropy.utils import iers
 from astropy.time import Time
 

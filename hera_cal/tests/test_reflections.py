@@ -7,16 +7,13 @@ import numpy as np
 from copy import deepcopy
 import os
 import sys
-import shutil
 from scipy import stats
 from pyuvdata import UVCal, UVData
-import operator
-import functools
 from sklearn.gaussian_process import kernels
 import hera_sim as hs
 import copy
 
-from .. import apply_cal, datacontainer, io, reflections
+from .. import apply_cal, io, reflections
 from ..data import DATA_PATH
 
 

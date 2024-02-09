@@ -9,13 +9,7 @@ import numpy as np
 from . import io
 from .vis_clean import VisClean
 from . import vis_clean
-import pickle
-import random
-import glob
-import os
 import warnings
-from pyuvdata import UVCal
-from copy import deepcopy
 import logging
 
 logger = logging.getLogger(__name__)

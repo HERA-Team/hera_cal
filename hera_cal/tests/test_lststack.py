@@ -6,14 +6,11 @@ from pathlib import Path
 from pyuvdata import UVCal, UVFlag
 import numpy as np
 from hera_cal import lst_stack as lstbin
-import pytest
-import numpy as np
-from pyuvdata import UVCal, UVData
+from pyuvdata import UVData
 from .. import io, utils
 from hera_cal import apply_cal
 from pyuvdata import utils as uvutils
 from hera_cal.red_groups import RedundantGroups
-from astropy import units
 from functools import partial
 
 try:

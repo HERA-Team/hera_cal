@@ -29,7 +29,7 @@ import argparse
 import numpy as np
 import operator
 from functools import reduce
-from scipy import signal, interpolate, spatial, constants, fft
+from scipy import signal, interpolate, constants, fft
 from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
 import linsolve
@@ -51,8 +51,6 @@ from . import apply_cal
 from .datacontainer import DataContainer
 from .utils import (
     echo,
-    polnum2str,
-    polstr2num,
     reverse_bl,
     split_pol,
     split_bl,
@@ -5357,7 +5355,7 @@ def run_model_based_calibration(
         if len(maxvals) > 0:
             delta = np.max(maxvals)
         else:
-            echo(f"All gains are flagged! Exiting...", verbose=verbose)
+            echo("All gains are flagged! Exiting...", verbose=verbose)
             break
 
         for k in abscal_gains:

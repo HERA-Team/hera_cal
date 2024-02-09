@@ -9,7 +9,7 @@ import copy
 import warnings
 
 from typing import Sequence
-from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
+from .utils import comply_pol, make_bl, comply_bl, reverse_bl
 from .red_groups import RedundantGroups, Baseline, AntPair
 
 
@@ -638,7 +638,6 @@ class RedDataContainer(DataContainer):
 
         # Figure out reds
         if reds is None:
-            from .redcal import get_reds
 
             if antpos is not None:
                 reds = RedundantGroups.from_antpos(

@@ -6,7 +6,6 @@
 """Command-line drive script for hera_cal.apply_cal"""
 
 from __future__ import absolute_import, division, print_function
-import argparse
 from hera_cal import apply_cal as ac
 import sys
 

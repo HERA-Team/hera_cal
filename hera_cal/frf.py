@@ -20,13 +20,10 @@ import astropy.constants as const
 from astropy_healpix import HEALPix
 from astropy.time import Time
 from pyuvdata import utils as uvutils
-from . import utils
 import copy
 from .utils import echo
 import datetime
-import astropy.constants as const
 from . import redcal
-from .utils import echo
 import os
 import yaml
 import re
@@ -488,7 +485,7 @@ def build_fringe_rate_profiles(
         uvb.efield_to_power()
     try:
         uvb.to_healpix()
-    except ValueError as err:
+    except ValueError:
         warnings.warn("UVBeam object already in healpix format...")
     if keys is None:
         keys = uvd.get_antpairpols()

@@ -11,7 +11,6 @@ from .. import chunker
 from hera_qm.utils import apply_yaml_flags
 import numpy as np
 import sys
-from pyuvdata.uvdata import FastUVH5Meta
 
 
 def test_chunk_data_files(tmpdir):

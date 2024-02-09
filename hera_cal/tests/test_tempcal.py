@@ -4,13 +4,10 @@
 
 import pytest
 import numpy as np
-import sys
 import os
 import glob
-import copy
-from pyuvdata import UVData
 
-from .. import utils, io, apply_cal, tempcal
+from .. import io, tempcal
 from ..data import DATA_PATH
 
 

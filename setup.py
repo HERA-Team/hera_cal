@@ -2,7 +2,6 @@ from setuptools import setup
 
 import os
 import sys
-import json
 from pathlib import Path
 
 sys.path.append("hera_cal")

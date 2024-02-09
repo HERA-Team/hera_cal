@@ -6,7 +6,6 @@
 """Command-line drive script for redundant calibration (firstcal, logcal, omnical, remove_degen).
 Includes solar flagging and iterative antenna exclusion based on chi^2."""
 
-import argparse
 from hera_cal.redcal import redcal_argparser, redcal_run
 import sys
 from hera_cal._cli_tools import parse_args, run_with_profiling

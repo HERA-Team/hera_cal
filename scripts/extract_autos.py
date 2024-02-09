@@ -5,10 +5,9 @@
 
 """Command-line drive script for hera_cal.autos"""
 
-import argparse
 from hera_cal import autos
 import sys
-from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
+from hera_cal._cli_tools import parse_args, run_with_profiling
 
 a = autos.extract_autos_argparser()
 

@@ -12,7 +12,6 @@ import sys
 from .. import io, noise
 from ..data import DATA_PATH
 from ..utils import split_pol
-from ..apply_cal import apply_cal
 
 
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")

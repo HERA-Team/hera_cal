@@ -1,15 +1,12 @@
 # -*- coding: utf-8 -*-
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
-import warnings
 import pytest
 import numpy as np
 from copy import deepcopy
 import os
 import sys
-import shutil
-from scipy import constants, interpolate
-from pyuvdata import UVCal, UVData
+from scipy import interpolate
 from hera_sim.interpolators import Beam
 from hera_sim import DATA_PATH as HS_DATA_PATH
 from hera_sim import noise

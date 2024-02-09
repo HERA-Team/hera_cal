@@ -5,10 +5,9 @@
 
 """Command-line drive script for absolute calibration after redundant calibration."""
 
-import argparse
 from hera_cal.abscal import post_redcal_abscal_argparser, post_redcal_abscal_run
 import sys
-from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
+from hera_cal._cli_tools import parse_args, run_with_profiling
 
 a = post_redcal_abscal_argparser()
 a = parse_args(a)

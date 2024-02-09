@@ -8,14 +8,13 @@ from copy import deepcopy
 import warnings
 import os
 import sys
-import shutil
 from hera_sim.antpos import linear_array, hex_array
 from hera_sim.vis import sim_red_data
 from hera_sim.sigchain import gen_gains
 
 from .. import redcal as om
 from .. import io, abscal
-from ..utils import split_pol, conj_pol, split_bl
+from ..utils import split_pol, split_bl
 from ..apply_cal import calibrate_in_place
 from ..data import DATA_PATH
 from ..datacontainer import DataContainer

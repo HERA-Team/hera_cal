@@ -13,6 +13,7 @@ target-version = "py39"
 line-length = 100   # increased so as not to trigger so many line chops
 
 [tool.ruff.lint]
+ignore-init-module-imports = true
 ignore =  [
   "E402",  # module import not at top of file
   "E501",  # line too long
@@ -24,5 +25,5 @@ extend-select = [
     "E",  # flake8 errors
     "W",  # flake8 warnings
 #    "F",  # flake8 pyflakes
-    "I",  # isort
+#    "I",  # isort
 ]

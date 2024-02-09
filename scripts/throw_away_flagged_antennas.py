@@ -5,8 +5,6 @@
 
 """Command-line script for throw away all data with apriori flags. Saves downstream I/O, memory etc..."""
 
-import sys
-import argparse
 from hera_cal import io
 from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
 

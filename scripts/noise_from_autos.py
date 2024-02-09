@@ -7,7 +7,7 @@
 
 from hera_cal import noise
 import sys
-from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
+from hera_cal._cli_tools import parse_args, run_with_profiling
 
 
 a = noise.noise_std_argparser()

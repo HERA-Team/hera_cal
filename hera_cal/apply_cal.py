@@ -11,8 +11,6 @@ import warnings
 from . import io
 from . import utils
 from . import redcal
-import pyuvdata.utils as uvutils
-from pyuvdata import UVData
 
 
 def _check_polarization_consistency(data, gains):

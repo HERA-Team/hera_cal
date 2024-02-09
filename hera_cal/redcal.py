@@ -22,7 +22,7 @@ from .utils import (
     comply_pol,
     per_antenna_modified_z_scores,
 )
-from .io import HERAData, HERACal, write_cal, save_redcal_meta
+from .io import HERAData, save_redcal_meta
 from .apply_cal import calibrate_in_place
 
 
@@ -778,7 +778,7 @@ class RedSol:
             None
         """
         if reds_to_solve is None:
-            unsolved_reds = [gp for gp in self.reds if not gp[0] in self.vis]
+            unsolved_reds = [gp for gp in self.reds if gp[0] not in self.vis]
             reds_to_solve = filter_reds(unsolved_reds, ants=self.gains.keys())
         self.update_vis_from_data(data, wgts=wgts, reds_to_update=reds_to_solve)
 

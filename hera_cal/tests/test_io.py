@@ -7,7 +7,6 @@
 import pytest
 import numpy as np
 import os
-import warnings
 import shutil
 import copy
 from collections import OrderedDict as odict
@@ -23,7 +22,7 @@ from pyuvdata.uvdata import FastUVH5Meta
 from .. import io
 from ..io import HERACal, HERAData
 from ..datacontainer import DataContainer
-from ..utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, split_bl
+from ..utils import polstr2num, reverse_bl, split_bl
 from ..data import DATA_PATH
 from hera_qm.data import DATA_PATH as QM_DATA_PATH
 

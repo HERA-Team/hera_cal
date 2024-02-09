@@ -5,7 +5,6 @@ import omnical.calib
 import numpy as np
 import unittest
 import time
-from copy import deepcopy
 import pstats
 import cProfile
 

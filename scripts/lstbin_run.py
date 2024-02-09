@@ -33,7 +33,6 @@ Note: make sure the search strings are bounded by quotations!
 
 from hera_cal import lstbin
 import sys
-import os
 import glob
 from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
 

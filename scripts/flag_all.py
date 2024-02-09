@@ -5,7 +5,6 @@
 
 """Command-line script for completely flagging a data-file."""
 
-import sys
 import argparse
 from pyuvdata import UVData
 

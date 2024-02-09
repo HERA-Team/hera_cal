@@ -7,21 +7,16 @@ import numpy as np
 import sys
 import os
 import warnings
-import shutil
 import glob
 from collections import OrderedDict as odict
 import copy
-from contextlib import contextmanager
 from pyuvdata import UVData
 from pyuvdata import UVCal
-import pyuvdata.tests as uvtest
 from sklearn import gaussian_process as gp
 from ..redcal import filter_reds
 from ..redcal import get_pos_reds
-from astropy.coordinates import EarthLocation
 from hera_sim.noise import white_noise
-from .. import utils, abscal, datacontainer, io, redcal
-from ..calibrations import CAL_PATH
+from .. import utils, datacontainer, io, redcal
 from ..data import DATA_PATH
 from . import mock_uvdata as mockuvd
 from pathlib import Path

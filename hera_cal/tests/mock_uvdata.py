@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from pyuvdata import UVData, UVCal, UVFlag
-from pyuvdata.uvdata import FastUVH5Meta
 from pyuvdata.telescopes import get_telescope
 
 from hera_cal import utils

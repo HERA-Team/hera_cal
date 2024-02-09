@@ -8,7 +8,7 @@ import os
 from copy import deepcopy
 from hera_sim.antpos import hex_array
 
-from .. import abscal, datacontainer, io, redcal
+from .. import datacontainer, io, redcal
 from ..data import DATA_PATH
 from ..utils import reverse_bl
 

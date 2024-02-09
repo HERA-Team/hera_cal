@@ -3,8 +3,6 @@ from . import redcal
 from . import abscal
 from .datacontainer import DataContainer, RedDataContainer
 
-import inspect
-import warnings
 import numpy as np
 from scipy import linalg
 from hera_filters import dspec
@@ -949,7 +947,7 @@ def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spec
             assert fg_model_comps[group[0]].shape[1:] == (
                 spectral_filters.shape[-1],
                 spatial_filters[group[0]].shape[-1],
-            ), f"The number of model components must match filter shapes."
+            ), "The number of model components must match filter shapes."
         else:
             assert (
                 fg_model_comps[group[0]].shape[-1] == spatial_filters[group[0]].shape[-1]
@@ -1860,8 +1858,8 @@ class SpectrallyRedundantCalibrator:
         if return_model:
             # Compute the foreground model from the model parameters
             fg_model_comps = {
-                rdgrp[0]: model_parameters[pol][f"fg_r"][ri]
-                + 1j * model_parameters[pol][f"fg_i"][ri]
+                rdgrp[0]: model_parameters[pol]["fg_r"][ri]
+                + 1j * model_parameters[pol]["fg_i"][ri]
                 for pol in data.pols()
                 for ri, rdgrp in enumerate(self.radial_reds.get_pol(pol))
             }
@@ -1876,11 +1874,11 @@ class SpectrallyRedundantCalibrator:
         gains = {}
         for pol in data.pols():
             for ant in idealized_antpos:
-                gains[(ant, f"J{pol}")] = np.sqrt(model_parameters[pol][f"amplitude"]) * np.exp(
+                gains[(ant, f"J{pol}")] = np.sqrt(model_parameters[pol]["amplitude"]) * np.exp(
                     1j
                     * np.tensordot(
                         idealized_antpos[ant],
-                        model_parameters[pol][f"tip_tilt"],
+                        model_parameters[pol]["tip_tilt"],
                         axes=(0, 0),
                     )
                 )
