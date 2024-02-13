@@ -270,7 +270,7 @@ def reduce_lst_bins(
     sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
     sigma_clip_type: str = 'direct',
-    sigma_clip_subbands: list[int] | None = None,
+    sigma_clip_subbands: list[tuple[int, int]] | None = None,
     sigma_clip_scale: list[np.ndarray] | None = None,
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
@@ -660,7 +660,7 @@ def lst_average(
     sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
     flag_below_min_N: bool = False,
-    sigma_clip_subbands: list[int] | None = None,
+    sigma_clip_subbands: list[tuple[int, int]] | None = None,
     sigma_clip_type: Literal['direct', 'mean', 'median'] = 'direct',
     sigma_clip_scale: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -695,11 +695,9 @@ def lst_average(
     flag_below_min_N
         Whether to flag data that has fewer than ``sigma_clip_min_N`` unflagged samples.
     sigma_clip_subbands
-        A list of integers specifying the start and end indices of the frequency axis
-        to perform sigma clipping over. If None, the entire frequency axis is used at
-        once. Given a list of integers e.g. ``[0, 10, 20]``, the sub-bands will be
-        defined as [(0, 10), (10, 20)], where each 2-tuple defines a standard Python
-        slice object (i.e. end is exclusive, start is inclusive).
+        A list of 2-tuples of integers specifying the start and end indices of the
+        frequency axis to perform sigma clipping over. If None, the entire frequency
+        axis is used at once.
     sigma_clip_type
         The type of sigma clipping to perform. If ``direct``, each datum is flagged
         individually. If ``mean`` or ``median``, an entire sub-band of the data is
@@ -747,7 +745,7 @@ def lst_average(
             'clip_type': sigma_clip_type,
             'median_axis': 0,
             'threshold_axis': 0 if sigma_clip_type == 'direct' else -2,
-            'flag_bands': list(zip(sigma_clip_subbands[:-1], sigma_clip_subbands[1:])) if sigma_clip_subbands else None,
+            'flag_bands': sigma_clip_subbands,
             "scale": sigma_clip_scale,
         }
         clip_flags = sigma_clip(data.real, **kw)
@@ -1316,7 +1314,7 @@ def lst_bin_files_single_outfile(
     golden_lsts: tuple[float] = (),
     sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
-    sigma_clip_subbands: list[int] | None = None,
+    sigma_clip_subbands: list[tuple[int, int]] | None = None,
     sigma_clip_type: Literal['direct', 'mean', 'median'] = 'direct',
     sigma_clip_use_autos: bool = False,
     flag_below_min_N: bool = False,
@@ -1438,9 +1436,9 @@ def lst_bin_files_single_outfile(
         is False, these (antpair,pol,channel) combinations are not flagged by
         sigma-clipping (otherwise they are).
     sigma_clip_subbands
-        A list of integers specifying the start and end indices of the frequency axis
-        to perform sigma clipping over. If None, the entire frequency axis is used at
-        once.
+        A list of 2-tuples of integers, specifying the start and end indices of the
+        frequency axis to perform sigma clipping over. If None, the entire frequency
+        axis is used at once.
     sigma_clip_type
         The type of sigma clipping to perform. If ``direct``, each datum is flagged
         individually. If ``mean`` or ``median``, an entire sub-band of the data is
@@ -2595,7 +2593,7 @@ def lst_bin_arg_parser():
     a.add_argument(
         "--sigma-clip-subbands",
         type=str,
-        help="Channels at which bands are separated for homogeneous sigma clipping. Separated by commas.",
+        help="Band-edges (as channel number) at which bands are separated for homogeneous sigma clipping, e.g. '0~10,100~500'",
         default=None,
     )
     a.add_argument(
