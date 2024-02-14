@@ -18,7 +18,7 @@ import numpy as np
 from . import utils
 import warnings
 from pathlib import Path
-from .lstbin import sigma_clip, make_lst_grid
+from .lstbin import make_lst_grid
 from . import abscal
 import os
 from . import io
@@ -35,6 +35,7 @@ from functools import partial
 import yaml
 from .types import Antpair
 from .datacontainer import DataContainer
+from typing import Literal
 
 try:
     profile
@@ -268,6 +269,9 @@ def reduce_lst_bins(
     mutable: bool = False,
     sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
+    sigma_clip_type: str = 'direct',
+    sigma_clip_subbands: list[tuple[int, int]] | None = None,
+    sigma_clip_scale: list[np.ndarray] | None = None,
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
     get_mad: bool = False,
@@ -285,7 +289,7 @@ def reduce_lst_bins(
     data
         The data to perform the reduction over. The length of the list is the number
         of LST bins. Each array in the list should have shape
-        ``(nbl, nintegrations_in_lst, nfreq, npol)``.
+        ``(nintegrations_in_lst, nbl, nfreq, npol)``.
     flags
         A list, the same length/shape as ``data``, containing the flags.
     nsamples
@@ -307,6 +311,23 @@ def reduce_lst_bins(
         per baseline, frequency, and polarization.
     sigma_clip_min_N
         The minimum number of unflagged samples required to perform sigma clipping.
+    sigma_clip_type
+        The type of sigma clipping to perform. If ``direct``, each datum is flagged
+        individually. If ``mean`` or ``median``, an entire sub-band of the data is
+        flagged if its mean (absolute) zscore is beyond the threshold.
+    sigma_clip_subbands
+        A list of tuples specifying the start and end indices of the threshold axis
+        over which to perform sigma clipping. They are used in a ``slice`` object,
+        so that the end is exclusive but the start is inclusive. If None, the entire
+        threshold axis is used at once.
+    sigma_clip_scale
+        If given, interpreted as the expected standard deviation of the data
+        (over nights). If not given, estimated from the data using the median
+        absolute deviation. If given, must be an array with either the same
+        shape as ``array`` OR the same shape as ``array`` with the ``median_axis``
+        removed. If the former, each variate over the ``median_axis`` is scaled
+        independently. If the latter, the same scale is applied to all variates
+        (generally nights).
     flag_below_min_N
         Whether to flag data that has fewer than ``sigma_clip_min_N`` unflagged samples.
     flag_thresh
@@ -316,6 +337,7 @@ def reduce_lst_bins(
     get_mad
         Whether to compute the median and median absolute deviation of the data in each
         LST bin, in addition to the mean and standard deviation.
+
 
     Returns
     -------
@@ -347,8 +369,11 @@ def reduce_lst_bins(
     if where_inpainted is None:
         where_inpainted = [None] * nlst_bins
 
-    for lstbin, (d, n, f, inpf) in enumerate(
-        zip(data, nsamples, flags, where_inpainted)
+    if sigma_clip_scale is None:
+        sigma_clip_scale = [None] * nlst_bins
+
+    for lstbin, (d, n, f, clip_scale, inpf) in enumerate(
+        zip(data, nsamples, flags, sigma_clip_scale, where_inpainted)
     ):
         logger.info(f"Computing LST bin {lstbin+1} / {nlst_bins}")
 
@@ -374,6 +399,9 @@ def reduce_lst_bins(
                 inpainted_mode=inpainted_mode,
                 sigma_clip_thresh=sigma_clip_thresh,
                 sigma_clip_min_N=sigma_clip_min_N,
+                sigma_clip_subbands=sigma_clip_subbands,
+                sigma_clip_type=sigma_clip_type,
+                sigma_clip_scale=clip_scale,
                 flag_below_min_N=flag_below_min_N,
             )
 
@@ -501,6 +529,128 @@ def threshold_flags(
     return flags
 
 
+def sigma_clip(
+    array: np.ndarray | np.ma.MaskedArray,
+    threshold: float = 4.0,
+    min_N: int = 4,
+    median_axis: int = 0,
+    threshold_axis: int = 0,
+    clip_type: Literal['direct', 'mean', 'median'] = 'direct',
+    flag_bands: list[tuple[int, int]] | None = None,
+    scale: np.ndarray | None = None,
+):
+    """
+    One-iteration robust sigma clipping algorithm.
+
+    Parameters
+    ----------
+    array
+        ndarray of *real* data, of any dimension. If a MaskedArray, the mask is
+        respected. If not, a masked array is created that masks out NaN values in the
+        array. While the input array can be of any dimension, it must have at least
+        ``ndim > max(median_axis, threshold_axis)``. In the context of this module
+        (lst binning), we expect the array to be of shape
+        ``(Nnights, Nbls, Nfreqs, Npols)``.
+    threshold
+        Threshold to cut above, in units of the standard deviation.
+    min_N
+        minimum length of array to sigma clip, below which no sigma
+        clipping is performed. Non-clipped values are *not* flagged.
+    median_axis
+        Axis along which to perform the median to determine the zscore of individual
+        data.
+    threshold_axis
+        Axis along which to perform the thresholding, if multiple data are to be
+        combined before thresholding. This is only applicable if ``clip_type`` is
+        ``mean`` or ``median``. In this case, if for example a 2D array is passed in
+        and ``threshold_axis=1`` (but no ``flag_bands`` is passed), then the mean of
+        the absolute zscores is take along the final axis, and the output flags are
+        applied homogeneously across this axis based on this mean.
+    clip_type
+        The type of sigma clipping to perform. If ``direct``, each datum is flagged
+        individually. If ``mean`` or ``median``, an entire sub-band of the data is
+        flagged if its mean (absolute) zscore is beyond the threshold.
+    flag_bands
+        A list of tuples specifying the start and end indices of the threshold axis
+        over which to perform sigma clipping. They are used in a ``slice`` object,
+        so that the end is exclusive but the start is inclusive. If None, the entire
+        threshold axis is used at once.
+    scale
+        If given, interpreted as the expected standard deviation of the data
+        (over nights). If not given, estimated from the data using the median
+        absolute deviation. If given, must be an array with eitherthe same
+        shape as ``array`` OR the same shape as ``array`` with the ``median_axis``
+        removed. If the former, each variate over the ``median_axis`` is scaled
+        independently. If the latter, the same scale is applied to all variates
+        (generally nights).
+
+    Output
+    ------
+    clip_flags
+        A boolean array with same shape as input array,
+        with clipped values set to True.
+    """
+    # ensure array is an array
+    if not isinstance(array, np.ndarray):  # this covers np.ma.MaskedArray as well
+        array = np.asarray(array)
+
+    if np.iscomplexobj(array):
+        raise ValueError("array must be real")
+
+    # ensure array passes min_N criterion:
+    if array.shape[median_axis] < min_N:
+        return np.zeros_like(array, dtype=bool)
+
+    if not isinstance(array, np.ma.MaskedArray):
+        array = np.ma.MaskedArray(array, mask=np.isnan(array))
+
+    location = np.expand_dims(np.ma.median(array, axis=median_axis), axis=median_axis)
+
+    if scale is None:
+        scale = np.expand_dims(np.ma.median(np.abs(array - location), axis=median_axis) * 1.482579, axis=median_axis)
+    elif scale.ndim == array.ndim - 1:
+        scale = np.expand_dims(scale, axis=median_axis)
+
+    if (scale.shape != array.shape and scale.shape[median_axis] != 1) or scale.ndim != array.ndim:
+        raise ValueError(
+            "scale must have same shape as array or array with median_axis removed."
+            f"Got {scale.shape}, needed {array.shape}"
+        )
+
+    if flag_bands is None:
+        # Use entire threshold axis together
+        flag_bands = [(0, array.shape[threshold_axis])]
+
+    zscore = np.abs(array - location) / scale
+
+    clip_flags = np.zeros(array.shape, dtype=bool)
+
+    for band in flag_bands:
+        # build the slice index. Don't use np.take with axis= parameter because it
+        # creates a new array, instead of a view.
+        mask = [slice(None)] * array.ndim
+        mask[threshold_axis] = slice(*band)
+        mask = tuple(mask)
+
+        subz = zscore[mask]
+        subflags = clip_flags[mask]
+
+        if clip_type == 'direct':
+            # In this mode, each datum is flagged individually.
+            subflags[:] = subz > threshold
+        elif clip_type in ['mean', 'median']:
+            # In this mode, an entire sub-band of the data is flagged if its mean
+            # (absolute) zscore is beyond the threshold.
+            thisf = getattr(np.ma, clip_type)(subz, axis=threshold_axis) > threshold
+            subflags[:] = np.expand_dims(thisf, axis=threshold_axis)
+        else:
+            raise ValueError(
+                f"clip_type must be 'direct', 'mean' or 'median', got {clip_type}"
+            )
+
+    return clip_flags
+
+
 @profile
 def lst_average(
     data: np.ndarray | np.ma.MaskedArray,
@@ -510,6 +660,9 @@ def lst_average(
     sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
     flag_below_min_N: bool = False,
+    sigma_clip_subbands: list[tuple[int, int]] | None = None,
+    sigma_clip_type: Literal['direct', 'mean', 'median'] = 'direct',
+    sigma_clip_scale: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute statistics of a set of data over its zeroth axis.
@@ -541,6 +694,22 @@ def lst_average(
         The minimum number of unflagged samples required to perform sigma clipping.
     flag_below_min_N
         Whether to flag data that has fewer than ``sigma_clip_min_N`` unflagged samples.
+    sigma_clip_subbands
+        A list of 2-tuples of integers specifying the start and end indices of the
+        frequency axis to perform sigma clipping over. If None, the entire frequency
+        axis is used at once.
+    sigma_clip_type
+        The type of sigma clipping to perform. If ``direct``, each datum is flagged
+        individually. If ``mean`` or ``median``, an entire sub-band of the data is
+        flagged if its mean (absolute) zscore is beyond the threshold.
+    sigma_clip_scale
+        If given, interpreted as the expected standard deviation of the data
+        (over nights). If not given, estimated from the data using the median
+        absolute deviation. If given, must be an array with either the same
+        shape as ``array`` OR the same shape as ``array`` with the ``median_axis``
+        removed. If the former, each variate over the ``median_axis`` is scaled
+        independently. If the latter, the same scale is applied to all variates
+        (generally nights).
 
     Returns
     -------
@@ -562,20 +731,25 @@ def lst_average(
 
     # Now do sigma-clipping.
     if sigma_clip_thresh is not None:
-        if inpainted_mode:
+        if inpainted_mode and sigma_clip_type == 'direct':
             warnings.warn(
-                "Sigma-clipping in in-painted mode is a bad idea, because it creates "
+                "Direct-mode sigma-clipping in in-painted mode is a bad idea, because it creates "
                 "non-uniform flags over frequency, which can cause artificial spectral "
                 "structure. In-painted mode specifically attempts to avoid this."
             )
 
         nflags = np.sum(flags)
-        clip_flags = sigma_clip(
-            data.real, sigma=sigma_clip_thresh, min_N=sigma_clip_min_N
-        )
-        clip_flags |= sigma_clip(
-            data.imag, sigma=sigma_clip_thresh, min_N=sigma_clip_min_N
-        )
+        kw = {
+            'threshold': sigma_clip_thresh,
+            'min_N': sigma_clip_min_N,
+            'clip_type': sigma_clip_type,
+            'median_axis': 0,
+            'threshold_axis': 0 if sigma_clip_type == 'direct' else -2,
+            'flag_bands': sigma_clip_subbands,
+            "scale": sigma_clip_scale,
+        }
+        clip_flags = sigma_clip(data.real, **kw)
+        clip_flags |= sigma_clip(data.imag, **kw)
 
         # Need to restore min_N condition properly here because it's not done properly in sigma_clip
         sc_min_N = np.sum(~flags, axis=0) < sigma_clip_min_N
@@ -1140,6 +1314,9 @@ def lst_bin_files_single_outfile(
     golden_lsts: tuple[float] = (),
     sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
+    sigma_clip_subbands: list[tuple[int, int]] | None = None,
+    sigma_clip_type: Literal['direct', 'mean', 'median'] = 'direct',
+    sigma_clip_use_autos: bool = False,
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
     freq_min: float | None = None,
@@ -1258,6 +1435,18 @@ def lst_bin_files_single_outfile(
         within an LST-bin required to perform sigma clipping. If `flag_below_min_N`
         is False, these (antpair,pol,channel) combinations are not flagged by
         sigma-clipping (otherwise they are).
+    sigma_clip_subbands
+        A list of 2-tuples of integers, specifying the start and end indices of the
+        frequency axis to perform sigma clipping over. If None, the entire frequency
+        axis is used at once.
+    sigma_clip_type
+        The type of sigma clipping to perform. If ``direct``, each datum is flagged
+        individually. If ``mean`` or ``median``, an entire sub-band of the data is
+        flagged if its mean (absolute) zscore is beyond the threshold.
+    sigma_clip_use_autos
+        If True, use the autos to predict the standard deviation for each baseline
+        over nights for use in sigma-clipping. If False, use the median absolute
+        deviation over nights for each baseline.
     flag_below_min_N
         If True, flag all (antpair, pol,channel) combinations  for an LST-bin that
         contiain fewer than `flag_below_min_N` unflagged integrations within the bin.
@@ -1453,7 +1642,15 @@ def lst_bin_files_single_outfile(
     # This is just to save on RAM.
     if Nbls_to_load is None:
         Nbls_to_load = len(all_baselines) + 1
+
     n_bl_chunks = len(all_baselines) // Nbls_to_load + 1
+
+    # First, separate the auto baselines from the rest. We do this first because
+    # we'd potentially like to use the autos to infer the noise, and do some
+    # preliminary clipping.
+    auto_bls = [bl for bl in all_baselines if bl[0] == bl[1]]
+    all_baselines = [bl for bl in all_baselines if bl[0] != bl[1]]
+
     bl_chunks = [
         all_baselines[i * Nbls_to_load: (i + 1) * Nbls_to_load]
         for i in range(n_bl_chunks)
@@ -1507,7 +1704,7 @@ def lst_bin_files_single_outfile(
         history=history,
         fname_format=fname_format,
         overwrite=overwrite,
-        antpairs=all_baselines,
+        antpairs=auto_bls + all_baselines,
         start_jd=start_jd,
         freq_min=freq_min,
         freq_max=freq_max,
@@ -1533,42 +1730,39 @@ def lst_bin_files_single_outfile(
                 inpaint_mode=inpaint_mode,
             )
 
-    nbls_so_far = 0
-    for bi, bl_chunk in enumerate(bl_chunks):
-        logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
-        # data/flags/nsamples are *lists*, with nlst_bins entries, each being an
-        # array, with shape (times, bls, freqs, npols)
-        (
-            bin_lst,
-            data,
-            flags,
-            nsamples,
-            where_inpainted,
-            binned_times,
-        ) = lst_bin_files_for_baselines(
-            data_files=file_list,
-            lst_bin_edges=lst_bin_edges,
-            antpairs=bl_chunk,
-            freqs=freq_array,
-            pols=all_pols,
-            cal_files=cals,
-            time_arrays=time_arrays,
-            time_idx=tinds,
-            ignore_flags=ignore_flags,
-            rephase=rephase,
-            antpos=antpos,
-            lsts=all_lsts,
-            redundantly_averaged=redundantly_averaged,
-            reds=reds,
-            freq_min=freq_min,
-            freq_max=freq_max,
-            where_inpainted_files=where_inpainted_files,
+    _bin_files_for_bls = partial(
+        lst_bin_files_for_baselines,
+        data_files=file_list,
+        lst_bin_edges=lst_bin_edges,
+        freqs=freq_array,
+        pols=all_pols,
+        cal_files=cals,
+        time_arrays=time_arrays,
+        time_idx=tinds,
+        ignore_flags=ignore_flags,
+        rephase=rephase,
+        antpos=antpos,
+        lsts=all_lsts,
+        redundantly_averaged=redundantly_averaged,
+        reds=reds,
+        freq_min=freq_min,
+        freq_max=freq_max,
+        where_inpainted_files=where_inpainted_files
+    )
+
+    def _process_blchunk(
+        bl_chunk: list[tuple[int, int]],
+        nbls_so_far: int,
+        mean_autos: list[np.ndarray] | None = None,
+    ):
+        """Process a single chunk of baselines."""
+        _, data, flags, nsamples, where_inpainted, binned_times = _bin_files_for_bls(
+            antpairs=bl_chunk
         )
 
         slc = slice(nbls_so_far, nbls_so_far + len(bl_chunk))
 
-        if bi == 0:
-            # On the first baseline chunk, create the output file
+        if "GOLDEN" not in out_files:
             # TODO: we're not writing out the where_inpainted data for the GOLDEN
             #       or REDUCEDCHAN files yet -- it looks like we'd have to write out
             #       completely new UVFlag files for this.
@@ -1609,6 +1803,14 @@ def lst_bin_files_single_outfile(
                 nsamples=nsamples[0][:, :, save_channels].transpose((1, 0, 2, 3)),
             )
 
+        # Get the sigma clip scale
+        if sigma_clip_use_autos and mean_autos is not None:
+            dtdf = np.median(np.ediff1d(meta.times)) * (meta.freq_array[1] - meta.freq_array[0])
+            predicted_var = [np.abs(auto)**2 / dtdf / ns for ns, auto in zip(nsamples, mean_autos)]
+            sigma_clip_scale = [np.sqrt(p) for p in predicted_var]
+        else:
+            sigma_clip_scale = None
+
         for inpainted in [True, False]:
             if inpainted and not output_inpainted:
                 continue
@@ -1630,6 +1832,9 @@ def lst_bin_files_single_outfile(
                 sigma_clip_min_N=sigma_clip_min_N,
                 flag_below_min_N=flag_below_min_N,
                 get_mad=write_med_mad,
+                sigma_clip_subbands=sigma_clip_subbands,
+                sigma_clip_type=sigma_clip_type,
+                sigma_clip_scale=sigma_clip_scale,
             )
 
             write_baseline_slc_to_file(
@@ -1663,7 +1868,21 @@ def lst_bin_files_single_outfile(
                     flags=rdc["flags"],
                     nsamples=rdc["days_binned"],
                 )
+        return data, flags, nsamples, rdc
 
+    auto_data, auto_flags, _, _ = _process_blchunk(auto_bls, 0)
+
+    # Get the mean auto
+    autos = [np.ma.masked_array(d, mask=f) for d, f in zip(auto_data, auto_flags)]
+    # Now each mean has shape (nnights, 1, nfreqs, npols)
+    auto_mean = [np.ma.mean(a, axis=1)[:, None] for a in autos]
+
+    nbls_so_far = len(auto_bls)
+    for bi, bl_chunk in enumerate(bl_chunks):
+        logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
+        # data/flags/nsamples are *lists*, with nlst_bins entries, each being an
+        # array, with shape (times, bls, freqs, npols)
+        _process_blchunk(bl_chunk, nbls_so_far=nbls_so_far, mean_autos=auto_mean)
         nbls_so_far += len(bl_chunk)
 
     return out_files
@@ -2370,6 +2589,24 @@ def lst_bin_arg_parser():
         type=int,
         help="number of unflagged data points over time to require before considering sigma clipping",
         default=4,
+    )
+    a.add_argument(
+        "--sigma-clip-subbands",
+        type=str,
+        help="Band-edges (as channel number) at which bands are separated for homogeneous sigma clipping, e.g. '0~10,100~500'",
+        default=None,
+    )
+    a.add_argument(
+        "--sigma-clip-type",
+        type=str,
+        default='direct',
+        choices=['direct', 'mean', 'median'],
+        help="How to threshold the absolute zscores for sigma clipping."
+    )
+    a.add_argument(
+        "--sigma-clip-use-autos",
+        action="store_true",
+        help="whether to use the autos to predict the variance for sigma-clipping"
     )
     a.add_argument(
         "--flag-below-min-N",
