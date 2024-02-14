@@ -35,3 +35,4 @@ from . import autos
 from . import noise
 from . import tempcal
 from . import nucal
+from . import lstcal
