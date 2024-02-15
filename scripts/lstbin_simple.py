@@ -60,6 +60,8 @@ kwargs['golden_lsts'] = tuple(float(lst) for lst in kwargs['golden_lsts'].split(
 
 kwargs['output_flagged'] = not kwargs.pop('no_flagged_mode')
 kwargs['output_inpainted'] = kwargs.pop("do_inpaint_mode")
+kwargs['sigma_clip_subbands'] = [(int(low), int(high)) for b in kwargs["sigma_clip_subbands"].split(",") for low, high in b.split("~")]
+
 run_with_profiling(
     lstbin.lst_bin_files,
     args,
