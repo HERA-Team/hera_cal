@@ -224,6 +224,7 @@ def test_flag_rows_with_contiguous_flags():
             assert np.all(np.isclose(wout[i], 0.0))
 
 
+@pytest.mark.filterwarnings("ignore:invalid value encountered in scalar divide")
 def test_get_max_contiguous_flag_from_filter_periods():
     Nfreqs = 64
     Ntimes = 60
@@ -1152,9 +1153,14 @@ class Test_VisClean:
             baselines = io.baselines_from_filelist_position(file, datafiles)
             fname = 'temp.fragment.part.%d.h5' % filenum
             fragment_filename = tmp_path / fname
-            frf.load_tophat_frfilter_and_write(datafiles, baseline_list=baselines, calfile_list=cals,
-                                               spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
-                                               res_outfilename=fragment_filename, clobber=True, case='sky')
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Antenna 53 not present")
+                warnings.filterwarnings("ignore", message="Cannot preserve total_quality_array")
+                frf.load_tophat_frfilter_and_write(
+                    datafiles, baseline_list=baselines, calfile_list=cals,
+                    spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
+                    res_outfilename=fragment_filename, clobber=True, case='sky'
+                )
             # load in fragment and make sure the number of baselines is equal to the length of the baseline list
             hd_fragment = io.HERAData(str(fragment_filename))
             assert len(hd_fragment.bls) == len(baselines)
@@ -1177,9 +1183,14 @@ class Test_VisClean:
         hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
         hd_reconstituted.read()
         # compare to xtalk filtering the whole file.
-        frf.load_tophat_frfilter_and_write(datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
-                                           calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
-                                           res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20], case='sky')
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Antenna 53 not present")
+            warnings.filterwarnings("ignore", message="Cannot preserve total_quality_array")
+            frf.load_tophat_frfilter_and_write(
+                datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
+                calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
+                res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20], case='sky'
+            )
         hd = io.HERAData(str(tmp_path / 'temp.h5'))
         hd.read()
         assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))
@@ -1214,6 +1225,7 @@ class Test_VisClean:
             vis_clean.time_chunk_from_baseline_chunks(datafiles[0], baseline_chunk_files=datafiles[1:], clobber=True, outfilename=str(tmp_path / fname), time_bounds=True)
 
 
+@pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
 def test_discard_autocorr_imag():
     hd = io.HERAData(os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"))
     data = hd.read()[0]

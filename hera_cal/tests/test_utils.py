@@ -26,8 +26,12 @@ from ..data import DATA_PATH
 from . import mock_uvdata as mockuvd
 from pathlib import Path
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*Using known values for HERA",
+)
 
-class Test_Pol_Ops(object):
+
+class Test_Pol_Ops:
     def test_comply_pol(self):
         assert utils.comply_pol('XX') == 'xx'
         assert utils.comply_pol('Xx') == 'xx'
@@ -391,7 +395,10 @@ def test_combine_calfits():
     uvc_dly.read_calfits(test_file1, use_future_array_shapes=True)
     uvc_abs = UVCal()
     uvc_abs.read_calfits(test_file2, use_future_array_shapes=True)
-    assert np.allclose(uvc_dly.gain_array[0, 0, 10, 10, 0] * uvc_abs.gain_array[0, 0, 10, 10, 0], uvc.gain_array[0, 0, 10, 10, 0])
+    assert np.allclose(
+        uvc_dly.gain_array[0, 10, 10, 0] * uvc_abs.gain_array[0, 10, 10, 0],
+        uvc.gain_array[0, 10, 10, 0]
+    )
     if os.path.exists('ex.calfits'):
         os.remove('ex.calfits')
     utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=False)
@@ -507,7 +514,7 @@ def test_lst_rephase():
     # test operation on array
     k = (0, 1, 'ee')
     d = data_drift[k].copy()
-    d_phs = utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True, inplace=False)
+    d_phs = utils.lst_rephase(d[:, None], bls[k], freqs, dlst, lat=0.0, inplace=False)
     assert np.allclose(np.abs(np.angle(d_phs[50] / data[k][50])).max(), 0.0)
 
 
@@ -826,6 +833,7 @@ def test_echo(capsys):
     assert output[4:] == '-' * 40 + '\n'
 
 
+@pytest.mark.filterwarnings("ignore:baseline group of length 7 encountered")
 def test_chunck_baselines_by_redundant_group():
     reds_extended = [[(24, 24), (25, 25), (37, 37), (38, 38), (39, 39), (52, 52), (53, 53), (67, 67), (68, 68), (125, 125), (146, 146)],
                      [(24, 37), (25, 38), (38, 52), (39, 53), (39, 125), (125, 146)],
@@ -870,6 +878,7 @@ def test_chunck_baselines_by_redundant_group():
         assert chunk1 == chunk2
 
 
+@pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
 def test_select_spw_ranges(tmpdir):
     # validate spw_ranges.
     tmp_path = str(tmpdir)
@@ -879,7 +888,10 @@ def test_select_spw_ranges(tmpdir):
     hd = io.HERAData(uvh5)
     nf = hd.Nfreqs
     output = os.path.join(tmp_path, 'test_calibrated_output.uvh5')
-    utils.select_spw_ranges(inputfilename=uvh5, outputfilename=output, spw_ranges=[(0, 256), (332, 364), (792, 1000)])
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Selected frequencies are not evenly spaced")
+        utils.select_spw_ranges(inputfilename=uvh5, outputfilename=output, spw_ranges=[(0, 256), (332, 364), (792, 1000)], clobber=True)
+
     hdo = io.HERAData(output)
     assert np.allclose(hdo.freq_array, np.hstack([hd.freq_array[:256], hd.freq_array[332:364], hd.freq_array[792:1000]]))
     # test case where no spw-ranges supplied
@@ -1081,7 +1093,8 @@ class Test_LSTBranchCut:
 
     def test_with_crazy_periods(self):
         lsts = np.linspace(0, 1.0, 100)
-        n = np.random.random_integers(10, size=100)
+
+        n = np.random.default_rng().integers(10, size=100)
         lsts += n * 2 * np.pi
         best = utils.get_best_lst_branch_cut(lsts)
         assert best == 0

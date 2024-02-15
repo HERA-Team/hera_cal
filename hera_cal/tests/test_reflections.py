@@ -19,6 +19,10 @@ import copy
 from .. import apply_cal, datacontainer, io, reflections
 from ..data import DATA_PATH
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*Using known values for HERA",
+)
+
 
 def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=True, cable_ants=None,
                          xamp=1e-2, xdelay=300, xphase=0, add_xtalk=False):

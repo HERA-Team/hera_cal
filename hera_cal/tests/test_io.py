@@ -1257,13 +1257,11 @@ class Test_Visibility_IO_Legacy:
         uvd.read_miriad(fname, use_future_array_shapes=True)
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
 
-        print("GOT THIS FAR")
         # make some modifications
         new_data = {key: (2.) * val for key, val in data.items()}
         new_flags = {key: np.logical_not(val) for key, val in flags.items()}
         io.update_vis(fname, outname, data=new_data, flags=new_flags,
                       add_to_history='hello world', clobber=True, telescope_name='PAPER')
-        print("AND THIS FAR??")
         # test modifications
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(outname, return_meta=True)
         for k in data.keys():
@@ -1782,7 +1780,9 @@ class Test_UVDataFromFastUVH5:
         self.meta_random = FastUVH5Meta(f"{self.tmp.name}/random.uvh5")
 
     def teardown_class(self):
-        del self.tmp
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ResourceWarning)
+            del self.tmp
 
     def test_default(self):
         uvd = io.uvdata_from_fastuvh5(self.meta_default)

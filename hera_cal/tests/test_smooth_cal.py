@@ -404,13 +404,13 @@ class Test_Smooth_Cal_Helper_Functions(object):
     def test_to_anflags(self):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
         uvc = UVCal()
-        uvc.read_calfits(calfits_list, use_future_array_shapes=True)
-        uvf = UVFlag(uvc, mode='flag')
+        uvc.read(calfits_list, use_future_array_shapes=True, file_type='calfits')
+        uvf = UVFlag(uvc, mode='flag', use_future_array_shapes=True)
         uvflag_file = calfits_list[0].replace('/test_input/', '/test_output')
         uvf.write(uvflag_file, clobber=True)
         assert (54, 'Jee') in smooth_cal._to_antflags(io.load_flags(uvflag_file), [(54, 'Jee')], 0)
 
-        uvf = UVFlag(uvc, mode='flag', waterfall=True)
+        uvf = UVFlag(uvc, mode='flag', waterfall=True, use_future_array_shapes=True)
         uvf.write(uvflag_file, clobber=True)
         assert (54, 'Jee') in smooth_cal._to_antflags(io.load_flags(uvflag_file), [(54, 'Jee')], 0)
         os.remove(uvflag_file)

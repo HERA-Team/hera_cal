@@ -15,6 +15,11 @@ from ..data import DATA_PATH
 import shutil
 
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*Using known values for HERA",
+)
+
+
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:Degrees of freedom <= 0 for slice")
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
@@ -214,8 +219,7 @@ class Test_lstbin:
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
         uv1 = UVData()
-        uv1.read(output_lst_file)
-        uv1.use_future_array_shapes()
+        uv1.read(output_lst_file, use_future_array_shapes=True)
         # assert nsample w.r.t time follows 1-2-3-2-1 pattern
         nsamps = np.mean(uv1.get_nsamples(52, 52, 'ee'), axis=1)
         expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(22)]).astype(float)
@@ -230,8 +234,7 @@ class Test_lstbin:
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
         uv2 = UVData()
-        uv2.read(output_lst_file)
-        uv2.use_future_array_shapes()
+        uv2.read(output_lst_file, use_future_array_shapes=True)
         assert uv1 == uv2
         os.remove(output_lst_file)
         os.remove(output_std_file)
@@ -267,8 +270,7 @@ class Test_lstbin:
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         # load a file
         uvd1 = UVData()
-        uvd1.read(output_files[1])
-        uvd1.use_future_array_shapes()
+        uvd1.read(output_files[1], use_future_array_shapes=True)
         assert uvd1.vis_units == 'Jy'
         assert 'Thisfilewasproducedbythefunction' in uvd1.history.replace('\n', '').replace(' ', '')
         assert uvd1.Ntimes == 80
@@ -284,8 +286,7 @@ class Test_lstbin:
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         # load a file
         uvd2 = UVData()
-        uvd2.read(output_files[0])
-        uvd2.use_future_array_shapes()
+        uvd2.read(output_files[0], use_future_array_shapes=True)
         # assert equivalence with previous run
         assert uvd1 == uvd2
         # remove files
@@ -349,8 +350,7 @@ class Test_lstbin:
 
         # assert gains and flags were propagated
         lstb = UVData()
-        lstb.read(output_lst_file)
-        lstb.use_future_array_shapes()
+        lstb.read(output_lst_file, use_future_array_shapes=True)
         assert np.allclose(np.abs(lstb.get_data(25, 37)[~lstb.get_flags(25, 37)]), 0.0)
         assert np.all(lstb.get_flags(24, 25))
         # make sure a is in the data when we dont use the flag yaml.
@@ -361,8 +361,7 @@ class Test_lstbin:
                              verbose=False, input_cals=input_cals, file_ext=file_ext,
                              ex_ant_yaml_files=self.ant_yamls)
         lstb = UVData()
-        lstb.read(output_lst_file)
-        lstb.use_future_array_shapes()
+        lstb.read(output_lst_file, use_future_array_shapes=True)
         for a in [24, 25, 37, 38]:
             assert a not in np.unique(np.hstack([lstb.ant_1_array, lstb.ant_2_array]))
 
@@ -383,20 +382,17 @@ class Test_lstbin:
         bl_union = set()
         for dlist in data_lists:
             hd = UVData()
-            hd.read(dlist[-1])
-            hd.use_future_array_shapes()
+            hd.read(dlist[-1], use_future_array_shapes=True)
             for bl in hd.get_antpairs():
                 bl_union.add(bl)
         output_files = sorted(glob.glob(tmp_path + '/lstbin_output/*LST*.uvh5'))
         lstb = UVData()
-        lstb.read(output_files[0])
-        lstb.use_future_array_shapes()
+        lstb.read(output_files[0], use_future_array_shapes=True)
         a1arr = lstb.ant_1_array[::lstb.Ntimes]
         a2arr = lstb.ant_2_array[::lstb.Ntimes]
         for of in output_files[1:]:
             lstb = UVData()
-            lstb.read(of)
-            lstb.use_future_array_shapes()
+            lstb.read(of, use_future_array_shapes=True)
             assert np.all(lstb.ant_1_array[::lstb.Ntimes] == a1arr)
             assert np.all(lstb.ant_2_array[::lstb.Ntimes] == a2arr)
             aps = set(lstb.get_antpairs())
@@ -414,19 +410,17 @@ class Test_lstbin:
         bl_union = set()
         for dlist in data_lists:
             hd = UVData()
-            hd.read(dlist[-1])
-            hd.use_future_array_shapes()
+            hd.read(dlist[-1], use_future_array_shapes=True)
             for bl in hd.get_antpairs():
                 bl_union.add(bl)
         output_files = sorted(glob.glob(tmp_path + '/lstbin_output/*LST*.uvh5'))
         lstb = UVData()
-        lstb.read(output_files[0])
+        lstb.read(output_files[0], use_future_array_shapes=True)
         a1arr = lstb.ant_1_array[::lstb.Ntimes]
         a2arr = lstb.ant_2_array[::lstb.Ntimes]
         for of in output_files[1:]:
             lstb = UVData()
-            lstb.read(of)
-            lstb.use_future_array_shapes()
+            lstb.read(of, use_future_array_shapes=True)
             # check that all outputs have same baselines
             assert np.all(lstb.ant_1_array[::lstb.Ntimes] == a1arr)
             assert np.all(lstb.ant_2_array[::lstb.Ntimes] == a2arr)
@@ -445,14 +439,12 @@ class Test_lstbin:
                              dlst=0.0007046864745507975, ntimes_per_file=6, average_redundant_baselines=True)
         output_files = sorted(glob.glob(tmp_path + '/lstbin_output/*LST*.uvh5'))
         lstb = UVData()
-        lstb.read(output_files[0])
-        lstb.use_future_array_shapes()
+        lstb.read(output_files[0], use_future_array_shapes=True)
         a1arr = lstb.ant_1_array[::lstb.Ntimes]
         a2arr = lstb.ant_2_array[::lstb.Ntimes]
         for of in output_files[1:]:
             lstb = UVData()
-            lstb.read(of)
-            lstb.use_future_array_shapes()
+            lstb.read(of, use_future_array_shapes=True)
             assert np.all(lstb.ant_1_array[::lstb.Ntimes] == a1arr)
             assert np.all(lstb.ant_2_array[::lstb.Ntimes] == a2arr)
 
@@ -560,8 +552,7 @@ class Test_lstbin:
         for fnum, flist in enumerate(self.data_files):
             for fstr in flist:
                 hd = UVData()
-                hd.read(fstr)
-                hd.use_future_array_shapes()
+                hd.read(fstr, use_future_array_shapes=True)
                 nants = len(hd.antenna_numbers)
                 # on first night, remove all but two antennas.
                 if fnum < 2:

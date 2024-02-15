@@ -822,7 +822,7 @@ def lst_rephase(
         if True edit arrays in data in memory, else make a copy and return
     array
         Deprecated parameter that specifies that the input data is an array
-        with shape (ntimes, nfreqs, [npols]). Don't write code with this
+        with shape (ntimes, nbls, nfreqs, [npols]). Don't write code with this
         parameter -- instead just set the baseline axis of data to be length-1.
 
     Notes:
@@ -1811,11 +1811,12 @@ def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=Fa
     clobber: bool, optional
     """
     hd = UVData()
-    hd.read_uvh5(inputfilename, read_data=False)
+    hd.read_uvh5(inputfilename, read_data=False, use_future_array_shapes=True)
     if spw_ranges is None:
         spw_ranges = [(0, hd.Nfreqs)]
     # read in selected spw_ranges
-    hd.read(inputfilename, freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]))
+    hd.read(inputfilename, freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]),
+            use_future_array_shapes=True)
     hd.write_uvh5(outputfilename, clobber=clobber)
 
 

@@ -9,6 +9,7 @@ import os
 import glob
 import copy
 from pyuvdata import UVData
+import warnings
 
 from .. import utils, io, apply_cal, tempcal
 from ..data import DATA_PATH
@@ -42,8 +43,12 @@ class Test_tempcal():
 
         # test flag propagation
         self.flags[key][:] = True
-        g, gf, s = tempcal.gains_from_autos(self.data, self.times, flags=self.flags, smooth_frate=1.0,
-                                            nl=1e-10, Nmirror=20, edgeflag=10, verbose=False)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="All-NaN slice encountered")
+            g, gf, s = tempcal.gains_from_autos(
+                self.data, self.times, flags=self.flags, smooth_frate=1.0,
+                nl=1e-10, Nmirror=20, edgeflag=10, verbose=False
+            )
         assert np.all(gf[gkey])
 
     def test_avg_ants(self):

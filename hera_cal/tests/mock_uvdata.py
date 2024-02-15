@@ -223,7 +223,10 @@ def write_files_in_hera_format(
 
             if add_where_inpainted_files:
                 flg = UVFlag()
-                flg.from_uvdata(obj, copy_flags=True, waterfall=False)
+                flg.from_uvdata(
+                    obj, copy_flags=True, waterfall=False, mode="flag",
+                    use_future_array_shapes=True
+                )
                 flg.flag_array[:] = True  # Everything inpainted.
                 flgfile = fl.with_suffix(".where_inpainted.h5")
                 flg.write(flgfile, clobber=True)

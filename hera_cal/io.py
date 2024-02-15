@@ -2305,7 +2305,6 @@ def update_uvdata(uvd, data=None, flags=None, nsamples=None, add_to_history='', 
 def _write_HERAData_to_filetype(hd, outfilename, filetype_out='miriad', clobber=False):
     '''Helper function for update_vis().'''
     if filetype_out == 'miriad':
-        print("BOUT TA WRITE MIRIAD")
         hd.write_miriad(outfilename, clobber=clobber)
     elif filetype_out == 'uvfits':
         hd.write_uvfits(outfilename, force_phase=True)
@@ -2347,7 +2346,6 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
         hd.read()
     update_uvdata(hd, data=data, flags=flags, nsamples=nsamples, add_to_history=add_to_history, **kwargs)
 
-    print("DID THE MODIFYING")
     # write out results
     _write_HERAData_to_filetype(hd, outfilename, filetype_out=filetype_out, clobber=clobber)
 
