@@ -99,7 +99,8 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True, return_gains=False, gai
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # abs of amplitude ratio is ydata independent variable
-    ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
+    with np.errstate(divide='ignore', invalid='ignore'):
+        ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -249,7 +250,10 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True, return_gains=False, gai
         sol0 = {k.replace('eta_', 'A_'): np.exp(sol) for k, sol in sol0.items()}
         # now solve by linearizing
         solver = linsolve.LinProductSolver(ls_data, sol0, wgts=ls_wgts, constants=ls_consts)
-        meta, fit = solver.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
+        with warnings.catch_warnings():
+            # The following warning should be suppressed properly in linsolve
+            warnings.filterwarnings("ignore", message="divide by zero encountered in reciprocal")
+            meta, fit = solver.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
     else:
         # in this case, the equations are already linear in A^2
         solver = linsolve.LinearSolver(ls_data, wgts=ls_wgts, constants=ls_consts)
@@ -1999,8 +2003,17 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
             f = np.zeros_like(real, bool)
 
         # interpolate
-        interp_real = interpolate.interp2d(model_freqs, model_lsts, real, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
-        interp_imag = interpolate.interp2d(model_freqs, model_lsts, imag, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
+        kw = dict(method=kind, bounds_error=False, fill_value=fill_value)
+        dfreqs, dlsts = np.meshgrid(data_freqs, data_lsts)
+        outgrid = np.array([dfreqs, dlsts]).T
+
+        interp_real = interpolate.RegularGridInterpolator(
+            (model_freqs, model_lsts), real.T, **kw
+        )(outgrid).reshape((len(data_lsts), len(data_freqs)))
+
+        interp_imag = interpolate.RegularGridInterpolator(
+            (model_freqs, model_lsts), imag.T, **kw
+        )(outgrid).reshape((len(data_lsts), len(data_freqs)))
 
         # flag extrapolation if desired
         if flag_extrapolate:

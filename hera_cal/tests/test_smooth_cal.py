@@ -20,6 +20,12 @@ from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:The uvw_array does not match the expected values given the antenna positions.",
+    "ignore:.*Using known values for HERA.",
+)
+
+
 class Test_Smooth_Cal_Helper_Functions(object):
 
     def setup_method(self):

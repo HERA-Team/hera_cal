@@ -86,10 +86,10 @@ def test_chunk_cal_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(tmp_path + '/chunk.*.calfits'))
     uvc = UVCal()
-    uvc.read_calfits(chunks, use_future_array_shapes=True)
+    uvc.read(chunks, use_future_array_shapes=True)
     # load in original file
     uvco = UVCal()
-    uvco.read_calfits(cal_files, use_future_array_shapes=True)
+    uvco.read(cal_files, use_future_array_shapes=True, file_type='calfits')
     uvco.select(freq_chans=range(32))
 
     assert np.all(np.isclose(uvco.gain_array, uvc.gain_array))
@@ -104,10 +104,10 @@ def test_chunk_cal_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(tmp_path + '/chunk.*.calfits'))
     uvc = UVCal()
-    uvc.read_calfits(chunks, use_future_array_shapes=True)
+    uvc.read(chunks, use_future_array_shapes=True)
     # load in original file
     uvco = UVCal()
-    uvco.read_calfits(cal_files, use_future_array_shapes=True)
+    uvco.read(cal_files, use_future_array_shapes=True, file_type='calfits')
 
     assert np.all(np.isclose(uvco.gain_array, uvc.gain_array))
     assert np.all(np.isclose(uvco.flag_array, uvc.flag_array))

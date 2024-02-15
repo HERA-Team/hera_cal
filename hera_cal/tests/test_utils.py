@@ -19,7 +19,7 @@ from sklearn import gaussian_process as gp
 from ..redcal import filter_reds
 from ..redcal import get_pos_reds
 from astropy.coordinates import EarthLocation
-from hera_sim.noise import white_noise
+from hera_sim.utils import gen_white_noise
 from .. import utils, abscal, datacontainer, io, redcal
 from ..calibrations import CAL_PATH
 from ..data import DATA_PATH
@@ -188,7 +188,7 @@ class TestFftDly(object):
     def test_noisy(self):
         true_dlys = np.random.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
-        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * white_noise((60, 1024))
+        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * gen_white_noise((60, 1024))
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df)
         assert np.median(np.abs(dlys - true_dlys)) < 1  # median accuracy of 1 ns

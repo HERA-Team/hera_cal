@@ -1156,8 +1156,14 @@ class Test_AbsCal:
 
         # Now run abscal run
         cal_fname = os.path.join(tmppath, 'test_cal.calfits')
-        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname,
-                                           output_filename=cal_fname, clobber=True, precalibration_gain_file=precal_fname)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Mean of empty slice")
+
+            abscal.run_model_based_calibration(
+                data_file=data_fname, model_file=model_fname,
+                output_filename=cal_fname, clobber=True, precalibration_gain_file=precal_fname
+            )
+
         # check that gains equal to 1/sqrt(scale_factor)
         hc = io.HERACal(cal_fname)
         gains, gain_flags, _, _ = hc.read()
@@ -1166,8 +1172,14 @@ class Test_AbsCal:
 
         # Now run abscal run with dly_lincal
         cal_fname = os.path.join(tmppath, 'test_cal.calfits')
-        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname, dly_lincal=True,
-                                           output_filename=cal_fname, clobber=True, precalibration_gain_file=precal_fname)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Mean of empty slice")
+
+            abscal.run_model_based_calibration(
+                data_file=data_fname, model_file=model_fname, dly_lincal=True,
+                output_filename=cal_fname, clobber=True, precalibration_gain_file=precal_fname
+            )
+
         # check that gains equal to 1/sqrt(scale_factor)
         hc = io.HERACal(cal_fname)
         gains, gain_flags, _, _ = hc.read()
@@ -1185,10 +1197,8 @@ class Test_AbsCal:
 
         hd = UVData()
         hdm = UVData()
-        hd.read(data_fname)
-        hd.use_future_array_shapes()
-        hdm.read(model_fname)
-        hdm.use_future_array_shapes()
+        hd.read(data_fname, use_future_array_shapes=True)
+        hdm.read(model_fname, use_future_array_shapes=True)
         # test feeding UVData objects instead.
         abscal.run_model_based_calibration(data_file=hd, model_file=hdm, auto_file=hd,
                                            output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'), precalibration_gain_file=precal_fname)
@@ -1748,9 +1758,12 @@ class Test_Post_Redcal_Abscal_Run(object):
         hd = io.HERAData(self.model_files[0])
         hd.read(return_data=False)
         hd.lst_array += 1
+
         temp_outfile = os.path.join(DATA_PATH, 'test_output/temp.uvh5')
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message=" The lst_array is not self-consistent with the time_array")
+            warnings.filterwarnings("ignore", message="The lst_array is not self-consistent with the time_array")
+            warnings.filterwarnings("ignore", message="The uvw_array does not match")
+
             hd.write_uvh5(temp_outfile, clobber=True)
 
         with warnings.catch_warnings():

@@ -453,8 +453,10 @@ class Test_Update_Cal(object):
         for grpnum in range(3):
             hdc = io.HERAData(output.replace('.uvh5', f'.{grpnum}.uvh5'))
             assert hdc.vis_units == 'Jy'
-        ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags,
-                     output, calfile, clobber=True, redundant_average=True, redundant_groups=3, vis_units='k str')
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Replacing original data vis_units of k str")
+            ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags,
+                         output, calfile, clobber=True, redundant_average=True, redundant_groups=3, vis_units='k str')
         for grpnum in range(3):
             hdc = io.HERAData(output.replace('.uvh5', f'.{grpnum}.uvh5'))
             assert hdc.vis_units == 'k str'
@@ -509,8 +511,11 @@ class Test_Update_Cal(object):
         assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
 
         # now do chunked redundant groups.
-        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
-                     gain_convention='divide', redundant_average=True, nbl_per_load=4, clobber=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="baseline group of length 7 encountered")
+
+            ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
+                         gain_convention='divide', redundant_average=True, nbl_per_load=4, clobber=True)
         hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
         hda_calibrated_with_apply_cal.read()
         # check that the data, flags, and nsamples arrays are close

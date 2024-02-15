@@ -327,8 +327,8 @@ class Test_ReflectionFitter_Cables(object):
         assert uvc2.Ntimes == 1  # because time_avg=True
         uvc.gain_array *= uvc2.gain_array
         aind = np.argmin(np.abs(uvc.ant_array - 23))
-        g = uvc.gain_array[aind, 0, :, :, 0].T
-        delays = np.fft.fftfreq(uvc.Nfreqs, np.diff(uvc.freq_array[0])[0]) * 1e9
+        g = uvc.gain_array[aind, :, :, 0].T
+        delays = np.fft.fftfreq(uvc.Nfreqs, np.diff(uvc.freq_array)[0]) * 1e9
         gfft = np.mean(np.abs(np.fft.fft(g, axis=1)), axis=0)
 
         assert delays[np.argmax(gfft * ((delays > 100) & (delays < 200)))] == 150

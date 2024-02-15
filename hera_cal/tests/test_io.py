@@ -27,8 +27,13 @@ from ..utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, spli
 from ..data import DATA_PATH
 from hera_qm.data import DATA_PATH as QM_DATA_PATH
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*Using known values for HERA",
+    "ignore:The uvw_array does not match",
+)
 
-class Test_HERACal(object):
+
+class Test_HERACal:
     def setup_method(self):
         self.fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
         self.fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
@@ -661,13 +666,15 @@ class Test_HERAData(object):
             next(hd.iterate_over_bls())
 
         hd = HERAData(self.uvh5_1)
-        for (d, f, n) in hd.iterate_over_bls(chunk_by_redundant_group=True, Nbls=1):
-            # check that all baselines in chunk are redundant
-            # this will be the case when Nbls = 1
-            bl_lens = np.asarray([hd.antpos[bl[0]] - hd.antpos[bl[1]] for bl in d])
-            assert np.all(np.isclose(bl_lens - bl_lens[0], 0., atol=1.0))
-            for dc in (d, f, n):
-                assert list(d.values())[0].shape == (60, 1024)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="baseline group of length 2 encountered")
+            for (d, f, n) in hd.iterate_over_bls(chunk_by_redundant_group=True, Nbls=1):
+                # check that all baselines in chunk are redundant
+                # this will be the case when Nbls = 1
+                bl_lens = np.asarray([hd.antpos[bl[0]] - hd.antpos[bl[1]] for bl in d])
+                assert np.all(np.isclose(bl_lens - bl_lens[0], 0., atol=1.0))
+                for dc in (d, f, n):
+                    assert list(d.values())[0].shape == (60, 1024)
 
         hd = HERAData([self.uvh5_1, self.uvh5_2])
         for (d, f, n) in hd.iterate_over_bls(chunk_by_redundant_group=True):
@@ -729,11 +736,11 @@ class Test_HERAData(object):
     def test_uvflag_compatibility(self):
         # Test that UVFlag is able to successfully init from the HERAData object
         uv = UVData()
-        uv.read_uvh5(self.uvh5_1)
-        uvf1 = UVFlag(uv)
+        uv.read_uvh5(self.uvh5_1, use_future_array_shapes=True)
+        uvf1 = UVFlag(uv, use_future_array_shapes=True)
         hd = HERAData(self.uvh5_1)
         hd.read()
-        uvf2 = UVFlag(hd)
+        uvf2 = UVFlag(hd, use_future_array_shapes=True)
         assert uvf1 == uvf2
 
     def init_HERACal(self):
@@ -871,6 +878,7 @@ class Test_ReadHeraHdf5(object):
             assert len(rv['info']['times']) == 2
 
 
+@pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
 class Test_HERADataFastReader:
     def setup_method(self):
         self.uvh5_1 = os.path.join(DATA_PATH, "test_input", "zen.2458042.60288.HH.uvRXLS.uvh5_downselected")
@@ -948,7 +956,12 @@ class Test_HERADataFastReader:
             bls = [(b, a) for a, b in bls]
 
         d, f, n = hd.read(check=True, bls=bls, pols=pols)
-        d2, f2, n2 = hd2.read(bls=bls, polarizations=pols)
+
+        with warnings.catch_warnings():
+            # Catch this warning, which we expect to be raised when using uvdata to read
+            warnings.filterwarnings("ignore", message="Combined frequencies are separated by more than their channel width")
+            d2, f2, n2 = hd2.read(bls=bls, polarizations=pols)
+
         # compare all data and metadata
         for dc1, dc2 in zip([d, f, n], [d2, f2, n2]):
             self.compare_datacontainers(dc1, dc2, allow_close=infile != 'uvh5_h4c')
@@ -1091,7 +1104,7 @@ class Test_ReadHeraCalfits(object):
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
-class Test_Visibility_IO_Legacy(object):
+class Test_Visibility_IO_Legacy:
     def test_load_vis(self):
         # inheretied testing from the old abscal_funcs.UVData2AbsCalDict
 
@@ -1159,10 +1172,11 @@ class Test_Visibility_IO_Legacy(object):
 
         uvd2 = UVData()
         uvd2.read_miriad(filename2, use_future_array_shapes=True)
-        if uvd1.phase_type != 'drift':
-            uvd1.unphase_to_drift()
-        if uvd2.phase_type != 'drift':
-            uvd2.unphase_to_drift()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="No selected baselines are projected")
+            uvd1.unproject_phase()
+            uvd2.unproject_phase()
+
         uvd = uvd1 + uvd2
         d, f = io.load_vis([uvd1, uvd2], nested_dict=True)
         for i, j in d:
@@ -1243,12 +1257,13 @@ class Test_Visibility_IO_Legacy(object):
         uvd.read_miriad(fname, use_future_array_shapes=True)
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
 
+        print("GOT THIS FAR")
         # make some modifications
         new_data = {key: (2.) * val for key, val in data.items()}
         new_flags = {key: np.logical_not(val) for key, val in flags.items()}
         io.update_vis(fname, outname, data=new_data, flags=new_flags,
                       add_to_history='hello world', clobber=True, telescope_name='PAPER')
-
+        print("AND THIS FAR??")
         # test modifications
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(outname, return_meta=True)
         for k in data.keys():
@@ -1588,13 +1603,14 @@ def test_get_file_times_bda():
         np.testing.assert_array_equal(tarr, hd.times[fp])
 
 
-def test_get_file_times_single_integraiton():
+def test_get_file_times_single_integration():
     fp = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.single_time.uvh5')
-    dlsts, dtimes, larrs, tarrs = io.get_file_times(fp, filetype='uvh5')
+    with pytest.warns(UserWarning, match="has only one time"):
+        dlsts, dtimes, larrs, tarrs = io.get_file_times(fp, filetype='uvh5')
     assert len(larrs) == 1
     assert len(tarrs) == 1
 
-    fp2 = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5')
+    fp = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.uvh5')
     dlsts2, dtimes2, larrs2, tarrs2 = io.get_file_times(fp, filetype='uvh5')
     np.testing.assert_array_almost_equal(dlsts, dlsts2)
     np.testing.assert_array_almost_equal(dtimes, dtimes2)

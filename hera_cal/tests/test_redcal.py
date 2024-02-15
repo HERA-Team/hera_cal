@@ -22,6 +22,10 @@ from ..datacontainer import DataContainer
 
 np.random.seed(0)
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:white_noise is being deprecated",  # this is emitted by hera_sim itself...
+)
+
 
 class TestMethods(object):
 

@@ -1765,7 +1765,7 @@ def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
         if len(grp) > max_chunk_size:
             # if red group is larger then the chunk size.
             # then give a warning and treate the red group as a chunk anyways.
-            warnings.warn("Warning: baseline group of length %d encountered with number"
+            warnings.warn("baseline group of length %d encountered with number"
                           " of baselines exceeding max_chunk_size=%d."
                           " First baseline is %s"
                           " Loading group anyways." % (len(reds[group_index]), max_chunk_size, str(reds[group_index][0])))

@@ -298,7 +298,8 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
         ind1 = np.where(antnums == k[0])[0][0]
         ind2 = np.where(antnums == k[1])[0][0]
         blvec = antpos[ind1] - antpos[ind2]
-        blcos = blvec[0] / np.linalg.norm(blvec[:2])
+        with np.errstate(divide='ignore', invalid='ignore'):
+            blcos = blvec[0] / np.linalg.norm(blvec[:2])
         if np.isfinite(blcos):
             frateamp_df = np.linalg.norm(blvec[:2]) / (SDAY_SEC * 1e-3) / SPEED_OF_LIGHT * 2 * np.pi
             # set autocorrs to have blcose of 0.0
@@ -801,7 +802,6 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
         if rephase:
             # get dlst and rephase
             dlst = mean_l - lst
-            print(d.shape)
             d = utils.lst_rephase(d[:, None], bl_vec, freqs, dlst, lat=lat, inplace=False)[:, 0]
 
         # form data weights
@@ -1500,9 +1500,8 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                               times=avg_times, lsts=avg_lsts, filetype=filetype, overwrite=clobber)
                 if flag_output is not None:
                     uv_avg = UVData()
-                    uv_avg.read(output_data_name)
-                    uv_avg.use_future_array_shapes()
-                    uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
+                    uv_avg.read(output_data_name, use_future_array_shapes=True)
+                    uvf = UVFlag(uv_avg, mode='flag', copy_flags=True, use_future_array_shapes=True)
                     uvf.to_waterfall(keep_pol=False, method='and')
                     uvf.write(os.path.join(os.path.dirname(flag_output),
                                            os.path.basename(flag_output).replace('.h5', f'.interleave_{inum}.h5')), clobber=clobber)
@@ -1513,9 +1512,8 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                           nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
             if flag_output is not None:
                 uv_avg = UVData()
-                uv_avg.read(output_data)
-                uv_avg.use_future_array_shapes()
-                uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
+                uv_avg.read(output_data, use_future_array_shapes=True)
+                uvf = UVFlag(uv_avg, mode='flag', copy_flags=True, use_future_array_shapes=True)
                 uvf.to_waterfall(keep_pol=False, method='and')
                 uvf.write(flag_output, clobber=clobber)
 
@@ -1819,8 +1817,7 @@ def load_tophat_frfilter_and_write(
         # Read in the beam file if provided.
         if beamfitsfile is not None:
             uvb = UVBeam()
-            uvb.read_beamfits(beamfitsfile)
-            uvb.use_future_array_shapes()
+            uvb.read_beamfits(beamfitsfile, use_future_array_shapes=True)
         else:
             uvb = None
 

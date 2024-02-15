@@ -10,6 +10,7 @@ import sys
 import shutil
 from scipy import constants
 from pyuvdata import UVData, UVFlag
+import warnings
 
 from .. import io
 from .. import delay_filter as df
@@ -128,8 +129,15 @@ class Test_DelayFilter:
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(tmp_path, 'temp.h5')
-        df.load_delay_filter_and_write(uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
-                                       avg_red_bllens=avg_bl)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Antenna 53 not present in calibration solution")
+            warnings.filterwarnings("ignore", message="Cannot preserve total_quality_array when changing number of antennas")
+
+            df.load_delay_filter_and_write(
+                uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
+                avg_red_bllens=avg_bl
+            )
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -214,11 +222,17 @@ class Test_DelayFilter:
             if os.path.isdir(cdir):
                 shutil.rmtree(cdir)
             os.mkdir(cdir)
-            df.load_delay_filter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)],
-                                           calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
-                                           read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
-                                           res_outfilename=outfilename, clobber=True,
-                                           mode='dayenu')
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Antenna 53 not present in calibration solution")
+                warnings.filterwarnings("ignore", message="Cannot preserve total_quality_array when changing number of antennas")
+
+                df.load_delay_filter_and_write(
+                    datafile_list=uvh5, baseline_list=[(53, 54)],
+                    calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                    read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                    res_outfilename=outfilename, clobber=True,
+                    mode='dayenu'
+                )
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
@@ -298,10 +312,14 @@ class Test_DelayFilter:
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
         uvf.write(flagfile, clobber=True)
-        df.load_delay_filter_and_write(datafile_list=[input_file], res_outfilename=outfilename,
-                                       tol=1e-4, baseline_list=[bl[:2]],
-                                       clobber=True, mode='dayenu',
-                                       external_flags=flagfile, overwrite_flags=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Antenna 53 not present in calibration solution")
+            df.load_delay_filter_and_write(
+                datafile_list=[input_file], res_outfilename=outfilename,
+                tol=1e-4, baseline_list=[bl[:2]],
+                clobber=True, mode='dayenu',
+                external_flags=flagfile, overwrite_flags=True
+            )
         # test that all flags are False
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
@@ -366,10 +384,16 @@ class Test_DelayFilter:
         os.remove(outfilename)
         # run again using computed cache.
         calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
-                                       cache_dir=cdir, calfile_list=calfile, read_cache=True,
-                                       Nbls_per_load=1, clobber=True, mode='dayenu',
-                                       spw_range=(0, 32), write_cache=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Antenna 53 not present in calibration solution")
+            warnings.filterwarnings("ignore", message="Cannot preserve total_quality_array when changing number of antennas")
+
+            df.load_delay_filter_and_write(
+                uvh5, res_outfilename=outfilename,
+                cache_dir=cdir, calfile_list=calfile, read_cache=True,
+                Nbls_per_load=1, clobber=True, mode='dayenu',
+                spw_range=(0, 32), write_cache=True
+            )
         # now new cache files should be generated.
         assert len(glob.glob(cdir + '/*')) == 1
         hd = io.HERAData(outfilename)

@@ -24,6 +24,13 @@ import glob
 import copy
 
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:The uvw_array does not match the expected values given the antenna positions.",
+    "ignore:.*Using known values for HERA",
+    "ignore:Selected frequencies are not evenly spaced"
+)
+
+
 # test flagging utility funtions
 def test_truncate_flagged_edges():
     Nfreqs = 64
@@ -277,7 +284,7 @@ def test_flag_model_rms():
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
-class Test_VisClean(object):
+class Test_VisClean:
 
     def test_init(self):
         # test basic init
@@ -1159,10 +1166,10 @@ class Test_VisClean(object):
         for filenum, file in enumerate(datafiles):
             # reconstitute
             fname = 'temp.reconstituted.part.%d.h5' % filenum
-            
+
             vis_clean.time_chunk_from_baseline_chunks(
                 time_chunk_template=file,
-                baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), 
+                baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')),
                 clobber=True,
                 outfilename=str(tmp_path / fname)
             )
@@ -1182,12 +1189,12 @@ class Test_VisClean(object):
         for filenum, file in enumerate(datafiles):
             # reconstitute
             fname = 'temp.reconstituted.part.%d.h5' % filenum
-            
+
             vis_clean.time_chunk_from_baseline_chunks(
                 time_chunk_template=file,
-                baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), 
+                baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')),
                 clobber=True,
-                outfilename=str(tmp_path / fname), 
+                outfilename=str(tmp_path / fname),
                 time_bounds=True
             )
         # load in the reconstituted files.
@@ -1206,6 +1213,7 @@ class Test_VisClean(object):
         with pytest.warns(RuntimeWarning):
             vis_clean.time_chunk_from_baseline_chunks(datafiles[0], baseline_chunk_files=datafiles[1:], clobber=True, outfilename=str(tmp_path / fname), time_bounds=True)
 
+
 def test_discard_autocorr_imag():
     hd = io.HERAData(os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"))
     data = hd.read()[0]
@@ -1221,10 +1229,8 @@ def test_discard_autocorr_imag():
     # only first key modified.
     data1 = deepcopy(data)
     first_key = next(iter(data1.keys()))
-    vis_clean.discard_autocorr_imag(data1, keys = [first_key])
+    vis_clean.discard_autocorr_imag(data1, keys=[first_key])
 
     assert data1[first_key].dtype == np.complex64
     assert np.all(data1[first_key].imag == 0)
     assert np.all(data1[first_key] == data0[first_key])
-
-        
