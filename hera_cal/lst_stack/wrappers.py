@@ -276,15 +276,15 @@ def lst_bin_files_single_outfile(
     # calibration files each night.
     input_cals = []
     if calfile_rules:
-        data_files, input_cals = apply_calfile_rules(
+        data_files, input_cals = io.apply_calfile_rules(
             data_files, calfile_rules, ignore_missing=ignore_missing_calfiles
         )
 
-    where_inpainted_files = _get_where_inpainted_files(
+    where_inpainted_files = io._get_where_inpainted_files(
         data_files, where_inpainted_file_rules
     )
 
-    output_flagged, output_inpainted = _configure_inpainted_mode(
+    output_flagged, output_inpainted = io._configure_inpainted_mode(
         output_flagged, output_inpainted, where_inpainted_files
     )
 
@@ -346,7 +346,7 @@ def lst_bin_files_single_outfile(
             logger.info("Inferred that files are redundantly averaged.")
 
     logger.info("Compiling all unflagged baselines...")
-    all_baselines, all_pols = get_all_unflagged_baselines(
+    all_baselines, all_pols = cfg.get_all_unflagged_baselines(
         data_metas,
         ex_ant_yaml_files,
         include_autos=include_autos,
@@ -398,7 +398,7 @@ def lst_bin_files_single_outfile(
         file_list,
         cals,
         where_inpainted_files,
-    ) = filter_required_files_by_times(
+    ) = io.filter_required_files_by_times(
         (lst_bin_edges[0], lst_bin_edges[-1]),
         data_metas,
         input_cals,
@@ -426,7 +426,7 @@ def lst_bin_files_single_outfile(
 
     # make it a bit easier to create the outfiles
     create_outfile = partial(
-        create_lstbin_output_file,
+        io.create_lstbin_output_file,
         outdir=outdir,
         pols=all_pols,
         file_list=file_list,
@@ -515,7 +515,7 @@ def lst_bin_files_single_outfile(
 
         if len(golden_bins) > 0:
             for fl, nbin in zip(out_files["GOLDEN"], golden_bins):
-                write_baseline_slc_to_file(
+                io.write_baseline_slc_to_file(
                     fl=fl,
                     slc=slc,
                     data=data[nbin].transpose((1, 0, 2, 3)),
@@ -524,7 +524,7 @@ def lst_bin_files_single_outfile(
                 )
 
         if "REDUCEDCHAN" in out_files:
-            write_baseline_slc_to_file(
+            io.write_baseline_slc_to_file(
                 fl=out_files["REDUCEDCHAN"],
                 slc=slc,
                 data=data[0][:, :, save_channels].transpose((1, 0, 2, 3)),
@@ -566,7 +566,7 @@ def lst_bin_files_single_outfile(
                 sigma_clip_scale=sigma_clip_scale,
             )
 
-            write_baseline_slc_to_file(
+            io.write_baseline_slc_to_file(
                 fl=out_files[("LST", inpainted)],
                 slc=slc,
                 data=rdc["data"],
@@ -574,7 +574,7 @@ def lst_bin_files_single_outfile(
                 nsamples=rdc["nsamples"],
             )
 
-            write_baseline_slc_to_file(
+            io.write_baseline_slc_to_file(
                 fl=out_files[("STD", inpainted)],
                 slc=slc,
                 data=rdc["std"],
@@ -583,14 +583,14 @@ def lst_bin_files_single_outfile(
             )
 
             if write_med_mad:
-                write_baseline_slc_to_file(
+                io.write_baseline_slc_to_file(
                     fl=out_files[("MED", inpainted)],
                     slc=slc,
                     data=rdc["median"],
                     flags=rdc["flags"],
                     nsamples=rdc["nsamples"],
                 )
-                write_baseline_slc_to_file(
+                io.write_baseline_slc_to_file(
                     fl=out_files[("MAD", inpainted)],
                     slc=slc,
                     data=rdc["mad"],
