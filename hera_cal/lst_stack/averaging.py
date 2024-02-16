@@ -15,8 +15,8 @@ def reduce_lst_bins(
     mutable: bool = False,
     sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
-    sigma_clip_type: str = "direct",
-    sigma_clip_subbands: list[int] | None = None,
+    sigma_clip_type: str = 'direct',
+    sigma_clip_subbands: list[tuple[int, int]] | None = None,
     sigma_clip_scale: list[np.ndarray] | None = None,
     flag_below_min_N: bool = False,
     flag_thresh: float = 0.7,
@@ -57,6 +57,23 @@ def reduce_lst_bins(
         per baseline, frequency, and polarization.
     sigma_clip_min_N
         The minimum number of unflagged samples required to perform sigma clipping.
+    sigma_clip_type
+        The type of sigma clipping to perform. If ``direct``, each datum is flagged
+        individually. If ``mean`` or ``median``, an entire sub-band of the data is
+        flagged if its mean (absolute) zscore is beyond the threshold.
+    sigma_clip_subbands
+        A list of tuples specifying the start and end indices of the threshold axis
+        over which to perform sigma clipping. They are used in a ``slice`` object,
+        so that the end is exclusive but the start is inclusive. If None, the entire
+        threshold axis is used at once.
+    sigma_clip_scale
+        If given, interpreted as the expected standard deviation of the data
+        (over nights). If not given, estimated from the data using the median
+        absolute deviation. If given, must be an array with either the same
+        shape as ``array`` OR the same shape as ``array`` with the ``median_axis``
+        removed. If the former, each variate over the ``median_axis`` is scaled
+        independently. If the latter, the same scale is applied to all variates
+        (generally nights).
     flag_below_min_N
         Whether to flag data that has fewer than ``sigma_clip_min_N`` unflagged samples.
     flag_thresh
@@ -66,6 +83,7 @@ def reduce_lst_bins(
     get_mad
         Whether to compute the median and median absolute deviation of the data in each
         LST bin, in addition to the mean and standard deviation.
+
 
     Returns
     -------
@@ -110,12 +128,8 @@ def reduce_lst_bins(
 
         if d.size:
             d, f = get_masked_data(
-                d,
-                n,
-                f,
-                inpainted=inpf,
-                inpainted_mode=inpainted_mode,
-                flag_thresh=flag_thresh,
+                d, n, f, inpainted=inpf,
+                inpainted_mode=inpainted_mode, flag_thresh=flag_thresh
             )
 
             (
@@ -262,7 +276,7 @@ def sigma_clip(
     min_N: int = 4,
     median_axis: int = 0,
     threshold_axis: int = 0,
-    clip_type: Literal["direct", "mean", "median"] = "direct",
+    clip_type: Literal['direct', 'mean', 'median'] = 'direct',
     flag_bands: list[tuple[int, int]] | None = None,
     scale: np.ndarray | None = None,
 ):
@@ -334,16 +348,11 @@ def sigma_clip(
     location = np.expand_dims(np.ma.median(array, axis=median_axis), axis=median_axis)
 
     if scale is None:
-        scale = np.expand_dims(
-            np.ma.median(np.abs(array - location), axis=median_axis) * 1.482579,
-            axis=median_axis,
-        )
+        scale = np.expand_dims(np.ma.median(np.abs(array - location), axis=median_axis) * 1.482579, axis=median_axis)
     elif scale.ndim == array.ndim - 1:
         scale = np.expand_dims(scale, axis=median_axis)
 
-    if (
-        scale.shape != array.shape and scale.shape[median_axis] != 1
-    ) or scale.ndim != array.ndim:
+    if (scale.shape != array.shape and scale.shape[median_axis] != 1) or scale.ndim != array.ndim:
         raise ValueError(
             "scale must have same shape as array or array with median_axis removed."
             f"Got {scale.shape}, needed {array.shape}"
@@ -367,10 +376,10 @@ def sigma_clip(
         subz = zscore[mask]
         subflags = clip_flags[mask]
 
-        if clip_type == "direct":
+        if clip_type == 'direct':
             # In this mode, each datum is flagged individually.
             subflags[:] = subz > threshold
-        elif clip_type in ["mean", "median"]:
+        elif clip_type in ['mean', 'median']:
             # In this mode, an entire sub-band of the data is flagged if its mean
             # (absolute) zscore is beyond the threshold.
             thisf = getattr(np.ma, clip_type)(subz, axis=threshold_axis) > threshold
@@ -383,6 +392,7 @@ def sigma_clip(
     return clip_flags
 
 
+@profile
 def lst_average(
     data: np.ndarray | np.ma.MaskedArray,
     nsamples: np.ndarray,
@@ -391,8 +401,8 @@ def lst_average(
     sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
     flag_below_min_N: bool = False,
-    sigma_clip_subbands: list[int] | None = None,
-    sigma_clip_type: Literal["direct", "mean", "median"] = "direct",
+    sigma_clip_subbands: list[tuple[int, int]] | None = None,
+    sigma_clip_type: Literal['direct', 'mean', 'median'] = 'direct',
     sigma_clip_scale: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -426,15 +436,21 @@ def lst_average(
     flag_below_min_N
         Whether to flag data that has fewer than ``sigma_clip_min_N`` unflagged samples.
     sigma_clip_subbands
-        A list of integers specifying the start and end indices of the frequency axis
-        to perform sigma clipping over. If None, the entire frequency axis is used at
-        once. Given a list of integers e.g. ``[0, 10, 20]``, the sub-bands will be
-        defined as [(0, 10), (10, 20)], where each 2-tuple defines a standard Python
-        slice object (i.e. end is exclusive, start is inclusive).
+        A list of 2-tuples of integers specifying the start and end indices of the
+        frequency axis to perform sigma clipping over. If None, the entire frequency
+        axis is used at once.
     sigma_clip_type
         The type of sigma clipping to perform. If ``direct``, each datum is flagged
         individually. If ``mean`` or ``median``, an entire sub-band of the data is
         flagged if its mean (absolute) zscore is beyond the threshold.
+    sigma_clip_scale
+        If given, interpreted as the expected standard deviation of the data
+        (over nights). If not given, estimated from the data using the median
+        absolute deviation. If given, must be an array with either the same
+        shape as ``array`` OR the same shape as ``array`` with the ``median_axis``
+        removed. If the former, each variate over the ``median_axis`` is scaled
+        independently. If the latter, the same scale is applied to all variates
+        (generally nights).
 
     Returns
     -------
@@ -456,7 +472,7 @@ def lst_average(
 
     # Now do sigma-clipping.
     if sigma_clip_thresh is not None:
-        if inpainted_mode and sigma_clip_type == "direct":
+        if inpainted_mode and sigma_clip_type == 'direct':
             warnings.warn(
                 "Direct-mode sigma-clipping in in-painted mode is a bad idea, because it creates "
                 "non-uniform flags over frequency, which can cause artificial spectral "
@@ -465,16 +481,12 @@ def lst_average(
 
         nflags = np.sum(flags)
         kw = {
-            "threshold": sigma_clip_thresh,
-            "min_N": sigma_clip_min_N,
-            "clip_type": sigma_clip_type,
-            "median_axis": 0,
-            "threshold_axis": 0 if sigma_clip_type == "direct" else -2,
-            "flag_bands": (
-                list(zip(sigma_clip_subbands[:-1], sigma_clip_subbands[1:]))
-                if sigma_clip_subbands
-                else None
-            ),
+            'threshold': sigma_clip_thresh,
+            'min_N': sigma_clip_min_N,
+            'clip_type': sigma_clip_type,
+            'median_axis': 0,
+            'threshold_axis': 0 if sigma_clip_type == 'direct' else -2,
+            'flag_bands': sigma_clip_subbands,
             "scale": sigma_clip_scale,
         }
         clip_flags = sigma_clip(data.real, **kw)
@@ -545,7 +557,5 @@ def lst_average(
 
     std[~normalizable] = np.inf
 
-    logger.info(
-        f"Mean of meandata: {np.mean(meandata)}. Mean of std: {np.mean(std)}. Total nsamples: {np.sum(norm)}"
-    )
+    logger.info(f"Mean of meandata: {np.mean(meandata)}. Mean of std: {np.mean(std)}. Total nsamples: {np.sum(norm)}")
     return meandata.data, lstbin_flagged, std.data, norm.data, ndays_binned

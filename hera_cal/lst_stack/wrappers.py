@@ -43,7 +43,7 @@ def lst_bin_files_single_outfile(
     golden_lsts: tuple[float] = (),
     sigma_clip_thresh: float | None = None,
     sigma_clip_min_N: int = 4,
-    sigma_clip_subbands: list[int] | None = None,
+    sigma_clip_subbands: list[tuple[int, int]] | None = None,
     sigma_clip_type: Literal['direct', 'mean', 'median'] = 'direct',
     sigma_clip_use_autos: bool = False,
     flag_below_min_N: bool = False,
@@ -165,9 +165,9 @@ def lst_bin_files_single_outfile(
         is False, these (antpair,pol,channel) combinations are not flagged by
         sigma-clipping (otherwise they are).
     sigma_clip_subbands
-        A list of integers specifying the start and end indices of the frequency axis
-        to perform sigma clipping over. If None, the entire frequency axis is used at
-        once.
+        A list of 2-tuples of integers, specifying the start and end indices of the
+        frequency axis to perform sigma clipping over. If None, the entire frequency
+        axis is used at once.
     sigma_clip_type
         The type of sigma clipping to perform. If ``direct``, each datum is flagged
         individually. If ``mean`` or ``median``, an entire sub-band of the data is
@@ -276,15 +276,15 @@ def lst_bin_files_single_outfile(
     # calibration files each night.
     input_cals = []
     if calfile_rules:
-        data_files, input_cals = io.apply_calfile_rules(
+        data_files, input_cals = apply_calfile_rules(
             data_files, calfile_rules, ignore_missing=ignore_missing_calfiles
         )
 
-    where_inpainted_files = io._get_where_inpainted_files(
+    where_inpainted_files = _get_where_inpainted_files(
         data_files, where_inpainted_file_rules
     )
 
-    output_flagged, output_inpainted = io._configure_inpainted_mode(
+    output_flagged, output_inpainted = _configure_inpainted_mode(
         output_flagged, output_inpainted, where_inpainted_files
     )
 
@@ -346,7 +346,7 @@ def lst_bin_files_single_outfile(
             logger.info("Inferred that files are redundantly averaged.")
 
     logger.info("Compiling all unflagged baselines...")
-    all_baselines, all_pols = cfg.get_all_unflagged_baselines(
+    all_baselines, all_pols = get_all_unflagged_baselines(
         data_metas,
         ex_ant_yaml_files,
         include_autos=include_autos,
@@ -398,7 +398,7 @@ def lst_bin_files_single_outfile(
         file_list,
         cals,
         where_inpainted_files,
-    ) = io.filter_required_files_by_times(
+    ) = filter_required_files_by_times(
         (lst_bin_edges[0], lst_bin_edges[-1]),
         data_metas,
         input_cals,
@@ -426,7 +426,7 @@ def lst_bin_files_single_outfile(
 
     # make it a bit easier to create the outfiles
     create_outfile = partial(
-        io.create_lstbin_output_file,
+        create_lstbin_output_file,
         outdir=outdir,
         pols=all_pols,
         file_list=file_list,
@@ -515,7 +515,7 @@ def lst_bin_files_single_outfile(
 
         if len(golden_bins) > 0:
             for fl, nbin in zip(out_files["GOLDEN"], golden_bins):
-                io.write_baseline_slc_to_file(
+                write_baseline_slc_to_file(
                     fl=fl,
                     slc=slc,
                     data=data[nbin].transpose((1, 0, 2, 3)),
@@ -524,7 +524,7 @@ def lst_bin_files_single_outfile(
                 )
 
         if "REDUCEDCHAN" in out_files:
-            io.write_baseline_slc_to_file(
+            write_baseline_slc_to_file(
                 fl=out_files["REDUCEDCHAN"],
                 slc=slc,
                 data=data[0][:, :, save_channels].transpose((1, 0, 2, 3)),
@@ -566,7 +566,7 @@ def lst_bin_files_single_outfile(
                 sigma_clip_scale=sigma_clip_scale,
             )
 
-            io.write_baseline_slc_to_file(
+            write_baseline_slc_to_file(
                 fl=out_files[("LST", inpainted)],
                 slc=slc,
                 data=rdc["data"],
@@ -574,7 +574,7 @@ def lst_bin_files_single_outfile(
                 nsamples=rdc["nsamples"],
             )
 
-            io.write_baseline_slc_to_file(
+            write_baseline_slc_to_file(
                 fl=out_files[("STD", inpainted)],
                 slc=slc,
                 data=rdc["std"],
@@ -583,14 +583,14 @@ def lst_bin_files_single_outfile(
             )
 
             if write_med_mad:
-                io.write_baseline_slc_to_file(
+                write_baseline_slc_to_file(
                     fl=out_files[("MED", inpainted)],
                     slc=slc,
                     data=rdc["median"],
                     flags=rdc["flags"],
                     nsamples=rdc["nsamples"],
                 )
-                io.write_baseline_slc_to_file(
+                write_baseline_slc_to_file(
                     fl=out_files[("MAD", inpainted)],
                     slc=slc,
                     data=rdc["mad"],
@@ -820,7 +820,7 @@ def lst_bin_arg_parser():
     a.add_argument(
         "--sigma-clip-subbands",
         type=str,
-        help="Channels at which bands are separated for homogeneous sigma clipping. Separated by commas.",
+        help="Band-edges (as channel number) at which bands are separated for homogeneous sigma clipping, e.g. '0~10,100~500'",
         default=None,
     )
     a.add_argument(
