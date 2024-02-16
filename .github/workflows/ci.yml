@@ -9,10 +9,6 @@ on:
 jobs:
   tests:
     name: Tests
-    env:
-      ENV_NAME: hera_cal_tests
-      PYTHON: ${{ matrix.python-version }}
-      OS: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -49,3 +45,32 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: true
+
+  warning-tests:
+    name: Warnings Tests
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.11"]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: |
+          pip install --upgrade pip
+          pip install .[dev]
+
+      - name: Run Tests
+        run: |
+          pytest -W error -n auto --pyargs hera_cal

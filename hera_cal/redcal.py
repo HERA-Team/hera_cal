@@ -1234,7 +1234,7 @@ class RedundantCalibrator:
         for ant in flipped:
             offs[ant] = _wrap_phs(offs[ant] + np.pi)
 
-        dtype = np.find_common_type([d.dtype for d in data.values()], [])
+        dtype = np.result_type(*list(data.values()))
         meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()},
                 'offs': {ant: off.flatten() for ant, off in offs.items()},
                 'polarity_flips': {ant: np.ones(Ntimes, dtype=bool) * bool(ant in flipped) for ant in ants}}

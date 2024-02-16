@@ -87,6 +87,7 @@ def create_mock_hera_obs(
         empty=empty,
         time_axis_faster_than_bls=time_axis_faster_than_bls,
         do_blt_outer=True,
+        channel_width=np.diff(freqs)[0] if len(freqs) > 1 else np.diff(PHASEII_FREQS)[0],
     )
     uvd.polarization_array = np.array(uvd.polarization_array)
     return uvd
@@ -222,7 +223,10 @@ def write_files_in_hera_format(
 
             if add_where_inpainted_files:
                 flg = UVFlag()
-                flg.from_uvdata(obj, copy_flags=True, waterfall=False)
+                flg.from_uvdata(
+                    obj, copy_flags=True, waterfall=False, mode="flag",
+                    use_future_array_shapes=True
+                )
                 flg.flag_array[:] = True  # Everything inpainted.
                 flgfile = fl.with_suffix(".where_inpainted.h5")
                 flg.write(flgfile, clobber=True)

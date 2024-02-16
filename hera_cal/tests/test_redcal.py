@@ -22,6 +22,10 @@ from ..datacontainer import DataContainer
 
 np.random.seed(0)
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:white_noise is being deprecated",  # this is emitted by hera_sim itself...
+)
+
 
 class TestMethods(object):
 
@@ -735,7 +739,9 @@ class TestRedundantCalibrator(object):
             return 1.
 
         def wgt_func2(abs2):
-            return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
 
         for wgt_func in [wgt_func1, wgt_func2]:
             meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
@@ -767,7 +773,9 @@ class TestRedundantCalibrator(object):
             return 1.
 
         def wgt_func2(abs2):
-            return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
 
         for wgt_func in [wgt_func1, wgt_func2]:
             meta, sol = info.omnical(d, sol0, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
@@ -796,7 +804,9 @@ class TestRedundantCalibrator(object):
             return 1.
 
         def wgt_func2(abs2):
-            return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
 
         for wgt_func in [wgt_func1, wgt_func2]:
             meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
@@ -824,7 +834,9 @@ class TestRedundantCalibrator(object):
 
         def wgt_func(abs2, thresh=3):
             # return 1.  # this fails the test, proving the below is effective
-            return np.where(abs2 > 0, thresh * np.tanh(abs2 / thresh) / abs2, 1)
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                return np.where(abs2 > 0, thresh * np.tanh(abs2 / thresh) / abs2, 1)
 
         meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)
         for i in range(NANTS):

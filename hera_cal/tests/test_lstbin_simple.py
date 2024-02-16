@@ -27,6 +27,11 @@ except NameError:
 
         return fnc
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:The uvw_array does not match the expected values given the antenna positions.",
+    "ignore:.*Using known values for HERA",
+)
+
 
 class Test_LSTAlign:
     @classmethod
@@ -369,11 +374,12 @@ def test_apply_calfile_rules(tmpdir_factory):
             ignore_missing=False,
         )
 
-    data_files, calfiles = lstbin_simple.apply_calfile_rules(
-        [[str(d) for d in datas]],
-        calfile_rules=[(".uvh5", ".calfile")],
-        ignore_missing=True,
-    )
+    with pytest.warns(UserWarning, match="Calibration file .* does not exist"):
+        data_files, calfiles = lstbin_simple.apply_calfile_rules(
+            [[str(d) for d in datas]],
+            calfile_rules=[(".uvh5", ".calfile")],
+            ignore_missing=True,
+        )
     assert len(data_files[0]) == 2
     assert len(calfiles[0]) == 2
 
@@ -468,9 +474,12 @@ class Test_LSTAverage:
 
         std = 2.0
         if nsamples == "ones":
+            warn = False
             nsamples = np.ones(shape)
         else:
-            nsamples = np.random.random_integers(1, 10, size=shape).astype(float)
+            warn = True
+            rng = np.random.default_rng(42)
+            nsamples = rng.integers(1, 10, size=shape).astype(float)
 
         std = std / np.sqrt(nsamples)
 
@@ -483,11 +492,19 @@ class Test_LSTAverage:
 
         flags = np.zeros(data.shape, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n, db = lstbin_simple.lst_average(
-            data=data,
-            nsamples=nsamples,
-            flags=flags,
-        )
+        if warn:
+            with pytest.warns(UserWarning, match='Nsamples is not uniform across frequency'):
+                data_n, flg_n, std_n, _, _ = lstbin_simple.lst_average(
+                    data=data,
+                    nsamples=nsamples,
+                    flags=flags,
+                )
+        else:
+            data_n, flg_n, std_n, _, _ = lstbin_simple.lst_average(
+                data=data,
+                nsamples=nsamples,
+                flags=flags,
+            )
 
         # Check the averaged data is within 6 sigma of the population mean
         assert np.allclose(data_n, 0.0, atol=std * 6 / np.sqrt(shape[0]))
@@ -727,6 +744,7 @@ def uvc_file(uvc, uvd_file: Path) -> Path:
     return fl
 
 
+@pytest.mark.filterwarnings("ignore", message="Getting antpos from the first file only")
 class Test_LSTBinFilesForBaselines:
     def test_defaults(self, uvd, uvd_file):
         lstbins, d0, f0, n0, inpflg, times0 = lstbin_simple.lst_bin_files_for_baselines(
@@ -1052,7 +1070,7 @@ class Test_LSTBinFiles:
         assert not out_files[3]["GOLDEN"]
 
         uvd = UVData()
-        uvd.read(out_files[1]["GOLDEN"])
+        uvd.read(out_files[1]["GOLDEN"], use_future_array_shapes=True)
 
         # Read the Golden File
         golden_hd = io.HERAData(out_files[1]["GOLDEN"])
@@ -1168,19 +1186,19 @@ class Test_LSTBinFiles:
         for flset, flsetc in zip(out_files, out_files_chunked):
             assert flset[("LST", False)] != flsetc[("LST", False)]
             uvdlst = UVData()
-            uvdlst.read(flset[("LST", False)])
+            uvdlst.read(flset[("LST", False)], use_future_array_shapes=True)
 
             uvdlstc = UVData()
-            uvdlstc.read(flsetc[("LST", False)])
+            uvdlstc.read(flsetc[("LST", False)], use_future_array_shapes=True)
 
             assert uvdlst == uvdlstc
 
             assert flset[("MED", False)] != flsetc[("MED", False)]
             uvdlst = UVData()
-            uvdlst.read(flset[("MED", False)])
+            uvdlst.read(flset[("MED", False)], use_future_array_shapes=True)
 
             uvdlstc = UVData()
-            uvdlstc.read(flsetc[("MED", False)])
+            uvdlstc.read(flsetc[("MED", False)], use_future_array_shapes=True)
 
             assert uvdlst == uvdlstc
 
@@ -1233,10 +1251,10 @@ class Test_LSTBinFiles:
         for flset, flsetc in zip(data_files, recaled_files):
             for fl, flc in zip(flset, flsetc):
                 uvdlst = UVData()
-                uvdlst.read(fl)
+                uvdlst.read(fl, use_future_array_shapes=True)
 
                 uvdlstc = UVData()
-                uvdlstc.read(flc)
+                uvdlstc.read(flc, use_future_array_shapes=True)
                 np.testing.assert_allclose(uvdlst.data_array, uvdlstc.data_array)
 
         cfl = tmp / "lstbin_config_file.yaml"
@@ -1270,10 +1288,10 @@ class Test_LSTBinFiles:
         for flset, flsetc in zip(out_files, out_files_recal):
             assert flset[("LST", False)] != flsetc[("LST", False)]
             uvdlst = UVData()
-            uvdlst.read(flset[("LST", False)])
+            uvdlst.read(flset[("LST", False)], use_future_array_shapes=True)
 
             uvdlstc = UVData()
-            uvdlstc.read(flsetc[("LST", False)])
+            uvdlstc.read(flsetc[("LST", False)], use_future_array_shapes=True)
             print(np.unique(uvdlstc.lst_array))
             expected = mockuvd.identifiable_data_from_uvd(uvdlst, reshape=False)
 
@@ -1379,7 +1397,7 @@ class Test_LSTBinFiles:
         assert len(out_files) == 2
         for flset in out_files:
             uvdlst = UVData()
-            uvdlst.read(flset[("LST", False)])
+            uvdlst.read(flset[("LST", False)], use_future_array_shapes=True)
 
             # Don't worry about history here, because we know they use different inputs
             expected = mockuvd.identifiable_data_from_uvd(uvdlst, reshape=False)
@@ -1448,7 +1466,7 @@ class Test_LSTBinFiles:
 
         for flset in out_files:
             uvdlst = UVData()
-            uvdlst.read(flset[("LST", False)])
+            uvdlst.read(flset[("LST", False)], use_future_array_shapes=True)
 
             # Don't worry about history here, because we know they use different inputs
             expected = mockuvd.identifiable_data_from_uvd(uvdlst, reshape=False)
@@ -1553,8 +1571,8 @@ class Test_LSTBinFiles:
         assert len(out_files) == 1
 
         for flset in out_files:
-            flagged = UVData.from_file(flset[("LST", False)])
-            inpainted = UVData.from_file(flset[("LST", True)])
+            flagged = UVData.from_file(flset[("LST", False)], use_future_array_shapes=True)
+            inpainted = UVData.from_file(flset[("LST", True)], use_future_array_shapes=True)
 
             assert flagged == inpainted
 
@@ -1597,8 +1615,8 @@ class Test_LSTBinFiles:
         assert len(out_files) == 1
 
         for flset in out_files:
-            flagged = UVData.from_file(flset[("LST", False)])
-            inpainted = UVData.from_file(flset[("LST", True)])
+            flagged = UVData.from_file(flset[("LST", False)], use_future_array_shapes=True)
+            inpainted = UVData.from_file(flset[("LST", True)], use_future_array_shapes=True)
 
             assert flagged == inpainted
 
@@ -1627,7 +1645,7 @@ class Test_LSTBinFiles:
         for fllist in inp:
             for fl in fllist:
                 uvf = UVFlag()
-                uvf.read(fl)
+                uvf.read(fl, use_future_array_shapes=True)
                 uvf.to_waterfall()
                 uvf.to_flag()
                 uvf.write(fl.replace(".h5", ".waterfall.h5"), clobber=True)
@@ -1678,7 +1696,7 @@ class Test_LSTBinFiles:
         for flset in out_files:
             uvdlst = UVData()
             # Just making sure it ran...
-            uvdlst.read(flset[("LST", False)])
+            uvdlst.read(flset[("LST", False)], use_future_array_shapes=True)
 
 
 def test_get_where_inpainted(tmp_path_factory):
