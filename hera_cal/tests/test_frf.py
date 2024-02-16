@@ -132,6 +132,8 @@ def test_fir_filtering():
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")  # TODO: probably should remove this
 @pytest.mark.filterwarnings("ignore:invalid value encountered in scalar divide")  # TODO: probably should remove this
 @pytest.mark.filterwarnings("ignore:No new keys provided")
+@pytest.mark.filterwarnings("ignore:writing default values for restfreq")
+@pytest.mark.filterwarnings("ignore:The uvw_array does not match")
 class Test_FRFilter:
     def setup_method(self):
         self.fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")

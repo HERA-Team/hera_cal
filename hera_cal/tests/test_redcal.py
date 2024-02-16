@@ -804,7 +804,9 @@ class TestRedundantCalibrator(object):
             return 1.
 
         def wgt_func2(abs2):
-            return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                return np.where(abs2 > 0, 5 * np.tanh(abs2 / 5) / abs2, 1)
 
         for wgt_func in [wgt_func1, wgt_func2]:
             meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6, wgt_func=wgt_func)

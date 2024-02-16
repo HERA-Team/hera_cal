@@ -1696,7 +1696,7 @@ class Test_LSTBinFiles:
         for flset in out_files:
             uvdlst = UVData()
             # Just making sure it ran...
-            uvdlst.read(flset[("LST", False)])
+            uvdlst.read(flset[("LST", False)], use_future_array_shapes=True)
 
 
 def test_get_where_inpainted(tmp_path_factory):

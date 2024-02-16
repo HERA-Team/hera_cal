@@ -24,6 +24,9 @@ import glob
 @pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
 @pytest.mark.filterwarnings("ignore:telescope_location is not set")
 @pytest.mark.filterwarnings("ignore:antenna_positions are not set")
+@pytest.mark.filterwarnings("ignore:Antenna 53 not present in calibration solution")
+@pytest.mark.filterwarnings("ignore:Cannot preserve total_quality_array when changing number of antennas")
+@pytest.mark.filterwarnings("ignore:No new keys provided")
 class Test_DelayFilter:
     def test_run_delay_filter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -130,14 +133,10 @@ class Test_DelayFilter:
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(tmp_path, 'temp.h5')
 
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Antenna 53 not present in calibration solution")
-            warnings.filterwarnings("ignore", message="Cannot preserve total_quality_array when changing number of antennas")
-
-            df.load_delay_filter_and_write(
-                uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
-                avg_red_bllens=avg_bl
-            )
+        df.load_delay_filter_and_write(
+            uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
+            avg_red_bllens=avg_bl
+        )
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -222,17 +221,13 @@ class Test_DelayFilter:
             if os.path.isdir(cdir):
                 shutil.rmtree(cdir)
             os.mkdir(cdir)
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", message="Antenna 53 not present in calibration solution")
-                warnings.filterwarnings("ignore", message="Cannot preserve total_quality_array when changing number of antennas")
-
-                df.load_delay_filter_and_write(
-                    datafile_list=uvh5, baseline_list=[(53, 54)],
-                    calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
-                    read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
-                    res_outfilename=outfilename, clobber=True,
-                    mode='dayenu'
-                )
+            df.load_delay_filter_and_write(
+                datafile_list=uvh5, baseline_list=[(53, 54)],
+                calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                res_outfilename=outfilename, clobber=True,
+                mode='dayenu'
+            )
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
@@ -240,11 +235,13 @@ class Test_DelayFilter:
             assert d[(53, 54, 'ee')].shape[0] == 60
 
         # Test baseline_list = None.
-        df.load_delay_filter_and_write(datafile_list=uvh5, baseline_list=None,
-                                       calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
-                                       read_cache=True, write_cache=True, avg_red_bllens=True,
-                                       res_outfilename=outfilename, clobber=True,
-                                       mode='dayenu')
+        df.load_delay_filter_and_write(
+            datafile_list=uvh5, baseline_list=None,
+            calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+            read_cache=True, write_cache=True, avg_red_bllens=True,
+            res_outfilename=outfilename, clobber=True,
+            mode='dayenu'
+        )
         hd = io.HERAData(outfilename)
         d, f, n = hd.read()
         assert d[(53, 54, 'ee')].shape[1] == 100
@@ -306,8 +303,7 @@ class Test_DelayFilter:
 
         # test apriori flags and flag_yaml
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
-        uvf = UVFlag(hd, mode='flag', copy_flags=True)
-        uvf.use_future_array_shapes()
+        uvf = UVFlag(hd, mode='flag', copy_flags=True, use_future_array_shapes=True)
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
@@ -384,17 +380,13 @@ class Test_DelayFilter:
         os.remove(outfilename)
         # run again using computed cache.
         calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Antenna 53 not present in calibration solution")
-            warnings.filterwarnings("ignore", message="Cannot preserve total_quality_array when changing number of antennas")
-
-            df.load_delay_filter_and_write(
-                uvh5, res_outfilename=outfilename,
-                cache_dir=cdir, calfile_list=calfile, read_cache=True,
-                Nbls_per_load=1, clobber=True, mode='dayenu',
-                spw_range=(0, 32), write_cache=True
-            )
-        # now new cache files should be generated.
+        df.load_delay_filter_and_write(
+            uvh5, res_outfilename=outfilename,
+            cache_dir=cdir, calfile_list=calfile, read_cache=True,
+            Nbls_per_load=1, clobber=True, mode='dayenu',
+            spw_range=(0, 32), write_cache=True
+        )
+    # now new cache files should be generated.
         assert len(glob.glob(cdir + '/*')) == 1
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
@@ -405,8 +397,7 @@ class Test_DelayFilter:
         hd = io.HERAData(uvh5)
         hd.read()
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
-        uvf = UVFlag(hd, mode='flag', copy_flags=True)
-        uvf.use_future_array_shapes()
+        uvf = UVFlag(hd, mode='flag', copy_flags=True, use_future_array_shapes=True)
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
