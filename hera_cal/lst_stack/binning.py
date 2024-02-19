@@ -485,8 +485,8 @@ def lst_bin_files_for_baselines(
         else:
             inpainted = None
 
-        if redundantly_averaged:
-            keyed = reds.keyed_on_bls(_data.antpairs())
+        # if redundantly_averaged:
+        #     keyed = reds.keyed_on_bls(_data.antpairs())
 
         # load calibration
         if calfl is not None:
@@ -509,7 +509,7 @@ def lst_bin_files_for_baselines(
 
         for i, bl in enumerate(antpairs):
             if redundantly_averaged:
-                bl = keyed.get_ubl_key(bl)
+                bl = reds.get_reds_in_bl_set(bl, _data.antpairs(), include_conj=True)
 
             for j, pol in enumerate(pols):
                 blpol = bl + (pol,)
