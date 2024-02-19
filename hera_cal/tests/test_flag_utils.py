@@ -17,8 +17,7 @@ from ..data import DATA_PATH
 def test_solar_flag():
     data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
     uvd = UVData()
-    uvd.read_miriad(data_fname)
-    uvd.use_future_array_shapes()
+    uvd.read_miriad(data_fname, use_future_array_shapes=True)
     data, flags, antp, ant, f, t, l, p = io.load_vis(uvd, return_meta=True)
     # get solar altitude
     a = utils.get_sun_alt(2458043)

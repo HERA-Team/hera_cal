@@ -759,7 +759,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
         if i == 0:
             echo("...loading {}".format(f), verbose=verbose)
             uvc = UVCal()
-            uvc.read_calfits(f)
+            uvc.read_calfits(f, use_future_array_shapes=True)
             f1 = copy.copy(f)
 
             # set flagged data to unity
@@ -767,7 +767,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
 
         else:
             uvc2 = UVCal()
-            uvc2.read_calfits(f)
+            uvc2.read_calfits(f, use_future_array_shapes=True)
 
             # set flagged data to unity
             gain_array = uvc2.gain_array
@@ -822,7 +822,7 @@ def lst_rephase(
         if True edit arrays in data in memory, else make a copy and return
     array
         Deprecated parameter that specifies that the input data is an array
-        with shape (ntimes, nfreqs, [npols]). Don't write code with this
+        with shape (ntimes, nbls, nfreqs, [npols]). Don't write code with this
         parameter -- instead just set the baseline axis of data to be length-1.
 
     Notes:
@@ -1765,7 +1765,7 @@ def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
         if len(grp) > max_chunk_size:
             # if red group is larger then the chunk size.
             # then give a warning and treate the red group as a chunk anyways.
-            warnings.warn("Warning: baseline group of length %d encountered with number"
+            warnings.warn("baseline group of length %d encountered with number"
                           " of baselines exceeding max_chunk_size=%d."
                           " First baseline is %s"
                           " Loading group anyways." % (len(reds[group_index]), max_chunk_size, str(reds[group_index][0])))
@@ -1811,11 +1811,12 @@ def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=Fa
     clobber: bool, optional
     """
     hd = UVData()
-    hd.read_uvh5(inputfilename, read_data=False)
+    hd.read_uvh5(inputfilename, read_data=False, use_future_array_shapes=True)
     if spw_ranges is None:
         spw_ranges = [(0, hd.Nfreqs)]
     # read in selected spw_ranges
-    hd.read(inputfilename, freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]))
+    hd.read(inputfilename, freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]),
+            use_future_array_shapes=True)
     hd.write_uvh5(outputfilename, clobber=clobber)
 
 

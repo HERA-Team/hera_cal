@@ -1,1984 +1,617 @@
-from __future__ import annotations
-
-from . import mock_uvdata as mockuvd
+# -*- coding: utf-8 -*-
+# Copyright 2019 the HERA Project
+# Licensed under the MIT License
 import pytest
-from pathlib import Path
-from pyuvdata import UVCal, UVFlag
+import os
 import numpy as np
-from hera_cal import lst_stack as lstbin
-import pytest
-import numpy as np
+from collections import OrderedDict as odict
+import copy
+import glob
+import scipy.stats as stats
 from pyuvdata import UVCal, UVData
-from .. import io, utils
-from hera_cal import apply_cal
-from pyuvdata import utils as uvutils
-from hera_cal.red_groups import RedundantGroups
-from astropy import units
-from functools import partial
-
-try:
-    benchmark
-except NameError:
-
-    @pytest.fixture(scope="module")
-    def benchmark():
-        def fnc(wrapped, *args, **kwargs):
-            return wrapped(*args, **kwargs)
-
-        return fnc
-
-
-class Test_LSTAlign:
-    @classmethod
-    def get_lst_align_data(
-        cls,
-        ntimes: int = 10,
-        nfreqs: int = 5,
-        npols: int = 4,
-        nants: int = 4,
-        ndays: int = 1,
-        creator: callable = mockuvd.create_uvd_identifiable,
-    ):
-        uvds = mockuvd.make_dataset(
-            ndays=ndays,
-            nfiles=1,
-            creator=creator,
-            pols=("xx", "yy", "xy", "yx")[:npols],
-            freqs=np.linspace(100e6, 200e6, nfreqs),
-            ants=np.arange(nants),
-            ntimes=ntimes,
-            time_axis_faster_than_bls=False,
-        )
-        uvds = [uvd[0] for uvd in uvds]  # flatten to single list
-
-        data = np.concatenate(
-            [uvd.data_array.reshape((ntimes, -1, nfreqs, npols)) for uvd in uvds],
-            axis=0,
-        )
-        freq_array = uvds[0].freq_array
-        data_lsts = np.concatenate(
-            [
-                np.unique(uvds[0].lst_array),
-            ]
-            * len(uvds)
-        )
-        antpairs = uvds[0].get_antpairs()
-        antpos = uvds[0].antenna_positions
-
-        # Ensure that each LST is in its own bin
-        lsts = np.sort(np.unique(data_lsts))
-
-        lst_bin_edges = np.concatenate(
-            (
-                [lsts[0] - (lsts[1] - lsts[0]) / 2],
-                (lsts[1:] + lsts[:-1]) / 2,
-                [lsts[-1] + (lsts[-1] - lsts[-2]) / 2],
-            )
-        )
-
-        return dict(
-            data=data,
-            data_lsts=data_lsts,
-            antpairs=antpairs,
-            lst_bin_edges=lst_bin_edges,
-            freq_array=freq_array,
-            antpos=antpos,
-        )
-
-    def test_bad_inputs(self):
-        # Test that we get the right errors for bad inputs
-        kwargs = self.get_lst_align_data()
-
-        def lst_align_with(**kw):
-            return lstbin.lst_align(**{**kwargs, **kw})
-
-        data = np.ones(kwargs["data"].shape[:-1] + (5,))
-        with pytest.raises(ValueError, match="data has more than 4 pols"):
-            lst_align_with(data=data)
-
-        with pytest.raises(ValueError, match="data should have shape"):
-            lst_align_with(freq_array=kwargs["freq_array"][:-1])
-
-        with pytest.raises(ValueError, match="flags should have shape"):
-            lst_align_with(flags=np.ones(13, dtype=bool))
-
-        # Make a wrong-shaped nsample array.
-        with pytest.raises(ValueError, match="nsamples should have shape"):
-            lst_align_with(nsamples=np.ones(13))
-
-        # Use only one bin edge
-        with pytest.raises(
-            ValueError, match="lst_bin_edges must have at least 2 elements"
-        ):
-            lst_align_with(lst_bin_edges=np.ones(1))
-
-        # Try rephasing without freq_array or antpos
-        with pytest.raises(
-            ValueError, match="freq_array and antpos is needed for rephase"
-        ):
-            lst_align_with(rephase=True, antpos=None)
-
-    def test_increasing_lsts_one_per_bin(self, benchmark):
-        kwargs = self.get_lst_align_data(ntimes=6)
-        bins, d, f, n, inp = benchmark(lstbin.lst_align, rephase=False, **kwargs)
-
-        # We should not be changing the data at all.
-        d = np.squeeze(np.asarray(d))
-        f = np.squeeze(np.asarray(f))
-        n = np.squeeze(np.asarray(n))
-
-        np.testing.assert_allclose(d, kwargs["data"])
-        assert not np.any(f)
-        assert np.all(n == 1.0)
-        assert len(bins) == 6
-
-    def test_multi_days_one_per_bin(self, benchmark):
-        kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
-        bins, d, f, n, inp = benchmark(lstbin.lst_align, rephase=False, **kwargs)
-
-        # We should not be changing the data at all.
-        d = np.squeeze(np.asarray(d))
-        f = np.squeeze(np.asarray(f))
-        n = np.squeeze(np.asarray(n))
-
-        np.testing.assert_allclose(d[:, 0], kwargs["data"][:7])
-        assert not np.any(f)
-        assert np.all(n == 1.0)
-        assert len(bins) == 7
-
-    def test_multi_days_with_flagging(self, benchmark):
-        kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
-
-        # Flag everything after the first day, and make the data there crazy.
-        flags = np.zeros_like(kwargs["data"], dtype=bool)
-        flags[7:] = True
-        kwargs["data"][7:] = 1000.0
-
-        bins, d, f, n, inp = benchmark(
-            lstbin.lst_align, rephase=False, flags=flags, **kwargs
-        )
-
-        d = np.squeeze(np.asarray(d))
-        f = np.squeeze(np.asarray(f))
-        n = np.squeeze(np.asarray(n))
-
-        np.testing.assert_allclose(d[:, 0], kwargs["data"][:7])
-        assert not np.any(f[:, 0])
-        assert np.all(f[:, 1])
-        assert len(bins) == 7
-
-    def test_multi_days_with_nsamples_zero(self, benchmark):
-        kwargs = benchmark(self.get_lst_align_data, ndays=2, ntimes=7)
-
-        # Flag everything after the first day, and make the data there crazy.
-        nsamples = np.ones_like(kwargs["data"], dtype=float)
-        nsamples[7:] = 0.0
-        kwargs["data"][7:] = 1000.0
-
-        bins, d, f, n, inp = lstbin.lst_align(
-            rephase=False, nsamples=nsamples, **kwargs
-        )
-
-        d = np.squeeze(np.asarray(d))
-        f = np.squeeze(np.asarray(f))
-        n = np.squeeze(np.asarray(n))
-
-        np.testing.assert_allclose(d[:, 0], kwargs["data"][:7])
-        assert not np.any(f)
-        assert np.all(n[:, 0] == 1.0)
-        assert np.all(n[:, 1] == 0.0)
-        assert len(bins) == 7
-
-    def test_rephase(self, benchmark):
-        """Test that rephasing where each bin is already at center does nothing."""
-        kwargs = self.get_lst_align_data(ntimes=7)
-
-        bins0, d0, f0, n0, inp = benchmark(
-            lstbin.lst_align, rephase=True, **kwargs
-        )
-        bins, d, f, n, inp = lstbin.lst_align(rephase=False, **kwargs)
-        np.testing.assert_allclose(d, d0, rtol=1e-6)
-        np.testing.assert_allclose(f, f0, rtol=1e-6)
-        np.testing.assert_allclose(n, n0, rtol=1e-6)
-        assert len(bins) == len(bins0)
-
-    def test_lstbinedges_modulus(self, benchmark):
-        kwargs = self.get_lst_align_data(ntimes=7)
-        edges = kwargs.pop("lst_bin_edges")
-
-        lst_bin_edges = edges.copy()
-        lst_bin_edges -= 4 * np.pi
-
-        bins, d0, f0, n0, inp = benchmark(
-            lstbin.lst_align, lst_bin_edges=lst_bin_edges, **kwargs
-        )
-
-        lst_bin_edges = edges.copy()
-        lst_bin_edges += 4 * np.pi
-
-        bins, d, f, n, inp = lstbin.lst_align(
-            lst_bin_edges=lst_bin_edges, **kwargs
-        )
-
-        np.testing.assert_allclose(d, d0)
-        np.testing.assert_allclose(f, f0)
-        np.testing.assert_allclose(n, n0)
-
-        with pytest.raises(
-            ValueError, match="lst_bin_edges must be monotonically increasing."
-        ):
-            lstbin.lst_align(lst_bin_edges=lst_bin_edges[::-1], **kwargs)
-
-
-def test_argparser_returns():
-    args = lstbin.wrappers.lst_bin_arg_parser()
-    assert args is not None
-
-
-class Test_ReduceLSTBins:
-    @classmethod
-    def get_input_data(
-        cls, nfreqs: int = 3, npols: int = 1, nbls: int = 6, ntimes: tuple[int] = (4,)
-    ):
-        data = np.random.random((nbls, nfreqs, npols))
-
-        # Make len(ntimes) LST bins, each with ntimes[i] time-entries, all the same
-        # data.
-        data = [
-            np.array(
-                [
-                    data,
-                ]
-                * nt
-            ).reshape((nt,) + data.shape)
-            * (i + 1)
-            for i, nt in enumerate(ntimes)
-        ]
-        flags = [np.zeros(d.shape, dtype=bool) for d in data]
-        nsamples = [np.ones(d.shape, dtype=float) for d in data]
-
-        return data, flags, nsamples
-
-    def test_one_point_per_bin(self, benchmark):
-        d, f, n = self.get_input_data(ntimes=(1,))
-        rdc = benchmark(lstbin.reduce_lst_bins, d, f, n)
-
-        assert (
-            rdc["data"].shape
-            == rdc["flags"].shape
-            == rdc["std"].shape
-            == rdc["nsamples"].shape
-        )
-
-        # reduce_data swaps the order of bls/times
-        dd = rdc["data"].swapaxes(0, 1)
-        ff = rdc["flags"].swapaxes(0, 1)
-        nn = rdc["nsamples"].swapaxes(0, 1)
-
-        np.testing.assert_allclose(dd[0], d[0][0])
-        assert not np.any(ff)
-        np.testing.assert_allclose(nn, 1.0)
-
-    def test_zerosize_bin(self):
-        d, f, n = self.get_input_data(ntimes=(0, 1))
-        print(d[0].shape, len(d))
-        rdc = lstbin.reduce_lst_bins(d, f, n, get_mad=True)
-
-        assert rdc["data"].shape[1] == 2  # 2 LST bins
-        assert np.all(np.isnan(rdc["data"][:, 0]))
-        assert np.all(rdc["flags"][:, 0])
-        assert np.all(rdc["nsamples"][:, 0] == 0.0)
-        assert np.all(np.isinf(rdc["mad"][:, 0]))
-        assert np.all(np.isnan(rdc["median"][:, 0]))
-
-    @pytest.mark.parametrize("ntimes", [(4,), (5, 4)])
-    def test_multi_points_per_bin(self, ntimes, benchmark):
-        d, f, n = self.get_input_data(ntimes=ntimes)
-        rdc = benchmark(lstbin.reduce_lst_bins, d, f, n)
-
-        assert (
-            rdc["data"].shape
-            == rdc["flags"].shape
-            == rdc["std"].shape
-            == rdc["nsamples"].shape
-        )
-
-        # reduce_data swaps the order of bls/times
-        dd = rdc["data"].swapaxes(0, 1)
-        ff = rdc["flags"].swapaxes(0, 1)
-        nn = rdc["nsamples"].swapaxes(0, 1)
-
-        assert not np.any(ff)
-        for lst in range(len(ntimes)):
-            np.testing.assert_allclose(dd[lst], d[lst][0])
-            np.testing.assert_allclose(nn[lst], ntimes[lst])
-
-    def test_multi_points_per_bin_flagged(self):
-        d, f, n = self.get_input_data(ntimes=(4,))
-        f[0][2:] = True
-        d[0][2:] = 1000.0
-        rdc = lstbin.reduce_lst_bins(d, f, n)
-
-        assert (
-            rdc["data"].shape
-            == rdc["flags"].shape
-            == rdc["std"].shape
-            == rdc["nsamples"].shape
-        )
-
-        # reduce_data swaps the order of bls/times
-        dd = rdc["data"].swapaxes(0, 1)
-        ff = rdc["flags"].swapaxes(0, 1)
-        nn = rdc["nsamples"].swapaxes(0, 1)
-
-        np.testing.assert_allclose(dd[0], d[0][0])
-        assert not np.any(ff)
-        np.testing.assert_allclose(nn, 2.0)
-
-    def test_get_med_mad(self):
-        d, f, n = self.get_input_data(ntimes=(4,))
-        rdc = lstbin.reduce_lst_bins(d, f, n, get_mad=True)
-
-        assert np.all(rdc["median"] == rdc["data"])
-
-
-def test_apply_calfile_rules(tmpdir_factory):
-    direc = tmpdir_factory.mktemp("test_apply_calfile_rules")
-
-    datas = [Path(direc / f"data{i}.uvh5") for i in range(3)]
-    for d in datas:
-        d.touch()
-
-    cals = [Path(direc / f"data{i}.calfile") for i in range(3)]
-    for c in cals:
-        c.touch()
-
-    data_files, calfiles = lstbin.io.apply_calfile_rules(
-        [[str(d) for d in datas]],
-        calfile_rules=[(".uvh5", ".calfile")],
-        ignore_missing=False,
-    )
-    assert len(data_files[0]) == 3
-    assert len(calfiles[0]) == 3
-
-    cals[-1].unlink()
-    with pytest.raises(IOError, match="does not exist"):
-        lstbin.io.apply_calfile_rules(
-            [[str(d) for d in datas]],
-            calfile_rules=[(".uvh5", ".calfile")],
-            ignore_missing=False,
-        )
-
-    data_files, calfiles = lstbin.io.apply_calfile_rules(
-        [[str(d) for d in datas]],
-        calfile_rules=[(".uvh5", ".calfile")],
-        ignore_missing=True,
-    )
-    assert len(data_files[0]) == 2
-    assert len(calfiles[0]) == 2
-
-
-class Test_LSTAverage:
-    def test_sigma_clip_without_outliers(self, benchmark):
-        shape = (7, 8, 9)
-        np.random.seed(42)
-        data = np.random.normal(size=shape) + np.random.normal(size=shape) * 1j
-        nsamples = np.ones_like(data)
-        flags = np.zeros_like(data, dtype=bool)
-
-        data_n, flg_n, std_n, norm_n, daysbinned = lstbin.lst_average(
-            data=data,
-            nsamples=nsamples,
-            flags=flags,
-            sigma_clip_thresh=None,
-        )
-
-        data, flg, std, norm, daysbinned = benchmark(
-            lstbin.lst_average,
-            data=data,
-            nsamples=nsamples,
-            flags=flags,
-            sigma_clip_thresh=20.0,
-        )
-
-        assert data.shape == flg.shape == std.shape == norm.shape == nsamples.shape[1:]
-        np.testing.assert_allclose(data, data_n)
-
-    def test_average_repeated(self):
-        shape = (7, 8, 9)
-        _data = np.random.random(shape) + np.random.random(shape) * 1j
-
-        data = np.array([_data, _data, _data])
-        nsamples = np.ones_like(data)
-        flags = np.zeros_like(data, dtype=bool)
-
-        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
-            data=data,
-            nsamples=nsamples,
-            flags=flags,
-        )
-
-        assert np.allclose(data_n, _data)
-        assert not np.any(flg_n)
-        assert np.allclose(std_n, 0.0)
-        assert np.allclose(norm_n, 3.0)
-
-        # Now flag the last "night"
-        flags[-1] = True
-        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
-            data=data,
-            nsamples=nsamples,
-            flags=flags,
-        )
-
-        assert np.allclose(data_n, _data)
-        assert not np.any(flg_n)
-        assert np.allclose(std_n, 0.0)
-        assert np.allclose(norm_n, 2.0)
-
-    def test_std_simple(self):
-        shape = (5000, 1, 2, 2)  # 1000 nights, doesn't matter what the other axis is.
-
-        std = 2.0
-        data = (
-            np.random.normal(scale=std, size=shape)
-            + np.random.normal(scale=std, size=shape) * 1j
-        )
-        nsamples = np.ones_like(data, dtype=float)
-        flags = np.zeros_like(data, dtype=bool)
-
-        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
-            data=data,
-            nsamples=nsamples,
-            flags=flags,
-        )
-
-        # Check the averaged data is within 6 sigma of the population mean
-        np.testing.assert_allclose(data_n, 0.0, atol=std * 6 / np.sqrt(shape[0]))
-
-        # Check the standard deviation is within 20% of the true value
-        np.testing.assert_allclose(std_n, std + std * 1j, rtol=0.2)
-
-        assert not np.any(flg_n)
-
-    @pytest.mark.parametrize("nsamples", ("ones", "random"))
-    @pytest.mark.parametrize("flags", ("zeros", "random"))
-    def test_std(self, nsamples, flags):
-        shape = (5000, 1, 2, 2)  # 1000 nights, doesn't matter what the other axis is.
-
-        std = 2.0
-        if nsamples == "ones":
-            nsamples = np.ones(shape)
-        else:
-            nsamples = np.random.random_integers(1, 10, size=shape).astype(float)
-
-        std = std / np.sqrt(nsamples)
-
-        if flags == "zeros":
-            flags = np.zeros(shape, dtype=bool)
-        else:
-            flags = np.random.random(shape) > 0.1
-
-        data = np.random.normal(scale=std) + np.random.normal(scale=std) * 1j
-
-        flags = np.zeros(data.shape, dtype=bool)
-
-        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
-            data=data,
-            nsamples=nsamples,
-            flags=flags,
-        )
-
-        # Check the averaged data is within 6 sigma of the population mean
-        assert np.allclose(data_n, 0.0, atol=std * 6 / np.sqrt(shape[0]))
-
-        # In reality the std is infinity where flags is True
-        std[flags] = np.inf
-        w = 1 / np.sum(1.0 / std**2, axis=0)
-
-        sample_var_expectation = sve = w * (shape[0] - 1)
-        # Check the standard deviation is within 20% of the true value
-        np.testing.assert_allclose(std_n, np.sqrt(sve) + np.sqrt(sve) * 1j, rtol=0.2)
-
-        assert not np.any(flg_n)
-
-    def test_inpaint_mode(self):
-        shape = (3, 2, 4, 1)  # nights, bls, freqs, pols
-        _data = np.random.random(shape) + np.random.random(shape) * 1j
-        nsamples = np.ones(_data.shape, dtype=float)
-        flags = np.zeros(_data.shape, dtype=bool)
-
-        # First test -- no flags should mean inpainted_mode does nothing.
-        df, ff, stdf, nf, dbf = lstbin.lst_average(
-            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=False
-        )
-
-        di, fi, stdi, ni, dbi = lstbin.lst_average(
-            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=True
-        )
-
-        assert np.allclose(df, di)
-        assert np.allclose(ff, fi)
-        np.testing.assert_allclose(stdf, stdi)
-        assert np.allclose(nf, ni)
-        assert np.allclose(dbf, dbi)
-
-        # Now test with a whole LST bin flagged for a single bl-chan-pol (but inpainted)
-        flags[:, 0, 0, 0] = True
-        df, ff, stdf, nf, dbf = lstbin.lst_average(
-            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=False
-        )
-
-        di, fi, stdi, ni, dbi = lstbin.lst_average(
-            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=True
-        )
-
-        # The data, flags and std in the fully-flagged bin should be different, but
-        # Nsamples and Flags should be the same.
-        assert not np.allclose(df[0, 0, 0], di[0, 0, 0])
-        assert np.allclose(df[1:], di[1:])
-        assert not np.allclose(ff, fi)
-        assert not np.allclose(stdf[0, 0, 0], stdi[0, 0, 0])
-        assert np.allclose(stdf[1:], stdi[1:])
-        assert np.allclose(nf, ni)
-        assert np.allclose(dbf, dbi)
-
-        # Now test with a whole spectrum flagged for one night
-        flags[:] = False
-        flags[0, 0, :, 0] = True
-        df, ff, stdf, nf, dbf = lstbin.lst_average(
-            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=False
-        )
-
-        di, fi, stdi, ni, dbi = lstbin.lst_average(
-            data=_data, nsamples=nsamples, flags=flags, inpainted_mode=True
-        )
-
-        # This should give exactly the same results either way, because the full-flagged
-        # blt is considered to NOT be inpainted by default.
-        assert np.allclose(df, di)
-        assert np.allclose(ff, fi)
-        np.testing.assert_allclose(stdf, stdi)
-        assert np.allclose(nf, ni)
-        assert np.allclose(dbf, dbi)
-
-        # However, if we had explicitly told the routine that the blt was inpainted,
-        # we'd get a different result...
-        _d, _f = lstbin.averaging.get_masked_data(
-            _data, nsamples, flags, inpainted=np.ones_like(flags), inpainted_mode=False
-        )
-        df, ff, stdf, nf, dbf = lstbin.lst_average(
-            data=_d,
-            nsamples=nsamples,
-            flags=_f,
-            inpainted_mode=False,
-        )
-
-        _d, _f = lstbin.averaging.get_masked_data(
-            _data, nsamples, flags, inpainted=np.ones_like(flags), inpainted_mode=True
-        )
-        di, fi, stdi, ni, dbi = lstbin.lst_average(
-            data=_d,
-            nsamples=nsamples,
-            flags=_f,
-            inpainted_mode=True,
-        )
-
-        # The LST-binned data will be different for blt=0, pol=0:
-        assert not np.allclose(df[0, :, 0], di[0, :, 0])
-        assert np.allclose(df[1:], di[1:])
-        assert np.allclose(ff, fi)
-        assert not np.allclose(stdf[0, :, 0], stdi[0, :, 0])
-        assert np.allclose(stdf[1:], stdi[1:])
-        assert np.allclose(nf, ni)
-        assert np.allclose(dbf, dbi)
-
-    def test_flag_below_min_N(self):
-        shape = (7, 8, 9, 2)
-        _data = np.random.random(shape) + np.random.random(shape) * 1j
-        nsamples = np.ones(_data.shape, dtype=float)
-        flags = np.zeros(_data.shape, dtype=bool)
-
-        # No samples have more than min_N, so they should all be flagged.
-        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
-            data=_data,
-            nsamples=nsamples,
-            flags=flags,
-            sigma_clip_min_N=8,
-            flag_below_min_N=True,
-        )
-
-        assert np.all(flg_n)
-        assert np.all(norm_n == 7)  # Even though they're flagged, we track the nsamples
-        assert not np.all(np.isinf(std_n))
-        assert not np.all(np.isnan(data_n))
-
-        # this time, there's enough samples, but too many are flagged...
-        flags[:5] = True
-        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
-            data=_data,
-            nsamples=nsamples,
-            flags=flags,
-            sigma_clip_min_N=5,
-            flag_below_min_N=True,
-        )
-
-        assert np.all(flg_n)
-        # nsamples is zero because all are flagged.
-        assert np.all(norm_n == 0)
-        assert np.all(np.isinf(std_n))
-
-        # this time, only one column is flagged too much...
-        flags[:] = False
-        flags[:5, 0] = True
-        data_n, flg_n, std_n, norm_n, db = lstbin.lst_average(
-            data=_data,
-            nsamples=nsamples,
-            flags=flags,
-            sigma_clip_min_N=5,
-            flag_below_min_N=True,
-        )
-
-        assert np.all(flg_n[0])
-        assert np.all(norm_n[0] == 0)
-        assert np.all(np.isinf(std_n[0]))
-
-        assert not np.any(flg_n[1:])
-        assert np.all(norm_n[1:] == 7)
-        assert not np.any(np.isinf(std_n[1:]))
-        assert not np.any(np.isnan(data_n[1:]))
-
-    def test_sigma_clip_and_inpainted_warning(self):
-        """Test that a warning is raised if doing inpainted_mode as well as sigma-clip."""
-        shape = (7, 8, 9, 2)
-        _data = np.random.random(shape) + np.random.random(shape) * 1j
-        nsamples = np.ones(_data.shape, dtype=float)
-        flags = np.zeros(_data.shape, dtype=bool)
-
-        with pytest.warns(UserWarning, match="Direct-mode sigma-clipping in in-painted mode"):
-            lstbin.lst_average(
-                data=_data,
-                nsamples=nsamples,
-                flags=flags,
-                sigma_clip_thresh=2.0,
-                inpainted_mode=True,
-            )
-
-
-def create_small_array_uvd(identifiable: bool = False, **kwargs):
-    kwargs.update(
-        freqs=np.linspace(150e6, 160e6, 100),
-        ants=[0, 1, 2, 127, 128],
-        antpairs=[(0, 0), (0, 1), (0, 2), (1, 1), (1, 2), (2, 2)],
-        pols=("xx", "yy"),
-    )
-    if identifiable:
-        return mockuvd.create_uvd_identifiable(**kwargs)
-    else:
-        return mockuvd.create_uvd_ones(**kwargs)
-
-
-@pytest.fixture(scope="function")
-def uvd():
-    return create_small_array_uvd()
-
-
-@pytest.fixture(scope="function")
-def uvd_redavg():
-    return create_small_array_uvd(redundantly_averaged=True)
-
-
-@pytest.fixture(scope="function")
-def uvc(uvd):
-    return UVCal.initialize_from_uvdata(
-        uvd,
-        cal_style="redundant",
-        gain_convention="multiply",
-        jones_array="linear",
-        cal_type="gain",
-        metadata_only=False,
-    )
-
-
-@pytest.fixture(scope="function")
-def uvd_file(uvd, tmpdir_factory) -> Path:
-    # Write to file, so we can run lst_bin_files
-    tmp = Path(tmpdir_factory.mktemp("test_partial_times"))
-    mock = tmp / "mock.uvh5"
-    uvd.write_uvh5(str(mock), clobber=True)
-    return mock
-
-
-@pytest.fixture(scope="function")
-def uvd_redavg_file(uvd_redavg, tmpdir_factory) -> Path:
-    # Write to file, so we can run lst_bin_files
-    tmp = Path(tmpdir_factory.mktemp("test_partial_times"))
-    mock = tmp / "mock.uvh5"
-    uvd_redavg.write_uvh5(str(mock), clobber=True)
-    return mock
-
-
-@pytest.fixture(scope="function")
-def uvc_file(uvc, uvd_file: Path) -> Path:
-    # Write to file, so we can run lst_bin_files
-    tmp = uvd_file.parent
-    fl = f"{tmp}/mock.calfits"
-    uvc.write_calfits(str(fl), clobber=True)
-    return fl
-
-
-class Test_LSTBinFilesForBaselines:
-    def test_defaults(self, uvd, uvd_file):
-        lstbins, d0, f0, n0, inpflg, times0 = lstbin.lst_bin_files_for_baselines(
-            data_files=[uvd_file],
-            lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max() + 0.01],
-            antpairs=uvd.get_antpairs(),
-            rephase=False,
-        )
-
-        lstbins, d, f, n, inpflg, times = lstbin.lst_bin_files_for_baselines(
-            data_files=[uvd_file],
-            lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max() + 0.01],
-            antpairs=uvd.get_antpairs(),
-            freqs=uvd.freq_array,
-            pols=uvd.polarization_array,
-            time_idx=[np.ones(uvd.Ntimes, dtype=bool)],
-            time_arrays=[np.unique(uvd.time_array)],
-            lsts=np.unique(uvd.lst_array),
-            rephase=False,
-        )
-
-        np.testing.assert_allclose(d0, d)
-        np.testing.assert_allclose(f0, f)
-        np.testing.assert_allclose(n0, n)
-        np.testing.assert_allclose(times0, times)
-
-    def test_empty(self, uvd, uvd_file):
-        lstbins, d0, f0, n0, inpflg, times0 = lstbin.lst_bin_files_for_baselines(
-            data_files=[uvd_file],
-            lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
-            antpairs=[(127, 128)],
-            rephase=True,
-        )
-
-        assert np.all(f0)
-
-    def test_extra(self, uvd, uvd_file):
-        # Providing baselines that don't exist in the file is fine, they're just ignored.
-        lstbins, d0, f0, n0, inpflg, times0 = lstbin.lst_bin_files_for_baselines(
-            data_files=[uvd_file],
-            lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
-            antpairs=uvd.get_antpairs() + [(127, 128)],
-            rephase=True,
-        )
-
-        assert np.all(
-            f0[0][:, -1]
-        )  # last baseline is the extra one that's all flagged.
-
-    def test_freqrange(self, uvd, uvd_file, uvc_file):
-        """Test that providing freq_range works."""
-        (
-            bins,
-            data,
-            flags,
-            nsamples,
-            inpflg,
-            times,
-        ) = lstbin.lst_bin_files_for_baselines(
-            data_files=[uvd_file],
-            lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
-            cal_files=[uvc_file],
-            freq_min=153e6,
-            freq_max=158e6,
-            antpairs=uvd.get_antpairs(),
-        )
-
-        assert data[0].shape[-2] < uvd.Nfreqs
-
-    def test_bad_pols(self, uvd, uvd_file):
-        with pytest.raises(KeyError, match="7"):
-            lstbin.lst_bin_files_for_baselines(
-                data_files=[uvd_file],
-                lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
-                pols=[3.0, 7, -1],
-                antpairs=uvd.get_antpairs(),
-            )
-
-    def test_incorrect_red_input(self, uvd, uvd_file, uvc_file):
-        with pytest.raises(
-            ValueError, match="reds must be provided if redundantly_averaged is True"
-        ):
-            lstbin.lst_bin_files_for_baselines(
-                data_files=[uvd_file],
-                lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
-                redundantly_averaged=True,
-                antpairs=uvd.get_antpairs(),
-            )
-
-        with pytest.raises(
-            ValueError, match="Cannot apply calibration if redundantly_averaged is True"
-        ):
-            lstbin.lst_bin_files_for_baselines(
-                data_files=[uvd_file],
-                lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
-                cal_files=[uvc_file],
-                redundantly_averaged=True,
-                reds=RedundantGroups.from_antpos(
-                    dict(zip(uvd.antenna_numbers, uvd.antenna_positions)),
-                    pols=uvutils.polnum2str(
-                        uvd.polarization_array, x_orientation=uvd.x_orientation
-                    ),
-                ),
-                antpairs=uvd.get_antpairs(),
-            )
-
-    def test_simple_redundant_averaged_file(self, uvd_redavg, uvd_redavg_file):
-        lstbins, d0, f0, n0, inpflg, times0 = lstbin.lst_bin_files_for_baselines(
-            data_files=[uvd_redavg_file],
-            lst_bin_edges=[
-                uvd_redavg.lst_array.min() - 0.1,
-                uvd_redavg.lst_array.max() + 0.1,
-            ],
-            redundantly_averaged=True,
-            rephase=False,
-            antpairs=uvd_redavg.get_antpairs(),
-            reds=RedundantGroups.from_antpos(
-                dict(zip(uvd_redavg.antenna_numbers, uvd_redavg.antenna_positions)),
-            ),
-        )
-
-        assert len(d0) == 1
-        assert d0[0].shape == (
-            uvd_redavg.Ntimes,
-            uvd_redavg.Nbls,
-            uvd_redavg.Nfreqs,
-            uvd_redavg.Npols,
-        )
-
-    def test_redavg_with_where_inpainted(self, tmp_path):
-        uvds = mockuvd.make_dataset(
-            ndays=2,
-            nfiles=3,
-            ntimes=2,
-            ants=np.arange(7),
-            creator=mockuvd.create_uvd_identifiable,
-            freqs=mockuvd.PHASEII_FREQS[:25],
-            pols=['xx', 'xy'],
-            redundantly_averaged=True,
-        )
-
-        uvd_files = mockuvd.write_files_in_hera_format(
-            uvds, tmp_path, add_where_inpainted_files=True
-        )
-
-        ap = uvds[0][0].get_antpairs()
-        reds = RedundantGroups.from_antpos(
-            dict(zip(uvds[0][0].antenna_numbers, uvds[0][0].antenna_positions)),
-        )
-        lstbins, d0, f0, n0, inpflg, times0 = lstbin.lst_bin_files_for_baselines(
-            data_files=sum(uvd_files, []),  # flatten the list-of-lists
-            lst_bin_edges=[0, 1.9 * np.pi],
-            redundantly_averaged=True,
-            rephase=False,
-            antpairs=ap,
-            reds=reds,
-            where_inpainted_files=[str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])],
-        )
-        assert len(lstbins) == 1
-
-        # Also test that if a where_inpainted file has missing baselines, an error is
-        # raised.
-        # This is kind of a dodgy way to test it: copy the original data files,
-        # write a whole new dataset in the same place but with fewer baselines, then
-        # copy the data files (but not the where_inpainted files) back, so they mismatch.
-        for flist in uvd_files:
-            for fl in flist:
-                fl = Path(fl)
-                fl.rename(fl.parent / f"{fl.with_suffix('.bk')}")
-
-                winp = fl.with_suffix(".where_inpainted.h5")
-                winp.unlink()
-
-        uvds = mockuvd.make_dataset(
-            ndays=2,
-            nfiles=3,
-            ntimes=2,
-            ants=np.arange(5),  # less than the original
-            creator=mockuvd.create_uvd_identifiable,
-            freqs=mockuvd.PHASEII_FREQS[:25],
-            pols=['xx', 'xy'],
-            redundantly_averaged=True,
-        )
-
-        uvd_files = mockuvd.write_files_in_hera_format(
-            uvds, tmp_path, add_where_inpainted_files=True
-        )
-
-        # Move back the originals.
-        for flist in uvd_files:
-            for fl in flist:
-                fl = Path(fl)
-                fl.unlink()
-                (fl.parent / f"{fl.with_suffix('.bk')}").rename(fl)
-
-        with pytest.raises(ValueError, match="Could not find any baseline from group"):
-            lstbin.lst_bin_files_for_baselines(
-                data_files=sum(uvd_files, []),  # flatten the list-of-lists
-                lst_bin_edges=[0, 1.9 * np.pi],
-                redundantly_averaged=True,
-                rephase=False,
-                antpairs=ap,
-                reds=reds,
-                where_inpainted_files=[str(Path(f).with_suffix(".where_inpainted.h5")) for f in sum(uvd_files, [])],
-            )
-
-
-def test_make_lst_grid():
-    lst_grid = lstbin.make_lst_grid(0.01, begin_lst=None)
-    assert len(lst_grid) == 628
-    assert np.isclose(lst_grid[0], 0.0050025360725952121)
-    lst_grid = lstbin.make_lst_grid(0.01, begin_lst=np.pi)
-    assert len(lst_grid) == 628
-    assert np.isclose(lst_grid[0], 3.1365901175171982)
-    lst_grid = lstbin.make_lst_grid(0.01, begin_lst=-np.pi)
-    assert len(lst_grid) == 628
-    assert np.isclose(lst_grid[0], 3.1365901175171982)
-
-
-class Test_GetAllUnflaggedBaselines:
-    @pytest.mark.parametrize("redundantly_averaged", [True, False])
-    @pytest.mark.parametrize("only_last_file_per_night", [True, False])
-    def test_get_all_baselines(
-        self, tmp_path_factory, redundantly_averaged, only_last_file_per_night
-    ):
-        tmp = tmp_path_factory.mktemp("get_all_baselines")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=4,
-            ntimes=2,
-            ants=np.arange(10),
-            creator=create_small_array_uvd,
-            redundantly_averaged=redundantly_averaged,
-        )
-        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
-
-        antpairs, pols = lstbin.config.get_all_unflagged_baselines(
-            data_files,
-            redundantly_averaged=redundantly_averaged,
-            only_last_file_per_night=only_last_file_per_night,
-        )
-
-        assert len(antpairs) == len(uvds[0][0].get_antpairs())
-
-    def test_bad_inputs(self, tmp_path_factory):
-        tmp = tmp_path_factory.mktemp("get_all_baselines")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=4,
-            ntimes=2,
-            ants=np.arange(10),
-            creator=create_small_array_uvd,
-            redundantly_averaged=True,
-        )
-        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
-
-        with pytest.raises(
-            ValueError,
-            match="Cannot ignore antennas if the files are redundantly averaged",
-        ):
-            lstbin.config.get_all_unflagged_baselines(data_files, ignore_ants=[0, 1])
-
-        with pytest.raises(
-            ValueError,
-            match="Cannot exclude antennas if the files are redundantly averaged",
-        ):
-            lstbin.config.get_all_unflagged_baselines(
-                data_files,
-                ex_ant_yaml_files=["non-existent-file.yaml"],
-            )
-
-        uvds_different_xorient = mockuvd.make_dataset(
-            ndays=1,
-            nfiles=4,
-            ntimes=2,
-            ants=np.arange(10),
-            creator=create_small_array_uvd,
-            x_orientation="east",
-            redundantly_averaged=True,
-        )
-
-        data_files = mockuvd.write_files_in_hera_format(
-            uvds + uvds_different_xorient, tmp
-        )
-
-        with pytest.raises(
-            ValueError, match="Not all files have the same xorientation!"
-        ):
-            lstbin.config.get_all_unflagged_baselines(data_files)
-
-
-class Test_LSTBinFiles:
-    def test_golden_data(self, tmp_path_factory):
-        tmp = tmp_path_factory.mktemp("lstbin_golden_data")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=4,
-            ntimes=2,
-            identifiable=True,
-            creator=create_small_array_uvd,
-            time_axis_faster_than_bls=True,
-        )
-        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
-        print(len(uvds))
-        cfl = tmp / "lstbin_config_file.yaml"
-        print(cfl)
-        lstbin.make_lst_bin_config_file(
-            cfl,
-            data_files,
-            ntimes_per_file=2,
-        )
-
-        out_files = lstbin.lst_bin_files(
-            config_file=cfl,
-            rephase=False,
-            golden_lsts=uvds[0][1].lst_array.min() + 0.0001,
-        )
-
-        assert len(out_files) == 4
-        assert out_files[1]["GOLDEN"]
-        assert not out_files[0]["GOLDEN"]
-        assert not out_files[2]["GOLDEN"]
-        assert not out_files[3]["GOLDEN"]
-
-        uvd = UVData()
-        uvd.read(out_files[1]["GOLDEN"])
-
-        # Read the Golden File
-        golden_hd = io.HERAData(out_files[1]["GOLDEN"])
-        gd, gf, gn = golden_hd.read()
-
-        assert gd.shape[0] == 3  # ndays
-        assert len(gd.antpairs()) == 6
-        assert gd.shape[1] == uvds[0][0].freq_array.size
-        assert len(gd.pols()) == 2
-
-        assert len(gd.keys()) == 12
-
-        # Check that autos are all the same
-        assert np.all(gd[(0, 0, "ee")] == gd[(1, 1, "ee")])
-        assert np.all(gd[(0, 0, "ee")] == gd[(2, 2, "ee")])
-
-        # Since each day is at exactly the same LST by construction, the golden data
-        # over time should be the same.
-        np.testing.assert_allclose(gd.lsts, gd.lsts[0], atol=1e-6)
-
-        for key, data in gd.items():
-            for day in data:
-                np.testing.assert_allclose(data[0], day, atol=1e-6)
-
-        assert not np.allclose(gd[(0, 1, "ee")][0], gd[(0, 2, "ee")][0])
-        assert not np.allclose(gd[(1, 2, "ee")][0], gd[(0, 2, "ee")][0])
-        assert not np.allclose(gd[(1, 2, "ee")][0], gd[(0, 1, "ee")][0])
-
-    def test_save_chans(self, tmp_path_factory):
-        tmp = tmp_path_factory.mktemp("lstbin_golden_data")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=4,
-            ntimes=2,
-            identifiable=True,
-            creator=create_small_array_uvd,
-        )
-        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
-
-        cfl = tmp / "lstbin_config_file.yaml"
-        lstbin.make_lst_bin_config_file(
-            cfl,
-            data_files,
-            ntimes_per_file=2,
-        )
-
-        out_files = lstbin.lst_bin_files(
-            config_file=cfl, save_channels=[50], rephase=False
-        )
-
-        assert len(out_files) == 4
-        # Ensure there's a REDUCEDCHAN file for each output LST
-        for fl in out_files:
-            assert fl["REDUCEDCHAN"]
-
-            # Read the Golden File
-            hd = io.HERAData(fl["REDUCEDCHAN"])
-            gd, gf, gn = hd.read()
-
-            assert gd.shape[0] == 3  # ndays
-            assert len(gd.antpairs()) == 6
-            assert gd.shape[1] == 1  # single frequency
-            assert len(gd.pols()) == 2
-
-            assert len(gd.keys()) == 12
-
-            # Check that autos are all the same
-            assert np.all(gd[(0, 0, "ee")] == gd[(1, 1, "ee")])
-            assert np.all(gd[(0, 0, "ee")] == gd[(2, 2, "ee")])
-
-            # Since each day is at exactly the same LST by construction, the golden data
-            # over time should be the same.
-            for key, data in gd.items():
-                for day in data:
-                    np.testing.assert_allclose(data[0], day, rtol=1e-6)
-
-            assert not np.allclose(gd[(0, 1, "ee")][0], gd[(0, 2, "ee")][0])
-            assert not np.allclose(gd[(1, 2, "ee")][0], gd[(0, 2, "ee")][0])
-            assert not np.allclose(gd[(1, 2, "ee")][0], gd[(0, 1, "ee")][0])
-
-    def test_baseline_chunking(self, tmp_path_factory):
-        tmp = tmp_path_factory.mktemp("baseline_chunking")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=4,
-            ntimes=2,
-            creator=mockuvd.create_uvd_identifiable,
-            antpairs=[(i, j) for i in range(10) for j in range(i, 10)],  # 55 antpairs
-            pols=["xx", "yy"],
-            freqs=np.linspace(140e6, 180e6, 12),
-        )
-        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
-
-        cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin.make_lst_bin_config_file(
-            cfl,
-            data_files,
-            ntimes_per_file=2,
-        )
-
-        out_files = lstbin.lst_bin_files(
-            config_file=cfl,
-            fname_format="zen.{kind}.{lst:7.5f}.uvh5",
-            write_med_mad=True,
-        )
-        out_files_chunked = lstbin.lst_bin_files(
-            config_file=cfl,
-            fname_format="zen.{kind}.{lst:7.5f}.chunked.uvh5",
-            Nbls_to_load=10,
-            write_med_mad=True,
-        )
-
-        for flset, flsetc in zip(out_files, out_files_chunked):
-            assert flset[("LST", False)] != flsetc[("LST", False)]
-            uvdlst = UVData()
-            uvdlst.read(flset[("LST", False)])
-
-            uvdlstc = UVData()
-            uvdlstc.read(flsetc[("LST", False)])
-
-            assert uvdlst == uvdlstc
-
-            assert flset[("MED", False)] != flsetc[("MED", False)]
-            uvdlst = UVData()
-            uvdlst.read(flset[("MED", False)])
-
-            uvdlstc = UVData()
-            uvdlstc.read(flsetc[("MED", False)])
-
-            assert uvdlst == uvdlstc
-
-    def test_compare_nontrivial_cal(self, tmp_path_factory):
-        tmp = tmp_path_factory.mktemp("nontrivial_cal")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=4,
-            ntimes=2,
-            creator=mockuvd.create_uvd_identifiable,
-            antpairs=[(i, j) for i in range(7) for j in range(i, 7)],  # 55 antpairs
-            pols=("xx", "yy"),
-            freqs=np.linspace(140e6, 180e6, 3),
-        )
-        uvcs = [[mockuvd.make_uvc_identifiable(d) for d in uvd] for uvd in uvds]
-
-        for night in uvds:
-            print([np.unique(night[0].lst_array)])
-
-        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
-        cal_files = mockuvd.write_cals_in_hera_format(uvcs, tmp)
-        decal_files = [
-            [df.replace(".uvh5", ".decal.uvh5") for df in dfl] for dfl in data_files
-        ]
-
-        for flist, clist, ulist in zip(data_files, cal_files, decal_files):
-            for df, cf, uf in zip(flist, clist, ulist):
-                apply_cal.apply_cal(
-                    df,
-                    uf,
-                    cf,
-                    gain_convention="divide",  # go the wrong way
-                    clobber=True,
-                )
-
-        # First, let's go the other way to check if we get the same thing back directly
-        recaled_files = [
-            [df.replace(".uvh5", ".recal.uvh5") for df in dfl] for dfl in data_files
-        ]
-        for flist, clist, ulist in zip(recaled_files, cal_files, decal_files):
-            for df, cf, uf in zip(flist, clist, ulist):
-                apply_cal.apply_cal(
-                    uf,
-                    df,
-                    cf,
-                    gain_convention="multiply",  # go the wrong way
-                    clobber=True,
-                )
-
-        for flset, flsetc in zip(data_files, recaled_files):
-            for fl, flc in zip(flset, flsetc):
-                uvdlst = UVData()
-                uvdlst.read(fl)
-
-                uvdlstc = UVData()
-                uvdlstc.read(flc)
-                np.testing.assert_allclose(uvdlst.data_array, uvdlstc.data_array)
-
-        cfl = tmp / "lstbin_config_file.yaml"
-        lstbin.make_lst_bin_config_file(
-            cfl,
-            decal_files,
-            ntimes_per_file=2,
-        )
-
-        out_files_recal = lstbin.lst_bin_files(
-            config_file=cfl,
-            calfile_rules=[(".decal.uvh5", ".calfits")],
-            fname_format="zen.{kind}.{lst:7.5f}.recal.uvh5",
-            Nbls_to_load=10,
-            rephase=False,
-        )
-
-        lstbin.make_lst_bin_config_file(
-            cfl,
-            data_files,
-            ntimes_per_file=2,
-            clobber=True,
-        )
-        out_files = lstbin.lst_bin_files(
-            config_file=cfl,
-            fname_format="zen.{kind}.{lst:7.5f}.uvh5",
-            Nbls_to_load=11,
-            rephase=False,
-        )
-
-        for flset, flsetc in zip(out_files, out_files_recal):
-            assert flset[("LST", False)] != flsetc[("LST", False)]
-            uvdlst = UVData()
-            uvdlst.read(flset[("LST", False)])
-
-            uvdlstc = UVData()
-            uvdlstc.read(flsetc[("LST", False)])
-            print(np.unique(uvdlstc.lst_array))
-            expected = mockuvd.identifiable_data_from_uvd(uvdlst, reshape=False)
-
-            strpols = utils.polnum2str(uvdlst.polarization_array)
-            for i, ap in enumerate(uvdlst.get_antpairs()):
-                for j, pol in enumerate(strpols):
-                    print(f"Baseline {ap + (pol,)}")
-
-                    # We only check where the flags are False, because
-                    # when we put in flags, we end up setting the data to nan (and
-                    # never using it...)
-                    np.testing.assert_allclose(
-                        np.where(
-                            uvdlst.get_flags(ap + (pol,)),
-                            1.0,
-                            uvdlstc.get_data(ap + (pol,)),
-                        ),
-                        np.where(
-                            uvdlst.get_flags(ap + (pol,)), 1.0, expected[i, :, :, j]
-                        ),
-                        rtol=1e-4,
-                    )
-
-            # Don't worry about history here, because we know they use different inputs
-            uvdlst.history = uvdlstc.history
-            assert uvdlst == uvdlstc
-
-    @pytest.mark.parametrize(
-        "random_ants_to_drop, rephase, sigma_clip_thresh, flag_strategy, pols, freq_range",
-        [
-            (0, True, 0.0, (0, 0, 0), ("xx", "yy"), None),
-            (0, True, 0.0, (0, 0, 0), ("xx", "yy", "xy", "yx"), None),
-            (0, True, 0.0, (0, 0, 0), ("xx", "yy"), (150e6, 180e6)),
-            (0, True, 0.0, (2, 1, 3), ("xx", "yy"), None),
-            (0, True, 3.0, (0, 0, 0), ("xx", "yy"), None),
-            (0, False, 0.0, (0, 0, 0), ("xx", "yy"), None),
-            (3, True, 0.0, (0, 0, 0), ("xx", "yy"), None),
-        ],
-    )
-    def test_nontrivial_cal(
-        self,
-        tmp_path_factory,
-        random_ants_to_drop: int,
-        rephase: bool,
-        sigma_clip_thresh: float,
-        flag_strategy: tuple[int, int, int],
-        pols: tuple[str],
-        freq_range: tuple[float, float] | None,
-        benchmark,
-    ):
-        tmp = tmp_path_factory.mktemp("nontrivial_cal")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=2,
-            ntimes=2,
-            ants=np.arange(7),
-            creator=mockuvd.create_uvd_identifiable,
-            pols=pols,
-            freqs=np.linspace(140e6, 180e6, 3),
-            random_ants_to_drop=random_ants_to_drop,
-        )
-
-        uvcs = [
-            [mockuvd.make_uvc_identifiable(d, *flag_strategy) for d in uvd]
-            for uvd in uvds
-        ]
-
-        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
-        cal_files = mockuvd.write_cals_in_hera_format(uvcs, tmp)
-        decal_files = [
-            [df.replace(".uvh5", ".decal.uvh5") for df in dfl] for dfl in data_files
-        ]
-
-        for flist, clist, ulist in zip(data_files, cal_files, decal_files):
-            for df, cf, uf in zip(flist, clist, ulist):
-                apply_cal.apply_cal(
-                    df,
-                    uf,
-                    cf,
-                    gain_convention="divide",  # go the wrong way
-                    clobber=True,
-                )
-
-        cfl = tmp / "lstbin_config_file.yaml"
-        lstbin.make_lst_bin_config_file(
-            cfl,
-            data_files,
-            ntimes_per_file=2,
-            clobber=True,
-        )
-        out_files = benchmark(
-            lstbin.lst_bin_files,
-            config_file=cfl,
-            fname_format="zen.{kind}.{lst:7.5f}.uvh5",
-            Nbls_to_load=11,
-            rephase=rephase,
-            sigma_clip_thresh=sigma_clip_thresh,
-            sigma_clip_min_N=2,
-            freq_min=freq_range[0] if freq_range is not None else None,
-            freq_max=freq_range[1] if freq_range is not None else None,
-            overwrite=True,
-        )
-        assert len(out_files) == 2
-        for flset in out_files:
-            uvdlst = UVData()
-            uvdlst.read(flset[("LST", False)])
-
-            # Don't worry about history here, because we know they use different inputs
-            expected = mockuvd.identifiable_data_from_uvd(uvdlst, reshape=False)
-
-            strpols = utils.polnum2str(uvdlst.polarization_array)
-            for i, ap in enumerate(uvdlst.get_antpairs()):
-                for j, pol in enumerate(strpols):
-                    print(f"Baseline {ap + (pol,)}")
-
-                    # Unfortunately, we don't have LSTs for the files that exactly align
-                    # with bin centres, so some rephasing will happen -- we just have to
-                    # live with it and change the tolerance
-                    # Furthermore, we only check where the flags are False, because
-                    # when we put in flags, we end up setting the data to 1.0 (and
-                    # never using it...)
-                    print(uvdlst.get_data(ap))
-                    print(expected[i])
-                    np.testing.assert_allclose(
-                        np.where(
-                            uvdlst.get_flags(ap + (pol,)),
-                            1.0,
-                            uvdlst.get_data(ap + (pol,)),
-                        ),
-                        np.where(
-                            uvdlst.get_flags(ap + (pol,)), 1.0, expected[i, :, :, j]
-                        ),
-                        rtol=1e-4
-                        if (not rephase or (ap[0] == ap[1] and pol[0] == pol[1]))
-                        else 1e-3,
-                    )
-
-    @pytest.mark.parametrize("tell_it", (True, False))
-    def test_redundantly_averaged(self, tmp_path_factory, tell_it):
-        tmp = tmp_path_factory.mktemp("nontrivial_cal")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=2,
-            ntimes=2,
-            creator=mockuvd.create_uvd_identifiable,
-            antpairs=[(i, j) for i in range(7) for j in range(i, 7)],  # 55 antpairs
-            pols=("xx", "yx"),
-            freqs=np.linspace(140e6, 180e6, 3),
-            redundantly_averaged=True,
-        )
-
-        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
-
-        cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin.make_lst_bin_config_file(
-            cfl,
-            data_files,
-            ntimes_per_file=2,
-            clobber=True,
-        )
-        out_files = lstbin.lst_bin_files(
-            config_file=cfl,
-            fname_format="zen.{kind}.{lst:7.5f}.uvh5",
-            Nbls_to_load=11,
-            rephase=False,
-            sigma_clip_thresh=0.0,
-            sigma_clip_min_N=2,
-            redundantly_averaged=True if tell_it else None,
-        )
-
-        assert len(out_files) == 2
-
-        for flset in out_files:
-            uvdlst = UVData()
-            uvdlst.read(flset[("LST", False)])
-
-            # Don't worry about history here, because we know they use different inputs
-            expected = mockuvd.identifiable_data_from_uvd(uvdlst, reshape=False)
-
-            strpols = utils.polnum2str(uvdlst.polarization_array)
-
-            for i, ap in enumerate(uvdlst.get_antpairs()):
-                for j, pol in enumerate(strpols):
-                    print(f"Baseline {ap + (pol,)}")
-
-                    # Unfortunately, we don't have LSTs for the files that exactly align
-                    # with bin centres, so some rephasing will happen -- we just have to
-                    # live with it and change the tolerance
-                    # Furthermore, we only check where the flags are False, because
-                    # when we put in flags, we end up setting the data to 1.0 (and
-                    # never using it...)
-                    np.testing.assert_allclose(
-                        uvdlst.get_data(ap + (pol,)),
-                        np.where(
-                            uvdlst.get_flags(ap + (pol,)), 1.0, expected[i, :, :, j]
-                        ),
-                        rtol=1e-4,
-                    )
-
-    def test_output_file_select(self, tmp_path_factory):
-        tmp = tmp_path_factory.mktemp("output_file_select")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=4,
-            ntimes=2,
-            creator=mockuvd.create_uvd_identifiable,
-            antpairs=[(i, j) for i in range(4) for j in range(i, 4)],  # 55 antpairs
-            pols=("xx", "yx"),
-            freqs=np.linspace(140e6, 180e6, 3),
-        )
-
-        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
-
-        cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin.make_lst_bin_config_file(
-            cfl,
-            data_files,
-            ntimes_per_file=2,
-            clobber=True,
-        )
-        lstbf = partial(
-            lstbin.lst_bin_files,
-            config_file=cfl,
-            fname_format="zen.{kind}.{lst:7.5f}.uvh5",
-            Nbls_to_load=11,
-            rephase=False,
-        )
-
-        out_files = lstbf(output_file_select=0)
-        assert len(out_files) == 1
-
-        out_files = lstbf(output_file_select=(1, 2))
-        assert len(out_files) == 2
-
-        with pytest.raises(
-            ValueError,
-            match="output_file_select must be less than the number of output files",
-        ):
-            lstbf(output_file_select=100)
-
-    def test_inpaint_mode_no_flags(self, tmp_path_factory):
-        """Test that using inpaint mode does nothing when there's no flags."""
-        tmp = tmp_path_factory.mktemp("inpaint_no_flags")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=1,
-            ntimes=2,
-            creator=mockuvd.create_uvd_identifiable,
-            antpairs=[(i, j) for i in range(3) for j in range(i, 3)],  # 55 antpairs
-            pols=("xx", "yx"),
-            freqs=np.linspace(140e6, 180e6, 3),
-            redundantly_averaged=True,
-        )
-
-        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
-
-        cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin.make_lst_bin_config_file(
-            cfl,
-            data_files,
-            ntimes_per_file=2,
-            clobber=True,
-        )
-
-        # Additionally try fname format with leading / which should be removed
-        # automatically in the writing.
-        out_files = lstbin.lst_bin_files(
-            config_file=cfl,
-            fname_format="/zen.{kind}.{lst:7.5f}.{inpaint_mode}.uvh5",
-            rephase=False,
-            sigma_clip_thresh=None,
-            sigma_clip_min_N=2,
-            output_flagged=True,
-            output_inpainted=True,
-        )
-
-        assert len(out_files) == 1
-
-        for flset in out_files:
-            flagged = UVData.from_file(flset[("LST", False)])
-            inpainted = UVData.from_file(flset[("LST", True)])
-
-            assert flagged == inpainted
-
-    def test_inpaint_mode_no_flags_where_inpainted(self, tmp_path_factory):
-        """Test that ."""
-        tmp = tmp_path_factory.mktemp("inpaint_no_flags")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=1,
-            ntimes=2,
-            creator=mockuvd.create_uvd_identifiable,
-            antpairs=[(i, j) for i in range(3) for j in range(i, 3)],  # 55 antpairs
-            pols=("xx", "yx"),
-            freqs=np.linspace(140e6, 180e6, 3),
-            redundantly_averaged=True,
-        )
-
-        data_files = mockuvd.write_files_in_hera_format(
-            uvds, tmp, add_where_inpainted_files=True
-        )
-
-        cfl = tmp / "lstbin_config_file.yaml"
-        config_info = lstbin.make_lst_bin_config_file(
-            cfl,
-            data_files,
-            ntimes_per_file=2,
-            clobber=True,
-        )
-        out_files = lstbin.lst_bin_files(
-            config_file=cfl,
-            fname_format="zen.{kind}.{lst:7.5f}{inpaint_mode}.uvh5",
-            rephase=False,
-            sigma_clip_thresh=None,
-            sigma_clip_min_N=2,
-            output_flagged=True,
-            output_inpainted=True,
-            where_inpainted_file_rules=[(".uvh5", ".where_inpainted.h5")],
-        )
-
-        assert len(out_files) == 1
-
-        for flset in out_files:
-            flagged = UVData.from_file(flset[("LST", False)])
-            inpainted = UVData.from_file(flset[("LST", True)])
-
-            assert flagged == inpainted
-
-    def test_where_inpainted_not_baseline_type(self, tmp_path_factory):
-        """Test that proper error is raised when using incorrect inpainted files."""
-        tmp = tmp_path_factory.mktemp("inpaint_not_baseline_type")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=1,
-            ntimes=2,
-            creator=mockuvd.create_uvd_identifiable,
-            antpairs=[(i, j) for i in range(3) for j in range(i, 3)],  # 55 antpairs
-            pols=("xx", "yx"),
-            freqs=np.linspace(140e6, 180e6, 3),
-            redundantly_averaged=True,
-        )
-
-        data_files = mockuvd.write_files_in_hera_format(
-            uvds, tmp, add_where_inpainted_files=True
-        )
-
-        # Now create dodgy where_inpainted files
-        inp = lstbin.io._get_where_inpainted_files(
-            data_files, [(".uvh5", ".where_inpainted.h5")]
-        )
-        for fllist in inp:
-            for fl in fllist:
-                uvf = UVFlag()
-                uvf.read(fl)
-                uvf.to_waterfall()
-                uvf.to_flag()
-                uvf.write(fl.replace(".h5", ".waterfall.h5"), clobber=True)
-
-        cfl = tmp / "lstbin_config_file.yaml"
-        lstbin.make_lst_bin_config_file(
-            cfl,
-            data_files,
-            ntimes_per_file=2,
-            clobber=True,
-        )
-        with pytest.raises(ValueError, match="to be a DataContainer"):
-            lstbin.lst_bin_files(
-                config_file=cfl,
-                fname_format="zen.{kind}.{lst:7.5f}{inpaint_mode}.uvh5",
-                output_flagged=False,
-                where_inpainted_file_rules=[(".uvh5", ".where_inpainted.waterfall.h5")],
-            )
-
-    def test_sigma_clip_use_autos(self, tmp_path_factory):
-        tmp = tmp_path_factory.mktemp("test_sigma_clip_use_autos")
-        uvds = mockuvd.make_dataset(
-            ndays=3,
-            nfiles=4,
-            ntimes=2,
-            creator=mockuvd.create_uvd_identifiable,
-            antpairs=[(i, j) for i in range(10) for j in range(i, 10)],  # 55 antpairs
-            pols=["xx", "yy"],
-            freqs=np.linspace(140e6, 180e6, 12),
-        )
-        data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
-
-        cfl = tmp / "lstbin_config_file.yaml"
-        lstbin.make_lst_bin_config_file(
-            cfl,
-            data_files,
-            ntimes_per_file=2,
-        )
-
-        out_files = lstbin.lst_bin_files(
-            config_file=cfl,
-            fname_format="zen.{kind}.{lst:7.5f}.uvh5",
-            write_med_mad=False,
-            sigma_clip_thresh=10.0,
-            sigma_clip_use_autos=True,
-        )
-
-        for flset in out_files:
-            uvdlst = UVData()
-            # Just making sure it ran...
-            uvdlst.read(flset[("LST", False)])
-
-
-def test_get_where_inpainted(tmp_path_factory):
-    tmp: Path = tmp_path_factory.mktemp("get_where_inpainted")
-
-    fls = []
-    for outer in ["abc", "def"]:
-        these = []
-        for filename in outer:
-            (tmp / f"{filename}.uvh5").touch()
-            (tmp / f"{filename}.where_inpainted.h5").touch()
-            these.append(tmp / f"{filename}.uvh5")
-        fls.append(these)
-
-    out = lstbin.io._get_where_inpainted_files(
-        fls, [(".uvh5", ".where_inpainted.h5")]
-    )
-
-    assert len(out) == 2
-    assert len(out[0]) == 3
-    assert len(out[1]) == 3
-
-    with pytest.raises(IOError, match="Where inpainted file"):
-        lstbin.io._get_where_inpainted_files(fls, [(".uvh5", ".non_existent.h5")])
-
-
-def test_configure_inpainted_mode():
-    flg, inp = lstbin.io._configure_inpainted_mode(
-        output_flagged=True, output_inpainted=True, where_inpainted_files=[]
-    )
-    assert flg
-    assert inp
-
-    flg, inp = lstbin.io._configure_inpainted_mode(
-        output_flagged=True, output_inpainted=True, where_inpainted_files=["a_file.h5"]
-    )
-    assert flg
-    assert inp
-
-    flg, inp = lstbin.io._configure_inpainted_mode(
-        output_flagged=True, output_inpainted=False, where_inpainted_files=[]
-    )
-    assert flg
-    assert not inp
-
-    flg, inp = lstbin.io._configure_inpainted_mode(
-        output_flagged=True, output_inpainted=False, where_inpainted_files=["a_file.h5"]
-    )
-    assert flg
-    assert not inp
-
-    flg, inp = lstbin.io._configure_inpainted_mode(
-        output_flagged=True, output_inpainted=None, where_inpainted_files=[]
-    )
-    assert flg
-    assert not inp
-
-    flg, inp = lstbin.io._configure_inpainted_mode(
-        output_flagged=True, output_inpainted=None, where_inpainted_files=["a_file.h5"]
-    )
-    assert flg
-    assert inp
-
-    flg, inp = lstbin.io._configure_inpainted_mode(
-        output_flagged=False, output_inpainted=True, where_inpainted_files=[]
-    )
-    assert not flg
-    assert inp
-
-    with pytest.raises(ValueError, match="Both output_inpainted and output_flagged"):
-        lstbin.io._configure_inpainted_mode(
-            output_flagged=False, output_inpainted=False, where_inpainted_files=[]
-        )
-
-
-class TestThresholdFlags:
-    def test_inplace(self):
-        flags = np.zeros((10, 12), dtype=bool)  # shape = (ntime, ...)
-        flags[:8, 0] = True
-
-        new = lstbin.averaging.threshold_flags(flags, flag_thresh=0.7, inplace=True)
-
-        assert np.all(flags[:, 0])
-        assert np.all(new == flags)
-
-    def test_not_inplace(self):
-        flags = np.zeros((10, 12), dtype=bool)  # shape = (ntime, ...)
-        flags[:8, 0] = True
-
-        new = lstbin.averaging.threshold_flags(flags, flag_thresh=0.7, inplace=False)
-
-        assert not np.all(flags[:, 0])
-        assert np.all(new[:, 0])
-
-
-# Define a fixture for common array shapes used in the tests
-@pytest.fixture(params=[(10, 5, 5, 2), (8, 10, 10, 4), (15, 3, 7, 1)])
-def array_shape(request):
-    return request.param
-
-
-class TestSigmaClip:
-    # Happy path tests with various realistic test values
-    @pytest.mark.parametrize(
-        "threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands",
-        [
-            (4.0, 4, 0, 0, 'direct', None),
-            (3.0, 4, 1, 1, 'mean', [(1, 3), (4, 5)]),
-            (5.0, 4, 2, 2, 'median', [(2, 4)]),
-        ]
-    )
-    def test_sigma_clip_happy_path(
-        self, array_shape, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands
-    ):
-        # Arrange
-        np.random.seed(42)
-        array = np.random.normal(size=array_shape)
-
-        print(
-            f"threshold={threshold}, min_N={min_N}, median_axis={median_axis}, "
-            f"threshold_axis={threshold_axis}, array_shape={array_shape}, "
-            f"clip_type={clip_type}, flag_bands={flag_bands}"
-        )
-        # Act
-        clip_flags = lstbin.sigma_clip(
-            array=array,
-            threshold=threshold,
-            min_N=min_N,
-            median_axis=median_axis,
-            threshold_axis=threshold_axis,
-            clip_type=clip_type,
-            flag_bands=flag_bands
-        )
-
-        # Assert
-        assert isinstance(clip_flags, np.ndarray), "The output should be an ndarray."
-        assert clip_flags.dtype == bool, "The output array should be of boolean type."
-        assert clip_flags.shape == array.shape, "The output flags should have the same shape as the input array."
-
-    # Edge cases
-    @pytest.mark.parametrize("array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id", [
-        (np.array([]), 4.0, 4, 0, 0, 'direct', None, 'edge_empty_array'),
-        (np.array([np.nan, np.nan]), 4.0, 4, 0, 0, 'direct', None, 'edge_all_nan'),
-        (np.random.normal(size=(5, 5)), 4.0, 6, 0, 0, 'direct', None, 'edge_below_min_N'),
-    ])
-    def test_sigma_clip_edge_cases(self, array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands, test_id):
-        # Act
-        clip_flags = lstbin.sigma_clip(
-            array, threshold, min_N, median_axis, threshold_axis, clip_type, flag_bands
-        )
-
-        # Assert
-        assert isinstance(clip_flags, np.ndarray), f"Test ID: {test_id} - The output should be an ndarray."
-        assert clip_flags.dtype == bool, f"Test ID: {test_id} - The output array should be of boolean type."
-        assert clip_flags.shape == array.shape, f"Test ID: {test_id} - The output flags should have the same shape as the input array."
-
-    # Error cases
-    def test_sigma_clip_error_cases(self):
-        # Act / Assert
-        array = np.array([1 + 1j, 2 + 2j])
-        with pytest.raises(ValueError, match=".*must be real.*"):
-            lstbin.sigma_clip(array)
-
-        array = np.array([1, 2])
-        with pytest.raises(ValueError, match=".*clip_type.*"):
-            lstbin.sigma_clip(array, min_N=0, clip_type='wrong_clip_type')
-
-    @pytest.mark.parametrize(
-        "clip_type", ['direct', 'mean', 'median']
-    )
-    @pytest.mark.parametrize(
-        "flag_bands", [None, [(0, 12)], [(0, 1), (1, 12)]]
-    )
-    def test_constant_data_no_flags(self, clip_type, flag_bands):
-        """Test an array with a reasonable expected shape, but constant values.
-
-        Expect that nothing is flagged in this case.
-        """
-        array = np.ones((10, 8, 12, 4))  # nnights, nbls, nfreqs, npols
-        clip_flags = lstbin.sigma_clip(
-            array,
-            clip_type=clip_type,
-            flag_bands=flag_bands,
-            median_axis=0,
-            threshold_axis=2,
-            min_N=0,
-            threshold=3.0,
-        )
-        assert not np.any(clip_flags)
-
-    def test_spiky_data_direct_clip(self):
-        """Test an array with a reasonable expected shape with spiky outliers.
-
-        We expect that JUST the outliers are flagged.
-        """
-        array = np.random.normal(size=(100, 8, 12, 4))  # nnights, nbls, nfreqs, npols
-
-        array[1, 0, 0, 0] = 1000
-        array[0, 1, 0, 0] = 1000
-        array[0, 0, 1, 0] = 1000
-        array[0, 0, 0, 1] = 1000
-
-        clip_flags = lstbin.sigma_clip(
-            array,
-            clip_type='direct',
-            median_axis=0,
-            threshold_axis=2,
-            min_N=0,
-            threshold=10.0,
-        )
-
-        assert np.sum(clip_flags) == 4
-        assert clip_flags[1, 0, 0, 0]
-        assert clip_flags[0, 1, 0, 0]
-        assert clip_flags[0, 0, 1, 0]
-        assert clip_flags[0, 0, 0, 1]
-
-    @pytest.mark.parametrize(
-        "flag_bands", [[(0, 12)], [(0, 2), (2, 12)]]
-    )
-    @pytest.mark.parametrize(
-        "clip_type", ['mean', 'median']
-    )
-    def test_spiky_data_mean_clip(self, flag_bands, clip_type):
-        """Test an array with a reasonable expected shape with spiky outliers.
-
-        In this case, we aggregate over the frequency axis by taking the mean,
-        and we also flag in particular bands.
-        """
-        array = np.random.normal(size=(100, 8, 12, 4))
-
-        array[0, 0, flag_bands[0][0]:flag_bands[0][1], 0] = 1000
-
-        clip_flags = lstbin.sigma_clip(
-            array,
-            clip_type=clip_type,
-            median_axis=0,
-            threshold_axis=2,
-            min_N=0,
-            threshold=6.0,
-            flag_bands=flag_bands,
-        )
-
-        # The entire first band should be clipped, but nothing else.
-        assert np.sum(clip_flags) == flag_bands[0][1] - flag_bands[0][0]
-        assert np.all(clip_flags[0, 0, flag_bands[0][0]:flag_bands[0][1], 0])
-
-    def test_passing_list(self):
-        """Test that passing a list of arrays works."""
-        array = np.random.normal(size=(8, 12, 4))
-        clip_flags = lstbin.sigma_clip(
-            [array, array],
-            clip_type='direct',
-            median_axis=0,
-            threshold_axis=2,
-            min_N=0,
-            threshold=3.0,
-        )
-
-        assert clip_flags[0].shape == array.shape
-        assert clip_flags[1].shape == array.shape
-
-    @pytest.mark.parametrize(
-        "scale", [
-            np.random.normal(size=(8, 12, 4)),  # no median_axis
-            np.random.normal(size=(1, 8, 12, 4)),  # dummy median axis
-            np.random.normal(size=(10, 8, 12, 4)),  # full median axis
-        ]
-    )
-    def test_passing_good_scale(self, scale):
-        """Test that passing a scale works."""
-        array = np.random.normal(size=(10, 8, 12, 4))
-        clip_flags = lstbin.sigma_clip(
-            array,
-            clip_type='direct',
-            median_axis=0,
-            threshold_axis=2,
-            min_N=0,
-            threshold=3.0,
-            scale=scale,
-        )
-
-        assert clip_flags.shape == array.shape
-
-    @pytest.mark.parametrize(
-        "scale", [
-            np.random.normal(size=(12, 4)),  # no median_axis
-            np.random.normal(size=(11, 8, 12, 4)),  # dummy median axis
-        ]
-    )
-    def test_passing_bad_scale(self, scale):
-        """Test that passing a scale works."""
-        array = np.random.normal(size=(10, 8, 12, 4))
-        with pytest.raises(ValueError, match='scale must have same shape as array'):
-            clip_flags = lstbin.sigma_clip(
-                array,
-                clip_type='direct',
-                median_axis=0,
-                threshold_axis=2,
-                min_N=0,
-                threshold=3.0,
-                scale=scale,
-            )
+from .. import io, lstbin, utils, redcal
+from ..datacontainer import DataContainer
+from ..data import DATA_PATH
+import shutil
+
+
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*Using known values for HERA",
+)
+
+
+@pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
+@pytest.mark.filterwarnings("ignore:Degrees of freedom <= 0 for slice")
+@pytest.mark.filterwarnings("ignore:Mean of empty slice")
+@pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
+@pytest.mark.filterwarnings("ignore:invalid value encountered in greater")
+class Test_lstbin:
+    def setup_method(self):
+        # load data
+        np.random.seed(0)
+        self.data_files = [sorted(glob.glob(DATA_PATH + '/zen.2458043.4*XRAA.uvh5')),
+                           sorted(glob.glob(DATA_PATH + '/zen.2458044.4*XRAA.uvh5')),
+                           sorted(glob.glob(DATA_PATH + '/zen.2458045.4*XRAA.uvh5'))]
+        self.ant_yamls = [DATA_PATH + '/2458043.yaml',
+                          DATA_PATH + '/2458044.yaml',
+                          DATA_PATH + '/2458045.yaml']
+
+        hd1 = io.HERAData(self.data_files[0])
+        hd2 = io.HERAData(self.data_files[1])
+        hd3 = io.HERAData(self.data_files[2])
+        self.data1, self.flgs1, self.nsmps1 = hd1.read()
+        self.ap1, self.freqs1, self.lsts1 = list(hd1.pols.values())[0], list(hd1.freqs.values())[0], np.hstack(list(hd1.lsts.values()))
+        self.data2, self.flgs2, self.nsmps2 = hd2.read()
+        self.ap2, self.freqs2, self.lsts2 = list(hd2.pols.values())[0], list(hd2.freqs.values())[0], np.hstack(list(hd2.lsts.values()))
+        self.data3, self.flgs3, self.nsmps3 = hd3.read()
+        self.ap3, self.freqs3, self.lsts3 = list(hd3.pols.values())[0], list(hd3.freqs.values())[0], np.hstack(list(hd3.lsts.values()))
+
+        hd1 = io.HERAData(self.data_files[0])
+        hd2 = io.HERAData(self.data_files[1])
+        hd3 = io.HERAData(self.data_files[2])
+        self.data1, self.flgs1, self.nsmps1 = hd1.read()
+        self.ap1, self.freqs1, self.lsts1 = list(hd1.pols.values())[0], list(hd1.freqs.values())[0], np.hstack(list(hd1.lsts.values()))
+        self.data2, self.flgs2, self.nsmps2 = hd2.read()
+        self.ap2, self.freqs2, self.lsts2 = list(hd2.pols.values())[0], list(hd2.freqs.values())[0], np.hstack(list(hd2.lsts.values()))
+        self.data3, self.flgs3, self.nsmps3 = hd3.read()
+        self.ap3, self.freqs3, self.lsts3 = list(hd3.pols.values())[0], list(hd3.freqs.values())[0], np.hstack(list(hd3.lsts.values()))
+
+        self.data_list = [self.data1, self.data2, self.data3]
+        self.flgs_list = [self.flgs1, self.flgs2, self.flgs3]
+        self.lst_list = [self.lsts1, self.lsts2, self.lsts3]
+        self.nsmp_list = [self.nsmps1, self.nsmps2, self.nsmps3]
+        self.file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
+        self.fname_format = "zen.{pol}.{kind}.{lst:7.5f}.uvh5"
+
+    def test_make_lst_grid(self):
+        lst_grid = lstbin.make_lst_grid(0.01, begin_lst=None)
+        assert len(lst_grid) == 628
+        assert np.isclose(lst_grid[0], 0.0050025360725952121)
+        lst_grid = lstbin.make_lst_grid(0.01, begin_lst=np.pi)
+        assert len(lst_grid) == 628
+        assert np.isclose(lst_grid[0], 3.1365901175171982)
+        lst_grid = lstbin.make_lst_grid(0.01, begin_lst=-np.pi)
+        assert len(lst_grid) == 628
+        assert np.isclose(lst_grid[0], 3.1365901175171982)
+
+    def test_config_lst_bin_files(self):
+        for data_files in [self.data_files,  # right order
+                           [self.data_files[1], self.data_files[0], self.data_files[2]],  # days out of order
+                           [self.data_files[0], self.data_files[1][::-1], self.data_files[2]]]:  # single day out of order
+            # test that dlst is right
+            lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays = lstbin.config_lst_bin_files(data_files, ntimes_per_file=60)
+            np.testing.assert_allclose(dlst, 0.0007830490163485138)
+            # test that lst_grid is reasonable
+            assert np.isclose(np.median(np.diff(lst_grid)), dlst)
+            for fla in file_lsts:
+                for fl in fla:
+                    assert fl in lst_grid
+            # test shape of file_lsts
+            assert len(file_lsts) == 4
+            for file_lst in file_lsts[0:-1]:
+                assert len(file_lst) == 60
+
+    @pytest.mark.filterwarnings("ignore:All-NaN slice encountered")
+    @pytest.mark.filterwarnings("ignore:divide by zero encountered in true_divide")
+    def test_lstbin(self):
+        dlst = 0.0007830490163484
+        # test basic execution
+        output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
+                                median=True, lst_low=0, lst_hi=np.pi, verbose=False)
+        output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
+                                verbose=False)
+
+        output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
+                                verbose=False)
+        # check shape and dtype
+        assert output[1][(24, 25, 'ee')].dtype == complex
+        assert output[1][(24, 25, 'ee')].shape == (224, 64)
+        # check number of points in each bin
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[0, 30], 1)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[30, 30], 2)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[100, 30], 3)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[190, 30], 2)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[220, 30], 1)
+        # check with large spacing lst_grid
+        output = lstbin.lst_bin(self.data_list, self.lst_list, dlst=.01, verbose=False)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[10, 30], 38)
+        # check flgs are propagated
+        flgs1 = copy.deepcopy(self.flgs1)
+        flgs1[(24, 25, 'ee')][:, 32] = True
+        flgs2 = copy.deepcopy(self.flgs2)
+        flgs2[(24, 25, 'ee')][:, 32] = True
+        flgs3 = copy.deepcopy(self.flgs3)
+        flgs_list = [flgs1, flgs2, flgs3]
+        output = lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst, flags_list=flgs_list)
+        assert np.allclose(output[2][(24, 25, 'ee')][0, 32], True)
+        assert np.allclose(output[2][(24, 25, 'ee')][180, 32], False)
+        assert np.allclose(output[2][(24, 25, 'ee')][210, 32], False)
+        # test return no avg
+        output = lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst, flags_list=self.flgs_list, return_no_avg=True)
+        assert len(output[2][list(output[2].keys())[0]][100]) == 3
+        assert len(output[2][list(output[2].keys())[0]][100][0]) == 64
+        # test switch bl
+        conj_data3 = DataContainer(odict([(utils.reverse_bl(k), np.conj(self.data3[k])) for k in self.data3.keys()]))
+        data_list = [self.data1, self.data2, conj_data3]
+        output = lstbin.lst_bin(data_list, self.lst_list, dlst=dlst)
+        assert output[1][(24, 25, 'ee')].shape == (224, 64)
+        # test sigma clip
+        output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
+                                verbose=False, sig_clip=True, min_N=5, sigma=2)
+        output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
+                                verbose=False, sig_clip=True, min_N=15, flag_below_min_N=True, sigma=2)
+        # test wrapping
+        lst_list = [(copy.deepcopy(lst) + 6) % (2 * np.pi) for lst in self.lst_list]
+        output = lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, begin_lst=np.pi)
+        assert output[0][0] > output[0][-1]
+        assert len(output[0]) == 175
+        # test appropriate data_count
+        output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=dlst, lst_low=0.25, lst_hi=0.3,
+                                verbose=False)
+        assert np.allclose(output[4][(24, 25, 'ee')], 3.0)
+        # test including additional baselines in bl_list:
+        output = lstbin.lst_bin(self.data_list, self.lst_list, nsamples_list=self.nsmp_list,
+                                flags_list=self.flgs_list, dlst=dlst, lst_low=0.25, lst_hi=0.3,
+                                verbose=False, bl_list=[(512, 512)])
+        assert (512, 512, 'ee') in output[4]
+        assert np.allclose(output[4][(512, 512, 'ee')], 0.0)
+        assert np.all(output[2][(512, 512, 'ee')])
+        assert np.allclose(output[1][(512, 512, 'ee')], 1.0)
+        # test conjugated flags and nsamples
+        flags_list_conj = copy.deepcopy(self.flgs_list)
+        nsamp_list_conj = copy.deepcopy(self.nsmp_list)
+        data_list_conj = copy.deepcopy(self.data_list)
+        # conjugate last night.
+        flags_list_conj[-1] = DataContainer({utils.reverse_bl(k): flags_list_conj[-1][k] for k in flags_list_conj[-1]})
+        nsamp_list_conj[-1] = DataContainer({utils.reverse_bl(k): nsamp_list_conj[-1][k] for k in nsamp_list_conj[-1]})
+        data_list_conj[-1] = DataContainer({utils.reverse_bl(k): np.conj(data_list_conj[-1][k]) for k in data_list_conj[-1]})
+        output2 = lstbin.lst_bin(data_list=data_list_conj, lst_list=self.lst_list,
+                                 flags_list=flags_list_conj, nsamples_list=nsamp_list_conj,
+                                 dlst=dlst, lst_low=0.25, lst_hi=0.3,
+                                 verbose=False, bl_list=[(512, 512)])
+        # assert outputs are identical, even with conjugations present in the last night.
+        for k in output2[4]:
+            assert np.all(np.isclose(output[4][k], output2[4][k]))
+            assert np.all(np.isclose(output[2][k], output2[2][k]))
+            assert np.all(np.isclose(output[1][k], output2[1][k]))
+
+    def test_lstbin_vary_nsamps(self):
+        # test execution
+        pytest.raises(NotImplementedError, lstbin.lst_bin, self.data_list, self.lst_list, flags_list=self.flgs_list,
+                      nsamples_list=self.nsmp_list, dlst=None,
+                      median=True, lst_low=0, lst_hi=np.pi, verbose=False)
+
+        lst_output, data_output, flags_output, _, nsamples_output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
+                                                                                   median=False, lst_low=0, lst_hi=np.pi, verbose=False)
+        output = lstbin.lst_bin(self.data_list + [data_output], self.lst_list + [lst_output], flags_list=self.flgs_list + [flags_output], dlst=None,
+                                nsamples_list=self.nsmp_list + [nsamples_output], median=False, verbose=False)
+        # test that nsamples_output are all 3.
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[0, 30], 2)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[30, 30], 4)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[100, 30], 6)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[190, 30], 4)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[220, 30], 2)
+
+    def test_lst_align(self):
+        # test basic execution
+        output = lstbin.lst_align(self.data1, self.lsts1, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
+        assert output[0][(24, 25, 'ee')].shape == (180, 64)
+        assert len(output[2]) == 180
+        assert np.allclose(output[2][0], 0.20163512170971379)
+        # test flag extrapolate
+        assert np.all(output[1][(24, 25, 'ee')][-1])
+        # test no dlst
+        output = lstbin.lst_align(self.data1, self.lsts1, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
+        # test wrapped lsts
+        lsts = (self.lsts1 + 6) % (2 * np.pi)
+        output = lstbin.lst_align(self.data1, lsts, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
+        assert np.allclose(output[2][150], 0.035628730243852047)
+
+    @pytest.mark.filterwarnings("ignore:The expected shape of the ENU array")
+    @pytest.mark.filterwarnings("ignore:antenna_diameters is not set")
+    def test_lst_bin_files(self):
+        # basic execution
+        file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                             verbose=False, file_ext=file_ext, ignore_flags=True)
+        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
+        output_std_file = "./zen.ee.STD.0.20124.uvh5"
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        uv1 = UVData()
+        uv1.read(output_lst_file, use_future_array_shapes=True)
+        # assert nsample w.r.t time follows 1-2-3-2-1 pattern
+        nsamps = np.mean(uv1.get_nsamples(52, 52, 'ee'), axis=1)
+        expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(22)]).astype(float)
+        assert np.allclose(nsamps[0:len(expectation)], expectation)
+        assert np.allclose(nsamps[len(expectation):], 0)
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+        # test with multiple blgroups
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                             verbose=False, file_ext=file_ext, Nblgroups=3, ignore_flags=True)
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        uv2 = UVData()
+        uv2.read(output_lst_file, use_future_array_shapes=True)
+        assert uv1 == uv2
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+        # test rephase
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                             verbose=False, rephase=True, file_ext=file_ext)
+        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
+        output_std_file = "./zen.ee.STD.0.20124.uvh5"
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+        # test data_list is empty
+        data_files = [[sorted(glob.glob(DATA_PATH + '/zen.2458043.*XRAA.uvh5'))[0]],
+                      [sorted(glob.glob(DATA_PATH + '/zen.2458045.*XRAA.uvh5'))[-1]]]
+        lstbin.lst_bin_files(data_files, ntimes_per_file=30, outdir="./", overwrite=True,
+                             verbose=False, file_ext=file_ext)
+        output_lst_files = ['./zen.ee.LST.0.20124.uvh5', './zen.ee.LST.0.31870.uvh5', './zen.ee.LST.0.36568.uvh5']
+        assert os.path.exists(output_lst_files[0])
+        assert os.path.exists(output_lst_files[1])
+        assert os.path.exists(output_lst_files[2])
+        output_files = np.concatenate([glob.glob("./zen.ee.LST*"),
+                                       glob.glob("./zen.ee.STD*")])
+        for of in output_files:
+            if os.path.exists(of):
+                os.remove(of)
+
+        # test smaller ntimes file output, sweeping through f_select
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True,
+                             verbose=False, vis_units='Jy', file_ext=file_ext)
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        # load a file
+        uvd1 = UVData()
+        uvd1.read(output_files[1], use_future_array_shapes=True)
+        assert uvd1.vis_units == 'Jy'
+        assert 'Thisfilewasproducedbythefunction' in uvd1.history.replace('\n', '').replace(' ', '')
+        assert uvd1.Ntimes == 80
+        assert np.isclose(uvd1.nsample_array.max(), 3.0)
+        # remove files
+        for of in output_files:
+            if os.path.exists(of):
+                os.remove(of)
+
+        # test output_file_select
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True, output_file_select=1,
+                             verbose=False, vis_units='Jy', file_ext=file_ext)
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        # load a file
+        uvd2 = UVData()
+        uvd2.read(output_files[0], use_future_array_shapes=True)
+        # assert equivalence with previous run
+        assert uvd1 == uvd2
+        # remove files
+        for of in output_files:
+            if os.path.exists(of):
+                os.remove(of)
+
+        # assert bad output_file_select produces no files
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        for of in output_files:
+            if os.path.exists(of):
+                os.remove(of)
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True, output_file_select=100,
+                             verbose=False, file_ext=file_ext)
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        assert len(output_files) == 0
+
+        # test fixed start
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                             verbose=False, lst_start=0.18, fixed_lst_start=True, file_ext=file_ext)
+        output_lst_file = "./zen.ee.LST.0.17932.uvh5"
+        output_std_file = "./zen.ee.STD.0.17932.uvh5"
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+        extra_files = ["zen.ee.LST.0.37508.uvh5", "zen.ee.STD.0.37508.uvh5"]
+        for of in extra_files:
+            if os.path.exists(of):
+                os.remove(of)
+
+        # test input_cal
+        uvc = UVCal()
+        uvc.read_calfits(os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits'),
+                         use_future_array_shapes=True)
+
+        uvc.flag_array[uvc.ant_array.tolist().index(24)] = True
+        uvc.gain_array[uvc.ant_array.tolist().index(25)] = 1e10
+        input_cals = []
+        for dfiles in self.data_files:
+            input_cals.append([uvc for df in dfiles])
+
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                             verbose=False, input_cals=input_cals, file_ext=file_ext)
+
+        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
+        output_std_file = "./zen.ee.STD.0.20124.uvh5"
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+        # test input_cal with only one Ntimes
+        input_cals = []
+        for dfiles in self.data_files:
+            input_cals.append([uvc.select(times=uvc.time_array[:1], inplace=False) for df in dfiles])
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                             verbose=False, input_cals=input_cals, file_ext=file_ext)
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+
+        # assert gains and flags were propagated
+        lstb = UVData()
+        lstb.read(output_lst_file, use_future_array_shapes=True)
+        assert np.allclose(np.abs(lstb.get_data(25, 37)[~lstb.get_flags(25, 37)]), 0.0)
+        assert np.all(lstb.get_flags(24, 25))
+        # make sure a is in the data when we dont use the flag yaml.
+        for a in [24, 25, 37, 38]:
+            assert a in np.unique(np.hstack([lstb.ant_1_array, lstb.ant_2_array]))
+        # test removing antennas in a flag yaml
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                             verbose=False, input_cals=input_cals, file_ext=file_ext,
+                             ex_ant_yaml_files=self.ant_yamls)
+        lstb = UVData()
+        lstb.read(output_lst_file, use_future_array_shapes=True)
+        for a in [24, 25, 37, 38]:
+            assert a not in np.unique(np.hstack([lstb.ant_1_array, lstb.ant_2_array]))
+
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+    def test_lstbin_files_inhomogenous_baselines(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        # now do a test with a more complicated set of files with inhomogenous baselines.
+        # between different nights.
+        # we want to test that each file that is written has identical ant_1_array
+        # and ant_2_array and have baselines that include the union of all the nights.
+        os.mkdir(tmp_path + '/lstbin_output/')
+        data_lists = [sorted(glob.glob(f'{DATA_PATH}/{jd}/*.uvh5')) for jd in [2459118, 2459119, 2459122, 2459139]]
+        lstbin.lst_bin_files(data_lists, outdir=tmp_path + '/lstbin_output/', lst_start=5.178260914725223,
+                             dlst=0.0007046864745507975, ntimes_per_file=6)
+
+        bl_union = set()
+        for dlist in data_lists:
+            hd = UVData()
+            hd.read(dlist[-1], use_future_array_shapes=True)
+            for bl in hd.get_antpairs():
+                bl_union.add(bl)
+        output_files = sorted(glob.glob(tmp_path + '/lstbin_output/*LST*.uvh5'))
+        lstb = UVData()
+        lstb.read(output_files[0], use_future_array_shapes=True)
+        a1arr = lstb.ant_1_array[::lstb.Ntimes]
+        a2arr = lstb.ant_2_array[::lstb.Ntimes]
+        for of in output_files[1:]:
+            lstb = UVData()
+            lstb.read(of, use_future_array_shapes=True)
+            assert np.all(lstb.ant_1_array[::lstb.Ntimes] == a1arr)
+            assert np.all(lstb.ant_2_array[::lstb.Ntimes] == a2arr)
+            aps = set(lstb.get_antpairs())
+            for ap in aps:
+                assert ap in bl_union or ap[::-1] in bl_union
+            for ap in bl_union:
+                assert ap in aps or ap[::-1] in aps
+
+        # Do the same test with partial bl loading.
+        shutil.rmtree(tmp_path + '/lstbin_output/')
+        os.mkdir(tmp_path + '/lstbin_output/')
+        data_lists = [sorted(glob.glob(f'{DATA_PATH}/{jd}/*.uvh5')) for jd in [2459118, 2459119, 2459122, 2459139]]
+        lstbin.lst_bin_files(data_lists, outdir=tmp_path + '/lstbin_output/', lst_start=5.178260914725223,
+                             dlst=0.0007046864745507975, ntimes_per_file=6, Nbls_to_load=1)
+        bl_union = set()
+        for dlist in data_lists:
+            hd = UVData()
+            hd.read(dlist[-1], use_future_array_shapes=True)
+            for bl in hd.get_antpairs():
+                bl_union.add(bl)
+        output_files = sorted(glob.glob(tmp_path + '/lstbin_output/*LST*.uvh5'))
+        lstb = UVData()
+        lstb.read(output_files[0], use_future_array_shapes=True)
+        a1arr = lstb.ant_1_array[::lstb.Ntimes]
+        a2arr = lstb.ant_2_array[::lstb.Ntimes]
+        for of in output_files[1:]:
+            lstb = UVData()
+            lstb.read(of, use_future_array_shapes=True)
+            # check that all outputs have same baselines
+            assert np.all(lstb.ant_1_array[::lstb.Ntimes] == a1arr)
+            assert np.all(lstb.ant_2_array[::lstb.Ntimes] == a2arr)
+            # check that all outputs have same baselines mod conjugation
+            # as the union of all baselines over all nights
+            aps = set(lstb.get_antpairs())
+            for ap in aps:
+                assert ap in bl_union or ap[::-1] in bl_union
+            for ap in bl_union:
+                assert ap in aps or ap[::-1] in aps
+        # test with redundant averaging
+        shutil.rmtree(tmp_path + '/lstbin_output/')
+        os.mkdir(tmp_path + '/lstbin_output/')
+        data_lists = [sorted(glob.glob(f'{DATA_PATH}/{jd}/*.uvh5')) for jd in [2459118, 2459119, 2459122, 2459139]]
+        lstbin.lst_bin_files(data_lists, outdir=tmp_path + '/lstbin_output/', lst_start=5.178260914725223,
+                             dlst=0.0007046864745507975, ntimes_per_file=6, average_redundant_baselines=True)
+        output_files = sorted(glob.glob(tmp_path + '/lstbin_output/*LST*.uvh5'))
+        lstb = UVData()
+        lstb.read(output_files[0], use_future_array_shapes=True)
+        a1arr = lstb.ant_1_array[::lstb.Ntimes]
+        a2arr = lstb.ant_2_array[::lstb.Ntimes]
+        for of in output_files[1:]:
+            lstb = UVData()
+            lstb.read(of, use_future_array_shapes=True)
+            assert np.all(lstb.ant_1_array[::lstb.Ntimes] == a1arr)
+            assert np.all(lstb.ant_2_array[::lstb.Ntimes] == a2arr)
+
+    def test_lst_bin_files_redundant_average(self, tmpdir):
+        # basic execution
+        tmp_path = tmpdir.strpath
+
+        file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
+        # generate list of redundantly averaged data files.
+        redundantly_averaged_filepaths = []
+        redundantly_averaged_data = []
+        redundantly_averaged_flags = []
+        redundantly_averaged_nsamples = []
+        # get reds
+        hdt = io.HERAData(self.data_files[0][0])
+        hdt.read()
+        ants_data = np.unique(np.hstack([hdt.ant_1_array, hdt.ant_2_array]))
+        antpos = {a: hdt.antpos[a] for a in ants_data}
+        reds_data = redcal.get_reds(antpos, include_autos=True)
+        reds_data = [[bl[:2] for bl in grp] for grp in reds_data]
+        # build redundantly averaged individual files and write them to disk.
+        for fnight, flist in enumerate(self.data_files):
+            redundantly_averaged_filepaths.append([])
+            for fstr in flist:
+                hd = io.HERAData(fstr)
+                hd.read()
+                if fnight == 1:
+                    # conjugate a group to test correctly keying cojugates.
+                    reds_average = copy.deepcopy(reds_data)
+                    reds_average[1] = [bl[::-1] for bl in reds_average[1]]
+                else:
+                    reds_to_average = reds_data
+                utils.red_average(hd, inplace=True, reds=reds_data)
+                out_path = os.path.join(tmp_path, fstr.split('/')[-1].replace('.uvh5', '.red_average.uvh5'))
+                hd.write_uvh5(out_path)
+                redundantly_averaged_filepaths[-1].append(out_path)
+        # test NotImplementedError when we set ignore_flags to True and average_redundant_baselines to True
+        pytest.raises(NotImplementedError, lstbin.lst_bin_files, data_files=self.data_files,
+                      outdir=tmp_path, overwrite=True, median=False,
+                      verbose=False, file_ext=file_ext,
+                      ignore_flags=True, average_redundant_baselines=True)
+        # get redundantly averaged nsamples.
+        lstbin.lst_bin_files(redundantly_averaged_filepaths, outdir=tmp_path, overwrite=True, median=False,
+                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=True)
+        output_lst_file = os.path.join(tmp_path, "zen.ee.LST.0.20124.uvh5")
+        output_std_file = os.path.join(tmp_path, "zen.ee.STD.0.20124.uvh5")
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        uv1 = io.HERAData(output_lst_file)
+        d1, f1, n1 = uv1.read()
+        lstbin.lst_bin_files(self.data_files, outdir=tmp_path, overwrite=True, median=False,
+                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=False)
+        uv2 = io.HERAData(output_lst_file)
+        uv2.read()
+        utils.red_average(uv2, inplace=True, reds=reds_data)
+        d2, f2, n2 = uv2.build_datacontainers()
+        # assert that all nsamples and data of lstbinned and red averaged equal to red average then lst bin.
+        for k in d2:
+            assert np.all(np.isclose(d1[k], d2[k]))
+            assert np.all(np.isclose(n1[k], n2[k]))
+            assert np.all(np.isclose(f1[k], f2[k]))
+        lstbin.lst_bin_files(self.data_files, outdir=tmp_path, overwrite=True, median=False,
+                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=True)
+        uv3 = io.HERAData(output_lst_file)
+        d3, f3, n3 = uv3.read()
+        # assert that all nsamples and data of lstbinned and red averaged equal to red average then lst bin.
+        for k in d2:
+            assert np.all(np.isclose(d3[k], d2[k]))
+            assert np.all(np.isclose(n3[k], n2[k]))
+            assert np.all(np.isclose(f3[k], f2[k]))
+
+        # next, remove one baseline from a group, including the first
+        # baseline which typically acts as the key for the redundant group
+        # this tests lstbinners ability to correctly match up red baselines
+        # between nights with non-matching keys.
+        reds_data_missing = copy.deepcopy(reds_data)
+        reds_data_missing[1] = reds_data_missing[1][2:]
+        bls_missing_first_group = []
+        for grp in reds_data_missing:
+            for bl in grp:
+                bls_missing_first_group.append(bl)
+        # replaced redundantly averaged files in second
+        # and third nights with data where
+        # first redundant group is missing two baselines.
+        for flist in self.data_files[1:]:
+            for fstr in flist:
+                hd = io.HERAData(fstr)
+                hd.read(bls=bls_missing_first_group)
+                utils.red_average(hd, inplace=True, reds=reds_data)
+                out_path = os.path.join(tmp_path, fstr.split('/')[-1].replace('.uvh5', '.red_average.uvh5'))
+                hd.write_uvh5(out_path, clobber=True)
+
+        lstbin.lst_bin_files(redundantly_averaged_filepaths, outdir=tmp_path, overwrite=True, median=False,
+                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=True)
+
+        uv4 = io.HERAData(output_lst_file)
+        d4, f4, n4 = uv4.read()
+        # assert that all nsamples and data of lstbinned and red averaged equal to red average then lst bin.
+        for k in d2:
+            if not(k[:2] in reds_data[1] or k[:2][::-1] in reds_data[1]):
+                assert np.all(np.isclose(n4[k], n2[k]))
+                assert np.all(np.isclose(d4[k], d2[k]))
+                assert np.all(np.isclose(f4[k], f2[k]))
+        # remove all but a single antenna from data on the first night.
+        for fnum, flist in enumerate(self.data_files):
+            for fstr in flist:
+                hd = UVData()
+                hd.read(fstr, use_future_array_shapes=True)
+                nants = len(hd.antenna_numbers)
+                # on first night, remove all but two antennas.
+                if fnum < 2:
+                    hd.select(antenna_nums=np.unique(hd.ant_1_array)[:2], keep_all_metadata=False)
+                hd.write_uvh5(os.path.join(tmp_path, 'temp.uvh5'), clobber=True)
+                hd = io.HERAData(os.path.join(tmp_path, 'temp.uvh5'))
+                hd.read()
+                if fnum < 2:
+                    assert len(hd.antpos) < nants
+                utils.red_average(hd, inplace=True, reds=reds_data)
+                out_path = os.path.join(tmp_path, fstr.split('/')[-1].replace('.uvh5', '.red_average.uvh5'))
+                hd.write_uvh5(out_path, clobber=True)
+
+        lstbin.lst_bin_files(redundantly_averaged_filepaths, outdir=tmp_path, overwrite=True, median=False,
+                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=True)
+        # assert that the keys when only two antennas are present on the first night data
+        # are identical to the data set when all antennas are present on the first night data
+        uv5 = io.HERAData(output_lst_file)
+        d5, f5, n5 = uv5.read()
+        assert sorted(list(d5.keys())) == sorted(list(d4.keys()))
+
+    def test_lst_bin_arg_parser(self):
+        a = lstbin.lst_bin_arg_parser()
+        args = a.parse_args(["--dlst", "0.1", "--input_cals", "zen.2458043.12552.HH.uvA.omni.calfits", "zen.2458043.12552.xx.HH.uvORA.abs.calfits",
+                             "--overwrite", "zen.2458042.12552.xx.HH.uvXA", "zen.2458043.12552.xx.HH.uvXA"])
+
+        assert np.isclose(args.dlst, 0.1)
+        assert len(args.input_cals) == 2
+        assert len(args.data_files) == 2
+
+    def test_sigma_clip(self):
+        # test basic execution
+        np.random.seed(0)
+        x = stats.norm.rvs(0, 1, 1000)
+        x[10] = 4
+        x[11] = -4
+        arr = lstbin.sigma_clip(x, sigma=2.0)
+        assert np.all(arr[10])
+        assert np.all(arr[11])
+        # test array performance
+        x = np.array([stats.norm.rvs(0, s, 100) for s in np.arange(1, 5.1, 1)])
+        x[0, 50] = 100
+        x[4, 50] = 5
+        arr = lstbin.sigma_clip(x, sigma=2.0)
+        assert np.all(arr[0, 50])
+        assert not np.any(arr[4, 50])
+
+    def test_gen_nightly_bldicts(self):
+        # Test some basic behavior for bl_nightly_dicts.
+        hds = [io.HERAData(df[-1]) for df in self.data_files]
+        for redundant in [True, False]:
+            nightly_bldict_list = lstbin.gen_bl_nightly_dicts(hds, redundant=redundant)
+            # baselines all agree over all nights. Make sure their bldicts reflect this.
+            for bldict in nightly_bldict_list:
+                assert len(bldict) == len(self.data_files)
+                assert np.all([bldict[0] == bldict[i] for i in bldict])
+
+    def tearDown(self):
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
+        for of in output_files:
+            if os.path.exists(of):
+                os.remove(of)
