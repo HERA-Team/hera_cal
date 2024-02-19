@@ -514,7 +514,10 @@ def lst_bin_files_for_baselines(
                     raise ValueError(
                         f"Expected only one baseline in group for {bl}, got {bls}"
                     )
-                bl = next(iter(bls))  # use next(iter) since bls is a set
+                if bls:
+                    # if there are no bls, just keep bl the same, and it won't be found,
+                    # triggering the data to be filled with nans anyway.
+                    bl = next(iter(bls))  # use next(iter) since bls is a set
 
             for j, pol in enumerate(pols):
                 blpol = bl + (pol,)
