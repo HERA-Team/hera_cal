@@ -509,7 +509,12 @@ def lst_bin_files_for_baselines(
 
         for i, bl in enumerate(antpairs):
             if redundantly_averaged:
-                bl = reds.get_reds_in_bl_set(bl, _data.antpairs(), include_conj=True)
+                bls = reds.get_reds_in_bl_set(bl, _data.antpairs(), include_conj=True)
+                if len(bls) > 1:
+                    raise ValueError(
+                        f"Expected only one baseline in group for {bl}, got {bls}"
+                    )
+                bl = next(iter(bls))  # use next(iter) since bls is a set
 
             for j, pol in enumerate(pols):
                 blpol = bl + (pol,)
