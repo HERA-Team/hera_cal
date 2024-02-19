@@ -16,6 +16,10 @@ Baseline = Tuple[int, int, str]
 BlLike = Union[AntPair, Baseline]
 
 
+class NonExistentBaselineError(KeyError):
+    pass
+
+
 def _convert_red_list(red_list: Sequence[Sequence[BlLike]]) -> List[List[BlLike]]:
     """Convert a list of redundant baseline groups to a list of lists of antenna pairs."""
     return [list(bls) for bls in red_list]
@@ -199,16 +203,24 @@ class RedundantGroups:
         self._bl_to_red_map = {}
 
         for red in self._red_list:
-            # Update both forward- and reverse-keys for each redundant group
-            ubl = self.key_chooser(red)
-            self._red_key_to_bls_map[ubl] = red
-            self._bl_to_red_map[bl] = ubl
-
             rev_red = [reverse_bl(bl) for bl in red]
-            ubl = self.key_chooser(rev_red)
-            self._red_key_to_bls_map[ubl] = rev_red
-            for bl in rev_red:
+
+            # Update both forward- and reverse-keys for each redundant group
+            try:
+                ubl = self.key_chooser(red)
+            except NonExistentBaselineError:
+                try:
+                    ubl = reverse_bl(self.key_chooser(rev_red))
+                except NonExistentBaselineError:
+                    ubl = red[0]  # backup plan for when key_chooser fails
+
+            rev_ubl = reverse_bl(ubl)
+
+            self._red_key_to_bls_map[ubl] = red
+            self._red_key_to_bls_map[rev_ubl] = rev_red
+            for bl in red:
                 self._bl_to_red_map[bl] = ubl
+                self._bl_to_red_map[reverse_bl(bl)] = rev_ubl
 
     @classmethod
     def from_antpos(
@@ -311,7 +323,14 @@ class RedundantGroups:
         Not to be called by users, but used internally to quickly update the cached
         properties (rather than having to fully recompute them).
         """
-        new_ubl = self.key_chooser(bls)
+        try:
+            new_ubl = self.key_chooser(bls)
+        except NonExistentBaselineError:
+            try:
+                new_ubl = reverse_bl(self.key_chooser([reverse_bl(bl) for bl in bls]))
+            except NonExistentBaselineError:
+                new_ubl = bls[0]
+
         self._remove_group(ubl)
         self._add_new_group(bls, ubl=new_ubl)
 
@@ -557,9 +576,9 @@ class RedundantGroups:
             )
 
             to_remap = [ubl for ubl in self._red_key_to_bls_map.keys() if ubl not in bls and reverse_bl(ubl) not in bls]
-            # Remove all flips....
+            # # Remove all flips....
             to_remap = [ubl for ubl in to_remap if ubl[0] <= ubl[1]]
-
+            print("TO REMAP: ", to_remap)
             obj.key_chooser = new_chooser
             for bl in to_remap:
                 obj._reset_ubl(bl, self[bl])
@@ -599,4 +618,8 @@ class BaselineKeyChooser:
 
     def __call__(self, red: Sequence[BlLike]) -> BlLike:
         filtered_red = [bl for bl in red if bl in self.bls]
-        return self.chooser(filtered_red) if filtered_red else self.chooser(red)
+
+        if not filtered_red:
+            raise NonExistentBaselineError("No baselines in the group are in the provided set.")
+
+        return self.chooser(filtered_red)
