@@ -1,3 +1,4 @@
+from __future__ import annotations
 from pyuvdata.uvdata import FastUVH5Meta
 import warnings
 import os
