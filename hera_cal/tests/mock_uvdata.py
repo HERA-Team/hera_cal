@@ -8,7 +8,7 @@ from pyuvdata.telescopes import get_telescope
 from hera_cal import utils
 from hera_cal import io
 from hera_cal import noise
-from hera_cal.lstbin import make_lst_grid
+from hera_cal.lst_stack.config import make_lst_grid
 import numpy as np
 from astropy.coordinates import EarthLocation
 import yaml
