@@ -566,6 +566,27 @@ class RedundantGroups:
         if not inplace:
             return obj
 
+    def get_reds_in_bl_set(
+        self,
+        bl: BLLike,
+        bl_set: Sequence[BlLike],
+        include_conj: bool = False,
+        include_conj_only_if_missing: bool = False,
+    ) -> set[BlLike]:
+        """Return a list of redundant groups that contain baselines in the given set."""
+        all_red_bls = self[bl]
+
+        out = {key for key in all_red_bls if key in bl_set}
+
+        if include_conj:
+            all_red_bls = self[reverse_bl(bl)]
+            newout = {key for key in all_red_bls if (key in bl_set)}
+            if include_conj_only_if_missing:
+                newout = {key for key in newout if reverse_bl(key) not in out}
+            out = out | newout
+
+        return out
+
 
 @attrs.define(frozen=True)
 class BaselineKeyChooser:
