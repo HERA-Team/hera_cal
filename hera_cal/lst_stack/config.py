@@ -7,9 +7,81 @@ from hera_qm.metrics_io import read_a_priori_ant_flags
 from .. import io, utils
 from typing import Any
 import yaml
-from ..lstbin import make_lst_grid
 
 logger = logging.getLogger(__name__)
+
+
+def make_lst_grid(
+    dlst: float,
+    begin_lst: float | None = None,
+    lst_width: float = 2 * np.pi,
+) -> np.ndarray:
+    """
+    Make a uniform grid in local sidereal time.
+
+    By default, this grid will span 2pi radians, starting at zero radians. Even if
+    the ``lst_width`` is not 2pi, we enforce that the grid equally divides 2pi, so
+    that it can wrap around if later the width is increased and the same dlst is used.
+
+    Parameters:
+    -----------
+    dlst :
+        The width of a single LST bin in radians. 2pi must be equally divisible
+        by dlst. If not, will default to the closest dlst that satisfies this criterion that
+        is also greater than the input dlst. There is a minimum allowed dlst of 6.283e-6 radians,
+        or .0864 seconds.
+    begin_lst
+        Beginning point for lst_grid. ``begin_lst`` must fall exactly on an LST bin
+        given a dlst, within 0-2pi. If not, it is replaced with the closest bin.
+        Default is zero radians.
+    lst_width
+        The width of the LST grid (including all bins) in radians.
+        Default is 2pi radians. Note that regardless of this value, the final grid
+        will always be equally divisible by 2pi.
+
+    Output:
+    -------
+    lst_grid
+        Uniform LST grid marking the center of each LST bin.
+    """
+    assert dlst >= 6.283e-6, "dlst must be greater than 6.283e-6 radians, or .0864 seconds."
+    assert dlst < 2 * np.pi, "dlst must be less than 2pi radians, or 24 hours."
+
+    # check 2pi is equally divisible by dlst
+    if not (
+        np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5)
+        or np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5)
+    ):
+        # generate array of appropriate dlsts
+        dlsts = 2 * np.pi / np.arange(1, 1000000)
+
+        # get dlsts closest to dlst, but also greater than dlst
+        dlst_diff = dlsts - dlst
+        dlst_diff[dlst_diff < 0] = 10
+        new_dlst = dlsts[np.argmin(dlst_diff)]
+        logger.warning(
+            f"2pi is not equally divisible by input dlst ({dlst:.16f}) at 1 part in 1e7.\n"
+            f"Using {new_dlst:.16f} instead."
+        )
+        dlst = new_dlst
+
+    # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
+    lst_grid = np.arange(0, 2 * np.pi - 1e-7, dlst) + dlst / 2
+
+    # shift grid by begin_lst
+    if begin_lst is not None:
+        # enforce begin_lst to be within 0-2pi
+        if begin_lst < 0 or begin_lst >= 2 * np.pi:
+            logger.warning("begin_lst was < 0 or >= 2pi, taking modulus with (2pi)")
+            begin_lst = begin_lst % (2 * np.pi)
+        begin_lst = lst_grid[np.argmin(np.abs(lst_grid - begin_lst))] - dlst / 2
+        lst_grid += begin_lst
+    else:
+        begin_lst = 0.0
+
+    lst_grid = lst_grid[lst_grid < (begin_lst + lst_width)]
+
+    return lst_grid
 
 
 def get_all_unflagged_baselines(
