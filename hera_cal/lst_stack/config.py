@@ -1,3 +1,4 @@
+from __future__ import annotations
 import numpy as np
 from pathlib import Path
 from pyuvdata.uvdata import FastUVH5Meta

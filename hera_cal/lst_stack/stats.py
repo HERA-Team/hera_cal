@@ -1,4 +1,5 @@
 """Statistics for LST-binned data."""
+from __future__ import annotations
 
 from scipy.stats import rv_continuous
 from scipy.special import gamma
