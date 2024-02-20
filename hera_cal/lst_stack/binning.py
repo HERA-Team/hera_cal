@@ -486,9 +486,6 @@ def lst_bin_files_for_baselines(
         else:
             inpainted = None
 
-        # if redundantly_averaged:
-        #     keyed = reds.keyed_on_bls(_data.antpairs())
-
         # load calibration
         if calfl is not None:
             logger.info(f"Opening and applying {calfl}")

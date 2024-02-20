@@ -576,9 +576,9 @@ class RedundantGroups:
             )
 
             to_remap = [ubl for ubl in self._red_key_to_bls_map.keys() if ubl not in bls and reverse_bl(ubl) not in bls]
-            # # Remove all flips....
+            # Remove all flips....
             to_remap = [ubl for ubl in to_remap if ubl[0] <= ubl[1]]
-            print("TO REMAP: ", to_remap)
+
             obj.key_chooser = new_chooser
             for bl in to_remap:
                 obj._reset_ubl(bl, self[bl])
