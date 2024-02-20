@@ -599,7 +599,7 @@ class RedundantGroups:
 
         if include_conj:
             all_red_bls = self[reverse_bl(bl)]
-            newout = {key for key in all_red_bls if (key in bl_set)}
+            newout = {reverse_bl(key) for key in all_red_bls if (key in bl_set)}
             if include_conj_only_if_missing:
                 newout = {key for key in newout if reverse_bl(key) not in out}
             out = out | newout
