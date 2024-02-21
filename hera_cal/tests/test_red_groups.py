@@ -235,16 +235,12 @@ class TestRedundantGroups:
         rg = RedundantGroups(
             [[(0, 1)], [(0, 2), (0, 3)]],
         )
-        print(rg._red_list)
         new = rg.keyed_on_bls(bls=[(0, 3)])
-        print(new._red_key_to_bls_map)
         assert (0, 2) in new
         assert new.get_ubl_key((0, 2)) == (0, 3)
         assert new.get_ubl_key((0, 1)) == (0, 1)
 
         new.keyed_on_bls(bls=[(0, 2)], inplace=True)
-        print(new._red_key_to_bls_map)
-        print(new._bl_to_red_map)
         assert new.get_ubl_key((0, 2)) == (0, 2)
 
     def test_delitem(self):
@@ -269,3 +265,58 @@ class TestRedundantGroups:
             [[(0, 1)], [(0, 2), (0, 3)]],
         )
         assert len(rg.data_bls) == 3
+
+
+class TestRedundantGroupsGetRedsInBlSet:
+    def setup_method(self, method):
+        self.rg = RedundantGroups(
+            [[(0, 1)], [(0, 2), (0, 3)]],
+        )
+
+    def test_default(self):
+        assert self.rg.get_reds_in_bl_set((0, 1), {(0, 1), (0, 2)}) == {(0, 1)}
+        assert self.rg.get_reds_in_bl_set((0, 1), {(0, 2)}) == set()
+        assert self.rg.get_reds_in_bl_set((0, 2), {(0, 2)}) == {(0, 2)}
+        assert self.rg.get_reds_in_bl_set((0, 2), {(0, 2), (0, 3)}) == {(0, 2), (0, 3)}
+
+    def test_conj_in_set(self):
+        """Test that passing a baseline that exists and only having the conj in the set returns nothing."""
+        assert self.rg.get_reds_in_bl_set((0, 1), {(1, 0), (0, 2)}) == set()
+        assert self.rg.get_reds_in_bl_set((0, 2), {(2, 0)}) == set()
+        assert self.rg.get_reds_in_bl_set((0, 2), {(2, 0), (0, 3)}) == {(0, 3)}
+
+        # However, if we *give* it the conjugate, it should work
+        assert self.rg.get_reds_in_bl_set((1, 0), {(1, 0), (0, 2)}) == {(1, 0)}
+
+    def test_bad_key(self):
+        with pytest.raises(KeyError):
+            # The baseline (0, 4) doesn't exist
+            self.rg.get_reds_in_bl_set((0, 4), {})
+
+        with pytest.raises(KeyError):
+            self.rg.get_reds_in_bl_set((0, 1, 'ee'), {})
+
+    def test_conj_in_set_include_conj_match_bl(self):
+        # The following test that at least the conjugates are returned
+        assert self.rg.get_reds_in_bl_set((0, 1), {(1, 0), (0, 2)}, include_conj=True) == {(0, 1)}
+        assert self.rg.get_reds_in_bl_set((0, 2), {(2, 0)}, include_conj=True) == {(0, 2)}
+        assert self.rg.get_reds_in_bl_set((0, 2), {(2, 0), (0, 3)}, include_conj=True) == {(0, 2), (0, 3)}
+
+        # If both the original and conjugate are in the set, only the original is returned, unless match_conj_to_set is True
+        assert self.rg.get_reds_in_bl_set((0, 1), {(1, 0), (0, 2), (0, 1)}, include_conj=True) == {(0, 1)}
+        assert self.rg.get_reds_in_bl_set((0, 2), {(2, 0), (0, 2)}, include_conj=True) == {(0, 2)}
+        assert self.rg.get_reds_in_bl_set((0, 2), {(2, 0), (0, 3), (0, 2)}, include_conj=True) == {(0, 2), (0, 3)}
+
+    def test_conj_in_set_include_conj_match_set(self):
+        # If both the original and conjugate are in the set, both returned if match_conj_to_set is True
+        kw = dict(include_conj=True, match_conj_to_set=True)
+        assert self.rg.get_reds_in_bl_set((0, 1), {(1, 0), (0, 2), (0, 1)}, **kw) == {(0, 1), (1, 0)}
+        assert self.rg.get_reds_in_bl_set((0, 2), {(2, 0), (0, 2)}, **kw) == {(0, 2), (2, 0)}
+        assert self.rg.get_reds_in_bl_set((0, 2), {(2, 0), (0, 3), (0, 2)}, **kw) == {(0, 2), (2, 0), (0, 3)}
+
+    def test_conj_in_set_only_if_missing(self):
+        # If the original is in the set, don't return the conjugate
+        kw = dict(include_conj=True, include_conj_only_if_missing=True, match_conj_to_set=True)
+        assert self.rg.get_reds_in_bl_set((0, 1), {(0, 1), (1, 0)}, **kw) == {(0, 1)}
+        assert self.rg.get_reds_in_bl_set((0, 2), {(2, 0), (3, 0)}, **kw) == {(2, 0), (3, 0)}
+        assert self.rg.get_reds_in_bl_set((0, 2), {(0, 2), (3, 0)}, **kw) == {(0, 2), (3, 0)}

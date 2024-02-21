@@ -345,7 +345,11 @@ class RedundantGroups:
         that do the appropriate checking).
         """
         if ubl is None:
-            ubl = self.key_chooser(bls)
+            try:
+                ubl = self.key_chooser(bls)
+            except NonExistentBaselineError:
+                ubl = bls[0]
+
         rubl = reverse_bl(ubl)
         self._red_key_to_bls_map[ubl] = bls
         self._red_key_to_bls_map[rubl] = [reverse_bl(bl) for bl in bls]
@@ -590,16 +594,67 @@ class RedundantGroups:
         bl: BLLike,
         bl_set: Sequence[BlLike],
         include_conj: bool = False,
+        match_conj_to_set: bool = False,
         include_conj_only_if_missing: bool = False,
     ) -> set[BlLike]:
-        """Return a list of redundant groups that contain baselines in the given set."""
+        """Return a list of baselines redundant with bl that are in bl_set.
+
+        Parameters
+        ----------
+        bl
+            Only return baselines redundant with this bl. Can be an antpair or baseline
+            triple (with pol).
+        bl_set
+            Only return baselines that are in this set.
+        include_conj
+            Whether to include conjugates of the baselines that are redundant with bl,
+            if they are in bl_set. This will only include the conjugate if *the conjugate*
+            is in bl_set (i.e. it will not return both the original and the conjugate
+            if only the original is listed in bl_set).
+        match_conj_to_set
+            If include_conj is True, the default behaviour is to include a baseline if
+            it or its conjugate is in the bl_set, but the returned baseline will match
+            the ordering of the original bl. If match_conj_to_set is True, the returned
+            baseline will match the ordering of the baseline in bl_set.
+        include_conj_only_if_missing
+            If include_conj is True *and* match_conj_to_set is True, then if both
+            a baseline and its conjugate are in bl_set, then both will be in the
+            returned set. To include only the original ordering in this case, set
+            include_conj_only_if_missing to True.
+
+        Returns
+        -------
+        set
+            A set of baselines redundant with bl that are in bl_set.
+
+        Examples
+        --------
+        >>> rg = RedundantGroups.from_antpos([[(0, 1), (1, 2)], [(0, 2)]])
+        >>> rg.get_reds_in_bl_set((0, 1), {(0, 1), (1, 2)})
+        {(0, 1), (1, 2)}
+        >>> rg.get_reds_in_bl_set((0, 1), {(0, 1)})
+        {(0, 1)}
+        >>> rg.get_reds_in_bl_set((0, 1), {(1, 0)}, include_conj=True)
+        {(0, 1)}
+        >>> rg.get_reds_in_bl_set((0, 1), {(1, 0)}, include_conj=True, match_conj_to_set=True)
+        {(1, 0)}
+        >>> rg.get_reds_in_bl_set((0, 1), {(0, 1), (1, 0)}, include_conj=True, match_conj_to_set=True)
+        {(0, 1), (1, 0)}
+        >>> rg.get_reds_in_bl_set((0, 1), {(0, 1), (1, 0)}, include_conj=True, match_conj_to_set=True, include_conj_only_if_missing=True)
+        {(0, 1)}
+
+        """
         all_red_bls = self[bl]
 
         out = {key for key in all_red_bls if key in bl_set}
 
         if include_conj:
             all_red_bls = self[reverse_bl(bl)]
-            newout = {reverse_bl(key) for key in all_red_bls if (key in bl_set)}
+            if match_conj_to_set:
+                newout = {key for key in all_red_bls if (key in bl_set)}
+            else:
+                newout = {reverse_bl(key) for key in all_red_bls if (key in bl_set)}
+
             if include_conj_only_if_missing:
                 newout = {key for key in newout if reverse_bl(key) not in out}
             out = out | newout
