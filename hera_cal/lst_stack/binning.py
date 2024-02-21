@@ -12,6 +12,7 @@ from pyuvdata import utils as uvutils
 from .. import io
 from ..datacontainer import DataContainer
 from .. import apply_cal
+from .config import LSTConfig
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +245,92 @@ def get_lst_bins(
     bins = np.digitize(lsts, edges, right=True) - 1
     mask = (bins >= 0) & (bins < (len(edges) - 1))
     return bins, lsts, mask
+
+
+def lst_bin_files_from_config(
+    config: LSTConfig,
+    outfile_index: int,
+    bl_chunk_to_load: int | str = 0,
+    nbl_chunks: int = 1,
+    calfile_rules: list[tuple[str, str]] | None = None,
+    where_inpainted_file_rules: list[tuple[str, str]] | None = None,
+    rephase: bool = True,
+    freq_min: float | None = None,
+    freq_max: float | None = None,
+):
+    data_files = config.matched_files[outfile_index]
+
+    # Check that that there are the same number of input data files and
+    # calibration files each night.
+    input_cals = []
+    if calfile_rules:
+        data_files, input_cals = io.apply_calfile_rules(
+            data_files, calfile_rules, ignore_missing=False
+        )
+
+    where_inpainted_files = io._get_where_inpainted_files(
+        data_files, where_inpainted_file_rules
+    )
+
+    output_flagged, output_inpainted = io._configure_inpainted_mode(
+        output_flagged, output_inpainted, where_inpainted_files
+    )
+
+    # get metadata
+    meta = config.config.datameta
+    freq_array = np.squeeze(meta.freq_array)
+
+    # Split up the baselines into chunks that will be LST-binned together.
+    # This is just to save on RAM.
+    if bl_chunk_to_load == "autos":
+        antpairs = config.autos
+    else:
+        nbls_to_load = int(np.ciel(len(config.antpairs) / nbl_chunks))
+        antpairs = [config.antpairs[nbls_to_load * bl_chunk_to_load: nbls_to_load * (bl_chunk_to_load + 1)]]
+
+    lst_bin_edges = config.lst_grid_edges
+
+    (
+        tinds,
+        time_arrays,
+        all_lsts,
+        file_list,
+        cals,
+        where_inpainted_files,
+    ) = io.filter_required_files_by_times(
+        (lst_bin_edges[0], lst_bin_edges[-1]),
+        data_files,
+        input_cals,
+        where_inpainted_files,
+    )
+
+    # If we have no times at all for this file, just return
+    if len(all_lsts) == 0:
+        return {}
+
+    all_lsts = np.concatenate(all_lsts)
+
+    _, data, flags, nsamples, where_inpainted, binned_times = lst_bin_files_for_baselines(
+        antpairs=antpairs,
+        data_files=file_list,
+        lst_bin_edges=lst_bin_edges,
+        freqs=freq_array,
+        pols=config.pols,
+        cal_files=cals,
+        time_arrays=time_arrays,
+        time_idx=tinds,
+        ignore_flags=False,
+        rephase=rephase,
+        antpos=config.config.reds.antpos,
+        lsts=all_lsts,
+        redundantly_averaged=config.config.is_redundantly_averaged,
+        reds=config.config.reds,
+        freq_min=freq_min,
+        freq_max=freq_max,
+        where_inpainted_files=where_inpainted_files
+    )
+
+    return antpairs, data, flags, nsamples, where_inpainted, binned_times
 
 
 def lst_bin_files_for_baselines(

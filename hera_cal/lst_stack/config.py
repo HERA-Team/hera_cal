@@ -8,6 +8,10 @@ from hera_qm.metrics_io import read_a_priori_ant_flags
 from .. import io, utils
 from typing import Any
 import yaml
+import attrs
+from functools import cached_property
+from astropy import units
+import h5py
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +89,7 @@ def make_lst_grid(
     return lst_grid
 
 
-def get_all_unflagged_baselines(
+def get_all_antpairs(
     data_files: list[list[str | Path | FastUVH5Meta]],
     ex_ant_yaml_files: list[str] | None = None,
     include_autos: bool = True,
@@ -219,164 +223,47 @@ def get_all_unflagged_baselines(
     return sorted(all_baselines), sorted(all_pols)
 
 
-def config_lst_bin_files(
-    data_files: list[list[str | FastUVH5Meta]],
-    dlst: float | None = None,
-    atol: float = 1e-10,
-    lst_start: float | None = None,
-    lst_width: float = 2 * np.pi,
-    blts_are_rectangular: bool | None = None,
-    time_axis_faster_than_bls: bool | None = None,
-    ntimes_per_file: int | None = None,
-    jd_regex: str = r"zen\.(\d+\.\d+)\.",
-):
-    """
-    Configure data for LST binning.
+def _subsorted_list(x: Sequence[Sequence[Any]]) -> list[list[Any]]:
+    return [sorted(y) for y in x]
 
-    Make a 24 hour lst grid, starting LST and output files given
-    input data files and LSTbin params.
 
-    Parameters
-    ----------
-    data_files : list of lists
-        nested set of lists, with each nested list containing paths to
-        data files from a particular night. Frequency axis of each file must be identical.
-    dlst : float
-        LST bin width. If None, will get this from the first file in data_files.
-    atol : float
-        absolute tolerance for LST bin float comparison
-    lst_start : float
-        starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
-        Default is first LST of the first file of the first night.
-    lst_width : float
-        How much LST to bin.
-    ntimes_per_file : int
-        number of LST bins in a single output file
+def _fix_dlst(dlst: float) -> float:
+    """Fix dlst to equally divide 2pi in less than 1 million sub-divisions."""
+    dlsts = 2 * np.pi / np.arange(1, 1000000)
 
-    Returns
-    -------
-    lst_grid : float ndarray holding LST bin centers.
-    matched_files : list of lists of files, one list for each output file.
-    """
-    logger.info("Configuring lst_grid")
-
-    data_files = [sorted(df) for df in data_files]
-
-    df0 = data_files[0][0]
-
-    # get dlst from first data file if None
-    if dlst is None:
-        dlst = io.get_file_times(df0, filetype="uvh5")[0]
-
-    # Get rectangularity of blts from first file if None
-    meta = FastUVH5Meta(
-        df0,
-        blts_are_rectangular=blts_are_rectangular,
-        time_axis_faster_than_bls=time_axis_faster_than_bls,
-    )
-
-    if blts_are_rectangular is None:
-        blts_are_rectangular = meta.blts_are_rectangular
-    if time_axis_faster_than_bls is None:
-        time_axis_faster_than_bls = meta.time_axis_faster_than_bls
-
-    if ntimes_per_file is None:
-        ntimes_per_file = meta.Ntimes
-
-    # Get the initial LST as the lowest LST in any of the first files on each night
-    first_files = [
-        FastUVH5Meta(
-            df[0],
-            blts_are_rectangular=blts_are_rectangular,
-            time_axis_faster_than_bls=time_axis_faster_than_bls,
+    if dlst < np.min(dlsts):
+        raise ValueError(
+            f"dlst must be more than {np.min(dlsts):1.5e}, the smallest possible value."
         )
-        for df in data_files
-    ]
 
-    # get begin_lst from lst_start or from the first JD in the data_files
-    if lst_start is None:
-        lst_start = np.min([ff.lsts[0] for ff in first_files])
-    begin_lst = lst_start
-
-    # make LST grid that divides into 2pi
-    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, lst_width=lst_width)
-    dlst = lst_grid[1] - lst_grid[0]
-
-    lst_edges = np.concatenate([lst_grid - dlst / 2, [lst_grid[-1] + dlst / 2]])
-
-    # Now, what we need here is actually the lst_edges of the *files*, not the actual
-    # bins.
-    nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
-    last_edge = lst_edges[-1]
-    lst_edges = lst_edges[::ntimes_per_file]
-    if len(lst_edges) < nfiles + 1:
-        lst_edges = np.concatenate([lst_edges, [last_edge]])
-
-    matched_files = [[] for _ in lst_grid]
-    for fllist in data_files:
-        matched = utils.match_files_to_lst_bins(
-            lst_edges=lst_edges,
-            file_list=fllist,
-            files_sorted=True,
-            jd_regex=jd_regex,
-            blts_are_rectangular=blts_are_rectangular,
-            time_axis_faster_than_bls=time_axis_faster_than_bls,
-            atol=atol,
+    if dlst > np.max(dlsts):
+        raise ValueError(
+            f"dlst must be less than {np.max(dlsts):1.5e}, the largest possible value."
         )
-        for i, m in enumerate(matched):
-            matched_files[i].append(m)
 
-    nfiles = int(np.ceil(len(lst_grid) / ntimes_per_file))
-    lst_grid = [
-        lst_grid[ntimes_per_file * i: ntimes_per_file * (i + 1)] for i in range(nfiles)
-    ]
-
-    # Only keep output files that have data associated
-    lst_grid = [
-        lg for lg, mf in zip(lst_grid, matched_files) if any(len(mff) > 0 for mff in mf)
-    ]
-    matched_files = [mf for mf in matched_files if any(len(mff) > 0 for mff in mf)]
-    return lst_grid, matched_files
+    # get dlsts closest to dlst, but also greater than dlst
+    dlst_diff = dlsts - dlst
+    return dlsts[dlst_diff > 0][0]
 
 
-def make_lst_bin_config_file(
-    config_file: str | Path,
-    data_files: list[list[str | FastUVH5Meta]],
-    clobber: bool = False,
-    dlst: float | None = None,
-    atol: float = 1e-10,
-    lst_start: float | None = None,
-    lst_width: float = 2 * np.pi,
-    ntimes_per_file: int = 60,
-    blts_are_rectangular: bool | None = None,
-    time_axis_faster_than_bls: bool | None = None,
-    jd_regex: str = r"zen\.(\d+\.\d+)\.",
-    lst_branch_cut: float | None = None,
-) -> dict[str, Any]:
-    """Construct and write a YAML configuration file for lst-binning.
+@attrs.define
+class LSTBinConfiguration:
+    """
+    LST-bin configuration specification.
 
-    This determines an LST-grid, and then determines which files should be
-    included in each LST-bin. The output is a YAML file that can be used to
-    quickly read in raw files that correspond to a particular LST-bin.
-
-    The idea of this function is for it to be run as a separate step (e.g. by hera_opm)
-    that needs to run to setup a full LST-binning run on multiple parallel tasks. Each
-    task will read the YAML file, and select out the portion appropriate for that
-    LST bin file.
+    This class is meant to be used to specify a configuration for LST-binning, and has
+    methods for searching for and matching files to LST bins. It can be used to create
+    an :class:`LSTConfig` object, which is a static configuration object that holds
+    the output of many of the methods of this class.
 
     The algorithm for matching files to LST bins is only approximate, but is conservative
     (i.e. it includes *at least* all files that should be included in the LST bin).
 
     Parameters
     ----------
-    config_file : str or Path
-        Path to write the YAML configuration file to.
     data_files : list of lists of str or FastUVH5Meta
         List of lists of data files to consider for LST-binning. The outer list
         is a list of nights, and the inner list is a list of files for that night.
-    clobber : bool, optional
-        If True, overwrite the config_file if it exists. If False, raise an error
-        if the config_file exists.
     dlst : float, optional
         The approximate width of each LST bin in radians. Default is integration time of
         the first file on the first night. This is approximate because the final bin
@@ -386,103 +273,277 @@ def make_lst_bin_config_file(
     lst_start : float, optional
         The starting LST for the LST grid. Default is the lowest LST in the first file
         on the first night.
-    lst_width : float, optional
-        The width of the LST grid. Default is 2pi. Note that this is not the width of
-        each LST bin, which is given by dlst. Further note that the LST grid is always
-        equally divided into 2pi, regardless of `lst_width`.
+    lst_end : float, optional
+        The ending LST for the LST grid. Default is lst_start + 2pi.
     ntimes_per_file : int, optional
         The number of LST bins to include in each output file. Default is 60.
-    blts_are_rectangular : bool, optional
-        If True, assume that the data-layout in the input files is rectangular in
-        baseline-times. This will be determined if not given.
-    time_axis_faster_than_bls : bool, optional
-        If True, assume that the time axis moves faster than the baseline axis in the
-        input files. This will be determined if not given.
     jd_regex : str, optional
         Regex to use to extract the JD from the file name. Set to None or empty
         to force the LST-matching to use the LSTs in the metadata within the file.
-    lst_branch_cut
-        The LST at which to branch cut the LST grid for file writing. The JDs in the
-        output LST-binned files will be *lowest* at the lst_branch_cut, and all file
-        names will have LSTs that are higher than lst_branch_cut. If None, this will
-        be determined automatically by finding the largest gap in LSTs and starting
-        AFTER it.
-
-    Returns
-    -------
-    config : dict
-        The configuration dictionary that was written to the YAML file.
     """
-    config_file = Path(config_file)
-    if config_file.exists() and not clobber:
-        raise IOError(f"{config_file} exists and clobber is False")
-
-    lst_grid, matched_files = config_lst_bin_files(
-        data_files=data_files,
-        dlst=dlst,
-        atol=atol,
-        lst_start=lst_start,
-        lst_width=lst_width,
-        blts_are_rectangular=blts_are_rectangular,
-        time_axis_faster_than_bls=time_axis_faster_than_bls,
-        jd_regex=jd_regex,
-        ntimes_per_file=ntimes_per_file,
+    data_files: list[list[str | Path | FastUVH5Meta]] = attrs.field(converter=_subsorted_list)
+    nlsts_per_file: int = attrs.field(converter=int, validator=attrs.validators.gt(0))
+    dlst: float = attrs.field(
+        converter=_fix_dlst
     )
+    atol: float = attrs.field(
+        default=1e-10,
+        converter=float,
+        validator=(attrs.validators.gt(0), attrs.validators.lt(0.1))
+    )
+    lst_start: float = attrs.field(default=0.0, converter=float)
+    lst_end: float = attrs.field(converter=float)
+    jd_regex: str = attrs.field(default=r"zen\.(\d+\.\d+)\.")
 
-    # Get the best lst_branch_cut by finding the largest gap in LSTs and starting
-    # AFTER it
-    if lst_branch_cut is None:
-        lst_branch_cut = float(utils.get_best_lst_branch_cut(np.concatenate(lst_grid)))
+    @cached_property
+    def datameta(self):
+        return FastUVH5Meta(self.data_files[0][0])
 
-    dlst = lst_grid[0][1] - lst_grid[0][0]
-    # Make it a real list of floats to make the YAML easier to read
-    lst_grid = [[float(lst) for lst in lsts] for lsts in lst_grid]
+    @nlsts_per_file.default
+    def _nlsts_per_file_default(self) -> int:
+        return self.datameta.Ntimes
 
-    # now matched files is a list of output files, each containing a list of nights,
-    # each containing a list of files
-    logger.info("Getting metadata from first file...")
+    @dlst.default
+    def _dlst_default(self) -> float:
+        df0 = self.datameta
+        if len(df0.lsts) > 1:
+            dlst = df0.lsts[1] - df0.lsts[0]
+        else:
+            dlst = np.min(df0.integration_time) * 2 * np.pi / (units.sday.to("s"))
+        return dlst
 
-    def get_meta():
-        for outfile in matched_files:
-            for night in outfile:
-                for i, fl in enumerate(night):
-                    return fl
+    @lst_end.default
+    def _lst_end_default(self):
+        return self.lst_start + 2 * np.pi
 
-    meta = get_meta()
+    @lst_start.validator
+    @lst_end.validator
+    @dlst.validator
+    def _lst_start_end_validator(self, attribute, value):
+        if value < 0 or value >= 2 * np.pi:
+            raise ValueError("LST must be between 0 and 2pi")
 
-    tint = np.median(meta.integration_time)
-    if not np.all(np.abs(np.diff(np.diff(meta.times))) < 1e-6):
-        raise ValueError(
-            "All integrations must be of equal length (BDA not supported), got diffs: "
-            f"{np.diff(meta.times)}"
+    @cached_property
+    def lst_grid(self) -> np.ndarray:
+        return make_lst_grid(
+            self.dlst,
+            begin_lst=self.lst_start,
+            lst_width=self.lst_end - self.lst_start
         )
 
-    matched_files = [
-        [[str(m.path) for m in night] for night in outfiles]
-        for outfiles in matched_files
-    ]
+    @cached_property
+    def lst_grid_edges(self) -> np.ndarray:
+        return np.concatenate([self.lst_grid - self.dlst / 2, [self.lst_grid[-1] + self.dlst / 2]])
 
-    output = {
-        "config_params": {
-            "dlst": float(dlst),
-            "atol": atol,
-            "lst_start": lst_start,
-            "lst_width": lst_width,
-            "jd_regex": jd_regex,
-        },
-        "lst_grid": lst_grid,
-        "matched_files": matched_files,
-        "metadata": {
-            "x_orientation": meta.x_orientation,
-            "blts_are_rectangular": meta.blts_are_rectangular,
-            "time_axis_faster_than_bls": meta.time_axis_faster_than_bls,
-            "start_jd": int(meta.times[0]),
-            "integration_time": float(tint),
-            "lst_branch_cut": lst_branch_cut,
-        },
-    }
+    @property
+    def nfiles(self) -> int:
+        return int(np.ceil(len(self.lst_grid) / self.nlsts_per_file))
 
-    with open(config_file, "w") as fl:
-        yaml.safe_dump(output, fl)
+    @cached_property
+    def reds(self) -> RedundantGroups:
+        return RedundantGroups.from_antpos(
+            antpos=dict(zip(self.datameta.antenna_numbers, self.datameta.antpos_enu)),
+            include_autos=True,
+        )
 
-    return output
+    @cached_property
+    def is_redundantly_averaged(self) -> bool:
+        # Try to work out if the files are redundantly averaged.
+        # just look at the middle file from each night.
+        for fl_list in self.data_files:
+            meta = fl_list[len(fl_list) // 2]
+            antpairs = meta.get_transactional("antpairs")
+            ubls = {self.reds.get_ubl_key(ap) for ap in antpairs}
+            if len(ubls) != len(antpairs):
+                # At least two of the antpairs are in the same redundant group.
+                return False
+
+        return True
+
+    def get_file_lst_edges(self) -> np.ndarray:
+        last_edge = self.lst_grid_edges[-1]
+        lst_edges = self.lst_grid_edges[::self.nlsts_per_file]
+        if len(lst_edges) < self.nfiles + 1:
+            lst_edges = np.concatenate([lst_edges, [last_edge]])
+        return lst_edges
+
+    def get_matched_files(self) -> list[list[FastUVH5Meta]]:
+        """
+        Configure data for LST binning.
+
+        Make a 24 hour lst grid, starting LST and output files given
+        input data files and LSTbin params.
+        """
+        lst_edges = self.get_file_lst_edges()
+
+        matched_files = [[] for _ in self.lst_grid]
+        for fllist in self.data_files:
+            # matched here is a list of lists of FastUVH5Meta objects.
+            # Each list is for a single lst-bin.
+            matched = utils.match_files_to_lst_bins(
+                lst_edges=lst_edges,
+                file_list=fllist,
+                files_sorted=True,
+                jd_regex=self.jd_regex,
+                blts_are_rectangular=self.datameta.blts_are_rectangular,
+                time_axis_faster_than_bls=self.datameta.time_axis_faster_than_bls,
+                atol=self.atol,
+            )
+            for i, m in enumerate(matched):
+                matched_files[i].append(m)
+
+        return matched_files
+
+    def create_config(
+        self,
+        matched_files: list[list[FastUVH5Meta]],
+        lst_branch_cut: float | None = None,
+        ignore_ants: tuple[int] = (),
+        only_last_file_per_night: bool = True,
+    ) -> LSTConfig:
+        """
+        Create an LSTConfig object from the given matched files.
+
+        Parameters
+        ----------
+        matched_files : list[list[FastUVH5Meta]]
+            The matched files to use for LST binning. This is the output of
+            :meth:`get_matched_files`.
+        lst_branch_cut
+            The LST at which to branch cut the LST grid for file writing. The JDs in the
+            output LST-binned files will be *lowest* at the lst_branch_cut, and all file
+            names will have LSTs that are higher than lst_branch_cut. If None, this will
+            be determined automatically by finding the largest gap in LSTs and starting
+            AFTER it.
+        ignore_ants
+            Antennas to ignore when creating the antpair list.
+        only_last_file_per_night
+            If True, only use the last file from each night when finding the full list
+            of antpairs.
+        """
+        lst_grid = self.lst_grid.copy()
+        if nextra := self.lst_grid.size % self.nfiles > 0:
+            lst_grid = np.concatenate(lst_grid, [np.nan] * (self.nlsts_per_file - nextra))
+
+        lst_grid = lst_grid.reshape((self.nfiles, self.nlsts_per_file))
+
+        file_mask = np.array([any(len(mff) > 0 for mff in mf) for mf in matched_files])
+        lst_grid = lst_grid[file_mask]
+        matched_files = [mf for mm, mf in zip(file_mask, matched_files) if mm]
+
+        # Get the best lst_branch_cut by finding the largest gap in LSTs and starting
+        # AFTER it
+        if lst_branch_cut is None:
+            lst_branch_cut = float(utils.get_best_lst_branch_cut(np.concatenate(lst_grid)))
+
+        matched_files = [
+            [[str(m.path) for m in night] for night in outfiles]
+            for outfiles in matched_files
+        ]
+
+        antpairs, pols = get_all_antpairs(
+            data_files=[sum(fls, start=[]) for fls in matched_files],
+            include_autos=True,
+            ignore_ants=ignore_ants,
+            only_last_file_per_night=only_last_file_per_night,
+            redundantly_averaged=self.is_redundantly_averaged,
+            reds=self.reds,
+            blts_are_rectangular=self.datameta.blts_are_rectangular,
+            time_axis_faster_than_bls=self.datameta.time_axis_faster_than_bls,
+        )
+
+        return LSTConfig(
+            config=self,
+            lst_grid=lst_grid,
+            matched_files=matched_files,
+            antpairs=[tuple(ap) for ap in antpairs if ap[0] != ap[1]],
+            autos=[tuple(ap) for ap in antpairs if ap[0] == ap[1]],
+            pols=pols,
+            properties={
+                "lst_branch_cut": lst_branch_cut,
+                "blts_are_rectangular": self.datameta.blts_are_rectangular,
+                "time_axis_faster_than_bls": self.datameta.time_axis_faster_than_bls,
+                "x_orientation": self.datameta.x_orientation,
+            }
+        )
+
+    def write(self, group: h5py.Group):
+        dct = attrs.asdict(self)
+
+        for k, v in dct.items():
+            if k == 'data_files':
+                for night, files in enumerate(v):
+                    group.create_dataset(f"night_{night}", data=[str(f) for f in files])
+            else:
+                group.attrs[k] = v
+
+    @classmethod
+    def read(cls, group: h5py.Group):
+        dct = {}
+        for k, v in group.attrs.items():
+            dct[k] = v
+
+        n_nights = len([k for k in group.keys() if k.startswith("night_")])
+        dct["data_files"] = []
+        for night in range(n_nights):
+            dct['data_files'].append([Path(f) for f in group[f"night_{night}"][()]])
+
+        return cls(**dct)
+
+
+@attrs.define(slots=False, frozen=False)
+class LSTConfig:
+    config: LSTBinConfiguration = attrs.field()
+    lst_grid: np.ndarray = attrs.field(converter=np.asarray)
+    matched_files: list[list[list[FastUVH5Meta]]] = attrs.field()
+    autos: list[tuple[int, int]] = attrs.field()
+    antpairs: list[tuple[int, int]] = attrs.field()
+    pols: list[str] = attrs.field()
+    properties: dict = attrs.field()
+
+    @lst_grid.validator
+    def _lst_grid_validator(self, attribute, value):
+        if value.ndim != 2:
+            raise ValueError("lst_grid must be a 2D array, with shape (nfiles, nlsts_per_file)")
+
+    @property
+    def dlst(self):
+        return self.config.dlst
+
+    @cached_property
+    def lst_grid_edges(self) -> np.ndarray:
+        return np.concatenate(
+            [self.lst_grid - self.dlst / 2, [self.lst_grid[-1] + self.dlst / 2]]
+        )
+
+    def write(self, fname: str | Path):
+        with h5py.File(fname, "w") as fl:
+            self.config.write(fl.create_group("config"))
+            fl.create_dataset("lst_grid", data=self.lst_grid)
+            fl.create_dataset("matched_files", data=self.matched_files)
+            fl.create_dataset("antpairs", data=self.antpairs)
+            fl.create_dataset("autos", data=self.autos)
+            fl.create_dataset("pols", data=self.pols)
+            for k, v in self.properties.items():
+                fl.attrs[k] = v
+
+    @classmethod
+    def from_file(cls, config_file: str | Path) -> LSTConfig:
+        with h5py.File(config_file, "r") as fl:
+            config = LSTBinConfiguration.read(fl["config"])
+            lst_grid = fl["lst_grid"][()]
+            matched_files = fl["matched_files"][()]
+            antpairs = fl["antpairs"][()]
+            autos = fl["autos"][()]
+            pols = fl["pols"][()]
+            properties = {k: v for k, v in fl.attrs.items()}
+
+        return cls(
+            config=config,
+            lst_grid=lst_grid,
+            matched_files=[[[FastUVH5Meta(fl) for fl in night] for night in outfile] for outfile in matched_files],
+            properties=properties,
+            antpairs=antpairs,
+            autos=autos,
+            pols=pols,
+        )

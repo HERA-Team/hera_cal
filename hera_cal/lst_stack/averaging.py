@@ -124,7 +124,7 @@ def reduce_lst_bins(
     for lstbin, (d, n, f, clip_scale, inpf) in enumerate(
         zip(data, nsamples, flags, sigma_clip_scale, where_inpainted)
     ):
-        logger.info(f"Computing LST bin {lstbin+1} / {nlst_bins}")
+        logger.info(f"Computing LST bin {lstbin + 1} / {nlst_bins}")
 
         # TODO: check that this doesn't make yet another copy...
         # This is just the data in this particular lst-bin.
@@ -334,7 +334,7 @@ def lst_average(
         data.mask |= clip_flags
 
         logger.info(
-            f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to sigma clipping"
+            f"Flagged a further {100 * (np.sum(flags) - nflags) / flags.size:.2f}% of visibilities due to sigma clipping"
         )
 
     # Here we do a check to make sure Nsamples is uniform across frequency.

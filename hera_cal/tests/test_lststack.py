@@ -983,7 +983,7 @@ class Test_GetAllUnflaggedBaselines:
         )
         data_files = mockuvd.write_files_in_hera_format(uvds, tmp)
 
-        antpairs, pols = lstbin.config.get_all_unflagged_baselines(
+        antpairs, pols = lstbin.config.get_all_antpairs(
             data_files,
             redundantly_averaged=redundantly_averaged,
             only_last_file_per_night=only_last_file_per_night,
@@ -1007,13 +1007,13 @@ class Test_GetAllUnflaggedBaselines:
             ValueError,
             match="Cannot ignore antennas if the files are redundantly averaged",
         ):
-            lstbin.config.get_all_unflagged_baselines(data_files, ignore_ants=[0, 1])
+            lstbin.config.get_all_antpairs(data_files, ignore_ants=[0, 1])
 
         with pytest.raises(
             ValueError,
             match="Cannot exclude antennas if the files are redundantly averaged",
         ):
-            lstbin.config.get_all_unflagged_baselines(
+            lstbin.config.get_all_antpairs(
                 data_files,
                 ex_ant_yaml_files=["non-existent-file.yaml"],
             )
@@ -1035,7 +1035,7 @@ class Test_GetAllUnflaggedBaselines:
         with pytest.raises(
             ValueError, match="Not all files have the same xorientation!"
         ):
-            lstbin.config.get_all_unflagged_baselines(data_files)
+            lstbin.config.get_all_antpairs(data_files)
 
 
 class Test_LSTBinFiles:

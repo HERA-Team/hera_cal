@@ -348,7 +348,7 @@ def lst_bin_files_single_outfile(
             logger.info("Inferred that files are redundantly averaged.")
 
     logger.info("Compiling all unflagged baselines...")
-    all_baselines, all_pols = cfg.get_all_unflagged_baselines(
+    all_baselines, all_pols = cfg.get_all_antpairs(
         data_metas,
         ex_ant_yaml_files,
         include_autos=include_autos,
@@ -610,7 +610,7 @@ def lst_bin_files_single_outfile(
 
     nbls_so_far = len(auto_bls)
     for bi, bl_chunk in enumerate(bl_chunks):
-        logger.info(f"Baseline Chunk {bi+1} / {len(bl_chunks)}")
+        logger.info(f"Baseline Chunk {bi + 1} / {len(bl_chunks)}")
         # data/flags/nsamples are *lists*, with nlst_bins entries, each being an
         # array, with shape (times, bls, freqs, npols)
         _process_blchunk(bl_chunk, nbls_so_far=nbls_so_far, mean_autos=auto_mean)
