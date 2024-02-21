@@ -66,21 +66,20 @@ class MixtureModel(rv_continuous):
 class LSTBinStatsCalc:
     """Class containing methods to calculate statistics of the LST-binned data."""
     uvd: UVData = attrs.field()
-    inpainted: UVFlag | None = attrs.field()
 
     @uvd.validator
     def _validate_data(self, attribute, value):
         if not isinstance(value, UVData):
-            raise ValueError(f"uvd must be a UVData object")
+            raise ValueError("uvd must be a UVData object")
 
         if not value.blts_are_rectangular:
-            raise ValueError(f"blts must be rectangular in UVData object")
+            raise ValueError("blts must be rectangular in UVData object")
 
         if not value.time_axis_faster_than_bls:
-            raise ValueError(f"time axis must be faster than bls in UVData object")
+            raise ValueError("time axis must be faster than bls in UVData object")
 
         if value.integration_time is None:
-            raise ValueError(f"integration_time must be defined in UVData object")
+            raise ValueError("integration_time must be defined in UVData object")
 
     @inpainted.default
     def _default_inpainted(self):

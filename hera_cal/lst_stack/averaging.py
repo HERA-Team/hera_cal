@@ -13,16 +13,7 @@ def reduce_lst_bins(
     data: list[np.ndarray],
     flags: list[np.ndarray],
     nsamples: list[np.ndarray],
-    where_inpainted: list[np.ndarray] | None = None,
-    inpainted_mode: bool = False,
-    mutable: bool = False,
-    sigma_clip_thresh: float | None = None,
-    sigma_clip_min_N: int = 4,
-    sigma_clip_type: str = 'direct',
-    sigma_clip_subbands: list[tuple[int, int]] | None = None,
-    sigma_clip_scale: list[np.ndarray] | None = None,
-    flag_below_min_N: bool = False,
-    flag_thresh: float = 0.7,
+    inpainted_mode: bool = True,
     get_mad: bool = False,
 ) -> dict[str, np.ndarray]:
     """
@@ -51,38 +42,6 @@ def reduce_lst_bins(
         Whether to use the inpainted samples when calculating the statistics. If False,
         the inpainted samples are ignored. If True, the inpainted samples are used, and
         the statistics are calculated over the un-inpainted samples.
-    mutable
-        Whether the input data (and flags and nsamples) can be modified in place within
-        the algorithm. Setting to true saves memory, and is safe for a one-shot script.
-    sigma_clip_thresh
-        The number of standard deviations to use as a threshold for sigma clipping.
-        If None (default), no sigma clipping is performed. Note that sigma-clipping is performed
-        per baseline, frequency, and polarization.
-    sigma_clip_min_N
-        The minimum number of unflagged samples required to perform sigma clipping.
-    sigma_clip_type
-        The type of sigma clipping to perform. If ``direct``, each datum is flagged
-        individually. If ``mean`` or ``median``, an entire sub-band of the data is
-        flagged if its mean (absolute) zscore is beyond the threshold.
-    sigma_clip_subbands
-        A list of tuples specifying the start and end indices of the threshold axis
-        over which to perform sigma clipping. They are used in a ``slice`` object,
-        so that the end is exclusive but the start is inclusive. If None, the entire
-        threshold axis is used at once.
-    sigma_clip_scale
-        If given, interpreted as the expected standard deviation of the data
-        (over nights). If not given, estimated from the data using the median
-        absolute deviation. If given, must be an array with either the same
-        shape as ``array`` OR the same shape as ``array`` with the ``median_axis``
-        removed. If the former, each variate over the ``median_axis`` is scaled
-        independently. If the latter, the same scale is applied to all variates
-        (generally nights).
-    flag_below_min_N
-        Whether to flag data that has fewer than ``sigma_clip_min_N`` unflagged samples.
-    flag_thresh
-        The fraction of integrations for a particular (antpair, pol, channel) combination
-        within an LST-bin that can be flagged before that combination is flagged
-        in the LST-average.
     get_mad
         Whether to compute the median and median absolute deviation of the data in each
         LST bin, in addition to the mean and standard deviation.
@@ -93,8 +52,8 @@ def reduce_lst_bins(
     dict
         The reduced data in a dictionary. Keys are 'data' (the lst-binned mean),
         'nsamples', 'flags', 'days_binned' (the number of days that went into each bin),
-        'std' (standard deviation) and *otionally* 'median' and 'mad' (if `get_mad` is
-        True). All values are arrays of the same shape: ``(nbl, nlst_bins, nfreq, npol)``.
+        'std' (standard deviation) and *optionally* 'median' and 'mad' (if `get_mad` is
+        True). All values are arrays of the same shape: ``(nlst_bins, nbl, nfreq, npol)``.
     """
     nlst_bins = len(data)
     (_, nbl, nfreq, npol) = data[0].shape
@@ -102,69 +61,40 @@ def reduce_lst_bins(
     for d, f, n in zip(data, flags, nsamples):
         assert d.shape == f.shape == n.shape
 
-    # Do this just so that we can save memory if the call to this function already
-    # has allocated memory.
-
-    out_data = np.zeros((nbl, nlst_bins, nfreq, npol), dtype=complex)
-    out_flags = np.zeros(out_data.shape, dtype=bool)
-    out_std = np.ones(out_data.shape, dtype=complex)
+    out_data = np.zeros((nlst_bins, nbl, nfreq, npol), dtype=complex) * np.nan
+    out_flags = np.ones(out_data.shape, dtype=bool)
+    out_std = np.ones(out_data.shape, dtype=complex) * np.inf
     out_nsamples = np.zeros(out_data.shape, dtype=float)
-    days_binned = np.zeros(out_nsamples.shape, dtype=int)
+    days_binned = np.zeros(out_data.shape, dtype=int)
 
     if get_mad:
-        mad = np.ones(out_data.shape, dtype=complex)
-        med = np.ones(out_data.shape, dtype=complex)
+        mad = np.ones(out_data.shape, dtype=complex) * np.inf
+        med = np.ones(out_data.shape, dtype=complex) * np.nan
 
-    if where_inpainted is None:
-        where_inpainted = [None] * nlst_bins
+    # if where_inpainted is None:
+    #     where_inpainted = [None] * nlst_bins
 
-    if sigma_clip_scale is None:
-        sigma_clip_scale = [None] * nlst_bins
-
-    for lstbin, (d, n, f, clip_scale, inpf) in enumerate(
-        zip(data, nsamples, flags, sigma_clip_scale, where_inpainted)
+    for lstbin, (d, n, f) in enumerate(
+        zip(data, nsamples, flags)
     ):
         logger.info(f"Computing LST bin {lstbin + 1} / {nlst_bins}")
 
-        # TODO: check that this doesn't make yet another copy...
-        # This is just the data in this particular lst-bin.
-
-        if d.size:
+        if d.size:  # If not, keep the default values initialized above
             d, f = get_masked_data(
                 d, n, f, inpainted=inpf,
                 inpainted_mode=inpainted_mode, flag_thresh=flag_thresh
             )
 
             (
-                out_data[:, lstbin],
-                out_flags[:, lstbin],
-                out_std[:, lstbin],
-                out_nsamples[:, lstbin],
-                days_binned[:, lstbin],
-            ) = lst_average(
-                d,
-                n,
-                f,
-                inpainted_mode=inpainted_mode,
-                sigma_clip_thresh=sigma_clip_thresh,
-                sigma_clip_min_N=sigma_clip_min_N,
-                sigma_clip_subbands=sigma_clip_subbands,
-                sigma_clip_type=sigma_clip_type,
-                sigma_clip_scale=clip_scale,
-                flag_below_min_N=flag_below_min_N,
-            )
+                out_data[lstbin],
+                out_flags[lstbin],
+                out_std[lstbin],
+                out_nsamples[lstbin],
+                days_binned[lstbin],
+            ) = lst_average(d, n, f, inpainted_mode=inpainted_mode)
 
             if get_mad:
-                med[:, lstbin], mad[:, lstbin] = get_lst_median_and_mad(d)
-        else:
-            out_data[:, lstbin] *= np.nan
-            out_flags[:, lstbin] = True
-            out_std[:, lstbin] *= np.inf
-            out_nsamples[:, lstbin] = 0.0
-
-            if get_mad:
-                mad[:, lstbin] *= np.inf
-                med[:, lstbin] *= np.nan
+                med[lstbin], mad[lstbin] = get_lst_median_and_mad(d)
 
     out = {
         "data": out_data,
@@ -184,25 +114,46 @@ def get_masked_data(
     data: np.ndarray,
     nsamples: np.ndarray,
     flags: np.ndarray,
-    inpainted: np.ndarray | None = None,
+    # inpainted: np.ndarray | None = None,
     inpainted_mode: bool = False,
-    flag_thresh: float = 0.7,
 ) -> np.ma.MaskedArray:
+    """
+    The assumptions on the input data here are that
+
+    data that is flagged IS flagged and not inpainted and should not be used at all
+    if nsamples == 0 but unflagged, the data is flagged but inpainted.
+    if nsamples > 0 and unflagged, the data is "normal" and should be used in any mode.
+
+    Assumptions on the output data are that
+
+    the data.mask represents what should be used when averaging the data:
+    - if inpainted_mode is False, then the mask is [flags & nsamples == 0] (i.e.anything that was originally flagged, whether inpainted or not)
+    - if inpainted_mode is True, then the mask is [flags] (i.e. anything that was originally flagged and not inpainted)
+
+    flags represent what was originally flagged (regardless of inpainting)
+    for nsamples, the elements where nsamples==0 are left at zero in non-inpainting mode
+      but in inpaint mode, the nsamples is forced to be the mean over frequency,
+      and the mask is set to True in the same way as the data.
+    """
+    flags = flags | np.isnan(data) | np.isinf(data)  # un-recoverable
+    orig_flags = flags | nsamples == 0
+
     if not inpainted_mode:
-        # Act like nothing is inpainted.
-        inpainted = np.zeros(flags.shape, dtype=bool)
-    elif inpainted is None:
+        data = np.ma.masked_array(data, mask=orig_flags)
+        nsamples = np.ma.masked_array(nsamples, mask=orig_flags)
+    else:
+        data = np.ma.masked_array(data, mask=flags)
+
+        # First set the mask to all original flags, so we don't count nsamples==0
+        nsamples = np.ma.masked_array(nsamples, mask=orig_flags)
+        nsamples = np.ma.mean(nsamples, axis=2)[:, :, None, :]
+        nsamples.mask = data.mask
+
         # Flag if a whole blt is flagged:
         allf = np.all(flags, axis=2)[:, :, None, :]
 
         # Assume everything else that's flagged is inpainted.
         inpainted = flags.copy() * (~allf)
-
-    flags = flags | np.isnan(data) | np.isinf(data) | (nsamples == 0)
-
-    # Threshold flags over time here, because we want the new flags to be treated on the
-    # same footing as the inpainted flags.
-    threshold_flags(flags, inplace=True, flag_thresh=flag_thresh)
 
     logger.info(
         f"In inpainted_mode: {inpainted_mode}. Got {np.sum(inpainted)} inpainted samples, {np.sum(flags)} total flags, {np.sum(flags & ~inpainted)} non-inpainted flags."

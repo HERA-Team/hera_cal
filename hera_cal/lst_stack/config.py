@@ -12,6 +12,7 @@ import attrs
 from functools import cached_property
 from astropy import units
 import h5py
+from .io import apply_filename_rules
 
 logger = logging.getLogger(__name__)
 
@@ -294,10 +295,17 @@ class LSTBinConfiguration:
     lst_start: float = attrs.field(default=0.0, converter=float)
     lst_end: float = attrs.field(converter=float)
     jd_regex: str = attrs.field(default=r"zen\.(\d+\.\d+)\.")
+    calfile_rules: list[tuple[str, str]] | None = attrs.field(default=None)
+    where_inpainted_file_rules: list[tuple[str, str]] | None = attrs.field(default=None)
 
     @cached_property
     def datameta(self):
         return FastUVH5Meta(self.data_files[0][0])
+
+    def get_earliest_jd_in_set(self) -> float:
+        """Assuming that each sub-list of datafiles is a night, return the earliest JD."""
+        first_files = [FastUVH5Meta(fl[0]) for fl in self.data_files]
+        return min(fl.times[0] for fl in first_files)
 
     @nlsts_per_file.default
     def _nlsts_per_file_default(self) -> int:
@@ -322,6 +330,16 @@ class LSTBinConfiguration:
     def _lst_start_end_validator(self, attribute, value):
         if value < 0 or value >= 2 * np.pi:
             raise ValueError("LST must be between 0 and 2pi")
+
+    @calfile_rules.validator
+    @where_inpainted_file_rules.validator
+    def _rules_validator(self, attribute, value):
+        if value is not None and not all(
+            isinstance(v, tuple)
+            and len(v) == 2
+            and all(isinstance(vv, str) for vv in v) for v in value
+        ):
+            raise ValueError(f"{attribute.name} must be a list of tuples of length 2.")
 
     @cached_property
     def lst_grid(self) -> np.ndarray:
@@ -459,11 +477,18 @@ class LSTBinConfiguration:
             antpairs=[tuple(ap) for ap in antpairs if ap[0] != ap[1]],
             autos=[tuple(ap) for ap in antpairs if ap[0] == ap[1]],
             pols=pols,
+            inpaint_files=apply_filename_rules(
+                matched_files, self.where_inpainted_file_rules, missing='raise'
+            ) if self.where_inpainted_file_rules else None,
+            calfiles=apply_filename_rules(
+                matched_files, self.calfile_rules, missing='raise'
+            ) if self.calfile_rules else None,
             properties={
                 "lst_branch_cut": lst_branch_cut,
                 "blts_are_rectangular": self.datameta.blts_are_rectangular,
                 "time_axis_faster_than_bls": self.datameta.time_axis_faster_than_bls,
                 "x_orientation": self.datameta.x_orientation,
+                "first_jd": self.get_earliest_jd_in_set(),
             }
         )
 
@@ -479,10 +504,7 @@ class LSTBinConfiguration:
 
     @classmethod
     def read(cls, group: h5py.Group):
-        dct = {}
-        for k, v in group.attrs.items():
-            dct[k] = v
-
+        dct = dict(group.attrs.items())
         n_nights = len([k for k in group.keys() if k.startswith("night_")])
         dct["data_files"] = []
         for night in range(n_nights):
@@ -499,6 +521,8 @@ class LSTConfig:
     autos: list[tuple[int, int]] = attrs.field()
     antpairs: list[tuple[int, int]] = attrs.field()
     pols: list[str] = attrs.field()
+    calfiles: list[list[list[str]]] | None = attrs.field()
+    inpaint_files: list[list[list[str]]] | None = attrs.field()
     properties: dict = attrs.field()
 
     @lst_grid.validator
@@ -524,6 +548,10 @@ class LSTConfig:
             fl.create_dataset("antpairs", data=self.antpairs)
             fl.create_dataset("autos", data=self.autos)
             fl.create_dataset("pols", data=self.pols)
+            if self.calfiles:
+                fl.create_dataset("calfiles", data=self.calfiles)
+            if self.inpaint_files:
+                fl.create_dataset("inpaint_files", data=self.inpaint_files)
             for k, v in self.properties.items():
                 fl.attrs[k] = v
 
@@ -536,6 +564,8 @@ class LSTConfig:
             antpairs = fl["antpairs"][()]
             autos = fl["autos"][()]
             pols = fl["pols"][()]
+            calfiles = fl["calfiles"][()] if "calfiles" in fl else None
+            inpaint_files = fl["inpaint_files"][()] if "inpaint_files" in fl else None
             properties = {k: v for k, v in fl.attrs.items()}
 
         return cls(
@@ -546,4 +576,6 @@ class LSTConfig:
             antpairs=antpairs,
             autos=autos,
             pols=pols,
+            calfiles=calfiles,
+            inpaint_files=inpaint_files,
         )

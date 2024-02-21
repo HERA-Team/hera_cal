@@ -9,58 +9,89 @@ from .. import io
 from .. import utils
 import logging
 from pyuvdata import utils as uvutils
+import re
 
 logger = logging.getLogger(__name__)
 
 
-def apply_calfile_rules(
-    data_files: list[list[str]],
-    calfile_rules: list[tuple[str, str]],
-    ignore_missing: bool,
-) -> tuple[list[list[str]], list[list[str]]]:
+def apply_filename_rules_to_file(
+    filename: str,
+    rules: list[tuple[str, str]],
+    missing: Literal["warn", "raise", "ignore"] = "raise",
+) -> str:
     """
-    Apply a set of rules to convert data file names to calibration file names.
+    Apply a set of rules to convert a data file name to another file name.
 
     Parameters
     ----------
-    data_files : list of list of str
-        List of lists of data file names. Each inner list is a night of data.
-    calfile_rules : list of tuple of str
+    filename : str
+        Data file name.
+    rules : list of tuple of str
         List of rules to apply. Each rule is a tuple of two strings, the first
         is the string to replace, the second is the string to replace it with.
         Each 2-tuple constitutes one "rule" and they are applied in order to each file.
         All rules are applied to all files.
-    ignore_missing : bool
-        If True, ignore missing calibration files. If False, raise an error.
+    missing : str, optional
+        What to do if a file is missing after applying the rules. Options are:
+        "warn" : issue a warning and continue
+        "raise" : raise an IOError
+        "ignore" : silently continue
+        "replace" : replace the missing file with None
 
     Returns
     -------
-    data_files : list of list of str
-        List of lists of data file names. Each inner list is a night of data.
-        Files that were removed due to missing calibration files are removed.
-    input_cals : list of list of str
+    new_filename : str
+        New file name.
+    """
+    new_filename = filename
+    for rule in rules:
+        new_filename = re.sub(rule[0], rule[1], new_filename)
+
+    if missing in ["warn", "replace", 'raise'] and not Path(new_filename).exists():
+        if missing == "warn":
+            warnings.warn(f"File {new_filename} does not exist")
+        elif missing == "raise":
+            raise IOError(f"File {new_filename} does not exist")
+        else:
+            new_filename = None
+
+    return new_filename
+
+
+def apply_filename_rules(
+    files: list[list[str]],
+    rules: list[tuple[str, str]],
+    missing: Literal["warn", "raise", "ignore"] = "raise",
+) -> list[list[str]]:
+    """
+    Apply a set of rules to convert data file names to other file names.
+
+    Parameters
+    ----------
+    files : arbitrarily-deep nested lists of strings
+        Lists (of lists, of lists...) of data file names.
+    rules : list of 2-tuples of str
+        List of rules to apply. Each rule is a tuple of two strings, the first
+        is the string to replace, the second is the string to replace it with.
+        Each 2-tuple constitutes one "rule" and they are applied in order to each file.
+        All rules are applied to all files. Each string can be a regex pattern.
+    missing : str, optional
+        What to do if a file is missing after applying the rules. Options are:
+        "warn" : issue a warning and continue
+        "raise" : raise an IOError
+        "ignore" : silently continue
+        "replace" : replace the missing file with None
+
+    Returns
+    -------
+    output_files : arbitrarily-deep nested lists of strings
         List of lists of calibration file names. Each inner list is a night of data.
         Any calibration files that were missing are not included.
     """
-    input_cals = []
-    for night, dflist in enumerate(data_files):
-        this = []
-        input_cals.append(this)
-        missing = []
-        for df in dflist:
-            cf = df
-            for rule in calfile_rules:
-                cf = cf.replace(rule[0], rule[1])
+    if not isinstance(files[0], str):
+        return [apply_filename_rules(f, rules, missing=missing) for f in files]
 
-            if os.path.exists(cf):
-                this.append(cf)
-            elif ignore_missing:
-                warnings.warn(f"Calibration file {cf} does not exist")
-                missing.append(df)
-            else:
-                raise IOError(f"Calibration file {cf} does not exist")
-        data_files[night] = [df for df in dflist if df not in missing]
-    return data_files, input_cals
+    return [apply_filename_rules_to_file(f, rules, missing) for f in files]
 
 
 def filter_required_files_by_times(
@@ -110,29 +141,6 @@ def filter_required_files_by_times(
                 where_inpainted.append(inp)
 
     return tinds, time_arrays, all_lsts, file_list, cals, where_inpainted
-
-
-def _get_where_inpainted_files(
-    data_files: list[list[str | Path]],
-    where_inpainted_file_rules: list[tuple[str, str]] | None,
-) -> list[list[str | Path]] | None:
-    if where_inpainted_file_rules is None:
-        return None
-
-    where_inpainted_files = []
-    for dflist in data_files:
-        this = []
-        where_inpainted_files.append(this)
-        for df in dflist:
-            wif = str(df)
-            for rule in where_inpainted_file_rules:
-                wif = wif.replace(rule[0], rule[1])
-            if os.path.exists(wif):
-                this.append(wif)
-            else:
-                raise IOError(f"Where inpainted file {wif} does not exist")
-
-    return where_inpainted_files
 
 
 def _configure_inpainted_mode(output_flagged, output_inpainted, where_inpainted_files):

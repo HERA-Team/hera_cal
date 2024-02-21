@@ -8,11 +8,14 @@ from .. import utils
 from typing import Sequence
 from ..red_groups import RedundantGroups
 from pyuvdata.uvdata import FastUVH5Meta
+from pyuvdata import UVData
+
 from pyuvdata import utils as uvutils
 from .. import io
 from ..datacontainer import DataContainer
 from .. import apply_cal
 from .config import LSTConfig
+from ..utils import LST2JD
 
 logger = logging.getLogger(__name__)
 
@@ -252,25 +255,13 @@ def lst_bin_files_from_config(
     outfile_index: int,
     bl_chunk_to_load: int | str = 0,
     nbl_chunks: int = 1,
-    calfile_rules: list[tuple[str, str]] | None = None,
-    where_inpainted_file_rules: list[tuple[str, str]] | None = None,
     rephase: bool = True,
     freq_min: float | None = None,
     freq_max: float | None = None,
-):
+) -> list[UVData]:
     data_files = config.matched_files[outfile_index]
-
-    # Check that that there are the same number of input data files and
-    # calibration files each night.
-    input_cals = []
-    if calfile_rules:
-        data_files, input_cals = io.apply_calfile_rules(
-            data_files, calfile_rules, ignore_missing=False
-        )
-
-    where_inpainted_files = io._get_where_inpainted_files(
-        data_files, where_inpainted_file_rules
-    )
+    input_cals = config.calfiles[outfile_index]
+    where_inpainted_files = config.inpaint_files[outfile_index]
 
     output_flagged, output_inpainted = io._configure_inpainted_mode(
         output_flagged, output_inpainted, where_inpainted_files
@@ -330,7 +321,68 @@ def lst_bin_files_from_config(
         where_inpainted_files=where_inpainted_files
     )
 
-    return antpairs, data, flags, nsamples, where_inpainted, binned_times
+    freqs, _ = _get_freqs_chans(freq_array, freq_min, freq_max)
+
+    out = []
+    for (d, f, n, wf, t, lst) in zip(data, flags, nsamples, where_inpainted, binned_times, all_lsts):
+        # To enable inpaint-mode, set nsamples where things are flagged and inpainted
+        # to zero, and set the flags to false.
+        f[wf] = False
+        n[wf] = 0
+
+        lsts = np.ones(d.shape[0]) * lst
+
+        times = LST2JD(
+            lsts, start_jd=config.properties['first_jd'],
+            allow_other_jd=True, lst_branch_cut=config.properties['lst_branch_cut'],
+            latitude=meta.telescope_location_lat_lon_alt_degrees[0],
+            longitude=meta.telescope_location_lat_lon_alt_degrees[1],
+            altitude=meta.telescope_location_lat_lon_alt_degrees[2],
+        )
+
+        # Return a UVData object
+        uv = UVData.new(
+            freq_array=freqs,
+            polarization_array=config.pols,
+            antenna_positions=meta.antpos_enu,
+            telescope_location=meta.telescope_location,
+            telescope_name=meta.telescope_name,
+            times=times,
+            antpairs=antpairs,
+            do_blt_outer=True,
+            integration_time=np.mean(meta.integration_time),
+            antenna_names=meta.antenna_names,
+            antenna_numbers=meta.antenna_numbers,
+            blts_are_rectangular=True,
+            data_array=d.reshape((-1, len(freqs), len(config.pols))),
+            flag_array=f.reshape((-1, len(freqs), len(config.pols))),
+            nsample_array=n.reshape((-1, len(freqs), len(config.pols))),
+            vis_units="Jy",
+            time_axis_faster_than_bls=False,
+            x_orientation=meta.x_orientation,
+        )
+
+        out.append(uv)
+    return out
+
+
+def _get_freqs_chans(freqs, freq_min, freq_max):
+
+    if freq_min is None and freq_max is None:
+        freq_chans = None
+    else:
+        freq_chans = np.arange(len(freqs))
+
+    if freq_min is not None:
+        mask = freqs >= freq_min
+        freqs = freqs[mask]
+        freq_chans = freq_chans[mask]
+    if freq_max is not None:
+        mask = freqs <= freq_max
+        freqs = freqs[mask]
+        freq_chans = freq_chans[mask]
+
+    return freqs, freq_chans
 
 
 def lst_bin_files_for_baselines(
@@ -451,19 +503,7 @@ def lst_bin_files_for_baselines(
     if freqs is None:
         freqs = np.squeeze(metas[0].freq_array)
 
-    if freq_min is None and freq_max is None:
-        freq_chans = None
-    else:
-        freq_chans = np.arange(len(freqs))
-
-    if freq_min is not None:
-        mask = freqs >= freq_min
-        freqs = freqs[mask]
-        freq_chans = freq_chans[mask]
-    if freq_max is not None:
-        mask = freqs <= freq_max
-        freqs = freqs[mask]
-        freq_chans = freq_chans[mask]
+    freqs, freq_chans = _get_freqs_chans(freqs, freq_min, freq_max)
 
     if pols is None:
         pols = metas[0].pols
