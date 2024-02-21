@@ -11,7 +11,7 @@ import json
 from hera_cal._cli_tools import setup_logger, parse_args, filter_kwargs, run_with_profiling
 from pathlib import Path
 
-a = lstbin.lst_bin_arg_parser()
+a = lstbin.wrappers.lst_bin_arg_parser()
 args = parse_args(a)
 
 history = ' '.join(sys.argv)
