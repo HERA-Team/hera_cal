@@ -5,7 +5,7 @@
 
 """command-line drive script for lstbin.lst_bin_files()"""
 
-from hera_cal import lstbin_simple as lstbin
+from hera_cal import lst_stack as lstbin
 import sys
 import json
 from hera_cal._cli_tools import setup_logger, parse_args, filter_kwargs, run_with_profiling
