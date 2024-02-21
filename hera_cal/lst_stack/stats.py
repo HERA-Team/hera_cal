@@ -63,7 +63,7 @@ class MixtureModel(rv_continuous):
 
 
 @attrs.define(slots=False, kw_only=True, frozen=True)
-class LSTBinStatsCalc:
+class LSTStack:
     """Class containing methods to calculate statistics of the LST-binned data."""
     uvd: UVData = attrs.field()
 
@@ -81,26 +81,6 @@ class LSTBinStatsCalc:
         if value.integration_time is None:
             raise ValueError("integration_time must be defined in UVData object")
 
-    @inpainted.default
-    def _default_inpainted(self):
-        uvf = UVFlag.from_uvdata(self.uvd, mode="flag")
-        uvf.flag_array[:] = False
-        return uvf
-
-    @inpainted.validator
-    def _validate_inpainted_type(self, attribute, value):
-        if not isinstance(value, UVFlag):
-            raise ValueError(f"inpainted must be a UVFlag object")
-
-        if not value.mode == "flag":
-            raise ValueError(f"mode of inpainted must be 'flag'")
-
-        if value.type != "baseline":
-            raise ValueError(f"type of inpainted must be 'baseline'")
-
-        if value.flag_array.shape != self.uvd.flag_array.shape:
-            raise ValueError(f"flag_array shape of inpainted must be the same as uvd")
-
     def __getattr__(self, name):
         return getattr(self.uvd, name)
 
@@ -114,286 +94,218 @@ class LSTBinStatsCalc:
         """The time resolution of the data."""
         return (np.median(self.integration_time) * units.day).to(units.s)
 
-    @classmethod
-    def from_config(
-        cls,
-        config_file: str,
-        output_file_index: int,
-        bl_chunk_to_load: int | str = 0,
-        nbl_chunks: int = 1,
-        rephase: bool = True,
-        freq_min: float | None = None,
-        freq_max: float | None = None,
-        calfile_rules: list[tuple[str, str]] | None = None,
-        where_inpainted_file_rules: list[tuple[str, str]] | None = None,
-    ) -> list[Self]:
-        """Create an LSTBinStatsCalc object from a configuration file."""
-        config = LSTConfig.from_file(config_file)
-
-        if output_file_index >= len(config.output_files):
-            raise ValueError(f"output_file_index must be less than the number of output_files")
-
-        antpairs, data, flags, nsamples, where_inpainted, jds = lst_bin_files_from_config(
-            config,
-            outfile_index=output_file_index,
-            bl_chunk_to_load=bl_chunk_to_load,
-            nbl_chunks=nbl_chunks,
-            calfile_rules=calfile_rules,
-            where_inpainted_file_rules=where_inpainted_file_rules,
-            rephase=True,
-            freq_min=freq_min,
-            freq_max=freq_max,
-        )
-
-        meta = config.config.datameta
-
-        freqs = meta.freq_array
-        if freq_min:
-            freqs = freqs[freqs >= freq_min]
-        if freq_max:
-            freqs = freqs[freqs <= freq_max]
-
-        # each element in data has shape (time, bl, freq, pol)
-        for d, n, f, w in zip(data, nsamples, flags, where_inpainted):
-
-            uvd_template = io.uvdata_from_fastuvh5(
-                meta=meta,
-                antpairs=antpairs,
-                lsts=config.lst_grid[output_file_index],
-                times=times,
-                start_jd=config.properties['start_jd'],
-                blts_are_rectangular=True,
-                time_axis_faster_than_bls=False,
-                lst_branch_cut=config.properties['lst_branch_cut'],
-            )
-            uvd_template.select(frequencies=freqs, polarizations=pols, inplace=True)
-            # Need to set the polarization array manually because even though the select
-            # operation does the down-select, it doesn't re-order the pols.
-            uvd_template.polarization_array = np.array(
-                uvutils.polstr2num(pols, x_orientation=uvd_template.x_orientation)
-            )
-
 
 @attrs.define(slots=False)
 class LSTBinStats:
+    """Class that holds basic LST-binned data and statistics"""
+    mean: DataContainer = attrs.field()
+    std: DataContainer = attrs.field()
+    nsamples: DataContainer = attrs.field()
+    flags: DataContainer = attrs.field()
+    median: DataContainer = attrs.field()
+    mad: DataContainer = attrs.field()
     days_binned: DataContainer = attrs.field()
-    n2n_var_obs: DataContainer = attrs.field()
-    lstavg_var_obs: DataContainer = attrs.field()
-    lstavg_var_pred: DataContainer = attrs.field()
-    per_night_var_pred: DataContainer = attrs.field()
 
     @classmethod
-    def from_data(
+    def from_reduced_data(
         cls,
-        *,
-        lstbin_data: DataContainer,
-        lstbin_nsamples: DataContainer,
-        lstbin_flags: DataContainer,
-        std_data: DataContainer,
-        dt: float,
-        df: float,
-        data: DataContainer = None,
-        nsamples: DataContainer = None,
-        flags: DataContainer = None,
+        antpairs: list[tuple[int, int]],
+        pols: list[str],
+        rdc: dict[str, np.ndarray],
+        reds: RedundantGroups | None = None,
     ):
-        """Get the observed and predicted variance metrics from observations in a particular LST bin."""
-        days_binned = {}
-        all_obs_var = {}
-        all_predicted_var = {}
-        all_interleaved_var = {}
-        all_predicted_binned_var = {}
-        excess_binned_var = {}
-        excess_interleaved_var = {}
-        per_night_var_pred = {}
+        """Return a class given a dictionary computed by reduce_lst_bins."""
+        outdict = {}
+        kls = partial(RedDataContainer, reds=reds) if reds is not None else DataContainer
 
-        # Make sure we output correct types
-        dcls = lstbin_data.__class__  # Either DataContainer or RedDataContainer
-        REDAVG = dcls == RedDataContainer
-
-        if REDAVG:
-            dcls = partial(dcls, reds=data.reds)
-
-        if REDAVG and (data is None or nsamples is None or flags is None):
-            raise ValueError(
-                "If data is redundantly-averaged, you must provide data, nsamples and flags"
+        for k, v in rdc.items():
+            outdict[k] = kls(
+                {antpair + (pol,): v[i] for i, antpair in enumerate(antpairs) for j, pol in enumerate(pols)}
             )
+        return cls(**outdict)
 
-        for bl in lstbin_data.bls():
-            lstd = lstbin_data[bl][0]
-            lstn = lstbin_nsamples[bl][0]
-            lstf = lstbin_flags[bl][0]
-            stdd = std_data[bl][0]
+    @property
+    def bls(self):
+        return self.mean.bls()
 
-            if np.all(lstf):
-                continue
 
-            splbl = utils.split_bl(bl)
-            if splbl[0] == splbl[1]:  # don't use autos
-                continue
-
-            # Observed variances.
-            all_obs_var[bl] = np.abs(np.where(lstf, np.nan, stdd**2))
-            all_interleaved_var[bl] = noise.interleaved_noise_variance_estimate(
-                np.atleast_2d(np.where(lstf, np.nan, lstd)), kernel=[[1, -2, 1]]
-            )[0]
-            # Set first and last frequency to NaN
-            all_interleaved_var[bl][[0, -1]] = np.nan
-
-            if REDAVG:
-                # In the redundantly-averaged case we need to know the
-                # nsamples (and autos) on each night, because they all have
-                # different nsamples.
-
-                # Ensure flagged data has zero samples
-                gd = data[bl]
-                gn = nsamples[bl].copy()
-                gf = flags[bl]
-
-                gn[gf] = 0
-
-                # This might be slighly wrong because it gets a different variance
-                # each night not just from the Nsamples but also the autos. In the
-                # sample variance calculation that goes in to the STD files, we
-                # use only the nsamples.
-                per_day_expected_var = noise.predict_noise_variance_from_autos(
-                    bl, data, dt=dt, df=df, nsamples=nsamples
-                )
-                per_day_expected_var[gf] = np.inf
-                per_night_var_pred[bl] = per_day_expected_var
-
-                wgts_arr = np.where(gf, 0, per_day_expected_var**-1)
-
-                # compute ancillary statistics, see math above
-                days_binned[bl] = np.sum(gn > 0, axis=0)
-
-                all_predicted_binned_var[bl] = np.sum(wgts_arr, axis=0) ** -1
-                all_predicted_var[bl] = (
-                    days_binned[bl] - 1
-                ) * all_predicted_binned_var[bl]
-            else:
-                # Although the above code WOULD work for non-redundantly-averaged
-                # data, it is highly inefficient, because we don't need to know
-                # the nsamples every night (since we know they're all uniform).
-                expected_var = noise.predict_noise_variance_from_autos(
-                    bl,
-                    lstbin_data,
-                    dt=dt,
-                    df=df,
-                )[0]
-                expected_var[lstf] = np.inf
-                days_binned[bl] = lstn
-                all_predicted_binned_var[bl] = expected_var / lstn
-                all_predicted_var[bl] = all_predicted_binned_var[bl] * (lstn - 1)
-                per_night_var_pred[bl] = expected_var[None, :]
-
-            excess_binned_var[bl] = all_obs_var[bl] / all_predicted_var[bl]
-            excess_interleaved_var[bl] = (
-                all_interleaved_var[bl] / all_predicted_binned_var[bl]
-            )
-
-        return cls(
-            days_binned=dcls(days_binned),
-            n2n_var_obs=dcls(all_obs_var),
-            lstavg_var_obs=dcls(all_interleaved_var),
-            lstavg_var_pred=dcls(all_predicted_binned_var),
-            per_night_var_pred=dcls(per_night_var_pred),
-        )
+@attrs.define(slots=False)
+class LSTBinMetricsCalculator:
+    """Class with methods to compute metrics that reduce over nights."""
+    auto_stats: LSTBinStats = attrs.field()
+    stats: LSTBinStats = attrs.field()
 
     @cached_property
     def _cls(self):
-        if isinstance(self.days_binned, RedDataContainer):
-            return partial(RedDataContainer, reds=self.days_binned.reds)
+        if isinstance(self.stats.mean, RedDataContainer):
+            return partial(RedDataContainer, reds=self.stats.mean.reds)
         else:
             return DataContainer
 
-    @cached_property
-    def n2n_var_pred(self) -> DataContainer:
-        return self._cls(
-            {
-                bl: self.lstavg_var_pred[bl] * (self.days_binned[bl] - 1)
-                for bl in self.bls()
-            }
-        )
 
-    @cached_property
-    def n2n_excess_var(self) -> DataContainer:
-        return self._cls(
-            {bl: self.n2n_var_obs[bl] / self.n2n_var_pred[bl] for bl in self.bls()}
-        )
+@attrs.define(slots=False)
+class LSTBinMetricsReduceNights(LSTBinMetricsCalculator):
+    """Class with methods to compute metrics that reduce over nights."""
+    def night_to_night_variance_predicted(self, stacks: list[LSTStack]) -> DataContainer:
+        out = {}
+        for bl in self.stats.mean.bls():
+            auto = self.auto_stats.mean[(bl[0], bl[0], bl[2])] * self.auto_stats.mean[(bl[1], bl[1], bl[2])]
+            out[bl] = np.zeros_like(self.stats.mean[bl])
 
-    @cached_property
-    def lstavg_excess_var(self) -> DataContainer:
-        return self._cls(
-            {
-                bl: self.lstavg_var_obs[bl] / self.lstavg_var_pred[bl]
-                for bl in self.bls()
-            }
-        )
+            for i, stack in enumerate(stacks):
+                gf = stack.get_flags(bl)
+                per_day_expected_var = np.abs(auto[i] / stack.dt / stack.df / stack.get_nsamples(bl))
+                per_day_expected_var[gf] = np.inf
+                wgts_arr = np.where(gf, 0, per_day_expected_var**-1)
 
-    @classmethod
-    def n2n_excess_var_distribution(cls, ndays_binned: int):
-        return gamma(a=(ndays_binned - 1) / 2, scale=2 / (ndays_binned - 1))
+                out[i] = np.sum(wgts_arr, axis=0) ** -1 * (self.stats.days_binned[bl] - 1)
+        return self._cls(out)
 
-    def n2n_excess_var_pred_dist(
-        self, bls, freq_inds=slice(None), min_n: int = 1
-    ) -> rv_continuous:
-        """Get a scipy distribution representing the theoretical distribution of excess variance.
+    def night_to_night_excess_variance(self, stacks: list[LSTStack]) -> DataContainer:
+        varpred = self.night_to_night_variance_predicted(stacks)
+        return self._cls({bl: self.stats.std[bl]**2 / varpred[bl] for bl in self.stats.bls()})
 
-        This will return a MixtureModel -- i.e. it will be the expected distribution of all frequencies
-        and baselines asked for (not their average).
+    def freq_to_freq_variance(self) -> DataContainer:
+        return self._cls({
+            bl: noise.interleaved_noise_variance_estimate(
+                np.atleast_2d(np.where(self.stats.flags[bl], np.nan, self.stats.mean[bl])),
+                kernel=[[1, -2, 1]]
+            )[0] for bl in self.stats.bls
+        })
 
-        """
-        if not hasattr(bls[0], "__len__"):
-            bls = [bls]
 
-        all_ns = np.concatenate(tuple(self.days_binned[bl][freq_inds] for bl in bls))
-        unique_days_binned, counts = np.unique(all_ns, return_counts=True)
-        indx = np.argwhere(unique_days_binned >= min_n)[:, 0]
-        unique_days_binned = unique_days_binned[indx]
-        counts = counts[indx]
+@attrs.define(slots=False)
+class LSTBinMetricsReduceFreq(LSTBinMetricsCalculator):
+    """Class with methods to compute metrics that reduce over frequencies."""
+    def reduced_square_zscore(
+        self,
+        stacks: list[LSTStack],
+        channels: np.ndarray | None,
+        use_mad: bool = False,
+        reducers: list[str] = ['mean', 'max']
+    ) -> dict[str, DataContainer]:
+        if channels is None:
+            channels = slice(None)
 
-        return MixtureModel(
-            [self.n2n_excess_var_distribution(nn) for nn in unique_days_binned],
-            weights=counts,
-        )
+        rdcfuncs = {
+            'mean': np.nanmean,
+            'max': np.nanmax,
+        }
 
-    def n2n_excess_var_avg_pred_dist(self, bls, freq_inds=slice(None), min_n: int = 1):
-        """Get a scipy distribution representing the theoretical distribution of averaged excess variance.
+        out = {rdc: {} for rdc in reducers}
+        for bl in self.stats.bls:
+            for rdc in reducers:
+                out[rdc][bl] = np.zeros((len(stacks), stacks[0].Ntimes))
 
-        This will return the expected distribution of the averaged excess variance for the
-        requested baselines and frequencies. Note this is NOT the excess averaged variance (i.e.
-        we're averaging the mean-one excess over the baselines/frequencies, rather than averaging
-        the observed variance and dividing by the averaged expected variance).
+            for i, stack in enumerate(stacks):
+                if use_mad:
+                    zscores = (stack.get_data(bl)[:, channels] - self.stats.median[bl][i, channels]) / self.stats.mad[bl][i, channels]
+                else:
+                    zscores = (stack.get_data(bl)[:, channels] - self.stats.mean[bl][i, channels]) / self.stats.std[bl][i, channels]
 
-        This is exact for non-redundantly averaged data, and an approximation for red-avg data.
-        Gotten from https://stats.stackexchange.com/a/191912/81338
-        """
-        if not hasattr(bls[0], "__len__"):
-            bls = [bls]
+                for rdc in reducers:
+                    out[rdc][bl][i] = rdcfuncs[rdc](zscores**2, axis=1)
 
-        ndays_binned = np.concatenate(
-            tuple(self.days_binned[bl][freq_inds] for bl in bls)
-        )
-        ndays_binned = ndays_binned[ndays_binned >= min_n]
+        return {rdc: self._cls(out[rdc]) for rdc in reducers}
 
-        M = len(ndays_binned)
-        ksum = np.sum(M**2 / 2 / np.sum(1 / (ndays_binned - 1)))
-        thetasum = 1 / ksum
 
-        return gamma(a=ksum, scale=thetasum)
+@attrs.define(slots=False)
+class LSTBinMetricsReduceBaseline(LSTBinMetricsCalculator):
+    """Class with methods to compute metrics that reduce over frequencies."""
+    def reduced_square_zscore(
+        self,
+        stacks: list[LSTStack],
+        use_mad: bool = False,
+        reducers: list[str] = ['mean', 'max']
+    ) -> dict[str, np.ndarray]:
 
-    def bls(self):
-        return self.days_binned.bls()
+        rdcfuncs = {
+            'mean': np.nanmean,
+            'max': np.nanmax,
+        }
 
-    def getmean(
-        self, rdc: str | RedDataContainer | DataContainer, bls=None, min_days: int = 7
-    ):
-        if isinstance(rdc, str):
-            rdc = getattr(self, rdc)
-        if bls is None:
-            bls = self.bls()
+        zscores = np.zeros((len(self.stats.bls), len(stacks), stacks[0].Ntimes))
 
-        return np.nanmean(
-            [np.where(self.days_binned[bl] >= min_days, rdc[bl], np.nan) for bl in bls],
-            axis=0,
-        )
+        for j, bl in enumerate(self.stats.bls):
+            for i, stack in enumerate(stacks):
+                if use_mad:
+                    zscores[j, i] = (stack.get_data(bl) - self.stats.median[bl]) / self.stats.mad[bl]
+                else:
+                    zscores[j, i] = (stack.get_data(bl) - self.stats.mean[bl]) / self.stats.std[bl]
+
+        out = {}
+        for rdc in reducers:
+            out[rdc] = rdcfuncs[rdc](zscores**2, axis=0)
+
+        return out
+
+
+def night_to_night_excess_var_distribution(cls, ndays_binned: int):
+    return gamma(a=(ndays_binned - 1) / 2, scale=2 / (ndays_binned - 1))
+
+
+def n2n_excess_var_pred_dist(
+    days_binned: DataContainer, bls, freq_inds=slice(None), min_n: int = 1
+) -> rv_continuous:
+    """Get a scipy distribution representing the theoretical distribution of excess variance.
+
+    This will return a MixtureModel -- i.e. it will be the expected distribution of all frequencies
+    and baselines asked for (not their average).
+
+    """
+    if not hasattr(bls[0], "__len__"):
+        bls = [bls]
+
+    all_ns = np.concatenate(tuple(days_binned[bl][freq_inds] for bl in bls))
+    unique_days_binned, counts = np.unique(all_ns, return_counts=True)
+    indx = np.argwhere(unique_days_binned >= min_n)[:, 0]
+    unique_days_binned = unique_days_binned[indx]
+    counts = counts[indx]
+
+    return MixtureModel(
+        [night_tonight_excess_var_distribution(nn) for nn in unique_days_binned],
+        weights=counts,
+    )
+
+
+def night_to_night_excess_var_avg_pred_dist(
+    days_binned: DataContainer,
+    bls, freq_inds=slice(None), min_n: int = 1
+):
+    """Get a scipy distribution representing the theoretical distribution of averaged excess variance.
+
+    This will return the expected distribution of the averaged excess variance for the
+    requested baselines and frequencies. Note this is NOT the excess averaged variance (i.e.
+    we're averaging the mean-one excess over the baselines/frequencies, rather than averaging
+    the observed variance and dividing by the averaged expected variance).
+
+    This is exact for non-redundantly averaged data, and an approximation for red-avg data.
+    Gotten from https://stats.stackexchange.com/a/191912/81338
+    """
+    if not hasattr(bls[0], "__len__"):
+        bls = [bls]
+
+    ndays_binned = np.concatenate(
+        tuple(days_binned[bl][freq_inds] for bl in bls)
+    )
+    ndays_binned = ndays_binned[ndays_binned >= min_n]
+
+    M = len(ndays_binned)
+    ksum = np.sum(M**2 / 2 / np.sum(1 / (ndays_binned - 1)))
+    thetasum = 1 / ksum
+
+    return gamma(a=ksum, scale=thetasum)
+
+
+def getmean(
+    self, rdc: str | RedDataContainer | DataContainer, bls=None, min_days: int = 7
+):
+    if isinstance(rdc, str):
+        rdc = getattr(self, rdc)
+    if bls is None:
+        bls = self.bls()
+
+    return np.nanmean(
+        [np.where(self.days_binned[bl] >= min_days, rdc[bl], np.nan) for bl in bls],
+        axis=0,
+    )

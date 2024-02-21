@@ -324,11 +324,11 @@ def lst_bin_files_from_config(
     freqs, _ = _get_freqs_chans(freq_array, freq_min, freq_max)
 
     out = []
-    for (d, f, n, wf, t, lst) in zip(data, flags, nsamples, where_inpainted, binned_times, all_lsts):
+    for (d, f, n, wf, lst) in zip(data, flags, nsamples, where_inpainted, all_lsts):
         # To enable inpaint-mode, set nsamples where things are flagged and inpainted
         # to zero, and set the flags to false.
         f[wf] = False
-        n[wf] = 0
+        n[wf] = -1
 
         lsts = np.ones(d.shape[0]) * lst
 

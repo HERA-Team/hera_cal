@@ -46,7 +46,6 @@ def reduce_lst_bins(
         Whether to compute the median and median absolute deviation of the data in each
         LST bin, in addition to the mean and standard deviation.
 
-
     Returns
     -------
     dict
@@ -71,19 +70,13 @@ def reduce_lst_bins(
         mad = np.ones(out_data.shape, dtype=complex) * np.inf
         med = np.ones(out_data.shape, dtype=complex) * np.nan
 
-    # if where_inpainted is None:
-    #     where_inpainted = [None] * nlst_bins
-
     for lstbin, (d, n, f) in enumerate(
         zip(data, nsamples, flags)
     ):
         logger.info(f"Computing LST bin {lstbin + 1} / {nlst_bins}")
 
         if d.size:  # If not, keep the default values initialized above
-            d, f = get_masked_data(
-                d, n, f, inpainted=inpf,
-                inpainted_mode=inpainted_mode, flag_thresh=flag_thresh
-            )
+            d, f, n = get_masked_data(d, f, n, inpainted_mode=inpainted_mode)
 
             (
                 out_data[lstbin],
@@ -112,31 +105,30 @@ def reduce_lst_bins(
 
 def get_masked_data(
     data: np.ndarray,
-    nsamples: np.ndarray,
     flags: np.ndarray,
-    # inpainted: np.ndarray | None = None,
+    nsamples: np.ndarray,
     inpainted_mode: bool = False,
-) -> np.ma.MaskedArray:
+) -> tuple[np.ma.MaskedArray, np.ndarray, np.ma.MaskedArray]:
     """
     The assumptions on the input data here are that
 
     data that is flagged IS flagged and not inpainted and should not be used at all
-    if nsamples == 0 but unflagged, the data is flagged but inpainted.
+    if nsamples == -1 but unflagged, the data is flagged but inpainted.
     if nsamples > 0 and unflagged, the data is "normal" and should be used in any mode.
 
     Assumptions on the output data are that
 
     the data.mask represents what should be used when averaging the data:
-    - if inpainted_mode is False, then the mask is [flags & nsamples == 0] (i.e.anything that was originally flagged, whether inpainted or not)
+    - if inpainted_mode is False, then the mask is [flags & nsamples == -1] (i.e.anything that was originally flagged, whether inpainted or not)
     - if inpainted_mode is True, then the mask is [flags] (i.e. anything that was originally flagged and not inpainted)
 
     flags represent what was originally flagged (regardless of inpainting)
-    for nsamples, the elements where nsamples==0 are left at zero in non-inpainting mode
+    for nsamples, the elements where nsamples==-1 are set to zero in non-inpainting mode
       but in inpaint mode, the nsamples is forced to be the mean over frequency,
-      and the mask is set to True in the same way as the data.
+      and the mask is set the same way as the data.
     """
     flags = flags | np.isnan(data) | np.isinf(data)  # un-recoverable
-    orig_flags = flags | nsamples == 0
+    orig_flags = flags | nsamples < 0
 
     if not inpainted_mode:
         data = np.ma.masked_array(data, mask=orig_flags)
@@ -144,22 +136,15 @@ def get_masked_data(
     else:
         data = np.ma.masked_array(data, mask=flags)
 
-        # First set the mask to all original flags, so we don't count nsamples==0
+        # First set the mask to all original flags, so we don't count nsamples==-1
         nsamples = np.ma.masked_array(nsamples, mask=orig_flags)
-        nsamples = np.ma.mean(nsamples, axis=2)[:, :, None, :]
+        # Take a mean over the freq axis, which forces nsamples to be uniform over frequency
+        nsamples = np.ma.mean(nsamples, axis=2)[:, :, None, :] * np.ones((1, 1, data.shape[2], 1))
+
+        # Set the mask the same as data.mask (i.e. mask out only non-inpainted data)
         nsamples.mask = data.mask
 
-        # Flag if a whole blt is flagged:
-        allf = np.all(flags, axis=2)[:, :, None, :]
-
-        # Assume everything else that's flagged is inpainted.
-        inpainted = flags.copy() * (~allf)
-
-    logger.info(
-        f"In inpainted_mode: {inpainted_mode}. Got {np.sum(inpainted)} inpainted samples, {np.sum(flags)} total flags, {np.sum(flags & ~inpainted)} non-inpainted flags."
-    )
-    data = np.ma.masked_array(data, mask=(flags & ~inpainted))
-    return data, flags
+    return data, orig_flags, nsamples
 
 
 def get_lst_median_and_mad(
@@ -179,7 +164,7 @@ def get_lst_median_and_mad(
 
 def lst_average(
     data: np.ndarray | np.ma.MaskedArray,
-    nsamples: np.ndarray,
+    nsamples: np.ndarray | np.ma.MaskedArray,
     flags: np.ndarray,
     inpainted_mode: bool = False,
     sigma_clip_thresh: float | None = None,
@@ -250,8 +235,8 @@ def lst_average(
         # the flags or the 'non-inpainted flags', as obtained by `threshold_flags`.
         # However, if this hasn't been called, and we just have an array, apply flags
         # appropriately here.
-        data, flags = get_masked_data(
-            data, nsamples, flags, inpainted_mode=inpainted_mode
+        data, flags, nsamples = get_masked_data(
+            data, flags, nsamples, inpainted_mode=inpainted_mode
         )
 
     # Now do sigma-clipping.
@@ -295,8 +280,6 @@ def lst_average(
         warnings.warn(
             "Nsamples is not uniform across frequency. This will result in spectral structure."
         )
-
-    nsamples = np.ma.masked_array(nsamples, mask=data.mask)
 
     # Norm is the total number of samples over the nights. In the in-painted case,
     # it *counts* in-painted data as samples. In the non-inpainted case, it does not.
