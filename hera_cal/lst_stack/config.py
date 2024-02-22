@@ -50,26 +50,7 @@ def make_lst_grid(
     lst_grid
         Uniform LST grid marking the center of each LST bin.
     """
-    assert dlst >= 6.283e-6, "dlst must be greater than 6.283e-6 radians, or .0864 seconds."
-    assert dlst < 2 * np.pi, "dlst must be less than 2pi radians, or 24 hours."
-
-    # check 2pi is equally divisible by dlst
-    if not (
-        np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5)
-        or np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5)
-    ):
-        # generate array of appropriate dlsts
-        dlsts = 2 * np.pi / np.arange(1, 1000000)
-
-        # get dlsts closest to dlst, but also greater than dlst
-        dlst_diff = dlsts - dlst
-        dlst_diff[dlst_diff < 0] = 10
-        new_dlst = dlsts[np.argmin(dlst_diff)]
-        logger.warning(
-            f"2pi is not equally divisible by input dlst ({dlst:.16f}) at 1 part in 1e7.\n"
-            f"Using {new_dlst:.16f} instead."
-        )
-        dlst = new_dlst
+    dlst = _fix_dlst(dlst)
 
     # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
     lst_grid = np.arange(0, 2 * np.pi - 1e-7, dlst) + dlst / 2
@@ -297,6 +278,14 @@ class LSTBinConfiguration:
     jd_regex: str = attrs.field(default=r"zen\.(\d+\.\d+)\.")
     calfile_rules: list[tuple[str, str]] | None = attrs.field(default=None)
     where_inpainted_file_rules: list[tuple[str, str]] | None = attrs.field(default=None)
+    ignore_ants: tuple[int] = attrs.field(
+        default=(),
+        converter=tuple,
+        validator=attrs.validators.deep_iterable(
+            attrs.validators.instance_of(int)
+        )
+    )
+    antpairs_from_last_file_each_night: bool = attrs.field(default=True)
 
     @cached_property
     def datameta(self):
@@ -378,6 +367,39 @@ class LSTBinConfiguration:
 
         return True
 
+    @classmethod
+    def from_toml(cls, toml_file: str | Path) -> LSTBinConfiguration:
+        with open(toml_file, "r") as fl:
+            dct = yaml.safe_load(fl)
+
+        datafiles = cls.find_datafiles(**dct.pop("datafiles"))
+
+        return cls(data_files=datafiles, **dct)
+
+    @staticmethod
+    def find_datafiles(
+        datadir: str | Path,
+        nightdirs: list[str],
+        extension: str = "uvh5",
+        label: str = "",
+        sum_or_diff: str = "sum",
+        jdglob: str = "*",
+    ) -> list[list[Path]]:
+        """Determine the datafiles from specifications."""
+        # These are only required if datafiles wasn't specified specifically.
+        if label:
+            label += "."
+
+        datadir = Path(datadir)
+
+        return [
+            sorted(
+                (datadir / str(nd)).glob(
+                    f"zen.{jdglob}.{sum_or_diff}.{label}{extension}"
+                ) for nd in nightdirs
+            )
+        ]
+
     def get_file_lst_edges(self) -> np.ndarray:
         last_edge = self.lst_grid_edges[-1]
         lst_edges = self.lst_grid_edges[::self.nlsts_per_file]
@@ -415,9 +437,6 @@ class LSTBinConfiguration:
     def create_config(
         self,
         matched_files: list[list[FastUVH5Meta]],
-        lst_branch_cut: float | None = None,
-        ignore_ants: tuple[int] = (),
-        only_last_file_per_night: bool = True,
     ) -> LSTConfig:
         """
         Create an LSTConfig object from the given matched files.
@@ -427,17 +446,6 @@ class LSTBinConfiguration:
         matched_files : list[list[FastUVH5Meta]]
             The matched files to use for LST binning. This is the output of
             :meth:`get_matched_files`.
-        lst_branch_cut
-            The LST at which to branch cut the LST grid for file writing. The JDs in the
-            output LST-binned files will be *lowest* at the lst_branch_cut, and all file
-            names will have LSTs that are higher than lst_branch_cut. If None, this will
-            be determined automatically by finding the largest gap in LSTs and starting
-            AFTER it.
-        ignore_ants
-            Antennas to ignore when creating the antpair list.
-        only_last_file_per_night
-            If True, only use the last file from each night when finding the full list
-            of antpairs.
         """
         lst_grid = self.lst_grid.copy()
         if nextra := self.lst_grid.size % self.nfiles > 0:
@@ -451,8 +459,7 @@ class LSTBinConfiguration:
 
         # Get the best lst_branch_cut by finding the largest gap in LSTs and starting
         # AFTER it
-        if lst_branch_cut is None:
-            lst_branch_cut = float(utils.get_best_lst_branch_cut(np.concatenate(lst_grid)))
+        lst_branch_cut = float(utils.get_best_lst_branch_cut(np.concatenate(lst_grid)))
 
         matched_files = [
             [[str(m.path) for m in night] for night in outfiles]
@@ -462,8 +469,8 @@ class LSTBinConfiguration:
         antpairs, pols = get_all_antpairs(
             data_files=[sum(fls, start=[]) for fls in matched_files],
             include_autos=True,
-            ignore_ants=ignore_ants,
-            only_last_file_per_night=only_last_file_per_night,
+            ignore_ants=self.ignore_ants,
+            only_last_file_per_night=self.antpairs_from_last_file_each_night,
             redundantly_averaged=self.is_redundantly_averaged,
             reds=self.reds,
             blts_are_rectangular=self.datameta.blts_are_rectangular,
