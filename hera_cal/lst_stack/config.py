@@ -17,9 +17,27 @@ from .io import apply_filename_rules
 logger = logging.getLogger(__name__)
 
 
+def _fix_dlst(dlst: float) -> float:
+    """Fix dlst to equally divide 2pi in less than 1 million sub-divisions."""
+    dlsts = 2 * np.pi / np.arange(1000000, 0, -1)
+
+    if dlst < np.min(dlsts):
+        raise ValueError(
+            f"dlst must be more than {np.min(dlsts):1.5e}, the smallest possible value."
+        )
+
+    if dlst > np.max(dlsts):
+        raise ValueError(
+            f"dlst must be less than {np.max(dlsts):1.5e}, the largest possible value."
+        )
+
+    # get dlsts closest to dlst, but also greater than dlst
+    return dlsts[dlsts >= dlst - 1e-12][0]
+
+
 def make_lst_grid(
     dlst: float,
-    begin_lst: float | None = None,
+    begin_lst: float = 0.0,
     lst_width: float = 2 * np.pi,
 ) -> np.ndarray:
     """
@@ -52,15 +70,16 @@ def make_lst_grid(
     """
     dlst = _fix_dlst(dlst)
 
+    if lst_width <= dlst:
+        raise ValueError("lst_width must be greater than dlst")
+
     # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
     lst_grid = np.arange(0, 2 * np.pi - 1e-7, dlst) + dlst / 2
 
     # shift grid by begin_lst
     if begin_lst is not None:
         # enforce begin_lst to be within 0-2pi
-        if begin_lst < 0 or begin_lst >= 2 * np.pi:
-            logger.warning("begin_lst was < 0 or >= 2pi, taking modulus with (2pi)")
-            begin_lst = begin_lst % (2 * np.pi)
+        begin_lst %= 2 * np.pi
         begin_lst = lst_grid[np.argmin(np.abs(lst_grid - begin_lst))] - dlst / 2
         lst_grid += begin_lst
     else:
@@ -82,14 +101,14 @@ def get_all_antpairs(
     blts_are_rectangular: bool | None = None,
     time_axis_faster_than_bls: bool | None = None,
 ) -> tuple[list[tuple[int, int]], list[str]]:
-    """Generate a set of all antpairs that have at least one un-flagged entry.
+    """Generate the set of all antpairs over a list of files.
 
     This is performed over a list of nights, each of which consists of a list of
     individual uvh5 files. Each UVH5 file is *assumed* to have the same set of times
     for each baseline internally (different nights obviously have different times).
 
     If ``reds`` is provided, then any baseline found is mapped back to the first
-    baseline in the redundant group it appears in. This *must* be set if
+    baseline in the redundant group it appears in.
 
     Returns
     -------
@@ -209,25 +228,6 @@ def _subsorted_list(x: Sequence[Sequence[Any]]) -> list[list[Any]]:
     return [sorted(y) for y in x]
 
 
-def _fix_dlst(dlst: float) -> float:
-    """Fix dlst to equally divide 2pi in less than 1 million sub-divisions."""
-    dlsts = 2 * np.pi / np.arange(1, 1000000)
-
-    if dlst < np.min(dlsts):
-        raise ValueError(
-            f"dlst must be more than {np.min(dlsts):1.5e}, the smallest possible value."
-        )
-
-    if dlst > np.max(dlsts):
-        raise ValueError(
-            f"dlst must be less than {np.max(dlsts):1.5e}, the largest possible value."
-        )
-
-    # get dlsts closest to dlst, but also greater than dlst
-    dlst_diff = dlsts - dlst
-    return dlsts[dlst_diff > 0][0]
-
-
 @attrs.define
 class LSTBinConfiguration:
     """
@@ -317,7 +317,7 @@ class LSTBinConfiguration:
     @lst_end.validator
     @dlst.validator
     def _lst_start_end_validator(self, attribute, value):
-        if value < 0 or value >= 2 * np.pi:
+        if value < 0 or value > 2 * np.pi:
             raise ValueError("LST must be between 0 and 2pi")
 
     @calfile_rules.validator
@@ -453,6 +453,7 @@ class LSTBinConfiguration:
 
         lst_grid = lst_grid.reshape((self.nfiles, self.nlsts_per_file))
 
+        print(len(matched_files), len(matched_files[0]), len(matched_files[0][0]), self.nfiles, self.nlsts_per_file)
         file_mask = np.array([any(len(mff) > 0 for mff in mf) for mf in matched_files])
         lst_grid = lst_grid[file_mask]
         matched_files = [mf for mm, mf in zip(file_mask, matched_files) if mm]
