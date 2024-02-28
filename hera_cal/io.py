@@ -455,11 +455,11 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     Returns:
         blt_slices: dictionary mapping anntenna pair tuples to baseline-time slice objects
     '''
-    if uvo.blts_are_rectangular is None:
+    if getattr(uvo, "blts_are_rectangular", False) is None:
         uvo.set_rectangularity(force=True)
 
     blt_slices = {}
-    if uvo.blts_are_rectangular:
+    if getattr(uvo, "blts_are_rectangular", False):
         if uvo.time_axis_faster_than_bls:
             for i in range(uvo.Nbls):
                 start = i * uvo.Ntimes
@@ -490,6 +490,12 @@ def get_blt_slices(uvo, tried_to_reorder=False):
                         'baselines in its baseline-times are not supported.'
                         f'Got indices {indices} for baseline {ant1}, {ant2}.'
                     )
+            else:
+                # This should only trigger for pyuvdata < 3, where you can get back
+                # an array of indices that are regular. In pyuvdata 3, you'd get
+                # back a slice if this was the case.
+                blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
+
     return blt_slices
 
 
@@ -858,7 +864,12 @@ class HERAData(UVData):
         self.set_rectangularity(force=True)
 
         # process data into DataContainers
-        self._clear_antpair2ind_cache(self)  # required because we over-wrote read()
+        try:
+            self._clear_antpair2ind_cache(self)  # required because we over-wrote read()
+        except AttributeError:
+            # pyuvdata < 3 doesn't have this method, and that's fine.
+            pass
+
         self._determine_blt_slicing()
         self._determine_pol_indexing()
 

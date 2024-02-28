@@ -35,3 +35,4 @@ cache_temp/
 profile.json
 profile.html
 .benchmarks/*
+.hypothesis/*
