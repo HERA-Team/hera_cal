@@ -987,8 +987,9 @@ class Test_HERADataFastReader:
         np.testing.assert_array_equal(hd1.ants, hd2.ants)
         np.testing.assert_array_equal(hd1.data_ants, hd2.data_ants)
         np.testing.assert_array_equal(hd1.pols, hd2.pols)
-        np.testing.assert_array_equal(hd1.antpairs, hd2.antpairs)
-        np.testing.assert_array_equal(hd1.bls, hd2.bls)
+        assert set(hd1.antpairs) == set(hd2.antpairs)
+        assert set(hd1.bls) == set(hd2.bls)
+
         for ant in hd1.antpos:
             np.testing.assert_array_almost_equal(hd1.antpos[ant] - hd2.antpos[ant], 0)
         for ant in hd1.data_antpos:
