@@ -32,6 +32,7 @@ from astropy.time import Time
 from contextlib import contextmanager
 from functools import lru_cache
 from pyuvdata.uvdata import FastUVH5Meta
+from pyuvdata.uvdata.initializers import set_phase_params
 import pyuvdata
 
 try:
@@ -167,8 +168,7 @@ class HERACal(UVCal):
 
         if self.filepaths is not None:
             # load data
-            self.read_calfits(self.filepaths[0])
-            self.use_future_array_shapes()
+            self.read_calfits(self.filepaths[0], use_future_array_shapes=True)
 
             if pols is not None:
                 pols = [jstr2num(ap, x_orientation=self.x_orientation) for ap in pols]
@@ -177,7 +177,7 @@ class HERACal(UVCal):
             if antenna_nums is not None:
                 for ant in antenna_nums:
                     if ant not in my_ants:
-                        warnings.warn(f"Warning, antenna {ant} not present in calibration solution. Skipping!")
+                        warnings.warn(f"Antenna {ant} not present in calibration solution. Skipping!")
                 antenna_nums = np.intersect1d(my_ants, antenna_nums)
             select_dict = {'antenna_nums': antenna_nums, 'frequencies': frequencies,
                            'freq_chans': freq_chans, 'jones': pols}
@@ -188,8 +188,7 @@ class HERACal(UVCal):
             if len(self.filepaths) > 1:
                 for fp in self.filepaths[1:]:
                     uvc = UVCal()
-                    uvc.read_calfits(fp)
-                    uvc.use_future_array_shapes()
+                    uvc.read_calfits(fp, use_future_array_shapes=True)
 
                     if np.any([s is not None for s in select_dict.values()]):
                         uvc.select(inplace=True, **select_dict)
@@ -219,6 +218,9 @@ class HERACal(UVCal):
             tSlice = slice(0, self.Ntimes)
         if fSlice is None:
             fSlice = slice(0, self.Nfreqs)
+
+        if quals is not None and self.quality_array is None:
+            self.quality_array = np.zeros(self.gain_array.shape, dtype=float)
 
         # loop over and update gains, flags, and quals
         data_arrays = [self.gain_array, self.flag_array, self.quality_array]
@@ -824,8 +826,9 @@ class HERAData(UVData):
                     super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
                                  times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
-                                 run_check_acceptability=run_check_acceptability, **kwargs)
-                    self.use_future_array_shapes()
+                                 run_check_acceptability=run_check_acceptability,
+                                 use_future_array_shapes=True,
+                                 **kwargs)
                     if self.filetype == 'uvfits':
                         self.unproject_phase()
                 else:
@@ -834,7 +837,8 @@ class HERAData(UVData):
                     if self.filetype == 'miriad':
                         super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
                                      time_range=time_range, run_check=run_check, check_extra=check_extra,
-                                     run_check_acceptability=run_check_acceptability, **kwargs)
+                                     run_check_acceptability=run_check_acceptability,
+                                     use_future_array_shapes=True, projected=False, **kwargs)
                         self.use_future_array_shapes()
                         if any([times is not None, lsts is not None, lst_range is not None,
                                 frequencies is not None, freq_chans is not None]):
@@ -1556,8 +1560,8 @@ def read_filter_cache_scratch(cache_dir):
     # If there are new keys, add them to internal cache.
     # If not, delete the reference matrices from memory.
     for cache_file in cache_files:
-        cfile = open(cache_file, 'rb')
-        cache_t = pickle.load(cfile)
+        with open(cache_file, 'rb') as cfile:
+            cache_t = pickle.load(cfile)
         for key in cache_t:
             if key not in cache:
                 cache[key] = cache_t[key]
@@ -1599,8 +1603,9 @@ def write_filter_cache_scratch(filter_cache, cache_dir=None, skip_keys=None):
         if cache_dir is None:
             cache_dir = os.getcwd()
         cache_file_name = '%032x' % random.getrandbits(128) + '.filter_cache'
-        cfile = open(os.path.join(cache_dir, cache_file_name), 'ab')
-        pickle.dump(new_filters, cfile)
+
+        with open(os.path.join(cache_dir, cache_file_name), 'ab') as cfile:
+            pickle.dump(new_filters, cfile)
     else:
         warnings.warn("No new keys provided. No cache file written.")
 
@@ -1631,7 +1636,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
 
     elif filetype == 'h5':
         from pyuvdata import UVFlag
-        uvf = UVFlag(flagfile)
+        uvf = UVFlag(flagfile, use_future_array_shapes=True)
         assert uvf.mode == 'flag', f'The input h5-based UVFlag object must be in flag mode, got {uvf.mode}'
         assert (np.issubsctype(uvf.polarization_array.dtype, np.signedinteger)
                 or np.issubsctype(uvf.polarization_array.dtype, np.str_)), \
@@ -1648,7 +1653,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                 else:
                     pol = ','.join([polnum2str(int(p), x_orientation=uvf.x_orientation) for p in pol.split(',')])
                 for (ant1, ant2), blt_slice in blt_slices.items():
-                    flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, 0, :, ip]
+                    flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, :, ip]
             # data container only supports standard polarizations strings
             if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                 flags = DataContainer(flags)
@@ -1662,7 +1667,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                         jpol = jnum2str(jpol, x_orientation=uvf.x_orientation)  # convert to string if possible
                     else:
                         jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(',')])
-                    flags[(ant, jpol)] = np.array(uvf.flag_array[i, 0, :, :, ip].T)
+                    flags[(ant, jpol)] = np.array(uvf.flag_array[i, :, :, ip].T)
 
         elif uvf.type == 'waterfall':  # one time x freq waterfall (per visibility polarization)
             for ip, jpol in enumerate(uvf.polarization_array):
@@ -2239,9 +2244,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # set uvw assuming drift phase i.e. phase center is zenith
     uvw_array = np.array([antpos[k[1]] - antpos[k[0]] for k in zip(ant_1_array, ant_2_array)])
 
-    # get zenith location: can only write drift phase
-    phase_type = 'drift'
-
     # instantiate object
     uvd = UVData()
 
@@ -2249,7 +2251,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     params = ['Nants_data', 'Nants_telescope', 'Nbls', 'Nblts', 'Nfreqs', 'Npols', 'Nspws', 'Ntimes',
               'ant_1_array', 'ant_2_array', 'antenna_names', 'antenna_numbers', 'baseline_array',
               'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'x_orientation',
-              'instrument', 'integration_time', 'lst_array', 'nsample_array', 'object_name', 'phase_type',
+              'instrument', 'integration_time', 'lst_array', 'nsample_array',
               'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
               'uvw_array', 'vis_units', 'antenna_positions']
     local_params = locals()
@@ -2260,6 +2262,9 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # set parameters in uvd
     for p in params:
         uvd.__setattr__(p, local_params[p])
+
+    set_phase_params(uvd, phase_center_catalog=None, phase_center_id_array=None, time_array=time_array)
+    uvd.flex_spw_id_array = np.zeros(Nfreqs, dtype=int)
 
     # write to file
     if write_file:
@@ -2577,6 +2582,9 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
 
     # set missing but required parameters to the default for the telescope name
     uvc.set_telescope_params()
+
+    # Set flex_spw_id_array, required for pyuvdata>=3.0
+    uvc.flex_spw_id_array = np.zeros(Nfreqs, dtype=int)
 
     # run check
     uvc.check()

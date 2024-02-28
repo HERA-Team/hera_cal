@@ -99,7 +99,8 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True, return_gains=False, gai
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # abs of amplitude ratio is ydata independent variable
-    ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
+    with np.errstate(divide='ignore', invalid='ignore'):
+        ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -249,7 +250,10 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True, return_gains=False, gai
         sol0 = {k.replace('eta_', 'A_'): np.exp(sol) for k, sol in sol0.items()}
         # now solve by linearizing
         solver = linsolve.LinProductSolver(ls_data, sol0, wgts=ls_wgts, constants=ls_consts)
-        meta, fit = solver.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
+        with warnings.catch_warnings():
+            # The following warning should be suppressed properly in linsolve
+            warnings.filterwarnings("ignore", message="divide by zero encountered in reciprocal")
+            meta, fit = solver.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
     else:
         # in this case, the equations are already linear in A^2
         solver = linsolve.LinearSolver(ls_data, wgts=ls_wgts, constants=ls_consts)
@@ -357,7 +361,9 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True,
 
     # angle of phs ratio is ydata independent variable
     # angle after divide
-    ydata = {k: np.angle(data[k] / model[k]) for k in keys}
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        ydata = {k: np.angle(data[k] / model[k]) for k in keys}
 
     # make unit weights if None
     if wgts is None:
@@ -468,7 +474,9 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # difference of log-amplitudes is ydata independent variable
-    ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -537,7 +545,9 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # angle of visibility ratio is ydata independent variable
-    ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -644,7 +654,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solv
     ratio_offsets = []
     ratio_wgts = []
     for i, k in enumerate(keys):
-        ratio = data[k] / model[k]
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = data[k] / model[k]
 
         # replace nans
         nan_select = np.isnan(ratio)
@@ -817,9 +828,11 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     # median filter and FFT to get delays
     ydata = {}
     ywgts = {}
+    np.seterr(divide='ignore', invalid='ignore')
     for i, k in enumerate(keys):
-        ratio = data[k] / model[k]
-        ratio /= np.abs(ratio)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = data[k] / model[k]
+            ratio /= np.abs(ratio)
 
         # replace nans and infs
         wgts[k][~np.isfinite(ratio)] = 0.0
@@ -1990,8 +2003,17 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
             f = np.zeros_like(real, bool)
 
         # interpolate
-        interp_real = interpolate.interp2d(model_freqs, model_lsts, real, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
-        interp_imag = interpolate.interp2d(model_freqs, model_lsts, imag, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
+        kw = dict(method=kind, bounds_error=False, fill_value=fill_value)
+        dfreqs, dlsts = np.meshgrid(data_freqs, data_lsts)
+        outgrid = np.array([dfreqs, dlsts]).T
+
+        interp_real = interpolate.RegularGridInterpolator(
+            (model_freqs, model_lsts), real.T, **kw
+        )(outgrid).reshape((len(data_lsts), len(data_freqs)))
+
+        interp_imag = interpolate.RegularGridInterpolator(
+            (model_freqs, model_lsts), imag.T, **kw
+        )(outgrid).reshape((len(data_lsts), len(data_freqs)))
 
         # flag extrapolation if desired
         if flag_extrapolate:
@@ -2271,7 +2293,7 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     Output: (red_data, red_wgts, red_keys)
     -------
     """
-    warnings.warn("Warning: This function will be deprecated in the next hera_cal release.")
+    warnings.warn("This function will be deprecated in the next hera_cal release.")
 
     # get data keys
     keys = list(data.keys())
@@ -2306,7 +2328,9 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     for i, bl_group in enumerate(stripped_reds):
         # average redundant baseline group
         d = np.nansum([data[k] * wgts[k] for k in bl_group], axis=0)
-        d /= np.nansum([wgts[k] for k in bl_group], axis=0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            d /= np.nansum([wgts[k] for k in bl_group], axis=0)
 
         # get wgts
         if broadcast_wgts:
@@ -2449,6 +2473,7 @@ def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
                                    & (model_ends > data_lsts[0] - atol)]
 
     return match
+
 
 def cut_bls(datacontainer, bls=None, min_bl_cut=None, max_bl_cut=None, inplace=False):
     """
@@ -3770,7 +3795,8 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
                         noise_vars.append(noise_var_here)
                     # estimate noise variance per baseline, assuming inverse variance weighting, but excluding flagged autos
                     noise_var = np.nansum(np.array(noise_vars)**-1, axis=0)**-1 * np.sum(~np.isnan(noise_vars), axis=0)
-            wgts[bl] *= noise_var**-1
+            with np.errstate(divide='ignore', invalid='ignore'):
+                wgts[bl] *= noise_var**-1
         wgts[bl][~np.isfinite(wgts[bl])] = 0.0
 
     return DataContainer(wgts)
@@ -4307,7 +4333,6 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     data_ant_flags = synthesize_ant_flags(data_flags, threshold=ant_threshold)
     model_ant_flags = synthesize_ant_flags(model_flags, threshold=ant_threshold)
 
-    lst_center = hdd.lsts[hdd.Ntimes // 2] * 12 / np.pi
     field_str = 'LST={lst_center:%.2f} hrs'
 
     if refant is None:
@@ -4319,7 +4344,7 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hc = UVCal()
     hc = hc.initialize_from_uvdata(uvdata=hdd, gain_convention='divide', cal_style='sky',
                                    ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
-                                   metadata_only=False, sky_field=field_str, cal_type='gain',
+                                   metadata_only=False, cal_type='gain',
                                    future_array_shapes=True)
 
     hc = io.to_HERACal(hc)
@@ -4328,7 +4353,7 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     hcm = UVCal()
     hcm = hcm.initialize_from_uvdata(uvdata=hdm, gain_convention='divide', cal_style='sky',
                                      ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
-                                     metadata_only=False, sky_field=field_str, cal_type='gain',
+                                     metadata_only=False, cal_type='gain',
                                      future_array_shapes=True)
     hcm = io.to_HERACal(hcm)
     hcm.update(flags=model_ant_flags)

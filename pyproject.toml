@@ -6,3 +6,13 @@ build-backend = "setuptools.build_meta"
 write_to = "hera_cal/_version.py"
 parentdir_prefix_version = "hera_cal-"
 fallback_version  = "0.0.0"
+
+[tool.pytest]
+addopts = "--ignore=scripts --cov=hera_cal --cov-config=.coveragerc"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:Fixing auto-correlations to be be real-only:UserWarning",
+    'ignore:telescope_location is not set\. Using known values for HERA\.:UserWarning',
+    "ignore:invalid value encountered in divide:RuntimeWarning",
+]

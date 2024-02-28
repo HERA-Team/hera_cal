@@ -387,6 +387,8 @@ class TestDataContainerWithRealData:
 
     @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
     @pytest.mark.filterwarnings("ignore:invalid value encountered in floor_divide")
+    @pytest.mark.filterwarnings("ignore:invalid value encountered in divide")
+    @pytest.mark.filterwarnings("ignore:invalid value encountered in cast")
     def test_div(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         d, f = io.load_vis(test_file, pop_autos=True)
