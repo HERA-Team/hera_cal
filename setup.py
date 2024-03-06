@@ -46,7 +46,7 @@ setup_args = {
                 'scripts/flag_all.py', 'scripts/throw_away_flagged_antennas.py', 'scripts/select_spw_ranges.py',
                 'scripts/multiply_gains.py', 'scripts/lstbin_simple.py', 'scripts/subselect.py'],
     'package_data': {'hera_cal': data_files},
-    'python_requires': '>3.8',
+    'python_requires': '>=3.9',
     'install_requires': [
         'numpy>=1.10',
         'scipy>=1.9.0',
