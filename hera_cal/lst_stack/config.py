@@ -12,7 +12,8 @@ import attrs
 from functools import cached_property
 from astropy import units
 import h5py
-from .io import apply_filename_rules
+from .io import apply_filename_rules, filter_required_files_by_times
+from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +263,29 @@ class LSTBinConfiguration:
     jd_regex : str, optional
         Regex to use to extract the JD from the file name. Set to None or empty
         to force the LST-matching to use the LSTs in the metadata within the file.
+    calfile_rules
+        A list of tuples of strings. Each tuple is a pair of strings that are used to
+        replace the first string with the second string in the data file name to get
+        the calibration file name. For example, providing [(".uvh5", ".calfits")] will
+        generate a list of calfiles that have the same basename as the data files, but
+        with the extension ".calfits" instead of ".uvh5". Multiple entries to the list
+        are allowed, and the replacements are applied in order. If the resulting calfile
+        name does not exist, the data file is ignored.
+    where_inpainted_file_rules
+        Rules to transform the input data file names into the corresponding "where
+        inpainted" files (which should be in UVFlag format). If provided, this indicates
+        that the data itself is in-painted, and the `output_inpainted` mode will be
+        switched on by default. These files should specify which data is in-painted
+        in the associated data file (which may be different than the in-situ flags
+        of the data object). If not provided, but `output_inpainted` is set to True,
+        all data-flags will be considered in-painted except for baseline-times that are
+        fully flagged, which will be completely ignored.
+    ignore_ants
+        A list of antennas to ignore when binning data.
+    antpairs_from_last_file_each_night : bool, optional
+        If True, only the last file from each night is used to infer the observed
+        antpairs. Setting to False can be very slow for large data sets, and is almost
+        never necessary, as the antpairs observed are generally set per-night.
     """
     data_files: list[list[str | Path | FastUVH5Meta]] = attrs.field(converter=_subsorted_list)
     nlsts_per_file: int = attrs.field(converter=int, validator=attrs.validators.gt(0))
@@ -346,6 +370,10 @@ class LSTBinConfiguration:
     def nfiles(self) -> int:
         return int(np.ceil(len(self.lst_grid) / self.nlsts_per_file))
 
+    @property
+    def n_nights(self) -> int:
+        return len(self.data_files)
+
     @cached_property
     def reds(self) -> RedundantGroups:
         return RedundantGroups.from_antpos(
@@ -358,7 +386,7 @@ class LSTBinConfiguration:
         # Try to work out if the files are redundantly averaged.
         # just look at the middle file from each night.
         for fl_list in self.data_files:
-            meta = fl_list[len(fl_list) // 2]
+            meta = FastUVH5Meta(fl_list[len(fl_list) // 2])
             antpairs = meta.get_transactional("antpairs")
             ubls = {self.reds.get_ubl_key(ap) for ap in antpairs}
             if len(ubls) != len(antpairs):
@@ -407,16 +435,24 @@ class LSTBinConfiguration:
             lst_edges = np.concatenate([lst_edges, [last_edge]])
         return lst_edges
 
-    def get_matched_files(self) -> list[list[FastUVH5Meta]]:
+    def get_matched_files(self) -> list[list[list[FastUVH5Meta]]]:
         """
-        Configure data for LST binning.
+        Find the files that are matched to each LST-bin.
 
-        Make a 24 hour lst grid, starting LST and output files given
-        input data files and LSTbin params.
+        The output is a triple-nested list. The first list is for each output file,
+        the second list is for each night, and the third list is for files within that
+        night that might overlap with that LST-bin. The elements of the third list are
+        FastUVH5Meta objects.
+
+        Note that there is no distinction made between LST bins within each output file,
+        as it is expected that all of the files will be read in any case.
+
+        Here, the lists are all unfiltered -- there can be many empty lists for LST
+        bins that are never observed in a given set of raw files.
         """
         lst_edges = self.get_file_lst_edges()
 
-        matched_files = [[] for _ in self.lst_grid]
+        matched_files = [[] for _ in lst_edges[:-1]]
         for fllist in self.data_files:
             # matched here is a list of lists of FastUVH5Meta objects.
             # Each list is for a single lst-bin.
@@ -448,12 +484,12 @@ class LSTBinConfiguration:
             :meth:`get_matched_files`.
         """
         lst_grid = self.lst_grid.copy()
-        if nextra := self.lst_grid.size % self.nfiles > 0:
+        if (nextra := self.lst_grid.size % self.nlsts_per_file) > 0:
+            print(nextra, self.nlsts_per_file)
             lst_grid = np.concatenate(lst_grid, [np.nan] * (self.nlsts_per_file - nextra))
 
         lst_grid = lst_grid.reshape((self.nfiles, self.nlsts_per_file))
 
-        print(len(matched_files), len(matched_files[0]), len(matched_files[0][0]), self.nfiles, self.nlsts_per_file)
         file_mask = np.array([any(len(mff) > 0 for mff in mf) for mf in matched_files])
         lst_grid = lst_grid[file_mask]
         matched_files = [mf for mm, mf in zip(file_mask, matched_files) if mm]
@@ -507,6 +543,9 @@ class LSTBinConfiguration:
             if k == 'data_files':
                 for night, files in enumerate(v):
                     group.create_dataset(f"night_{night}", data=[str(f) for f in files])
+            elif k in ('calfile_rules', 'where_inpainted_file_rules'):
+                if v:
+                    group.create_dataset(k, data=v)
             else:
                 group.attrs[k] = v
 
@@ -516,50 +555,168 @@ class LSTBinConfiguration:
         n_nights = len([k for k in group.keys() if k.startswith("night_")])
         dct["data_files"] = []
         for night in range(n_nights):
-            dct['data_files'].append([Path(f) for f in group[f"night_{night}"][()]])
+            dct['data_files'].append([f.decode() for f in group[f"night_{night}"][()]])
+
+        for k in ("calfile_rules", "where_inpainted_file_rules"):
+            if k in group:
+                dct[k] = group[k][()]
+            else:
+                dct[k] = None
 
         return cls(**dct)
 
 
-@attrs.define(slots=False, frozen=False)
-class LSTConfig:
+def _nested_list_of(cls):
+    def get_nested_list(x):
+        if x is None:
+            return None
+
+        if isinstance(x, (Path, str, FastUVH5Meta)):
+            return cls(x)
+
+        return [get_nested_list(xx) for xx in x]
+    return get_nested_list
+
+
+def _to_antpairs(x) -> list[tuple]:
+    return [tuple(int(a) for a in xx) for xx in x]
+
+
+def _extra_files_validator(inst, attribute, value):
+    if value is None:
+        return
+
+    def validate_sublist(this, that):
+        if len(this) != len(that):
+            raise ValueError(f"{attribute.name} must have the same shape as matched_files.")
+
+        for this_sub, that_sub in zip(this, that):
+            if isinstance(this_sub, list) and isinstance(that_sub, list):
+                validate_sublist(this_sub, that_sub)
+            elif isinstance(this_sub, Path) and isinstance(that_sub, Path):
+                if not this_sub.exists():
+                    raise ValueError(f"{this_sub} does not exist.")
+            else:
+                raise ValueError(f"{attribute.name} has a different shape than matched_files.")
+
+    validate_sublist(value, inst.matched_files)
+
+
+@attrs.define(slots=False, frozen=False, kw_only=True)
+class _LSTConfigBase(ABC):
     config: LSTBinConfiguration = attrs.field()
-    lst_grid: np.ndarray = attrs.field(converter=np.asarray)
-    matched_files: list[list[list[FastUVH5Meta]]] = attrs.field()
-    autos: list[tuple[int, int]] = attrs.field()
-    antpairs: list[tuple[int, int]] = attrs.field()
+    lst_grid: np.ndarray = attrs.field(converter=np.asarray, eq=attrs.cmp_using(eq=np.allclose))
+    matched_files: list[list[list[Path]]] = attrs.field(converter=_nested_list_of(Path))
+    calfiles: list[list[list[Path]]] | None = attrs.field(
+        converter=_nested_list_of(Path), validator=_extra_files_validator
+    )
+    inpaint_files: list[list[list[Path]]] | None = attrs.field(
+        converter=_nested_list_of(Path), validator=_extra_files_validator
+    )
+    autos: list[tuple[int, int]] = attrs.field(converter=_to_antpairs)
+    antpairs: list[tuple[int, int]] = attrs.field(converter=_to_antpairs)
     pols: list[str] = attrs.field()
-    calfiles: list[list[list[str]]] | None = attrs.field()
-    inpaint_files: list[list[list[str]]] | None = attrs.field()
     properties: dict = attrs.field()
 
     @lst_grid.validator
     def _lst_grid_validator(self, attribute, value):
-        if value.ndim != 2:
-            raise ValueError("lst_grid must be a 2D array, with shape (nfiles, nlsts_per_file)")
+        if value.ndim not in (0, 1, 2):
+            raise ValueError("lst_grid must be a 0D, 1D or 2D array.")
+
+        if value.ndim == 2 and value.shape[1] != self.config.nlsts_per_file:
+            raise ValueError(
+                "lst_grid must have shape (n_output_files, nlsts_per_file). "
+                f"Got {value.shape} instead of (..., {self.config.nlsts_per_file})."
+            )
+
+    @property
+    def n_output_files(self) -> int:
+        return len(self.lst_grid)
+
+    @property
+    def n_nights(self) -> int:
+        return self.config.n_nights
+
+    @matched_files.validator
+    def _matched_files_validator(self, attribute, value):
+        if self.lst_grid.ndim == 2:
+            if len(value) != self.n_output_files:
+                raise ValueError(f"matched_files must be a list with one entry per output file: {self.n_output_files}")
+            if len(value[0]) > self.n_nights:
+                # Any particular outfile might have _less_ than n_nights, since not all nights
+                # will contribute to any particular output file.
+                raise ValueError(f"each list in matched_files should be n_nights long: {self.n_nights}")
+
+            if not all(isinstance(pth, Path) for fl in value for night in fl for pth in night):
+                raise ValueError("matched_files must be a list of lists of lists of Path objects.")
+        else:
+            if not all(isinstance(pth, Path) for pth in value):
+                raise ValueError("matched_files must be a list of Path objects.")
+
+    @cached_property
+    def matched_metas(self) -> list[list[list[FastUVH5Meta]]]:
+        return _nested_list_of(FastUVH5Meta)(self.matched_files)
+
+    @autos.validator
+    @antpairs.validator
+    def _antpairs_validator(self, attribute, value):
+        if any(len(v) != 2 for v in value):
+            raise ValueError(f"{attribute.name} must be a list of tuples of length 2.")
+
+        if not all(isinstance(vv, int) for v in value for vv in v):
+            types = {type(vv) for v in value for vv in v}
+            raise ValueError(f"{attribute.name} must be a list of tuples of integers. Got {types}.")
+
+    @pols.validator
+    def _pols_validator(self, attribute, value):
+        if not all(isinstance(v, str) for v in value):
+            raise ValueError(f"{attribute.name} must be a list of strings.")
+        if len(value) > 4:
+            raise ValueError(f"{attribute.name} must have at most 4 elements.")
+
+    @autos.validator
+    def _autos_validator(self, attribute, value):
+        if any(a != b for a, b in value):
+            raise ValueError("Autos must have the same antenna number on both sides.")
 
     @property
     def dlst(self):
         return self.config.dlst
 
+
+@attrs.define(slots=False, frozen=False, kw_only=True)
+class LSTConfig(_LSTConfigBase):
     @cached_property
     def lst_grid_edges(self) -> np.ndarray:
         return np.concatenate(
-            [self.lst_grid - self.dlst / 2, [self.lst_grid[-1] + self.dlst / 2]]
+            [self.lst_grid - self.dlst / 2, self.lst_grid[:, [-1]] + self.dlst / 2],
+            axis=1
         )
 
     def write(self, fname: str | Path):
+        max_files_per_night = max(
+            len(night) for outfile in self.matched_files for night in outfile
+        )
+
+        regular_mfs = [
+            [
+                [str(m) for m in night] + [''] * (max_files_per_night - len(night))
+                for night in outfile
+            ] for outfile in self.matched_files
+        ]
+
         with h5py.File(fname, "w") as fl:
             self.config.write(fl.create_group("config"))
             fl.create_dataset("lst_grid", data=self.lst_grid)
-            fl.create_dataset("matched_files", data=self.matched_files)
-            fl.create_dataset("antpairs", data=self.antpairs)
-            fl.create_dataset("autos", data=self.autos)
+            fl.create_dataset("matched_files", data=regular_mfs)
+            fl.create_dataset("antpairs", data=self.antpairs, dtype=int)
+            fl.create_dataset("autos", data=self.autos, dtype=int)
             fl.create_dataset("pols", data=self.pols)
             if self.calfiles:
                 fl.create_dataset("calfiles", data=self.calfiles)
             if self.inpaint_files:
                 fl.create_dataset("inpaint_files", data=self.inpaint_files)
+
             for k, v in self.properties.items():
                 fl.attrs[k] = v
 
@@ -568,22 +725,139 @@ class LSTConfig:
         with h5py.File(config_file, "r") as fl:
             config = LSTBinConfiguration.read(fl["config"])
             lst_grid = fl["lst_grid"][()]
-            matched_files = fl["matched_files"][()]
+            regular_mfs = fl["matched_files"][()]
             antpairs = fl["antpairs"][()]
             autos = fl["autos"][()]
             pols = fl["pols"][()]
             calfiles = fl["calfiles"][()] if "calfiles" in fl else None
             inpaint_files = fl["inpaint_files"][()] if "inpaint_files" in fl else None
-            properties = {k: v for k, v in fl.attrs.items()}
+            properties = dict(fl.attrs.items())
 
+        matched_files = [
+            [
+                [Path(fl.decode()) for fl in night if fl]
+                for night in outfile
+            ] for outfile in regular_mfs
+        ]
         return cls(
             config=config,
             lst_grid=lst_grid,
-            matched_files=[[[FastUVH5Meta(fl) for fl in night] for night in outfile] for outfile in matched_files],
+            matched_files=matched_files,
             properties=properties,
-            antpairs=antpairs,
-            autos=autos,
-            pols=pols,
+            antpairs=[(a, b) for a, b in antpairs],
+            autos=[(a, b) for a, b in autos],
+            pols=[p.decode() for p in pols],
             calfiles=calfiles,
             inpaint_files=inpaint_files,
         )
+
+    def _get_single_config(self, outfile, lstindex: int | None) -> LSTConfigSingle:
+        """Return a single LSTConfigSingle object.
+
+        This method is used to create a LSTConfigSingle object from the current
+        LSTConfig object. It is used by the at_single_outfile and at_single_bin
+        methods. The output LSTConfigSingle object represents the files and config
+        required for a single LST bin or output file (which might contain a few
+        LST bins).
+        """
+        lst_grid = self.lst_grid[outfile]
+        grid_edges = self.lst_grid_edges[outfile]
+
+        if lstindex is not None:
+            lst_grid = lst_grid[lstindex]
+            grid_edges = grid_edges[lstindex:lstindex + 2]
+
+        tinds, _, _, matched_files, cals, inp = filter_required_files_by_times(
+            lst_range=(grid_edges[0], grid_edges[-1]),
+            data_metas=self.matched_metas[outfile],
+            cal_files=self.calfiles[outfile] if self.calfiles else None,
+            where_inpainted_files=self.inpaint_files[outfile] if self.inpaint_files else None,
+        )
+
+        kw = attrs.asdict(self, recurse=False)
+        kw['lst_grid'] = lst_grid
+        kw['matched_files'] = [m.path for m in matched_files]
+        kw['calfiles'] = cals
+        kw['inpaint_files'] = inp
+
+        print(kw['matched_files'], kw['calfiles'])
+        return LSTConfigSingle(time_indices=tinds, **kw)
+
+    def at_single_outfile(
+        self,
+        outfile: int | None = None,
+        lst: float | None = None,
+    ) -> LSTConfigSingle:
+        if lst is None and outfile is None:
+            raise ValueError("Either lst or outfile must be specified.")
+
+        if lst is not None and outfile is not None:
+            raise ValueError("Only one of lst or outfile can be specified.")
+
+        if lst is not None:
+            outfile = np.searchsorted(self.lst_grid_edges[:, 0], lst, side='right') - 1
+
+        return self._get_single_config(outfile, None)
+
+    def at_single_bin(
+        self,
+        bin_index: int | None = None,
+        lst: float | None = None,
+    ) -> LSTConfigSingle:
+        if lst is None and bin_index is None:
+            raise ValueError("Either lst or bin_index must be specified.")
+
+        if lst is not None and bin_index is not None:
+            raise ValueError("Only one of lst or bin_index can be specified.")
+
+        edges = self.lst_grid_edges[:, :-1].flatten()
+
+        if lst is not None:
+            bin_index = np.searchsorted(edges, lst, side='right') - 1
+
+        fl_index = bin_index // self.config.nlsts_per_file
+        bin_index = bin_index % self.config.nlsts_per_file
+
+        return self._get_single_config(fl_index, bin_index)
+
+
+@attrs.define(slots=False, kw_only=True)
+class LSTConfigSingle(_LSTConfigBase):
+    time_indices: list[np.ndarray] = attrs.field()
+
+    @time_indices.default
+    def _time_indices_default(self):
+        lstmin = self.lst_grid[0] - self.dlst / 2
+        lstmax = self.lst_grid[-1] + self.dlst / 2
+
+        tinds = []
+        for meta in self.matched_metas:
+            lsts = meta.lsts % (2 * np.pi)
+            lsts[lsts < lstmin] += 2 * np.pi
+
+            tind = np.argwhere((lsts >= lstmin) & (lsts < lstmax)).flatten()
+            tinds.append(tind)
+
+        return tinds
+
+    @cached_property
+    def lst_grid_edges(self) -> np.ndarray:
+        return np.concatenate(
+            [self.lst_grid - self.dlst / 2, [self.lst_grid[-1] + self.dlst / 2]],
+        )
+
+    @property
+    def n_lsts(self) -> int:
+        return self.lst_grid.size
+
+    def get_lsts(self) -> tuple[np.ndarray]:
+        """Return the LSTs of the observations that fall into this LST bin/outfile.
+
+        Returns
+        -------
+        tuple[np.ndarray]
+            The LSTs of the observations that fall into this LST bin/outfile.
+            Each element of the tuple represents a single input data file, and is
+            an array of LSTs from that file that fall into the LST bin/outfile.
+        """
+        return tuple(meta.lsts[tind] % (2 * np.pi) for meta, tind in zip(self.matched_metas, self.time_indices))

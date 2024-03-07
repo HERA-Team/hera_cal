@@ -5,6 +5,7 @@ from .conftest import create_small_array_uvd
 from ...tests import mock_uvdata as mockuvd
 from hypothesis import given, strategies as st, assume
 from pyuvdata.uvdata import FastUVH5Meta
+from pathlib import Path
 
 
 class TestFixdLST:
@@ -138,64 +139,119 @@ class TestGetAllAntpairs:
             config.get_all_antpairs(data_files)
 
 
-@pytest.fixture(scope="module")
-def default_dataset(tmp_path_factory):
-    tmp = tmp_path_factory.mktemp("get_all_baselines")
-    uvds = mockuvd.make_dataset(
-        ndays=3,
-        nfiles=4,
-        ntimes=2,
-        ants=np.arange(10),
-        creator=create_small_array_uvd,
-        redundantly_averaged=True,
-    )
-    return mockuvd.write_files_in_hera_format(uvds, tmp)
-
-
-@pytest.fixture(scope="module")
-def default_config(default_dataset):
-    return config.LSTBinConfiguration(default_dataset)
+all_seasons = [
+    'redavg',
+    'redavg_inpaint',
+    'notredavg',
+]
 
 
 class TestLSTBinConfiguration:
-    def test_datameta(self, default_config):
-        assert isinstance(default_config.datameta, FastUVH5Meta)
+    def get_config(self, season, request):
+        return config.LSTBinConfiguration(request.getfixturevalue(f"season_{season}"))
 
-    def test_get_earliest_jd_in_set(self, default_config):
-        earliest = default_config.get_earliest_jd_in_set()
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_datameta(self, season, request):
+        cfg = self.get_config(season, request)
+        assert isinstance(cfg.datameta, FastUVH5Meta)
+
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_get_earliest_jd_in_set(self, season, request):
+        cfg = self.get_config(season, request)
+
+        earliest = cfg.get_earliest_jd_in_set()
         assert isinstance(earliest, float)
-        all_metas = [FastUVH5Meta(f) for fls in self.data_files for f in fls]
+        all_metas = [FastUVH5Meta(f) for fls in cfg.data_files for f in fls]
         all_times = [meta.times[0] for meta in all_metas]
         assert earliest == min(all_times)
 
-    def test_lst_grid(self, default_config):
-        assert default_config.lst_grid is not None
-        assert len(default_config.lst_grid) > 0
-        assert np.all(np.diff(default_config.lst_grid) > 0)
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_lst_grid(self, season, request):
+        cfg = self.get_config(season, request)
+        assert cfg.lst_grid is not None
+        assert len(cfg.lst_grid) == 24
+        assert np.all(np.diff(cfg.lst_grid) > 0)
 
-    def test_lst_grid_edges(self, default_config):
-        assert len(default_config.lst_grid_edges) == len(default_config.lst_grid) + 1
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_lst_grid_edges(self, season, request):
+        cfg = self.get_config(season, request)
+        assert len(cfg.lst_grid_edges) == len(cfg.lst_grid) + 1
 
-    def test_nfiles(self, default_config):
-        assert default_config.nfiles > 0
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_get_file_lst_edges(self, season, request):
+        cfg = self.get_config(season, request)
+        edges = cfg.get_file_lst_edges()
+        assert len(edges) == 13  # one for each file, each of which has 2 bins, and one at the last edge.
+        assert np.all(np.diff(edges) > 0)
 
-    def test_red_avg(self, default_config):
-        assert default_config.is_redundantly_averaged
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_nfiles(self, season, request):
+        cfg = self.get_config(season, request)
+        assert cfg.nfiles > 0
 
-    def test_get_matched_files(self, default_config):
-        matched_files = default_config.get_matched_files()
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_red_avg(self, season, request):
+        cfg = self.get_config(season, request)
+        assert cfg.is_redundantly_averaged == ('notredavg' not in season)
+
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_get_matched_files(self, season, request):
+        cfg = self.get_config(season, request)
+        matched_files = cfg.get_matched_files()
 
         assert isinstance(matched_files, list)
-        assert len(matched_files) > 0
+        assert len(matched_files) == 12  # LSTs
         assert isinstance(matched_files[0], list)
-        assert len(matched_files[0]) > 0
-        assert isinstance(matched_files[0][0], FastUVH5Meta)
+        assert all(len(m) <= 3 for m in matched_files)  # number of nights
+        assert isinstance(matched_files[0][0], list)
+        assert len(matched_files[0][0]) in {0, 1}  # At most one file corresponds to each bin
 
-    def test_create_config(self, default_config):
-        mf = default_config.get_matched_files()
-        config = default_config.create_config(mf)
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_create_config(self, season, request):
+        cfg = self.get_config(season, request)
+        mf = cfg.get_matched_files()
+        cfg = cfg.create_config(mf)
 
-        assert len(config.matched_files) == 4  # 2 outfiles
-        assert len(config.matched_files[0]) == 3  # 3 nights
-        assert isinstance(config.matched_files[0][0], list)
-        assert isinstance(config.matched_files[0][0][0], FastUVH5Meta)
+        assert len(cfg.matched_files) == 4  # 2 outfiles
+        assert len(cfg.matched_files[0]) == 3  # 3 nights
+        assert isinstance(cfg.matched_files[0][0], list)
+        assert isinstance(cfg.matched_files[0][0][0], Path)
+
+
+class TestLSTConfig:
+    def get_lstconfig(self, season: str, request) -> config.LSTConfig:
+        cfg = config.LSTBinConfiguration(request.getfixturevalue(f"season_{season}"))
+        mf = cfg.get_matched_files()
+        return cfg.create_config(mf)
+
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_lst_grid_edges(self, season, request):
+        cfg = self.get_lstconfig(season, request)
+        assert len(cfg.lst_grid_edges[0]) == len(cfg.lst_grid[0]) + 1
+
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_read_write_roundtrip(
+        self,
+        season,
+        tmp_path, request
+    ):
+        cfg = self.get_lstconfig(season, request)
+        fl = tmp_path / "lstconfig.h5"
+        cfg.write(fl)
+        new_config = config.LSTConfig.from_file(fl)
+        assert new_config.config == cfg.config
+        assert new_config == cfg
+
+    @pytest.mark.parametrize('season', all_seasons)
+    def test_at_single_outfile(self, season, request):
+        cfg = self.get_lstconfig(season, request)
+        cfgout = cfg.at_single_outfile(outfile=0)
+
+        assert len(cfgout.matched_metas) == 3  # number of nights * lst bins per outfile
+        assert len(cfgout.time_indices) == len(cfgout.matched_metas)
+        assert all(isinstance(x, np.ndarray) for x in cfgout.time_indices)
+        assert len(cfgout.lst_grid_edges) == 3  # 2 bins in the file, so 3 edges
+        assert cfgout.n_lsts == 2
+        lsts = cfgout.get_lsts()
+        assert len(lsts) == len(cfgout.matched_metas)
+        assert all(np.all((lst > cfgout.lst_grid_edges[0]) & (lst < cfgout.lst_grid_edges[-1])) for lst in lsts)

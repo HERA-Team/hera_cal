@@ -1560,7 +1560,7 @@ def match_files_to_lst_bins(
     lst_edges = np.array([(lst - lst0) % (2 * np.pi) + lst0 for lst in lst_edges])
     # We can have the case that an edges is at lst0 + 2pi exactly, which would
     # get wrapped around to lst0, but it should stay at lst0+2pi.
-    lst_edges[1:][lst_edges[1:] == lst_edges[0]] += 2 * np.pi
+    lst_edges[1:][np.isclose(lst_edges[1:], lst_edges[0], atol=1e-10)] += 2 * np.pi
 
     if np.any(np.diff(lst_edges) < 0):
         raise ValueError("lst_edges must not extend beyond 2pi total radians from start to finish.")

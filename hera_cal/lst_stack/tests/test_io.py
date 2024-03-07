@@ -3,65 +3,66 @@ from pathlib import Path
 import pytest
 
 
-def test_apply_calfile_rules(tmpdir_factory):
-    direc = tmpdir_factory.mktemp("test_apply_calfile_rules")
+@pytest.fixture(scope="module")
+def file_trove(tmp_path_factory):
+    return tmp_path_factory.mktemp("file_trove")
 
-    datas = [Path(direc / f"data{i}.uvh5") for i in range(3)]
+
+@pytest.fixture(scope='module')
+def empty_uvh5(file_trove) -> list[str]:
+    datas = [file_trove / f"data{i}.uvh5" for i in range(6)]
     for d in datas:
         d.touch()
+    return [str(d) for d in datas]
 
-    cals = [Path(direc / f"data{i}.calfile") for i in range(3)]
-    for c in cals:
-        c.touch()
 
-    data_files, calfiles = io.apply_calfile_rules(
-        [[str(d) for d in datas]],
-        calfile_rules=[(".uvh5", ".calfile")],
-        ignore_missing=False,
-    )
-    assert len(data_files[0]) == 3
-    assert len(calfiles[0]) == 3
+@pytest.fixture(scope='module')
+def empty_calfile(empty_uvh5) -> list[str]:
+    cals = [Path(d).with_suffix(".calfile") for d in empty_uvh5]
+    for fl in cals:
+        fl.touch()
+    return [str(c) for c in cals]
 
-    cals[-1].unlink()
-    with pytest.raises(IOError, match="does not exist"):
-        io.apply_calfile_rules(
-            [[str(d) for d in datas]],
-            calfile_rules=[(".uvh5", ".calfile")],
-            ignore_missing=False,
+
+class TestApplyFilenameRules:
+    def test_single_depth(self, empty_uvh5: list[str], empty_calfile: list[str]):
+        calfiles = io.apply_filename_rules(empty_uvh5, [(".uvh5", ".calfile")])
+        assert len(calfiles) == len(empty_uvh5)
+
+    def test_single_path(self, empty_uvh5: list[str], empty_calfile: list[str]):
+        calfiles = io.apply_filename_rules(empty_uvh5[0], [(".uvh5", ".calfile")])
+        assert isinstance(calfiles, str)
+
+    def test_multiple_depth(self, empty_uvh5: list[str], empty_calfile: list[str]):
+        calfiles = io.apply_filename_rules(
+            [[empty_uvh5, empty_uvh5]],
+            [(".uvh5", ".calfile")]
         )
+        assert len(calfiles) == 1
 
-    with pytest.warns(UserWarning, match="Calibration file .* does not exist"):
-        data_files, calfiles = io.apply_calfile_rules(
-            [[str(d) for d in datas]],
-            calfile_rules=[(".uvh5", ".calfile")],
-            ignore_missing=True,
+    def test_warn_if_missing(self, empty_uvh5: list[str]):
+        with pytest.warns(UserWarning, match="does not exist"):
+            io.apply_filename_rules(
+                empty_uvh5,
+                [(".uvh5", ".non_existent.h5")],
+                missing="warn"
+            )
+
+    def test_raise_if_missing(self, empty_uvh5: list[str]):
+        with pytest.raises(IOError, match="does not exist"):
+            io.apply_filename_rules(
+                empty_uvh5,
+                [(".uvh5", ".non_existent.h5")],
+                missing="raise"
+            )
+
+    def test_ignore_if_missing(self, empty_uvh5: list[str]):
+        out = io.apply_filename_rules(
+            empty_uvh5,
+            [(".uvh5", ".non_existent.h5")],
+            missing="ignore"
         )
-    assert len(data_files[0]) == 2
-    assert len(calfiles[0]) == 2
-
-
-def test_get_where_inpainted(tmp_path_factory):
-    tmp: Path = tmp_path_factory.mktemp("get_where_inpainted")
-
-    fls = []
-    for outer in ["abc", "def"]:
-        these = []
-        for filename in outer:
-            (tmp / f"{filename}.uvh5").touch()
-            (tmp / f"{filename}.where_inpainted.h5").touch()
-            these.append(tmp / f"{filename}.uvh5")
-        fls.append(these)
-
-    out = io._get_where_inpainted_files(
-        fls, [(".uvh5", ".where_inpainted.h5")]
-    )
-
-    assert len(out) == 2
-    assert len(out[0]) == 3
-    assert len(out[1]) == 3
-
-    with pytest.raises(IOError, match="Where inpainted file"):
-        io._get_where_inpainted_files(fls, [(".uvh5", ".non_existent.h5")])
+        assert all(o is None for o in out)
 
 
 def test_configure_inpainted_mode():

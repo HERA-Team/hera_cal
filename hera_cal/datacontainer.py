@@ -468,7 +468,7 @@ class DataContainer:
         '''Allows for getting values with fallback if not found. Default None.'''
         return (self[key] if key in self else val)
 
-    def select_or_expand_times(self, new_times, in_place=True, skip_bda_check=False):
+    def select_or_expand_times(self, new_times: Sequence[float] | None = None, in_place=True, skip_bda_check=False, *, indices: np.ndarray | None = None):
         '''Update self.times with new times, updating data and metadata to be consistent. Data and
         metadata will be deleted, rearranged, or duplicated as necessary using numpy's fancy indexing.
         Assumes that the 0th data axis is time. Does not support baseline-dependent averaging.
@@ -478,6 +478,11 @@ class DataContainer:
                 self.times, but they can be a subset in any order with any number of duplicates.
             in_place: if True, this DataContainer is modified. Otherwise, a modified copy is returned.
         '''
+        if new_times is None and indices is None:
+            raise ValueError('Either new_times or indices must be given.')
+        if new_times is not None and indices is not None:
+            raise ValueError('Cannot specify both new_times and indices.')
+
         if in_place:
             dc = self
         else:
@@ -485,8 +490,10 @@ class DataContainer:
 
         # make sure this is a sensible object for performing this operation
         assert dc.times is not None
-        if not np.all([nt in dc.times for nt in new_times]):
+
+        if new_times is not None and not np.all([nt in dc.times for nt in new_times]):
             raise ValueError('All new_times must be in self.times.')
+
         if not skip_bda_check:
             if dc.times_by_bl is not None:
                 for tbbl in dc.times_by_bl.values():
@@ -496,7 +503,12 @@ class DataContainer:
                     assert np.all(lbbl == np.asarray(dc.lsts)), 'select_or_expand_times does not support baseline dependent averaging.'
 
         # update data
-        nt_inds = np.searchsorted(np.array(dc.times), np.array(new_times))
+        if indices is not None:
+            nt_inds = indices
+            new_times = np.array(dc.times)[nt_inds]
+        else:
+            nt_inds = np.searchsorted(np.array(dc.times), np.array(new_times))
+
         for bl in dc:
             assert dc[bl].shape[0] == len(dc.times), 'select_or_expand_times assume that time is the 0th data dimension.'
             dc[bl] = dc[bl][nt_inds]

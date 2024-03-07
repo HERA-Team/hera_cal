@@ -47,7 +47,7 @@ def apply_filename_rules_to_file(
     for rule in rules:
         new_filename = re.sub(rule[0], rule[1], new_filename)
 
-    if missing in ["warn", "replace", 'raise'] and not Path(new_filename).exists():
+    if missing in ["warn", "ignore", 'raise'] and not Path(new_filename).exists():
         if missing == "warn":
             warnings.warn(f"File {new_filename} does not exist")
         elif missing == "raise":
@@ -88,6 +88,9 @@ def apply_filename_rules(
         List of lists of calibration file names. Each inner list is a night of data.
         Any calibration files that were missing are not included.
     """
+    if isinstance(files, str):
+        return apply_filename_rules_to_file(files, rules, missing=missing)
+
     if not isinstance(files[0], str):
         return [apply_filename_rules(f, rules, missing=missing) for f in files]
 
@@ -106,9 +109,11 @@ def filter_required_files_by_times(
     if lstmin > lstmax:
         lstmax += 2 * np.pi
 
+    have_calfiles = cal_files is not None
     if not cal_files:
         cal_files = [[None for _ in dm] for dm in data_metas]
 
+    have_inp = where_inpainted_files is not None
     if not where_inpainted_files:
         where_inpainted_files = [[None for _ in dm] for dm in data_metas]
 
@@ -140,10 +145,17 @@ def filter_required_files_by_times(
                 cals.append(cal)
                 where_inpainted.append(inp)
 
+    if not have_calfiles:
+        cals = None
+    if not have_inp:
+        where_inpainted = None
+
     return tinds, time_arrays, all_lsts, file_list, cals, where_inpainted
 
 
-def _configure_inpainted_mode(output_flagged, output_inpainted, where_inpainted_files):
+def _configure_inpainted_mode(
+    output_flagged, output_inpainted, where_inpainted_files
+) -> list[bool]:
     # Sort out defaults for inpaint/flagging mode
     if output_inpainted is None:
         output_inpainted = bool(where_inpainted_files)
@@ -153,7 +165,13 @@ def _configure_inpainted_mode(output_flagged, output_inpainted, where_inpainted_
             "Both output_inpainted and output_flagged are False. One must be True."
         )
 
-    return output_flagged, output_inpainted
+    inpaint_modes = []
+    if output_inpainted:
+        inpaint_modes.append(True)
+    if output_flagged:
+        inpaint_modes.append(False)
+
+    return inpaint_modes
 
 
 def create_lstbin_output_file(
