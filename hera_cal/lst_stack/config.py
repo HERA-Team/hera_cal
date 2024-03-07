@@ -14,6 +14,7 @@ from astropy import units
 import h5py
 from .io import apply_filename_rules, filter_required_files_by_times
 from abc import ABC, abstractmethod
+import toml
 
 logger = logging.getLogger(__name__)
 
