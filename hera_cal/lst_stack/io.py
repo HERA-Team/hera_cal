@@ -138,7 +138,7 @@ def filter_required_files_by_times(
             lsts = meta.lsts % (2 * np.pi)
             lsts[lsts < lstmin] += 2 * np.pi
 
-            tind = (lsts > lstmin) & (lsts < lstmax)
+            tind = np.argwhere((lsts > lstmin) & (lsts < lstmax)).flatten()
 
             if np.any(tind):
                 tinds.append(tind)

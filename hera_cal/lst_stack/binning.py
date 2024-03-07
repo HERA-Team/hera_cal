@@ -428,7 +428,6 @@ def lst_bin_files_for_baselines(
             )
 
     if lsts is None:
-        print(time_idx)
         lsts = np.concatenate(
             [meta.get_transactional("lsts")[idx] for meta, idx in zip(metas, time_idx)]
         )
@@ -480,7 +479,7 @@ def lst_bin_files_for_baselines(
                 if bl in data_antpairs or bl[::-1] in data_antpairs
             ]
 
-        if not bls_to_load or not np.any(tind):
+        if not bls_to_load or len(tind) == 0:
             # If none of the requested baselines are in this file, then just
             # set stuff as nan and go to next file.
             logger.warning(f"None of the baseline-times are in {meta.path}. Skipping.")

@@ -851,6 +851,17 @@ class LSTConfigSingle(_LSTConfigBase):
 
         return tinds
 
+    @time_indices.validator
+    def _time_indices_validator(self, attribute, value):
+        if len(value) != len(self.matched_metas):
+            raise ValueError("time_indices must have the same length as matched_metas.")
+
+        for tind, meta in zip(value, self.matched_metas):
+            if tind.dtype.kind != 'i':
+                raise ValueError("time_indices must be integer arrays.")
+            if len(tind) > len(meta.lsts) or tind.max() >= len(meta.lsts):
+                raise ValueError("time_indices must be shorter than the LSTs in the file.")
+
     @cached_property
     def lst_grid_edges(self) -> np.ndarray:
         return np.concatenate(
