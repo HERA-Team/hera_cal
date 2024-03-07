@@ -91,6 +91,9 @@ def apply_filename_rules(
     if isinstance(files, str):
         return apply_filename_rules_to_file(files, rules, missing=missing)
 
+    elif not files:
+        return files
+
     if not isinstance(files[0], str):
         return [apply_filename_rules(f, rules, missing=missing) for f in files]
 
