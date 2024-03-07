@@ -441,8 +441,8 @@ class LSTBinConfiguration:
 
         The output is a triple-nested list. The first list is for each output file,
         the second list is for each night, and the third list is for files within that
-        night that might overlap with that LST-bin. The elements of the third list are
-        FastUVH5Meta objects.
+        night that might overlap with any LST-bin in that outfile file.
+        The elements of the third list are FastUVH5Meta objects.
 
         Note that there is no distinction made between LST bins within each output file,
         as it is expected that all of the files will be read in any case.
@@ -472,20 +472,19 @@ class LSTBinConfiguration:
 
     def create_config(
         self,
-        matched_files: list[list[FastUVH5Meta]],
+        matched_files: list[list[list[FastUVH5Meta]]],
     ) -> LSTConfig:
         """
         Create an LSTConfig object from the given matched files.
 
         Parameters
         ----------
-        matched_files : list[list[FastUVH5Meta]]
+        matched_files : list[list[list[FastUVH5Meta]]]
             The matched files to use for LST binning. This is the output of
             :meth:`get_matched_files`.
         """
         lst_grid = self.lst_grid.copy()
         if (nextra := self.lst_grid.size % self.nlsts_per_file) > 0:
-            print(nextra, self.nlsts_per_file)
             lst_grid = np.concatenate(lst_grid, [np.nan] * (self.nlsts_per_file - nextra))
 
         lst_grid = lst_grid.reshape((self.nfiles, self.nlsts_per_file))
@@ -498,13 +497,14 @@ class LSTBinConfiguration:
         # AFTER it
         lst_branch_cut = float(utils.get_best_lst_branch_cut(np.concatenate(lst_grid)))
 
+        # Turn matched_files back into a list of lists of strings.
         matched_files = [
             [[str(m.path) for m in night] for night in outfiles]
             for outfiles in matched_files
         ]
 
         antpairs, pols = get_all_antpairs(
-            data_files=[sum(fls, start=[]) for fls in matched_files],
+            data_files=self.data_files,
             include_autos=True,
             ignore_ants=self.ignore_ants,
             only_last_file_per_night=self.antpairs_from_last_file_each_night,
