@@ -682,6 +682,39 @@ class _LSTConfigBase(ABC):
         return self.config.dlst
 
 
+def _write_irregular_list_of_paths_hdf5(fl, name, value):
+    if value is None:
+        return
+
+    max_files_per_night = max(
+        len(night) for outfile in value for night in outfile
+    )
+
+    regular = [
+        [
+            [str(m) for m in night] + [''] * (max_files_per_night - len(night))
+            for night in outfile
+        ] for outfile in value
+    ]
+
+    fl.create_dataset(name, data=regular)
+
+
+def _read_irregular_list_of_paths_hdf5(fl, name):
+    if name not in fl:
+        return None
+
+    value = fl[name][()]
+
+    irregular = [
+        [
+            [Path(fl.decode()) for fl in night if fl]
+            for night in outfile
+        ] for outfile in value
+    ]
+    return irregular
+
+
 @attrs.define(slots=False, frozen=False, kw_only=True)
 class LSTConfig(_LSTConfigBase):
     @cached_property
@@ -692,28 +725,15 @@ class LSTConfig(_LSTConfigBase):
         )
 
     def write(self, fname: str | Path):
-        max_files_per_night = max(
-            len(night) for outfile in self.matched_files for night in outfile
-        )
-
-        regular_mfs = [
-            [
-                [str(m) for m in night] + [''] * (max_files_per_night - len(night))
-                for night in outfile
-            ] for outfile in self.matched_files
-        ]
-
         with h5py.File(fname, "w") as fl:
             self.config.write(fl.create_group("config"))
             fl.create_dataset("lst_grid", data=self.lst_grid)
-            fl.create_dataset("matched_files", data=regular_mfs)
             fl.create_dataset("antpairs", data=self.antpairs, dtype=int)
             fl.create_dataset("autos", data=self.autos, dtype=int)
             fl.create_dataset("pols", data=self.pols)
-            if self.calfiles:
-                fl.create_dataset("calfiles", data=self.calfiles)
-            if self.inpaint_files:
-                fl.create_dataset("inpaint_files", data=self.inpaint_files)
+            _write_irregular_list_of_paths_hdf5(fl, "matched_files", self.matched_files)
+            _write_irregular_list_of_paths_hdf5(fl, "calfiles", self.calfiles)
+            _write_irregular_list_of_paths_hdf5(fl, "inpaint_files", self.inpaint_files)
 
             for k, v in self.properties.items():
                 fl.attrs[k] = v
@@ -723,24 +743,18 @@ class LSTConfig(_LSTConfigBase):
         with h5py.File(config_file, "r") as fl:
             config = LSTBinConfiguration.read(fl["config"])
             lst_grid = fl["lst_grid"][()]
-            regular_mfs = fl["matched_files"][()]
+            mfs = _read_irregular_list_of_paths_hdf5(fl, "matched_files")
+            calfiles = _read_irregular_list_of_paths_hdf5(fl, "calfiles")
+            inpaint_files = _read_irregular_list_of_paths_hdf5(fl, "inpaint_files")
             antpairs = fl["antpairs"][()]
             autos = fl["autos"][()]
             pols = fl["pols"][()]
-            calfiles = fl["calfiles"][()] if "calfiles" in fl else None
-            inpaint_files = fl["inpaint_files"][()] if "inpaint_files" in fl else None
             properties = dict(fl.attrs.items())
 
-        matched_files = [
-            [
-                [Path(fl.decode()) for fl in night if fl]
-                for night in outfile
-            ] for outfile in regular_mfs
-        ]
         return cls(
             config=config,
             lst_grid=lst_grid,
-            matched_files=matched_files,
+            matched_files=mfs,
             properties=properties,
             antpairs=[(a, b) for a, b in antpairs],
             autos=[(a, b) for a, b in autos],
@@ -778,7 +792,6 @@ class LSTConfig(_LSTConfigBase):
         kw['calfiles'] = cals
         kw['inpaint_files'] = inp
 
-        print(kw['matched_files'], kw['calfiles'])
         return LSTConfigSingle(time_indices=tinds, **kw)
 
     def at_single_outfile(

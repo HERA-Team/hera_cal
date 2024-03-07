@@ -138,6 +138,14 @@ def season_redavg(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
+def season_redavg_irregular(tmp_path_factory):
+    files = _make_season(tmp_path_factory)
+    files[1] = files[1][1:]
+    files[2] = files[2][2:]
+    return files
+
+
+@pytest.fixture(scope="session")
 def season_redavg_inpaint(tmp_path_factory):
     return _make_season(tmp_path_factory, inpaint=True)
 

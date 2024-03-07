@@ -66,6 +66,7 @@ setup_args = {
         "optax",
         'attrs',
         'frozendict',
+        "toml",
     ],
     'extras_require': {
         'dev': [

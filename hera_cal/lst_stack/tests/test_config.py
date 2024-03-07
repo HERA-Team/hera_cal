@@ -143,6 +143,7 @@ all_seasons = [
     'redavg',
     'redavg_inpaint',
     'notredavg',
+    'redavg_irregular'
 ]
 
 
@@ -247,7 +248,7 @@ class TestLSTConfig:
         cfg = self.get_lstconfig(season, request)
         cfgout = cfg.at_single_outfile(outfile=0)
 
-        assert len(cfgout.matched_metas) == 3  # number of nights * lst bins per outfile
+        assert len(cfgout.matched_metas) == 1 if season == 'redavg_irregular' else 3  # number of nights
         assert len(cfgout.time_indices) == len(cfgout.matched_metas)
         assert all(isinstance(x, np.ndarray) for x in cfgout.time_indices)
         assert len(cfgout.lst_grid_edges) == 3  # 2 bins in the file, so 3 edges
