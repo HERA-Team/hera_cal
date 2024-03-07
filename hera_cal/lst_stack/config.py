@@ -422,8 +422,8 @@ class LSTBinConfiguration:
             sorted(
                 (datadir / str(nd)).glob(
                     f"zen.{jdglob}.{sum_or_diff}.{label}{extension}"
-                ) for nd in nightdirs
-            )
+                )
+            ) for nd in nightdirs
         ]
 
     def get_file_lst_edges(self) -> np.ndarray:
