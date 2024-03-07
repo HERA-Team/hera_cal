@@ -397,11 +397,8 @@ class LSTBinConfiguration:
 
     @classmethod
     def from_toml(cls, toml_file: str | Path) -> LSTBinConfiguration:
-        with open(toml_file, "r") as fl:
-            dct = yaml.safe_load(fl)
-
+        dct = toml.load(toml_file)
         datafiles = cls.find_datafiles(**dct.pop("datafiles"))
-
         return cls(data_files=datafiles, **dct)
 
     @staticmethod
