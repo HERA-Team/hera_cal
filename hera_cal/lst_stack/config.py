@@ -349,7 +349,7 @@ class LSTBinConfiguration:
     @where_inpainted_file_rules.validator
     def _rules_validator(self, attribute, value):
         if value is not None and not all(
-            isinstance(v, tuple)
+            isinstance(v, (list, tuple))
             and len(v) == 2
             and all(isinstance(vv, str) for vv in v) for v in value
         ):
