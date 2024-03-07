@@ -230,7 +230,7 @@ def _subsorted_list(x: Sequence[Sequence[Any]]) -> list[list[Any]]:
     return [sorted(y) for y in x]
 
 
-@attrs.define
+@attrs.define(slots=False, frozen=True)
 class LSTBinConfiguration:
     """
     LST-bin configuration specification.
