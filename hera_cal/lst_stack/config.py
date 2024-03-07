@@ -189,10 +189,12 @@ def get_all_antpairs(
         else:
             a_priori_antenna_flags = set()
 
+        print("ONLY LAST FILE? ", only_last_file_per_night)
         if only_last_file_per_night:
             # Actually, use first AND last, just to be cautious
             fl_list = [fl_list[0], fl_list[-1]]
 
+        print(len(fl_list))
         for meta in fl_list:
             antpairs = meta.antpairs
             all_pols.update(set(meta.pols))
