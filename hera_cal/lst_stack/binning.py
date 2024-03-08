@@ -632,7 +632,7 @@ def lst_bin_files_from_config(
 
     all_lsts = np.concatenate(config.get_lsts())
 
-    _, data, flags, nsamples, where_inpainted, binned_lsts, binned_times = lst_bin_files_for_baselines(
+    _, data, flags, nsamples, where_inpainted, binned_times, binned_lsts = lst_bin_files_for_baselines(
         antpairs=antpairs,
         data_files=config.matched_files,
         lst_bin_edges=config.lst_grid_edges,

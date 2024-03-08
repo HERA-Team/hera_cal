@@ -130,6 +130,7 @@ def lst_average(
     ndays_binned = np.sum((~flags).astype(int), axis=0)
 
     logger.info("Calculating mean")
+
     # np.sum works the same for both masked and non-masked arrays.
     meandata = np.sum(data * nsamples, axis=0)
 
