@@ -134,15 +134,13 @@ def filter_required_files_by_times(
 
     for night, callist, inplist in zip(data_metas, cal_files, where_inpainted_files):
         for meta, cal, inp in zip(night, callist, inplist):
-            tarr = meta.times
             lsts = meta.lsts % (2 * np.pi)
             lsts[lsts < lstmin] += 2 * np.pi
 
             tind = np.argwhere((lsts > lstmin) & (lsts < lstmax)).flatten()
 
-            if np.any(tind):
+            if len(tind) > 0:
                 tinds.append(tind)
-                time_arrays.append(tarr[tind])
                 all_lsts.append(lsts[tind])
                 file_list.append(meta)
                 cals.append(cal)
@@ -153,7 +151,7 @@ def filter_required_files_by_times(
     if not have_inp:
         where_inpainted = None
 
-    return tinds, time_arrays, all_lsts, file_list, cals, where_inpainted
+    return tinds, all_lsts, file_list, cals, where_inpainted
 
 
 def _configure_inpainted_mode(

@@ -779,7 +779,7 @@ class LSTConfig(_LSTConfigBase):
             lst_grid = lst_grid[lstindex]
             grid_edges = grid_edges[lstindex:lstindex + 2]
 
-        tinds, _, _, matched_files, cals, inp = filter_required_files_by_times(
+        tinds, _, matched_files, cals, inp = filter_required_files_by_times(
             lst_range=(grid_edges[0], grid_edges[-1]),
             data_metas=self.matched_metas[outfile],
             cal_files=self.calfiles[outfile] if self.calfiles else None,
