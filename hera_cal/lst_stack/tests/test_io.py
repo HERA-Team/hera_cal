@@ -66,47 +66,44 @@ class TestApplyFilenameRules:
 
 
 def test_configure_inpainted_mode():
-    flg, inp = io._configure_inpainted_mode(
+    modes = io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=True, where_inpainted_files=[]
     )
-    assert flg
-    assert inp
+    assert len(modes) == 2
 
-    flg, inp = io._configure_inpainted_mode(
+    modes = io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=True, where_inpainted_files=["a_file.h5"]
     )
-    assert flg
-    assert inp
+    assert len(modes) == 2
 
-    flg, inp = io._configure_inpainted_mode(
+    modes = io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=False, where_inpainted_files=[]
     )
-    assert flg
-    assert not inp
+    assert len(modes) == 1
+    assert not modes[0]
 
-    flg, inp = io._configure_inpainted_mode(
+    modes = io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=False, where_inpainted_files=["a_file.h5"]
     )
-    assert flg
-    assert not inp
+    assert len(modes) == 1
+    assert not modes[0]
 
-    flg, inp = io._configure_inpainted_mode(
+    modes = io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=None, where_inpainted_files=[]
     )
-    assert flg
-    assert not inp
+    assert len(modes) == 1
+    assert not modes[0]
 
-    flg, inp = io._configure_inpainted_mode(
+    modes = io._configure_inpainted_mode(
         output_flagged=True, output_inpainted=None, where_inpainted_files=["a_file.h5"]
     )
-    assert flg
-    assert inp
+    assert len(modes) == 2
 
-    flg, inp = io._configure_inpainted_mode(
+    modes = io._configure_inpainted_mode(
         output_flagged=False, output_inpainted=True, where_inpainted_files=[]
     )
-    assert not flg
-    assert inp
+    assert len(modes) == 1
+    assert modes[0]
 
     with pytest.raises(ValueError, match="Both output_inpainted and output_flagged"):
         io._configure_inpainted_mode(

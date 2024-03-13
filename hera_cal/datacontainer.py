@@ -7,6 +7,7 @@ import numpy as np
 from collections import OrderedDict as odict
 import copy
 import warnings
+from functools import cache
 
 from typing import Sequence
 from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
@@ -654,8 +655,6 @@ class RedDataContainer(DataContainer):
         else:
             self.reds = RedundantGroups(red_list=reds, antpos=getattr(self, 'antpos', None))
 
-        self._reds_keyed_on_data = self.reds.keyed_on_bls(bls=self.bls())
-
         # delete unused data to avoid leaking memory
         del self[[k for k in self._data if k not in self.reds]]
 
@@ -671,14 +670,23 @@ class RedDataContainer(DataContainer):
             else:
                 redkeys[ubl] = bl
 
-    def get_ubl_key(self, bl):
+    def get_ubl_key(self, bl: Baseline | AntPair):
         '''Returns the blkey used to internally denote the data stored.
 
         If this bl is in a redundant group present in the data, this will return the
         blkey that exists in the data. Otherwise, it will return the array-wide blkey
         representing this group.
         '''
-        return self._reds_keyed_on_data.get_ubl_key(bl)
+        # return self._reds_keyed_on_data.get_ubl_key(bl)
+        out = self.reds.get_reds_in_bl_set(bl, self.bls(), include_conj=False)
+        if len(out) == 1:
+            return next(iter(out))
+        elif len(out) == 0:
+            return self.reds.get_ubl_key(bl)
+        else:
+            raise ValueError(
+                f'Baseline {bl} corresponds to multiple baselines in the data: {out}.'
+            )
 
     def get_red(self, key):
         '''Returns the list of baselines in the array redundant with this key.
@@ -699,11 +707,6 @@ class RedDataContainer(DataContainer):
         else:
             # treat this as a new baseline not redundant with anything
             self.reds.append([key])
-
-            # Since this is a completely new key, the BaselineKeyChooser will
-            # automatically use the only key in the group as the ubl key, we just
-            # need to add it to the potential key list.
-            self._reds_keyed_on_data.append([key])
             ubl_key = key
 
         super().__setitem__(ubl_key, value)
