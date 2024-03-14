@@ -123,7 +123,6 @@ def filter_required_files_by_times(
     tinds = []
     all_lsts = []
     file_list = []
-    time_arrays = []
     cals = []
     where_inpainted = []
 

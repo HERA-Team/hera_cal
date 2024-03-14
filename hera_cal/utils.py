@@ -1603,7 +1603,7 @@ def match_files_to_lst_bins(
 
         @cache
         def get_first_time(path: Path) -> float:
-            return float(jd_regex.findall(path.name)[0])
+            return float(jd_regex.findall(path.name)[0]) - tint / 2
     else:
 
         @cache

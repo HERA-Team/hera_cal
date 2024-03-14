@@ -453,7 +453,7 @@ class LSTBinConfiguration:
         matched_files = [[] for _ in lst_edges[:-1]]
         for fllist in self.data_files:
             # matched here is a list of lists of FastUVH5Meta objects.
-            # Each list is for a single lst-bin.
+            # Each list is for a single output LST bin file.
             matched = utils.match_files_to_lst_bins(
                 lst_edges=lst_edges,
                 file_list=fllist,
