@@ -827,7 +827,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
         return {k: eval(k, _sol) for k in keys}
 
     def solve_iteratively(self, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1,
-                          wgt_func=lambda x: 1., verbose=False):
+                          wgt_func=lambda x: 1., locked_prms=[], verbose=False):
         """Repeatedly solves and updates solution until convergence or maxiter is reached.
         Returns a meta-data about the solution and the solution itself.
 
@@ -842,6 +842,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 data and model that returns an additional data weighting to apply to when calculating
                 chisq and updating parameters. Example: lambda x: np.where(x>0, 5*np.tanh(x/5)/x, 1)
                 clamps deviations to 5 sigma. Default is no additional weighting (lambda x: 1.).
+            locked_prms: a list of parameters which are not allowed to change.
 
         Returns: meta, sol
             meta: a dictionary with metadata about the solution, including
@@ -852,7 +853,9 @@ class OmnicalSolver(linsolve.LinProductSolver):
         """
         sol = self.sol0
         terms = [(linsolve.get_name(gi), linsolve.get_name(gj), linsolve.get_name(uij))
-                 for term in self.all_terms for (gi, gj, uij) in term]
+                 for term in self.all_terms for (gi, gj, uij) in term
+                 if (gi not in locked_prms) or (gj not in locked_prms) or (uij not in locked_prms)]
+        gain = {k: self.gain if k not in locked_prms else 0 for k in sol.keys()}
         dmdl_u = self._get_ans0(sol)
         abs2_u = {k: np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys}
         chisq = sum([v * wgt_func(v) for v in abs2_u.values()])
@@ -892,7 +895,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 sol_sum_u[gi] += numerator
                 sol_sum_u[gj] += numerator.conj()
                 sol_sum_u[uij] += numerator
-            new_sol_u = {k: v * ((1 - self.gain) + self.gain * sol_sum_u[k] / sol_wgt_u[k])
+            new_sol_u = {k: v * ((1 - gain[k]) + gain[k] * sol_sum_u[k] / sol_wgt_u[k])
                          for k, v in sol_u.items()}
             dmdl_u = self._get_ans0(new_sol_u)
             # check if i % check_every is 0, which is purposely one less than the '1' up at the top of the loop
@@ -1270,7 +1273,8 @@ class RedundantCalibrator:
         sol = RedSol(self.reds, sol_dict=prms)
         return meta, sol
 
-    def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, wgt_func=lambda x: 1.):
+    def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1,
+                wgt_func=lambda x: 1., locked_prms=[]):
         """Use the Liu et al 2010 Omnical algorithm to linearize equations and iteratively minimize chi^2.
 
         Args:
@@ -1299,9 +1303,12 @@ class RedundantCalibrator:
         sol0pack = {self.pack_sol_key(ant): gain for ant, gain in sol0.gains.items()}
         for ubl in self._ubl_to_reds_index.keys():
             sol0pack[self.pack_sol_key(ubl)] = sol0[ubl]
+        locked_prms = [self.pack_sol_key(k) for k in locked_prms]
         ls = self._solver(OmnicalSolver, data, sol0=sol0pack, wgts=wgts, gain=gain)
-        meta, prms = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after, wgt_func=wgt_func)
-        prms = {self.unpack_sol_key(k): v for k, v in prms.items()}
+        meta, prms = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every,
+                                          check_after=check_after, wgt_func=wgt_func, locked_prms=locked_prms)
+        prms = sol0pack.copy()
+        prms.update({self.unpack_sol_key(k): v for k, v in prms.items()})
         sol = RedSol(self.reds, sol_dict=prms)
         return meta, sol
 
@@ -1512,7 +1519,7 @@ def _get_pol_load_list(pols, pol_mode='1pol'):
 def redundantly_calibrate(data, reds, sol0=None, run_logcal=True, run_omnical=True,
                           remove_degen=True, compute_chisq=True, freqs=None, times_by_bl=None,
                           oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50,
-                          gain=.4, max_dims=2, use_gpu=False):
+                          gain=.4, max_dims=2, locked_prms=[], use_gpu=False):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -1593,7 +1600,8 @@ def redundantly_calibrate(data, reds, sol0=None, run_logcal=True, run_omnical=Tr
     # perform omnical
     if run_omnical:
         meta['omni_meta'], sol = rc.omnical(data, sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
-                                            check_every=check_every, check_after=check_after, gain=gain)
+                                            check_every=check_every, check_after=check_after,
+                                            locked_prms=locked_prms, gain=gain)
 
     # remove degneracies using firstcal or sol0
     if remove_degen:
