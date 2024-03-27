@@ -5,8 +5,6 @@ import numpy as np
 from ...red_groups import RedundantGroups
 from pyuvdata import utils as uvutils
 from pathlib import Path
-from hypothesis import given, strategies as st
-from hypothesis.extra import numpy as hnp
 from ..config import LSTBinConfiguration
 import shutil
 from hera_cal.lst_stack.io import apply_filename_rules

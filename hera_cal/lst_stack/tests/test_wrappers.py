@@ -1,15 +1,12 @@
 from ...tests import mock_uvdata as mockuvd
-from .conftest import create_small_array_uvd
-from pyuvdata import UVData, UVFlag
+from pyuvdata import UVData
 import numpy as np
-from ... import io
 from ... import apply_cal
 from pyuvdata import utils
 import pytest
 from functools import partial
 from .. import wrappers
-from ..io import apply_filename_rules
-from hera_cal.lst_stack.config import LSTConfig, LSTBinConfiguration
+from hera_cal.lst_stack.config import LSTBinConfiguration
 
 
 def test_argparser_returns():

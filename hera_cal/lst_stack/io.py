@@ -1,7 +1,6 @@
 from __future__ import annotations
 from pyuvdata.uvdata import FastUVH5Meta
 import warnings
-import os
 import numpy as np
 from pathlib import Path
 import h5py
@@ -10,6 +9,7 @@ from .. import utils
 import logging
 from pyuvdata import utils as uvutils
 import re
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 

@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import logging
-from typing import Literal
 import warnings
-from .flagging import threshold_flags, sigma_clip
 
 logger = logging.getLogger(__name__)
 

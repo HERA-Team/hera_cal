@@ -5,15 +5,14 @@ from pyuvdata.uvdata import FastUVH5Meta
 from ..red_groups import RedundantGroups
 import logging
 from hera_qm.metrics_io import read_a_priori_ant_flags
-from .. import io, utils
-from typing import Any
-import yaml
+from .. import utils
+from typing import Any, Sequence
 import attrs
 from functools import cached_property
 from astropy import units
 import h5py
 from .io import apply_filename_rules, filter_required_files_by_times
-from abc import ABC, abstractmethod
+from abc import ABC
 import toml
 
 logger = logging.getLogger(__name__)

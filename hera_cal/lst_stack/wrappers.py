@@ -1,22 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import Sequence
 import argparse
 import os
 from functools import partial
-from ..red_groups import RedundantGroups
-from .. import abscal
-from pyuvdata.uvdata import FastUVH5Meta
 from . import io
 import logging
-from . import config as cfg
 import numpy as np
-from .binning import get_lst_bins
-import yaml
 from .binning import lst_bin_files_from_config
 from .averaging import reduce_lst_bins
 from .config import LSTConfig, LSTConfigSingle
+from pyuvdata import UVData
 
 logger = logging.getLogger(__name__)
 

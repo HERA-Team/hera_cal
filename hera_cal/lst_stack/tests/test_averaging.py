@@ -1,5 +1,4 @@
 import numpy as np
-from ...tests import mock_uvdata as mockuvd
 import pytest
 from .. import averaging as avg
 

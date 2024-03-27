@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from .conftest import create_small_array_uvd
 from ...tests import mock_uvdata as mockuvd
-from hypothesis import given, strategies as st, assume
+from hypothesis import given, strategies as st
 from pyuvdata.uvdata import FastUVH5Meta
 from pathlib import Path
 

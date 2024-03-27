@@ -3,7 +3,6 @@ from pyuvdata import UVCal
 from ...tests import mock_uvdata as mockuvd
 from pathlib import Path
 import numpy as np
-from functools import cache
 from hera_cal import apply_cal
 
 
