@@ -218,6 +218,9 @@ def create_lstbin_output_file(
         fname = fname[1:]
     fname = outdir / fname
 
+    if not fname.parent.exists():
+        fname.parent.mkdir(parents=True)
+
     logger.info(f"Initializing {fname}")
 
     # check for overwrite

@@ -53,17 +53,17 @@ class MixtureModel(rv_continuous):
             len(self.submodels), size=size, p=self.weights
         )
         submodel_samples = [submodel.rvs(size=size) for submodel in self.submodels]
-        rvs = np.choose(submodel_choices, submodel_samples)
-        return rvs
+        return np.choose(submodel_choices, submodel_samples)
 
 
 def zsquare_predicted_dist(df: int = 2):
-    if df not in (1, 2):
+    if df in {1, 2}:
+        return chi2(df=df)
+    else:
         raise ValueError(
             "df should be either 1 (if using Z^2 of real/imag separately), "
             "or 2 (if using |Z^2|)."
         )
-    return chi2(df=df)
 
 
 @attrs.define(slots=False)
@@ -201,8 +201,12 @@ def _get_data_subset(
     allz = []
 
     nbls = zscores[0].Nbls
-    datapols = utils.polnum2str(zscores[0].polarization_array, x_orientation=zscores[0].x_orientation).tolist()
-    datapairs = [(a, b) for a, b in zip(zscores[0].ant_1_array[:nbls], zscores[0].ant_2_array[:nbls])]
+    datapols = utils.polnum2str(
+        zscores[0].polarization_array, x_orientation=zscores[0].x_orientation
+    )
+    datapairs = list(
+        zip(zscores[0].ant_1_array[:nbls], zscores[0].ant_2_array[:nbls])
+    )
 
     if selector is not None:
         allbls = [(a, b, p) for a, b in datapairs for p in datapols]
