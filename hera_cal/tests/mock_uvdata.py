@@ -215,7 +215,7 @@ def write_files_in_hera_format(
 
         _fls = []
         for obj in uvdlist:
-            fl = daydir / fmt.format(jd=obj.time_array.min())
+            fl = daydir / fmt.format(jd=np.mean(obj.time_array))
             if obj.metadata_only:
                 obj.initialize_uvh5_file(fl, clobber=True)
             else:

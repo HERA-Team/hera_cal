@@ -44,11 +44,11 @@ def threshold_flags(
     flag_frac = np.sum(flags, axis=0) / flags.shape[0]
     nflags = np.sum(flags)
     logger.info(
-        f"Percent of data flagged before thresholding: {100*nflags/flags.size:.2f}%"
+        f"Percent of data flagged before thresholding: {100 * nflags / flags.size:.2f}%"
     )
     flags |= flag_frac > flag_thresh
     logger.info(
-        f"Flagged a further {100*(np.sum(flags) - nflags)/flags.size:.2f}% of visibilities due to flag_frac > {flag_thresh}"
+        f"Flagged a further {100 * (np.sum(flags) - nflags) / flags.size:.2f}% of visibilities due to flag_frac > {flag_thresh}"
     )
 
     return flags
