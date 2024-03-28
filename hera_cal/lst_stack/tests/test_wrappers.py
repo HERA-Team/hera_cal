@@ -1,3 +1,4 @@
+from __future__ import annotations
 from ...tests import mock_uvdata as mockuvd
 from pyuvdata import UVData
 import numpy as np
@@ -127,7 +128,6 @@ class TestLSTBinFiles:
         flag_strategy: tuple[int, int, int],
         pols: tuple[str],
         freq_range: tuple[float, float] | None,
-        benchmark,
     ):
         tmp = tmp_path_factory.mktemp("nontrivial_cal")
         uvds = mockuvd.make_dataset(

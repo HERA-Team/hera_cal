@@ -319,9 +319,9 @@ class TestReduceLSTBins:
 
         return data, flags, nsamples
 
-    def test_one_point_per_bin(self, benchmark):
+    def test_one_point_per_bin(self):
         d, f, n = self.get_input_data(ntimes=(1,))
-        rdc = benchmark(avg.reduce_lst_bins, d, f, n)
+        rdc = avg.reduce_lst_bins(d, f, n)
 
         assert (
             rdc["data"].shape
@@ -347,9 +347,9 @@ class TestReduceLSTBins:
         assert np.all(np.isnan(rdc["median"][0]))
 
     @pytest.mark.parametrize("ntimes", [(4,), (5, 4)])
-    def test_multi_points_per_bin(self, ntimes, benchmark):
+    def test_multi_points_per_bin(self, ntimes):
         d, f, n = self.get_input_data(ntimes=ntimes)
-        rdc = benchmark(avg.reduce_lst_bins, d, f, n)
+        rdc = avg.reduce_lst_bins(d, f, n)
 
         assert (
             rdc["data"].shape

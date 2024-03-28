@@ -120,9 +120,9 @@ class TestLSTAlign:
         ):
             lst_align_with(rephase=True, antpos=None)
 
-    def test_increasing_lsts_one_per_bin(self, benchmark):
+    def test_increasing_lsts_one_per_bin(self):
         kwargs = self.get_lst_align_data(ntimes=6)
-        bins, d, f, n, inp = benchmark(binning.lst_align, rephase=False, **kwargs)
+        bins, d, f, n, inp = binning.lst_align(rephase=False, **kwargs)
 
         # We should not be changing the data at all.
         d = np.squeeze(np.asarray(d))
@@ -134,9 +134,9 @@ class TestLSTAlign:
         assert np.all(n == 1.0)
         assert len(bins) == 6
 
-    def test_multi_days_one_per_bin(self, benchmark):
+    def test_multi_days_one_per_bin(self):
         kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
-        bins, d, f, n, inp = benchmark(binning.lst_align, rephase=False, **kwargs)
+        bins, d, f, n, inp = binning.lst_align(rephase=False, **kwargs)
 
         # We should not be changing the data at all.
         d = np.squeeze(np.asarray(d))
@@ -148,7 +148,7 @@ class TestLSTAlign:
         assert np.all(n == 1.0)
         assert len(bins) == 7
 
-    def test_multi_days_with_flagging(self, benchmark):
+    def test_multi_days_with_flagging(self):
         kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
 
         # Flag everything after the first day, and make the data there crazy.
@@ -156,9 +156,7 @@ class TestLSTAlign:
         flags[7:] = True
         kwargs["data"][7:] = 1000.0
 
-        bins, d, f, n, inp = benchmark(
-            binning.lst_align, rephase=False, flags=flags, **kwargs
-        )
+        bins, d, f, n, inp = binning.lst_align(rephase=False, flags=flags, **kwargs)
 
         d = np.squeeze(np.asarray(d))
         f = np.squeeze(np.asarray(f))
@@ -169,8 +167,8 @@ class TestLSTAlign:
         assert np.all(f[:, 1])
         assert len(bins) == 7
 
-    def test_multi_days_with_nsamples_zero(self, benchmark):
-        kwargs = benchmark(self.get_lst_align_data, ndays=2, ntimes=7)
+    def test_multi_days_with_nsamples_zero(self):
+        kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
 
         # Flag everything after the first day, and make the data there crazy.
         nsamples = np.ones_like(kwargs["data"], dtype=float)
@@ -191,29 +189,25 @@ class TestLSTAlign:
         assert np.all(n[:, 1] == 0.0)
         assert len(bins) == 7
 
-    def test_rephase(self, benchmark):
+    def test_rephase(self):
         """Test that rephasing where each bin is already at center does nothing."""
         kwargs = self.get_lst_align_data(ntimes=7)
 
-        bins0, d0, f0, n0, inp = benchmark(
-            binning.lst_align, rephase=True, **kwargs
-        )
+        bins0, d0, f0, n0, inp = binning.lst_align(rephase=True, **kwargs)
         bins, d, f, n, inp = binning.lst_align(rephase=False, **kwargs)
         np.testing.assert_allclose(d, d0, rtol=1e-6)
         np.testing.assert_allclose(f, f0, rtol=1e-6)
         np.testing.assert_allclose(n, n0, rtol=1e-6)
         assert len(bins) == len(bins0)
 
-    def test_lstbinedges_modulus(self, benchmark):
+    def test_lstbinedges_modulus(self):
         kwargs = self.get_lst_align_data(ntimes=7)
         edges = kwargs.pop("lst_bin_edges")
 
         lst_bin_edges = edges.copy()
         lst_bin_edges -= 4 * np.pi
 
-        bins, d0, f0, n0, inp = benchmark(
-            binning.lst_align, lst_bin_edges=lst_bin_edges, **kwargs
-        )
+        bins, d0, f0, n0, inp = binning.lst_align(lst_bin_edges=lst_bin_edges, **kwargs)
 
         lst_bin_edges = edges.copy()
         lst_bin_edges += 4 * np.pi
