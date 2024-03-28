@@ -174,24 +174,47 @@ def _configure_inpainted_mode(
     return inpaint_modes
 
 
+def format_outfile_name(
+    lst: float,
+    pols: list[str],
+    fname_format: str = "zen.{kind}.{lst:7.5f}.{inpaint_mode}.uvh5",
+    inpaint_mode: bool | None = None,
+    kind: str | None = None,
+    lst_branch_cut: float = 0.0,
+):
+    if lst < lst_branch_cut:
+        lst += 2 * np.pi
+
+    out = fname_format.format(
+        lst=lst,
+        pol="".join(pols),
+        inpaint_mode=(
+            "inpaint" if inpaint_mode else ("flagged" if inpaint_mode is False else "")
+        ),
+    )
+
+    if kind is not None:
+        return out.format(kind=kind)
+    else:
+        return out
+
+
 def create_lstbin_output_file(
     outdir: Path,
+    fname: str,
     kind: str,
-    lst: float,
     pols: list[str],
     file_list: list[FastUVH5Meta],
     start_jd: float,
     times: np.ndarray | None = None,
     lsts: np.ndarray | None = None,
     history: str = "",
-    fname_format: str = "zen.{kind}.{lst:7.5f}.{inpaint_mode}.uvh5",
     overwrite: bool = False,
     antpairs: list[tuple[int, int]] | None = None,
     freq_min: float | None = None,
     freq_max: float | None = None,
     channels: np.ndarray | list[int] | None = None,
     vis_units: str = "Jy",
-    inpaint_mode: bool | None = None,
     lst_branch_cut: float = 0.0,
 ) -> Path:
     outdir = Path(outdir)
@@ -201,17 +224,8 @@ def create_lstbin_output_file(
     file_history = f"{history} Input files: {file_list_str}"
     _history = file_history + utils.history_string()
 
-    if lst < lst_branch_cut:
-        lst += 2 * np.pi
+    fname = fname.format(kind=kind)
 
-    fname = fname_format.format(
-        kind=kind,
-        lst=lst,
-        pol="".join(pols),
-        inpaint_mode=(
-            "inpaint" if inpaint_mode else ("flagged" if inpaint_mode is False else "")
-        ),
-    )
     # There's a weird gotcha with pathlib where if you do path / "/file.name"
     # You get just "/file.name" which is in root.
     if fname.startswith("/"):
