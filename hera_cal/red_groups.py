@@ -629,7 +629,7 @@ class RedundantGroups:
 
         Examples
         --------
-        >>> rg = RedundantGroups.from_antpos([[(0, 1), (1, 2)], [(0, 2)]])
+        >>> rg = RedundantGroups([[(0, 1), (1, 2)], [(0, 2)]])
         >>> rg.get_reds_in_bl_set((0, 1), {(0, 1), (1, 2)})
         {(0, 1), (1, 2)}
         >>> rg.get_reds_in_bl_set((0, 1), {(0, 1)})
