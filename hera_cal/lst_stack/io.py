@@ -185,18 +185,15 @@ def format_outfile_name(
     if lst < lst_branch_cut:
         lst += 2 * np.pi
 
-    out = fname_format.format(
+    kind = kind or "{kind}"
+    return fname_format.format(
         lst=lst,
         pol="".join(pols),
         inpaint_mode=(
             "inpaint" if inpaint_mode else ("flagged" if inpaint_mode is False else "")
         ),
+        kind=kind
     )
-
-    if kind is not None:
-        return out.format(kind=kind)
-    else:
-        return out
 
 
 def create_lstbin_output_file(
