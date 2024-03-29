@@ -421,14 +421,21 @@ class LSTBinConfiguration:
         """Determine the datafiles from specifications."""
         # These are only required if datafiles wasn't specified specifically.
         if label:
-            label += "."
+            if label.endswith(f".{extension}"):
+                labelext = label
+            elif label.endswith("."):
+                labelext = f"{label}{extension}"
+            else:
+                labelext = f"{label}.{extension}"
+        else:
+            labelext = extension
 
         datadir = Path(datadir)
 
         return [
             sorted(
                 (datadir / str(nd)).glob(
-                    f"zen.{jdglob}.{sum_or_diff}.{label}{extension}"
+                    f"zen.{jdglob}.{sum_or_diff}.{labelext}"
                 )
             ) for nd in nightdirs
         ]
