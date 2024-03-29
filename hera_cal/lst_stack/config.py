@@ -396,8 +396,16 @@ class LSTBinConfiguration:
         return True
 
     @classmethod
-    def from_toml(cls, toml_file: str | Path) -> LSTBinConfiguration:
-        dct = toml.load(toml_file)
+    def from_toml(cls, toml_file: str | Path | dict) -> LSTBinConfiguration:
+        if isinstance(toml_file, dict):
+            dct = toml_file
+        elif isinstance(toml_file, (str, Path)) and Path(toml_file).exists():
+            dct = toml.load(toml_file)
+        elif isinstance(toml_file, str):
+            dct = toml.loads(toml_file)
+        else:
+            raise ValueError("toml_file must be a valid path, toml-serialized string, or a dictionary.")
+
         datafiles = cls.find_datafiles(**dct.pop("datafiles"))
         return cls(data_files=datafiles, **dct)
 
