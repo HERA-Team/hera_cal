@@ -5,7 +5,7 @@ import numpy as np
 from ...red_groups import RedundantGroups
 from pyuvdata import utils as uvutils
 from pathlib import Path
-from ..config import LSTBinConfiguration
+from ..config import LSTBinConfigurator
 import shutil
 from hera_cal.lst_stack.io import apply_filename_rules
 
@@ -351,7 +351,7 @@ class TestLSTBinFilesForBaselines:
 
 class TestLSTBinFilesFromConfig:
     def get_config(self, season, request, outfile_index=0):
-        cfg = LSTBinConfiguration(
+        cfg = LSTBinConfigurator(
             request.getfixturevalue(f"season_{season}"),
             where_inpainted_file_rules=[(".uvh5", ".where_inpainted.h5")] if 'inpaint' in season else None,
         )
@@ -388,7 +388,7 @@ class TestLSTBinFilesFromConfig:
                 fl = Path(fl)
                 shutil.copyfile(fl, newobs / fl.parent.name / fl.name)
 
-        cfg = LSTBinConfiguration(
+        cfg = LSTBinConfigurator(
             [sorted(pth.glob("*.uvh5")) for pth in sorted(newobs.glob("*"))],
             where_inpainted_file_rules=[(".uvh5", ".where_inpainted.h5")],
         )

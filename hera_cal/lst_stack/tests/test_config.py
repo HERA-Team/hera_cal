@@ -149,7 +149,7 @@ all_seasons = [
 
 class TestLSTBinConfiguration:
     def get_config(self, season, request):
-        return config.LSTBinConfiguration(request.getfixturevalue(f"season_{season}"))
+        return config.LSTBinConfigurator(request.getfixturevalue(f"season_{season}"))
 
     @pytest.mark.parametrize('season', all_seasons)
     def test_datameta(self, season, request):
@@ -221,7 +221,7 @@ class TestLSTBinConfiguration:
 
 class TestLSTConfig:
     def get_lstconfig(self, season: str, request) -> config.LSTConfig:
-        cfg = config.LSTBinConfiguration(request.getfixturevalue(f"season_{season}"))
+        cfg = config.LSTBinConfigurator(request.getfixturevalue(f"season_{season}"))
         mf = cfg.get_matched_files()
         return cfg.create_config(mf)
 

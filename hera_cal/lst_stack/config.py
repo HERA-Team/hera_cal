@@ -230,7 +230,7 @@ def _subsorted_list(x: Sequence[Sequence[Any]]) -> list[list[Any]]:
 
 
 @attrs.define(slots=False, frozen=True)
-class LSTBinConfiguration:
+class LSTBinConfigurator:
     """
     LST-bin configuration specification.
 
@@ -396,7 +396,7 @@ class LSTBinConfiguration:
         return True
 
     @classmethod
-    def from_toml(cls, toml_file: str | Path | dict) -> LSTBinConfiguration:
+    def from_toml(cls, toml_file: str | Path | dict) -> LSTBinConfigurator:
         if isinstance(toml_file, dict):
             dct = toml_file
         elif isinstance(toml_file, (str, Path)) and Path(toml_file).exists():
@@ -616,7 +616,7 @@ def _extra_files_validator(inst, attribute, value):
 
 @attrs.define(slots=False, frozen=False, kw_only=True)
 class _LSTConfigBase(ABC):
-    config: LSTBinConfiguration = attrs.field()
+    config: LSTBinConfigurator = attrs.field()
     lst_grid: np.ndarray = attrs.field(converter=np.asarray, eq=attrs.cmp_using(eq=np.allclose))
     matched_files: list[list[list[Path]]] = attrs.field(converter=_nested_list_of(Path))
     calfiles: list[list[list[Path]]] | None = attrs.field(
@@ -755,7 +755,7 @@ class LSTConfig(_LSTConfigBase):
     @classmethod
     def from_file(cls, config_file: str | Path) -> LSTConfig:
         with h5py.File(config_file, "r") as fl:
-            config = LSTBinConfiguration.read(fl["config"])
+            config = LSTBinConfigurator.read(fl["config"])
             lst_grid = fl["lst_grid"][()]
             mfs = _read_irregular_list_of_paths_hdf5(fl, "matched_files")
             calfiles = _read_irregular_list_of_paths_hdf5(fl, "calfiles")

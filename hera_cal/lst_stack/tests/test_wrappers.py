@@ -7,7 +7,7 @@ from pyuvdata import utils
 import pytest
 from functools import partial
 from .. import wrappers
-from hera_cal.lst_stack.config import LSTBinConfiguration
+from hera_cal.lst_stack.config import LSTBinConfigurator
 
 
 def test_argparser_returns():
@@ -60,7 +60,7 @@ class TestLSTBinFiles:
                     )
 
     def test_baseline_chunking(self, season_notredavg):
-        config = LSTBinConfiguration(season_notredavg, nlsts_per_file=2)
+        config = LSTBinConfigurator(season_notredavg, nlsts_per_file=2)
         mf = config.get_matched_files()
         config = config.create_config(mf)
 
@@ -82,7 +82,7 @@ class TestLSTBinFiles:
         decal_files = [
             [df.replace(".uvh5", ".decal.uvh5") for df in dfl] for dfl in season_notredavg
         ]
-        config = LSTBinConfiguration(decal_files, nlsts_per_file=2, calfile_rules=[(".decal.uvh5", ".calfits")])
+        config = LSTBinConfigurator(decal_files, nlsts_per_file=2, calfile_rules=[(".decal.uvh5", ".calfits")])
         mf = config.get_matched_files()
         config = config.create_config(mf)
 
@@ -93,7 +93,7 @@ class TestLSTBinFiles:
             overwrite=True
         )
 
-        config = LSTBinConfiguration(
+        config = LSTBinConfigurator(
             season_notredavg, nlsts_per_file=2
         )
         mf = config.get_matched_files()
@@ -162,7 +162,7 @@ class TestLSTBinFiles:
                     clobber=True,
                 )
 
-        config = LSTBinConfiguration(decal_files, nlsts_per_file=2, calfile_rules=[(".decal.uvh5", ".calfits")])
+        config = LSTBinConfigurator(decal_files, nlsts_per_file=2, calfile_rules=[(".decal.uvh5", ".calfits")])
         mf = config.get_matched_files()
         config = config.create_config(mf)
 
@@ -214,7 +214,7 @@ class TestLSTBinFiles:
         #             )
 
     def test_redundantly_averaged(self, season_redavg):
-        config = LSTBinConfiguration(season_redavg, nlsts_per_file=2)
+        config = LSTBinConfigurator(season_redavg, nlsts_per_file=2)
         mf = config.get_matched_files()
         config = config.create_config(mf)
 
@@ -256,7 +256,7 @@ class TestLSTBinFiles:
         #             )
 
     def test_output_file_select(self, season_redavg_inpaint):
-        config = LSTBinConfiguration(season_redavg_inpaint, nlsts_per_file=2, where_inpainted_file_rules=[(".uvh5", ".where_inpainted.h5")])
+        config = LSTBinConfigurator(season_redavg_inpaint, nlsts_per_file=2, where_inpainted_file_rules=[(".uvh5", ".where_inpainted.h5")])
         mf = config.get_matched_files()
         config = config.create_config(mf)
 

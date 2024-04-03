@@ -286,7 +286,6 @@ def lst_bin_files_for_baselines(
     freqs: np.ndarray | None = None,
     pols: np.ndarray | None = None,
     cal_files: list[Path | None] | None = None,
-    # time_arrays: list[np.ndarray] | None = None,
     time_idx: list[np.ndarray] | None = None,
     ignore_flags: bool = False,
     rephase: bool = True,
@@ -338,9 +337,6 @@ def lst_bin_files_for_baselines(
         no calibration will be applied. If provided, must be the same length as
         ``data_files``. If a particular element is None, no calibration will be
         applied to that file.
-    time_arrays
-        A list of time arrays for each file. If not provided, will be read from the
-        files. If provided, must be the same length as ``data_files``.
     time_idx
         A list of arrays, one for each file, where the array is the same length as
         the time array for that file, and is boolean, indicating whether each time
@@ -637,7 +633,6 @@ def lst_bin_files_from_config(
         freqs=meta.freq_array,
         pols=config.pols,
         cal_files=config.calfiles,
-        # time_arrays=time_arrays,
         time_idx=config.time_indices,
         ignore_flags=False,
         rephase=rephase,
