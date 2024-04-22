@@ -372,7 +372,7 @@ def write_cals_in_hera_format(
 
         _fls = []
         for obj in uvdlist:
-            fl = daydir / fmt.format(jd=obj.time_array.min())
+            fl = daydir / fmt.format(jd=np.mean(obj.time_array))
             obj.write_calfits(fl, clobber=True)
             _fls.append(str(fl))
         fls.append(_fls)

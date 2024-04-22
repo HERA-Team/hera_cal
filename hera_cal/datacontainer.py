@@ -474,10 +474,21 @@ class DataContainer:
         metadata will be deleted, rearranged, or duplicated as necessary using numpy's fancy indexing.
         Assumes that the 0th data axis is time. Does not support baseline-dependent averaging.
 
-        Arguments:
-            new_times: list or numpy array of times to use to index into this object. These must all be in
-                self.times, but they can be a subset in any order with any number of duplicates.
-            in_place: if True, this DataContainer is modified. Otherwise, a modified copy is returned.
+        Parameters
+        ----------
+        new_times : list or numpy array or None
+            Times to use to index into this object. If given, these must all be in
+            self.times, but they can be a subset in any order with any number of
+            duplicates. If not given, ``indices`` must be given.
+        in_place : bool
+            If True, this DataContainer is modified. Otherwise, a modified copy is returned.
+        skip_bda_check : bool
+            If True, do not check that the object is sensible for this operation.
+            This is useful for performance reasons when you know the object is sensible.
+        indices : integer array
+            If given, these are the indices to use to index the time axis.
+            If given, new_times must be None.
+
         '''
         if new_times is None and indices is None:
             raise ValueError('Either new_times or indices must be given.')

@@ -1603,6 +1603,9 @@ def match_files_to_lst_bins(
 
         @cache
         def get_first_time(path: Path) -> float:
+            # Note that the time listed in the file name is the middle of the first
+            # integration, so we need to subtract tint/2 to get the start of the first
+            # bin.
             return float(jd_regex.findall(path.name)[0]) - tint / 2
     else:
 

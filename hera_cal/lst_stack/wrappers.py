@@ -168,7 +168,6 @@ def lst_bin_files_single_outfile(
         pols=config.pols,
         file_list=config.matched_metas,
         history=history,
-        fname_format=fname_format,
         overwrite=overwrite,
         antpairs=config.autos + config.antpairs,
         start_jd=config.properties['first_jd'],
@@ -183,12 +182,20 @@ def lst_bin_files_single_outfile(
         if write_med_mad:
             kinds += ["MED", "MAD"]
         for kind in kinds:
+
+            fname = io.format_outfile_name(
+                lst=config.lst_grid_edges[0],
+                pols=config.pols,
+                fname_format=fname_format,
+                inpaint_mode=inpaint_mode,
+                lst_branch_cut=config.properties["lst_branch_cut"],
+                kind=kind
+            )
+
             # Create the files we'll write to
             out_files[(kind, inpaint_mode)] = create_outfile(
-                kind=kind,
-                lst=config.lst_grid_edges[0],
                 lsts=config.lst_grid,
-                inpaint_mode=inpaint_mode,
+                fname=fname
             )
 
     # Split up the baselines into chunks that will be LST-binned together.
@@ -205,7 +212,7 @@ def lst_bin_files_single_outfile(
         nbls_so_far: int,
     ):
         """Process a single chunk of baselines."""
-        stacks: list[UVData] = lst_bin_files_from_config(
+        stacks: list[LSTStack] = lst_bin_files_from_config(
             config,
             bl_chunk_to_load=bl_chunk,
             nbl_chunks=n_bl_chunks,
@@ -219,45 +226,43 @@ def lst_bin_files_single_outfile(
         dshape = (chunk_size, stacks[0].Nfreqs, stacks[0].Npols)
 
         for inpainted in inpaint_modes:
-            rdc = reduce_lst_bins(
-                [uvd.data_array.reshape((uvd.Ntimes,) + dshape) for uvd in stacks],
-                [uvd.flag_array.reshape((uvd.Ntimes,) + dshape) for uvd in stacks],
-                [uvd.nsample_array.reshape((uvd.Ntimes,) + dshape) for uvd in stacks],
-                inpainted_mode=inpainted,
-                get_mad=write_med_mad,
-            )
+            for lstidx, stack in enumerate(stacks):
 
-            io.write_baseline_slc_to_file(
-                fl=out_files[("LST", inpainted)],
-                slc=slc,
-                data=rdc["data"],
-                flags=rdc["flags"],
-                nsamples=rdc["nsamples"],
-            )
+                rdc = reduce_lst_bins(
+                    lststack=stack,
+                    inpainted_mode=inpainted,
+                    get_mad=write_med_mad,
+                )
+                write = partial(
+                    io.write_baseline_slc_to_file,
+                    baseline_slice=slc,
+                    time_index=lstidx,
+                    flags=rdc['flags'],
+                )
 
-            io.write_baseline_slc_to_file(
-                fl=out_files[("STD", inpainted)],
-                slc=slc,
-                data=rdc["std"],
-                flags=rdc["flags"],
-                nsamples=rdc["days_binned"],
-            )
-
-            if write_med_mad:
-                io.write_baseline_slc_to_file(
-                    fl=out_files[("MED", inpainted)],
-                    slc=slc,
-                    data=rdc["median"],
-                    flags=rdc["flags"],
+                write(
+                    fl=out_files[("LST", inpainted)],
+                    data=rdc["data"],
                     nsamples=rdc["nsamples"],
                 )
-                io.write_baseline_slc_to_file(
-                    fl=out_files[("MAD", inpainted)],
-                    slc=slc,
-                    data=rdc["mad"],
-                    flags=rdc["flags"],
+
+                write(
+                    fl=out_files[("STD", inpainted)],
+                    data=rdc["std"],
                     nsamples=rdc["days_binned"],
                 )
+
+                if write_med_mad:
+                    write(
+                        fl=out_files[("MED", inpainted)],
+                        data=rdc["median"],
+                        nsamples=rdc["nsamples"],
+                    )
+                    write(
+                        fl=out_files[("MAD", inpainted)],
+                        data=rdc["mad"],
+                        nsamples=rdc["days_binned"],
+                    )
         return chunk_size
 
     nbls_so_far = _process_blchunk('autos', 0)
@@ -374,163 +379,4 @@ def lst_bin_arg_parser():
         help="list of output file integers to run on. Default is all output files.",
     )
 
-    # a.add_argument(
-    #     "--fname-format",
-    #     type=str,
-    #     default="zen.{kind}.{lst:7.5f}.uvh5",
-    #     help="filename format for output files. See docstring for details.",
-    # )
-    # a.add_argument(
-    #     "--outdir", default=None, type=str, help="directory for writing output"
-    # )
-    # a.add_argument(
-    #     "--rephase",
-    #     default=False,
-    #     action="store_true",
-    #     help="rephase data to center of LST bin before binning",
-    # )
-    # a.add_argument(
-    #     "--history", default=" ", type=str, help="history to insert into output files"
-    # )
-    # a.add_argument(
-    #     "--vis_units", default="Jy", type=str, help="visibility units of output files."
-    # )
-    # a.add_argument(
-    #     "--ignore_flags",
-    #     default=False,
-    #     action="store_true",
-    #     help="Ignore flags in data files, such that all input data is included in binning.",
-    # )
-    # a.add_argument(
-    #     "--Nbls_to_load",
-    #     default=None,
-    #     type=int,
-    #     help="Number of baselines to load and bin simultaneously. Default is all.",
-    # )
-    # a.add_argument(
-    #     "--ex_ant_yaml_files",
-    #     default=None,
-    #     type=str,
-    #     nargs="+",
-    #     help="list of paths to yamls with lists of antennas from each night to exclude lstbinned data files.",
-    # )
-    # a.add_argument(
-    #     "--ignore-ants", default=(), type=int, nargs="+", help="ants to ignore"
-    # )
-    # a.add_argument(
-    #     "--ignore-missing-calfiles",
-    #     default=False,
-    #     action="store_true",
-    #     help="if true, any datafile with missing calfile will just be removed from lstbinning.",
-    # )
-    # a.add_argument(
-    #     "--write_kwargs",
-    #     default="{}",
-    #     type=str,
-    #     help="json dictionary of arguments to the uvh5 writer",
-    # )
-    # a.add_argument(
-    #     "--golden-lsts",
-    #     type=str,
-    #     help="LSTS (rad) to save longitudinal data for, separated by commas",
-    # )
-    # a.add_argument(
-    #     "--save-channels",
-    #     type=str,
-    #     help="integer channels separated by commas to save longitudinal data for",
-    # )
-    # a.add_argument(
-    #     "--sigma-clip-thresh",
-    #     type=float,
-    #     help="sigma clip threshold for flagging data in an LST bin over time. Zero means no clipping.",
-    #     default=None,
-    # )
-    # a.add_argument(
-    #     "--sigma-clip-min-N",
-    #     type=int,
-    #     help="number of unflagged data points over time to require before considering sigma clipping",
-    #     default=4,
-    # )
-    # a.add_argument(
-    #     "--sigma-clip-subbands",
-    #     type=str,
-    #     help="Band-edges (as channel number) at which bands are separated for homogeneous sigma clipping, e.g. '0~10,100~500'",
-    #     default=None,
-    # )
-    # a.add_argument(
-    #     "--sigma-clip-type",
-    #     type=str,
-    #     default='direct',
-    #     choices=['direct', 'mean', 'median'],
-    #     help="How to threshold the absolute zscores for sigma clipping."
-    # )
-    # a.add_argument(
-    #     "--sigma-clip-use-autos",
-    #     action="store_true",
-    #     help="whether to use the autos to predict the variance for sigma-clipping"
-    # )
-    # a.add_argument(
-    #     "--flag-below-min-N",
-    #     action="store_true",
-    #     help="if true, flag all data in an LST bin if there are fewer than --sigma-clip-min-N unflagged data points over time",
-    # )
-    # a.add_argument(
-    #     "--flag-thresh",
-    #     type=float,
-    #     help="fraction of integrations in an LST bin for a particular (antpair, pol, channel) that must be flagged for the entire bin to be flagged",
-    #     default=0.7,
-    # )
-    # a.add_argument(
-    #     "--redundantly-averaged",
-    #     action="store_true",
-    #     default=None,
-    #     help="if true, assume input files are redundantly averaged",
-    # )
-    # a.add_argument(
-    #     "--only-last-file-per-night",
-    #     action="store_true",
-    #     default=False,
-    #     help="if true, only use the first and last file every night to obtain antpairs",
-    # )
-    # a.add_argument(
-    #     "--freq-min",
-    #     type=float,
-    #     default=None,
-    #     help="minimum frequency to include in lstbinning",
-    # )
-    # a.add_argument(
-    #     "--freq-max",
-    #     type=float,
-    #     default=None,
-    #     help="maximum frequency to include in lstbinning",
-    # )
-    # a.add_argument(
-    #     "--no-flagged-mode",
-    #     action="store_true",
-    #     help="turn off output of flagged mode LST-binning",
-    # )
-    # a.add_argument(
-    #     "--do-inpaint-mode",
-    #     action="store_true",
-    #     default=None,
-    #     help="turn on inpainting mode LST-binning",
-    # )
-    # a.add_argument(
-    #     "--where-inpainted-file-rules",
-    #     nargs="*",
-    #     type=str,
-    #     help="rules to convert datafile names to where-inpainted-file names. A series of two strings where the first will be replaced by the latter",
-    # )
-    # a.add_argument(
-    #     "--sigma-clip-in-inpainted-mode",
-    #     action="store_true",
-    #     default=False,
-    #     help="allow sigma-clipping in inpainted mode",
-    # )
-    # a.add_argument(
-    #     "--write-med-mad",
-    #     action="store_true",
-    #     default=False,
-    #     help="option to write out MED/MAD files in addition to LST/STD files",
-    # )
     return a

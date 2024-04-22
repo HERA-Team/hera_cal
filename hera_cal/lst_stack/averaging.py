@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import logging
 import warnings
+from .binning import LSTStack
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def get_masked_data(
       but in inpaint mode, the nsamples is forced to be the mean over frequency,
       and the mask is set the same way as the data.
     """
-    flags = flags | (np.isnan(data) | np.isinf(data))  # un-recoverable
+    flags = flags | ~np.isfinite(data)  # un-recoverable
     orig_flags = flags | (nsamples < 0)
 
     if not inpainted_mode:
@@ -67,33 +68,46 @@ def get_lst_median_and_mad(
 
 
 def lst_average(
-    data: np.ndarray | np.ma.MaskedArray,
-    nsamples: np.ndarray | np.ma.MaskedArray,
+    data: np.ma.MaskedArray,
+    nsamples: np.ma.MaskedArray,
     flags: np.ndarray,
-    inpainted_mode: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute statistics of a set of data over its zeroth axis.
 
     The idea here is that the data's zeroth axis is "nights", and that each night is
     at the same LST. However, this function is agnostic to the meaning of the first
-    axis. It just computes the mean, std, and nsamples over the first axis.
+    axis. It just computes the mean, std, and nsamples over it.
 
-    This function is meant to be used on a single element of a list returned by
-    :func:`simple_lst_bin`.
+    However, it *is* important that the second-last axis is the frequency axis, because
+    this axis is checked for whether the nsamples is uniform over frequency.
+
+    A distinction is made between the averaging of the *data* compared to *nsamples*.
+    The average of *nsamples* is to be used in calculating expected variance, and
+    therefore represents the number of actual data samples in the average (as opposed
+    to inpainted values). The determination of which nsamples to include in this
+    average is determined by the *flags* array (which thus represents all the flags
+    on the data, irrespective of whether they were inpainted or not).
+
+    The average of the *data* may include flagged samples that were subsequently
+    inpainted, in order to maintain spectral smoothness. The determination of which
+    samples to include in this average is determined by the mask of the data and
+    nsamples arrays, which should be MaskedArrays. In principle, this array can be
+    the *same* as the flags array, in which case flagged data are not used at all.
 
     Parameters
     ----------
-    data
+    data : np.ma.MaskedArray
         The data to compute the statistics over. Shape ``(nnights, nbl, nfreq, npol)``.
-    nsamples
-        The number of samples for each measurement. Same shape as ``data``.
+        See notes above for interpretation of the mask. The masked array can be
+        computed with :func:`get_masked_data`.
+    nsamples : np.ma.MaskedArray
+        The number of samples for each measurement. Same shape as ``data``, and having
+        the same mask. The masked array can be computed with :func:`get_masked_data`.
     flags
-        The flags for each measurement. Same shape as ``data``.
-    inpainted_mode
-        Whether to use the inpainted samples when calculating the statistics. If False,
-        the inpainted samples are ignored. If True, the inpainted samples are used, and
-        the statistics are calculated over the un-inpainted samples.
+        The flags for each measurement. Same shape as ``data``. These represent the flags
+        considered in the averaging of nsamples -- i.e. the determination of the
+        expected variance.
 
     Returns
     -------
@@ -102,15 +116,7 @@ def lst_average(
         Shape ``(nbl, nfreq, npol)``.
     """
     # all data is assumed to be in the same LST bin.
-
-    if not isinstance(data, np.ma.MaskedArray):
-        # Generally, we want a MaskedArray for 'data', where the mask is *either*
-        # the flags or the 'non-inpainted flags', as obtained by `threshold_flags`.
-        # However, if this hasn't been called, and we just have an array, apply flags
-        # appropriately here.
-        data, flags, nsamples = get_masked_data(
-            data, flags, nsamples, inpainted_mode=inpainted_mode
-        )
+    assert (all(isinstance(x, np.ma.MaskedArray) for x in (data, nsamples)))
 
     # Here we do a check to make sure Nsamples is uniform across frequency
     ndiff = np.diff(nsamples, axis=2)
@@ -165,35 +171,33 @@ def lst_average(
 
 
 def reduce_lst_bins(
-    data: list[np.ndarray],
-    flags: list[np.ndarray],
-    nsamples: list[np.ndarray],
+    lststack: LSTStack | None = None,
+    data: np.ndarray | None = None,
+    flags: np.ndarray | None = None,
+    nsamples: np.ndarray | None = None,
     inpainted_mode: bool = True,
     get_mad: bool = False,
 ) -> dict[str, np.ndarray]:
     """
-    From a list of LST-binned data, produce reduced statistics.
+    Reduce LST-stacked data over the time axis.
 
-    Use this function to reduce a list of `nlst_bins` arrays, each with multiple time
-    integrations in them (i.e. the output of :func:`lst_align`) to arrays of shape
-    ``(nbl, nlst_bins, nfreq, npol)``, each representing different statistics of the
-    data in each LST bin (eg. mean, std, etc.).
+    Use this function to reduce an array of data, whose first axis contains all the
+    integrations within a particular LST-bin (generally from different nights), across
+    the night (or integration) axis. This will produce different statistics (e.g.
+    mean, std, median).
 
     Parameters
     ----------
     data
-        The data to perform the reduction over. The length of the list is the number
-        of LST bins. Each array in the list should have shape
+        The data over which to perform the reduction. The shape should be
         ``(nintegrations_in_lst, nbl, nfreq, npol)`` -- i.e. the same as a UVData
         object's data_array if the blt axis is pushed out to two dimensions (time, bl).
+        Note that this is the same format as ``LSTStack.data``.
     flags
-        A list, the same length/shape as ``data``, containing the flags.
+        The flags, in the same shape as ``data``.
     nsamples
-        A list, the same length/shape as ``data``, containing the number of samples
-        for each measurement.
-    where_inpainted
-        A list, the same length/shape as ``data``, containing a boolean mask indicating
-        which samples have been inpainted.
+        The nsamples, same shape as ``data``. Importantly, in-painted samples must be
+        represented with negative nsamples.
     inpainted_mode
         Whether to use the inpainted samples when calculating the statistics. If False,
         the inpainted samples are ignored. If True, the inpainted samples are used, and
@@ -207,53 +211,43 @@ def reduce_lst_bins(
     dict
         The reduced data in a dictionary. Keys are 'data' (the lst-binned mean),
         'nsamples', 'flags', 'days_binned' (the number of days that went into each bin),
-        'std' (standard deviation) and *optionally* 'median' and 'mad' (if `get_mad` is
-        True). All values are arrays of the same shape: ``(nlst_bins, nbl, nfreq, npol)``.
+        'std' (standard deviation), 'median' and 'mad'. All values are arrays of the
+        same shape: ``(nbl, nfreq, npol)`` unless None.
     """
-    nlst_bins = len(data)
-    (_, nbl, nfreq, npol) = data[0].shape
+    if lststack is not None:
+        data = lststack.data
+        flags = lststack.flags
+        nsamples = lststack.nsamples
 
-    for d, f, n in zip(data, flags, nsamples):
-        assert d.shape == f.shape == n.shape
+    if any(x is None for x in (data, flags, nsamples)):
+        raise ValueError(
+            "data, flags, and nsamples must all be provided, "
+            "or lststack must be provided."
+        )
 
-    out_data = np.zeros((nlst_bins, nbl, nfreq, npol), dtype=complex) * np.nan
-    out_flags = np.ones(out_data.shape, dtype=bool)
-    out_std = np.ones(out_data.shape, dtype=complex) * np.inf
-    out_nsamples = np.zeros(out_data.shape, dtype=float)
-    days_binned = np.zeros(out_data.shape, dtype=int)
+    assert data.shape == flags.shape == nsamples.shape
 
+    if data.shape[0] == 0:
+        # We have no data to reduce (no data in this LST bin)
+        return {
+            'data': np.nan * np.ones(data.shape[1:], dtype=complex),
+            'flags': np.ones(data.shape[1:], dtype=bool),
+            'std': np.inf * np.ones(data.shape[1:], dtype=complex),
+            'nsamples': np.zeros(data.shape[1:]),
+            'days_binned': np.zeros(data.shape[1:]),
+            'median': np.nan * np.ones(data.shape[1:], dtype=complex) if get_mad else None,
+            'mad': np.inf * np.ones(data.shape[1:], dtype=complex) if get_mad else None,
+        }
+
+    data, flags, nsamples = get_masked_data(
+        data, flags, nsamples, inpainted_mode=inpainted_mode
+    )
+
+    o = {'mad': None, 'median': None}
+    o['data'], o['flags'], o['std'], o['nsamples'], o['days_binned'] = lst_average(
+        data, flags=flags, nsamples=nsamples
+    )
     if get_mad:
-        mad = np.ones(out_data.shape, dtype=complex) * np.inf
-        med = np.ones(out_data.shape, dtype=complex) * np.nan
+        o['median'], o['mad'] = get_lst_median_and_mad(data)
 
-    for lstbin, (d, n, f) in enumerate(
-        zip(data, nsamples, flags)
-    ):
-        logger.info(f"Computing LST bin {lstbin + 1} / {nlst_bins}")
-
-        if d.size:  # If not, keep the default values initialized above
-            d, f, n = get_masked_data(d, f, n, inpainted_mode=inpainted_mode)
-
-            (
-                out_data[lstbin],
-                out_flags[lstbin],
-                out_std[lstbin],
-                out_nsamples[lstbin],
-                days_binned[lstbin],
-            ) = lst_average(d, n, f, inpainted_mode=inpainted_mode)
-
-            if get_mad:
-                med[lstbin], mad[lstbin] = get_lst_median_and_mad(d)
-
-    out = {
-        "data": out_data,
-        "flags": out_flags,
-        "std": out_std,
-        "nsamples": out_nsamples,
-        "days_binned": days_binned,
-    }
-    if get_mad:
-        out["mad"] = mad
-        out["median"] = med
-
-    return out
+    return o

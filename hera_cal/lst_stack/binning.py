@@ -9,6 +9,8 @@ from typing import Sequence
 from ..red_groups import RedundantGroups
 from pyuvdata.uvdata import FastUVH5Meta
 from pyuvdata import UVData
+from functools import cached_property
+from astropy import units
 
 from pyuvdata import utils as uvutils
 from .. import io
@@ -260,7 +262,7 @@ def get_lst_bins(
     return bins, lsts, mask
 
 
-def _get_freqs_chans(freqs, freq_min, freq_max):
+def _get_freqs_chans(freqs, freq_min: float | None = None, freq_max: float | None = None):
 
     if freq_min is None and freq_max is None:
         freq_chans = None
@@ -600,6 +602,82 @@ def lst_bin_files_for_baselines(
     return bin_lst, data, flags, nsamples, where_inpainted, times_in_bins, lsts_in_bins
 
 
+class LSTStack:
+    """A very simple validation layer on top of UVData for LST-stacked data."""
+    def __init__(self, uvd: UVData):
+        self._uvd = uvd
+        self._validate_uvd()
+
+    def _validate_uvd(self):
+        if not self._uvd.blts_are_rectangular:
+            raise ValueError("blts_are_rectangular must be True")
+
+        if self._uvd.time_axis_faster_than_bls:
+            raise ValueError("time_axis_faster_than_bls must be False")
+
+    def __getattr__(self, item):
+        return getattr(self._uvd, item)
+
+    def __setattr__(self, key, value):
+        if key == "_uvd":
+            super().__setattr__(key, value)
+
+        setattr(self._uvd, key, value)
+
+    @cached_property
+    def dt(self) -> units.Quantity[units.s]:
+        """The median integration time of the data."""
+        return np.median(self.integration_time) * units.s
+
+    @cached_property
+    def df(self) -> units.Quantity[units.Hz]:
+        """The median frequency resolution of the data."""
+        return np.median(np.diff(self.freq_array)) * units.Hz
+
+    @property
+    def data(self) -> np.ndarray:
+        """A view into the data array, reshaped to (Nbls, Ntimes, Nfreqs, Npols)."""
+        return self._uvd.data_array.reshape(
+            (self.Ntimes, self.Nbls, len(self.freq_array), len(self.polarization_array))
+        )
+
+    @property
+    def nsamples(self) -> np.ndarray:
+        """A view into the nsamples array, reshaped to (Nbls, Ntimes, Nfreqs, Npols)."""
+        return self._uvd.nsample_array.reshape(
+            (self.Ntimes, self.Nbls, len(self.freq_array), len(self.polarization_array))
+        )
+
+    @property
+    def flags(self) -> np.ndarray:
+        """A view into the flags array, reshaped to (Nbls, Ntimes, Nfreqs, Npols)."""
+        return self._uvd.flag_array.reshape(
+            (self.Ntimes, self.Nbls, len(self.freq_array), len(self.polarization_array))
+        )
+
+    @property
+    def metrics(self) -> np.ndarray:
+        """A view into the flags array, reshaped to (Nbls, Ntimes, Nfreqs, Npols)."""
+        return self._uvd.metrics_array.reshape(
+            (self.Ntimes, self.Nbls, len(self.freq_array), len(self.polarization_array))
+        )
+
+    @property
+    def times(self) -> np.ndarray:
+        """The unique times of the data (same shape as first axis of ``data``)."""
+        return self._uvd.time_array[::self.Nbls]
+
+    @property
+    def nights(self) -> np.ndarray:
+        """The nights in the data as integer JDs"""
+        return self.times.astype(int)
+
+    @property
+    def antpairs(self) -> list[Antpair]:
+        """The antenna pairs in the data."""
+        return list(zip(self.ant_1_array[:self.Nbls], self.ant_2_array[:self.Nbls]))
+
+
 def lst_bin_files_from_config(
     config: LSTConfigSingle,
     bl_chunk_to_load: int | str = 0,
@@ -607,8 +685,47 @@ def lst_bin_files_from_config(
     rephase: bool = True,
     freq_min: float | None = None,
     freq_max: float | None = None,
-) -> list[UVData] | None:
+) -> list[LSTStack] | None:
+    """Read and LST-bin data from a configuration object.
 
+    This function is the main entry point for binning (not averaging) data into LST
+    bins, given a :class:`LSTConfigSingle` object, which is the intended mode of
+    operation of the `lststack` subpackage.
+
+    Parameters
+    ----------
+    config : LSTConfigSingle
+        The configuration object to read data from.
+    bl_chunk_to_load : int or str, optional
+        The chunk of baselines to load. If 'autos', will load only the autos. If an
+        integer, will load the nth chunk of baselines, where the number of chunks
+        is defined by ``nbl_chunks``. Default is 0.
+    nbl_chunks : int, optional
+        The number of chunks to split the baselines into. Default is 1. Use more chunks
+        to reduce memory usage.
+    rephase : bool, optional
+        Whether to rephase the data to the LST bin centres. Default is True.
+    freq_min : float, optional
+        The minimum frequency to include in the data (Hz). Default is all frequencies.
+    freq_max : float, optional
+        The maximum frequency to include in the data (Hz). Default is all frequencies.
+
+    Returns
+    -------
+    list[LSTStack] or None
+        A list of LSTStack objects, one for each LST bin. If there is no data to read,
+        returns None. The LSTStack object looks and feels just like a UVData object, but
+        has some additional properties and methods that are useful for LST-stacked data,
+        as well as validating that the data is in the correct format.
+
+        In particular, the LSTStack object has "rectangular" baselines and times (i.e.
+        at each time, the same set of baselines are present), and the time axis is
+        slower than the baseline axis (i.e the data has virtual shape
+        ``(Nnights, Nbls, Nfreqs, Npols)``). Attributes on the stack that are extra to
+        base UVData are ``data``, ``nsamples`` and ``flags`` -- all of which are simply
+        views into their UVData counterparts (e.g. ``data_array``), but where the
+        baseline and time axis are explicitly split.
+    """
     if not config.matched_files:
         # An empty list of files means there's no data to read for this outfile
         return None
@@ -651,9 +768,9 @@ def lst_bin_files_from_config(
     for (d, f, n, wf, bt) in zip(data, flags, nsamples, where_inpainted, binned_times):
         # To enable inpaint-mode, set nsamples where things are flagged and inpainted
         # to zero, and set the flags to false.
-
-        f[wf] = False
-        n[wf] *= -1
+        if wf is not None:
+            f[wf] = False
+            n[wf] *= -1
 
         uv = UVData.new(
             freq_array=freqs,
@@ -680,5 +797,5 @@ def lst_bin_files_from_config(
         uv.blts_are_rectangular = True
         uv.time_axis_faster_than_bls = False
 
-        out.append(uv)
+        out.append(LSTStack(uv))
     return out

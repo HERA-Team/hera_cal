@@ -91,7 +91,7 @@ def apply_filename_rules(
     if isinstance(files, str):
         return apply_filename_rules_to_file(files, rules, missing=missing)
 
-    elif not files:
+    elif len(files) == 0:
         return files
 
     if not isinstance(files[0], str):
@@ -165,11 +165,7 @@ def _configure_inpainted_mode(
             "Both output_inpainted and output_flagged are False. One must be True."
         )
 
-    inpaint_modes = []
-    if output_inpainted:
-        inpaint_modes.append(True)
-    if output_flagged:
-        inpaint_modes.append(False)
+    inpaint_modes = [True] * output_inpainted + [False] * output_flagged
 
     return inpaint_modes
 
@@ -199,10 +195,10 @@ def format_outfile_name(
 def create_lstbin_output_file(
     outdir: Path,
     fname: str,
-    kind: str,
     pols: list[str],
     file_list: list[FastUVH5Meta],
     start_jd: float,
+    kind: str | None = None,
     times: np.ndarray | None = None,
     lsts: np.ndarray | None = None,
     history: str = "",
@@ -221,7 +217,8 @@ def create_lstbin_output_file(
     file_history = f"{history} Input files: {file_list_str}"
     _history = file_history + utils.history_string()
 
-    fname = fname.format(kind=kind)
+    if kind:
+        fname = fname.format(kind=kind)
 
     # There's a weird gotcha with pathlib where if you do path / "/file.name"
     # You get just "/file.name" which is in root.
@@ -270,18 +267,63 @@ def create_lstbin_output_file(
 
 
 def write_baseline_slc_to_file(
-    fl: Path, slc: slice, data: np.ndarray, flags: np.ndarray, nsamples: np.ndarray
+    fl: Path | FastUVH5Meta,
+    baseline_slice: slice,
+    data: np.ndarray,
+    flags: np.ndarray,
+    nsamples: np.ndarray,
+    time_index: int | None = None,
 ):
-    """Write a baseline slice to a file."""
-    with h5py.File(fl, "r+") as f:
-        ntimes = int(f["Header"]["Ntimes"][()])
-        timefirst = bool(f["Header"]["time_axis_faster_than_bls"][()])
-        if not timefirst and ntimes > 1:
-            raise NotImplementedError("Can only do time-first files for now.")
+    """Write a baseline slice to a file.
 
-        slc = slice(slc.start * ntimes, slc.stop * ntimes, 1)
-        f["Data"]["visdata"][slc] = data.reshape((-1, data.shape[2], data.shape[3]))
-        f["Data"]["flags"][slc] = flags.reshape((-1, data.shape[2], data.shape[3]))
-        f["Data"]["nsamples"][slc] = nsamples.reshape(
-            (-1, data.shape[2], data.shape[3])
+    This is a specialized function that writes a slice of baselines to a pre-existing
+    uvh5 file. The file must be in a specific format for this function to work, namely
+    it must be a .uvh5 file with a rectangular blt axis, where the time axis is the
+    outer most axis. Such a file is created by the :func:`create_lstbin_output_file`
+    function.
+
+    This function is useful when lst-averaging, to write out partial results to disk,
+    when looping over baselines and/or lsts.
+
+    Parameters
+    ----------
+    fl : Path or FastUVH5Meta
+        Path to the file or an open FastUVH5Meta object.
+    baseline_slice : slice
+        Slice of baselines to write to the file -- these must be the baseline indices
+        (NOT blt indices) *in the file* to which the input data corresponds.
+    data : np.ndarray
+        Data to write to the file. Must have shape ``(nbl_slice, nfreqs, npols)`` if
+        ``time_index`` is not None, or ``(ntimes, nbl_slice, nfreqs, npols)`` otherwise.
+    flags : np.ndarray
+        Flags to write to the file. Must have the same shape as ``data``.
+    nsamples : np.ndarray
+        Number of samples to write to the file. Must have the same shape as ``data``.
+    time_index : int, optional
+        The time index to write the data to. If None, the data is written to all times.
+    """
+    if not isinstance(fl, FastUVH5Meta):
+        fl = FastUVH5Meta(fl)
+
+    # The file must be in specific format to use this specialized function.
+    if not fl.time_axis_faster_than_bls:
+        raise NotImplementedError(
+            "write_baseline_slc_to_file only works for files with shape ``(nbls, ntimes, ...)``."
         )
+
+    if time_index is None:
+        for time_index in range(fl.Ntimes):
+            write_baseline_slc_to_file(
+                fl, baseline_slice, data[time_index], flags[time_index], nsamples[time_index], time_index
+            )
+    else:
+        slc = slice(
+            time_index + baseline_slice.start * fl.Ntimes,
+            time_index + baseline_slice.stop * fl.Ntimes,
+            fl.Ntimes
+        )
+        fl.close()
+        with h5py.File(fl.path, 'a') as _fl:
+            _fl["/Data"]["visdata"][slc] = data
+            _fl["/Data"]["flags"][slc] = flags
+            _fl["/Data"]["nsamples"][slc] = nsamples

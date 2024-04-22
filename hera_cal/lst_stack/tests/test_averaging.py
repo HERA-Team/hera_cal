@@ -119,11 +119,8 @@ class TestLSTAverage:
         nsamples = np.ones_like(data)
         flags = np.zeros_like(data, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n, db = avg.lst_average(
-            data=data,
-            nsamples=nsamples,
-            flags=flags,
-        )
+        _d, _f, _n = avg.get_masked_data(data, flags, nsamples, inpainted_mode=False)
+        data_n, flg_n, std_n, norm_n, db = avg.lst_average(_d, _n, _f)
 
         assert np.allclose(data_n, _data)
         assert not np.any(flg_n)
@@ -132,11 +129,9 @@ class TestLSTAverage:
 
         # Now flag the last "night"
         flags[-1] = True
-        data_n, flg_n, std_n, norm_n, db = avg.lst_average(
-            data=data,
-            nsamples=nsamples,
-            flags=flags,
-        )
+
+        _d, _f, _n = avg.get_masked_data(data, flags, nsamples, inpainted_mode=False)
+        data_n, flg_n, std_n, norm_n, db = avg.lst_average(_d, _n, _f)
 
         assert np.allclose(data_n, _data)
         assert not np.any(flg_n)
@@ -154,11 +149,8 @@ class TestLSTAverage:
         nsamples = np.ones_like(data, dtype=float)
         flags = np.zeros_like(data, dtype=bool)
 
-        data_n, flg_n, std_n, norm_n, db = avg.lst_average(
-            data=data,
-            nsamples=nsamples,
-            flags=flags,
-        )
+        _d, _f, _n = avg.get_masked_data(data, flags, nsamples, inpainted_mode=False)
+        data_n, flg_n, std_n, norm_n, db = avg.lst_average(_d, _n, _f)
 
         # Check the averaged data is within 6 sigma of the population mean
         np.testing.assert_allclose(data_n, 0.0, atol=std * 6 / np.sqrt(shape[0]))
@@ -171,7 +163,7 @@ class TestLSTAverage:
     @pytest.mark.parametrize("nsamples", ("ones", "random"))
     @pytest.mark.parametrize("flags", ("zeros", "random"))
     def test_std(self, nsamples, flags):
-        shape = (5000, 1, 2, 2)  # 1000 nights, doesn't matter what the other axis is.
+        shape = (5000, 1, 10, 2)  # 1000 nights, doesn't matter what the other axis is.
 
         std = 2.0
         if nsamples == "ones":
@@ -193,19 +185,13 @@ class TestLSTAverage:
 
         flags = np.zeros(data.shape, dtype=bool)
 
+        _d, _f, _n = avg.get_masked_data(data, flags, nsamples, inpainted_mode=False)
+
         if warn:
             with pytest.warns(UserWarning, match='Nsamples is not uniform across frequency'):
-                data_n, flg_n, std_n, _, _ = avg.lst_average(
-                    data=data,
-                    nsamples=nsamples,
-                    flags=flags,
-                )
+                data_n, flg_n, std_n, _, _ = avg.lst_average(_d, _n, _f)
         else:
-            data_n, flg_n, std_n, _, _ = avg.lst_average(
-                data=data,
-                nsamples=nsamples,
-                flags=flags,
-            )
+            data_n, flg_n, std_n, _, _ = avg.lst_average(_d, _n, _f)
 
         # Check the averaged data is within 6 sigma of the population mean
         assert np.allclose(data_n, 0.0, atol=std * 6 / np.sqrt(shape[0]))
@@ -231,13 +217,15 @@ class TestLSTAverage:
             flg = self.noflags
 
         # First test -- no flags should mean inpainted_mode does nothing.
-        df, ff, stdf, nf, dbf = avg.lst_average(
-            data=self.data, nsamples=self.nsamples, flags=flg, inpainted_mode=False
+        _d, _f, _n = avg.get_masked_data(
+            self.data, flg, self.nsamples, inpainted_mode=False
         )
+        df, ff, stdf, nf, dbf = avg.lst_average(data=_d, nsamples=_n, flags=_f)
 
-        di, fi, stdi, ni, dbi = avg.lst_average(
-            data=self.data, nsamples=self.nsamples, flags=flg, inpainted_mode=True
+        _d, _f, _n = avg.get_masked_data(
+            self.data, flg, self.nsamples, inpainted_mode=True
         )
+        di, fi, stdi, ni, dbi = avg.lst_average(data=_d, nsamples=_n, flags=_f)
 
         np.testing.assert_allclose(df, di)
         np.testing.assert_allclose(ff, fi)
@@ -251,13 +239,15 @@ class TestLSTAverage:
         # mode makes a difference. Nsamples with negatives implies inpainting, and
         # we use "noflags" because lst_average assumes that anything that we want to use
         # that's inpainted will have be unflagged.
-        df, ff, stdf, nf, dbf = avg.lst_average(
-            data=self.data, nsamples=self.nsamples_with_negatives, flags=self.noflags, inpainted_mode=False
+        _d, _f, _n = avg.get_masked_data(
+            self.data, self.noflags, self.nsamples_with_negatives, inpainted_mode=False
         )
+        df, ff, stdf, nf, dbf = avg.lst_average(_d, _n, _f)
 
-        di, fi, stdi, ni, dbi = avg.lst_average(
-            data=self.data, nsamples=self.nsamples_with_negatives, flags=self.noflags, inpainted_mode=True
+        _d, _f, _n = avg.get_masked_data(
+            self.data, self.noflags, self.nsamples_with_negatives, inpainted_mode=True
         )
+        di, fi, stdi, ni, dbi = avg.lst_average(_d, _n, _f)
 
         # The data and std in the fully-flagged bin should be different, but
         # Nsamples, Flags and Days Binned should be the same.
@@ -277,13 +267,16 @@ class TestLSTAverage:
         # mode makes a difference. Nsamples with negatives implies inpainting, and
         # we use "noflags" because lst_average assumes that anything that we want to use
         # that's inpainted will have be unflagged.
-        df, ff, stdf, nf, dbf = avg.lst_average(
-            data=self.data, nsamples=self.nsamples_full_input, flags=self.noflags, inpainted_mode=False
+        _d, _f, _n = avg.get_masked_data(
+            self.data, self.noflags, self.nsamples_full_input, inpainted_mode=False
+        )
+        df, ff, stdf, nf, dbf = avg.lst_average(_d, _n, _f)
+
+        _d, _f, _n = avg.get_masked_data(
+            self.data, self.noflags, self.nsamples_full_input, inpainted_mode=True
         )
 
-        di, fi, stdi, ni, dbi = avg.lst_average(
-            data=self.data, nsamples=self.nsamples_full_input, flags=self.noflags, inpainted_mode=True
-        )
+        di, fi, stdi, ni, dbi = avg.lst_average(_d, _n, _f)
 
         # The data, flags and std in the fully-flagged bin should be different, but
         # Nsamples, and Days Binned should be the same (zero).
@@ -304,24 +297,21 @@ class TestLSTAverage:
 class TestReduceLSTBins:
     @classmethod
     def get_input_data(
-        cls, nfreqs: int = 3, npols: int = 1, nbls: int = 6, ntimes: tuple[int] = (4,)
+        cls, nfreqs: int = 3, npols: int = 1, nbls: int = 6, ntimes: int = 4,
     ):
         data = np.random.random((nbls, nfreqs, npols))
 
         # Make len(ntimes) LST bins, each with ntimes[i] time-entries, all the same
         # data.
-        data = [
-            np.array([data] * nt).reshape((nt,) + data.shape) * (i + 1)
-            for i, nt in enumerate(ntimes)
-        ]
-        flags = [np.zeros(d.shape, dtype=bool) for d in data]
-        nsamples = [np.ones(d.shape, dtype=float) for d in data]
+        data = np.array([data] * ntimes)
+        flags = np.zeros(data.shape, dtype=bool)
+        nsamples = np.ones(data.shape, dtype=float)
 
         return data, flags, nsamples
 
     def test_one_point_per_bin(self):
-        d, f, n = self.get_input_data(ntimes=(1,))
-        rdc = avg.reduce_lst_bins(d, f, n)
+        d, f, n = self.get_input_data(ntimes=1)
+        rdc = avg.reduce_lst_bins(data=d, flags=f, nsamples=n)
 
         assert (
             rdc["data"].shape
@@ -330,44 +320,26 @@ class TestReduceLSTBins:
             == rdc["nsamples"].shape
         )
 
-        np.testing.assert_allclose(rdc['data'][0], d[0][0])
+        np.testing.assert_allclose(rdc['data'], d[0])
         assert not np.any(rdc['flags'])
         np.testing.assert_allclose(rdc['nsamples'], 1.0)
 
     @pytest.mark.filterwarnings("ignore:invalid value encountered")
     def test_zerosize_bin(self):
-        d, f, n = self.get_input_data(ntimes=(0, 1))
-        rdc = avg.reduce_lst_bins(d, f, n, get_mad=True)
+        d, f, n = self.get_input_data(ntimes=0)
+        rdc = avg.reduce_lst_bins(data=d, flags=f, nsamples=n, get_mad=True)
 
-        assert rdc["data"].shape[0] == 2  # 2 LST bins
-        assert np.all(np.isnan(rdc["data"][0]))
-        assert np.all(rdc["flags"][0])
-        assert np.all(rdc["nsamples"][0] == 0.0)
-        assert np.all(np.isinf(rdc["mad"][0]))
-        assert np.all(np.isnan(rdc["median"][0]))
-
-    @pytest.mark.parametrize("ntimes", [(4,), (5, 4)])
-    def test_multi_points_per_bin(self, ntimes):
-        d, f, n = self.get_input_data(ntimes=ntimes)
-        rdc = avg.reduce_lst_bins(d, f, n)
-
-        assert (
-            rdc["data"].shape
-            == rdc["flags"].shape
-            == rdc["std"].shape
-            == rdc["nsamples"].shape
-        )
-
-        assert not np.any(rdc['flags'])
-        for lst in range(len(ntimes)):
-            np.testing.assert_allclose(rdc['data'][lst], d[lst][0])
-            np.testing.assert_allclose(rdc['nsamples'][lst], ntimes[lst])
+        assert np.all(np.isnan(rdc["data"]))
+        assert np.all(rdc["flags"])
+        assert np.all(rdc["nsamples"] == 0.0)
+        assert np.all(np.isinf(rdc["mad"]))
+        assert np.all(np.isnan(rdc["median"]))
 
     def test_multi_points_per_bin_flagged(self):
-        d, f, n = self.get_input_data(ntimes=(4,))
-        f[0][2:] = True
-        d[0][2:] = 1000.0
-        rdc = avg.reduce_lst_bins(d, f, n)
+        d, f, n = self.get_input_data(ntimes=4)
+        f[2:] = True
+        d[2:] = 1000.0
+        rdc = avg.reduce_lst_bins(data=d, flags=f, nsamples=n)
 
         assert (
             rdc["data"].shape
@@ -376,12 +348,12 @@ class TestReduceLSTBins:
             == rdc["nsamples"].shape
         )
 
-        np.testing.assert_allclose(rdc['data'][0], d[0][0])
+        np.testing.assert_allclose(rdc['data'], d[0])
         assert not np.any(rdc['flags'])
         np.testing.assert_allclose(rdc['nsamples'], 2.0)
 
     def test_get_med_mad(self):
-        d, f, n = self.get_input_data(ntimes=(4,))
-        rdc = avg.reduce_lst_bins(d, f, n, get_mad=True)
+        d, f, n = self.get_input_data(ntimes=4)
+        rdc = avg.reduce_lst_bins(data=d, flags=f, nsamples=n, get_mad=True)
 
         assert np.all(rdc["median"] == rdc["data"])

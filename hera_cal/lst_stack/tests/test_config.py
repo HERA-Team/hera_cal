@@ -147,7 +147,7 @@ all_seasons = [
 ]
 
 
-class TestLSTBinConfiguration:
+class TestLSTBinConfigurator:
     def get_config(self, season, request):
         return config.LSTBinConfigurator(request.getfixturevalue(f"season_{season}"))
 
