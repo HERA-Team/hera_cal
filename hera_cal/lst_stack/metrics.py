@@ -156,7 +156,7 @@ def get_squared_zscores(
         cross-correlations are used, and the statistic is estimated over nights from
         the sample.
     """
-    zstack = UVFlag(stack, mode='metric', label='zsquare')  # [UVFlag(stack, mode='metric', label='zsquare') for stack in stacks]
+    zstack = UVFlag(stack, mode='metric', label='zsquare')
 
     if central not in ("mean", "median"):
         raise ValueError("central must be 'mean' or 'median'")
@@ -182,7 +182,7 @@ def get_squared_zscores(
 
         zstack.set_data(z[:, :, None], bl)
 
-    return zstack
+    return LSTStack(zstack)
 
 
 def get_selected_bls(
@@ -400,20 +400,23 @@ def reduce_stack_over_axis(
         The reduced data, with original shape, sans the axis that was reduced over.
     """
     axes = set()
-    if isinstance(mean_over, str):
-        mean_over = [mean_over]
-    for mo in mean_over:
-        if mo == 'bls':
+    if isinstance(axis, str):
+        axis = [axis]
+
+    for ax in axis:
+        if ax == 'bls':
             axes.add(1)
             axes.add(3)
-        elif mo == 'nights':
+        elif ax == 'nights':
             axes.add(0)
-        elif mo == 'band':
+        elif ax == 'band':
             axes.add(2)
-        elif mo == 'pols':
+        elif ax == 'pols':
             axes.add(3)
         else:
-            raise ValueError(f"got {mo} for mean_over")
+            raise ValueError(
+                f"got {ax} for axis. Must be one of 'bls', 'nights', 'band', 'pols'"
+            )
 
     axes = tuple(sorted(axes))
 

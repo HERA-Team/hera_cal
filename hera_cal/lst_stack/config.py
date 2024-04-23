@@ -465,72 +465,40 @@ class LSTBinConfigurator:
     @staticmethod
     def find_datafiles(
         datadir: str | Path,
-        nightdirs: list[str],
-        extension: str = "uvh5",
-        label: str = "",
-        sum_or_diff: str = "sum",
-        jdglob: str = "*",
+        nights: list[str],
+        fileglob: str = "{night}/zen.{night}.*.sum.uvh5",
     ) -> list[list[Path]]:
         """Determine the datafiles from specifications.
 
         This will search for files with the following glob:
 
-            ``<datadir>/<night>/zen.<jdglob>.<sum_or_diff>.<label>.<extension>``
+            ``{datadir}/{fileglob}``
 
-        where ``night`` takes on each value in ``nightdirs``. By default, this is
-
-            ``<datadir>/<night>/zen.*.sum.uvh5``
-
-        If the label includes the extension, it will not be duplicated, i.e. it will
-        search for
-
-            ``<datadir>/<night>/zen.*.sum.<label>``
-
-        ALternatively, if label is empty, the dot between label and extension will
-        be omitted, to search for
-
-            ``<datadir>/<night>/zen.*.<sum_or_diff>.<extension>``
+        where fileglob may contain instances of "{night}" which will be replaced by
+        each of the nights in ``nights``.
 
         Parameters
         ----------
         datadir : str or Path
             The top-level directory where the data files are stored.
-        nightdirs : list of str
-            The subdirectories in which the data files are stored, named by night.
-        extension : str, optional
-            The extension of the data files. Default is "uvh5".
-        label : str, optional
-            The label of the datafiles.
-        sum_or_diff : str, optional
-            Whether to use the sum or difference files. Default is "sum".
-        jdglob : str, optional
-            The JD glob to use to find the data files. Default is "*".
+        nights : list of str
+            The nights to consider.
+        fileglob
+            A string glob-pattern to search for files. This string may contain instances
+            of "{night}" which will be replaced by each of the nights in ``nights``.
 
         Returns
         -------
         data_files : list[list[Path | FastUVH5Meta]]
-            The list of data files for each night in each nightdir.
+            The list of data files for each night.
         """
-        # These are only required if datafiles wasn't specified specifically.
-        if label:
-            if label.endswith(f".{extension}"):
-                labelext = label
-            elif label.endswith("."):
-                labelext = f"{label}{extension}"
-            else:
-                labelext = f"{label}.{extension}"
-        else:
-            labelext = extension
 
         datadir = Path(datadir)
-
-        return [
-            sorted(
-                (datadir / str(nd)).glob(
-                    f"zen.{jdglob}.{sum_or_diff}.{labelext}"
-                )
-            ) for nd in nightdirs
-        ]
+        out = []
+        for night in nights:
+            this = fileglob.format(night=night)
+            out.append(sorted(datadir.glob(this)))
+        return out
 
     def get_file_lst_edges(self) -> np.ndarray:
         """Get the LST edges for each *output* file.
