@@ -8,7 +8,7 @@ from .. import utils
 from typing import Sequence
 from ..red_groups import RedundantGroups
 from pyuvdata.uvdata import FastUVH5Meta
-from pyuvdata import UVData
+from pyuvdata import UVData, UVFlag
 from functools import cached_property
 from astropy import units
 
@@ -604,16 +604,23 @@ def lst_bin_files_for_baselines(
 
 class LSTStack:
     """A very simple validation layer on top of UVData for LST-stacked data."""
-    def __init__(self, uvd: UVData):
+    def __init__(self, uvd: UVData | UVFlag):
         self._uvd = uvd
         self._validate_uvd()
 
     def _validate_uvd(self):
-        if not self._uvd.blts_are_rectangular:
-            raise ValueError("blts_are_rectangular must be True")
+        if isinstance(self._uvd, UVData):
+            if not self._uvd.blts_are_rectangular:
+                raise ValueError("blts_are_rectangular must be True")
 
-        if self._uvd.time_axis_faster_than_bls:
-            raise ValueError("time_axis_faster_than_bls must be False")
+            if self._uvd.time_axis_faster_than_bls:
+                raise ValueError("time_axis_faster_than_bls must be False")
+        elif isinstance(self._uvd, UVFlag):
+            # Here, for now we must _assume_ that the blts are rectangular and
+            # that the time axis is the outer axis. This is because we don't have
+            # a way to check this in UVFlag objects (yet)
+            if self._uvd.type != "baseline":
+                raise ValueError("UVFlag type must be 'baseline'")
 
     def __getattr__(self, item):
         return getattr(self._uvd, item)
@@ -658,7 +665,7 @@ class LSTStack:
     @property
     def metrics(self) -> np.ndarray:
         """A view into the flags array, reshaped to (Nbls, Ntimes, Nfreqs, Npols)."""
-        return self._uvd.metrics_array.reshape(
+        return self._uvd.metric_array.reshape(
             (self.Ntimes, self.Nbls, len(self.freq_array), len(self.polarization_array))
         )
 
@@ -676,6 +683,15 @@ class LSTStack:
     def antpairs(self) -> list[Antpair]:
         """The antenna pairs in the data."""
         return list(zip(self.ant_1_array[:self.Nbls], self.ant_2_array[:self.Nbls]))
+
+    @property
+    def pols(self) -> list[str]:
+        """The polarizations in the data."""
+        return utils.polnum2str(self.polarization_array, x_orientation=self.x_orientation)
+
+    def copy(self, *args, **kwargs):
+        """Return a copy of the LSTStack object."""
+        return LSTStack(self._uvd.copy(*args, **kwargs))
 
 
 def lst_bin_files_from_config(

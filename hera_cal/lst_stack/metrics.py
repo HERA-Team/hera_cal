@@ -13,61 +13,6 @@ from .. import types as tp
 from .binning import LSTStack
 
 
-class MixtureModel(rv_continuous):
-    """A distribution model from mixing multiple models.
-
-    Taken from https://stackoverflow.com/a/72315113/1467820
-    """
-
-    def __init__(self, submodels, *args, weights=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.submodels = submodels
-        if weights is None:
-            weights = [1 for _ in submodels]
-        if len(weights) != len(submodels):
-            raise (
-                ValueError(
-                    f"There are {len(submodels)} submodels and {len(weights)} weights, but they must be equal."
-                )
-            )
-        self.weights = [w / sum(weights) for w in weights]
-
-    def _pdf(self, x):
-        pdf = self.submodels[0].pdf(x) * self.weights[0]
-        for submodel, weight in zip(self.submodels[1:], self.weights[1:]):
-            pdf += submodel.pdf(x) * weight
-        return pdf
-
-    def _sf(self, x):
-        sf = self.submodels[0].sf(x) * self.weights[0]
-        for submodel, weight in zip(self.submodels[1:], self.weights[1:]):
-            sf += submodel.sf(x) * weight
-        return sf
-
-    def _cdf(self, x):
-        cdf = self.submodels[0].cdf(x) * self.weights[0]
-        for submodel, weight in zip(self.submodels[1:], self.weights[1:]):
-            cdf += submodel.cdf(x) * weight
-        return cdf
-
-    def rvs(self, size):
-        submodel_choices = np.random.choice(
-            len(self.submodels), size=size, p=self.weights
-        )
-        submodel_samples = [submodel.rvs(size=size) for submodel in self.submodels]
-        return np.choose(submodel_choices, submodel_samples)
-
-
-def zsquare_predicted_dist(df: int = 2):
-    if df in {1, 2}:
-        return chi2(df=df)
-    else:
-        raise ValueError(
-            "df should be either 1 (if using Z^2 of real/imag separately), "
-            "or 2 (if using |Z^2|)."
-        )
-
-
 @attrs.define(slots=False)
 class LSTBinStats:
     """Class that holds basic LST-binned data and statistics"""
@@ -108,22 +53,19 @@ def get_nightly_predicted_variance(
     bl: tuple[int, int, str],
     stack: LSTStack,
     auto_stats: LSTBinStats,
-) -> list[np.ndarray]:
+) -> np.ndarray:
     """
-    Compute the predicted variance from the autos over nights/freqs for a particular bl.
+    Get predicted thermal variance on a single bl for each night & freq.
 
-    Output is a list with the length of the number of lst bins, and each element is
-    an array of shape (Nnights, Nfreqs).
+    Output is an array of shape (Nnights, Nfreqs).
     """
-
     auto = auto_stats.mean[(bl[0], bl[0], bl[2])] * auto_stats.mean[(bl[1], bl[1], bl[2])]
 
-    dtdf = stack.dt * stack.df
+    dtdf = (stack.dt * stack.df).to_value("")
 
     gf = stack.get_flags(bl)
     per_day_expected_var = np.abs(auto / dtdf / stack.get_nsamples(bl))
     per_day_expected_var[gf] = np.inf
-
     return per_day_expected_var
 
 
@@ -133,9 +75,10 @@ def get_squared_zscores(
     stack: LSTStack,
     central: str = 'mean',
     std: str = 'autos'
-) -> list[UVFlag]:
+) -> LSTStack:
     """
-    Obtain squared Z-scores as a list of UVFlag objects in metrics mode.
+    Obtain squared Z-scores as a UVFlag object in metrics mode.
+
     Parameters
     ----------
     auto_stats : LSTBinStats
@@ -156,31 +99,44 @@ def get_squared_zscores(
         cross-correlations are used, and the statistic is estimated over nights from
         the sample.
     """
-    zstack = UVFlag(stack, mode='metric', label='zsquare')
+    zstack = stack.copy(metadata_only=True)
+    zstack.nsample_array = np.ones_like(stack.nsample_array)  # this will turn into metrics
 
     if central not in ("mean", "median"):
         raise ValueError("central must be 'mean' or 'median'")
 
-    for bl in cross_stats.bls:
-        if std == 'autos':
-            variance = get_nightly_predicted_variance(
-                bl, stack, auto_stats, stack.dt, stack.df
-            )
-        elif std in {'std', 'mad'}:
-            variance = np.abs(np.where(cross_stats.flags[bl], np.inf, getattr(cross_stats, std)[bl]))**2
-        else:
-            raise ValueError("std must be 'autos', 'std' or 'mad'")
+    if std not in {'autos', 'std', 'mad'}:
+        raise ValueError("std must be 'autos', 'std' or 'mad'")
 
-        data = zstack.get_data(bl)
-        flg = zstack.get_flags(bl)
+    zsq = np.zeros(stack.data.shape, dtype=np.float32)
 
-        centre = getattr(cross_stats, central)[bl]
+    for iap, ap in enumerate(stack.antpairs):
+        for ipol, pol in enumerate(stack.pols):
+            bl = (*ap, pol)
+            data = stack.get_data(bl)
 
-        z = np.abs(data - centre)**2 / (variance / 2)  # TODO: check that we need /2 for std, mad
+            zsq_view = zsq[:, iap, :, ipol]
+            zsq_view[:] = np.abs(data - getattr(cross_stats, central)[bl])**2
 
-        z[flg] = np.nan
+            # Divide variance by 2 to get the variance of the real/imaginary parts.
+            # That is, z = (data - centre) / sqrt(variance / 2), so that each component
+            # (real/imag) is a Gaussian with variance equal to 1. Then zsq = |z|^2 is just
+            # the sum of two standard normal variables squared, which is chi2(2).
 
-        zstack.set_data(z[:, :, None], bl)
+            if std == 'autos':
+                # This is the variance such that each of the components (real/imag) is a
+                # Gaussian with variance equal to this value / 2.
+                zsq_view /= get_nightly_predicted_variance(bl, stack, auto_stats) / 2
+            else:
+                # This variance is also the variance of the magnitude of the complex number,
+                # the same as using the autos method.
+                zsq_view /= np.abs(np.where(
+                    cross_stats.flags[bl], np.inf, getattr(cross_stats, std)[bl]
+                ))**2 / 2
+
+    # convert zstack to UVFlag object
+    zstack = UVFlag(stack._uvd, mode='metric', use_future_array_shapes=True)
+    zstack.metrics_array = zsq
 
     return LSTStack(zstack)
 
@@ -221,12 +177,12 @@ def get_selected_bls(
 
 def downselect_zscores(
     zscores: LSTStack,
-    stack: LSTStack,
-    bls: list[tp.Baseline] | None = None,
+    antpairs: list[tp.Antpair] | None = None,
     band: tuple[int, int] | slice | None = None,
-    nights='all',
-    pols='all',
-    bl_selectors=None
+    nights: list[int] | None = None,
+    pols: str | None = None,
+    bl_selectors=None,
+    flags: np.ndarray | None = None,
 ) -> list[np.ndarray]:
     """
     Downselect zscores to a subset of baselines, nights, and polarizations.
@@ -241,21 +197,21 @@ def downselect_zscores(
     zscores : LSTStack
         The LSTStack object to downselect. This should be an LSTStack wrapping
         a UVFlag object in metrics mode (i.e. the output of get_squared_zscores).
-    stack : LSTStack
-        The LSTStack object that the zscores were computed from. This is used to
-        get the flags.
-    bls : list[tuple[int, int, str]] | None
+    bls : list[tuple[int, int]] | None
         List of baselines to get the data from. If None, all baselines are used.
     band : tuple[int, int] | slice | None
         The frequency band to use. If None, all frequencies are used.
     nights : int | list[int] | 'all'
-        The nights to use. If 'all', all nights are used.
+        The nights to use. By default, all nights are used.
     pols : str | list[str]
-        The polarizations to use. If 'all', all polarizations are used.
+        The polarizations to use. By default, all polarizations are used.
     bl_selectors : list[Callable] | None
         A list of callables that take a baseline (int, int str) and return a boolean,
         for whether to include that baseline. This can be used instead of passing
         bls directly.
+    flags : np.ndarray | None
+        Any flags for which to mask out particular zscore values. Must be the same
+        shape as zscores.metrics
 
     Returns
     -------
@@ -264,9 +220,6 @@ def downselect_zscores(
         but with some axes smaller after subselection. The mask is from the flags
         in stack.
     """
-
-    allz = []
-
     nbls = zscores.Nbls
     datapols = utils.polnum2str(
         zscores.polarization_array, x_orientation=zscores.x_orientation
@@ -275,21 +228,21 @@ def downselect_zscores(
         zip(zscores.ant_1_array[:nbls], zscores.ant_2_array[:nbls])
     )
 
-    if selectors is not None:
+    if bl_selectors is not None:
         allbls = [(a, b, p) for a, b in datapairs for p in datapols]
-        bls = get_selected_bls(allbls, min_days=0, selectors=selectors)
+        bls = get_selected_bls(allbls, min_days=0, selectors=bl_selectors)
         selpols = {p for a, b, p in bls}
-        bls = list({bl[:2] for bl in bls})  # only antpairs
+        antpairs = list({bl[:2] for bl in bls})  # only antpairs
 
         if 'ee' in selpols and 'nn' in selpols:
-            pols = 'all'
+            pols = None
         elif 'ee' in selpols:
             pols = 'ee'
         elif 'nn' in selpols:
             pols = 'nn'
 
     # Get pol indices
-    if pols == 'all':
+    if pols is None:
         pols = slice(None)
     elif isinstance(pols, str):
         pols = [datapols.index(pols)]
@@ -297,12 +250,12 @@ def downselect_zscores(
         pols = [datapols.index(p) for p in pols]
 
     # Get bl indices
-    if bls is None:
-        bls = datapairs
-    if isinstance(bls, tuple) and len(bls) == 2:
-        bls = [datapairs.index(bls)]
-    elif isinstance(bls, list):
-        bls = [datapairs.index(bl) for bl in bls]
+    if antpairs is None:
+        antpairs = slice(None)
+    elif isinstance(antpairs, tuple) and len(antpairs) == 2:
+        antpairs = [datapairs.index(antpairs)]
+    elif isinstance(antpairs, list):
+        antpairs = [datapairs.index(ap) for ap in antpairs]
 
     if band is None:
         band = slice(None)
@@ -312,13 +265,16 @@ def downselect_zscores(
     if not isinstance(band, slice):
         raise TypeError("band must be a tuple of (low, high) or a slice")
 
-    zsq = np.ma.MaskedArray(zscores.metrics[:, :, band], mask=stack.flags[:, :, band])
+    zsq = np.ma.MaskedArray(
+        zscores.metrics[:, :, band],
+        mask=flags[:, :, band] if flags is not None else None
+    )
 
     # make sure flagged stuff is nan
-    zsq = zsq[:, bls][..., pols]
+    zsq = zsq[:, antpairs][..., pols]
     # Get time indices
-    if nights != 'all':
-        if isinstance(nights, int):
+    if nights is not None:
+        if not hasattr(nights, '__len__'):
             nights = [nights]
 
         zsq = zsq[[zscores.nights.tolist().index(n) for n in nights]]
@@ -326,15 +282,7 @@ def downselect_zscores(
     return zsq
 
 
-def get_compressed_zscores(
-    zscores: list[LSTStack],
-    stacks: list[LSTStack],
-    bls: list[tp.Baseline] | None = None,
-    band: tupe[int, int] | slice | None = None,
-    nights: Literal['all'] | list[int] = 'all',
-    pols: Literal['all'] | list[str] = 'all',
-    bl_selectors: list[callable] | None = None
-) -> np.ndarray:
+def get_compressed_zscores(zscores: list[LSTStack], flags: list[np.ndarray] | None = None, **kwargs) -> np.ndarray:
     """
     Get a subset of data from a list of UVData objects.
 
@@ -345,21 +293,10 @@ def get_compressed_zscores(
     zscores : list[LSTStack]
         The LSTStack objects to downselect. This should be an LSTStack wrapping
         a UVFlag object in metrics mode (i.e. the output of get_squared_zscores).
-    stack : list[LSTStack]
-        The LSTStack objects that the zscores were computed from. This is used to
-        get the flags.
-    bls : list[tuple[int, int, str]] | None
-        List of baselines to get the data from. If None, all baselines are used.
-    band : tuple[int, int] | slice | None
-        The frequency band to use. If None, all frequencies are used.
-    nights : int | list[int] | 'all'
-        The nights to use. If 'all', all nights are used.
-    pols : str | list[str]
-        The polarizations to use. If 'all', all polarizations are used.
-    bl_selectors : list[Callable] | None
-        A list of callables that take a baseline (int, int str) and return a boolean,
-        for whether to include that baseline. This can be used instead of passing
-        bls directly.
+
+    Other Parameters
+    ----------------
+    All other parameters passed on to :func:`downselect_zscores`.
 
     Returns
     -------
@@ -369,9 +306,12 @@ def get_compressed_zscores(
     """
 
     allz = []
-    for stack, zsq in zip(stacks, zscores):
-        subset = downselect_zscores(zsq, stack, bls=bls, band=band, nights=nights, pols=pols, bl_selectors=bl_selectors)
-        allz.append(subset.comressed())
+    if flags is None:
+        flags = [None] * len(zscores)
+
+    for zsq, flg in zip(zscores, flags):
+        subset = downselect_zscores(zsq, flags=flg, **kwargs)
+        allz.append(subset.compressed())
 
     return np.concatenate(allz)
 
@@ -404,132 +344,22 @@ def reduce_stack_over_axis(
         axis = [axis]
 
     for ax in axis:
+        if ax == 'antpairs':
+            axes.add(1)
         if ax == 'bls':
             axes.add(1)
             axes.add(3)
         elif ax == 'nights':
             axes.add(0)
-        elif ax == 'band':
+        elif ax == 'freqs':
             axes.add(2)
         elif ax == 'pols':
             axes.add(3)
         else:
             raise ValueError(
-                f"got {ax} for axis. Must be one of 'bls', 'nights', 'band', 'pols'"
+                f"got {ax} for axis. Must be one of 'bls', 'nights', 'freqs', 'pols'"
             )
 
     axes = tuple(sorted(axes))
 
     return func(data, axis=axes)
-
-
-def night_to_night_excess_var_distribution(ndays_binned: int) -> rv_continuous:
-    """Get a distribution for the excess variance of a single lst-averaged observation.
-
-    See https://reionization.org/manual_uploads/HERA123_LST_Bin_Statistics-v3.pdf.
-
-    Parameters
-    ----------
-    ndays_binned : int
-        The number of nights binned in the LST bin.
-
-    Returns
-    -------
-    dist : rv_continuous
-        A scipy distribution object representing the excess variance distribution.
-    """
-    return gamma(a=(ndays_binned - 1) / 2, scale=2 / (ndays_binned - 1))
-
-
-def n2n_excess_var_pred_dist(
-    days_binned: DataContainer, bls, freq_inds=slice(None), min_n: int = 1
-) -> rv_continuous:
-    """Get a scipy distribution representing the theoretical distribution of excess variance.
-
-    This will return a MixtureModel -- i.e. it will be the expected distribution of all frequencies
-    and baselines asked for (not their average).
-
-    See https://reionization.org/manual_uploads/HERA123_LST_Bin_Statistics-v3.pdf.
-
-    Parameters
-    ----------
-    days_binned : DataContainer
-        The number of days binned for each baseline and frequency.
-    bls : list[tuple[int, int, str]]
-        The baselines to include in the distribution.
-    freq_inds : slice
-        The frequency indices to include in the distribution.
-    min_n : int
-        The minimum number of days binned to include in the distribution.
-
-    Returns
-    -------
-    dist : MixtureModel
-        A mixture model representing the distribution of excess variance.
-    """
-    if not hasattr(bls[0], "__len__"):
-        bls = [bls]
-
-    all_ns = np.concatenate(tuple(days_binned[bl][freq_inds] for bl in bls))
-    unique_days_binned, counts = np.unique(all_ns, return_counts=True)
-    indx = np.argwhere(unique_days_binned >= min_n)[:, 0]
-    unique_days_binned = unique_days_binned[indx]
-    counts = counts[indx]
-
-    return MixtureModel(
-        [night_to_night_excess_var_distribution(nn) for nn in unique_days_binned],
-        weights=counts,
-    )
-
-
-def night_to_night_excess_var_avg_pred_dist(
-    days_binned: DataContainer,
-    bls, freq_inds=slice(None), min_n: int = 1
-):
-    """Get a scipy distribution representing the theoretical distribution of averaged excess variance.
-
-    This will return the expected distribution of the averaged excess variance for the
-    requested baselines and frequencies. Note this is NOT the excess averaged variance (i.e.
-    we're averaging the mean-one excess over the baselines/frequencies, rather than averaging
-    the observed variance and dividing by the averaged expected variance).
-
-    This is exact for non-redundantly averaged data, and an approximation for red-avg data.
-    Gotten from https://stats.stackexchange.com/a/191912/81338
-
-    Parameters
-    ----------
-    days_binned : DataContainer
-        The number of days binned for each baseline and frequency.
-    bls : list[tuple[int, int, str]]
-        The baselines to include in the distribution.
-    freq_inds : slice
-        The frequency indices to include in the distribution.
-    min_n : int
-        The minimum number of days binned to include in the distribution.
-
-    Returns
-    -------
-    dist : rv_continuous
-        A gamma distribution representing the distribution of averaged excess variance.
-
-    See Also
-    --------
-    n2n_excess_var_pred_dist
-        The distribution of a collection of excess variances (rather than the
-        distribution of their average).
-    night_to_night_excess_var_distribution
-        The distribution of a single excess variance.
-    """
-    if not hasattr(bls[0], "__len__"):
-        bls = [bls]
-
-    ndays_binned = np.concatenate(
-        tuple(days_binned[bl][freq_inds] for bl in bls)
-    )
-    ndays_binned = ndays_binned[ndays_binned >= min_n]
-
-    M = len(ndays_binned)
-    ksum = np.sum(M**2 / 2 / np.sum(1 / (ndays_binned - 1)))
-    thetasum = 1 / ksum
-
-    return gamma(a=ksum, scale=thetasum)

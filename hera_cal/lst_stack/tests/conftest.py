@@ -86,9 +86,9 @@ def _make_season(
 ) -> list[list[str]]:
     tmp = pthfac.mktemp("season")
     uvds = mockuvd.make_dataset(
-        ndays=kwargs.get('ndays', 3),
-        nfiles=kwargs.get('nfiles', 4),
-        ntimes=kwargs.get('ntimes', 2),
+        ndays=kwargs.pop('ndays', 3),
+        nfiles=kwargs.pop('nfiles', 4),
+        ntimes=kwargs.pop('ntimes', 2),
         integration_time=kwargs.pop("integration_time", 3600.0),
         creator=create_small_array_uvd,
         identifiable=True,
@@ -159,4 +159,12 @@ def season_notredavg(tmp_path_factory):
     return _make_season(
         tmp_path_factory, redundantly_averaged=False, with_cals=True,
         antpairs=[(i, j) for i in range(10) for j in range(i, 10)],  # 55 antpairs
+    )
+
+
+@pytest.fixture(scope='session')
+def season_nonredavg_with_noise(tmp_path_factory):
+    return _make_season(
+        tmp_path_factory, with_cals=False, with_noise=True,
+        redundantly_averaged=False, ndays=100, nfiles=1,
     )

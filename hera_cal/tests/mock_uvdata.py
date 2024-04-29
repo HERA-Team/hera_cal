@@ -174,6 +174,7 @@ def add_noise_to_uvd(uvd, autos: bool = False):
         data[bl] += np.random.normal(
             scale=np.sqrt(variance / 2)
         ) + 1j * np.random.normal(scale=np.sqrt(variance / 2))
+
     hd.update(data=data)
 
 

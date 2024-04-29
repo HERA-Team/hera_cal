@@ -272,7 +272,7 @@ def write_baseline_slc_to_file(
     data: np.ndarray,
     flags: np.ndarray,
     nsamples: np.ndarray,
-    time_index: int | None = None,
+    time_index: int,
 ):
     """Write a baseline slice to a file.
 
@@ -311,19 +311,13 @@ def write_baseline_slc_to_file(
             "write_baseline_slc_to_file only works for files with shape ``(nbls, ntimes, ...)``."
         )
 
-    if time_index is None:
-        for time_index in range(fl.Ntimes):
-            write_baseline_slc_to_file(
-                fl, baseline_slice, data[time_index], flags[time_index], nsamples[time_index], time_index
-            )
-    else:
-        slc = slice(
-            time_index + baseline_slice.start * fl.Ntimes,
-            time_index + baseline_slice.stop * fl.Ntimes,
-            fl.Ntimes
-        )
-        fl.close()
-        with h5py.File(fl.path, 'a') as _fl:
-            _fl["/Data"]["visdata"][slc] = data
-            _fl["/Data"]["flags"][slc] = flags
-            _fl["/Data"]["nsamples"][slc] = nsamples
+    slc = slice(
+        time_index + baseline_slice.start * fl.Ntimes,
+        time_index + baseline_slice.stop * fl.Ntimes,
+        fl.Ntimes
+    )
+    fl.close()
+    with h5py.File(fl.path, 'a') as _fl:
+        _fl["/Data"]["visdata"][slc] = data
+        _fl["/Data"]["flags"][slc] = flags
+        _fl["/Data"]["nsamples"][slc] = nsamples

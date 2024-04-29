@@ -357,3 +357,8 @@ class TestReduceLSTBins:
         rdc = avg.reduce_lst_bins(data=d, flags=f, nsamples=n, get_mad=True)
 
         assert np.all(rdc["median"] == rdc["data"])
+
+    def test_bad_input(self):
+        d, f, n = self.get_input_data(ntimes=4)
+        with pytest.raises(ValueError, match="data, flags, and nsamples must all be provided"):
+            avg.reduce_lst_bins(data=d, flags=f)
