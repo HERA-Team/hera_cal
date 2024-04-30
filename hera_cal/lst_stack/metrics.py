@@ -131,14 +131,11 @@ def get_squared_zscores(
                     cross_stats.flags[bl], np.inf, getattr(cross_stats, std)[bl]
                 ))**2 / 2
 
-    print("SUM OF ZSQ", np.sum(zsq))
     # convert zstack to UVFlag object
     zstack = UVFlag(stack._uvd, mode='metric', use_future_array_shapes=True)
     zstack.metric_array = zsq
-    print(">> ", np.sum(zstack.metric_array), zstack.metric_array.shape)
 
     out = LSTStack(zstack)
-    print(">>> ", np.sum(out.metrics), np.sum(out.metric_array))
     return LSTStack(zstack)
 
 

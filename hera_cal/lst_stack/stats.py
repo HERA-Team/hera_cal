@@ -21,6 +21,7 @@ coming from redundant baselines or the same LST). The difference is that the exc
 variance is normalized by a factor n/(n-1), in order to ensure that its expected value
 is 1. This is implemented in the :func:`excess_variance` function.
 """
+from __future__ import annotations
 from scipy.stats import rv_continuous
 import numpy as np
 from scipy.stats import chi2, gamma
