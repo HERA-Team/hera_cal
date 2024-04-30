@@ -162,26 +162,33 @@ def lst_bin_files_single_outfile(
     )
 
     # make it a bit easier to create the outfiles
-    create_outfile = partial(
-        io.create_lstbin_output_file,
-        outdir=outdir,
+    uvd_template = io.create_empty_uvd(
         pols=config.pols,
         file_list=config.matched_metas,
         history=history,
-        overwrite=overwrite,
         antpairs=config.autos + config.antpairs,
         start_jd=config.properties['first_jd'],
         freq_min=freq_min,
         freq_max=freq_max,
         lst_branch_cut=config.properties["lst_branch_cut"],
+        lsts=config.lst_grid
+    )
+
+    create_file = partial(
+        io.create_lstbin_output_file,
+        uvd_template=uvd_template,
+        outdir=outdir,
+        overwrite=overwrite,
         **write_kwargs,
     )
+
     out_files = {}
     for inpaint_mode in inpaint_modes:
         kinds = ["LST", "STD"]
         if write_med_mad:
             kinds += ["MED", "MAD"]
         for kind in kinds:
+            key = (kind, inpaint_mode)
 
             fname = io.format_outfile_name(
                 lst=config.lst_grid_edges[0],
@@ -192,11 +199,7 @@ def lst_bin_files_single_outfile(
                 kind=kind
             )
 
-            # Create the files we'll write to
-            out_files[(kind, inpaint_mode)] = create_outfile(
-                lsts=config.lst_grid,
-                fname=fname
-            )
+            out_files[key] = create_outfile(fname=fname)
 
     # Split up the baselines into chunks that will be LST-binned together.
     # This is just to save on RAM.
@@ -234,34 +237,33 @@ def lst_bin_files_single_outfile(
                     get_mad=write_med_mad,
                 )
                 write = partial(
-                    io.write_baseline_slc_to_file,
-                    baseline_slice=slc,
-                    time_index=lstidx,
-                    flags=rdc['flags'],
+                    uvd_template.write_uvh5_part,
+                    blt_inds=np.arange(nbls_so_far, nbls_so_far + chunk_size) * (lstidx + 1),
+                    flag_array=rdc['flags'],
                 )
 
                 write(
-                    fl=out_files[("LST", inpainted)],
-                    data=rdc["data"],
-                    nsamples=rdc["nsamples"],
+                    filename=out_files[("LST", inpainted)],
+                    data_array=rdc["data"],
+                    nsample_array=rdc["nsamples"],
                 )
 
                 write(
-                    fl=out_files[("STD", inpainted)],
-                    data=rdc["std"],
-                    nsamples=rdc["days_binned"],
+                    filename=out_files[("STD", inpainted)],
+                    data_array=rdc["std"],
+                    nsample_array=rdc["days_binned"],
                 )
 
                 if write_med_mad:
                     write(
-                        fl=out_files[("MED", inpainted)],
-                        data=rdc["median"],
-                        nsamples=rdc["nsamples"],
+                        filename=out_files[("MED", inpainted)],
+                        data_array=rdc["median"],
+                        nsample_array=rdc["nsamples"],
                     )
                     write(
-                        fl=out_files[("MAD", inpainted)],
-                        data=rdc["mad"],
-                        nsamples=rdc["days_binned"],
+                        filename=out_files[("MAD", inpainted)],
+                        data_array=rdc["mad"],
+                        nsample_array=rdc["days_binned"],
                     )
         return chunk_size
 

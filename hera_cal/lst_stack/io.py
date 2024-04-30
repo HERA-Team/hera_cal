@@ -192,48 +192,24 @@ def format_outfile_name(
     )
 
 
-def create_lstbin_output_file(
-    outdir: Path,
-    fname: str,
+def create_empty_uvd(
     pols: list[str],
     file_list: list[FastUVH5Meta],
     start_jd: float,
-    kind: str | None = None,
     times: np.ndarray | None = None,
     lsts: np.ndarray | None = None,
     history: str = "",
-    overwrite: bool = False,
     antpairs: list[tuple[int, int]] | None = None,
     freq_min: float | None = None,
     freq_max: float | None = None,
     channels: np.ndarray | list[int] | None = None,
     vis_units: str = "Jy",
     lst_branch_cut: float = 0.0,
-) -> Path:
-    outdir = Path(outdir)
-
+):
     # update history
     file_list_str = "-".join(ff.path.name for ff in file_list)
     file_history = f"{history} Input files: {file_list_str}"
     _history = file_history + utils.history_string()
-
-    if kind:
-        fname = fname.format(kind=kind)
-
-    # There's a weird gotcha with pathlib where if you do path / "/file.name"
-    # You get just "/file.name" which is in root.
-    if fname.startswith("/"):
-        fname = fname[1:]
-    fname = outdir / fname
-
-    if not fname.parent.exists():
-        fname.parent.mkdir(parents=True)
-
-    logger.info(f"Initializing {fname}")
-
-    # check for overwrite
-    if fname.exists() and not overwrite:
-        raise FileExistsError(f"{fname} exists, not overwriting")
 
     freqs = np.squeeze(file_list[0].freq_array)
     if freq_min:
@@ -256,68 +232,42 @@ def create_lstbin_output_file(
         lst_branch_cut=lst_branch_cut,
     )
     uvd_template.select(frequencies=freqs, polarizations=pols, inplace=True)
+
     # Need to set the polarization array manually because even though the select
     # operation does the down-select, it doesn't re-order the pols.
     uvd_template.polarization_array = np.array(
         uvutils.polstr2num(pols, x_orientation=uvd_template.x_orientation)
     )
+    return uvd_template
+
+
+def create_lstbin_output_file(
+    uvd_template: UVData,
+    outdir: Path,
+    fname: str,
+    kind: str | None = None,
+    overwrite: bool = False,
+) -> Path:
+    outdir = Path(outdir)
+
+    if kind:
+        fname = fname.format(kind=kind)
+
+    # There's a weird gotcha with pathlib where if you do path / "/file.name"
+    # You get just "/file.name" which is in root.
+    if fname.startswith("/"):
+        fname = fname[1:]
+    fname = outdir / fname
+
+    if not fname.parent.exists():
+        fname.parent.mkdir(parents=True)
+
+    logger.info(f"Initializing {fname}")
+
+    # check for overwrite
+    if fname.exists() and not overwrite:
+        raise FileExistsError(f"{fname} exists, not overwriting")
+
     uvd_template.initialize_uvh5_file(str(fname.absolute()), clobber=overwrite)
 
     return fname
-
-
-def write_baseline_slc_to_file(
-    fl: Path | FastUVH5Meta,
-    baseline_slice: slice,
-    data: np.ndarray,
-    flags: np.ndarray,
-    nsamples: np.ndarray,
-    time_index: int,
-):
-    """Write a baseline slice to a file.
-
-    This is a specialized function that writes a slice of baselines to a pre-existing
-    uvh5 file. The file must be in a specific format for this function to work, namely
-    it must be a .uvh5 file with a rectangular blt axis, where the time axis is the
-    outer most axis. Such a file is created by the :func:`create_lstbin_output_file`
-    function.
-
-    This function is useful when lst-averaging, to write out partial results to disk,
-    when looping over baselines and/or lsts.
-
-    Parameters
-    ----------
-    fl : Path or FastUVH5Meta
-        Path to the file or an open FastUVH5Meta object.
-    baseline_slice : slice
-        Slice of baselines to write to the file -- these must be the baseline indices
-        (NOT blt indices) *in the file* to which the input data corresponds.
-    data : np.ndarray
-        Data to write to the file. Must have shape ``(nbl_slice, nfreqs, npols)`` if
-        ``time_index`` is not None, or ``(ntimes, nbl_slice, nfreqs, npols)`` otherwise.
-    flags : np.ndarray
-        Flags to write to the file. Must have the same shape as ``data``.
-    nsamples : np.ndarray
-        Number of samples to write to the file. Must have the same shape as ``data``.
-    time_index : int, optional
-        The time index to write the data to. If None, the data is written to all times.
-    """
-    if not isinstance(fl, FastUVH5Meta):
-        fl = FastUVH5Meta(fl)
-
-    # The file must be in specific format to use this specialized function.
-    if not fl.time_axis_faster_than_bls:
-        raise NotImplementedError(
-            "write_baseline_slc_to_file only works for files with shape ``(nbls, ntimes, ...)``."
-        )
-
-    slc = slice(
-        time_index + baseline_slice.start * fl.Ntimes,
-        time_index + baseline_slice.stop * fl.Ntimes,
-        fl.Ntimes
-    )
-    fl.close()
-    with h5py.File(fl.path, 'a') as _fl:
-        _fl["/Data"]["visdata"][slc] = data
-        _fl["/Data"]["flags"][slc] = flags
-        _fl["/Data"]["nsamples"][slc] = nsamples
