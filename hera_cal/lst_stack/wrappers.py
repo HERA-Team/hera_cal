@@ -12,6 +12,8 @@ from .binning import lst_bin_files_from_config
 from .averaging import reduce_lst_bins
 from .config import LSTConfig, LSTConfigSingle
 from pyuvdata import UVData
+from pyuvdata.uvdata.uvh5 import UVH5
+import h5py
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +201,7 @@ def lst_bin_files_single_outfile(
                 kind=kind
             )
 
-            out_files[key] = create_outfile(fname=fname)
+            out_files[key] = create_file(fname=fname)
 
     # Split up the baselines into chunks that will be LST-binned together.
     # This is just to save on RAM.
@@ -238,7 +240,7 @@ def lst_bin_files_single_outfile(
                 )
                 write = partial(
                     uvd_template.write_uvh5_part,
-                    blt_inds=np.arange(nbls_so_far, nbls_so_far + chunk_size) * (lstidx + 1),
+                    blt_inds=np.arange(nbls_so_far, nbls_so_far + chunk_size) * len(stacks) + lstidx,
                     flag_array=rdc['flags'],
                 )
 

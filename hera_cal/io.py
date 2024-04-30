@@ -2852,4 +2852,8 @@ def uvdata_from_fastuvh5(
     uvd.Nants_telescope = len(uvd.antenna_numbers)
     uvd.blts_are_rectangular = True
     uvd.time_axis_faster_than_bls = timefirst
+
+    # This needs to be done, though it should be fixed in pyuvdata
+    uvd.history += uvd.pyuvdata_version_str
+
     return uvd

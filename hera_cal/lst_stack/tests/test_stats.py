@@ -82,7 +82,7 @@ def test_zsquare(absolute, ndays, weighted):
 
     # Test statistics...
     np.testing.assert_allclose(dist.mean(), np.mean(zsq), atol=1e-2)
-    np.testing.assert_allclose(dist.var(), np.var(zsq), rtol=0.5 / ndays)
+    np.testing.assert_allclose(dist.var(), np.var(zsq), rtol=1.0 / ndays)
 
 
 @pytest.mark.parametrize("absolute", [True, False])

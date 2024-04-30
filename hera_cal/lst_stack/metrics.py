@@ -99,9 +99,6 @@ def get_squared_zscores(
         cross-correlations are used, and the statistic is estimated over nights from
         the sample.
     """
-    zstack = stack.copy(metadata_only=True)
-    zstack.nsample_array = np.ones_like(stack.nsample_array)  # this will turn into metrics
-
     if central not in ("mean", "median"):
         raise ValueError("central must be 'mean' or 'median'")
 
@@ -134,10 +131,14 @@ def get_squared_zscores(
                     cross_stats.flags[bl], np.inf, getattr(cross_stats, std)[bl]
                 ))**2 / 2
 
+    print("SUM OF ZSQ", np.sum(zsq))
     # convert zstack to UVFlag object
     zstack = UVFlag(stack._uvd, mode='metric', use_future_array_shapes=True)
-    zstack.metrics_array = zsq
+    zstack.metric_array = zsq
+    print(">> ", np.sum(zstack.metric_array), zstack.metric_array.shape)
 
+    out = LSTStack(zstack)
+    print(">>> ", np.sum(out.metrics), np.sum(out.metric_array))
     return LSTStack(zstack)
 
 
@@ -346,7 +347,7 @@ def reduce_stack_over_axis(
     for ax in axis:
         if ax == 'antpairs':
             axes.add(1)
-        if ax == 'bls':
+        elif ax == 'bls':
             axes.add(1)
             axes.add(3)
         elif ax == 'nights':

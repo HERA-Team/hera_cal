@@ -5,6 +5,7 @@ from hera_cal.lst_stack import metrics as mt
 from hera_cal.lst_stack.config import LSTBinConfigurator
 from hera_cal.lst_stack import lst_bin_files_from_config, reduce_lst_bins
 from hera_cal.lst_stack.binning import LSTStack
+from hera_cal.lst_stack import stats
 from hera_cal.datacontainer import DataContainer
 from hera_cal.tests import mock_uvdata as mockuvd
 from pyuvdata import UVFlag
@@ -97,7 +98,7 @@ class TestGetZSquared:
         assert isinstance(zsq, LSTStack)
         assert zsq.metrics.shape == cross_stack.data.shape
 
-        dist = mt.zsquare_predicted_dist(df=2)
+        dist = stats.zsquare(n=len(zsq.nights), absolute=True)
 
         # Check if the mean lines up. The variance on the mean is equal to
         # the variance of chi2(df=2nnights)/nnights^2 == 4*nnights/nnights^2.
@@ -142,7 +143,7 @@ class TestGetSelectedBls:
     def test_with_min_days(self):
         bls = [(0, 1, 'ee'), (1, 1, 'nn'), (2, 3, 'en')]
         days_binned = DataContainer({bl: np.ones(100) for bl in bls})
-        assert mt.get_selected_bls(bls, min_days=2) == []
+        assert mt.get_selected_bls(bls, days_binned=days_binned, min_days=2) == []
 
 
 class TestDownSelectZscores:
