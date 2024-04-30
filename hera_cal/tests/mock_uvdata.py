@@ -137,6 +137,7 @@ def create_uvd_identifiable(
     with_noise: bool = False,
     autos_noise: bool = False,
     flag_frac: float = 0.0,
+    time_axis_faster_than_bls: bool = True,
     **kwargs,
 ) -> UVData:
     """Make a UVData object with identifiable data.
@@ -146,8 +147,13 @@ def create_uvd_identifiable(
 
         data = pol* lst * [np.cos(freq*a) + I * np.sin(freq*b)]
     """
-    uvd = create_mock_hera_obs(empty=True, **kwargs)
+    uvd = create_mock_hera_obs(empty=True, time_axis_faster_than_bls=time_axis_faster_than_bls, **kwargs)
     uvd.data_array = identifiable_data_from_uvd(uvd)
+
+    if not time_axis_faster_than_bls:
+        uvd.data_array.shape = (uvd.Nbls, uvd.Ntimes, uvd.Nfreqs, uvd.Npols)
+        uvd.data_array = np.transpose(uvd.data_array, (1, 0, 2, 3))
+        uvd.data_array = uvd.data_array.reshape((uvd.Nbls * uvd.Ntimes, uvd.Nfreqs, uvd.Npols))
 
     if with_noise:
         add_noise_to_uvd(uvd, autos=autos_noise)
