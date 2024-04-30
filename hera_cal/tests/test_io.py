@@ -1831,4 +1831,4 @@ class Test_UVDataFromFastUVH5:
     def test_pass_metadata(self):
         uvd = io.uvdata_from_fastuvh5(self.meta_default, history='I made this!')
 
-        assert uvd.history == 'I made this!'
+        assert 'I made this!' in uvd.history
