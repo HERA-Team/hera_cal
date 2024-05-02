@@ -80,6 +80,7 @@ def create_mock_hera_obs(
         polarization_array=pols,
         antenna_positions=antpos,
         antpairs=np.array(antpairs),
+        antenna_diameters=np.ones(len(antpos)) * 14.6,
         telescope_location=HERA_LOC,
         telescope_name="HERA",
         times=times,
@@ -90,6 +91,7 @@ def create_mock_hera_obs(
         channel_width=np.diff(freqs)[0] if len(freqs) > 1 else np.diff(PHASEII_FREQS)[0],
     )
     uvd.polarization_array = np.array(uvd.polarization_array)
+
     return uvd
 
 

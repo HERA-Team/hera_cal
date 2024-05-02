@@ -5,13 +5,12 @@ import numpy as np
 from scipy.stats import gamma, chi2, norm
 
 
-def get_samples(
+def get_vis(
     ndays: int = 10,
     nvars: int = 200000,
-    absolute: bool = True,
-    mean: bool = False,
     weighted: bool = False,
-    allow_zeros: bool = False
+    allow_zeros: bool = False,
+    absolute: bool = True
 ):
     rng = np.random.default_rng(1)
 
@@ -21,14 +20,28 @@ def get_samples(
     else:
         weights = np.ones((ndays, nvars))
 
-    x = rng.normal(size=(ndays, nvars), scale=np.where(weights == 0, 1, 1 / np.sqrt(weights)))
-    if absolute:
-        y = rng.normal(size=(ndays, nvars), scale=np.where(weights == 0, 1, 1 / np.sqrt(weights)))
+    scale = np.ones_like(weights).astype(float)
+    scale[weights > 0] = 1 / np.sqrt(weights[weights > 0])
 
-    zsq = weights * (x - np.average(x, axis=0, weights=weights))**2
+    x = rng.normal(scale=scale)
     if absolute:
-        zsq += weights * (y - np.average(y, axis=0, weights=weights))**2
+        x = x + 1j * rng.normal(scale=scale)
 
+    return x, weights
+
+
+def get_samples(
+    ndays: int = 10,
+    nvars: int = 200000,
+    absolute: bool = True,
+    mean: bool = False,
+    weighted: bool = False,
+    allow_zeros: bool = False
+):
+    x, weights = get_vis(ndays, nvars, weighted, allow_zeros, absolute)
+    avg = np.average(x, axis=0, weights=weights)
+
+    zsq = weights * np.abs(x - avg)**2
     if mean:
         zsq = np.mean(zsq, axis=0)
 
@@ -44,23 +57,13 @@ def get_excess_variance(
     weighted: bool = False,
     allow_zeros: bool = False
 ):
-    rng = np.random.default_rng(1)
+    x, weights = get_vis(ndays, nvars, weighted, allow_zeros, absolute)
+    avg = np.average(x, axis=0, weights=weights)
 
-    if weighted:
-        weights = rng.integers(low=0 if allow_zeros else 1, high=10, size=(ndays, nvars))
-    else:
-        weights = np.ones((ndays, nvars))
-
-    x = rng.normal(size=(ndays, nvars), scale=np.where(weights == 0, 1, 1 / np.sqrt(weights)))
-    if absolute:
-        y = rng.normal(size=(ndays, nvars), scale=np.where(weights == 0, 1, 1 / np.sqrt(weights)))
-
-    mean = np.average(x, axis=0, weights=weights)
-    var = np.average((x - mean)**2, axis=0, weights=weights)
+    var = np.average((x.real - avg.real)**2, axis=0, weights=weights)
 
     if absolute:
-        ymean = np.average(y, axis=0, weights=weights)
-        yvar = np.average((y - ymean)**2, axis=0, weights=weights)
+        yvar = np.average((x.imag - avg.imag)**2, axis=0, weights=weights)
         var += yvar
 
     excess_var = var * np.sum(weights, axis=0) / (ndays - 1)  # Bessel's correction, true var is 1
