@@ -85,10 +85,12 @@ def cross_stats(cross_rdc, cross_stack):
 
 class TestGetNightlyPredictedVariance:
     def test_cross(self, lstconfig, cross_stack, auto_stats, cross_stats):
+
         for ap in lstconfig.antpairs:
             for pol in lstconfig.pols:
                 bl = ap + (pol,)
                 print(bl)
+                assert bl in cross_stats.bls
                 predicted_var = mt.get_nightly_predicted_variance(
                     bl=bl, stack=cross_stack, auto_stats=auto_stats
                 )

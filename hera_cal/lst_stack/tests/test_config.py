@@ -9,6 +9,7 @@ from pathlib import Path
 import toml
 import attrs
 import re
+import copy
 
 
 class TestFixdLST:
@@ -318,7 +319,7 @@ class TestLSTConfig:
         mf = cfg.get_matched_files()
         good_cfg = cfg.create_config(mf)
 
-        with pytest.raises(ValueError, match='lst_grid must be a 0D, 1D or 2D array'):
+        with pytest.raises(ValueError, match='lst_grid must be a 1D or 2D array'):
             attrs.evolve(good_cfg, lst_grid=np.arange(16).reshape((2, 2, 2, 2)))
 
         with pytest.raises(ValueError, match=re.escape("lst_grid must have shape (n_output_files, nlsts_per_file)")):
@@ -335,6 +336,24 @@ class TestLSTConfig:
 
         with pytest.raises(ValueError, match="Autos must have the same antenna number on both sides"):
             attrs.evolve(good_cfg, autos=[(1, 2)])
+
+        with pytest.raises(ValueError, match="calfiles must have the same shape as matched_files"):
+            attrs.evolve(good_cfg, calfiles=good_cfg.matched_files[:-1])
+
+        with pytest.raises(ValueError, match="does not exist"):
+            cf = copy.deepcopy(good_cfg.matched_files)
+            cf[-1][-1][-1] = Path("non-existent.file")
+            attrs.evolve(good_cfg, calfiles=cf)
+
+        with pytest.raises(ValueError, match="calfiles has a different shape than matched_files"):
+            cf = [[[[fl, fl] for fl in night] for night in outfl] for outfl in good_cfg.matched_files]
+            attrs.evolve(good_cfg, calfiles=cf)
+
+        with pytest.raises(ValueError, match='pols must be a list of strings'):
+            attrs.evolve(good_cfg, pols=[1, 2, 3])
+
+        with pytest.raises(ValueError, match='pols must have at most 4 elements'):
+            attrs.evolve(good_cfg, pols=['xx', 'yy', 'xy', 'yx', 'extra'])
 
     @pytest.mark.parametrize('season', all_seasons)
     def test_lst_grid_edges(self, season, request):
@@ -401,6 +420,12 @@ class TestLSTConfig:
         cfgnew = cfg.at_single_bin(lst=getlst)
         assert cfgnew == cfgout
 
+    def test_bad_matched_files_config_single(self, request):
+        cfg = self.get_lstconfig('redavg', request).at_single_bin(bin_index=0)
+
+        with pytest.raises(ValueError, match='matched_files must be a list of Path objects'):
+            attrs.evolve(cfg, matched_files=[[fl] for fl in cfg.matched_files])
+
     def test_write_none_property(self, request, tmp_path):
         cfg = self.get_lstconfig('redavg', request)
 
@@ -418,3 +443,40 @@ class TestLSTConfig:
 
         with pytest.raises(ValueError, match='Cannot write attribute badprop'):
             cfg.write(tmp_path / 'somefile.h5')
+
+
+@pytest.fixture(scope='module')
+def redavg_configurator(season_redavg):
+    return config.LSTBinConfigurator(season_redavg)
+
+
+@pytest.fixture(scope='module')
+def redavg_single(season_redavg, redavg_configurator):
+    mf = redavg_configurator.get_matched_files()
+    return redavg_configurator.create_config(mf).at_single_bin(bin_index=0)
+
+
+class TestLSTConfigSingle:
+    def test_default_time_indices(self, redavg_configurator, redavg_single):
+        new = config.LSTConfigSingle(
+            config=redavg_configurator,
+            lst_grid=redavg_single.lst_grid,
+            matched_files=redavg_single.matched_files,
+            autos=redavg_single.autos,
+            antpairs=redavg_single.antpairs,
+            pols=redavg_single.pols,
+        )
+
+        assert all(np.allclose(ttnew, tt) for ttnew, tt in zip(new.time_indices, redavg_single.time_indices))
+
+    def test_bad_time_indices(self, redavg_single):
+        with pytest.raises(ValueError, match='time_indices must have the same length as matched_metas'):
+            attrs.evolve(redavg_single, time_indices=np.arange(len(redavg_single.matched_files) - 1))
+
+        with pytest.raises(ValueError, match='time_indices must be integer arrays'):
+            attrs.evolve(redavg_single, time_indices=[np.linspace(0, 1, 10) for _ in redavg_single.matched_files])
+
+        with pytest.raises(ValueError, match='time_indices must be shorter than the LSTs in the file'):
+            tidx = copy.deepcopy(redavg_single.time_indices)
+            tidx[-1] += 1000
+            attrs.evolve(redavg_single, time_indices=tidx)

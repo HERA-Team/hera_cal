@@ -121,13 +121,10 @@ def make_lst_grid(
     lst_grid = np.arange(0, 2 * np.pi - 1e-7, dlst) + dlst / 2
 
     # shift grid by begin_lst
-    if begin_lst is not None:
-        # enforce begin_lst to be within 0-2pi
-        begin_lst %= 2 * np.pi
-        begin_lst = lst_grid[np.argmin(np.abs(lst_grid - begin_lst))] - dlst / 2
-        lst_grid += begin_lst
-    else:
-        begin_lst = 0.0
+    # enforce begin_lst to be within 0-2pi
+    begin_lst %= 2 * np.pi
+    begin_lst = lst_grid[np.argmin(np.abs(lst_grid - begin_lst))] - dlst / 2
+    lst_grid += begin_lst
 
     lst_grid = lst_grid[lst_grid < (begin_lst + lst_width)]
 
@@ -707,16 +704,16 @@ class _LSTConfigBase(ABC):
     config: LSTBinConfigurator = attrs.field()
     lst_grid: np.ndarray = attrs.field(converter=np.asarray, eq=attrs.cmp_using(eq=np.allclose))
     matched_files: list[list[list[Path]]] = attrs.field(converter=_nested_list_of(Path))
-    calfiles: list[list[list[Path]]] | None = attrs.field(
-        converter=_nested_list_of(Path),
-    )
-    inpaint_files: list[list[list[Path]]] | None = attrs.field(
-        converter=_nested_list_of(Path),
-    )
     autos: list[tuple[int, int]] = attrs.field(converter=_to_antpairs)
     antpairs: list[tuple[int, int]] = attrs.field(converter=_to_antpairs)
     pols: list[str] = attrs.field()
-    properties: dict = attrs.field()
+    properties: dict = attrs.field(factory=dict)
+    calfiles: list[list[list[Path]]] | None = attrs.field(
+        default=None, converter=_nested_list_of(Path),
+    )
+    inpaint_files: list[list[list[Path]]] | None = attrs.field(
+        default=None, converter=_nested_list_of(Path),
+    )
 
     @calfiles.validator
     @inpaint_files.validator
@@ -753,8 +750,8 @@ class _LSTConfigBase(ABC):
 
     @lst_grid.validator
     def _lst_grid_validator(self, attribute, value):
-        if value.ndim not in (0, 1, 2):
-            raise ValueError("lst_grid must be a 0D, 1D or 2D array.")
+        if value.ndim not in (1, 2):
+            raise ValueError("lst_grid must be a 1D or 2D array.")
 
         if value.ndim == 2 and value.shape[1] != self.config.nlsts_per_file:
             raise ValueError(
@@ -792,9 +789,8 @@ class _LSTConfigBase(ABC):
                 # Any particular outfile might have _less_ than n_nights, since not all nights
                 # will contribute to any particular output file.
                 raise ValueError(f"each list in matched_files should be n_nights long: {self.n_nights}")
-        else:
-            if not all(isinstance(pth, Path) for pth in value):
-                raise ValueError("matched_files must be a list of Path objects.")
+        elif not all(isinstance(pth, Path) for pth in value):
+            raise ValueError("matched_files must be a list of Path objects.")
 
     @cached_property
     def matched_metas(self) -> list[list[list[FastUVH5Meta]]]:
@@ -964,7 +960,7 @@ class LSTConfig(_LSTConfigBase):
         grid_edges = self.lst_grid_edges[outfile]
 
         if lstindex is not None:
-            lst_grid = lst_grid[lstindex]
+            lst_grid = lst_grid[[lstindex]]
             grid_edges = grid_edges[lstindex:lstindex + 2]
 
         tinds, _, matched_files, cals, inp = filter_required_files_by_times(
@@ -1114,12 +1110,9 @@ class LSTConfigSingle(_LSTConfigBase):
     @cached_property
     def lst_grid_edges(self) -> np.ndarray:
         """The LST grid edges for the LST bins in this object."""
-        if self.lst_grid.ndim == 0:
-            return np.array([self.lst_grid - self.dlst / 2, self.lst_grid + self.dlst / 2])
-        else:
-            return np.concatenate(
-                [self.lst_grid - self.dlst / 2, [self.lst_grid[-1] + self.dlst / 2]],
-            )
+        return np.concatenate(
+            [self.lst_grid - self.dlst / 2, [self.lst_grid[-1] + self.dlst / 2]],
+        )
 
     @property
     def n_lsts(self) -> int:

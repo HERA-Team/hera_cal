@@ -91,7 +91,8 @@ def create_mock_hera_obs(
         channel_width=np.diff(freqs)[0] if len(freqs) > 1 else np.diff(PHASEII_FREQS)[0],
     )
     uvd.polarization_array = np.array(uvd.polarization_array)
-
+    uvd.blts_are_rectangular = True
+    uvd.time_axis_faster_than_bls = time_axis_faster_than_bls
     return uvd
 
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from ..config import LSTBinConfigurator
 import shutil
 from hera_cal.lst_stack.io import apply_filename_rules
+from pyuvdata import UVFlag
 
 
 class TestAdjustLSTBinEdges:
@@ -397,3 +398,31 @@ class TestLSTBinFilesFromConfig:
 
         with pytest.raises(ValueError, match="Could not find any baseline from group"):
             binning.lst_bin_files_from_config(cfg)
+
+
+class TestLSTStack:
+    def setup_class(self):
+        self.uvd = mockuvd.create_mock_hera_obs(
+            integration_time=1.0, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
+            time_axis_faster_than_bls=False
+        )
+        self.stack = binning.LSTStack(self.uvd)
+
+    def test_bad_uvd(self):
+        uvd = mockuvd.create_mock_hera_obs(
+            integration_time=1.0, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
+            time_axis_faster_than_bls=True
+        )
+        print('bl', uvd.time_axis_faster_than_bls)
+        with pytest.raises(ValueError, match='time_axis_faster_than_bls must be False'):
+            binning.LSTStack(uvd)
+
+        uvf = UVFlag(self.uvd)
+        uvf.to_waterfall()
+        with pytest.raises(ValueError, match="UVFlag type must be 'baseline'"):
+            binning.LSTStack(uvf)
+
+        rng = np.random.default_rng(0)
+        uvd.reorder_blts(order=rng.permutation(uvd.Nblts))
+        with pytest.raises(ValueError, match='blts_are_rectangular must be True'):
+            binning.LSTStack(uvd)

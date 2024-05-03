@@ -1,6 +1,9 @@
 from .. import io
 from pathlib import Path
 import pytest
+from ..config import _nested_list_of
+from pyuvdata.uvdata import FastUVH5Meta, UVData
+import numpy as np
 
 
 @pytest.fixture(scope="module")
@@ -64,6 +67,10 @@ class TestApplyFilenameRules:
         )
         assert all(o is None for o in out)
 
+    def test_empty_list(self):
+        out = io.apply_filename_rules([], [(".uvh5", ".calfile")])
+        assert out == []
+
 
 def test_configure_inpainted_mode():
     modes = io._configure_inpainted_mode(
@@ -109,3 +116,58 @@ def test_configure_inpainted_mode():
         io._configure_inpainted_mode(
             output_flagged=False, output_inpainted=False, where_inpainted_files=[]
         )
+
+
+@pytest.fixture(scope="module")
+def redavg_metas(season_redavg):
+    return _nested_list_of(FastUVH5Meta)(season_redavg)
+
+
+@pytest.fixture(scope="module")
+def uvd_template(season_redavg):
+    return UVData.from_file(season_redavg[0][0])
+
+
+class TestFilterRequiredFilesByTimes:
+    def test_lstmin_larger_than_max(self, redavg_metas):
+
+        tinds, lsts, files, cals, inp = io.filter_required_files_by_times(
+            lst_range=(np.pi + 0.01, np.pi - 0.01),
+            data_metas=redavg_metas
+        )
+        # should have all files.
+        assert len(files) == sum(len(m) for m in redavg_metas)
+
+
+class TestCreateLSTBinOutputFile:
+    def test_passing_kind(self, uvd_template, tmp_path):
+        out = io.create_lstbin_output_file(
+            uvd_template, outdir=tmp_path, fname="{kind}.uvh5",
+            kind="test"
+        )
+
+        assert "test" in out.name
+
+    def test_poorly_formed_fname(self, uvd_template, tmp_path):
+        io.create_lstbin_output_file(
+            uvd_template, outdir=tmp_path, fname="/thisfile.uvh5", kind='yoho'
+        )
+
+        assert (tmp_path / 'thisfile.uvh5').exists()
+
+    def test_dir_not_existing(self, uvd_template, tmp_path):
+        io.create_lstbin_output_file(
+            uvd_template, outdir=tmp_path / "non_existent", fname="{kind}.uvh5", kind='yoho'
+        )
+
+        assert (tmp_path / 'non_existent' / 'yoho.uvh5').exists()
+
+    def test_no_overwrite(self, uvd_template, tmp_path):
+        io.create_lstbin_output_file(
+            uvd_template, outdir=tmp_path, fname="test.uvh5", kind='yoho'
+        )
+
+        with pytest.raises(FileExistsError):
+            io.create_lstbin_output_file(
+                uvd_template, outdir=tmp_path, fname="test.uvh5", kind='yoho'
+            )
