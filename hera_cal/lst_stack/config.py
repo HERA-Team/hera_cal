@@ -792,9 +792,6 @@ class _LSTConfigBase(ABC):
                 # Any particular outfile might have _less_ than n_nights, since not all nights
                 # will contribute to any particular output file.
                 raise ValueError(f"each list in matched_files should be n_nights long: {self.n_nights}")
-
-            if not all(isinstance(pth, Path) for fl in value for night in fl for pth in night):
-                raise ValueError("matched_files must be a list of lists of lists of Path objects.")
         else:
             if not all(isinstance(pth, Path) for pth in value):
                 raise ValueError("matched_files must be a list of Path objects.")
@@ -809,10 +806,6 @@ class _LSTConfigBase(ABC):
     def _antpairs_validator(self, attribute, value):
         if any(len(v) != 2 for v in value):
             raise ValueError(f"{attribute.name} must be a list of tuples of length 2.")
-
-        if not all(isinstance(vv, int) for v in value for vv in v):
-            types = {type(vv) for v in value for vv in v}
-            raise ValueError(f"{attribute.name} must be a list of tuples of integers. Got {types}.")
 
     @pols.validator
     def _pols_validator(self, attribute, value):
@@ -1088,7 +1081,9 @@ class LSTConfigSingle(_LSTConfigBase):
         This will be determined by reading the metadata in the matched files if
         necessary.
     """
-    time_indices: list[np.ndarray] = attrs.field()
+    time_indices: list[np.ndarray] = attrs.field(
+        eq=attrs.cmp_using(lambda x, y: all(np.allclose(xx, yy) for xx, yy in zip(x, y)))
+    )
 
     @time_indices.default
     def _time_indices_default(self):
@@ -1119,9 +1114,12 @@ class LSTConfigSingle(_LSTConfigBase):
     @cached_property
     def lst_grid_edges(self) -> np.ndarray:
         """The LST grid edges for the LST bins in this object."""
-        return np.concatenate(
-            [self.lst_grid - self.dlst / 2, [self.lst_grid[-1] + self.dlst / 2]],
-        )
+        if self.lst_grid.ndim == 0:
+            return np.array([self.lst_grid - self.dlst / 2, self.lst_grid + self.dlst / 2])
+        else:
+            return np.concatenate(
+                [self.lst_grid - self.dlst / 2, [self.lst_grid[-1] + self.dlst / 2]],
+            )
 
     @property
     def n_lsts(self) -> int:

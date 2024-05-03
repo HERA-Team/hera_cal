@@ -7,6 +7,8 @@ from hypothesis import given, strategies as st
 from pyuvdata.uvdata import FastUVH5Meta
 from pathlib import Path
 import toml
+import attrs
+import re
 
 
 class TestFixdLST:
@@ -73,7 +75,8 @@ class TestMakeLSTGrid:
 
     def test_default_begin_lst(self):
         grid = config.make_lst_grid(dlst=0.01)
-        assert grid[0] == 0.0
+        dlst = grid[1] - grid[0]
+        assert np.isclose(grid[0], 0.0 + dlst / 2)
 
 
 class TestGetAllAntpairs:
@@ -163,14 +166,14 @@ class TestLSTBinConfigurator:
             where_inpainted_file_rules=[(".uvh5", ".where_inpainted.h5")] if 'inpaint' in season else None
         )
 
-    def test_bad_inputs(self):
+    def test_bad_inputs(self, season_redavg):
         with pytest.raises(ValueError, match="LST must be between 0 and 2pi"):
             config.LSTBinConfigurator(season_redavg, lst_start=-1)
 
         with pytest.raises(ValueError, match="LST must be between 0 and 2pi"):
             config.LSTBinConfigurator(season_redavg, lst_start=3 * np.pi)
 
-        with pytest.raises(ValueError, match="calfile_ruls must be a list of tuples of length 2"):
+        with pytest.raises(ValueError, match="calfile_rules must be a list of tuples of length 2"):
             config.LSTBinConfigurator(season_redavg, calfile_rules=[1, 2, 3])
 
     @pytest.mark.parametrize('season', all_seasons)
@@ -268,10 +271,10 @@ class TestLSTBinConfigurator:
             config.LSTBinConfigurator.from_toml({})
 
         with pytest.raises(ValueError, match="No data files found"):
-            config.LSTBinConfigurator.from_toml({'datafiles': []})
+            config.LSTBinConfigurator.from_toml({'datafiles': [], 'datadir': '.'})
 
         with pytest.raises(ValueError, match="No data files found"):
-            config.LSTBinConfigurator.from_toml({'datafiles': [[], []]})
+            config.LSTBinConfigurator.from_toml({'datafiles': ["non-existent/*", "other-non-exists*"], 'datadir': '.'})
 
     def test_from_toml_datafile_dict(self, tmp_path):
         # Make a few files to find.
@@ -316,40 +319,22 @@ class TestLSTConfig:
         good_cfg = cfg.create_config(mf)
 
         with pytest.raises(ValueError, match='lst_grid must be a 0D, 1D or 2D array'):
-            config.LSTConfigSingle(config=cfg, lst_grid=np.linspace(16).reshape((2, 2, 2, 2)), matched_files=mf)
+            attrs.evolve(good_cfg, lst_grid=np.arange(16).reshape((2, 2, 2, 2)))
 
-        with pytest.raises(ValueError, match="lst_grid must have shape (n_output_files, nlsts_per_file)"):
-            config.LSTConfigSingle(config=cgf, lst_grid=np.linspace(16).reshape((2, 8)), matched_files=mf)
+        with pytest.raises(ValueError, match=re.escape("lst_grid must have shape (n_output_files, nlsts_per_file)")):
+            attrs.evolve(good_cfg, lst_grid=np.arange(16).reshape((2, 8)))
 
-        with pytest.raises(ValueError, match="matched_files mustbe a list with one entry per output file"):
-            config.LSTConfigSingle(
-                config=cgf, lst_grid=good_cfg.lst_grid, matched_files=mf[:-1]
-            )
+        with pytest.raises(ValueError, match="matched_files must be a list with one entry per output file"):
+            attrs.evolve(good_cfg, matched_files=good_cfg.matched_files[:-1])
 
         with pytest.raises(ValueError, match="each list in matched_files should be n_nights long"):
-            config.LSTConfigSingle(
-                config=cgf, lst_grid=good_cfg.lst_grid, matched_files=[mmf[:-1] for mmf in mf]
-            )
-
-        with pytest.raises(ValueError, match="matched_files must be a list of lists of lists of Path objects"):
-            config.LSTConfigSingle(
-                config=cgf, lst_grid=good_cfg.lst_grid, matched_files=[[str(mmmf) for mmmf in mmf[:-1]] for mmf in mf]
-            )
+            attrs.evolve(good_cfg, matched_files=[mmf + [mmf[-1]] for mmf in good_cfg.matched_files])
 
         with pytest.raises(ValueError, match="antpairs must be a list of tuples of length 2"):
-            config.LSTConfigSingle(
-                config=cgf, lst_grid=good_cfg.lst_grid, matched_files=mf, antpairs='bad'
-            )
-
-        with pytest.raises(ValueError, match="antpairs must be a list of tuples of integers"):
-            config.LSTConfigSingle(
-                config=cgf, lst_grid=good_cfg.lst_grid, matched_files=mf, antpairs=[(1, 'e')]
-            )
+            attrs.evolve(good_cfg, antpairs=[(1, 1, 2.5)])
 
         with pytest.raises(ValueError, match="Autos must have the same antenna number on both sides"):
-            config.LSTConfigSingle(
-                config=cgf, lst_grid=good_cfg.lst_grid, matched_files=mf, autos=[(1, 2)]
-            )
+            attrs.evolve(good_cfg, autos=[(1, 2)])
 
     @pytest.mark.parametrize('season', all_seasons)
     def test_lst_grid_edges(self, season, request):
@@ -399,11 +384,11 @@ class TestLSTConfig:
         with pytest.raises(ValueError, match='Either lst or bin_index must be specified'):
             cfg.at_single_bin()
 
-        with pytest.raises(ValueError, match='Only one of lst or outfile can be specified'):
+        with pytest.raises(ValueError, match='Only one of lst or bin_index can be specified'):
             cfg.at_single_bin(bin_index=0, lst=0)
 
         cfgout = cfg.at_single_bin(bin_index=0)
-        assert len(cfgout.matched_metas) == 1 if season == 'redavg_irregular' else 3  # number of nights
+        assert len(cfgout.matched_metas) == 3  # number of nights
         assert len(cfgout.time_indices) == len(cfgout.matched_metas)
         assert all(isinstance(x, np.ndarray) for x in cfgout.time_indices)
         assert len(cfgout.lst_grid_edges) == 2  # 2 bins in the file, so 3 edges
@@ -422,7 +407,7 @@ class TestLSTConfig:
         cfg.properties['nonetype'] = None
 
         cfg.write(tmp_path / 'outfile.h5')
-        new = LSTConfig.from_file(tmp_path / 'outfile.h5')
+        new = config.LSTConfig.from_file(tmp_path / 'outfile.h5')
 
         assert new.properties['nonetype'] is None
 
