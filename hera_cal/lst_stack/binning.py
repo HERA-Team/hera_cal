@@ -8,12 +8,18 @@ from .. import utils
 from typing import Sequence
 from ..red_groups import RedundantGroups
 from pyuvdata.uvdata import FastUVH5Meta
+from pyuvdata import UVData, UVFlag
+from functools import cached_property
+from astropy import units
+
 from pyuvdata import utils as uvutils
 from .. import io
 from ..datacontainer import DataContainer
 from .. import apply_cal
-
+from .config import LSTConfigSingle
 logger = logging.getLogger(__name__)
+from astropy.coordinates import EarthLocation
+from ..utils import _comply_vispol
 
 
 def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
@@ -22,6 +28,12 @@ def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
 
     Performs the adjustment in-place.
     """
+    if lst_bin_edges.ndim != 1:
+        raise ValueError("lst_bin_edges must be a 1D array")
+
+    if np.any(np.diff(lst_bin_edges) < 0):
+        raise ValueError("lst_bin_edges must be monotonically increasing.")
+
     while lst_bin_edges[0] < 0:
         lst_bin_edges += 2 * np.pi
     while lst_bin_edges[0] >= 2 * np.pi:
@@ -197,14 +209,18 @@ def lst_align(
             _nsamples.append(nsamples[mask])
             if where_inpainted is not None:
                 _where_inpainted.append(where_inpainted[mask])
+            else:
+                _where_inpainted.append(None)
         else:
             _data.append(np.zeros(empty_shape, complex))
             _flags.append(np.zeros(empty_shape, bool))
             _nsamples.append(np.zeros(empty_shape, int))
             if where_inpainted is not None:
                 _where_inpainted.append(np.zeros(empty_shape, bool))
+            else:
+                _where_inpainted.append(None)
 
-    return lst_bin_centres, _data, _flags, _nsamples, _where_inpainted or None
+    return lst_bin_centres, _data, _flags, _nsamples, _where_inpainted
 
 
 def _allocate_dfn(shape: tuple[int], d=0.0, f=0, n=0):
@@ -246,6 +262,25 @@ def get_lst_bins(
     return bins, lsts, mask
 
 
+def _get_freqs_chans(freqs, freq_min: float | None = None, freq_max: float | None = None):
+
+    if freq_min is None and freq_max is None:
+        freq_chans = None
+    else:
+        freq_chans = np.arange(len(freqs))
+
+    if freq_min is not None:
+        mask = freqs >= freq_min
+        freqs = freqs[mask]
+        freq_chans = freq_chans[mask]
+    if freq_max is not None:
+        mask = freqs <= freq_max
+        freqs = freqs[mask]
+        freq_chans = freq_chans[mask]
+
+    return freqs, freq_chans
+
+
 def lst_bin_files_for_baselines(
     data_files: list[Path | FastUVH5Meta],
     lst_bin_edges: np.ndarray,
@@ -253,7 +288,6 @@ def lst_bin_files_for_baselines(
     freqs: np.ndarray | None = None,
     pols: np.ndarray | None = None,
     cal_files: list[Path | None] | None = None,
-    time_arrays: list[np.ndarray] | None = None,
     time_idx: list[np.ndarray] | None = None,
     ignore_flags: bool = False,
     rephase: bool = True,
@@ -305,9 +339,6 @@ def lst_bin_files_for_baselines(
         no calibration will be applied. If provided, must be the same length as
         ``data_files``. If a particular element is None, no calibration will be
         applied to that file.
-    time_arrays
-        A list of time arrays for each file. If not provided, will be read from the
-        files. If provided, must be the same length as ``data_files``.
     time_idx
         A list of arrays, one for each file, where the array is the same length as
         the time array for that file, and is boolean, indicating whether each time
@@ -349,6 +380,7 @@ def lst_bin_files_for_baselines(
         Same as ``data``, but boolean flags indicating where inpainting has been done.
     times_in_bins
         The JDs that are in each LST bin -- a list of arrays.
+    lsts_in_bins
     """
     metas = [
         (
@@ -364,19 +396,7 @@ def lst_bin_files_for_baselines(
     if freqs is None:
         freqs = np.squeeze(metas[0].freq_array)
 
-    if freq_min is None and freq_max is None:
-        freq_chans = None
-    else:
-        freq_chans = np.arange(len(freqs))
-
-    if freq_min is not None:
-        mask = freqs >= freq_min
-        freqs = freqs[mask]
-        freq_chans = freq_chans[mask]
-    if freq_max is not None:
-        mask = freqs <= freq_max
-        freqs = freqs[mask]
-        freq_chans = freq_chans[mask]
+    freqs, freq_chans = _get_freqs_chans(freqs, freq_min, freq_max)
 
     if pols is None:
         pols = metas[0].pols
@@ -397,12 +417,11 @@ def lst_bin_files_for_baselines(
         time_idx = []
         for meta in metas:
             _lsts = meta.get_transactional("lsts")
-            time_idx.append(op(_lsts >= lst_bin_edges[0], _lsts < lst_bin_edges[-1]))
-
-    if time_arrays is None:
-        time_arrays = [
-            meta.get_transactional("times")[idx] for meta, idx in zip(metas, time_idx)
-        ]
+            time_idx.append(
+                np.argwhere(
+                    op(_lsts >= lst_bin_edges[0], _lsts < lst_bin_edges[-1])
+                ).flatten()
+            )
 
     if lsts is None:
         lsts = np.concatenate(
@@ -432,12 +451,12 @@ def lst_bin_files_for_baselines(
 
     # This loop actually reads the associated data in this LST bin.
     ntimes_so_far = 0
-    for meta, calfl, tind, tarr, inpfile in zip(
-        metas, cal_files, time_idx, time_arrays, where_inpainted_files
+    for meta, calfl, tind, inpfile in zip(
+        metas, cal_files, time_idx, where_inpainted_files
     ):
         logger.info(f"Reading {meta.path}")
-        slc = slice(ntimes_so_far, ntimes_so_far + len(tarr))
-        ntimes_so_far += len(tarr)
+        slc = slice(ntimes_so_far, ntimes_so_far + len(tind))
+        ntimes_so_far += len(tind)
 
         # hd = io.HERAData(str(fl.path), filetype='uvh5')
         data_antpairs = meta.get_transactional("antpairs")
@@ -456,7 +475,7 @@ def lst_bin_files_for_baselines(
                 if bl in data_antpairs or bl[::-1] in data_antpairs
             ]
 
-        if not bls_to_load or not np.any(tind):
+        if not bls_to_load or len(tind) == 0:
             # If none of the requested baselines are in this file, then just
             # set stuff as nan and go to next file.
             logger.warning(f"None of the baseline-times are in {meta.path}. Skipping.")
@@ -465,13 +484,17 @@ def lst_bin_files_for_baselines(
             nsamples[slc] = 0
             continue
 
-        # TODO: use Fast readers here instead.
+        # TODO: use Fast readers here instead, and select times directly on read.
         _data, _flags, _nsamples = io.HERAData(meta.path).read(
             bls=bls_to_load,
-            times=tarr,
             freq_chans=freq_chans,
             polarizations=pols,
         )
+
+        _data.select_or_expand_times(indices=tind, skip_bda_check=True)
+        _flags.select_or_expand_times(indices=tind, skip_bda_check=True)
+        _nsamples.select_or_expand_times(indices=tind, skip_bda_check=True)
+
         if inpfile is not None:
             # This returns a DataContainer (unless something went wrong) since it should
             # always be a 'baseline' type of UVFlag.
@@ -481,7 +504,7 @@ def lst_bin_files_for_baselines(
 
             # We need to down-selecton times/freqs (bls and pols will be sub-selected
             # based on those in the data through the next loop)
-            inpainted.select_or_expand_times(new_times=tarr, skip_bda_check=True)
+            inpainted.select_or_expand_times(indices=tind, skip_bda_check=True)
             inpainted.select_freqs(channels=freq_chans)
         else:
             inpainted = None
@@ -492,7 +515,7 @@ def lst_bin_files_for_baselines(
             uvc = io.to_HERACal(calfl)
             gains, cal_flags, _, _ = uvc.read(freq_chans=freq_chans)
             # down select times if necessary
-            if False in tind and uvc.Ntimes > 1:
+            if len(tind) < uvc.Ntimes and uvc.Ntimes > 1:
                 # If uvc has Ntimes == 1, then broadcast across time will work automatically
                 uvc.select(times=uvc.time_array[tind])
                 gains, cal_flags, _, _ = uvc.build_calcontainers()
@@ -565,10 +588,230 @@ def lst_bin_files_for_baselines(
     )
 
     bins = get_lst_bins(lsts, lst_bin_edges)[0]
-    times = np.concatenate(time_arrays)
+    times = np.concatenate([
+        meta.get_transactional("times")[idx] for meta, idx in zip(metas, time_idx)
+    ])
+
     times_in_bins = []
+    lsts_in_bins = []
     for i in range(len(bin_lst)):
         mask = bins == i
         times_in_bins.append(times[mask])
+        lsts_in_bins.append(lsts[mask])
 
-    return bin_lst, data, flags, nsamples, where_inpainted, times_in_bins
+    return bin_lst, data, flags, nsamples, where_inpainted, times_in_bins, lsts_in_bins
+
+
+class LSTStack:
+    """A very simple validation layer on top of UVData for LST-stacked data."""
+    def __init__(self, uvd: UVData | UVFlag):
+        self._uvd = uvd
+        self._validate_uvd()
+
+    def _validate_uvd(self):
+        if isinstance(self._uvd, UVData):
+            if not self._uvd.blts_are_rectangular:
+                raise ValueError("blts_are_rectangular must be True")
+
+            if self._uvd.time_axis_faster_than_bls:
+                raise ValueError("time_axis_faster_than_bls must be False")
+        elif isinstance(self._uvd, UVFlag):
+            # Here, for now we must _assume_ that the blts are rectangular and
+            # that the time axis is the outer axis. This is because we don't have
+            # a way to check this in UVFlag objects (yet)
+            if self._uvd.type != "baseline":
+                raise ValueError("UVFlag type must be 'baseline'")
+
+    def __getattr__(self, item):
+        return getattr(self._uvd, item)
+
+    def __setattr__(self, key, value):
+        if key == "_uvd":
+            super().__setattr__(key, value)
+
+        setattr(self._uvd, key, value)
+
+    @cached_property
+    def dt(self) -> units.Quantity[units.s]:
+        """The median integration time of the data."""
+        return np.median(self.integration_time) * units.s
+
+    @cached_property
+    def df(self) -> units.Quantity[units.Hz]:
+        """The median frequency resolution of the data."""
+        return np.median(np.diff(self.freq_array)) * units.Hz
+
+    @property
+    def data(self) -> np.ndarray:
+        """A view into the data array, reshaped to (Nbls, Ntimes, Nfreqs, Npols)."""
+        return self._uvd.data_array.reshape(
+            (self.Ntimes, self.Nbls, len(self.freq_array), len(self.polarization_array))
+        )
+
+    @property
+    def nsamples(self) -> np.ndarray:
+        """A view into the nsamples array, reshaped to (Nbls, Ntimes, Nfreqs, Npols)."""
+        return self._uvd.nsample_array.reshape(
+            (self.Ntimes, self.Nbls, len(self.freq_array), len(self.polarization_array))
+        )
+
+    @property
+    def flags(self) -> np.ndarray:
+        """A view into the flags array, reshaped to (Nbls, Ntimes, Nfreqs, Npols)."""
+        return self._uvd.flag_array.reshape(
+            (self.Ntimes, self.Nbls, len(self.freq_array), len(self.polarization_array))
+        )
+
+    @property
+    def metrics(self) -> np.ndarray:
+        """A view into the flags array, reshaped to (Nbls, Ntimes, Nfreqs, Npols)."""
+        return self._uvd.metric_array.reshape(
+            (self.Ntimes, self.Nbls, len(self.freq_array), len(self.polarization_array))
+        )
+
+    @property
+    def times(self) -> np.ndarray:
+        """The unique times of the data (same shape as first axis of ``data``)."""
+        return self._uvd.time_array[::self.Nbls]
+
+    @property
+    def nights(self) -> np.ndarray:
+        """The nights in the data as integer JDs"""
+        return self.times.astype(int)
+
+    @property
+    def antpairs(self) -> list[Antpair]:
+        """The antenna pairs in the data."""
+        return list(zip(self.ant_1_array[:self.Nbls], self.ant_2_array[:self.Nbls]))
+
+    @property
+    def pols(self) -> list[str]:
+        """The polarizations in the data."""
+        return utils.polnum2str(self.polarization_array, x_orientation=self.x_orientation)
+
+    def copy(self, *args, **kwargs):
+        """Return a copy of the LSTStack object."""
+        return LSTStack(self._uvd.copy(*args, **kwargs))
+
+
+def lst_bin_files_from_config(
+    config: LSTConfigSingle,
+    bl_chunk_to_load: int | str = 0,
+    nbl_chunks: int = 1,
+    rephase: bool = True,
+    freq_min: float | None = None,
+    freq_max: float | None = None,
+) -> list[LSTStack] | None:
+    """Read and LST-bin data from a configuration object.
+
+    This function is the main entry point for binning (not averaging) data into LST
+    bins, given a :class:`LSTConfigSingle` object, which is the intended mode of
+    operation of the `lststack` subpackage.
+
+    Parameters
+    ----------
+    config : LSTConfigSingle
+        The configuration object to read data from.
+    bl_chunk_to_load : int or str, optional
+        The chunk of baselines to load. If 'autos', will load only the autos. If an
+        integer, will load the nth chunk of baselines, where the number of chunks
+        is defined by ``nbl_chunks``. Default is 0.
+    nbl_chunks : int, optional
+        The number of chunks to split the baselines into. Default is 1. Use more chunks
+        to reduce memory usage.
+    rephase : bool, optional
+        Whether to rephase the data to the LST bin centres. Default is True.
+    freq_min : float, optional
+        The minimum frequency to include in the data (Hz). Default is all frequencies.
+    freq_max : float, optional
+        The maximum frequency to include in the data (Hz). Default is all frequencies.
+
+    Returns
+    -------
+    list[LSTStack] or None
+        A list of LSTStack objects, one for each LST bin. If there is no data to read,
+        returns None. The LSTStack object looks and feels just like a UVData object, but
+        has some additional properties and methods that are useful for LST-stacked data,
+        as well as validating that the data is in the correct format.
+
+        In particular, the LSTStack object has "rectangular" baselines and times (i.e.
+        at each time, the same set of baselines are present), and the time axis is
+        slower than the baseline axis (i.e the data has virtual shape
+        ``(Nnights, Nbls, Nfreqs, Npols)``). Attributes on the stack that are extra to
+        base UVData are ``data``, ``nsamples`` and ``flags`` -- all of which are simply
+        views into their UVData counterparts (e.g. ``data_array``), but where the
+        baseline and time axis are explicitly split.
+    """
+    if not config.matched_files:
+        # An empty list of files means there's no data to read for this outfile
+        return None
+
+    # get metadata
+    meta = config.config.datameta
+
+    # Split up the baselines into chunks that will be LST-binned together.
+    # This is just to save on RAM.
+    if bl_chunk_to_load == "autos":
+        antpairs = config.autopairs
+    else:
+        nbls_to_load = int(np.ceil(len(config.antpairs) / nbl_chunks))
+        antpairs = config.antpairs[nbls_to_load * bl_chunk_to_load: nbls_to_load * (bl_chunk_to_load + 1)]
+
+    all_lsts = np.concatenate(config.get_lsts())
+
+    _, data, flags, nsamples, where_inpainted, binned_times, binned_lsts = lst_bin_files_for_baselines(
+        antpairs=antpairs,
+        data_files=config.matched_files,
+        lst_bin_edges=config.lst_grid_edges,
+        freqs=meta.freq_array,
+        pols=config.pols,
+        cal_files=config.calfiles,
+        time_idx=config.time_indices,
+        ignore_flags=False,
+        rephase=rephase,
+        antpos=config.config.reds.antpos,
+        lsts=all_lsts,
+        redundantly_averaged=config.config.is_redundantly_averaged,
+        reds=config.config.reds,
+        freq_min=freq_min,
+        freq_max=freq_max,
+        where_inpainted_files=config.inpaint_files
+    )
+
+    freqs, _ = _get_freqs_chans(meta.freq_array, freq_min, freq_max)
+
+    out = []
+    for (d, f, n, wf, bt) in zip(data, flags, nsamples, where_inpainted, binned_times):
+        # To enable inpaint-mode, set nsamples where things are flagged and inpainted
+        # to zero, and set the flags to false.
+        if wf is not None:
+            f[wf] = False
+            n[wf] *= -1
+
+        uv = UVData.new(
+            freq_array=freqs,
+            polarization_array=utils.polstr2num([_comply_vispol(p) for p in config.pols], x_orientation=meta.x_orientation),
+            antenna_positions=meta.antpos_enu,
+            telescope_location=EarthLocation.from_geocentric(*meta.telescope_location, unit="m"),
+            telescope_name=meta.telescope_name,
+            times=bt,
+            antpairs=antpairs,
+            do_blt_outer=True,
+            integration_time=np.mean(meta.integration_time),
+            antenna_names=meta.antenna_names,
+            antenna_numbers=meta.antenna_numbers,
+            blts_are_rectangular=True,
+            data_array=d.reshape((-1, len(freqs), len(config.pols))),
+            flag_array=f.reshape((-1, len(freqs), len(config.pols))),
+            nsample_array=n.reshape((-1, len(freqs), len(config.pols))),
+            vis_units="Jy",
+            time_axis_faster_than_bls=False,
+            x_orientation=meta.x_orientation,
+        )
+
+        # These can be removed in future pyuvdata versions where they are set automatically.
+        uv.blts_are_rectangular = True
+        uv.time_axis_faster_than_bls = False
+
+        out.append(LSTStack(uv))
+    return out

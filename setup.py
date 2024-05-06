@@ -67,6 +67,7 @@ setup_args = {
         "optax",
         'attrs',
         'frozendict',
+        "toml",
     ],
     'extras_require': {
         'dev': [
@@ -74,7 +75,8 @@ setup_args = {
             "pre-commit",
             "pytest-cov",
             "hera_sim",
-            "pytest-xdist"
+            "pytest-xdist",
+            "hypothesis"
         ]
     },
     'zip_safe': False,

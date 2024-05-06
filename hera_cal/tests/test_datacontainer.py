@@ -470,6 +470,13 @@ class TestDataContainerWithRealData:
                 assert np.all(dc.lsts == (np.arange(10) * 2 * np.pi / 10)[new_times])
                 assert np.all(dc.lsts_by_bl[0, 1] == (np.arange(10) * 2 * np.pi / 10)[new_times])
 
+        # Test bad input
+        with pytest.raises(ValueError, match="Either new_times or indices must be given"):
+            dc1.select_or_expand_times()
+
+        with pytest.raises(ValueError, match="Cannot specify both new_times and indices"):
+            dc1.select_or_expand_times(new_times=[0], indices=[0])
+
     def test_select_freqs(self):
         fq = np.linspace(0, 1, 10)
         dc1 = datacontainer.DataContainer({(0, 1, 'ee'): np.arange(10)})
