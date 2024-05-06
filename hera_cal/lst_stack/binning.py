@@ -752,7 +752,7 @@ def lst_bin_files_from_config(
     # Split up the baselines into chunks that will be LST-binned together.
     # This is just to save on RAM.
     if bl_chunk_to_load == "autos":
-        antpairs = config.autos
+        antpairs = config.autopairs
     else:
         nbls_to_load = int(np.ceil(len(config.antpairs) / nbl_chunks))
         antpairs = config.antpairs[nbls_to_load * bl_chunk_to_load: nbls_to_load * (bl_chunk_to_load + 1)]

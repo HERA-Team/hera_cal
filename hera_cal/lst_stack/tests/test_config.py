@@ -335,7 +335,7 @@ class TestLSTConfig:
             attrs.evolve(good_cfg, antpairs=[(1, 1, 2.5)])
 
         with pytest.raises(ValueError, match="Autos must have the same antenna number on both sides"):
-            attrs.evolve(good_cfg, autos=[(1, 2)])
+            attrs.evolve(good_cfg, autopairs=[(1, 2)])
 
         with pytest.raises(ValueError, match="calfiles must have the same shape as matched_files"):
             attrs.evolve(good_cfg, calfiles=good_cfg.matched_files[:-1])
@@ -462,7 +462,7 @@ class TestLSTConfigSingle:
             config=redavg_configurator,
             lst_grid=redavg_single.lst_grid,
             matched_files=redavg_single.matched_files,
-            autos=redavg_single.autos,
+            autopairs=redavg_single.autopairs,
             antpairs=redavg_single.antpairs,
             pols=redavg_single.pols,
         )

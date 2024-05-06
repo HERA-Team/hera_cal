@@ -168,7 +168,7 @@ def lst_bin_files_single_outfile(
         pols=config.pols,
         file_list=config.matched_metas,
         history=history,
-        antpairs=config.autos + config.antpairs,
+        antpairs=config.autopairs + config.antpairs,
         start_jd=config.properties['first_jd'],
         freq_min=freq_min,
         freq_max=freq_max,

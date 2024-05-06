@@ -608,7 +608,7 @@ class LSTBinConfigurator:
             lst_grid=lst_grid,
             matched_files=matched_files,
             antpairs=[tuple(ap) for ap in antpairs if ap[0] != ap[1]],
-            autos=[tuple(ap) for ap in antpairs if ap[0] == ap[1]],
+            autopairs=[tuple(ap) for ap in antpairs if ap[0] == ap[1]],
             pols=pols,
             inpaint_files=apply_filename_rules(
                 matched_files, self.where_inpainted_file_rules, missing='raise'
@@ -704,7 +704,7 @@ class _LSTConfigBase(ABC):
     config: LSTBinConfigurator = attrs.field()
     lst_grid: np.ndarray = attrs.field(converter=np.asarray, eq=attrs.cmp_using(eq=np.allclose))
     matched_files: list[list[list[Path]]] = attrs.field(converter=_nested_list_of(Path))
-    autos: list[tuple[int, int]] = attrs.field(converter=_to_antpairs)
+    autopairs: list[tuple[int, int]] = attrs.field(converter=_to_antpairs)
     antpairs: list[tuple[int, int]] = attrs.field(converter=_to_antpairs)
     pols: list[str] = attrs.field()
     properties: dict = attrs.field(factory=dict)
@@ -797,7 +797,7 @@ class _LSTConfigBase(ABC):
         """Matched files represented as FastUVH5Meta objects."""
         return _nested_list_of(FastUVH5Meta)(self.matched_files)
 
-    @autos.validator
+    @autopairs.validator
     @antpairs.validator
     def _antpairs_validator(self, attribute, value):
         if any(len(v) != 2 for v in value):
@@ -810,7 +810,7 @@ class _LSTConfigBase(ABC):
         if len(value) > 4:
             raise ValueError(f"{attribute.name} must have at most 4 elements.")
 
-    @autos.validator
+    @autopairs.validator
     def _autos_validator(self, attribute, value):
         if any(a != b for a, b in value):
             raise ValueError("Autos must have the same antenna number on both sides.")
@@ -902,7 +902,7 @@ class LSTConfig(_LSTConfigBase):
             self.config._write(fl.create_group("config"))
             fl.create_dataset("lst_grid", data=self.lst_grid)
             fl.create_dataset("antpairs", data=self.antpairs, dtype=int)
-            fl.create_dataset("autos", data=self.autos, dtype=int)
+            fl.create_dataset("autopairs", data=self.autopairs, dtype=int)
             fl.create_dataset("pols", data=self.pols)
             _write_irregular_list_of_paths_hdf5(fl, "matched_files", self.matched_files)
             _write_irregular_list_of_paths_hdf5(fl, "calfiles", self.calfiles)
@@ -928,7 +928,7 @@ class LSTConfig(_LSTConfigBase):
             calfiles = _read_irregular_list_of_paths_hdf5(fl, "calfiles")
             inpaint_files = _read_irregular_list_of_paths_hdf5(fl, "inpaint_files")
             antpairs = fl["antpairs"][()]
-            autos = fl["autos"][()]
+            autos = fl["autopairs"][()]
             pols = fl["pols"][()]
             properties = dict(fl.attrs.items())
             for k in properties:
@@ -941,7 +941,7 @@ class LSTConfig(_LSTConfigBase):
             matched_files=mfs,
             properties=properties,
             antpairs=[(a, b) for a, b in antpairs],
-            autos=[(a, b) for a, b in autos],
+            autopairs=[(a, b) for a, b in autos],
             pols=[p.decode() for p in pols],
             calfiles=calfiles,
             inpaint_files=inpaint_files,
