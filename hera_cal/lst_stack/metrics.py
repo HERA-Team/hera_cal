@@ -135,9 +135,8 @@ def get_squared_zscores(
 
     # convert zstack to UVFlag object
     zstack = UVFlag(stack._uvd, mode='metric', use_future_array_shapes=True)
-    zstack.metric_array = zsq
+    zstack.metric_array = zsq.reshape(stack.data_array.shape)
 
-    out = LSTStack(zstack)
     return LSTStack(zstack)
 
 
