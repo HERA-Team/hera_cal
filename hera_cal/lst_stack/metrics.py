@@ -37,6 +37,8 @@ class LSTBinStats:
         kls = partial(RedDataContainer, reds=reds) if reds is not None else DataContainer
 
         for k, v in rdc.items():
+            if v is None:
+                continue
             if k == 'data':
                 k = 'mean'
             dct = {antpair + (pol,): v[i, :, j] for i, antpair in enumerate(antpairs) for j, pol in enumerate(pols)}
