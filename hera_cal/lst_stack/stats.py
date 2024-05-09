@@ -6,13 +6,14 @@ and dividing by the standard deviation of the same set of visibilities (generall
 assumed to be predicted by the autos). Note that the distributions here assume that
 the mean used to estimate the Z-scores comes from the sample itself, i.e.
 
-    .. math:: Z_i = (V_i - \bar{V}) / \sigma,
+    .. math:: Z_i = (V_i - \bar{V}) / (\sigma/\sqrt{2}),
 
 where :math:`\bar{V}` is the sample mean (over LSTs or redundant baselines, or both),
 of which :math:`V_i` is a part. These distributions are *not* applicable to cases in
-which the mean is estimated from a different, uncorrelated, sample. Setting n=0 in the
-:func:`zsquare` function will give the correct result for the case in which the mean
-is the population mean (i.e. the limit as n -> infinity).
+which the mean is estimated from a different, uncorrelated, sample.
+
+The distributions here are derived and discussed in the memo
+https://github.com/HERA-Team/H6C-analysis/blob/main/docs/statistics_of_visibilities.ipynb.
 
 Note that the "excess variance" defined in the HERA memo
 https://reionization.org/manual_uploads/HERA123_LST_Bin_Statistics-v3.pdf is closely
@@ -78,20 +79,25 @@ class MixtureModel(rv_continuous):
         return np.choose(submodel_choices, submodel_samples)
 
 
-def zsquare(n: int = 0, absolute: bool = True) -> rv_continuous:
-    """The distribution of Z^2 of a single component of a visibility (real/imag).
+def zsquare(absolute: bool = True) -> rv_continuous:
+    r"""Return the distribution of Z^2 of a visibility.
 
     If absolute is True, this is the distribution of |Z|^2, otherwise it is the distribution
     of the real/imaginary component of Z^2.
 
     Parameters
     ----------
-    n : int
-        The number of visibilities that were used to obtain the mean, from which the
-        zscore was calculated. If n=0, assume that the mean is the true population mean
-        (i.e. the limit as n -> infinity).
     absolute : bool
         Whether to return the distribution of |Z|^2, or Re(Z)^2 (equivalently Im(Z)^2).
+
+    Notes
+    -----
+    Here Z is defined as
+
+    .. math::  Z_i = \sqrt{\frac{2n_i}{\sigma^2}}\frac{M}{M-n_i}(V_i - \bar{V})
+
+    where M is the sum of nsamples over the redundant set from which the mean is
+    estimated, and ni is the nsamples for the particular visibility under consideration.
 
     Returns
     -------
@@ -99,65 +105,75 @@ def zsquare(n: int = 0, absolute: bool = True) -> rv_continuous:
         A chi^2(df=1) distribution if absolute is False, or a chi^2(df=2) distribution
         if absolute is True.
     """
-    factor = 1 if n == 0 else (n - 1) / n
-    return gamma(a=1 / (1 if absolute else 2), scale=2 * factor)
+    return gamma(a=1 / (1 if absolute else 2), scale=2)
 
 
-def mean_zsquare(n: int, absolute: bool = True) -> rv_continuous:
-    """The distribution of the mean Z^2 of n iid visibilities..
+def mean_zsquare_over_redundant_set(n: int, absolute: bool = True) -> rv_continuous:
+    r"""
+    Return the distribution of the mean of Z^2 over a redundant set.
 
-    Note that this result is independent of whether the mean is weighted.
+    In Memo XXX this is called \zeta^2. It is defined as
+
+    .. math:: |\zeta|^2 \equiv \frac{1}{N} \sum_i^N \frac{M-n_i}{M}|Z|^2_i,
+
+    where :math:`|Z|^2_i` has the distribution given in :func:`zsquare`.
 
     Parameters
     ----------
     n : int
-        The number of z^2 values in the mean.
-    absolute : bool
-        Whether to return the distribution of <|Z|^2>, or <Re(Z)^2>
-        (equivalently <Im(Z)^2>).
-
-    Returns
-    -------
-    dist
-        A Gamma distribution, with a=(n-1)/2 and scale=2/(n-1) if absolute is False,
-        or scale=1/(n-1) if absolute is True.
+        The number of visibilities in the redundant set (whose nsamples is greater
+        than zero).
     """
     return gamma(a=(n - 1) / (1 if absolute else 2), scale=2 / n)
 
 
-def mean_zsquare_mixture(
-    n: np.ndarray | list[int],
-    absolute: bool = True,
-    min_n: int = 1
-) -> MixtureModel:
-    """The distribution of the mean Z^2 of n iid visibilities, per-component (real/imag).
+def mean_zsquare_over_independent_set(q: int, absolute: bool = True) -> rv_continuous:
+    r"""
+    Return the distribution of the mean of Z^2 over independent samples.
 
-    This is the distribution of a *collection* of mean Z-square values, each of which may
-    be the mean of a different number of z^2.
-    This is a mixture model of gamma distributions with rate=(n-1)/2 and scale=2/(n-1).
+    This is different than :func:`mean_zsquare_over_redundant_set` in that it is the
+    distribution of the mean of *independent* samples (i.e. from different channels
+    or baselines), rather than those that are used as part of the mean when defining Z.
+
+    In Memo XXX it is defined as:
+
+    .. math:: \bar{|Z|^2} \equiv \frac{1}{Q} \sum_j^Q |Z|^2_j,
+
+    where Q is the number of independent visibilities (that have non-zero nsamples).
 
     Parameters
     ----------
-    n : np.ndarray | list[int]
-        The number of Z^2 values in each mean. There may be repeated values.
-    absolute : bool
-        Whether to return the distribution of |Z|^2, or Re(Z)^2
-        (equivalently Im(Z)^2).
-    min_n : int
-        The minimum number of visibilities averaged together in any particular mean
-        required to include it in the mixture distribution.
-
-    Returns
-    -------
-    dist : MixtureModel
-        A mixture model representing the distribution of the mean Z^2.
+    q : int
+        The number of independent visibilities in the mean.
     """
-    unique_n, counts = np.unique(n, return_counts=True)
-    indx = np.argwhere(unique_n >= min_n)[:, 0]
-    unique_n = unique_n[indx]
-    counts = counts[indx]
+    return gamma(a=q / (1 if absolute else 2), scale=2 / q)
 
-    return MixtureModel([mean_zsquare(nn, absolute=absolute) for nn in unique_n], weights=counts)
+
+def mean_zsquare_over_redundant_and_independent_sets(
+    nsets: int, ntot: int, absolute: bool = True
+) -> rv_continuous:
+    r"""
+    Return the distribution of the mean of Z^2 over both redundant and independent data.
+
+    This is the distribution of the mean of Z^2 over a set of visibilities that are
+    both redundant and independent. This is defined in Memo XXX as:
+
+    .. math:: \bar{\zeta^2} \equiv \frac{1}{\sum_j N_j} \sum_j^Q N_j \zeta^2_j.
+
+    where Q is the number of independent visibilities in the mean, and N_j is the number
+    of visibilities with non-zero nsamples in the jth redundant set (e.g. the number of
+    unflagged nights in an LST-stack).
+
+    Parameters
+    ----------
+    nsets : int
+        The number of independent sets of visibilities (e.g. different channels,
+        different baseline types).
+    ntot : int
+        The total number of unflagged visibilities in the sample (e.g. the sum of the
+        number of unflagged nights for each channel/baseline).
+    """
+    return gamma(a=(ntot - nsets) / (1 if absolute else 2), scale=2 / ntot)
 
 
 def excess_variance(n: int, absolute: bool = True) -> rv_continuous:
@@ -195,6 +211,40 @@ def excess_variance(n: int, absolute: bool = True) -> rv_continuous:
     which does *not* depend on Nsamples.
     """
     return gamma(a=(n - 1) / (1 if absolute else 2), scale=(1 if absolute else 2) / (n - 1))
+
+
+def mean_zsquare_mixture(
+    n: np.ndarray | list[int],
+    absolute: bool = True,
+    min_n: int = 1
+) -> MixtureModel:
+    """The distribution of the mean Z^2 of n iid visibilities for a collection of such means.
+
+    This is the distribution of a *collection* of mean Z-square values, each of which may
+    be the mean of a different number of z^2.
+
+    Parameters
+    ----------
+    n : np.ndarray | list[int]
+        The number of Z^2 values in each mean. There may be repeated values.
+    absolute : bool
+        Whether to return the distribution of |Z|^2, or Re(Z)^2
+        (equivalently Im(Z)^2).
+    min_n : int
+        The minimum number of visibilities averaged together in any particular mean
+        required to include it in the mixture distribution.
+
+    Returns
+    -------
+    dist : MixtureModel
+        A mixture model representing the distribution of the mean Z^2.
+    """
+    unique_n, counts = np.unique(n, return_counts=True)
+    indx = np.argwhere(unique_n >= min_n)[:, 0]
+    unique_n = unique_n[indx]
+    counts = counts[indx]
+
+    return MixtureModel([mean_zsquare(nn, absolute=absolute) for nn in unique_n], weights=counts)
 
 
 def excess_variance_mixture(

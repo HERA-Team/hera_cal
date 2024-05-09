@@ -81,6 +81,14 @@ def get_squared_zscores(
     """
     Obtain squared Z-scores as a UVFlag object in metrics mode.
 
+    The Z-score is defined as:
+
+    .. math:: Z_i \\equiv \\sqrt{\frac{2n_i}{\\sigma^2}}\frac{M}{M-n_i}(V_i - \bar{V}).
+
+    Where :math:`n_i` is the number of samples, :math:`\\sigma^2` is the variance of the
+    visibility, and M is the total number of samples. This definition and associated
+    distributions can be found in [this memo](https://github.com/HERA-Team/H6C-analysis/blob/main/docs/statistics_of_visibilities.ipynb).
+
     Parameters
     ----------
     auto_stats : LSTBinStats
@@ -100,6 +108,16 @@ def get_squared_zscores(
         to predict the variance of the cross-correlations. If 'std' or 'mad', the
         cross-correlations are used, and the statistic is estimated over nights from
         the sample.
+
+    Returns
+    -------
+    zstack : LSTStack
+        The squared Z-scores as a UVFlag object in metrics mode.
+
+    See Also
+    --------
+    stats.zsquare
+        The predicted distribution of the results of this function.
     """
     if central not in ("mean", "median"):
         raise ValueError("central must be 'mean' or 'median'")
@@ -113,9 +131,12 @@ def get_squared_zscores(
         for ipol, pol in enumerate(stack.pols):
             bl = (*ap, pol)
             data = stack.get_data(bl)
+            nsamps = stack.get_nsamples(bl)
+            M = cross_stats.nsamples[bl]
+            norm = nsamps * (M / (M - nsamps))**2
 
             zsq_view = zsq[:, iap, :, ipol]
-            zsq_view[:] = np.abs(data - getattr(cross_stats, central)[bl])**2
+            zsq_view[:] = norm * np.abs(data - getattr(cross_stats, central)[bl])**2
 
             # Divide variance by 2 to get the variance of the real/imaginary parts.
             # That is, z = (data - centre) / sqrt(variance / 2), so that each component
