@@ -65,9 +65,13 @@ def get_nightly_predicted_variance(
 
     dtdf = (stack.dt * stack.df).to_value("")
 
-    gf = stack.get_flags(bl)
-    per_day_expected_var = np.abs(auto / dtdf / stack.get_nsamples(bl))
-    per_day_expected_var[gf] = np.inf
+    with np.errstate(divide='ignore'):
+        # Some nsamples can be zero, so we ignore warnings from that.
+        # Also note that in the stack, inpainted samples have -nsamples, rather than
+        # zero. These will thus return a finite expected variance, even though they
+        # technically have no unflagged samples.
+        per_day_expected_var = np.abs(auto / dtdf / stack.get_nsamples(bl))
+
     return per_day_expected_var
 
 
