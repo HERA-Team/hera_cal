@@ -65,12 +65,45 @@ def get_nightly_predicted_variance(
 
     dtdf = (stack.dt * stack.df).to_value("")
 
+    gf = stack.get_flags(bl)
     with np.errstate(divide='ignore'):
         # Some nsamples can be zero, so we ignore warnings from that.
         # Also note that in the stack, inpainted samples have -nsamples, rather than
         # zero. These will thus return a finite expected variance, even though they
         # technically have no unflagged samples.
         per_day_expected_var = np.abs(auto / dtdf / stack.get_nsamples(bl))
+    per_day_expected_var[gf] = np.inf
+    return per_day_expected_var
+
+
+def get_nightly_predicted_variance_stack(
+    stack: LSTStack,
+    auto_stats: LSTBinStats,
+    flag_if_inpainted: bool = True,
+) -> np.ndarray:
+    """
+    Get predicted thermal variance for each bl, night & freq.
+
+    Output is an array with same shape as stack.data, containing the variance.
+    """
+    auto = np.array([
+        [
+            auto_stats.mean[(ap[0], ap[0], pol)] * auto_stats.mean[(ap[1], ap[1], pol)]
+            for pol in stack.pols
+        ] for ap in stack.antpairs
+    ]).transpose((0, 2, 1))  # nbls, nfreq, npol
+
+    dtdf = (stack.dt * stack.df).to_value("")
+
+    with np.errstate(divide='ignore'):
+        # Some nsamples can be zero, so we ignore warnings from that.
+        # Also note that in the stack, inpainted samples have -nsamples, rather than
+        # zero. These will thus return a finite expected variance, even though they
+        # technically have no unflagged samples.
+        per_day_expected_var = np.abs(auto / dtdf / stack.get_nsamples(bl))
+
+    gf = stack.flagged_or_inpainted() if flag_if_inpainted else stack.flags
+    per_day_expected_var[gf] = np.inf
 
     return per_day_expected_var
 
