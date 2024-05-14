@@ -310,8 +310,10 @@ def average_and_inpaint_simultaneously(
     # Time axis is outer axis for all LSTStacks.
     uvws = stack.uvw_array.reshape((stack.Ntimes, stack.Nbls, 3))
 
-    newmean = np.ones_like(lstavg['data']) * np.nan
     complete_flags = stack.flagged_or_inpainted()
+
+    this = np.zeros(stack.Nfreqs, dtype=stack.data.dtype)
+    nn = np.zeros(stack.Nfreqs, dtype=float)
 
     for iap, antpair in enumerate(stack.antpairs):
         for polidx, pol in enumerate(stack.pols):
@@ -324,7 +326,8 @@ def average_and_inpaint_simultaneously(
                 **filter_properties,
             )
 
-            flagged_mean = lstavg['data'][iap, :, polidx].copy()
+            flagged_mean = lstavg['data'][iap, :, polidx]
+
             wgts = lstavg['nsamples'][iap, :, polidx].copy()
 
             # fourier_filter can't deal with nans, even if they're flagged
@@ -353,8 +356,8 @@ def average_and_inpaint_simultaneously(
             flags = complete_flags[:, iap, :, polidx]
             nsamples = np.abs(stack.nsamples[:, iap, :, polidx])
 
-            this = np.zeros(stack.Nfreqs, dtype=stack.data.dtype)
-            nn = np.zeros(stack.Nfreqs, dtype=float)
+            this[:] = 0.0
+            nn[:] = 0.0
             for d, f, n in zip(data, flags, nsamples):
                 # If an entire integration is flagged, don't use it at all
                 # in the averaging -- it doesn't contibute any knowledge.
@@ -368,8 +371,6 @@ def average_and_inpaint_simultaneously(
                 this /= nn
                 this[nn == 0] *= np.nan
 
-            newmean[iap, :, polidx] = this
-
-        lstavg['data'] = newmean
+            flagged_mean[:] = this
 
     return all_models
