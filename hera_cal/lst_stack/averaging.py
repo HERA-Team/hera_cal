@@ -251,3 +251,114 @@ def reduce_lst_bins(
         o['median'], o['mad'] = get_lst_median_and_mad(data)
 
     return o
+
+
+def average_and_inpaint_simultaneously(
+    stack: LSTStack,
+    lstavg: dict[str, np.ndarray],
+    inpaint_bands: Sequence[tuple[int, int] | slice] = (slice(0, None)),
+    return_models: bool = True,
+    cache: dict | None = None,
+    filter_properties: dict | None = None,
+    **kwargs,
+) -> list[np.ndarray]:
+    """
+    Perform an average over nights while simultaneously inpainting.
+
+    This function updates the ``data`` key in ``lstavg`` in-place. If you want to keep
+    the original data, make a copy of it first.
+
+    Parameters
+    ----------
+    stack
+        An LSTStack object containing the data to average.
+    lstavg
+        A dictionary of LST-averaged data, with at _least_ keys 'data' and 'nsamples'.
+        The averaging for this data must be in *flagged* mode. This can be the output
+        of :func:`reduce_lst_bins`.
+    inpaint_bands
+        The frequency bands to inpaint independently for each baseline-night. This
+        should be a sequence of tuples, where each tuple is a start and end frequency
+        to inpaint, or slices.
+    return_models
+        Whether to return the inpainted models.
+    cache
+        A dict-like object to use as a cache for the Fourier filter.
+    filter_properties
+        A dictionary of params to use for the Fourier filter. This is passed to
+        :func:`hera_cal.vis_clean.gen_filter_properties`.
+
+    Other Parameters
+    ----------------
+    kwargs
+        Passed to :func:`hera_filters.dspec.fourier_filter`.
+
+    Returns
+    -------
+    dict
+        A dictionary of the inpainted models, keyed by (ant1, ant2, pol). If
+        ``return_models`` is False, the dict is empty.
+    """
+    model = np.zeros(stacks[0].Nfreqs, dtype=stacks[0].data_array.dtype)
+
+    all_models = {}
+
+    # Time axis is outer axis for all LSTStacks.
+    uvws = stack.uvw_array.reshape((stack.Ntimes, stack.Nbls, 3))
+
+    newmean = np.ones_like(avg['data']) * np.nan
+    complete_flags = stack.flagged_or_inpainted()
+
+    for iap, antpair in enumerate(stack.antpairs):
+        for polidx, pol in enumerate(stack.pols):
+
+            bl_vec = uvws[0, iap, :2]
+            bl_len = np.linalg.norm(bl_vec) / constants.c
+            filter_centers, filter_half_widths = vis_clean.gen_filter_properties(
+                ax='freq',
+                bl_len=bl_len,
+                **filter_properties,
+            )
+
+            flagged_mean = lstavg['data'][iap, :, polidx]
+            wgts = lstavg['nsamples'][iap, :, polidx]
+
+            for band in inpaint_bands:
+                model[band], _, info = dspec.fourier_filter(
+                    stack.freq_array[band],
+                    flagged_mean[band],
+                    wgts=wgts[band],
+                    mode='dpss_solve',
+                    max_contiguous_edge_flags=stack.Nfreqs,
+                    cache=cache
+                    **kwargs,  # noqa: E225
+                )
+
+            if return_models:
+                all_models[(*antpair, pol)] = model.copy()
+
+            # fill in the data with the model
+            data = stack.data[:, iap, :, polidx]
+            flags = complete_flags[:, iap, :, polidx]
+            nsamples = np.abs(stack.nsamples[:, iap, :, polidx])
+
+            this = np.zeros(stack.Nfreqs, dtype=stack.data.dtype)
+            nn = np.zeros(stack.Nfreqs, dtype=float)
+            for d, f, n in zip(data, flags, nsamples):
+                # If an entire integration is flagged, don't use it at all
+                # in the averaging -- it doesn't contibute any knowledge.
+                if np.all(f):
+                    continue
+
+                this += n * np.where(f, model, d)
+                nn += n
+
+            with np.errstate(divide='ignore', invalid='ignore'):
+                this /= nn
+                this[nn == 0] *= np.nan
+
+            newmean[iap, :, polidx] = this
+
+        lstavg['data'] = newmean
+
+    return all_models

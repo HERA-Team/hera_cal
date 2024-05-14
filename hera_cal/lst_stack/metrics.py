@@ -95,12 +95,12 @@ def get_nightly_predicted_variance_stack(
 
     dtdf = (stack.dt * stack.df).to_value("")
 
-    with np.errstate(divide='ignore'):
+    with np.errstate(divide='ignore', invalid='ignore'):
         # Some nsamples can be zero, so we ignore warnings from that.
         # Also note that in the stack, inpainted samples have -nsamples, rather than
         # zero. These will thus return a finite expected variance, even though they
         # technically have no unflagged samples.
-        per_day_expected_var = np.abs(auto / dtdf / stack.get_nsamples(bl))
+        per_day_expected_var = np.abs(auto / dtdf / stack.nsamples)
 
     gf = stack.flagged_or_inpainted() if flag_if_inpainted else stack.flags
     per_day_expected_var[gf] = np.inf
@@ -196,6 +196,40 @@ def get_squared_zscores(
     zstack.metric_array = zsq.reshape(stack.data_array.shape)
 
     return LSTStack(zstack)
+
+
+def get_squared_zscores_flagged(
+    stack: LSTStack,
+    variance: np.ndarray | None = None,
+    auto_stats: lstbin.metrics.LSTBinStats | None = None,
+):
+    zsq = np.zeros(stack.data.shape, dtype=np.float32)
+
+    # inpainted data should _not_ be counted in the nsamples here,
+    # because its not counted in the mean (vbar) below.
+    nsamples = np.abs(stack.nsamples) * ~stack.flagged_or_inpainted() * np.isfinite(stack.data)
+
+    if variance is None:
+        variance = get_nightly_predicted_variance_stack(stack, auto_stats, flag_if_inpainted=True) / 2
+
+    # Get V mean
+    vbar = np.nansum(stack.data * nsamples, axis=0)
+    M = np.sum(nsamples, axis=0)
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        vbar /= M
+        norm = M / (M - nsamples)
+        zsq = norm * np.abs(stack.data - vbar)**2 / variance
+
+    with np.errstate(invalid='ignore'):
+        # Either zero or one visibility in the mean, or no samples at that point -- undefined z-score.
+        mask = (M == 0) | (M == nsamples) | (nsamples == 0)
+        zsq[mask] = np.nan
+
+    # convert zstack to UVFlag object
+    zstack = UVFlag(stack._uvd, mode='metric', use_future_array_shapes=True)
+    zstack.metric_array = zsq.reshape(stack.data_array.shape)
+    return lstbin.averaging.LSTStack(zstack)
 
 
 def get_selected_bls(
@@ -322,12 +356,16 @@ def downselect_zscores(
     if not isinstance(band, slice):
         raise TypeError("band must be a tuple of (low, high) or a slice")
 
+    if flags is None:
+        flags = ~np.isfinite(zscores.metrics)
+    else:
+        flags = flags | ~np.isfinite(zscores.metrics)
+
     zsq = np.ma.MaskedArray(
         zscores.metrics[:, :, band],
-        mask=flags[:, :, band] if flags is not None else None
+        mask=flags[:, :, band]
     )
 
-    # make sure flagged stuff is nan
     zsq = zsq[:, antpairs][..., pols]
     # Get time indices
     if nights is not None:
