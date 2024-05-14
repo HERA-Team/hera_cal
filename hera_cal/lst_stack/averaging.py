@@ -324,8 +324,13 @@ def average_and_inpaint_simultaneously(
                 **filter_properties,
             )
 
-            flagged_mean = lstavg['data'][iap, :, polidx]
+            flagged_mean = lstavg['data'][iap, :, polidx].copy()
             wgts = lstavg['nsamples'][iap, :, polidx]
+
+            # fourier_filter can't deal with nans, even if they're flagged
+            nanmask = np.isnan(flagged_mean)
+            flagged_mean[nanmask] = 0.0
+            wgts[nanmask] = 0.0
 
             for band in inpaint_bands:
                 model[band], _, info = dspec.fourier_filter(

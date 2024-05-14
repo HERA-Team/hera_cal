@@ -7,7 +7,7 @@ import attrs
 import numpy as np
 from functools import partial
 from .. import utils
-from pyuvdata import UVData, UVFlag
+from pyuvdata import UVFlag
 from ..red_groups import RedundantGroups
 from .. import types as tp
 from .binning import LSTStack
