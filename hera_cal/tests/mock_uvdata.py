@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 from pyuvdata import UVData, UVCal, UVFlag
-from pyuvdata.uvdata import FastUVH5Meta
-from pyuvdata.telescopes import get_telescope
+from pyuvdata.telescopes import known_telescope_location
 
 from hera_cal import utils
 from hera_cal import io
@@ -17,9 +16,7 @@ from pathlib import Path
 from hera_cal.red_groups import RedundantGroups
 from astropy import units
 
-HERA_LOC = EarthLocation.from_geocentric(
-    *get_telescope("HERA").telescope_location, unit="m"
-)
+HERA_LOC = known_telescope_location("HERA")
 
 with open(f"{DATA_PATH}/hera_antpos.yaml", "r") as fl:
     HERA_ANTPOS = yaml.safe_load(fl)

@@ -22,7 +22,7 @@ import pickle
 import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
-from pyuvdata.telescopes import KNOWN_TELESCOPES
+from pyuvdata.telescopes import known_telescope_location
 import argparse
 from hera_filters.dspec import place_data_on_uniform_grid
 from typing import Literal
@@ -2506,9 +2506,13 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
         integration_time = 0.0
     lst_array = np.array(lsts, float)
     if lsts is None:
-        tel = KNOWN_TELESCOPES[telescope_name]
-        lst_array = utils.JD2LST(times, latitude=(tel['latitude'] * 180 / np.pi),
-                                 longitude=(tel['longitude'] * 180 / np.pi), altitude=tel['altitude'])
+        tel_loc = known_telescope_location(telescope_name)
+        lst_array = utils.JD2LST(
+            times,
+            latitude=tel_loc.lat.rad,
+            longitude=tel_loc.lon.rad,
+            altitude=tel_loc.height.to('m').value
+        )
 
     # get frequency info
     freq_array = np.array(freqs, float)
