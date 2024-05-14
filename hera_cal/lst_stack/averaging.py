@@ -332,7 +332,9 @@ def average_and_inpaint_simultaneously(
                     wgts=wgts[band],
                     mode='dpss_solve',
                     max_contiguous_edge_flags=stack.Nfreqs,
-                    cache=cache
+                    cache=cache,
+                    filter_centers=filter_centers,
+                    filter_half_widths=filter_half_widths,
                     **kwargs,  # noqa: E225
                 )
 
