@@ -325,7 +325,7 @@ def average_and_inpaint_simultaneously(
             )
 
             flagged_mean = lstavg['data'][iap, :, polidx].copy()
-            wgts = lstavg['nsamples'][iap, :, polidx]
+            wgts = lstavg['nsamples'][iap, :, polidx].copy()
 
             # fourier_filter can't deal with nans, even if they're flagged
             nanmask = np.isnan(flagged_mean)
