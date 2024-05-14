@@ -4,6 +4,8 @@ import numpy as np
 import logging
 import warnings
 from .binning import LSTStack
+from .. import vis_clean
+from hera_filters import dspec
 
 logger = logging.getLogger(__name__)
 

@@ -201,7 +201,7 @@ def get_squared_zscores(
 def get_squared_zscores_flagged(
     stack: LSTStack,
     variance: np.ndarray | None = None,
-    auto_stats: lstbin.metrics.LSTBinStats | None = None,
+    auto_stats: LSTBinStats | None = None,
 ):
     zsq = np.zeros(stack.data.shape, dtype=np.float32)
 
@@ -229,7 +229,7 @@ def get_squared_zscores_flagged(
     # convert zstack to UVFlag object
     zstack = UVFlag(stack._uvd, mode='metric', use_future_array_shapes=True)
     zstack.metric_array = zsq.reshape(stack.data_array.shape)
-    return lstbin.averaging.LSTStack(zstack)
+    return LSTStack(zstack)
 
 
 def get_selected_bls(
