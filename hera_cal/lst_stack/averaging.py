@@ -301,7 +301,7 @@ def average_and_inpaint_simultaneously(
         A dictionary of the inpainted models, keyed by (ant1, ant2, pol). If
         ``return_models`` is False, the dict is empty.
     """
-    model = np.zeros(stacks[0].Nfreqs, dtype=stacks[0].data_array.dtype)
+    model = np.zeros(stack.Nfreqs, dtype=stack.data_array.dtype)
 
     all_models = {}
 
