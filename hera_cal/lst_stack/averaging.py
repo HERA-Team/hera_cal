@@ -6,6 +6,8 @@ import warnings
 from .binning import LSTStack
 from .. import vis_clean
 from hera_filters import dspec
+from scipy import constants
+from typing import Sequence
 
 logger = logging.getLogger(__name__)
 
