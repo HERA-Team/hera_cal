@@ -1211,6 +1211,7 @@ class Test_Visibility_IO_Legacy:
     @pytest.mark.filterwarnings("ignore:The expected shape of the ENU array")
     @pytest.mark.filterwarnings("ignore:antenna_diameters is not set")
     @pytest.mark.filterwarnings("ignore:Unicode equal comparison failed")
+    @pytest.mark.filterwarnings("ignore:writing default values for restfreq")
     def test_write_vis(self):
         # get data
         uvd = UVData()
@@ -1250,6 +1251,7 @@ class Test_Visibility_IO_Legacy:
         if os.path.exists('ex.uv'):
             shutil.rmtree('ex.uv')
 
+    @pytest.mark.filterwarnings("ignore:writing default values for restfreq")
     def test_update_vis(self):
         # load in cal
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -1832,4 +1834,4 @@ class Test_UVDataFromFastUVH5:
     def test_pass_metadata(self):
         uvd = io.uvdata_from_fastuvh5(self.meta_default, history='I made this!')
 
-        assert uvd.history == 'I made this!'
+        assert 'I made this!' in uvd.history

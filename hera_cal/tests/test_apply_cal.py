@@ -294,6 +294,7 @@ class Test_Update_Cal(object):
             with pytest.warns(UserWarning, match="integrations cannot be calibrated"):
                 ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=None, old_gains=old_g_here)
 
+    @pytest.mark.filterwarnings("ignore:writing default values for restfreq")
     def test_apply_cal(self, tmpdir):
         tmp_path = tmpdir.strpath
         miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")

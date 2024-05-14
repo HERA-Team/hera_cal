@@ -80,6 +80,7 @@ def create_mock_hera_obs(
         polarization_array=pols,
         antenna_positions=antpos,
         antpairs=np.array(antpairs),
+        antenna_diameters=np.ones(len(antpos)) * 14.6,
         telescope_location=HERA_LOC,
         telescope_name="HERA",
         times=times,
@@ -90,6 +91,8 @@ def create_mock_hera_obs(
         channel_width=np.diff(freqs)[0] if len(freqs) > 1 else np.diff(PHASEII_FREQS)[0],
     )
     uvd.polarization_array = np.array(uvd.polarization_array)
+    uvd.blts_are_rectangular = True
+    uvd.time_axis_faster_than_bls = time_axis_faster_than_bls
     return uvd
 
 
@@ -137,6 +140,7 @@ def create_uvd_identifiable(
     with_noise: bool = False,
     autos_noise: bool = False,
     flag_frac: float = 0.0,
+    time_axis_faster_than_bls: bool = True,
     **kwargs,
 ) -> UVData:
     """Make a UVData object with identifiable data.
@@ -146,8 +150,13 @@ def create_uvd_identifiable(
 
         data = pol* lst * [np.cos(freq*a) + I * np.sin(freq*b)]
     """
-    uvd = create_mock_hera_obs(empty=True, **kwargs)
+    uvd = create_mock_hera_obs(empty=True, time_axis_faster_than_bls=time_axis_faster_than_bls, **kwargs)
     uvd.data_array = identifiable_data_from_uvd(uvd)
+
+    if not time_axis_faster_than_bls:
+        uvd.data_array.shape = (uvd.Nbls, uvd.Ntimes, uvd.Nfreqs, uvd.Npols)
+        uvd.data_array = np.transpose(uvd.data_array, (1, 0, 2, 3))
+        uvd.data_array = uvd.data_array.reshape((uvd.Nbls * uvd.Ntimes, uvd.Nfreqs, uvd.Npols))
 
     if with_noise:
         add_noise_to_uvd(uvd, autos=autos_noise)
@@ -174,6 +183,7 @@ def add_noise_to_uvd(uvd, autos: bool = False):
         data[bl] += np.random.normal(
             scale=np.sqrt(variance / 2)
         ) + 1j * np.random.normal(scale=np.sqrt(variance / 2))
+
     hd.update(data=data)
 
 
@@ -215,7 +225,7 @@ def write_files_in_hera_format(
 
         _fls = []
         for obj in uvdlist:
-            fl = daydir / fmt.format(jd=obj.time_array.min())
+            fl = daydir / fmt.format(jd=np.mean(obj.time_array))
             if obj.metadata_only:
                 obj.initialize_uvh5_file(fl, clobber=True)
             else:
@@ -372,7 +382,7 @@ def write_cals_in_hera_format(
 
         _fls = []
         for obj in uvdlist:
-            fl = daydir / fmt.format(jd=obj.time_array.min())
+            fl = daydir / fmt.format(jd=np.mean(obj.time_array))
             obj.write_calfits(fl, clobber=True)
             _fls.append(str(fl))
         fls.append(_fls)

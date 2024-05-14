@@ -1021,7 +1021,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     if reds is not None:
         model = copy.deepcopy(model)
         for red in reds:
-            if np.any([bl in data for bl in red]):
+            if any(bl in data for bl in red):
                 for bl in red:
                     model[bl] = model[red[0]]
 
@@ -1558,7 +1558,7 @@ def match_files_to_lst_bins(
     lst_edges = np.array([(lst - lst0) % (2 * np.pi) + lst0 for lst in lst_edges])
     # We can have the case that an edges is at lst0 + 2pi exactly, which would
     # get wrapped around to lst0, but it should stay at lst0+2pi.
-    lst_edges[1:][lst_edges[1:] == lst_edges[0]] += 2 * np.pi
+    lst_edges[1:][np.isclose(lst_edges[1:], lst_edges[0], atol=1e-10)] += 2 * np.pi
 
     if np.any(np.diff(lst_edges) < 0):
         raise ValueError("lst_edges must not extend beyond 2pi total radians from start to finish.")
@@ -1601,7 +1601,10 @@ def match_files_to_lst_bins(
 
         @cache
         def get_first_time(path: Path) -> float:
-            return float(jd_regex.findall(path.name)[0])
+            # Note that the time listed in the file name is the middle of the first
+            # integration, so we need to subtract tint/2 to get the start of the first
+            # bin.
+            return float(jd_regex.findall(path.name)[0]) - tint / 2
     else:
 
         @cache

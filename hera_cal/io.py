@@ -839,7 +839,7 @@ class HERAData(UVData):
                                      time_range=time_range, run_check=run_check, check_extra=check_extra,
                                      run_check_acceptability=run_check_acceptability,
                                      use_future_array_shapes=True, projected=False, **kwargs)
-                        self.use_future_array_shapes()
+
                         if any([times is not None, lsts is not None, lst_range is not None,
                                 frequencies is not None, freq_chans is not None]):
                             warnings.warn('miriad does not support partial loading for times/lsts (except time_range) and frequencies. '
@@ -2869,4 +2869,8 @@ def uvdata_from_fastuvh5(
     uvd.Nants_telescope = len(uvd.antenna_numbers)
     uvd.blts_are_rectangular = True
     uvd.time_axis_faster_than_bls = timefirst
+
+    # This needs to be done, though it should be fixed in pyuvdata
+    uvd.history += uvd.pyuvdata_version_str
+
     return uvd
