@@ -308,7 +308,7 @@ def average_and_inpaint_simultaneously(
     # Time axis is outer axis for all LSTStacks.
     uvws = stack.uvw_array.reshape((stack.Ntimes, stack.Nbls, 3))
 
-    newmean = np.ones_like(avg['data']) * np.nan
+    newmean = np.ones_like(lstavg['data']) * np.nan
     complete_flags = stack.flagged_or_inpainted()
 
     for iap, antpair in enumerate(stack.antpairs):
