@@ -2503,7 +2503,7 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
         integration_time = np.median(np.diff(time_array)) * 24. * 3600.
     else:
         integration_time = 0.0
-    lst_array = np.array(lsts, float)
+
     if lsts is None:
         try:
             from pyuvdata import known_telescope_location
@@ -2520,6 +2520,8 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
             longitude=tel_loc.lon.rad,
             altitude=tel_loc.height.to('m').value
         )
+    else:
+        lst_array = np.asarray(lsts, dtype=float)
 
     # get frequency info
     freq_array = np.array(freqs, float)

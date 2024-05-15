@@ -1280,7 +1280,7 @@ class Test_Visibility_IO_Legacy:
         io.update_vis(fname, outname, data=new_data, flags=new_flags, filetype_out='uvfits',
                       add_to_history='hello world', clobber=True, telescope_name='PAPER')
         uvd_fits = UVData()
-        uvd_fits.read_uvfits(outname)
+        uvd_fits.read_uvfits(outname, use_future_array_shapes=True)
         os.remove(outname)
 
         # Coverage for errors
@@ -1305,7 +1305,7 @@ class Test_Visibility_IO_Legacy:
         shutil.rmtree(outname)
 
 
-class Test_Calibration_IO_Legacy(object):
+class Test_Calibration_IO_Legacy:
     def test_load_cal(self):
         with pytest.raises(TypeError):
             io.load_cal(1.0)
