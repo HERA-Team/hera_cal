@@ -456,7 +456,7 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     Returns:
         blt_slices: dictionary mapping anntenna pair tuples to baseline-time slice objects
     '''
-    if getattr(uvo, "blts_are_rectangular", False) is None:
+    if getattr(uvo, "blts_are_rectangular", None) is None:
         uvo.set_rectangularity(force=True)
 
     blt_slices = {}
@@ -1463,8 +1463,8 @@ class HERADataFastReader():
     def _adapt_metadata(self, info_dict, skip_lsts=False):
         '''Updates metadata from read_hera_hdf5 to better match HERAData. Updates info_dict in place.'''
         info_dict['data_ants'] = sorted(info_dict['data_ants'])
-        info_dict['antpairs'] = info_dict['bls']
-        info_dict['bls'] = list(set([ap + (pol, ) for ap in info_dict['antpairs'] for pol in info_dict['pols']]))
+        info_dict['antpairs'] = sorted(info_dict['bls'])
+        info_dict['bls'] = sorted(set([ap + (pol, ) for ap in info_dict['antpairs'] for pol in info_dict['pols']]))
         XYZ = XYZ_from_LatLonAlt(info_dict['latitude'] * np.pi / 180, info_dict['longitude'] * np.pi / 180, info_dict['altitude'])
         enu_antpos = ENU_from_ECEF(
             np.array([antpos for ant, antpos in info_dict['antpos'].items()]) + XYZ,
