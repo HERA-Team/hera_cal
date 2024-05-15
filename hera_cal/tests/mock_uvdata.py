@@ -2,21 +2,27 @@
 from __future__ import annotations
 
 from pyuvdata import UVData, UVCal, UVFlag
-from pyuvdata.telescopes import known_telescope_location
 
 from hera_cal import utils
 from hera_cal import io
 from hera_cal import noise
 from hera_cal.lst_stack.config import make_lst_grid
 import numpy as np
-from astropy.coordinates import EarthLocation
 import yaml
 from hera_cal.data import DATA_PATH
 from pathlib import Path
 from hera_cal.red_groups import RedundantGroups
 from astropy import units
 
-HERA_LOC = known_telescope_location("HERA")
+try:
+    from pyuvdata import known_telescope_location
+    HERA_LOC = known_telescope_location("HERA")
+except ImportError:
+    # this can go away when we require pyuvdata >= 3.0
+    from pyuvdata import get_telescope
+    from astropy.coordinates import EarthLocation
+    hera_tel = get_telescope("HERA")
+    HERA_LOC = EarthLocation.from_geocentric(*hera_tel.telescope_location * units.m)
 
 with open(f"{DATA_PATH}/hera_antpos.yaml", "r") as fl:
     HERA_ANTPOS = yaml.safe_load(fl)

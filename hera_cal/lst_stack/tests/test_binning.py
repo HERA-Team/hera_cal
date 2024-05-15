@@ -417,7 +417,7 @@ class TestLSTStack:
         with pytest.raises(ValueError, match='time_axis_faster_than_bls must be False'):
             binning.LSTStack(uvd)
 
-        uvf = UVFlag(self.uvd)
+        uvf = UVFlag(self.uvd, use_future_array_shapes=True)
         uvf.to_waterfall()
         with pytest.raises(ValueError, match="UVFlag type must be 'baseline'"):
             binning.LSTStack(uvf)
