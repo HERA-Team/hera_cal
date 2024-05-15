@@ -689,7 +689,7 @@ class RedDataContainer(DataContainer):
         representing this group.
         '''
         # return self._reds_keyed_on_data.get_ubl_key(bl)
-        out = self.reds.get_reds_in_bl_set(bl, self.bls(), include_conj=False)
+        out = self.reds.get_reds_in_bl_set(bl, self.keys(), include_conj=False)
         if len(out) == 1:
             return next(iter(out))
         elif len(out) == 0:
