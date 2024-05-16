@@ -372,7 +372,7 @@ def downselect_zscores(
         if not hasattr(nights, '__len__'):
             nights = [nights]
 
-        zsq = zsq[[zscores.nights.tolist().index(n) for n in nights]]
+        zsq = zsq[np.isin(zscores.nights, nights)]
 
     return zsq
 
