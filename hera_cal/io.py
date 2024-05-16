@@ -456,8 +456,9 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     Returns:
         blt_slices: dictionary mapping anntenna pair tuples to baseline-time slice objects
     '''
-    if getattr(uvo, "blts_are_rectangular", None) is None:
-        uvo.set_rectangularity(force=True)
+    if hasattr(uvo, "blts_are_rectangular"):
+        if getattr(uvo, "blts_are_rectangular", None) is None:
+            uvo.set_rectangularity(force=True)
 
     blt_slices = {}
     if getattr(uvo, "blts_are_rectangular", False):
