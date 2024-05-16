@@ -1234,7 +1234,7 @@ class RedundantCalibrator:
         for ant in flipped:
             offs[ant] = _wrap_phs(offs[ant] + np.pi)
 
-        dtype = np.find_common_type([d.dtype for d in data.values()], [])
+        dtype = np.result_type(*list(data.values()))
         meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()},
                 'offs': {ant: off.flatten() for ant, off in offs.items()},
                 'polarity_flips': {ant: np.ones(Ntimes, dtype=bool) * bool(ant in flipped) for ant in ants}}
@@ -1661,7 +1661,7 @@ def expand_omni_vis(sol, expanded_reds, data, nsamples=None, chisq=None, chisq_p
     # figure out which reds are solvable using the baselines for which we have gains for both antennas
     solved_ants = set(sol.gains.keys())
     good_ants_reds = filter_reds(expanded_reds, ants=solved_ants)
-    reds_to_solve = [red for red in good_ants_reds if not np.any([bl in sol.vis for bl in red])]
+    reds_to_solve = [red for red in good_ants_reds if not any(bl in sol.vis for bl in red)]
     data_bls_to_use = [bl for red in reds_to_solve for bl in red
                        if (split_bl(bl)[0] in solved_ants) and (split_bl(bl)[1] in solved_ants)]
 
@@ -1697,7 +1697,7 @@ def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=Non
             See normalized_chisq() for more info.
     '''
     while True:
-        bls_to_use = set([bl for red in expanded_reds for bl in red if (np.any([bl in sol.vis for bl in red])
+        bls_to_use = set([bl for red in expanded_reds for bl in red if (any(bl in sol.vis for bl in red)
                           and ((split_bl(bl)[0] not in sol.gains) ^ (split_bl(bl)[1] not in sol.gains)))])
         if len(bls_to_use) == 0:
             break  # iterate to also solve for ants only found in bls with other ex_ants

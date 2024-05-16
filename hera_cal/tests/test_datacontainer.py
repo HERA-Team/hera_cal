@@ -387,6 +387,8 @@ class TestDataContainerWithRealData:
 
     @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
     @pytest.mark.filterwarnings("ignore:invalid value encountered in floor_divide")
+    @pytest.mark.filterwarnings("ignore:invalid value encountered in divide")
+    @pytest.mark.filterwarnings("ignore:invalid value encountered in cast")
     def test_div(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         d, f = io.load_vis(test_file, pop_autos=True)
@@ -467,6 +469,13 @@ class TestDataContainerWithRealData:
                 assert np.all(dc.times_by_bl[0, 1] == new_times)
                 assert np.all(dc.lsts == (np.arange(10) * 2 * np.pi / 10)[new_times])
                 assert np.all(dc.lsts_by_bl[0, 1] == (np.arange(10) * 2 * np.pi / 10)[new_times])
+
+        # Test bad input
+        with pytest.raises(ValueError, match="Either new_times or indices must be given"):
+            dc1.select_or_expand_times()
+
+        with pytest.raises(ValueError, match="Cannot specify both new_times and indices"):
+            dc1.select_or_expand_times(new_times=[0], indices=[0])
 
     def test_select_freqs(self):
         fq = np.linspace(0, 1, 10)

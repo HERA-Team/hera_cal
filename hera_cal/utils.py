@@ -759,7 +759,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
         if i == 0:
             echo("...loading {}".format(f), verbose=verbose)
             uvc = UVCal()
-            uvc.read_calfits(f)
+            uvc.read_calfits(f, use_future_array_shapes=True)
             f1 = copy.copy(f)
 
             # set flagged data to unity
@@ -767,7 +767,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
 
         else:
             uvc2 = UVCal()
-            uvc2.read_calfits(f)
+            uvc2.read_calfits(f, use_future_array_shapes=True)
 
             # set flagged data to unity
             gain_array = uvc2.gain_array
@@ -822,7 +822,7 @@ def lst_rephase(
         if True edit arrays in data in memory, else make a copy and return
     array
         Deprecated parameter that specifies that the input data is an array
-        with shape (ntimes, nfreqs, [npols]). Don't write code with this
+        with shape (ntimes, nbls, nfreqs, [npols]). Don't write code with this
         parameter -- instead just set the baseline axis of data to be length-1.
 
     Notes:
@@ -1021,7 +1021,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     if reds is not None:
         model = copy.deepcopy(model)
         for red in reds:
-            if np.any([bl in data for bl in red]):
+            if any(bl in data for bl in red):
                 for bl in red:
                     model[bl] = model[red[0]]
 
@@ -1560,7 +1560,7 @@ def match_files_to_lst_bins(
     lst_edges = np.array([(lst - lst0) % (2 * np.pi) + lst0 for lst in lst_edges])
     # We can have the case that an edges is at lst0 + 2pi exactly, which would
     # get wrapped around to lst0, but it should stay at lst0+2pi.
-    lst_edges[1:][lst_edges[1:] == lst_edges[0]] += 2 * np.pi
+    lst_edges[1:][np.isclose(lst_edges[1:], lst_edges[0], atol=1e-10)] += 2 * np.pi
 
     if np.any(np.diff(lst_edges) < 0):
         raise ValueError("lst_edges must not extend beyond 2pi total radians from start to finish.")
@@ -1603,7 +1603,10 @@ def match_files_to_lst_bins(
 
         @cache
         def get_first_time(path: Path) -> float:
-            return float(jd_regex.findall(path.name)[0])
+            # Note that the time listed in the file name is the middle of the first
+            # integration, so we need to subtract tint/2 to get the start of the first
+            # bin.
+            return float(jd_regex.findall(path.name)[0]) - tint / 2
     else:
 
         @cache
@@ -1765,7 +1768,7 @@ def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
         if len(grp) > max_chunk_size:
             # if red group is larger then the chunk size.
             # then give a warning and treate the red group as a chunk anyways.
-            warnings.warn("Warning: baseline group of length %d encountered with number"
+            warnings.warn("baseline group of length %d encountered with number"
                           " of baselines exceeding max_chunk_size=%d."
                           " First baseline is %s"
                           " Loading group anyways." % (len(reds[group_index]), max_chunk_size, str(reds[group_index][0])))
@@ -1811,11 +1814,12 @@ def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=Fa
     clobber: bool, optional
     """
     hd = UVData()
-    hd.read_uvh5(inputfilename, read_data=False)
+    hd.read_uvh5(inputfilename, read_data=False, use_future_array_shapes=True)
     if spw_ranges is None:
         spw_ranges = [(0, hd.Nfreqs)]
     # read in selected spw_ranges
-    hd.read(inputfilename, freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]))
+    hd.read(inputfilename, freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]),
+            use_future_array_shapes=True)
     hd.write_uvh5(outputfilename, clobber=clobber)
 
 

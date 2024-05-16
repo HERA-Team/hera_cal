@@ -14,6 +14,10 @@ from ..data import DATA_PATH
 from ..utils import split_pol
 from ..apply_cal import apply_cal
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*Using known values for HERA",
+)
+
 
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
