@@ -2517,8 +2517,8 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
             tel_loc = EarthLocation.from_geocentric(*tel.telescope_location * units.m)
         lst_array = utils.JD2LST(
             times,
-            latitude=tel_loc.lat.rad,
-            longitude=tel_loc.lon.rad,
+            latitude=tel_loc.lat.deg,
+            longitude=tel_loc.lon.deg,
             altitude=tel_loc.height.to('m').value
         )
     else:
