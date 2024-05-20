@@ -421,7 +421,7 @@ def average_and_inpaint_simultaneously(
 
                 # Update the flags. All successfully-inpainted data is unflagged.
                 # If in-painting is unsuccessful, we flag the data.
-                flgs[band] = (info['status']['axis_0'][0] == 'skipped')
+                flgs[band] = (info['status']['axis_1'][0] == 'skipped')
 
             if return_models:
                 all_models[(*antpair, pol)] = model.copy()
