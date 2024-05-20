@@ -10,18 +10,17 @@ def get_vis(
     ninds: int = 1,
     nvars: int = 200000,
     weighted: bool = False,
-    allow_zeros: bool = False,
+    allow_zeros: bool = True,
 ):
     rng = np.random.default_rng()
 
     if weighted:
-        weights = rng.integers(low=0 if allow_zeros else 1, high=10, size=(ndays, ninds))
-        weights[0] = 1  # Ensure at least one day is included
-        weights = weights[:, :, None] * np.ones((ndays, ninds, nvars))
+        weights = rng.integers(low=0 if allow_zeros else 1, high=10, size=(ndays, ninds, nvars))
+        weights[:2] = 1  # Ensure at least one day is included
     else:
         weights = np.ones((ndays, ninds, nvars))
 
-    scale = np.ones_like(weights).astype(float)  # *np.nan
+    scale = np.ones_like(weights).astype(float)
     scale[weights > 0] = 1 / np.sqrt(weights[weights > 0])
 
     x = rng.normal(scale=scale) + 1j * rng.normal(scale=scale)
@@ -37,7 +36,7 @@ def get_samples(
     mean_over_days: bool = False,
     mean_over_ind: bool = False,
     weighted: bool = True,
-    allow_zeros: bool = False
+    allow_zeros: bool = True
 ):
     x, weights = get_vis(ndays, ninds, nvars, weighted, allow_zeros)
 
@@ -49,10 +48,9 @@ def get_samples(
     else:
         zsq = prefac * np.abs(x.real - avg.real)**2
 
+    n_averaged = np.sum(weights > 0, axis=0)
     if mean_over_days:
-        zsq = np.mean(zsq * (m - weights) / m, axis=0)
-
-    n_averaged = np.sum(weights[:, :, 0] > 0, axis=0)
+        zsq = np.sum(zsq * (m - weights) / m, axis=0) / n_averaged
 
     if mean_over_ind:
         if not mean_over_days:
@@ -63,6 +61,7 @@ def get_samples(
     else:
         if ninds > 1:
             raise ValueError("only use ninds>1 if averaging over ind")
+
         n_averaged = n_averaged[0]
 
     return zsq.flatten(), n_averaged
@@ -70,7 +69,6 @@ def get_samples(
 
 def get_excess_variance(
     ndays: int = 10,
-    ninds: int = 1,
     nvars: int = 200000,
     absolute: bool = True,
     weighted: bool = True,
@@ -85,12 +83,12 @@ def get_excess_variance(
         yvar = np.average((x.imag - avg.imag)**2, axis=0, weights=weights)
         var += yvar
 
-    n_averaged = np.sum(weights > 0, axis=0)
-
-    excess_var = var * np.sum(weights, axis=0) / (n_averaged - 1)  # Bessel's correction, true var is 1
+    excess_var = var * np.sum(weights, axis=0) / (ndays - 1)  # Bessel's correction, true var is 1
 
     if absolute:
         excess_var /= 2
+
+    n_averaged = np.sum(weights > 0, axis=0)
 
     return excess_var, n_averaged
 
