@@ -72,7 +72,7 @@ def get_lst_median_and_mad(
     return med, madrl + madim * 1j
 
 
-def get_std(
+def compute_std(
     data: np.ndarray | np.ma.MaskedArray,
     nsamples: np.ndarray | np.ma.MaskedArray,
     flags: np.ndarray | None = None
@@ -198,7 +198,7 @@ def lst_average(
     norm = np.sum(nsamples, axis=0)
 
     if get_std:
-        std, norm = get_std(data, nsamples)
+        std, norm = compute_std(data, nsamples)
     else:
         std = None
 
@@ -242,7 +242,7 @@ def reduce_lst_bins(
     get_mad
         Whether to compute the median and median absolute deviation of the data in each
         LST bin, in addition to the mean and standard deviation.
-    get_std
+    compute_std
         Whether to compute the standard deviation of the data in each LST bin.
 
     Returns
