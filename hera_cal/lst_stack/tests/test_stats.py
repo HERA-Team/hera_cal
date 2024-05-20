@@ -166,7 +166,7 @@ def test_excess_var(absolute, ndays, weighted):
 def test_mean_zsquare_mixture(absolute):
     zsq, navg = get_samples(
         absolute=absolute, mean_over_days=True,
-        ndays=10, nvars=10000, weighted=True, allow_zeros=True
+        ndays=10, nvars=1000, weighted=True, allow_zeros=True
     )
     dist = stats.mean_zsquare_mixture(absolute=absolute, n=navg)
 

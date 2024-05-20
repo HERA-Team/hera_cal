@@ -196,7 +196,6 @@ def lst_average(
     # what we want for the mean, for the std and nsamples we want to treat flags as really
     # flagged.
     nsamples.mask = flags
-    norm = np.sum(nsamples, axis=0)
 
     if get_std:
         std, norm = compute_std(data, nsamples, meandata)
