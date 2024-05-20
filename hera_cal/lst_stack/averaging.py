@@ -431,7 +431,7 @@ def average_and_inpaint_simultaneously(
             # simply sum(n_i) for all i (originally flagged or not).
             inpainted_mean[:] = 0.0
             total_nsamples[:] = 0.0
-            for d, f, n in zip(data, flags, nsamples):
+            for d, f, n in zip(stackd, stackf, stackn):
                 # If an entire integration is flagged, don't use it at all
                 # in the averaging -- it doesn't contibute any knowledge.
                 if np.all(f):
