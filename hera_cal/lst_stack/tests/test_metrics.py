@@ -116,7 +116,7 @@ class TestGetZSquared:
         assert isinstance(zsq, LSTStack)
         assert zsq.metrics.shape == cross_stack.data.shape
 
-        dist = stats.zsquare(n=len(zsq.nights), absolute=True)
+        dist = stats.zsquare(absolute=True)
 
         # Check if the mean lines up. The variance on the mean is equal to
         # the variance of chi2(df=2nnights)/nnights^2 == 4*nnights/nnights^2.
@@ -168,7 +168,7 @@ class TestGetSelectedBls:
 class TestDownSelectZscores:
     def setup_class(self):
         uvd = mockuvd.create_mock_hera_obs(
-            integration_time=1.0, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
+            integration_time=24 * 3600, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
             time_axis_faster_than_bls=False
         )
         uvf = UVFlag(uvd, mode='metric', use_future_array_shapes=True)

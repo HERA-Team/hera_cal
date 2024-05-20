@@ -218,7 +218,7 @@ def mean_zsquare_mixture(
     absolute: bool = True,
     min_n: int = 1
 ) -> MixtureModel:
-    """The distribution of the mean Z^2 of n iid visibilities for a collection of such means.
+    """The distribution of the mean Z^2 over the redundant set of n iid visibilities for a collection of such means.
 
     This is the distribution of a *collection* of mean Z-square values, each of which may
     be the mean of a different number of z^2.
@@ -244,7 +244,7 @@ def mean_zsquare_mixture(
     unique_n = unique_n[indx]
     counts = counts[indx]
 
-    return MixtureModel([mean_zsquare(nn, absolute=absolute) for nn in unique_n], weights=counts)
+    return MixtureModel([mean_zsquare_over_redundant_set(nn, absolute=absolute) for nn in unique_n], weights=counts)
 
 
 def excess_variance_mixture(

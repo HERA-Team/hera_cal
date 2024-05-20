@@ -56,7 +56,7 @@ def create_mock_hera_obs(
         if jd_start < 2000000:
             jd_start += jdint
         times = np.arange(jd_start, ntimes * tint + jd_start, tint)[:ntimes]
-
+        print(times)
     if ants is None:
         ants = list(HERA_ANTPOS.keys())
 

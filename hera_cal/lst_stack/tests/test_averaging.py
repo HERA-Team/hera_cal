@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
 from .. import averaging as avg
+from ...tests import mock_uvdata as mockuvd
+from hera_cal.lst_stack import LSTStack
 
 
 class TestGetMaskedData:
@@ -362,3 +364,68 @@ class TestReduceLSTBins:
         d, f, n = self.get_input_data(ntimes=4)
         with pytest.raises(ValueError, match="data, flags, and nsamples must all be provided"):
             avg.reduce_lst_bins(data=d, flags=f)
+
+
+class TestAverageInpaintSimultaneously:
+    def setup_class(self):
+        self.uvd = mockuvd.create_uvd_identifiable(
+            integration_time=24 * 3600, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
+            time_axis_faster_than_bls=False
+        )
+        self.stack = LSTStack(self.uvd)
+        self.stack.data[1:] = self.stack.data[0]  # All nights exactly the same
+
+    def test_no_flags(self):
+        lstavg, models = avg.average_and_inpaint_simultaneously(
+            self.stack, return_models=True
+        )
+
+        # Since there were no flags at all, there should be no models at all.
+        assert len(models) == 0
+
+        np.testing.assert_allclose(lstavg['data'], self.stack.data[0])
+
+    def test_all_flagged(self):
+        self.stack.flags[:] = True
+
+        lstavg, models = avg.average_and_inpaint_simultaneously(
+            self.stack, return_models=True
+        )
+        self.stack.flags[:] = False
+
+        assert len(models) == 0
+        assert np.all(np.isnan(lstavg['data']))
+
+    def test_fully_flagged_channel(self):
+        self.stack.flags[:, 0, self.stack.Nfreqs // 2, 0] = True
+
+        lstavg, models = avg.average_and_inpaint_simultaneously(
+            self.stack, return_models=True
+        )
+        self.stack.flags[:] = False
+
+        assert len(models) == 1  # only one baseline actually gets a model, others are fully determined by data
+        assert not np.any(np.isnan(lstavg['data']))
+        np.testing.assert_allclose(
+            lstavg['data'][0, self.stack.Nfreqs // 2, 0],
+            self.stack.data[0, 0, self.stack.Nfreqs // 2, 0],
+            rtol=1e-4
+        )
+        assert lstavg['nsamples'][0, self.stack.Nfreqs // 2, 0] == 0.0
+        assert not lstavg['flags'][0, self.stack.Nfreqs // 2, 0]
+
+    def test_fully_flagged_integration(self):
+        self.stack.flags[0, 0, :, 0] = True
+
+        lstavg, models = avg.average_and_inpaint_simultaneously(
+            self.stack, return_models=True
+        )
+        self.stack.flags[:] = False
+
+        assert len(models) == 1
+        assert not np.any(np.isnan(lstavg['data']))
+        np.testing.assert_allclose(
+            lstavg['data'][0, :, 0], self.stack.data[0, 0, :, 0],
+        )
+        assert np.all(lstavg['nsamples'][0, :, 0] == len(self.stack.nights) - 1)
+        assert not np.any(lstavg['flags'][0, :, 0])

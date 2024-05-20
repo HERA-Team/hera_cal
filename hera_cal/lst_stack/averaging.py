@@ -295,7 +295,7 @@ def reduce_lst_bins(
 
 def average_and_inpaint_simultaneously(
     stack: LSTStack,
-    inpaint_bands: Sequence[tuple[int, int] | slice] = (slice(0, None)),
+    inpaint_bands: Sequence[tuple[int, int] | slice] = (slice(0, None),),
     return_models: bool = True,
     cache: dict | None = None,
     filter_properties: dict | None = None,
@@ -358,6 +358,7 @@ def average_and_inpaint_simultaneously(
         ``return_models`` is False, the dict is empty.
     """
     model = np.zeros(stack.Nfreqs, dtype=stack.data_array.dtype)
+    filter_properties = filter_properties or {}
 
     all_models = {}
 
@@ -394,7 +395,7 @@ def average_and_inpaint_simultaneously(
 
             # Shortcut early if there are no flags in the stack. In that case,
             # the LST-average is the same as the flagged-mode mean.
-            if not np.any(stackf) or np.all(stackf):
+            if (not np.any(stackf)) or np.all(stackf):
                 continue
 
             # Get the baseline vector and length
@@ -402,7 +403,7 @@ def average_and_inpaint_simultaneously(
             bl_len = np.linalg.norm(bl_vec) / constants.c
             filter_centers, filter_half_widths = vis_clean.gen_filter_properties(
                 ax='freq',
-                bl_len=bl_len,
+                bl_len=max(bl_len, 7.0 / constants.c),
                 **filter_properties,
             )
 
@@ -447,6 +448,9 @@ def average_and_inpaint_simultaneously(
             # Overwrite the original averaged data with the inpainted mean.
             # The nsamples remains the same for inpainted vs. flagged mean (we don't
             # count inpainted samples as samples, but we do count them as data).
-            flagged_mean[:] = this
+            flagged_mean[:] = inpainted_mean
+
+    # Set data that is flagged to nan
+    lstavg['data'][lstavg['flags']] = np.nan
 
     return lstavg, all_models
