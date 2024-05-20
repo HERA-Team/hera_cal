@@ -296,6 +296,23 @@ class TestLSTAverage:
         assert dbf[0, 0, 0] == 0
 
 
+def test_get_std():
+    data = np.linspace(0, 10, 3 * 4 * 5).reshape(3, 4, 5)
+    nsamples = np.ones_like(data)
+    flags = np.zeros_like(data, dtype=bool)
+    flags[0, 0, 0] = True
+
+    _d, _f, _n = avg.get_masked_data(data, flags, nsamples, inpainted_mode=False)
+
+    mean = np.mean(_d, axis=0)
+
+    std = avg.compute_std(_d, _n, meandata=mean)[0]
+    std2 = avg.compute_std(data, nsamples, meandata=mean, flags=flags)[0]
+    std3 = avg.compute_std(_d, _n, meandata=mean, flags=flags)[0]
+    assert np.all(std == std2)
+    assert np.all(std == std3)
+
+
 class TestReduceLSTBins:
     @classmethod
     def get_input_data(

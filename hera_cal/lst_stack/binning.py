@@ -790,9 +790,6 @@ def lst_bin_files_from_config(
 
     out = []
     for (d, f, n, wf, bt) in zip(data, flags, nsamples, where_inpainted, binned_times):
-        if len(binned_times) == 0:
-            out.append(None)
-            continue
 
         # To enable inpaint-mode, set nsamples where things are flagged and inpainted
         # to zero, and set the flags to false.
