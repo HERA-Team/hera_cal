@@ -8,6 +8,7 @@ from .. import vis_clean
 from hera_filters import dspec
 from scipy import constants
 from typing import Sequence
+from .. import types as tp
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +72,48 @@ def get_lst_median_and_mad(
     return med, madrl + madim * 1j
 
 
+def get_std(
+    data: np.ndarray | np.ma.MaskedArray,
+    nsamples: np.ndarray | np.ma.MaskedArray,
+    flags: np.ndarray | None = None
+):
+    logger.info("Calculating std")
+
+    if flags is not None:
+        if isinstance(data, np.ma.MaskedArray):
+            data.mask = flags
+        else:
+            data = np.ma.masked_array(data, mask=flags)
+
+        if isinstance(nsamples, np.ma.MaskedArray):
+            nsamples.mask = flags
+        else:
+            nsamples = np.ma.masked_array(nsamples, mask=flags)
+
+    norm = np.sum(nsamples, axis=0)
+
+    normalizable = norm > 0
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
+        std = np.square(data.real - meandata.real) + 1j * np.square(
+            data.imag - meandata.imag
+        )
+        std = np.sum(std * nsamples, axis=0)
+        std[normalizable] /= norm[normalizable]
+        std = np.sqrt(std.real) + 1j * np.sqrt(std.imag)
+
+        std[~normalizable] = np.inf
+
+    return std.data, norm
+
+
 def lst_average(
     data: np.ma.MaskedArray,
     nsamples: np.ma.MaskedArray,
     flags: np.ndarray,
+    get_std: bool = True,
+    fill_value: float = np.nan,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute statistics of a set of data over its zeroth axis.
@@ -147,31 +186,23 @@ def lst_average(
     normalizable = norm > 0
 
     meandata[normalizable] /= norm[normalizable]
-    # Multiply by nan instead of just setting as nan, so both real and imag parts are nan
-    meandata[~normalizable] *= np.nan
+
+    # Multiply by the fill value, which works for complex numbers when fill_value is
+    # inf, 0 or nan.
+    meandata[~normalizable] *= fill_value
 
     # While the previous nsamples is different for in-painted and flagged mode, which is
     # what we want for the mean, for the std and nsamples we want to treat flags as really
     # flagged.
     nsamples.mask = flags
     norm = np.sum(nsamples, axis=0)
-    normalizable = norm > 0
 
-    # get other stats
-    logger.info("Calculating std")
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
-        std = np.square(data.real - meandata.real) + 1j * np.square(
-            data.imag - meandata.imag
-        )
-        std = np.sum(std * nsamples, axis=0)
-        std[normalizable] /= norm[normalizable]
-        std = np.sqrt(std.real) + 1j * np.sqrt(std.imag)
+    if get_std:
+        std, norm = get_std(data, nsamples)
+    else:
+        std = None
 
-    std[~normalizable] = np.inf
-
-    logger.info(f"Mean of meandata: {np.mean(meandata)}. Mean of std: {np.mean(std)}. Total nsamples: {np.sum(norm)}")
-    return meandata.data, lstbin_flagged, std.data, norm.data, ndays_binned
+    return meandata.data, lstbin_flagged, std, norm.data, ndays_binned
 
 
 def reduce_lst_bins(
@@ -181,6 +212,8 @@ def reduce_lst_bins(
     nsamples: np.ndarray | None = None,
     inpainted_mode: bool = True,
     get_mad: bool = False,
+    get_std: bool = True,
+    mean_fill_value: float = np.nan,
 ) -> dict[str, np.ndarray]:
     """
     Reduce LST-stacked data over the time axis.
@@ -209,6 +242,8 @@ def reduce_lst_bins(
     get_mad
         Whether to compute the median and median absolute deviation of the data in each
         LST bin, in addition to the mean and standard deviation.
+    get_std
+        Whether to compute the standard deviation of the data in each LST bin.
 
     Returns
     -------
@@ -249,7 +284,7 @@ def reduce_lst_bins(
 
     o = {'mad': None, 'median': None}
     o['data'], o['flags'], o['std'], o['nsamples'], o['days_binned'] = lst_average(
-        data, flags=flags, nsamples=nsamples
+        data, flags=flags, nsamples=nsamples, get_std=get_std, fill_value=mean_fill_value
     )
     if get_mad:
         o['median'], o['mad'] = get_lst_median_and_mad(data)
@@ -259,27 +294,42 @@ def reduce_lst_bins(
 
 def average_and_inpaint_simultaneously(
     stack: LSTStack,
-    lstavg: dict[str, np.ndarray],
     inpaint_bands: Sequence[tuple[int, int] | slice] = (slice(0, None)),
     return_models: bool = True,
     cache: dict | None = None,
     filter_properties: dict | None = None,
     **kwargs,
-) -> list[np.ndarray]:
-    """
+) -> dict[tp.Baseline, np.ndarray]:
+    r"""
     Perform an average over nights while simultaneously inpainting.
 
-    This function updates the ``data`` key in ``lstavg`` in-place. If you want to keep
-    the original data, make a copy of it first.
+    For any particular baseline-pol-channel, this function will first perform a
+    flagged-mode average:
+
+    .. math:: \bar{d} = \frac{\sum_i (1 - f_i) n_i d_i}{N}
+
+    where :math:`n_i` is the number of samples for the i-th integration, :math:`d_i` is
+    the data for the i-th integration, :math:`f_i` is the flag for the i-th integration,
+    and :math:`N` is the total number of samples:
+
+    .. math:: N = \sum_i (1 - f_i) n_i
+
+    Then it will create a model of the data by inpainting the averaged data:
+
+    .. math:: m = \text{FourierFilter}(\bar{d})
+
+    Finally, it will do a weighted average of the data and the model:
+
+    .. math:: \bar{d}_{\text{inp}} = \frac{\sum_i n_i (f_i m + (1 - f_i) d_i)}{\sum_i n_i}.
+
+    The output dictionary will have :math:`\bar{d}_{\text{inp}}` as the data, :math:`N`
+    as the nsamples (i.e. only the sum of un-flagged samples), and the binned flags will
+    simply be where the inpaint model either fails or is not attempted.
 
     Parameters
     ----------
     stack
         An LSTStack object containing the data to average.
-    lstavg
-        A dictionary of LST-averaged data, with at _least_ keys 'data' and 'nsamples'.
-        The averaging for this data must be in *flagged* mode. This can be the output
-        of :func:`reduce_lst_bins`.
     inpaint_bands
         The frequency bands to inpaint independently for each baseline-night. This
         should be a sequence of tuples, where each tuple is a start and end frequency
@@ -300,6 +350,9 @@ def average_and_inpaint_simultaneously(
     Returns
     -------
     dict
+        A dictionary of the LST-averaged data. This is in the same format as returned
+        by :func:`reduce_lst_bins`.
+    dict
         A dictionary of the inpainted models, keyed by (ant1, ant2, pol). If
         ``return_models`` is False, the dict is empty.
     """
@@ -312,12 +365,38 @@ def average_and_inpaint_simultaneously(
 
     complete_flags = stack.flagged_or_inpainted()
 
-    this = np.zeros(stack.Nfreqs, dtype=stack.data.dtype)
-    nn = np.zeros(stack.Nfreqs, dtype=float)
+    # First, perform a simple flagged-mode average over the nights.
+    # lstavg is a dict of arrays with keys being 'mean', 'std', 'nsamples', 'flags'.
+    lstavg = reduce_lst_bins(
+        stack, get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
+    )
+
+    inpainted_mean = np.zeros(stack.Nfreqs, dtype=stack.data.dtype)
+    total_nsamples = np.zeros(stack.Nfreqs, dtype=float)
 
     for iap, antpair in enumerate(stack.antpairs):
         for polidx, pol in enumerate(stack.pols):
+            # Get the data, flags, and nsamples for this baseline-pol pair, for the
+            # whole LST-stack. Note that the incoming data may already be in-painted
+            # on a per-day basis, in which case the nsamples for those data will be
+            # negative, and they will be unflagged. Here, we want to use the original
+            # per-day flags and nsamples (i.e. we effectively use the pre-inpainted
+            # data).
+            stackd = stack.data[:, iap, :, polidx]
+            stackf = complete_flags[:, iap, :, polidx]
+            stackn = np.abs(stack.nsamples[:, iap, :, polidx])
 
+            # Also get the lst-avg data, flags, and nsamples for this baseline-pol pair.
+            flagged_mean = lstavg['data'][iap, :, polidx]
+            wgts = lstavg['nsamples'][iap, :, polidx]
+            flgs = lstavg['flags'][iap, :, polidx]
+
+            # Shortcut early if there are no flags in the stack. In that case,
+            # the LST-average is the same as the flagged-mode mean.
+            if not np.any(stackf) or np.all(stackf):
+                continue
+
+            # Get the baseline vector and length
             bl_vec = uvws[0, iap, :2]
             bl_len = np.linalg.norm(bl_vec) / constants.c
             filter_centers, filter_half_widths = vis_clean.gen_filter_properties(
@@ -325,15 +404,6 @@ def average_and_inpaint_simultaneously(
                 bl_len=bl_len,
                 **filter_properties,
             )
-
-            flagged_mean = lstavg['data'][iap, :, polidx]
-
-            wgts = lstavg['nsamples'][iap, :, polidx].copy()
-
-            # fourier_filter can't deal with nans, even if they're flagged
-            nanmask = np.isnan(flagged_mean)
-            flagged_mean[nanmask] = 0.0
-            wgts[nanmask] = 0.0
 
             for band in inpaint_bands:
                 model[band], _, info = dspec.fourier_filter(
@@ -348,29 +418,34 @@ def average_and_inpaint_simultaneously(
                     **kwargs,  # noqa: E225
                 )
 
+                # Update the flags. All successfully-inpainted data is unflagged.
+                # If in-painting is unsuccessful, we flag the data.
+                flgs[band] = (info['status']['axis_0'][0] == 'skipped')
+
             if return_models:
                 all_models[(*antpair, pol)] = model.copy()
 
-            # fill in the data with the model
-            data = stack.data[:, iap, :, polidx]
-            flags = complete_flags[:, iap, :, polidx]
-            nsamples = np.abs(stack.nsamples[:, iap, :, polidx])
-
-            this[:] = 0.0
-            nn[:] = 0.0
+            # Inpainted mean is going to be sum(n_i * {model if flagged else data_i}) / sum(n_i)
+            # where n_i is the nsamples for the i-th integration The total_nsamples is
+            # simply sum(n_i) for all i (originally flagged or not).
+            inpainted_mean[:] = 0.0
+            total_nsamples[:] = 0.0
             for d, f, n in zip(data, flags, nsamples):
                 # If an entire integration is flagged, don't use it at all
                 # in the averaging -- it doesn't contibute any knowledge.
                 if np.all(f):
                     continue
 
-                this += n * np.where(f, model, d)
-                nn += n
+                inpainted_mean += n * np.where(f, model, d)
+                total_nsamples += n
 
             with np.errstate(divide='ignore', invalid='ignore'):
-                this /= nn
-                this[nn == 0] *= np.nan
+                inpainted_mean /= total_nsamples
+                inpainted_mean[total_nsamples == 0] *= np.nan
 
+            # Overwrite the original averaged data with the inpainted mean.
+            # The nsamples remains the same for inpainted vs. flagged mean (we don't
+            # count inpainted samples as samples, but we do count them as data).
             flagged_mean[:] = this
 
-    return all_models
+    return lstavg, all_models
