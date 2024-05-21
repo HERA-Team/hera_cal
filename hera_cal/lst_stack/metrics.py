@@ -168,9 +168,9 @@ def get_squared_zscores(
         for ipol, pol in enumerate(stack.pols):
             bl = (*ap, pol)
             data = stack.get_data(bl)
-            nsamps = stack.get_nsamples(bl)
-            M = cross_stats.nsamples[bl]
-            norm = nsamps * (M / (M - nsamps))**2
+            nsamps = stack.get_nsamples(bl)  # per-night nsamples
+            M = cross_stats.nsamples[bl]     # total nsamples over nights
+            norm = nsamps * (M / (M - nsamps))
 
             zsq_view = zsq[:, iap, :, ipol]
             zsq_view[:] = norm * np.abs(data - getattr(cross_stats, central)[bl])**2
@@ -203,6 +203,38 @@ def get_squared_zscores_flagged(
     variance: np.ndarray | None = None,
     auto_stats: LSTBinStats | None = None,
 ):
+    """
+    Obtain squared Z-scores as a UVFlag object in metrics mode.
+
+    This function is similar to :func:`get_squared_zscores` -- it takes in the same
+    information and returns the same output. However, it is more limited in its options:
+    it only implements the 'autos' method for the standard deviation, and the 'mean'
+    method for the central value. It is also faster, because it vectorizes the computation
+    over all baselines, polarizations, and frequencies. Finally, it allows the nightly
+    variance to be passed in, instead of computed within the function, which speeds up
+    calculations if the nightly variance is already known but the Z^2 scores need to be
+    re-evaluated many times (e.g. if iterative flagging is being performed).
+
+    Parameters
+    ----------
+    stack : LSTStack
+        The LST-stack of data over nights, as an LSTStack object (which is essentially
+        a UVData object).
+    variance : np.ndarray | None
+        The nightly variance of the data, with the same shape as ``stack.data``.
+        If None, it is computed from the autos. Either this or the auto_stats must be
+        given.
+    auto_stats : LSTBinStats | None
+        LST-binned statistics for the autos. Used to predict the variance of the
+        cross-correlations if ``variance`` is not given. Must be provided if ``variance``
+        is not.
+
+    Returns
+    -------
+    zstack : LSTStack
+        The squared Z-scores as an LSTStack-ed UVFlag object in metrics mode (the
+        zscores can be accessed via ``zstack.metrics``).
+    """
     zsq = np.zeros(stack.data.shape, dtype=np.float32)
 
     # inpainted data should _not_ be counted in the nsamples here,

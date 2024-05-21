@@ -73,32 +73,74 @@ def get_lst_median_and_mad(
 
 
 def compute_std(
-    data: np.ndarray | np.ma.MaskedArray,
-    nsamples: np.ndarray | np.ma.MaskedArray,
-    meandata: np.ndarray,
-    flags: np.ndarray | None = None
+    data: np.ma.MaskedArray,
+    nsamples: np.ma.MaskedArray,
+    mean: np.ndarray | None = None,
 ):
+    r"""
+    Compute the standard deviation of a set of data over its zeroth axis.
+
+    The input data is expected to be complex visibilities. The standard deviation is
+    computed component-wise for real and imaginary parts, as
+
+    .. math:: \sigma  = \sqrt{\frac{1}{N} \sum_i (1-f_i) n_i (d_i - \bar{d})^2},
+
+    where :math:`n_i` is the number of samples for the i-th integration, :math:`d_i` is
+    the data for the i-th integration (either real or imaginary component, separately),
+    :math:`f_i` is a binary flag which is 1 if the data is flagged, :math:`\bar{d}` is
+    the mean of the data, and :math:`N` is the total number of un-flagged samples over
+    integrations.
+
+    If not given directly, the mean of the data is computed as
+
+    .. math:: \bar{d} = \frac{\sum_i (1 - f_i) n_i d_i}{N}.
+
+    Parameters
+    ----------
+    data : np.ma.MaskedArray
+        The data to compute the statistics over. The shape should be such that the
+        first axis is the one averaged over (e.g. nights), and other axes are arbitrary.
+        The mask of the array should be set to True where the data is flagged. The
+        correct form of the MaskedArray can be obtained using :func:`get_masked_data`
+        *with inpainted_mode=False*.
+    nsamples : np.ma.MaskedArray
+        The number of samples for each measurement. Same shape as ``data``, and having
+        the same mask. The masked array can be computed with :func:`get_masked_data`.
+    mean : np.ndarray, optional
+        The mean of the data over the first axis. If not given, it will be computed from
+        the data and nsamples. Providing it directly can serve two purposes: firstly, it
+        allows more rapid computation of the standard deviation without re-computing the
+        mean, and secondly, it allows using a different mean than the one computed from
+        the data (e.g. if an inpainted mean is desired, rather than a flagged-mode mean).
+        Note that if the mean is not provided, it will be computed under whatever
+        assumptions led to the masking of the data and nsamples, which *should* be
+        that flagged data (even if inpainted) is not included.
+
+    Returns
+    -------
+    std : np.ndarray
+        The standard deviation of the data. The shape is the same as the data, but with
+        the first axis removed. It will be a complex array, regardless of the dtype
+        of data.
+    norm : np.ndarray
+        The total number of un-flagged samples over the first axis. This is the same
+        as the total number of samples in the mean, but it is returned here for
+        convenience.
+    """
     logger.info("Calculating std")
 
-    if flags is not None:
-        if isinstance(data, np.ma.MaskedArray):
-            data.mask = flags
-        else:
-            data = np.ma.masked_array(data, mask=flags)
-
-        if isinstance(nsamples, np.ma.MaskedArray):
-            nsamples.mask = flags
-        else:
-            nsamples = np.ma.masked_array(nsamples, mask=flags)
-
     norm = np.sum(nsamples, axis=0)
-
     normalizable = norm > 0
+
+    if mean is None:
+        mean = np.sum(data * nsamples, axis=0)
+        mean[normalizable] /= norm[normalizable]
+        mean[~normalizable] = np.nan
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
-        std = np.square(data.real - meandata.real) + 1j * np.square(
-            data.imag - meandata.imag
+        std = np.square(data.real - mean.real) + 1j * np.square(
+            data.imag - mean.imag
         )
         std = np.sum(std * nsamples, axis=0)
         std[normalizable] /= norm[normalizable]
@@ -152,6 +194,11 @@ def lst_average(
         The flags for each measurement. Same shape as ``data``. These represent the flags
         considered in the averaging of nsamples -- i.e. the determination of the
         expected variance.
+    get_std
+        Whether to compute the standard deviation of the data.
+    fill_value
+        The value to use for the mean when there are no samples. This must be either
+        nan, zero or inf.
 
     Returns
     -------
@@ -161,6 +208,9 @@ def lst_average(
     """
     # all data is assumed to be in the same LST bin.
     assert (all(isinstance(x, np.ma.MaskedArray) for x in (data, nsamples)))
+
+    if fill_value not in (np.nan, 0, np.inf):
+        raise ValueError("fill_value must be nan, 0, or inf")
 
     # Here we do a check to make sure Nsamples is uniform across frequency
     ndiff = np.diff(nsamples, axis=2)
@@ -244,6 +294,9 @@ def reduce_lst_bins(
         LST bin, in addition to the mean and standard deviation.
     get_std
         Whether to compute the standard deviation of the data in each LST bin.
+    fill_value
+        The value to use for the mean when there are no samples. This must be either
+        nan, zero or inf.
 
     Returns
     -------
@@ -294,7 +347,7 @@ def reduce_lst_bins(
 
 def average_and_inpaint_simultaneously(
     stack: LSTStack,
-    inpaint_bands: Sequence[tuple[int, int] | slice] = (slice(0, None),),
+    inpaint_bands: Sequence[slice] = (slice(0, None),),
     return_models: bool = True,
     cache: dict | None = None,
     filter_properties: dict | None = None,
@@ -306,13 +359,13 @@ def average_and_inpaint_simultaneously(
     For any particular baseline-pol-channel, this function will first perform a
     flagged-mode average:
 
-    .. math:: \bar{d} = \frac{\sum_i (1 - f_i) n_i d_i}{N}
+    .. math:: \bar{d} = \frac{\sum_i (1 - f_i) n_i d_i}{N_\text{unf}}
 
     where :math:`n_i` is the number of samples for the i-th integration, :math:`d_i` is
     the data for the i-th integration, :math:`f_i` is the flag for the i-th integration,
-    and :math:`N` is the total number of samples:
+    and :math:`N_\text{unf}` is the total number of un-flagged samples:
 
-    .. math:: N = \sum_i (1 - f_i) n_i
+    .. math:: N_\text{unf} = \sum_i (1 - f_i) n_i
 
     Then it will create a model of the data by inpainting the averaged data:
 
@@ -320,9 +373,13 @@ def average_and_inpaint_simultaneously(
 
     Finally, it will do a weighted average of the data and the model:
 
-    .. math:: \bar{d}_{\text{inp}} = \frac{\sum_i n_i (f_i m + (1 - f_i) d_i)}{\sum_i n_i}.
+    .. math:: \bar{d}_{\text{inp}} = \frac{\sum_i n_i (f_i m + (1 - f_i) d_i)}{N_\text{tot}},
 
-    The output dictionary will have :math:`\bar{d}_{\text{inp}}` as the data, :math:`N`
+    where :math:`N_\text{tot}` is the total number of samples, including flagged samples:
+
+    .. math:: N_\text{tot} = \sum_i n_i.
+
+    The output dictionary will have :math:`\bar{d}_{\text{inp}}` as the data, :math:`N_\text{unf}`
     as the nsamples (i.e. only the sum of un-flagged samples), and the binned flags will
     simply be where the inpaint model either fails or is not attempted.
 
@@ -332,8 +389,7 @@ def average_and_inpaint_simultaneously(
         An LSTStack object containing the data to average.
     inpaint_bands
         The frequency bands to inpaint independently for each baseline-night. This
-        should be a sequence of tuples, where each tuple is a start and end frequency
-        to inpaint, or slices.
+        should be a sequence of slices that select frequencies from the stack.freq_array.
     return_models
         Whether to return the inpainted models.
     cache
@@ -358,11 +414,13 @@ def average_and_inpaint_simultaneously(
     """
     model = np.zeros(stack.Nfreqs, dtype=stack.data_array.dtype)
     filter_properties = filter_properties or {}
+    cache = cache or {}
 
     all_models = {}
 
     # Time axis is outer axis for all LSTStacks.
-    uvws = stack.uvw_array.reshape((stack.Ntimes, stack.Nbls, 3))
+    antpos, ants = stack.get_ENU_antpos(pick_data_ants=False)
+    antpos = dict(zip(ants, antpos))
 
     complete_flags = stack.flagged_or_inpainted()
 
@@ -398,7 +456,7 @@ def average_and_inpaint_simultaneously(
                 continue
 
             # Get the baseline vector and length
-            bl_vec = uvws[0, iap, :2]
+            bl_vec = (antpos[antpair[1]] - antpos[antpair[0]])[:2]
             bl_len = np.linalg.norm(bl_vec) / constants.c
             filter_centers, filter_half_widths = vis_clean.gen_filter_properties(
                 ax='freq',

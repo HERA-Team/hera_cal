@@ -306,11 +306,9 @@ def test_get_std():
 
     mean = np.mean(_d, axis=0)
 
-    std = avg.compute_std(_d, _n, meandata=mean)[0]
-    std2 = avg.compute_std(data, nsamples, meandata=mean, flags=flags)[0]
-    std3 = avg.compute_std(_d, _n, meandata=mean, flags=flags)[0]
+    std = avg.compute_std(_d, _n, mean=mean)[0]
+    std2 = avg.compute_std(_d, _n)[0]
     assert np.all(std == std2)
-    assert np.all(std == std3)
 
 
 class TestReduceLSTBins:
