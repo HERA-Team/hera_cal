@@ -12,9 +12,10 @@ import warnings
 import inspect
 from functools import reduce
 from collections.abc import Iterable
-from pyuvdata import UVCal, UVData
+from pyuvdata import UVCal, UVData, Telescope
 from pyuvdata import utils as uvutils
 from astropy import units
+from astropy.coordinates import EarthLocation
 from astropy.io import fits
 import h5py
 import scipy
@@ -2144,12 +2145,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # configure UVData parameters
     # get pols
     pols = np.unique([k[-1] for k in data.keys()])
-    Npols = len(pols)
     polarization_array = np.array([polstr2num(p, x_orientation=x_orientation) for p in pols])
 
     # get telescope ants
     antenna_numbers = np.unique(list(antpos.keys()))
-    Nants_telescope = len(antenna_numbers)
     antenna_names = [f"HH{a}" for a in antenna_numbers]
 
     # get antenna positions in ITRF frame
@@ -2172,99 +2171,61 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
             longitude=(lon * 180 / np.pi),
             altitude=alt
         )
-    Ntimes = len(time_array)
 
-    # get freqs
-    Nfreqs = len(freq_array)
-    channel_width = np.median(np.diff(freq_array))
-    freq_array = freq_array.reshape(1, -1)
-    spw_array = np.array([0])
-    Nspws = 1
-
-    # get baselines keys
     antpairs = sorted(data.antpairs())
-    Nbls = len(antpairs)
-    Nblts = Nbls * Ntimes
 
-    # reconfigure time_array and lst_array
-    time_array = np.repeat(time_array[np.newaxis], Nbls, axis=0).ravel()
-    lst_array = np.repeat(lst_array[np.newaxis], Nbls, axis=0).ravel()
+    tel_loc_obj = EarthLocation.from_geocentric(*telescope_location, unit="m")
+    # create an object with empty data-size arrays using UVData.new()
+    if hasattr(UVData(), "telescope"):
+        tel_params = {
+            "telescope": Telescope.new(
+                name=telescope_name,
+                location=tel_loc_obj,
+                antenna_numbers=antenna_numbers,
+                antenna_names=antenna_names,
+                antenna_positions=antenna_positions,
+                instrument=instrument,
+                x_orientation=x_orientation,
+            )
+        }
+    else:
+        tel_params = {
+            "telescope_name": telescope_name,
+            "telescope_location": tel_loc_obj,
+            "antenna_numbers": antenna_numbers,
+            "antenna_names": antenna_names,
+            "antenna_positions": antenna_positions,
+            "instrument": instrument,
+            "x_orientation": x_orientation,
+        }
+    uvd = UVData.new(
+        freq_array=freq_array,
+        polarization_array=polarization_array,
+        times=time_array,
+        antpairs=antpairs,
+        time_axis_faster_than_bls=True,
+        do_blt_outer=True,
+        empty=True,
+        history=history,
+        **tel_params,
+    )
 
-    # configure integration time, converting from days (the unit of time_array)
-    # to seconds (the unit of integration_time)
-    if integration_time is None:
-        integration_time = np.ones_like(time_array, dtype=np.float64) * np.median(np.diff(np.unique(time_array))) * 24 * 3600.
+    # set data
+    for antpair in antpairs:
+        for pol in pols:
+            key1, key2 = antpair
+            pol_num = polstr2num(pol, x_orientation=x_orientation)
+            uvd.set_data(data[antpair + (str(pol),)][:,:,np.newaxis], key1, key2, pol_num)
 
-    # get data array
-    data_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=complex)
-    for i, antpair in enumerate(antpairs):
-        for j, pol in enumerate(pols):
-            data_array[i, :, :, j] = data[antpair + (str(pol),)]
+            if nsamples is not None:
+                uvd.set_nsamples(nsamples[antpair + (str(pol),)][:,:,np.newaxis], key1, key2, pol_num)
 
-    # resort time and baseline axes
-    data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
+            if flags is not None:
+                uvd.set_flags(flags[antpair + (str(pol),)][:,:,np.newaxis], key1, key2, pol_num)
 
     if nsamples is None:
-        nsample_array = np.ones_like(data_array, float)
-    else:
-        nsample_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=float)
-        for i, antpair in enumerate(antpairs):
-            for j, pol in enumerate(pols):
-                nsample_array[i, :, :, j] = nsamples[antpair + (str(pol),)]
-        nsample_array = nsample_array.reshape(Nblts, 1, Nfreqs, Npols)
-
-    # flags
-    if flags is None:
-        flag_array = np.zeros_like(data_array, float).astype(bool)
-    else:
-        flag_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=bool)
-        for i, antpair in enumerate(antpairs):
-            for j, pol in enumerate(pols):
-                flag_array[i, :, :, j] = flags[antpair + (str(pol),)]
-        flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
-
-    # configure baselines
-    antpairs = np.repeat(np.array(antpairs), Ntimes, axis=0)
-
-    antpairs_int = antpairs.astype(np.uint64)
-    if not np.allclose(antpairs, antpairs_int):
-        raise ValueError("antenna numbers must be non-negative integers")
-
-    # get ant_1_array, ant_2_array
-    ant_1_array = antpairs_int[:, 0]
-    ant_2_array = antpairs_int[:, 1]
-
-    # get baseline array
-    baseline_array = 2048 * (ant_1_array + 1) + (ant_2_array + 1) + 2**16
-
-    # get antennas in data
-    data_ants = np.unique(np.concatenate([ant_1_array, ant_2_array]))
-    Nants_data = len(data_ants)
-
-    # set uvw assuming drift phase i.e. phase center is zenith
-    uvw_array = np.array([antpos[k[1]] - antpos[k[0]] for k in zip(ant_1_array, ant_2_array)])
-
-    # instantiate object
-    uvd = UVData()
-
-    # assign parameters
-    params = ['Nants_data', 'Nants_telescope', 'Nbls', 'Nblts', 'Nfreqs', 'Npols', 'Nspws', 'Ntimes',
-              'ant_1_array', 'ant_2_array', 'antenna_names', 'antenna_numbers', 'baseline_array',
-              'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'x_orientation',
-              'instrument', 'integration_time', 'lst_array', 'nsample_array',
-              'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
-              'uvw_array', 'vis_units', 'antenna_positions']
-    local_params = locals()
-
-    # overwrite paramters by kwargs
-    local_params.update(kwargs)
-
-    # set parameters in uvd
-    for p in params:
-        uvd.__setattr__(p, local_params[p])
-
-    set_phase_params(uvd, phase_center_catalog=None, phase_center_id_array=None, time_array=time_array)
-    uvd.flex_spw_id_array = np.zeros(Nfreqs, dtype=int)
+        # default nsamples to all ones
+        uvd.nsample_array = np.full_like(uvd.nsample_array, 1.0)
 
     # write to file
     if write_file:
@@ -2440,10 +2401,10 @@ def load_cal(input_cal, return_meta=False):
         return gains, flags
 
 
-def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, total_qual=None, antnums2antnames=None,
+def write_cal(fname, gains, freqs, times, antpos=None, lsts=None, flags=None, quality=None, total_qual=None, antnums2antnames=None,
               write_file=True, return_uvc=True, outdir='./', overwrite=False, gain_convention='divide',
               history=' ', x_orientation="north", telescope_name='HERA', cal_style='redundant',
-              zero_check=True, **kwargs):
+              zero_check=True, telescope_location=HERA_TELESCOPE_LOCATION, **kwargs):
     '''Format gain solution dictionary into pyuvdata.UVCal and write to file
 
     Arguments:
@@ -2453,7 +2414,12 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
             along [0] axis and freq along [1] axis.
         freqs : type=ndarray, holds unique frequencies channels in Hz
         times : type=ndarray, holds unique times of integration centers in Julian Date
-        lsts : type=ndarray, holds unique lsts corresponding to the times. If None, converts
+        antpos : type=dictionary, antenna position dictionary. keys are antenna integers and values
+                 are position vectors in meters in ENU (TOPO) frame. If this is
+                 not supplied, antenna names, numbers and positions are set from
+                 pyuvdata known telescopes.
+        lsts : Not used. Retained to prevent breaking API changes.
+            type=ndarray, holds unique lsts corresponding to the times. If None, converts
             times to lsts using the default telescope coordinates given telescope_name.
         flags : type=dictionary, holds boolean flags (True if flagged) for gains.
             Must match shape of gains.
@@ -2489,7 +2455,6 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
     else:
         antenna_names = np.array([antnums2antnames[ant_num] for ant_num in antenna_numbers])
     Nants_data = len(ant_array)
-    Nants_telescope = len(antenna_numbers)
 
     # get polarization info: ordering must be monotonic in Jones number
     jones_array = np.array(list(set([jstr2num(k[1], x_orientation=x_orientation) for k in gains.keys()])))
@@ -2500,65 +2465,43 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
     # get time info
     time_array = np.array(times, float)
     Ntimes = len(time_array)
-    if len(time_array) > 1:
-        integration_time = np.median(np.diff(time_array)) * 24. * 3600.
-    else:
-        integration_time = 0.0
-
-    if lsts is None:
-        try:
-            from pyuvdata import known_telescope_location
-            tel_loc = known_telescope_location(telescope_name)
-        except ImportError:
-            # this can go away when we require pyuvdata >= 3.0
-            from pyuvdata import get_telescope
-            from astropy.coordinates import EarthLocation
-            tel = get_telescope(telescope_name)
-            tel_loc = EarthLocation.from_geocentric(*tel.telescope_location * units.m)
-        lst_array = utils.JD2LST(
-            times,
-            latitude=tel_loc.lat.deg,
-            longitude=tel_loc.lon.deg,
-            altitude=tel_loc.height.to('m').value
-        )
-    else:
-        lst_array = np.asarray(lsts, dtype=float)
 
     # get frequency info
     freq_array = np.array(freqs, float)
     Nfreqs = len(freq_array)
-    Nspws = 1
-    freq_array = freq_array[None, :]
-    spw_array = np.arange(Nspws)
-    channel_width = np.median(np.diff(freq_array))
+
+    if antpos is not None:
+        # get antenna positions in ITRF frame
+        lat, lon, alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
+        antenna_positions = np.array([antpos[k] for k in antenna_numbers])
+        antenna_positions = uvutils.ECEF_from_ENU(
+            antenna_positions, latitude=lat, longitude=lon, altitude=alt
+        ) - telescope_location
 
     # form gain, flags and qualities
-    gain_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), complex)
-    flag_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), bool)
-    quality_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), float)
-    total_quality_array = np.empty((Nspws, Nfreqs, Ntimes, Njones), float)
+    gain_array = np.empty((Nants_data, Nfreqs, Ntimes, Njones), complex)
+    flag_array = np.empty((Nants_data, Nfreqs, Ntimes, Njones), bool)
+    quality_array = np.empty((Nants_data, Nfreqs, Ntimes, Njones), float)
+    total_quality_array = np.empty((Nfreqs, Ntimes, Njones), float)
     for i, p in enumerate(pol_array):
         if total_qual is not None:
-            total_quality_array[0, :, :, i] = total_qual[p].T[None, :, :]
+            total_quality_array[:, :, i] = total_qual[p].T[None, :, :]
         for j, a in enumerate(ant_array):
             # ensure (a, p) is in gains
             if (a, p) in gains:
-                gain_array[j, :, :, :, i] = gains[(a, p)].T[None, :, :]
+                gain_array[j, :, :, i] = gains[(a, p)].T[None, :, :]
                 if flags is not None:
-                    flag_array[j, :, :, :, i] = flags[(a, p)].T[None, :, :]
+                    flag_array[j, :, :, i] = flags[(a, p)].T[None, :, :]
                 else:
-                    flag_array[j, :, :, :, i] = np.zeros((Nspws, Nfreqs, Ntimes), bool)
+                    flag_array[j, :, :, i] = np.zeros((Nfreqs, Ntimes), bool)
                 if quality is not None:
-                    quality_array[j, :, :, :, i] = quality[(a, p)].T[None, :, :]
+                    quality_array[j, :, :, i] = quality[(a, p)].T[None, :, :]
                 else:
-                    quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), float)
+                    quality_array[j, :, :, i] = np.ones((Nfreqs, Ntimes), float)
             else:
-                gain_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), complex)
-                flag_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), bool)
-                quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), float)
-
-    if total_qual is None:
-        total_quality_array = None
+                gain_array[j, :, :, i] = np.ones((Nfreqs, Ntimes), complex)
+                flag_array[j, :, :, i] = np.ones((Nfreqs, Ntimes), bool)
+                quality_array[j, :, :, i] = np.ones((Nfreqs, Ntimes), float)
 
     if zero_check:
         # Check gain_array for values close to zero, if so, set to 1
@@ -2571,37 +2514,64 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
         if zero_check_arr.max() is True:
             warnings.warn("Some of values in self.gain_array were zero and are flagged and set to 1.")
 
-    # instantiate UVCal
-    uvc = UVCal()
+    data_dict = {
+        "gain_array": gain_array,
+        "flag_array": flag_array,
+        "quality_array": quality_array
+    }
 
-    # enforce 'gain' cal_type
-    uvc.cal_type = "gain"
+    if total_qual is not None:
+        data_dict["total_quality_array"] = total_quality_array
 
-    # create parameter list
-    params = ["Nants_data", "Nants_telescope", "Nfreqs", "Ntimes", "Nspws", "Njones",
-              "ant_array", "antenna_numbers", "antenna_names", "cal_style", "history",
-              "channel_width", "flag_array", "gain_array", "quality_array", "jones_array",
-              "time_array", "lst_array", "spw_array", "freq_array", "history", "integration_time",
-              "x_orientation", "telescope_name", "gain_convention", "total_quality_array"]
-
-    # create local parameter dict
-    local_params = locals()
-
-    # overwrite with kwarg parameters
-    local_params.update(kwargs)
-
-    # set parameters
-    for p in params:
-        uvc.__setattr__(p, local_params[p])
-
-    # set missing but required parameters to the default for the telescope name
-    uvc.set_telescope_params()
-
-    # Set flex_spw_id_array, required for pyuvdata>=3.0
-    uvc.flex_spw_id_array = np.zeros(Nfreqs, dtype=int)
-
-    # run check
-    uvc.check()
+    tel_loc_obj = EarthLocation.from_geocentric(*telescope_location, unit="m")
+    # create an object with empty data-size arrays using UVData.new()
+    if hasattr(UVCal(), "telescope"):
+        if antpos is None:
+            tel_use = Telescope.from_known_telescopes(telescope_name)
+            tel_use.x_orientation = x_orientation
+        else:
+            tel_use = Telescope.new(
+                name=telescope_name,
+                location=tel_loc_obj,
+                antenna_numbers=antenna_numbers,
+                antenna_names=antenna_names,
+                antenna_positions=antenna_positions,
+                x_orientation=x_orientation,
+            )
+        tel_params = {"telescope": tel_use}
+    else:
+        if antpos is None:
+            from pyuvdata import get_telescope
+            tel_use = get_telescope(telescope_name)
+            tel_params = {
+                "telescope_name": telescope_name,
+                "telescope_location": tel_loc_obj,
+                "antenna_numbers": tel_use.antenna_numbers,
+                "antenna_names": tel_use.antenna_names,
+                "antenna_positions": tel_use.antenna_positions,
+                "x_orientation": x_orientation,
+            }
+        else:
+            tel_params = {
+                "telescope_name": telescope_name,
+                "telescope_location": tel_loc_obj,
+                "antenna_numbers": antenna_numbers,
+                "antenna_names": antenna_names,
+                "antenna_positions": antenna_positions,
+                "x_orientation": x_orientation,
+            }
+    uvc = UVCal.new(
+        cal_style=cal_style,
+        gain_convention=gain_convention,
+        jones_array=jones_array,
+        time_array=time_array,
+        freq_array=freq_array,
+        cal_type="gain",
+        ant_array=ant_array,
+        history=history,
+        data=data_dict,
+        **tel_params,
+    )
 
     # write to file
     if write_file:
