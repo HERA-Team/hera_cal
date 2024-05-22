@@ -2442,6 +2442,7 @@ def write_cal(fname, gains, freqs, times, antpos=None, lsts=None, flags=None, qu
         cal_style : type=str, style of calibration solutions, options=['redundant', 'sky']. If
             cal_style == sky, additional params are required. See pyuvdata.UVCal doc.
         zero_check : type=bool, if True, for gain values near zero, set to one and flag them.
+        telescope_location : type=ndarray, telescope location in xyz in ITRF (earth-centered frame).
         kwargs : additional atrributes to set in pyuvdata.UVCal
     Returns:
         if return_uvc: returns UVCal object
