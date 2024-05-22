@@ -662,6 +662,14 @@ class LSTStack:
             (self.Ntimes, self.Nbls, len(self.freq_array), len(self.polarization_array))
         )
 
+    def inpainted(self) -> np.ndarray:
+        """Flags representing data that is inpainted."""
+        return self.nsamples <= 0
+
+    def flagged_or_inpainted(self):
+        """Flags representing data that is flagged or inpainted."""
+        return self.flags | self.inpainted()
+
     @property
     def metrics(self) -> np.ndarray:
         """A view into the flags array, reshaped to (Nbls, Ntimes, Nfreqs, Npols)."""
@@ -701,7 +709,7 @@ def lst_bin_files_from_config(
     rephase: bool = True,
     freq_min: float | None = None,
     freq_max: float | None = None,
-) -> list[LSTStack] | None:
+) -> list[LSTStack | None] | None:
     """Read and LST-bin data from a configuration object.
 
     This function is the main entry point for binning (not averaging) data into LST
@@ -782,6 +790,7 @@ def lst_bin_files_from_config(
 
     out = []
     for (d, f, n, wf, bt) in zip(data, flags, nsamples, where_inpainted, binned_times):
+
         # To enable inpaint-mode, set nsamples where things are flagged and inpainted
         # to zero, and set the flags to false.
         if wf is not None:

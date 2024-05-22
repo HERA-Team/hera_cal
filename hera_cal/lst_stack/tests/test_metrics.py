@@ -57,7 +57,7 @@ def cross_stack(lstconfig) -> LSTStack:
 
 @pytest.fixture(scope='module')
 def auto_rdc(auto_stack) -> dict[str, np.ndarray]:
-    return reduce_lst_bins(auto_stack, get_mad=True)
+    return reduce_lst_bins(auto_stack, get_mad=False)
 
 
 @pytest.fixture(scope='module')
@@ -106,6 +106,14 @@ class TestGetNightlyPredictedVariance:
                 np.testing.assert_allclose(predicted_var[0] / 2, std.real**2, atol=0, rtol=0.5)
                 np.testing.assert_allclose(predicted_var[0] / 2, std.imag**2, atol=0, rtol=0.5)
 
+    def test_as_stack(self, cross_stack, auto_stats):
+        v = mt.get_nightly_predicted_variance_stack(
+            stack=cross_stack,
+            auto_stats=auto_stats,
+        )
+        assert v.shape == cross_stack.data.shape
+        assert np.all(v >= 0)
+
 
 class TestGetZSquared:
     @pytest.mark.parametrize("central", ['mean', 'median'])
@@ -116,7 +124,7 @@ class TestGetZSquared:
         assert isinstance(zsq, LSTStack)
         assert zsq.metrics.shape == cross_stack.data.shape
 
-        dist = stats.zsquare(n=len(zsq.nights), absolute=True)
+        dist = stats.zsquare(absolute=True)
 
         # Check if the mean lines up. The variance on the mean is equal to
         # the variance of chi2(df=2nnights)/nnights^2 == 4*nnights/nnights^2.
@@ -136,6 +144,17 @@ class TestGetZSquared:
     def test_wrong_std(self, auto_stats, cross_stats, cross_stack):
         with pytest.raises(ValueError, match="std must be 'autos', 'std' or 'mad'"):
             mt.get_squared_zscores(auto_stats, cross_stats, cross_stack, std='bad')
+
+    def test_get_flagged_z(self, auto_stats, cross_stats, cross_stack):
+        zsq = mt.get_squared_zscores_flagged(
+            cross_stack, auto_stats=auto_stats
+        )
+        v = mt.get_nightly_predicted_variance_stack(
+            cross_stack, auto_stats=auto_stats, flag_if_inpainted=True
+        ) / 2
+        zsq2 = mt.get_squared_zscores_flagged(cross_stack, variance=v)
+
+        assert np.all(zsq.metrics == zsq2.metrics)
 
 
 class TestGetSelectedBls:
@@ -168,7 +187,7 @@ class TestGetSelectedBls:
 class TestDownSelectZscores:
     def setup_class(self):
         uvd = mockuvd.create_mock_hera_obs(
-            integration_time=1.0, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
+            integration_time=24 * 3600, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
             time_axis_faster_than_bls=False
         )
         uvf = UVFlag(uvd, mode='metric', use_future_array_shapes=True)

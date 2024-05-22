@@ -1487,7 +1487,7 @@ class HERADataFastReader():
         raise NotImplementedError('HERADataFastReader does not support this method. Try HERAData instead.')
 
     def read(self, bls=None, pols=None, full_read_thresh=0.002, read_data=True, read_flags=True,
-             read_nsamples=True, check=False, dtype=np.complex128, verbose=False, skip_lsts=False):
+             read_nsamples=True, fix_autos_func=np.abs, check=False, dtype=np.complex128, verbose=False, skip_lsts=False):
         '''A faster read that only concatenates along the time axis. Puts times in ascending order, but does not
         check that files are contiguous. Currently not BDA compatible.
         Arguments:
@@ -1497,6 +1497,8 @@ class HERADataFastReader():
             read_data (bool, True): read data
             read_flags (bool, True): read flags
             read_nsamples (bool, True): read nsamples
+            fix_autos_func (function, np.abs): function to apply to autocorrelations to enforce, for example, that
+                they are real. Default is np.abs, which matches UVData._fix_autos(). Use np.real for loading diff data.
             check (bool, False): run sanity checks to make sure files match.
             dtype (np.complex128): numpy datatype for output complex-valued arrays
             verbose: print some progress messages.
@@ -1511,11 +1513,11 @@ class HERADataFastReader():
                             check=check, dtype=dtype, verbose=verbose)
         self._adapt_metadata(rv['info'], skip_lsts=skip_lsts)
 
-        # make autocorrleations real by taking the abs, matches UVData._fix_autos()
+        # make autocorrleations real by taking the real part. Using fix_autos_func = np.abs matches UVData._fix_autos()
         if 'data' in rv:
             for bl in rv['data']:
                 if split_bl(bl)[0] == split_bl(bl)[1]:
-                    rv['data'][bl] = np.abs(rv['data'][bl])
+                    rv['data'][bl] = fix_autos_func(rv['data'][bl])
 
         # construct datacontainers from result
         return self._make_datacontainer(rv, 'data'), self._make_datacontainer(rv, 'flags'), self._make_datacontainer(rv, 'nsamples')

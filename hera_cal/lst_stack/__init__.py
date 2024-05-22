@@ -14,7 +14,7 @@ __all__ = [
 ]
 
 from .wrappers import lst_bin_files
-from .binning import lst_bin_files_for_baselines, lst_align, lst_bin_files_from_config
+from .binning import lst_bin_files_for_baselines, lst_align, lst_bin_files_from_config, LSTStack
 from .config import LSTBinConfigurator, LSTConfig
 from .io import create_empty_uvd, create_lstbin_output_file, format_outfile_name
 from .averaging import reduce_lst_bins, lst_average
