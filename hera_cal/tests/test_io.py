@@ -987,8 +987,9 @@ class Test_HERADataFastReader:
         np.testing.assert_array_equal(hd1.ants, hd2.ants)
         np.testing.assert_array_equal(hd1.data_ants, hd2.data_ants)
         np.testing.assert_array_equal(hd1.pols, hd2.pols)
-        np.testing.assert_array_equal(hd1.antpairs, hd2.antpairs)
-        np.testing.assert_array_equal(hd1.bls, hd2.bls)
+        assert set(hd1.antpairs) == set(hd2.antpairs)
+        assert set(hd1.bls) == set(hd2.bls)
+
         for ant in hd1.antpos:
             np.testing.assert_array_almost_equal(hd1.antpos[ant] - hd2.antpos[ant], 0)
         for ant in hd1.data_antpos:
@@ -1279,7 +1280,7 @@ class Test_Visibility_IO_Legacy:
         io.update_vis(fname, outname, data=new_data, flags=new_flags, filetype_out='uvfits',
                       add_to_history='hello world', clobber=True, telescope_name='PAPER')
         uvd_fits = UVData()
-        uvd_fits.read_uvfits(outname)
+        uvd_fits.read_uvfits(outname, use_future_array_shapes=True)
         os.remove(outname)
 
         # Coverage for errors
@@ -1304,7 +1305,7 @@ class Test_Visibility_IO_Legacy:
         shutil.rmtree(outname)
 
 
-class Test_Calibration_IO_Legacy(object):
+class Test_Calibration_IO_Legacy:
     def test_load_cal(self):
         with pytest.raises(TypeError):
             io.load_cal(1.0)
@@ -1370,15 +1371,16 @@ class Test_Calibration_IO_Legacy(object):
         uvc = io.write_cal("ex.calfits", gains, freqs, times, flags=flags, quality=quality,
                            total_qual=total_qual, overwrite=True, return_uvc=True, write_file=True)
         assert os.path.exists("ex.calfits")
-        assert uvc.gain_array.shape == (10, 1, 64, 100, 1)
+        assert uvc.gain_array.shape == (10, 64, 100, 1)
         assert np.allclose(uvc.gain_array[5].min(), 1.0)
-        assert np.allclose(uvc.gain_array[0, 0, 0, 0, 0], (1 + 0j))
+        assert np.allclose(uvc.gain_array[0, 0, 0, 0], (1 + 0j))
         assert np.allclose(np.sum(uvc.gain_array), (64000 + 0j))
-        assert not np.any(uvc.flag_array[0, 0, 0, 0, 0])
+        assert not np.any(uvc.flag_array[0, 0, 0, 0])
         assert np.sum(uvc.flag_array) == 640
-        assert np.allclose(uvc.quality_array[0, 0, 0, 0, 0], 2)
+        assert np.allclose(uvc.quality_array[0, 0, 0, 0], 2)
         assert np.allclose(np.sum(uvc.quality_array), 128000.0)
-        assert len(uvc.antenna_numbers) == 10
+        assert len(uvc.antenna_numbers) == 350
+        assert uvc.Nants_data == 10
         assert uvc.total_quality_array is not None
         if os.path.exists('ex.calfits'):
             os.remove('ex.calfits')
@@ -1389,7 +1391,8 @@ class Test_Calibration_IO_Legacy(object):
         # test single integration write
         gains2 = odict([(k, gains[k][:1]) for k in gains.keys()])
         uvc = io.write_cal("ex.calfits", gains2, freqs, times[:1], return_uvc=True, outdir='./')
-        assert np.allclose(uvc.integration_time, 0.0)
+        # only one time, integration time defaults to 1s
+        assert np.allclose(uvc.integration_time, 1.0)
         assert uvc.Ntimes == 1
         assert os.path.exists('ex.calfits')
         os.remove('ex.calfits')
@@ -1398,22 +1401,33 @@ class Test_Calibration_IO_Legacy(object):
         for k in list(gains.keys()):
             gains[(k[0], 'Jyy')] = gains[k].conj()
         uvc = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, outdir='./')
-        assert uvc.gain_array.shape == (10, 1, 64, 100, 2)
-        np.testing.assert_array_almost_equal(uvc.gain_array[0, 0, :, :, 0], uvc.gain_array[0, 0, :, :, 1].conj())
+        assert uvc.gain_array.shape == (10, 64, 100, 2)
+        np.testing.assert_array_almost_equal(uvc.gain_array[0, :, :, 0], uvc.gain_array[0, :, :, 1].conj())
         os.remove('ex.calfits')
 
         # test zero check
         gains[(0, 'Jnn')][:] = 0.0
         uvc1 = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, write_file=False, outdir='./', zero_check=True)
         uvc2 = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, write_file=False, outdir='./', zero_check=False)
-        assert np.allclose(uvc1.gain_array[0, 0, :, :, 0], 1.0)
-        assert np.allclose(uvc2.gain_array[0, 0, :, :, 0], 0.0)
+        assert np.allclose(uvc1.gain_array[0, :, :, 0], 1.0)
+        assert np.allclose(uvc2.gain_array[0, :, :, 0], 0.0)
 
         # test antenna number and names ordering
+        # note, antnums2antnames only used if antenna_positions are also supplied.
         antnums2antnames = {a: "THISANT{}".format(a + 1) for a in ants}
+        if hasattr(uvc1, "telescope"):
+            antpos_enu = uvc1.telescope.get_enu_antpos()
+        else:
+            lat, lon, alt = uvc1.telescope_location_lat_lon_alt
+            antpos_enu = pyuvdata.utils.ENU_from_ECEF(
+                uvc1.antenna_positions + uvc.telescope_location,
+                latitude=lat, longitude=lon, altitude=alt
+            )
+        antpos_enu_dict = {ant: antpos_enu[a_ind] for a_ind, ant in enumerate(uvc1.antenna_numbers) if ant in ants}
         uvc = io.write_cal("ex.calfits", gains, freqs, times, antnums2antnames=antnums2antnames,
-                           return_uvc=True, write_file=False)
+                           antpos=antpos_enu_dict, return_uvc=True, write_file=False)
         assert sorted(uvc.antenna_names) == sorted(antnums2antnames.values())
+        np.testing.assert_allclose(uvc.antenna_positions, uvc1.antenna_positions[:10])
 
     def test_update_cal(self):
         # load in cal

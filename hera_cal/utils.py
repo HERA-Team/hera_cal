@@ -1410,9 +1410,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 n = np.asarray([data.get_nsamples(bl + (pol,)) for bl in blg])
                 tint = []
                 for bl in blg:
-                    blinds = data.antpair2ind(bl + (pol,))
-                    if len(blinds) == 0:
-                        blinds = data.antpair2ind(reverse_bl(bl + (pol,)))
+                    blinds = data.antpair2ind(bl + (pol,), ordered=False)
                     tint.append(data.integration_time[blinds])
                 tint = np.asarray(tint)[:, :, None]
                 w = np.asarray([wgts[bl + (pol,)] for bl in blg]) * tint
@@ -1445,7 +1443,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             else:
                 blinds = data.antpair2ind(blk)
                 polind = pols.index(pol)
-                if len(blinds) == 0:
+                if blinds is None or (hasattr(blinds, "__len__") and len(blinds) == 0):
                     blinds = data.antpair2ind(reverse_bl(blk))
                     davg = np.conj(davg)
                 data.data_array[blinds, :, polind] = davg
