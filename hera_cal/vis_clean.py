@@ -388,7 +388,7 @@ def flag_model_rms(skipped, d, w, mdl, mdl_w=None, model_rms_threshold=1.1, ax='
     return skipped
 
 
-class VisClean(object):
+class VisClean:
     """
     VisClean object for visibility CLEANing and filtering.
     """
@@ -618,7 +618,7 @@ class VisClean(object):
         # apply flags
         if filetype == 'uvflag':
             if isinstance(external_flags, str):
-                external_flags = UVFlag(external_flags)
+                external_flags = UVFlag(external_flags, use_future_array_shapes=True)
             uvutils.apply_uvflag(self.hd, external_flags, unflag_first=overwrite_flags, inplace=True)
         elif filetype == 'yaml':
             from hera_qm.utils import apply_yaml_flags

@@ -19,15 +19,19 @@ from sklearn import gaussian_process as gp
 from ..redcal import filter_reds
 from ..redcal import get_pos_reds
 from astropy.coordinates import EarthLocation
-from hera_sim.noise import white_noise
+from hera_sim.utils import gen_white_noise
 from .. import utils, abscal, datacontainer, io, redcal
 from ..calibrations import CAL_PATH
 from ..data import DATA_PATH
 from . import mock_uvdata as mockuvd
 from pathlib import Path
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*Using known values for HERA",
+)
 
-class Test_Pol_Ops(object):
+
+class Test_Pol_Ops:
     def test_comply_pol(self):
         assert utils.comply_pol('XX') == 'xx'
         assert utils.comply_pol('Xx') == 'xx'
@@ -188,7 +192,7 @@ class TestFftDly(object):
     def test_noisy(self):
         true_dlys = np.random.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
-        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * white_noise((60, 1024))
+        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * gen_white_noise((60, 1024))
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df)
         assert np.median(np.abs(dlys - true_dlys)) < 1  # median accuracy of 1 ns
@@ -271,7 +275,7 @@ class TestAAFromUV(object):
     def test_get_aa_from_uv(self):
         fn = os.path.join(DATA_PATH, self.test_file)
         uvd = UVData()
-        uvd.read_miriad(fn)
+        uvd.read_miriad(fn, use_future_array_shapes=True)
         aa = utils.get_aa_from_uv(uvd)
         # like miriad, aipy will pad the aa with non-existent antennas,
         #   because there is no concept of antenna names
@@ -287,7 +291,7 @@ class TestAA(object):
         # generate aa from file
         fn = os.path.join(DATA_PATH, self.test_file)
         uvd = UVData()
-        uvd.read_miriad(fn)
+        uvd.read_miriad(fn, use_future_array_shapes=True)
         aa = utils.get_aa_from_uv(uvd)
 
         # change one antenna position, and read it back in to check it's the same
@@ -382,16 +386,19 @@ def test_combine_calfits():
     assert os.path.exists('ex.calfits')
     # test antenna number
     uvc = UVCal()
-    uvc.read_calfits('ex.calfits')
+    uvc.read_calfits('ex.calfits', use_future_array_shapes=True)
     assert len(uvc.antenna_numbers) == 7
     # test time number
     assert uvc.Ntimes == 60
     # test gain value got properly multiplied
     uvc_dly = UVCal()
-    uvc_dly.read_calfits(test_file1)
+    uvc_dly.read_calfits(test_file1, use_future_array_shapes=True)
     uvc_abs = UVCal()
-    uvc_abs.read_calfits(test_file2)
-    assert np.allclose(uvc_dly.gain_array[0, 0, 10, 10, 0] * uvc_abs.gain_array[0, 0, 10, 10, 0], uvc.gain_array[0, 0, 10, 10, 0])
+    uvc_abs.read_calfits(test_file2, use_future_array_shapes=True)
+    assert np.allclose(
+        uvc_dly.gain_array[0, 10, 10, 0] * uvc_abs.gain_array[0, 10, 10, 0],
+        uvc.gain_array[0, 10, 10, 0]
+    )
     if os.path.exists('ex.calfits'):
         os.remove('ex.calfits')
     utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=False)
@@ -507,7 +514,7 @@ def test_lst_rephase():
     # test operation on array
     k = (0, 1, 'ee')
     d = data_drift[k].copy()
-    d_phs = utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True, inplace=False)
+    d_phs = utils.lst_rephase(d[:, None], bls[k], freqs, dlst, lat=0.0, inplace=False)
     assert np.allclose(np.abs(np.angle(d_phs[50] / data[k][50])).max(), 0.0)
 
 
@@ -620,7 +627,7 @@ def test_gp_interp1d():
     # load data
     dfiles = glob.glob(os.path.join(DATA_PATH, "zen.2458043.4*.xx.HH.XRAA.uvh5"))
     uvd = UVData()
-    uvd.read(dfiles, bls=[(37, 39)])
+    uvd.read(dfiles, bls=[(37, 39)], use_future_array_shapes=True)
     times = np.unique(uvd.time_array) * 24 * 60
     times -= times.min()
     y = uvd.get_data(37, 39, 'ee')
@@ -826,6 +833,7 @@ def test_echo(capsys):
     assert output[4:] == '-' * 40 + '\n'
 
 
+@pytest.mark.filterwarnings("ignore:baseline group of length 7 encountered")
 def test_chunck_baselines_by_redundant_group():
     reds_extended = [[(24, 24), (25, 25), (37, 37), (38, 38), (39, 39), (52, 52), (53, 53), (67, 67), (68, 68), (125, 125), (146, 146)],
                      [(24, 37), (25, 38), (38, 52), (39, 53), (39, 125), (125, 146)],
@@ -870,6 +878,7 @@ def test_chunck_baselines_by_redundant_group():
         assert chunk1 == chunk2
 
 
+@pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
 def test_select_spw_ranges(tmpdir):
     # validate spw_ranges.
     tmp_path = str(tmpdir)
@@ -879,7 +888,10 @@ def test_select_spw_ranges(tmpdir):
     hd = io.HERAData(uvh5)
     nf = hd.Nfreqs
     output = os.path.join(tmp_path, 'test_calibrated_output.uvh5')
-    utils.select_spw_ranges(inputfilename=uvh5, outputfilename=output, spw_ranges=[(0, 256), (332, 364), (792, 1000)])
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Selected frequencies are not evenly spaced")
+        utils.select_spw_ranges(inputfilename=uvh5, outputfilename=output, spw_ranges=[(0, 256), (332, 364), (792, 1000)], clobber=True)
+
     hdo = io.HERAData(output)
     assert np.allclose(hdo.freq_array, np.hstack([hd.freq_array[:256], hd.freq_array[332:364], hd.freq_array[792:1000]]))
     # test case where no spw-ranges supplied
@@ -1081,7 +1093,8 @@ class Test_LSTBranchCut:
 
     def test_with_crazy_periods(self):
         lsts = np.linspace(0, 1.0, 100)
-        n = np.random.random_integers(10, size=100)
+
+        n = np.random.default_rng().integers(10, size=100)
         lsts += n * 2 * np.pi
         best = utils.get_best_lst_branch_cut(lsts)
         assert best == 0

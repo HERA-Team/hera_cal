@@ -15,9 +15,15 @@ from ..utils import split_pol
 from ..apply_cal import apply_cal
 
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*Using known values for HERA",
+)
+
+
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
-class Test_Autos(object):
+@pytest.mark.filterwarnings("ignore:telescope_location is not set")
+class Test_Autos:
     def test_read_and_write_autocorrelations(self):
         infile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
         outfile = os.path.join(DATA_PATH, 'test_output/autos.uvh5')

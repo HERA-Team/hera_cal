@@ -21,16 +21,14 @@ from . import redcal
 from . import apply_cal
 from .datacontainer import DataContainer
 import logging
-from pyuvdata.uvdata import FastUVH5Meta
-from pyuvdata.utils import get_lst_for_time
-try:
-    profile
-except NameError:
-    def profile(fnc):
-        return fnc
+import warnings
 
 logger = logging.getLogger(__name__)
 
+warnings.warn(
+    "This module is deprecated and will be removed in a future version of hera_cal. ",
+    DeprecationWarning,
+)
 
 def baselines_same_across_nights(data_list):
     """
@@ -61,7 +59,6 @@ def baselines_same_across_nights(data_list):
     return same_across_nights
 
 
-@profile
 def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None, begin_lst=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True, weight_only_by_flags=False,
             sig_clip=False, sigma=4.0, min_N=4, flag_below_min_N=False, return_no_avg=False, antpos=None,
@@ -215,7 +212,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
         klist = list(d.keys())
         for j, key in enumerate(klist):
             if j % max(1, (len(klist) // 100)) == 0:
-                logger.info(f"Doing key {key} [{j+1}/{len(klist)}]")
+                logger.info(f"Doing key {key} [{j + 1}/{len(klist)}]")
 
             # if bl_list is not None, use it to determine conjugation:
             # this is to prevent situations where conjugation of bl in
@@ -872,8 +869,10 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                             # If uvc has Ntimes == 1, then broadcast across time will work automatically
                             uvc.select(times=uvc.time_array[tinds])
                             gains, cal_flags, _, _ = uvc.build_calcontainers()
-                        apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags,
-                                                     gain_convention=uvc.gain_convention)
+                        apply_cal.calibrate_in_place(
+                            data, gains, data_flags=flags, cal_flags=cal_flags,
+                            gain_convention=uvc.gain_convention
+                        )
                         utils.echo("Done with calibration.", verbose=verbose)
 
                     # redundantly average baselines, keying to baseline group key
@@ -1054,7 +1053,12 @@ def make_lst_grid(
     return lst_grid
 
 
-def sigma_clip(array: np.ndarray | np.ma.MaskedArray, sigma: float = 4.0, min_N: int = 4, axis: int = 0):
+def sigma_clip(
+    array: np.ndarray | np.ma.MaskedArray,
+    sigma: float = 4.0,
+    min_N: int = 4,
+    axis: int = 0
+):
     """
     One-iteration robust sigma clipping algorithm.
 

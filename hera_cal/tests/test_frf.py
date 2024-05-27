@@ -20,6 +20,11 @@ from pyuvdata import UVFlag, UVBeam
 from .. import utils
 from .. import datacontainer, io, frf
 from ..data import DATA_PATH
+import warnings
+
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*Using known values for HERA",
+)
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -27,8 +32,7 @@ def test_timeavg_waterfall():
     fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
 
     uvd = UVData()
-    uvd.read_miriad(fname)
-    uvd.use_future_array_shapes()
+    uvd.read_miriad(fname, use_future_array_shapes=True)
 
     d = uvd.get_data(24, 25)
     f = uvd.get_flags(24, 25)
@@ -123,7 +127,15 @@ def test_fir_filtering():
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
-class Test_FRFilter(object):
+@pytest.mark.filterwarnings("ignore:Fixing auto-correlations")
+@pytest.mark.filterwarnings("ignore:The lst_array is not self-consistent")
+@pytest.mark.filterwarnings("ignore:Mean of empty slice")  # TODO: probably should remove this
+@pytest.mark.filterwarnings("ignore:invalid value encountered in scalar divide")  # TODO: probably should remove this
+@pytest.mark.filterwarnings("ignore:No new keys provided")
+@pytest.mark.filterwarnings("ignore:writing default values for restfreq")
+@pytest.mark.filterwarnings("ignore:The uvw_array does not match")
+@pytest.mark.filterwarnings("ignore:projected is False, but RA, Dec is off from lst")
+class Test_FRFilter:
     def setup_method(self):
         self.fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
         self.F = frf.FRFilter(self.fname, filetype='miriad')
@@ -231,7 +243,7 @@ class Test_FRFilter(object):
         tmp_path = tmpdir.strpath
         input_name = os.path.join(tmp_path, 'test_input.uvh5')
         uvd = UVData()
-        uvd.read(self.fname)
+        uvd.read(self.fname, use_future_array_shapes=True)
         uvd.write_uvh5(input_name)
         output_name = os.path.join(tmp_path, 'test_output.uvh5')
         flag_output = tmp_path + '/test_output.flags.h5'
@@ -274,9 +286,13 @@ class Test_FRFilter(object):
                 frf.time_avg_data_and_write(baseline_list=[], flag_output=output_flags,
                                             input_data_list=uvh5s, rephase=True,
                                             output_data=output, t_avg=35., wgt_by_nsample=True)
-            frf.time_avg_data_and_write(baseline_list=baseline_list, flag_output=output_flags,
-                                        input_data_list=uvh5s, rephase=True,
-                                        output_data=output, t_avg=35., wgt_by_nsample=True)
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message='The uvw_array does not match the expected values')
+                frf.time_avg_data_and_write(baseline_list=baseline_list, flag_output=output_flags,
+                                            input_data_list=uvh5s, rephase=True,
+                                            output_data=output, t_avg=35., wgt_by_nsample=True)
+
         # now do everything at once:
         output = tmp_path + '/combined.uvh5'
         frf.time_avg_data_and_write(uvh5s, output, t_avg=35., rephase=True, wgt_by_nsample=True)
@@ -367,11 +383,14 @@ class Test_FRFilter(object):
                                                res_outfilename=outfilename, clobber=True,
                                                mode='dayenu', case='sky')
         for avg_bl in [True, False]:
-            frf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)], polarizations=['ee'],
-                                               calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
-                                               read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
-                                               res_outfilename=outfilename, clobber=True,
-                                               mode='dayenu', case='sky')
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Antenna 53 not present")
+                warnings.filterwarnings("ignore", message='Cannot preserve total_quality_array')
+                frf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)], polarizations=['ee'],
+                                                   calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                                   read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                                                   res_outfilename=outfilename, clobber=True,
+                                                   mode='dayenu', case='sky')
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
@@ -431,7 +450,7 @@ class Test_FRFilter(object):
 
         # test apriori flags and flag_yaml
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
-        uvf = UVFlag(hd, mode='flag', copy_flags=True)
+        uvf = UVFlag(hd, mode='flag', copy_flags=True, use_future_array_shapes=True)
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
@@ -479,11 +498,9 @@ class Test_FRFilter(object):
         test_beam = os.path.join(DATA_PATH, "efield_test_nside16.beamfits")
         test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
         uvd = UVData()
-        uvd.read_uvh5(test_data)
-        uvd.use_future_array_shapes()
+        uvd.read_uvh5(test_data, use_future_array_shapes=True)
         uvb = UVBeam()
-        uvb.read_beamfits(test_beam)
-        uvb.use_future_array_shapes()
+        uvb.read_beamfits(test_beam, use_future_array_shapes=True)
         fr_grid, profiles = frf.build_fringe_rate_profiles(uvd, uvb)
         assert len(fr_grid) == uvd.Ntimes
 
@@ -492,14 +509,12 @@ class Test_FRFilter(object):
         test_beam = os.path.join(DATA_PATH, "fr_unittest_beam.beamfits")
         test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
         uvd = UVData()
-        uvd.read_uvh5(test_data)
-        uvd.use_future_array_shapes()
+        uvd.read_uvh5(test_data, use_future_array_shapes=True)
         myfrf = frf.FRFilter(uvd)
         sim_c_frates = {}
         sim_w_frates = {}
         uvb = UVBeam()
-        uvb.read_beamfits(test_beam)
-        uvb.use_future_array_shapes()
+        uvb.read_beamfits(test_beam, use_future_array_shapes=True)
         c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb, percentile_low=10, percentile_high=90)
         for bl in c_frs:
             # fft data
@@ -622,8 +637,13 @@ class Test_FRFilter(object):
         filled_outfilename = os.path.join(tmp_path, 'temp_filled.h5')
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         for avg_bl in [True, False]:
-            frf.load_tophat_frfilter_and_write(uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename,
-                                               Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl, case='sky')
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Antenna 53 not present in calibration solution")
+                warnings.filterwarnings("ignore", message='Cannot preserve total_quality_array')
+                frf.load_tophat_frfilter_and_write(
+                    uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename,
+                    Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl, case='sky'
+                )
             hd = io.HERAData(outfilename)
             assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
             d, f, n = hd.read()
@@ -811,7 +831,7 @@ class Test_FRFilter(object):
         hd = io.HERAData(uvh5)
         hd.read()
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
-        uvf = UVFlag(hd, mode='flag', copy_flags=True)
+        uvf = UVFlag(hd, mode='flag', copy_flags=True, use_future_array_shapes=True)
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
@@ -912,10 +932,15 @@ class Test_FRFilter(object):
         os.mkdir(cdir)
         # run again using computed cache.
         calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-        frf.load_tophat_frfilter_and_write(uvh5, res_outfilename=outfilename, max_frate_coeffs=[0.0, 0.025],
-                                           cache_dir=cdir, calfile_list=calfile, read_cache=True,
-                                           Nbls_per_load=1, clobber=True, mode='dayenu',
-                                           spw_range=(0, 32), write_cache=True, case='max_frate_coeffs')
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Antenna 53 not present in calibration solution")
+            warnings.filterwarnings("ignore", message='Cannot preserve total_quality_array')
+            frf.load_tophat_frfilter_and_write(
+                uvh5, res_outfilename=outfilename, max_frate_coeffs=[0.0, 0.025],
+                cache_dir=cdir, calfile_list=calfile, read_cache=True,
+                Nbls_per_load=1, clobber=True, mode='dayenu',
+                spw_range=(0, 32), write_cache=True, case='max_frate_coeffs'
+            )
         # no new cache files should be generated.
         assert len(glob.glob(cdir + '/*')) == 1
         hd = io.HERAData(outfilename)

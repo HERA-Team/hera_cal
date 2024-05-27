@@ -46,6 +46,7 @@ setup_args = {
                 'scripts/flag_all.py', 'scripts/throw_away_flagged_antennas.py', 'scripts/select_spw_ranges.py',
                 'scripts/multiply_gains.py', 'scripts/lstbin_simple.py', 'scripts/subselect.py'],
     'package_data': {'hera_cal': data_files},
+    'python_requires': '>=3.9',
     'install_requires': [
         'numpy>=1.10',
         'scipy>=1.9.0',
@@ -63,19 +64,19 @@ setup_args = {
         "rich",
         "jax",
         "jaxlib",
+        "optax",
         'attrs',
         'frozendict',
+        "toml",
     ],
     'extras_require': {
-        "all": [
-            'optax'
-        ],
         'dev': [
             "pytest",
             "pre-commit",
             "pytest-cov",
             "hera_sim",
-            "pytest-xdist"
+            "pytest-xdist",
+            "hypothesis"
         ]
     },
     'zip_safe': False,

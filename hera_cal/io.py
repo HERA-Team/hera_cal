@@ -12,9 +12,10 @@ import warnings
 import inspect
 from functools import reduce
 from collections.abc import Iterable
-from pyuvdata import UVCal, UVData
+from pyuvdata import UVCal, UVData, Telescope
 from pyuvdata import utils as uvutils
 from astropy import units
+from astropy.coordinates import EarthLocation
 from astropy.io import fits
 import h5py
 import scipy
@@ -22,7 +23,6 @@ import pickle
 import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT, POL_NUM2STR_DICT, ENU_from_ECEF, XYZ_from_LatLonAlt
-from pyuvdata.telescopes import KNOWN_TELESCOPES
 import argparse
 from hera_filters.dspec import place_data_on_uniform_grid
 from typing import Literal
@@ -32,6 +32,7 @@ from astropy.time import Time
 from contextlib import contextmanager
 from functools import lru_cache
 from pyuvdata.uvdata import FastUVH5Meta
+from pyuvdata.uvdata.initializers import set_phase_params
 import pyuvdata
 
 try:
@@ -167,8 +168,7 @@ class HERACal(UVCal):
 
         if self.filepaths is not None:
             # load data
-            self.read_calfits(self.filepaths[0])
-            self.use_future_array_shapes()
+            self.read_calfits(self.filepaths[0], use_future_array_shapes=True)
 
             if pols is not None:
                 pols = [jstr2num(ap, x_orientation=self.x_orientation) for ap in pols]
@@ -177,7 +177,7 @@ class HERACal(UVCal):
             if antenna_nums is not None:
                 for ant in antenna_nums:
                     if ant not in my_ants:
-                        warnings.warn(f"Warning, antenna {ant} not present in calibration solution. Skipping!")
+                        warnings.warn(f"Antenna {ant} not present in calibration solution. Skipping!")
                 antenna_nums = np.intersect1d(my_ants, antenna_nums)
             select_dict = {'antenna_nums': antenna_nums, 'frequencies': frequencies,
                            'freq_chans': freq_chans, 'jones': pols}
@@ -188,8 +188,7 @@ class HERACal(UVCal):
             if len(self.filepaths) > 1:
                 for fp in self.filepaths[1:]:
                     uvc = UVCal()
-                    uvc.read_calfits(fp)
-                    uvc.use_future_array_shapes()
+                    uvc.read_calfits(fp, use_future_array_shapes=True)
 
                     if np.any([s is not None for s in select_dict.values()]):
                         uvc.select(inplace=True, **select_dict)
@@ -219,6 +218,9 @@ class HERACal(UVCal):
             tSlice = slice(0, self.Ntimes)
         if fSlice is None:
             fSlice = slice(0, self.Nfreqs)
+
+        if quals is not None and self.quality_array is None:
+            self.quality_array = np.zeros(self.gain_array.shape, dtype=float)
 
         # loop over and update gains, flags, and quals
         data_arrays = [self.gain_array, self.flag_array, self.quality_array]
@@ -455,11 +457,12 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     Returns:
         blt_slices: dictionary mapping anntenna pair tuples to baseline-time slice objects
     '''
-    if hasattr(uvo, 'blts_are_rectangular') and uvo.blts_are_rectangular is None:
-        uvo.set_rectangularity()
+    if hasattr(uvo, "blts_are_rectangular"):
+        if getattr(uvo, "blts_are_rectangular", None) is None:
+            uvo.set_rectangularity(force=True)
 
     blt_slices = {}
-    if getattr(uvo, 'blts_are_rectangular', False):
+    if getattr(uvo, "blts_are_rectangular", False):
         if uvo.time_axis_faster_than_bls:
             for i in range(uvo.Nbls):
                 start = i * uvo.Ntimes
@@ -474,9 +477,13 @@ def get_blt_slices(uvo, tried_to_reorder=False):
     else:
         for ant1, ant2 in uvo.get_antpairs():
             indices = uvo.antpair2ind(ant1, ant2)
-            if len(indices) == 1:  # only one blt matches
+            if isinstance(indices, slice):
+                blt_slices[(ant1, ant2)] = indices
+            elif indices is None:
+                raise ValueError(f"Antpair ({ant1}, {ant2}) does not exist in the data.")
+            elif len(indices) == 1:  # only one blt matches
                 blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, uvo.Nblts)
-            elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
+            elif len(set(np.ediff1d(indices))) != 1:  # checks if the consecutive differences are all the same
                 if not tried_to_reorder:
                     uvo.reorder_blts(order='time')
                     return get_blt_slices(uvo, tried_to_reorder=True)
@@ -484,9 +491,14 @@ def get_blt_slices(uvo, tried_to_reorder=False):
                     raise NotImplementedError(
                         'UVData objects with non-regular spacing of '
                         'baselines in its baseline-times are not supported.'
+                        f'Got indices {indices} for baseline {ant1}, {ant2}.'
                     )
             else:
+                # This should only trigger for pyuvdata < 3, where you can get back
+                # an array of indices that are regular. In pyuvdata 3, you'd get
+                # back a slice if this was the case.
                 blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
+
     return blt_slices
 
 
@@ -626,6 +638,7 @@ class HERAData(UVData):
         times_by_bl = {antpair: np.array(self.time_array[self._blt_slices[antpair]])
                        for antpair in antpairs}
         times_by_bl.update({(ant1, ant0): times_here for (ant0, ant1), times_here in times_by_bl.items()})
+
         lsts_by_bl = {antpair: np.array(self.lst_array[self._blt_slices[antpair]])
                       for antpair in antpairs}
         lsts_by_bl.update({(ant1, ant0): lsts_here for (ant0, ant1), lsts_here in lsts_by_bl.items()})
@@ -635,6 +648,7 @@ class HERAData(UVData):
 
     def _determine_blt_slicing(self):
         '''Determine the mapping between antenna pairs and slices of the blt axis of the data_array.'''
+
         self._blt_slices = get_blt_slices(self)
 
     def get_polstr_index(self, pol: str) -> int:
@@ -813,8 +827,9 @@ class HERAData(UVData):
                     super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
                                  times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
-                                 run_check_acceptability=run_check_acceptability, **kwargs)
-                    self.use_future_array_shapes()
+                                 run_check_acceptability=run_check_acceptability,
+                                 use_future_array_shapes=True,
+                                 **kwargs)
                     if self.filetype == 'uvfits':
                         self.unproject_phase()
                 else:
@@ -823,8 +838,9 @@ class HERAData(UVData):
                     if self.filetype == 'miriad':
                         super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
                                      time_range=time_range, run_check=run_check, check_extra=check_extra,
-                                     run_check_acceptability=run_check_acceptability, **kwargs)
-                        self.use_future_array_shapes()
+                                     run_check_acceptability=run_check_acceptability,
+                                     use_future_array_shapes=True, projected=False, **kwargs)
+
                         if any([times is not None, lsts is not None, lst_range is not None,
                                 frequencies is not None, freq_chans is not None]):
                             warnings.warn('miriad does not support partial loading for times/lsts (except time_range) and frequencies. '
@@ -853,9 +869,15 @@ class HERAData(UVData):
         self.set_rectangularity(force=True)
 
         # process data into DataContainers
-        if read_data or self.filetype in ['uvh5', 'uvfits']:
-            self._determine_blt_slicing()
-            self._determine_pol_indexing()
+        try:
+            self._clear_antpair2ind_cache(self)  # required because we over-wrote read()
+        except AttributeError:
+            # pyuvdata < 3 doesn't have this method, and that's fine.
+            pass
+
+        self._determine_blt_slicing()
+        self._determine_pol_indexing()
+
         if read_data and return_data:
             return self.build_datacontainers()
 
@@ -1465,7 +1487,7 @@ class HERADataFastReader():
         raise NotImplementedError('HERADataFastReader does not support this method. Try HERAData instead.')
 
     def read(self, bls=None, pols=None, full_read_thresh=0.002, read_data=True, read_flags=True,
-             read_nsamples=True, check=False, dtype=np.complex128, verbose=False, skip_lsts=False):
+             read_nsamples=True, fix_autos_func=np.abs, check=False, dtype=np.complex128, verbose=False, skip_lsts=False):
         '''A faster read that only concatenates along the time axis. Puts times in ascending order, but does not
         check that files are contiguous. Currently not BDA compatible.
         Arguments:
@@ -1475,6 +1497,8 @@ class HERADataFastReader():
             read_data (bool, True): read data
             read_flags (bool, True): read flags
             read_nsamples (bool, True): read nsamples
+            fix_autos_func (function, np.abs): function to apply to autocorrelations to enforce, for example, that
+                they are real. Default is np.abs, which matches UVData._fix_autos(). Use np.real for loading diff data.
             check (bool, False): run sanity checks to make sure files match.
             dtype (np.complex128): numpy datatype for output complex-valued arrays
             verbose: print some progress messages.
@@ -1489,11 +1513,11 @@ class HERADataFastReader():
                             check=check, dtype=dtype, verbose=verbose)
         self._adapt_metadata(rv['info'], skip_lsts=skip_lsts)
 
-        # make autocorrleations real by taking the abs, matches UVData._fix_autos()
+        # make autocorrleations real by taking the real part. Using fix_autos_func = np.abs matches UVData._fix_autos()
         if 'data' in rv:
             for bl in rv['data']:
                 if split_bl(bl)[0] == split_bl(bl)[1]:
-                    rv['data'][bl] = np.abs(rv['data'][bl])
+                    rv['data'][bl] = fix_autos_func(rv['data'][bl])
 
         # construct datacontainers from result
         return self._make_datacontainer(rv, 'data'), self._make_datacontainer(rv, 'flags'), self._make_datacontainer(rv, 'nsamples')
@@ -1539,8 +1563,8 @@ def read_filter_cache_scratch(cache_dir):
     # If there are new keys, add them to internal cache.
     # If not, delete the reference matrices from memory.
     for cache_file in cache_files:
-        cfile = open(cache_file, 'rb')
-        cache_t = pickle.load(cfile)
+        with open(cache_file, 'rb') as cfile:
+            cache_t = pickle.load(cfile)
         for key in cache_t:
             if key not in cache:
                 cache[key] = cache_t[key]
@@ -1582,8 +1606,9 @@ def write_filter_cache_scratch(filter_cache, cache_dir=None, skip_keys=None):
         if cache_dir is None:
             cache_dir = os.getcwd()
         cache_file_name = '%032x' % random.getrandbits(128) + '.filter_cache'
-        cfile = open(os.path.join(cache_dir, cache_file_name), 'ab')
-        pickle.dump(new_filters, cfile)
+
+        with open(os.path.join(cache_dir, cache_file_name), 'ab') as cfile:
+            pickle.dump(new_filters, cfile)
     else:
         warnings.warn("No new keys provided. No cache file written.")
 
@@ -1614,7 +1639,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
 
     elif filetype == 'h5':
         from pyuvdata import UVFlag
-        uvf = UVFlag(flagfile)
+        uvf = UVFlag(flagfile, use_future_array_shapes=True)
         assert uvf.mode == 'flag', f'The input h5-based UVFlag object must be in flag mode, got {uvf.mode}'
         assert (np.issubsctype(uvf.polarization_array.dtype, np.signedinteger)
                 or np.issubsctype(uvf.polarization_array.dtype, np.str_)), \
@@ -1631,7 +1656,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                 else:
                     pol = ','.join([polnum2str(int(p), x_orientation=uvf.x_orientation) for p in pol.split(',')])
                 for (ant1, ant2), blt_slice in blt_slices.items():
-                    flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, 0, :, ip]
+                    flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, :, ip]
             # data container only supports standard polarizations strings
             if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                 flags = DataContainer(flags)
@@ -1645,7 +1670,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                         jpol = jnum2str(jpol, x_orientation=uvf.x_orientation)  # convert to string if possible
                     else:
                         jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(',')])
-                    flags[(ant, jpol)] = np.array(uvf.flag_array[i, 0, :, :, ip].T)
+                    flags[(ant, jpol)] = np.array(uvf.flag_array[i, :, :, ip].T)
 
         elif uvf.type == 'waterfall':  # one time x freq waterfall (per visibility polarization)
             for ip, jpol in enumerate(uvf.polarization_array):
@@ -2122,12 +2147,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # configure UVData parameters
     # get pols
     pols = np.unique([k[-1] for k in data.keys()])
-    Npols = len(pols)
     polarization_array = np.array([polstr2num(p, x_orientation=x_orientation) for p in pols])
 
     # get telescope ants
     antenna_numbers = np.unique(list(antpos.keys()))
-    Nants_telescope = len(antenna_numbers)
     antenna_names = [f"HH{a}" for a in antenna_numbers]
 
     # get antenna positions in ITRF frame
@@ -2150,99 +2173,61 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
             longitude=(lon * 180 / np.pi),
             altitude=alt
         )
-    Ntimes = len(time_array)
 
-    # get freqs
-    Nfreqs = len(freq_array)
-    channel_width = np.median(np.diff(freq_array))
-    freq_array = freq_array.reshape(1, -1)
-    spw_array = np.array([0])
-    Nspws = 1
-
-    # get baselines keys
     antpairs = sorted(data.antpairs())
-    Nbls = len(antpairs)
-    Nblts = Nbls * Ntimes
 
-    # reconfigure time_array and lst_array
-    time_array = np.repeat(time_array[np.newaxis], Nbls, axis=0).ravel()
-    lst_array = np.repeat(lst_array[np.newaxis], Nbls, axis=0).ravel()
+    tel_loc_obj = EarthLocation.from_geocentric(*telescope_location, unit="m")
+    # create an object with empty data-size arrays using UVData.new()
+    if hasattr(UVData(), "telescope"):
+        tel_params = {
+            "telescope": Telescope.new(
+                name=telescope_name,
+                location=tel_loc_obj,
+                antenna_numbers=antenna_numbers,
+                antenna_names=antenna_names,
+                antenna_positions=antenna_positions,
+                instrument=instrument,
+                x_orientation=x_orientation,
+            )
+        }
+    else:
+        tel_params = {
+            "telescope_name": telescope_name,
+            "telescope_location": tel_loc_obj,
+            "antenna_numbers": antenna_numbers,
+            "antenna_names": antenna_names,
+            "antenna_positions": antenna_positions,
+            "instrument": instrument,
+            "x_orientation": x_orientation,
+        }
+    uvd = UVData.new(
+        freq_array=freq_array,
+        polarization_array=polarization_array,
+        times=time_array,
+        antpairs=antpairs,
+        time_axis_faster_than_bls=True,
+        do_blt_outer=True,
+        empty=True,
+        history=history,
+        **tel_params,
+    )
 
-    # configure integration time, converting from days (the unit of time_array)
-    # to seconds (the unit of integration_time)
-    if integration_time is None:
-        integration_time = np.ones_like(time_array, dtype=np.float64) * np.median(np.diff(np.unique(time_array))) * 24 * 3600.
+    # set data
+    for antpair in antpairs:
+        for pol in pols:
+            key1, key2 = antpair
+            pol_num = polstr2num(pol, x_orientation=x_orientation)
+            uvd.set_data(data[antpair + (str(pol),)][:,:,np.newaxis], key1, key2, pol_num)
 
-    # get data array
-    data_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=complex)
-    for i, antpair in enumerate(antpairs):
-        for j, pol in enumerate(pols):
-            data_array[i, :, :, j] = data[antpair + (str(pol),)]
+            if nsamples is not None:
+                uvd.set_nsamples(nsamples[antpair + (str(pol),)][:,:,np.newaxis], key1, key2, pol_num)
 
-    # resort time and baseline axes
-    data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
+            if flags is not None:
+                uvd.set_flags(flags[antpair + (str(pol),)][:,:,np.newaxis], key1, key2, pol_num)
 
     if nsamples is None:
-        nsample_array = np.ones_like(data_array, float)
-    else:
-        nsample_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=float)
-        for i, antpair in enumerate(antpairs):
-            for j, pol in enumerate(pols):
-                nsample_array[i, :, :, j] = nsamples[antpair + (str(pol),)]
-        nsample_array = nsample_array.reshape(Nblts, 1, Nfreqs, Npols)
-
-    # flags
-    if flags is None:
-        flag_array = np.zeros_like(data_array, float).astype(bool)
-    else:
-        flag_array = np.zeros((Nbls, Ntimes, Nfreqs, Npols), dtype=bool)
-        for i, antpair in enumerate(antpairs):
-            for j, pol in enumerate(pols):
-                flag_array[i, :, :, j] = flags[antpair + (str(pol),)]
-        flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
-
-    # configure baselines
-    antpairs = np.repeat(np.array(antpairs), Ntimes, axis=0)
-
-    antpairs_int = antpairs.astype(np.uint64)
-    if not np.allclose(antpairs, antpairs_int):
-        raise ValueError("antenna numbers must be non-negative integers")
-
-    # get ant_1_array, ant_2_array
-    ant_1_array = antpairs_int[:, 0]
-    ant_2_array = antpairs_int[:, 1]
-
-    # get baseline array
-    baseline_array = 2048 * (ant_1_array + 1) + (ant_2_array + 1) + 2**16
-
-    # get antennas in data
-    data_ants = np.unique(np.concatenate([ant_1_array, ant_2_array]))
-    Nants_data = len(data_ants)
-
-    # set uvw assuming drift phase i.e. phase center is zenith
-    uvw_array = np.array([antpos[k[1]] - antpos[k[0]] for k in zip(ant_1_array, ant_2_array)])
-
-    # get zenith location: can only write drift phase
-    phase_type = 'drift'
-
-    # instantiate object
-    uvd = UVData()
-
-    # assign parameters
-    params = ['Nants_data', 'Nants_telescope', 'Nbls', 'Nblts', 'Nfreqs', 'Npols', 'Nspws', 'Ntimes',
-              'ant_1_array', 'ant_2_array', 'antenna_names', 'antenna_numbers', 'baseline_array',
-              'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'x_orientation',
-              'instrument', 'integration_time', 'lst_array', 'nsample_array', 'object_name', 'phase_type',
-              'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
-              'uvw_array', 'vis_units', 'antenna_positions']
-    local_params = locals()
-
-    # overwrite paramters by kwargs
-    local_params.update(kwargs)
-
-    # set parameters in uvd
-    for p in params:
-        uvd.__setattr__(p, local_params[p])
+        # default nsamples to all ones
+        uvd.nsample_array = np.full_like(uvd.nsample_array, 1.0)
 
     # write to file
     if write_file:
@@ -2418,10 +2403,10 @@ def load_cal(input_cal, return_meta=False):
         return gains, flags
 
 
-def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, total_qual=None, antnums2antnames=None,
+def write_cal(fname, gains, freqs, times, antpos=None, lsts=None, flags=None, quality=None, total_qual=None, antnums2antnames=None,
               write_file=True, return_uvc=True, outdir='./', overwrite=False, gain_convention='divide',
               history=' ', x_orientation="north", telescope_name='HERA', cal_style='redundant',
-              zero_check=True, **kwargs):
+              zero_check=True, telescope_location=HERA_TELESCOPE_LOCATION, **kwargs):
     '''Format gain solution dictionary into pyuvdata.UVCal and write to file
 
     Arguments:
@@ -2431,7 +2416,12 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
             along [0] axis and freq along [1] axis.
         freqs : type=ndarray, holds unique frequencies channels in Hz
         times : type=ndarray, holds unique times of integration centers in Julian Date
-        lsts : type=ndarray, holds unique lsts corresponding to the times. If None, converts
+        antpos : type=dictionary, antenna position dictionary. keys are antenna integers and values
+                 are position vectors in meters in ENU (TOPO) frame. If this is
+                 not supplied, antenna names, numbers and positions are set from
+                 pyuvdata known telescopes.
+        lsts : Not used. Retained to prevent breaking API changes.
+            type=ndarray, holds unique lsts corresponding to the times. If None, converts
             times to lsts using the default telescope coordinates given telescope_name.
         flags : type=dictionary, holds boolean flags (True if flagged) for gains.
             Must match shape of gains.
@@ -2454,6 +2444,7 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
         cal_style : type=str, style of calibration solutions, options=['redundant', 'sky']. If
             cal_style == sky, additional params are required. See pyuvdata.UVCal doc.
         zero_check : type=bool, if True, for gain values near zero, set to one and flag them.
+        telescope_location : type=ndarray, telescope location in xyz in ITRF (earth-centered frame).
         kwargs : additional atrributes to set in pyuvdata.UVCal
     Returns:
         if return_uvc: returns UVCal object
@@ -2467,7 +2458,6 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
     else:
         antenna_names = np.array([antnums2antnames[ant_num] for ant_num in antenna_numbers])
     Nants_data = len(ant_array)
-    Nants_telescope = len(antenna_numbers)
 
     # get polarization info: ordering must be monotonic in Jones number
     jones_array = np.array(list(set([jstr2num(k[1], x_orientation=x_orientation) for k in gains.keys()])))
@@ -2478,51 +2468,43 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
     # get time info
     time_array = np.array(times, float)
     Ntimes = len(time_array)
-    if len(time_array) > 1:
-        integration_time = np.median(np.diff(time_array)) * 24. * 3600.
-    else:
-        integration_time = 0.0
-    lst_array = np.array(lsts, float)
-    if lsts is None:
-        tel = KNOWN_TELESCOPES[telescope_name]
-        lst_array = utils.JD2LST(times, latitude=(tel['latitude'] * 180 / np.pi),
-                                 longitude=(tel['longitude'] * 180 / np.pi), altitude=tel['altitude'])
 
     # get frequency info
     freq_array = np.array(freqs, float)
     Nfreqs = len(freq_array)
-    Nspws = 1
-    freq_array = freq_array[None, :]
-    spw_array = np.arange(Nspws)
-    channel_width = np.median(np.diff(freq_array))
+
+    if antpos is not None:
+        # get antenna positions in ITRF frame
+        lat, lon, alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
+        antenna_positions = np.array([antpos[k] for k in antenna_numbers])
+        antenna_positions = uvutils.ECEF_from_ENU(
+            antenna_positions, latitude=lat, longitude=lon, altitude=alt
+        ) - telescope_location
 
     # form gain, flags and qualities
-    gain_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), complex)
-    flag_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), bool)
-    quality_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), float)
-    total_quality_array = np.empty((Nspws, Nfreqs, Ntimes, Njones), float)
+    gain_array = np.empty((Nants_data, Nfreqs, Ntimes, Njones), complex)
+    flag_array = np.empty((Nants_data, Nfreqs, Ntimes, Njones), bool)
+    quality_array = np.empty((Nants_data, Nfreqs, Ntimes, Njones), float)
+    total_quality_array = np.empty((Nfreqs, Ntimes, Njones), float)
     for i, p in enumerate(pol_array):
         if total_qual is not None:
-            total_quality_array[0, :, :, i] = total_qual[p].T[None, :, :]
+            total_quality_array[:, :, i] = total_qual[p].T[None, :, :]
         for j, a in enumerate(ant_array):
             # ensure (a, p) is in gains
             if (a, p) in gains:
-                gain_array[j, :, :, :, i] = gains[(a, p)].T[None, :, :]
+                gain_array[j, :, :, i] = gains[(a, p)].T[None, :, :]
                 if flags is not None:
-                    flag_array[j, :, :, :, i] = flags[(a, p)].T[None, :, :]
+                    flag_array[j, :, :, i] = flags[(a, p)].T[None, :, :]
                 else:
-                    flag_array[j, :, :, :, i] = np.zeros((Nspws, Nfreqs, Ntimes), bool)
+                    flag_array[j, :, :, i] = np.zeros((Nfreqs, Ntimes), bool)
                 if quality is not None:
-                    quality_array[j, :, :, :, i] = quality[(a, p)].T[None, :, :]
+                    quality_array[j, :, :, i] = quality[(a, p)].T[None, :, :]
                 else:
-                    quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), float)
+                    quality_array[j, :, :, i] = np.ones((Nfreqs, Ntimes), float)
             else:
-                gain_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), complex)
-                flag_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), bool)
-                quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), float)
-
-    if total_qual is None:
-        total_quality_array = None
+                gain_array[j, :, :, i] = np.ones((Nfreqs, Ntimes), complex)
+                flag_array[j, :, :, i] = np.ones((Nfreqs, Ntimes), bool)
+                quality_array[j, :, :, i] = np.ones((Nfreqs, Ntimes), float)
 
     if zero_check:
         # Check gain_array for values close to zero, if so, set to 1
@@ -2535,34 +2517,64 @@ def write_cal(fname, gains, freqs, times, lsts=None, flags=None, quality=None, t
         if zero_check_arr.max() is True:
             warnings.warn("Some of values in self.gain_array were zero and are flagged and set to 1.")
 
-    # instantiate UVCal
-    uvc = UVCal()
+    data_dict = {
+        "gain_array": gain_array,
+        "flag_array": flag_array,
+        "quality_array": quality_array
+    }
 
-    # enforce 'gain' cal_type
-    uvc.cal_type = "gain"
+    if total_qual is not None:
+        data_dict["total_quality_array"] = total_quality_array
 
-    # create parameter list
-    params = ["Nants_data", "Nants_telescope", "Nfreqs", "Ntimes", "Nspws", "Njones",
-              "ant_array", "antenna_numbers", "antenna_names", "cal_style", "history",
-              "channel_width", "flag_array", "gain_array", "quality_array", "jones_array",
-              "time_array", "lst_array", "spw_array", "freq_array", "history", "integration_time",
-              "x_orientation", "telescope_name", "gain_convention", "total_quality_array"]
-
-    # create local parameter dict
-    local_params = locals()
-
-    # overwrite with kwarg parameters
-    local_params.update(kwargs)
-
-    # set parameters
-    for p in params:
-        uvc.__setattr__(p, local_params[p])
-
-    # set missing but required parameters to the default for the telescope name
-    uvc.set_telescope_params()
-
-    # run check
-    uvc.check()
+    tel_loc_obj = EarthLocation.from_geocentric(*telescope_location, unit="m")
+    # create an object with empty data-size arrays using UVData.new()
+    if hasattr(UVCal(), "telescope"):
+        if antpos is None:
+            tel_use = Telescope.from_known_telescopes(telescope_name)
+            tel_use.x_orientation = x_orientation
+        else:
+            tel_use = Telescope.new(
+                name=telescope_name,
+                location=tel_loc_obj,
+                antenna_numbers=antenna_numbers,
+                antenna_names=antenna_names,
+                antenna_positions=antenna_positions,
+                x_orientation=x_orientation,
+            )
+        tel_params = {"telescope": tel_use}
+    else:
+        if antpos is None:
+            from pyuvdata import get_telescope
+            tel_use = get_telescope(telescope_name)
+            tel_params = {
+                "telescope_name": telescope_name,
+                "telescope_location": tel_loc_obj,
+                "antenna_numbers": tel_use.antenna_numbers,
+                "antenna_names": tel_use.antenna_names,
+                "antenna_positions": tel_use.antenna_positions,
+                "x_orientation": x_orientation,
+            }
+        else:
+            tel_params = {
+                "telescope_name": telescope_name,
+                "telescope_location": tel_loc_obj,
+                "antenna_numbers": antenna_numbers,
+                "antenna_names": antenna_names,
+                "antenna_positions": antenna_positions,
+                "x_orientation": x_orientation,
+            }
+    uvc = UVCal.new(
+        cal_style=cal_style,
+        gain_convention=gain_convention,
+        jones_array=jones_array,
+        time_array=time_array,
+        freq_array=freq_array,
+        cal_type="gain",
+        ant_array=ant_array,
+        history=history,
+        data=data_dict,
+        **tel_params,
+    )
 
     # write to file
     if write_file:
@@ -2844,4 +2856,8 @@ def uvdata_from_fastuvh5(
     uvd.Nants_telescope = len(uvd.antenna_numbers)
     uvd.blts_are_rectangular = True
     uvd.time_axis_faster_than_bls = timefirst
+
+    # This needs to be done, though it should be fixed in pyuvdata
+    uvd.history += uvd.pyuvdata_version_str
+
     return uvd
