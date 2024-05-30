@@ -22,7 +22,7 @@ This package only officially supports python 3, though most functionality will s
 
 * `hera_cal.redcal`: redundant calibration module, with `firstcal`, `logcal`, `lincal`, and `omnical` and helper functions for finding and manipulating sets of redundant baselines.
 
-* `hera_cal.abscal`: absolute calibnration module, largely used to calibrate out redcal degeneraices post-redundant calibration using an externally calibrated data set.
+* `hera_cal.abscal`: absolute calibration module, largely used to calibrate out redcal degeneraices post-redundant calibration using an externally calibrated data set.
 
 * `hera_cal.apply_cal`: functions to apply calibration solutions (and flags) to data in memory or on disk
 
