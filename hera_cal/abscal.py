@@ -1574,7 +1574,7 @@ def _put_transformed_array_on_integer_grid(transformed_antpos, tol=1e-8, max_num
                 transformed_antpos[ap][dim] *= (numerator / denominator)
 
 
-def complex_phase_abscal(data, model, reds, data_bls, model_bls):
+def complex_phase_abscal(data, model, reds, data_bls, model_bls, transformed_antpos=None):
     """
     Calculates gains that would absolute calibrate the phase of already redundantly-calibrated data.
     Only operates one polarization at a time.
@@ -1586,11 +1586,14 @@ def complex_phase_abscal(data, model, reds, data_bls, model_bls):
     model : DataContainer or RedDataContainer
         Dictionary-like container mapping baselines to model visibilities
     reds : list of lists
-        List of lists of redundant baselines tuples like (0, 1, 'ee')
+        List of lists of redundant baselines tuples like (0, 1, 'ee'). Ignored if transformed_antpos is not None.
     data_bls : list of tuples
         List of baseline tuples in data to use.
     model_bls : list of tuples
         List of baseline tuples in model to use. Must correspond the same physical separations as data_bls.
+    transformed_antpos : dict
+        Dictionary of abstracted antenna positions that you'd normally get from redcal.reds_to_antpos().
+        If None, will be inferred from reds.
 
     Returns:
     -------
@@ -1607,7 +1610,8 @@ def complex_phase_abscal(data, model, reds, data_bls, model_bls):
     assert len(pols) == 1, 'complex_phase_abscal() can only solve for one polarization at a time.'
 
     # Get transformed antenna positions and baselines
-    transformed_antpos = redcal.reds_to_antpos(reds)
+    if transformed_antpos is None:
+        transformed_antpos = redcal.reds_to_antpos(reds)
     _put_transformed_array_on_integer_grid(transformed_antpos)
     transformed_b_vecs = np.rint([transformed_antpos[jj] - transformed_antpos[ii] for (ii, jj, pol) in data_bls]).astype(int)
 
@@ -4129,7 +4133,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
                             # run absolute calibration to get the gain updates
                             delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
-                                                             phs_max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose, use_abs_amp_lincal=not(skip_abs_amp_lincal))
+                                                             phs_max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose, use_abs_amp_lincal=~(skip_abs_amp_lincal))
 
                             # abscal autos, rebuild weights, and generate abscal Chi^2
                             calibrate_in_place(autocorrs, delta_gains)
