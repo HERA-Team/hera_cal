@@ -1634,7 +1634,7 @@ def complex_phase_abscal(data, model, reds, data_bls, model_bls, transformed_ant
     # turn solution into per-antenna gains
     phase_angle = {a: np.sum(Lambda_sol * r, axis=-1) for a, r in transformed_antpos.items()}
     delta_gains = {(a, utils.split_pol(pols[0])[0]): np.exp(1j * (angle)) for a, angle in phase_angle.items()}
-    meta = {'Lambda_sol': Lambda_sol, 'Z_sol': Z_sol, 'newton_iterations': newton_iterations}
+    meta = {'Lambda_sol': Lambda_sol, 'Z_sol': Z_sol, 'newton_iterations': newton_iterations, 'transformed_antpos': transformed_antpos}
     return meta, delta_gains
 
 
