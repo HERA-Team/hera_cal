@@ -8,7 +8,7 @@ from pathlib import Path
 from ..config import LSTBinConfigurator
 import shutil
 from hera_cal.lst_stack.io import apply_filename_rules
-from pyuvdata import UVFlag
+from pyuvdata import UVFlag, UVData
 
 
 class TestAdjustLSTBinEdges:
@@ -368,6 +368,10 @@ class TestLSTBinFilesFromConfig:
         assert uvd.Nbls == uvd1.Nbls == len(cfg.antpairs)
         assert uvd.Nfreqs == uvd1.Nfreqs == len(cfg.config.datameta.freq_array)
         assert uvd.Npols == uvd1.Npols == len(cfg.config.datameta.pols)
+
+        # test that exposes bug fixed in 3a3ead0fd13400578b50b5fe05af39be61717206
+        uvd0 = UVData.from_file(cfg.matched_files[0])
+        assert np.allclose(uvd.get_ENU_antpos()[0], uvd0.get_ENU_antpos()[0])
 
     def test_redavg_with_where_inpainted(self, request, tmp_path_factory):
         # This is kind of a dodgy way to test that if the inpainted files don't have
