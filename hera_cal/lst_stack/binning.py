@@ -800,7 +800,7 @@ def lst_bin_files_from_config(
         uv = UVData.new(
             freq_array=freqs,
             polarization_array=utils.polstr2num([_comply_vispol(p) for p in config.pols], x_orientation=meta.x_orientation),
-            antenna_positions=meta.antpos_enu,
+            antenna_positions=meta.antenna_positions,
             telescope_location=EarthLocation.from_geocentric(*meta.telescope_location, unit="m"),
             telescope_name=meta.telescope_name,
             times=bt,
