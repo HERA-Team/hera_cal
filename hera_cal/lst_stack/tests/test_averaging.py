@@ -389,6 +389,8 @@ class TestAverageInpaintSimultaneouslySingleBl:
     Testing at a single-bl level makes it easier to test more cases, so we use this
     class to do a bunch of precision tests.
     """
+    def setup_class(self):
+        self.rng = np.random.default_rng(42)
 
     def create_data(
         self,
@@ -401,7 +403,6 @@ class TestAverageInpaintSimultaneouslySingleBl:
         flag_func: callable = partial(np.zeros, dtype=bool),
     ):
         freqs = mockuvd.PHASEII_FREQS[:nfreqs]
-        rng = np.random.default_rng(42)
 
         basis = dpss_operator(
             freqs, filter_centers=[0],
@@ -412,7 +413,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         ncoeff = basis.shape[-1]
 
         def gauss_noise(size, scale=1.):
-            return scale * (rng.normal(size=size) + 1j * rng.normal(size=size))
+            return scale * (self.rng.normal(size=size) + 1j * self.rng.normal(size=size))
 
         coeffs_mean = gauss_noise(ncoeff, 10)  # avg dpss coeffs
         coeffs = coeffs_mean + gauss_noise((nnights, ncoeff), 0.01)  # daily variation in dpss coeffs
@@ -423,7 +424,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
             d_true += tones
 
         # daily variation in gain
-        gains = 1 + gain_spread * rng.uniform(size=d_true.shape[0]) - gain_spread / 2
+        gains = 1 + gain_spread * self.rng.uniform(size=d_true.shape[0]) - gain_spread / 2
         d_true *= gains[:, None]
 
         nsamples = nsamples_func(d_true.shape)
@@ -438,7 +439,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         return freqs, d_true, flags, nsamples
 
     def random_nsamples(self, shape):
-        n = np.random.random_integers(1, 10, size=shape[0]).astype(float)
+        n = self.rng.integers(1, 10, size=shape[0]).astype(float)
         return n[:, None] * np.ones(shape)
 
     def test_no_flags_no_nsamples(self):
@@ -602,15 +603,24 @@ class TestAverageInpaintSimultaneouslySingleBl:
 class TestAverageInpaintSimultaneously:
     def setup_class(self):
         self.uvd = mockuvd.create_uvd_identifiable(
-            integration_time=24 * 3600, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
+            integration_time=24 * 3600, ntimes=20, jd_start=2459844.0,
+            antpairs=[(0, 1), (0, 2)],
             time_axis_faster_than_bls=False
         )
         self.stack = LSTStack(self.uvd)
         self.stack.data[1:] = self.stack.data[0]  # All nights exactly the same
 
+        self.auto_uvd = mockuvd.create_uvd_identifiable(
+            integration_time=24 * 3600, ntimes=20, jd_start=2459844.0,
+            antpairs=[(0, 0)],
+            time_axis_faster_than_bls=False
+        )
+        self.auto_stack = LSTStack(self.auto_uvd)
+        self.auto_stack.data[1:] = self.auto_stack.data[0]  # All nights exactly the same
+
     def test_no_flags(self):
         lstavg, models = avg.average_and_inpaint_simultaneously(
-            self.stack, return_models=True
+            self.stack, self.auto_stack, return_models=True
         )
 
         # Since there were no flags at all, there should be no models at all.
@@ -622,7 +632,7 @@ class TestAverageInpaintSimultaneously:
         self.stack.flags[:] = True
 
         lstavg, models = avg.average_and_inpaint_simultaneously(
-            self.stack, return_models=True
+            self.stack, self.auto_stack, return_models=True
         )
         self.stack.flags[:] = False
 
@@ -633,7 +643,7 @@ class TestAverageInpaintSimultaneously:
         self.stack.flags[:, 0, self.stack.Nfreqs // 2, 0] = True
 
         lstavg, models = avg.average_and_inpaint_simultaneously(
-            self.stack, return_models=True
+            self.stack, self.auto_stack, return_models=True
         )
         self.stack.flags[:] = False
 
@@ -651,7 +661,7 @@ class TestAverageInpaintSimultaneously:
         self.stack.flags[0, 0, :, 0] = True
 
         lstavg, models = avg.average_and_inpaint_simultaneously(
-            self.stack, return_models=True
+            self.stack, self.auto_stack, return_models=True
         )
         self.stack.flags[:] = False
 
