@@ -353,15 +353,15 @@ def average_and_inpaint_simultaneously_single_bl(
     stackf: np.ndarray,
     stackn: np.ndarray,
     base_noise_var: np.ndarray,
-    df: un.Quantity['frequency'],
-    filter_centers: Sequence[float],
+    df: un.Quantity['frequency'] | float,
+    filter_half_widths: Sequence[float],
+    filter_centers: Sequence[float] = (0.0,),
     avg_flgs: np.ndarray | None = None,
     inpaint_bands: tuple[slice] = (slice(0, None, None),),
     max_gap_factor: float = 2.0,
     max_convolved_flag_frac: float = 0.667,
     use_unbiased_estimator: bool = False,
     sample_cov_fraction: float = 0.0,
-    filter_half_widths: Sequence[float] = [0.1],
     eigenval_cutoff: float = 0.01,
     cache: dict = {}
 ):
@@ -380,12 +380,14 @@ def average_and_inpaint_simultaneously_single_bl(
         The stacked nsamples, shape (n_nights, nfreq).
     base_noise_var : np.ndarray
         The expected noise variance for each night, shape (n_nights, nfreq).
-    df : un.Quantity['frequency']
-        The frequency resolution.
+    df : un.Quantity['frequency'] | float
+        The frequency resolution. If a float, assumed to be in Hz.
     filter_centers : Sequence[float]
         The centers of the DPSS filters.
     avg_flgs : np.ndarray | None
-        If passed, should be one when ALL data is flagged over nights, zero otherwise.
+        If passed, should be True when ALL data is flagged over nights, False otherwise.
+        If not passed, will be calculated from ``stackf``. If passed, this array is
+        **modified in-place**.
     inpaint_bands : tuple[slice]
         The bands to inpaint individually, as slices over frequency channels.
     max_gap_factor : float
@@ -396,23 +398,42 @@ def average_and_inpaint_simultaneously_single_bl(
         Whether to use an unbiased estimator.
     sample_cov_fraction : float
         A factor to use to down-weight off-diagonal elements of the sample covariance.
+        ``sample_cov_fraction==0`` means use variance only, while
+        ``sample_cov_fraction==1`` means use the full sample covariance.
     filter_half_widths : Sequence[float]
-        The half-widths of the DPSS filters.
+        The half-widths of the DPSS filters in nanoseconds.
     eigenval_cutoff : float
         The eigenvalue cutoff for determining DPSS filters.
     cache : dict
         A cache for storing DPSS filter matrices.
+
+    Returns
+    -------
+    mean
+        The inpainted mean as a numpy array of shape (nfreqs,)
+    avg_flgs
+        The flags as determined after simultaneous inpainting on the mean. If
+        ``avg_flgs`` was given as input, it will be modified in-place (and also returned).
+    models
+        The inpainting models as a numpy array of shape (n_nights, nfreq).
     """
     # DPSS inpainting model
     model = np.zeros_like(stackd)
     mask = (~stackf).astype(float)
     avg_flgs = avg_flgs if avg_flgs is not None else np.all(stackf, axis=0)
 
+    if hasattr(df, 'unit'):
+        df = df.to_value("Hz")
+
     n_nights = stackd.shape[0]
 
     # Get median nsamples across the band
     nsamples_by_night = np.median(stackn, axis=1, keepdims=True)
-    assert np.all(nsamples_by_night == stackn), 'This code assumes that nsamples is constant over frequency for a given night and baseline.'
+    if np.any(nsamples_by_night != stackn):
+        raise ValueError(
+            'average_and_inpaint_simultaneously assumes that nsamples is constant over '
+            'frequency for a given night and baseline.'
+        )
 
     # Arrays for inpainted mean and total samples
     inpainted_mean = np.zeros(len(freqs), dtype=stackd.dtype)
@@ -424,7 +445,7 @@ def average_and_inpaint_simultaneously_single_bl(
             continue
 
         # if there are too-large flag gaps even after a simple LST-stacking, continue
-        max_allowed_gap_size = max_gap_factor * filter_half_widths[0]**-1 / df.value
+        max_allowed_gap_size = max_gap_factor * filter_half_widths[0]**-1 / df
         convolution_kernel = np.append(
             np.linspace(0, 1, int(max_allowed_gap_size) - 1, endpoint=False),
             np.linspace(1, 0, int(max_allowed_gap_size))
@@ -555,7 +576,7 @@ def average_and_inpaint_simultaneously_single_bl(
         inpainted_mean /= total_nsamples
         inpainted_mean[total_nsamples == 0] *= np.nan
 
-    return inpainted_mean, model
+    return inpainted_mean, avg_flgs, model
 
 
 def average_and_inpaint_simultaneously(
@@ -662,7 +683,7 @@ def average_and_inpaint_simultaneously(
             if (not np.any(stackf)) or np.all(stackf):
                 continue
 
-            flagged_mean[:], model = average_and_inpaint_simultaneously_single_bl(
+            flagged_mean[:], _, model = average_and_inpaint_simultaneously_single_bl(
                 freqs=stack.freq_array,
                 stackd=stackd,
                 stackf=stackf,

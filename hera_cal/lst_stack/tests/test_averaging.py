@@ -445,9 +445,9 @@ class TestAverageInpaintSimultaneouslySingleBl:
     def test_no_flags_no_nsamples(self):
         freqs, d, f, n = self.create_data()
 
-        inp_mean, model = avg.average_and_inpaint_simultaneously_single_bl(
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
             freqs=freqs, stackd=d, stackf=f, stackn=n,
-            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.MHz, filter_centers=[0.0],
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
             filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
         )
 
@@ -462,9 +462,9 @@ class TestAverageInpaintSimultaneouslySingleBl:
             add_tones=add_tones
         )
 
-        inp_mean, model = avg.average_and_inpaint_simultaneously_single_bl(
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
             freqs=freqs, stackd=d, stackf=f, stackn=n,
-            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.MHz, filter_centers=[0.0],
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
             filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
         )
 
@@ -479,9 +479,9 @@ class TestAverageInpaintSimultaneouslySingleBl:
         slc = slice(750, 750 + gap_size)
         f[:nnights_flagged, slc] = True
 
-        inp_mean, model = avg.average_and_inpaint_simultaneously_single_bl(
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
             freqs=freqs, stackd=d, stackf=f, stackn=n,
-            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.MHz, filter_centers=[0.0],
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
             filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
         )
 
@@ -500,9 +500,9 @@ class TestAverageInpaintSimultaneouslySingleBl:
         slc = slice(750, 750 + gap_size)
         f[:nnights_flagged, slc] = True
 
-        inp_mean, model = avg.average_and_inpaint_simultaneously_single_bl(
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
             freqs=freqs, stackd=d, stackf=f, stackn=n,
-            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.MHz, filter_centers=[0.0],
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
             filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
         )
 
@@ -528,9 +528,9 @@ class TestAverageInpaintSimultaneouslySingleBl:
         # Do the bias
         d[:nnights_flagged] *= bias
 
-        inp_mean, model = avg.average_and_inpaint_simultaneously_single_bl(
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
             freqs=freqs, stackd=d, stackf=f, stackn=n,
-            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.MHz, filter_centers=[0.0],
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
             filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
         )
 
@@ -558,9 +558,9 @@ class TestAverageInpaintSimultaneouslySingleBl:
         # Do the bias
         d[:nnights_flagged] *= bias
 
-        inp_mean, model = avg.average_and_inpaint_simultaneously_single_bl(
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
             freqs=freqs, stackd=d, stackf=f, stackn=n,
-            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.MHz, filter_centers=[0.0],
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
             filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
         )
 
@@ -587,9 +587,9 @@ class TestAverageInpaintSimultaneouslySingleBl:
         # Do the bias
         d[:nnights_flagged] *= bias
 
-        inp_mean, model = avg.average_and_inpaint_simultaneously_single_bl(
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
             freqs=freqs, stackd=d, stackf=f, stackn=n,
-            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.MHz, filter_centers=[0.0],
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
             filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
         )
 
