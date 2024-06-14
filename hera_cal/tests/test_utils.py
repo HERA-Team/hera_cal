@@ -14,7 +14,6 @@ import copy
 from contextlib import contextmanager
 from pyuvdata import UVData
 from pyuvdata import UVCal
-import pyuvdata.tests as uvtest
 from sklearn import gaussian_process as gp
 from ..redcal import filter_reds
 from ..redcal import get_pos_reds
