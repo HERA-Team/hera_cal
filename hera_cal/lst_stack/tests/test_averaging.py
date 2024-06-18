@@ -599,6 +599,61 @@ class TestAverageInpaintSimultaneouslySingleBl:
             atol=4 * 0.04 / np.sqrt(d.shape[0]),  # 4-sigma
         )
 
+    def test_non_uniform_nsamples(self):
+        freqs, d, f, n = self.create_data()
+        n[0, 1] = 25.0
+
+        with pytest.raises(
+            ValueError,
+            match='assumes that nsamples is constant over frequency'
+        ):
+            avg.average_and_inpaint_simultaneously_single_bl(
+                freqs=freqs, stackd=d, stackf=f, stackn=n,
+                base_noise_var=0.04**2 * np.ones(d.shape),
+                df=(freqs[1] - freqs[0]) * un.Hz,
+                filter_half_widths=[200e-9]
+            )
+
+    def test_fully_flagged(self):
+        freqs, d, f, n = self.create_data()
+        f[:] = True
+
+        data, flg, m = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape),
+            df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9]
+        )
+
+        assert np.all(np.isnan(data))
+        assert np.all(flg)
+
+    def test_too_long_flag_gap(self):
+        freqs, d, f, n = self.create_data()
+        f[:, 100:200] = True
+
+        data, flg, m = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape),
+            df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9],
+            max_gap_factor=1
+        )
+
+        assert np.all(np.isnan(data))
+        assert np.all(flg)
+
+    def test_single_night_corner_case(self):
+        freqs, d, f, n = self.create_data(nnights=1)
+        data, flg, m = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape),
+            df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9],
+        )
+
+        assert np.all(data == d)
+
 
 class TestAverageInpaintSimultaneously:
     def setup_class(self):
@@ -672,3 +727,17 @@ class TestAverageInpaintSimultaneously:
         )
         assert np.all(lstavg['nsamples'][0, :, 0] == len(self.stack.nights) - 1)
         assert not np.any(lstavg['flags'][0, :, 0])
+
+    def test_nonred_data(self):
+        auto_uvd = mockuvd.create_uvd_identifiable(
+            integration_time=24 * 3600, ntimes=20, jd_start=2459844.0,
+            antpairs=[(0, 0), (1, 1)],
+            time_axis_faster_than_bls=False
+        )
+        auto_stack = LSTStack(auto_uvd)
+
+        with pytest.raises(
+            NotImplementedError,
+            match="This code only works with redundantly averaged data"
+        ):
+            avg.average_and_inpaint_simultaneously(self.stack, auto_stack)

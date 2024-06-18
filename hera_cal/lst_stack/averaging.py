@@ -362,7 +362,7 @@ def average_and_inpaint_simultaneously_single_bl(
     max_convolved_flag_frac: float = 0.667,
     use_unbiased_estimator: bool = False,
     sample_cov_fraction: float = 0.0,
-    eigenval_cutoff: float = 0.01,
+    eigenval_cutoff: float = (0.01,),
     cache: dict = {}
 ):
     """
@@ -557,6 +557,12 @@ def average_and_inpaint_simultaneously_single_bl(
         # If we've made it this far, set averaged flags to False
         avg_flgs[band] = False
 
+    # Shortcut here if everything is flagged.
+    # Note that we can have avg_flgs be all flagged when not all of stackf is flagged
+    # because we flag the average on "largest gaps". That's why we shortcut early here.
+    if np.all(avg_flgs):
+        return np.nan * inpainted_mean, avg_flgs, model
+
     # Inpainted mean is going to be sum(n_i * {model if flagged else data_i}) / sum(n_i)
     # where n_i is the nsamples for the i-th integration. The total_nsamples is
     # simply sum(n_i) for all i (originally flagged or not).
@@ -587,7 +593,7 @@ def average_and_inpaint_simultaneously(
     cache: dict = {},
     filter_properties: dict | None = None,
     eigenval_cutoff: list[float] = [1e-12],
-    round_filter_half_width: bool = False,
+    round_filter_half_width: bool = True,
     max_gap_factor: float = 2.0,
     max_convolved_flag_frac: float = 0.667,
     use_unbiased_estimator: bool = False,
