@@ -363,7 +363,7 @@ def average_and_inpaint_simultaneously_single_bl(
     use_unbiased_estimator: bool = False,
     sample_cov_fraction: float = 0.0,
     eigenval_cutoff: float = (0.01,),
-    cache: dict = {}
+    cache: dict | None = None,
 ):
     """
     Average and inpaint simultaneously for a single baseline.
@@ -439,6 +439,8 @@ def average_and_inpaint_simultaneously_single_bl(
     inpainted_mean = np.zeros(len(freqs), dtype=stackd.dtype)
     total_nsamples = np.zeros(len(freqs), dtype=float)
 
+    cache = cache or {}
+
     for band in inpaint_bands:
         # if the band is already entirely flagged for all nights, continue
         if np.all(stackf[:, band]):
@@ -503,9 +505,10 @@ def average_and_inpaint_simultaneously_single_bl(
         CNinv_data_dpss = np.array([
             basis.T.dot(weighted_data) for weighted_data in mask[:, band] / noise_var[:, band] * stackd[:, band]
         ])
+        print(CNinv_data_dpss.shape, CNinv_data_dpss.shape)
         dpss_fits = np.array([
             a.dot(b) if np.all(np.isfinite(b)) else a.dot(np.zeros_like(b))
-            for night_index, (a, b) in enumerate(zip(CNinv_dpss_inv, CNinv_data_dpss))
+            for a, b in zip(CNinv_dpss_inv, CNinv_data_dpss)
         ])
 
         # Find nights that are entirely flagged in this band
