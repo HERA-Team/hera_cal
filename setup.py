@@ -48,7 +48,7 @@ setup_args = {
     'package_data': {'hera_cal': data_files},
     'python_requires': '>=3.9',
     'install_requires': [
-        'numpy>=1.10',
+        'numpy>=1.10,<2.0',
         'scipy>=1.9.0',
         'h5py',
         'hdf5plugin',
