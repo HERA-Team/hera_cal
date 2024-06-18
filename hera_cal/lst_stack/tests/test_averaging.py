@@ -3,6 +3,9 @@ import pytest
 from .. import averaging as avg
 from ...tests import mock_uvdata as mockuvd
 from hera_cal.lst_stack import LSTStack
+from hera_filters.dspec import dpss_operator
+from functools import partial
+from astropy import units as un
 
 
 class TestGetMaskedData:
@@ -381,18 +384,298 @@ class TestReduceLSTBins:
             avg.reduce_lst_bins(data=d, flags=f)
 
 
+class TestAverageInpaintSimultaneouslySingleBl:
+    """
+    Testing at a single-bl level makes it easier to test more cases, so we use this
+    class to do a bunch of precision tests.
+    """
+    def setup_class(self):
+        self.rng = np.random.default_rng(42)
+
+    def create_data(
+        self,
+        nnights=14,
+        nfreqs=1536,
+        add_tones: bool = False,
+        add_noise: bool = True,
+        gain_spread: float = 0.0,
+        nsamples_func: callable = np.ones,
+        flag_func: callable = partial(np.zeros, dtype=bool),
+    ):
+        freqs = mockuvd.PHASEII_FREQS[:nfreqs]
+
+        basis = dpss_operator(
+            freqs, filter_centers=[0],
+            filter_half_widths=[200e-9],
+            eigenval_cutoff=[1e-9]
+        )[0].real
+
+        ncoeff = basis.shape[-1]
+
+        def gauss_noise(size, scale=1.):
+            return scale * (self.rng.normal(size=size) + 1j * self.rng.normal(size=size))
+
+        coeffs_mean = gauss_noise(ncoeff, 10)  # avg dpss coeffs
+        coeffs = coeffs_mean + gauss_noise((nnights, ncoeff), 0.01)  # daily variation in dpss coeffs
+        d_true = np.einsum('nc,fc->nf', coeffs, basis)
+
+        if add_tones:
+            tones = gauss_noise((nnights, 1), 0.1) * np.exp(2j * np.pi * freqs[None, :] * 190e-9)  # a ripple
+            d_true += tones
+
+        # daily variation in gain
+        gains = 1 + gain_spread * self.rng.uniform(size=d_true.shape[0]) - gain_spread / 2
+        d_true *= gains[:, None]
+
+        nsamples = nsamples_func(d_true.shape)
+        flags = flag_func(d_true.shape)
+
+        if add_noise:
+            n_true = gauss_noise(d_true.shape, 0.04) / nsamples**0.5
+            d_true += n_true
+
+        nsamples[flags] *= -1
+
+        return freqs, d_true, flags, nsamples
+
+    def random_nsamples(self, shape):
+        n = self.rng.integers(1, 10, size=shape[0]).astype(float)
+        return n[:, None] * np.ones(shape)
+
+    def test_no_flags_no_nsamples(self):
+        freqs, d, f, n = self.create_data()
+
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
+        )
+
+        assert np.all(inp_mean == np.mean(d, axis=0))
+
+    @pytest.mark.parametrize("gain_spread", [0.0, 0.1, 0.5])
+    @pytest.mark.parametrize("add_tones", [False, True])
+    def test_no_flags_with_nsamples(self, gain_spread, add_tones):
+        freqs, d, f, n = self.create_data(
+            nsamples_func=self.random_nsamples,
+            gain_spread=gain_spread,
+            add_tones=add_tones
+        )
+
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
+        )
+
+        assert np.allclose(inp_mean, np.average(d, axis=0, weights=n))
+
+    @pytest.mark.parametrize("gain_spread", [0.0, 0.3])
+    @pytest.mark.parametrize("add_tones", [False, True])
+    @pytest.mark.parametrize("gap_size", [1, 3])
+    @pytest.mark.parametrize("nnights_flagged", [1, 2, 7, 13, 14])
+    def test_small_flag_gap(self, gain_spread, add_tones, gap_size, nnights_flagged):
+        freqs, d, f, n = self.create_data(gain_spread=gain_spread, add_tones=add_tones)
+        slc = slice(750, 750 + gap_size)
+        f[:nnights_flagged, slc] = True
+
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
+        )
+
+        np.testing.assert_allclose(
+            inp_mean[slc],
+            np.mean(d, axis=0)[slc],
+            atol=4 * 0.04 / d.shape[0]**0.5,  # 4-sigma
+        )
+
+    @pytest.mark.parametrize("gain_spread", [0.0, 0.3])
+    @pytest.mark.parametrize("add_tones", [False, True])
+    @pytest.mark.parametrize("gap_size", [10, 20])
+    @pytest.mark.parametrize("nnights_flagged", [1, 2, 7])
+    def test_large_flag_gap(self, gain_spread, add_tones, gap_size, nnights_flagged):
+        freqs, d, f, n = self.create_data(gain_spread=gain_spread, add_tones=add_tones)
+        slc = slice(750, 750 + gap_size)
+        f[:nnights_flagged, slc] = True
+
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
+        )
+
+        np.testing.assert_allclose(
+            inp_mean[slc],
+            np.mean(d, axis=0)[slc],
+            atol=4 * 0.04 / np.sqrt(d.shape[0]),  # 4-sigma
+        )
+
+    @pytest.mark.parametrize("gain_spread", [0.3])
+    @pytest.mark.parametrize("add_tones", [True])
+    @pytest.mark.parametrize("gap_size", [1, 5, 10])
+    @pytest.mark.parametrize("nnights_flagged", [1, 2, 7])
+    @pytest.mark.parametrize("bias", [1.5, 3.0])
+    def test_biased_flags(self, gain_spread, add_tones, gap_size, nnights_flagged, bias):
+        if bias > 1.5 and nnights_flagged > 5:
+            pytest.xfail("Expected failure of simultaneous inpainting with large bias in large gaps")
+
+        freqs, d, f, n = self.create_data(gain_spread=gain_spread, add_tones=add_tones)
+        slc = slice(750, 750 + gap_size)
+        f[:nnights_flagged, slc] = True
+
+        # Do the bias
+        d[:nnights_flagged] *= bias
+
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
+        )
+
+        np.testing.assert_allclose(
+            inp_mean[slc],
+            np.mean(d, axis=0)[slc],
+            atol=4 * 0.04 / np.sqrt(d.shape[0]),  # 4-sigma
+        )
+
+    @pytest.mark.parametrize("gain_spread", [0.3])
+    @pytest.mark.parametrize("add_tones", [True])
+    @pytest.mark.parametrize("gap_size", [1, 5, 15])
+    @pytest.mark.parametrize("nnights_flagged", [1, 2, 7])
+    @pytest.mark.parametrize("bias", [1.0, 1.5])
+    def test_uneven_flags(self, gain_spread, add_tones, gap_size, nnights_flagged, bias):
+        freqs, d, f, n = self.create_data(gain_spread=gain_spread, add_tones=add_tones)
+
+        slc = slice(750 - gap_size, 750 + gap_size)
+        for i in range(nnights_flagged):
+            start = 750 + np.random.randint(-gap_size // 2, gap_size // 2)
+            end = start + gap_size
+            _slc = slice(start, end)
+            f[i, _slc] = True
+
+        # Do the bias
+        d[:nnights_flagged] *= bias
+
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
+        )
+
+        np.testing.assert_allclose(
+            inp_mean[slc],
+            np.mean(d, axis=0)[slc],
+            atol=4 * 0.04 / np.sqrt(d.shape[0]),  # 4-sigma
+        )
+
+    @pytest.mark.parametrize("gain_spread", [0.3])
+    @pytest.mark.parametrize("add_tones", [True])
+    @pytest.mark.parametrize("gap_size", [1, 5, 15])
+    @pytest.mark.parametrize("nnights_flagged", [1, 2, 7])
+    @pytest.mark.parametrize("bias", [1.0, 1.5])
+    def test_band_edge(self, gain_spread, add_tones, gap_size, nnights_flagged, bias):
+        if gap_size > 1:
+            pytest.xfail("Expected failure of simultaneous inpainting at band edge")
+
+        freqs, d, f, n = self.create_data(gain_spread=gain_spread, add_tones=add_tones)
+
+        slc = slice(0, gap_size)
+        f[:nnights_flagged, slc] = True
+
+        # Do the bias
+        d[:nnights_flagged] *= bias
+
+        inp_mean, ff, model = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape), df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9], eigenval_cutoff=[1e-9]
+        )
+
+        np.testing.assert_allclose(
+            inp_mean[slc],
+            np.mean(d, axis=0)[slc],
+            atol=4 * 0.04 / np.sqrt(d.shape[0]),  # 4-sigma
+        )
+
+    def test_non_uniform_nsamples(self):
+        freqs, d, f, n = self.create_data()
+        n[0, 1] = 25.0
+
+        with pytest.raises(
+            ValueError,
+            match='assumes that nsamples is constant over frequency'
+        ):
+            avg.average_and_inpaint_simultaneously_single_bl(
+                freqs=freqs, stackd=d, stackf=f, stackn=n,
+                base_noise_var=0.04**2 * np.ones(d.shape),
+                df=(freqs[1] - freqs[0]) * un.Hz,
+                filter_half_widths=[200e-9]
+            )
+
+    def test_fully_flagged(self):
+        freqs, d, f, n = self.create_data()
+        f[:] = True
+
+        data, flg, m = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape),
+            df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9]
+        )
+
+        assert np.all(np.isnan(data))
+        assert np.all(flg)
+
+    def test_too_long_flag_gap(self):
+        freqs, d, f, n = self.create_data()
+        f[:, 100:200] = True
+
+        data, flg, m = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape),
+            df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9],
+            max_gap_factor=1
+        )
+
+        assert np.all(np.isnan(data))
+        assert np.all(flg)
+
+    def test_single_night_corner_case(self):
+        freqs, d, f, n = self.create_data(nnights=1)
+        data, flg, m = avg.average_and_inpaint_simultaneously_single_bl(
+            freqs=freqs, stackd=d, stackf=f, stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape),
+            df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9],
+        )
+
+        assert np.all(data == d)
+
+
 class TestAverageInpaintSimultaneously:
     def setup_class(self):
         self.uvd = mockuvd.create_uvd_identifiable(
-            integration_time=24 * 3600, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
+            integration_time=24 * 3600, ntimes=20, jd_start=2459844.0,
+            antpairs=[(0, 1), (0, 2)],
             time_axis_faster_than_bls=False
         )
         self.stack = LSTStack(self.uvd)
         self.stack.data[1:] = self.stack.data[0]  # All nights exactly the same
 
+        self.auto_uvd = mockuvd.create_uvd_identifiable(
+            integration_time=24 * 3600, ntimes=20, jd_start=2459844.0,
+            antpairs=[(0, 0)],
+            time_axis_faster_than_bls=False
+        )
+        self.auto_stack = LSTStack(self.auto_uvd)
+        self.auto_stack.data[1:] = self.auto_stack.data[0]  # All nights exactly the same
+
     def test_no_flags(self):
         lstavg, models = avg.average_and_inpaint_simultaneously(
-            self.stack, return_models=True
+            self.stack, self.auto_stack, return_models=True
         )
 
         # Since there were no flags at all, there should be no models at all.
@@ -404,7 +687,7 @@ class TestAverageInpaintSimultaneously:
         self.stack.flags[:] = True
 
         lstavg, models = avg.average_and_inpaint_simultaneously(
-            self.stack, return_models=True
+            self.stack, self.auto_stack, return_models=True
         )
         self.stack.flags[:] = False
 
@@ -415,7 +698,7 @@ class TestAverageInpaintSimultaneously:
         self.stack.flags[:, 0, self.stack.Nfreqs // 2, 0] = True
 
         lstavg, models = avg.average_and_inpaint_simultaneously(
-            self.stack, return_models=True
+            self.stack, self.auto_stack, return_models=True
         )
         self.stack.flags[:] = False
 
@@ -433,7 +716,7 @@ class TestAverageInpaintSimultaneously:
         self.stack.flags[0, 0, :, 0] = True
 
         lstavg, models = avg.average_and_inpaint_simultaneously(
-            self.stack, return_models=True
+            self.stack, self.auto_stack, return_models=True
         )
         self.stack.flags[:] = False
 
@@ -444,3 +727,17 @@ class TestAverageInpaintSimultaneously:
         )
         assert np.all(lstavg['nsamples'][0, :, 0] == len(self.stack.nights) - 1)
         assert not np.any(lstavg['flags'][0, :, 0])
+
+    def test_nonred_data(self):
+        auto_uvd = mockuvd.create_uvd_identifiable(
+            integration_time=24 * 3600, ntimes=20, jd_start=2459844.0,
+            antpairs=[(0, 0), (1, 1)],
+            time_axis_faster_than_bls=False
+        )
+        auto_stack = LSTStack(auto_uvd)
+
+        with pytest.raises(
+            NotImplementedError,
+            match="This code only works with redundantly averaged data"
+        ):
+            avg.average_and_inpaint_simultaneously(self.stack, auto_stack)
