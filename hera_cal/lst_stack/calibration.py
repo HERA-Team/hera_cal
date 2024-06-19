@@ -8,7 +8,7 @@ from hera_filters import dspec
 from .binning import LSTStack
 
 
-def lstbin_calibration(
+def lstbin_absolute_calibration(
     stack: LSTStack,
     model: np.ndarray,
     all_reds: list[list[tuple]],
@@ -20,22 +20,46 @@ def lstbin_calibration(
     eigenval_cutoff: float = 1e-12,
     calibrate_inplace: bool = True,
     return_gains: bool = True,
+    smooth_gains: bool = True,
 ):
     """
-    Perform calibration on LSTStack object by comparing each day to a reference model.
-    Each day is calibrated independently using only the absolute calibration degrees of freedom
-    (per-antenna calibration is not currently supported), and the calibration parameters are
-    smoothed in frequency.
+    This function performs calibration on LSTStack object by comparing each day to an input
+    reference model. Each day is calibrated independently using only the absolute calibration
+    degrees of freedom (per-antenna calibration is not currently supported). The calibration
+    is performed in two steps:
+
+        1. Amplitude calibration: The amplitude of the data is scaled to match the model using
+           hera_cal.abscal.abs_amp_lincal to perform gain fits.
+        2. Phase calibration: The phase of the data is adjusted to match the model by fitting
+           for the tip-tilt abscal degeneracy using hera_cal.abscal.complex_phase_abscal.
 
 
     Parameters:
     ----------
         stack : LSTStack
-        model : dictionary
-        inpaint_bands : tuple
-        run_amplitude_cal : bool
-        run_phase_cal : bool
-        smoothing_scale : float
+            asdf
+        model : np.ndarray
+            asdf
+        inpaint_bands : tuple, default=(slice(0, None, None),)
+            asdf
+        run_amplitude_cal : bool, default=True
+            asdf
+        run_phase_cal : bool, default=True
+            asdf
+        smoothing_scale : float, default=10e6
+            asdf
+        eigenval_cutoff : float, default=1e-12
+            asdf
+        calibrate_inplace : bool, default=True
+            asdf
+        return_gains : bool, default=True
+
+    Returns:
+    -------
+        calibration_parameters : dict
+            asdf
+        gains : dict
+            asdf
 
     """
     # Assert some calibration done
@@ -54,16 +78,17 @@ def lstbin_calibration(
     calibration_parameters = {}
 
     # Get DPSS for each band
-    smoothing_functions = []
-    for band in inpaint_bands:
-        smoothing_functions.append(
-            dspec.dpss_operator(
-                x=stack.freq_array[band],
-                filter_centers=[0],
-                filter_half_widths=[1 / smoothing_scale],
-                eigenval_cutoff=[eigenval_cutoff],
-            )[0]
-        )
+    if smooth_gains:
+        smoothing_functions = []
+        for band in inpaint_bands:
+            smoothing_functions.append(
+                dspec.dpss_operator(
+                    x=stack.freq_array[band],
+                    filter_centers=[0],
+                    filter_half_widths=[1 / smoothing_scale],
+                    eigenval_cutoff=[eigenval_cutoff],
+                )[0]
+            )
 
     # Dictionaries for storing data used in abscal functions
     data_here = {}
@@ -205,19 +230,20 @@ def lstbin_calibration(
             )
 
     # Pre-compute matrices for smoothing fits
-    fmats = {pol: [] for pol in pols}
-    for polidx, pol in enumerate(pols):
-        for bandidx, band in enumerate(inpaint_bands):
-            # Get weights and basis functions for the fit
-            wgts = np.logical_not(stack.flags[:, 0, band, polidx]).astype(float)
-            basis = smoothing_functions[bandidx]
+    if smooth_gains:
+        fmats = {pol: [] for pol in pols}
+        for polidx, pol in enumerate(pols):
+            for bandidx, band in enumerate(inpaint_bands):
+                # Get weights and basis functions for the fit
+                wgts = np.logical_not(stack.flags[:, 0, band, polidx]).astype(float)
+                basis = smoothing_functions[bandidx]
 
-            # Compute matrices for linear least-squares fits
-            xtxinv = np.linalg.pinv([np.dot(basis.T * wi, basis) for wi in wgts])
-            fmat = np.array(
-                [np.dot(_xtxinv, basis.T) * _w for _xtxinv, _w in zip(xtxinv, wgts)]
-            )
-            fmats[pol].append(fmat)
+                # Compute matrices for linear least-squares fits
+                xtxinv = np.linalg.pinv([np.dot(basis.T * wi, basis) for wi in wgts])
+                fmat = np.array(
+                    [np.dot(_xtxinv, basis.T) * _w for _xtxinv, _w in zip(xtxinv, wgts)]
+                )
+                fmats[pol].append(fmat)
 
     # Dictionary for gain parameters
     gains = {}
@@ -227,8 +253,6 @@ def lstbin_calibration(
         for apidx, (ant1, ant2) in enumerate(antpairs):
             bl_gain = np.ones((stack.nights.size, stack.freq_array.size), dtype=complex)
             for bandidx, band in enumerate(inpaint_bands):
-                basis = smoothing_functions[bandidx]
-
                 # Construct the raw gain and remove nans and infs
                 raw_gain = calibration_parameters[f"A_J{pol}"] ** 2 * (
                     phase_gains.get(
@@ -245,12 +269,17 @@ def lstbin_calibration(
                 )
 
                 # Compute smooth gain for each parameter and remove zeros/nans/infs
-                bl_gain_here = np.array(
-                    [
-                        np.dot(basis, _fmat.dot(_raw_gain))
-                        for _fmat, _raw_gain in zip(fmats[pol][bandidx], raw_gain)
-                    ]
-                )
+                if smooth_gains:
+                    basis = smoothing_functions[bandidx]
+                    bl_gain_here = np.array(
+                        [
+                            np.dot(basis, _fmat.dot(_raw_gain))
+                            for _fmat, _raw_gain in zip(fmats[pol][bandidx], raw_gain)
+                        ]
+                    )
+                else:
+                    bl_gain_here = raw_gain
+
                 bl_gain_here = np.where(
                     np.isfinite(bl_gain_here), bl_gain_here, 1.0 + 0.0j
                 )
