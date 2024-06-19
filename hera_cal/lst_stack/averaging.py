@@ -9,6 +9,8 @@ from hera_filters import dspec
 from scipy import constants
 from typing import Sequence
 from .. import types as tp
+from scipy import signal, linalg
+from hera_qm.time_series_metrics import true_stretches
 
 logger = logging.getLogger(__name__)
 
@@ -345,77 +347,302 @@ def reduce_lst_bins(
     return o
 
 
-def average_and_inpaint_simultaneously(
-    stack: LSTStack,
-    inpaint_bands: Sequence[slice] = (slice(0, None),),
-    return_models: bool = True,
+def average_and_inpaint_simultaneously_single_bl(
+    freqs: np.ndarray,
+    stackd: np.ndarray,
+    stackf: np.ndarray,
+    stackn: np.ndarray,
+    base_noise_var: np.ndarray,
+    df: un.Quantity['frequency'] | float,
+    filter_half_widths: Sequence[float],
+    filter_centers: Sequence[float] = (0.0,),
+    avg_flgs: np.ndarray | None = None,
+    inpaint_bands: tuple[slice] = (slice(0, None, None),),
+    max_gap_factor: float = 2.0,
+    max_convolved_flag_frac: float = 0.667,
+    use_unbiased_estimator: bool = False,
+    sample_cov_fraction: float = 0.0,
+    eigenval_cutoff: float = (0.01,),
     cache: dict | None = None,
-    filter_properties: dict | None = None,
-    **kwargs,
-) -> dict[tp.Baseline, np.ndarray]:
-    r"""
-    Perform an average over nights while simultaneously inpainting.
-
-    For any particular baseline-pol-channel, this function will first perform a
-    flagged-mode average:
-
-    .. math:: \bar{d} = \frac{\sum_i (1 - f_i) n_i d_i}{N_\text{unf}}
-
-    where :math:`n_i` is the number of samples for the i-th integration, :math:`d_i` is
-    the data for the i-th integration, :math:`f_i` is the flag for the i-th integration,
-    and :math:`N_\text{unf}` is the total number of un-flagged samples:
-
-    .. math:: N_\text{unf} = \sum_i (1 - f_i) n_i
-
-    Then it will create a model of the data by inpainting the averaged data:
-
-    .. math:: m = \text{FourierFilter}(\bar{d})
-
-    Finally, it will do a weighted average of the data and the model:
-
-    .. math:: \bar{d}_{\text{inp}} = \frac{\sum_i n_i (f_i m + (1 - f_i) d_i)}{N_\text{tot}},
-
-    where :math:`N_\text{tot}` is the total number of samples, including flagged samples:
-
-    .. math:: N_\text{tot} = \sum_i n_i.
-
-    The output dictionary will have :math:`\bar{d}_{\text{inp}}` as the data, :math:`N_\text{unf}`
-    as the nsamples (i.e. only the sum of un-flagged samples), and the binned flags will
-    simply be where the inpaint model either fails or is not attempted.
+):
+    """
+    Average and inpaint simultaneously for a single baseline.
 
     Parameters
     ----------
-    stack
-        An LSTStack object containing the data to average.
-    inpaint_bands
-        The frequency bands to inpaint independently for each baseline-night. This
-        should be a sequence of slices that select frequencies from the stack.freq_array.
-    return_models
-        Whether to return the inpainted models.
-    cache
-        A dict-like object to use as a cache for the Fourier filter.
-    filter_properties
-        A dictionary of params to use for the Fourier filter. This is passed to
-        :func:`hera_cal.vis_clean.gen_filter_properties`.
-
-    Other Parameters
-    ----------------
-    kwargs
-        Passed to :func:`hera_filters.dspec.fourier_filter`.
+    freqs : np.ndarray
+        The frequencies of the data.
+    stackd : np.ndarray
+        The stacked data, shape (n_nights, nfreq).
+    stackf : np.ndarray
+        The stacked flags, shape (n_nights, nfreq).
+    stackn : np.ndarray
+        The stacked nsamples, shape (n_nights, nfreq).
+    base_noise_var : np.ndarray
+        The expected noise variance for each night, shape (n_nights, nfreq).
+    df : un.Quantity['frequency'] | float
+        The frequency resolution. If a float, assumed to be in Hz.
+    filter_centers : Sequence[float]
+        The centers of the DPSS filters.
+    avg_flgs : np.ndarray | None
+        If passed, should be True when ALL data is flagged over nights, False otherwise.
+        If not passed, will be calculated from ``stackf``. If passed, this array is
+        **modified in-place**.
+    inpaint_bands : tuple[slice]
+        The bands to inpaint individually, as slices over frequency channels.
+    max_gap_factor : float
+        The maximum allowed gap factor.
+    max_convolved_flag_frac : float
+        The maximum allowed fraction of convolved flags.
+    use_unbiased_estimator : bool
+        Whether to use an unbiased estimator.
+    sample_cov_fraction : float
+        A factor to use to down-weight off-diagonal elements of the sample covariance.
+        ``sample_cov_fraction==0`` means use variance only, while
+        ``sample_cov_fraction==1`` means use the full sample covariance.
+    filter_half_widths : Sequence[float]
+        The half-widths of the DPSS filters in nanoseconds.
+    eigenval_cutoff : float
+        The eigenvalue cutoff for determining DPSS filters.
+    cache : dict
+        A cache for storing DPSS filter matrices.
 
     Returns
     -------
-    dict
-        A dictionary of the LST-averaged data. This is in the same format as returned
-        by :func:`reduce_lst_bins`.
-    dict
-        A dictionary of the inpainted models, keyed by (ant1, ant2, pol). If
-        ``return_models`` is False, the dict is empty.
+    mean
+        The inpainted mean as a numpy array of shape (nfreqs,)
+    avg_flgs
+        The flags as determined after simultaneous inpainting on the mean. If
+        ``avg_flgs`` was given as input, it will be modified in-place (and also returned).
+    models
+        The inpainting models as a numpy array of shape (n_nights, nfreq).
     """
-    model = np.zeros(stack.Nfreqs, dtype=stack.data_array.dtype)
-    filter_properties = filter_properties or {}
+    # DPSS inpainting model
+    model = np.zeros_like(stackd)
+    mask = (~stackf).astype(float)
+    avg_flgs = avg_flgs if avg_flgs is not None else np.all(stackf, axis=0)
+
+    if hasattr(df, 'unit'):
+        df = df.to_value("Hz")
+
+    n_nights = stackd.shape[0]
+
+    # Get median nsamples across the band
+    nsamples_by_night = np.median(stackn, axis=1, keepdims=True)
+    if np.any(nsamples_by_night != stackn):
+        raise ValueError(
+            'average_and_inpaint_simultaneously assumes that nsamples is constant over '
+            'frequency for a given night and baseline.'
+        )
+
+    # Arrays for inpainted mean and total samples
+    inpainted_mean = np.zeros(len(freqs), dtype=stackd.dtype)
+    total_nsamples = np.zeros(len(freqs), dtype=float)
+
     cache = cache or {}
 
+    for band in inpaint_bands:
+        # if the band is already entirely flagged for all nights, continue
+        if np.all(stackf[:, band]):
+            continue
+
+        # if there are too-large flag gaps even after a simple LST-stacking, continue
+        max_allowed_gap_size = max_gap_factor * filter_half_widths[0]**-1 / df
+        convolution_kernel = np.append(
+            np.linspace(0, 1, int(max_allowed_gap_size) - 1, endpoint=False),
+            np.linspace(1, 0, int(max_allowed_gap_size))
+        )
+        convolution_kernel /= np.sum(convolution_kernel)
+        convolved_flags = signal.convolve(avg_flgs[band], convolution_kernel, mode='same') > max_convolved_flag_frac
+        flagged_stretches = true_stretches(convolved_flags)
+        longest_gap = np.max([ts.stop - ts.start for ts in flagged_stretches]) if len(flagged_stretches) > 0 else 0
+
+        # Flag if combined gap is too large
+        if longest_gap > max_allowed_gap_size:
+            avg_flgs[band] = True
+            continue
+
+        # Get basis functions
+        basis = dspec.dpss_operator(
+            freqs[band],
+            filter_centers=filter_centers,
+            filter_half_widths=filter_half_widths,
+            cache=cache,
+            eigenval_cutoff=eigenval_cutoff
+        )[0].real
+
+        # Do the caching on a per night basis - find better way to do this
+        CNinv_1sample_dpss = []
+        CNinv_1sample_dpss_inv = []
+        for night_index in range(n_nights):
+            # compute fits for dpss basis functions
+            hash_key = dspec._fourier_filter_hash(
+                filter_centers=filter_centers,
+                filter_half_widths=filter_half_widths,
+                x=freqs[band],
+                w=(base_noise_var[night_index, band] * mask[night_index, band])
+            )
+
+            # If key exists in cache, load in filter and inverse
+            if hash_key in cache:
+                _CNinv_1sample_dpss, _CNinv_1sample_dpss_inv = cache[hash_key]
+                CNinv_1sample_dpss.append(_CNinv_1sample_dpss)
+                CNinv_1sample_dpss_inv.append(_CNinv_1sample_dpss_inv)
+            else:
+                _CNinv_1sample_dpss = np.dot(basis.T * mask[night_index, band] / base_noise_var[night_index, band], basis)
+                _CNinv_1sample_dpss_inv = np.linalg.pinv(_CNinv_1sample_dpss)
+                CNinv_1sample_dpss.append(_CNinv_1sample_dpss)
+                CNinv_1sample_dpss_inv.append(_CNinv_1sample_dpss_inv)
+                cache[hash_key] = (_CNinv_1sample_dpss, _CNinv_1sample_dpss_inv)
+
+        # Compute data covariance
+        CNinv_dpss = CNinv_1sample_dpss * nsamples_by_night[:, np.newaxis]
+        CNinv_dpss_inv = CNinv_1sample_dpss_inv / nsamples_by_night[:, np.newaxis]
+        sum_CNinv_dpss = np.sum(CNinv_dpss, axis=0)
+
+        # compute matrix product + get per-day DPSS fits
+        noise_var = base_noise_var / nsamples_by_night
+        CNinv_data_dpss = np.array([
+            basis.T.dot(weighted_data) for weighted_data in mask[:, band] / noise_var[:, band] * stackd[:, band]
+        ])
+        print(CNinv_data_dpss.shape, CNinv_data_dpss.shape)
+        dpss_fits = np.array([
+            a.dot(b) if np.all(np.isfinite(b)) else a.dot(np.zeros_like(b))
+            for a, b in zip(CNinv_dpss_inv, CNinv_data_dpss)
+        ])
+
+        # Find nights that are entirely flagged in this band
+        is_unflagged_night = (~np.all(stackf[:, band], axis=1))
+
+        # Compute weighted sample mean from per-day DPSS-fits and noise-weighted covariance matrix
+        inv_sum_CNinv_dpss = np.linalg.pinv(sum_CNinv_dpss)
+        sample_mean_dpss = inv_sum_CNinv_dpss @ np.einsum('nde,nd->e', CNinv_dpss[is_unflagged_night], dpss_fits[is_unflagged_night])
+
+        # Compute weighted sample covariance of DPSS coefficients, then restrict it to the diagonal variance, then invert
+        weighted_diff_dpss = np.array([
+            np.dot(CNinv_dpss[i], (dpss_fits - sample_mean_dpss)[i])
+            for i in range(n_nights) if is_unflagged_night[i]
+        ])
+        sample_cov_dpss = np.sum([
+            np.outer(_weighted_diff_dpss, _weighted_diff_dpss.conj())
+            for _weighted_diff_dpss in weighted_diff_dpss
+        ], axis=0)
+
+        # Calculate effective nights
+        effective_nights = np.sum(np.mean(mask[:, band], axis=1))
+
+        # TODO: Sample covariance is overestimated and has a fudge factor, this is probably close to correct
+        # but not exactly right. We should revisit this.
+        if effective_nights <= 1:
+            sample_cov_dpss_inv = np.zeros_like(sample_cov_dpss)
+        else:
+            sample_cov_dpss = (
+                inv_sum_CNinv_dpss @ (sample_cov_dpss - use_unbiased_estimator * sum_CNinv_dpss) @ inv_sum_CNinv_dpss
+            ) * effective_nights ** 2 / (effective_nights - 1)
+            sample_cov_dpss = (
+                sample_cov_fraction * sample_cov_dpss
+                + (1.0 - sample_cov_fraction) * np.diag(np.diag(sample_cov_dpss))
+            )
+            sample_cov_dpss_inv = np.linalg.pinv(sample_cov_dpss)
+
+        CNinv_data_dpss = np.where(np.isfinite(CNinv_data_dpss), CNinv_data_dpss, 0)
+        LU_decomp = [
+            linalg.lu_factor(nightly_inv + sample_cov_dpss_inv)
+            for nightly_inv in CNinv_dpss
+        ]  # LU decomposition of Sigma_{N,i}^-1
+        sample_cov_inv_sample_mean_dpss = sample_cov_dpss_inv.dot(sample_mean_dpss)
+        post_mean = np.array([
+            linalg.lu_solve(_LU_decomp, (nightly_weighted_data + sample_cov_inv_sample_mean_dpss))
+            for _LU_decomp, nightly_weighted_data in zip(LU_decomp, CNinv_data_dpss)
+        ])
+        model[:, band] = basis.dot(post_mean.T).T
+
+        # If we've made it this far, set averaged flags to False
+        avg_flgs[band] = False
+
+    # Shortcut here if everything is flagged.
+    # Note that we can have avg_flgs be all flagged when not all of stackf is flagged
+    # because we flag the average on "largest gaps". That's why we shortcut early here.
+    if np.all(avg_flgs):
+        return np.nan * inpainted_mean, avg_flgs, model
+
+    # Inpainted mean is going to be sum(n_i * {model if flagged else data_i}) / sum(n_i)
+    # where n_i is the nsamples for the i-th integration. The total_nsamples is
+    # simply sum(n_i) for all i (originally flagged or not).
+    inpainted_mean[:] = 0.0
+    total_nsamples[:] = 0.0
+    for nightidx, (d, f, n) in enumerate(zip(stackd, stackf, stackn)):
+        # If an entire integration is flagged, don't use it at all
+        # in the averaging -- it doesn't contibute any knowledge.
+        if np.all(f):
+            continue
+
+        # Make model variable here
+        inpainted_mean += n * np.where(f, model[nightidx], d)
+        total_nsamples += n
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        inpainted_mean /= total_nsamples
+        inpainted_mean[total_nsamples == 0] *= np.nan
+
+    return inpainted_mean, avg_flgs, model
+
+
+def average_and_inpaint_simultaneously(
+    stack: LSTStack,
+    auto_stack: LSTStack,
+    inpaint_bands: tuple[slice] = (slice(0, None, None),),
+    return_models: bool = True,
+    cache: dict = {},
+    filter_properties: dict | None = None,
+    eigenval_cutoff: list[float] = [1e-12],
+    round_filter_half_width: bool = True,
+    max_gap_factor: float = 2.0,
+    max_convolved_flag_frac: float = 0.667,
+    use_unbiased_estimator: bool = False,
+    sample_cov_fraction: float = 0.0
+):
+    """
+    Average and inpaint simultaneously for all baselines in a stack.
+
+    Parameters
+    ----------
+    stack : LSTStack
+        The LSTStack object to average and inpaint.
+    auto_stack : LSTStack
+        The LSTStack object containing the auto-correlations.
+    inpaint_bands : tuple[slice]
+        The bands to inpaint individually, as slices over frequency channels.
+    return_models : bool
+        Whether to return the inpainting models.
+    cache : dict
+        A cache for storing DPSS filter matrices.
+    filter_properties : dict
+        The properties of the DPSS filters.
+    eigenval_cutoff : list[float]
+        The eigenvalue cutoff for determining DPSS filters.
+    round_filter_half_width : bool
+        Whether to round the filter half-width to the nearest nanosecond. This helps
+        with caching.
+    inpaint_max_gap_factor : float
+        A factor determining the maximum allowed flagging gap.
+    inpaint_max_convolved_flag_frac : float
+        The maximum allowed fraction of convolved flags.
+    use_unbiased_estimator : bool
+        Whether to use an unbiased estimator.
+    inpaint_sample_cov_fraction : float
+        A factor to use to down-weight off-diagonal elements of the sample covariance.
+
+    Returns
+    -------
+    lstavg : dict
+        The LST-averaged data, flags, standard deviation, and nsamples.
+    all_models : dict
+        The inpainting models for each baseline (if return_models is True).
+    """
+    filter_properties = filter_properties or {}
+
+    # Dictionary for model storage
     all_models = {}
 
     # Time axis is outer axis for all LSTStacks.
@@ -430,82 +657,62 @@ def average_and_inpaint_simultaneously(
         stack, get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
     )
 
-    inpainted_mean = np.zeros(stack.Nfreqs, dtype=stack.data.dtype)
-    total_nsamples = np.zeros(stack.Nfreqs, dtype=float)
+    # Compute noise variance
+    if auto_stack.data.shape[1] != 1:
+        raise NotImplementedError('This code only works with redundantly averaged data, which has only one unique auto per polarization')
 
     for iap, antpair in enumerate(stack.antpairs):
+        # Get the baseline vector and length
+        bl_vec = (antpos[antpair[1]] - antpos[antpair[0]])[:]
+        bl_len = np.linalg.norm(bl_vec) / constants.c
+        filter_centers, filter_half_widths = vis_clean.gen_filter_properties(
+            ax='freq',
+            bl_len=max(bl_len, 7.0 / constants.c),
+            **filter_properties,
+        )
+
+        # Round up filter half width to the nearest nanosecond
+        # allows the cache to be hit more frequently
+        if round_filter_half_width:
+            filter_half_widths = [np.ceil(filter_half_widths[0] * 1e9) * 1e-9]
+
         for polidx, pol in enumerate(stack.pols):
-            # Get the data, flags, and nsamples for this baseline-pol pair, for the
-            # whole LST-stack. Note that the incoming data may already be in-painted
-            # on a per-day basis, in which case the nsamples for those data will be
-            # negative, and they will be unflagged. Here, we want to use the original
-            # per-day flags and nsamples (i.e. we effectively use the pre-inpainted
-            # data).
+            # Get easy access to the data, flags, and nsamples for this baseline-pol pair
             stackd = stack.data[:, iap, :, polidx]
             stackf = complete_flags[:, iap, :, polidx]
             stackn = np.abs(stack.nsamples[:, iap, :, polidx])
-
-            # Also get the lst-avg data, flags, and nsamples for this baseline-pol pair.
             flagged_mean = lstavg['data'][iap, :, polidx]
-            wgts = lstavg['nsamples'][iap, :, polidx]
-            flgs = lstavg['flags'][iap, :, polidx]
+            avg_flgs = lstavg['flags'][iap, :, polidx]
+
+            # Compute noise variance for all days in stack
+            base_noise_var = np.abs(auto_stack.data[:, 0, :, polidx]) ** 2 / (stack.dt * stack.df).value
 
             # Shortcut early if there are no flags in the stack. In that case,
             # the LST-average is the same as the flagged-mode mean.
             if (not np.any(stackf)) or np.all(stackf):
                 continue
 
-            # Get the baseline vector and length
-            bl_vec = (antpos[antpair[1]] - antpos[antpair[0]])[:2]
-            bl_len = np.linalg.norm(bl_vec) / constants.c
-            filter_centers, filter_half_widths = vis_clean.gen_filter_properties(
-                ax='freq',
-                bl_len=max(bl_len, 7.0 / constants.c),
-                **filter_properties,
+            flagged_mean[:], _, model = average_and_inpaint_simultaneously_single_bl(
+                freqs=stack.freq_array,
+                stackd=stackd,
+                stackf=stackf,
+                stackn=stackn,
+                avg_flgs=avg_flgs,
+                base_noise_var=base_noise_var,
+                df=stack.df,
+                filter_centers=filter_centers,
+                inpaint_bands=inpaint_bands,
+                max_gap_factor=max_gap_factor,
+                max_convolved_flag_frac=max_convolved_flag_frac,
+                use_unbiased_estimator=use_unbiased_estimator,
+                sample_cov_fraction=sample_cov_fraction,
+                filter_half_widths=filter_half_widths,
+                eigenval_cutoff=eigenval_cutoff,
+                cache=cache
             )
 
-            for band in inpaint_bands:
-                model[band], _, info = dspec.fourier_filter(
-                    stack.freq_array[band],
-                    flagged_mean[band],
-                    wgts=wgts[band],
-                    mode='dpss_solve',
-                    max_contiguous_edge_flags=stack.Nfreqs,
-                    cache=cache,
-                    filter_centers=filter_centers,
-                    filter_half_widths=filter_half_widths,
-                    **kwargs,  # noqa: E225
-                )
-
-                # Update the flags. All successfully-inpainted data is unflagged.
-                # If in-painting is unsuccessful, we flag the data.
-                flgs[band] = (info['status']['axis_1'][0] == 'skipped')
-
             if return_models:
-                all_models[(*antpair, pol)] = model.copy()
-
-            # Inpainted mean is going to be sum(n_i * {model if flagged else data_i}) / sum(n_i)
-            # where n_i is the nsamples for the i-th integration The total_nsamples is
-            # simply sum(n_i) for all i (originally flagged or not).
-            inpainted_mean[:] = 0.0
-            total_nsamples[:] = 0.0
-            for d, f, n in zip(stackd, stackf, stackn):
-                # If an entire integration is flagged, don't use it at all
-                # in the averaging -- it doesn't contibute any knowledge.
-                if np.all(f):
-                    continue
-
-                inpainted_mean += n * np.where(f, model, d)
-                total_nsamples += n
-
-            with np.errstate(divide='ignore', invalid='ignore'):
-                inpainted_mean /= total_nsamples
-                inpainted_mean[total_nsamples == 0] *= np.nan
-
-            # Overwrite the original averaged data with the inpainted mean.
-            # The nsamples remains the same for inpainted vs. flagged mean (we don't
-            # count inpainted samples as samples, but we do count them as data).
-            flagged_mean[:] = inpainted_mean
+                all_models[(antpair[0], antpair[1], pol)] = model.copy()
 
     # Set data that is flagged to nan
     lstavg['data'][lstavg['flags']] = np.nan
