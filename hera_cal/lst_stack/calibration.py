@@ -303,8 +303,6 @@ def lstbin_absolute_calibration(
                     (stack.nights.size, stack.freq_array.size), dtype=complex
                 )
                 for bandidx, band in enumerate(inpaint_bands):
-                    basis = smoothing_functions[bandidx]
-
                     # Construct the raw gain and remove nans and infs
                     raw_gain = calibration_parameters[f"A_J{pol}"] ** 2
                     raw_gain = np.where(
@@ -312,12 +310,20 @@ def lstbin_absolute_calibration(
                     )
 
                     # Compute smooth gain for each parameter and remove zeros/nans/infs
-                    bl_gain_here = np.array(
-                        [
-                            np.dot(basis, _fmat.dot(_raw_gain))
-                            for _fmat, _raw_gain in zip(fmats[pol][bandidx], raw_gain)
-                        ]
-                    )
+
+                    if smooth_gains:
+                        basis = smoothing_functions[bandidx]
+                        bl_gain_here = np.array(
+                            [
+                                np.dot(basis, _fmat.dot(_raw_gain))
+                                for _fmat, _raw_gain in zip(
+                                    fmats[pol][bandidx], raw_gain
+                                )
+                            ]
+                        )
+                    else:
+                        bl_gain_here = raw_gain
+
                     bl_gain_here = np.where(
                         np.isfinite(bl_gain_here), bl_gain_here, 1.0 + 0.0j
                     )

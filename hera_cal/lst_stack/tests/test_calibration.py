@@ -18,24 +18,44 @@ class TestAverageInpaintSimultaneously:
             freqs=mockuvd.PHASEII_FREQS[:100],
         )
 
+        auto_uvd = mockuvd.create_uvd_identifiable(
+            integration_time=24 * 3600,
+            ntimes=20,
+            jd_start=2459844.0,
+            ants=[
+                0,
+            ],
+            time_axis_faster_than_bls=False,
+            pols=["xx", "yy"],
+            freqs=mockuvd.PHASEII_FREQS[:100],
+        )
+
         self.antpos = {ant: np.array([ant * 10, 0, 0]) for ant in range(4)}
         self.stack = LSTStack(self.uvd)
+        self.auto_stack = LSTStack(auto_uvd)
         self.stack.data[1:] = self.stack.data[0]  # All nights exactly the same
+        self.auto_stack.data[1:] = self.auto_stack.data[
+            0
+        ]  # All nights exactly the same
         self.all_reds = redcal.get_reds(self.antpos, pols=self.stack.pols)
 
     def test_amp_cal(self):
         stack_copy = self.stack.copy()
+        auto_stack_copy = self.auto_stack.copy()
         gains = np.random.normal(1, 0.1, size=(20, stack_copy.data.shape[2], 2))
 
         stack_copy.data *= gains[:, None, :, :] ** 2
+        auto_stack_copy.data *= gains[:, None, :, :] ** 2
         model = np.mean(self.stack.data, axis=0)
 
         pre_cal_std = np.std(stack_copy.data, axis=0)
+        pre_cal_auto_std = np.std(auto_stack_copy.data, axis=0)
 
         cal_params, _ = calibration.lstbin_absolute_calibration(
             stack_copy,
             model,
             [],
+            auto_stack=auto_stack_copy,
             run_amplitude_cal=True,
             run_phase_cal=False,
             calibrate_inplace=True,
@@ -43,10 +63,12 @@ class TestAverageInpaintSimultaneously:
         )
 
         post_cal_std = np.std(stack_copy.data, axis=0)
+        post_cal_auto_std = np.std(auto_stack_copy.data, axis=0)
         del stack_copy
 
         # Check that the standard deviation of the data decreased after calibration
         assert np.all(post_cal_std < pre_cal_std)
+        assert np.all(post_cal_auto_std < pre_cal_auto_std)
         assert np.allclose(cal_params["A_Jnn"], gains[:, :, 0])
         assert np.allclose(cal_params["A_Jee"], gains[:, :, 1])
 
