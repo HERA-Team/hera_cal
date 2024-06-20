@@ -37,30 +37,39 @@ def lstbin_absolute_calibration(
     Parameters:
     ----------
         stack : LSTStack
-            asdf
+            The LSTStack object to calibrate
         model : np.ndarray
-            asdf
-        inpaint_bands : tuple, default=(slice(0, None, None),)
-            asdf
+            The reference model to calibrate the data to. The model should have the same
+            number of baselines, frequencies, and polarizations as the data in stack.
+        inpaint_bands : tuple of slices, default=(slice(0, None, None),)
+            Defines the frequency bands to use for smoothing. Each slice object in the tuple
+            defines a separate frequency band to use for smoothing. The default is to smooth over
+            all frequencies at once.
         run_amplitude_cal : bool, default=True
-            asdf
+            Boolean flag to run amplitude calibration.
         run_phase_cal : bool, default=True
-            asdf
+            Boolean flag to run tip-tilt calibration.
         smoothing_scale : float, default=10e6
-            asdf
+            The scale of the smoothing function used to smooth the gains. This is the width of the
+            smoothing function in Hz.
         eigenval_cutoff : float, default=1e-12
-            asdf
+            The cutoff for the eigenvalues of the DPSS eigenvectors.
         calibrate_inplace : bool, default=True
-            asdf
+            Boolean flag to calibrate the data in place.
         return_gains : bool, default=True
+            Boolean flag to return the gains. If set to False, the function will return an empty
+            dictionary for the gains.
 
     Returns:
     -------
         calibration_parameters : dict
-            asdf
+            A dictionary containing the calibration parameters. The keys are as follows:
+                - 'A_J{pol}' : The amplitude calibration parameters for each polarization.
+                - 'T_J{pol}' : The tip-tilt calibration parameters for each polarization
         gains : dict
-            asdf
-
+            A dictionary containing the calibrated gains for each baseline. The keys are tuples
+            containing the antenna numbers and polarization of the baseline. If return_gains is
+            set to False, this dictionary will be empty.
     """
     # Assert some calibration done
     assert (
