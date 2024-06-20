@@ -41,10 +41,19 @@ def lstbin_absolute_calibration(
         model : np.ndarray
             The reference model to calibrate the data to. The model should have the same
             number of baselines, frequencies, and polarizations as the data in stack.
+        all_reds : list of list of tuples
+            A list of lists of redundant baseline groups. Each element of the list is a list of tuples
+            containing the redundant baseline groups. Each tuple contains the antenna numbers
+            of the antennas in the redundant baseline group.
         inpaint_bands : tuple of slices, default=(slice(0, None, None),)
             Defines the frequency bands to use for smoothing. Each slice object in the tuple
             defines a separate frequency band to use for smoothing. The default is to smooth over
             all frequencies at once.
+        auto_stack : LSTStack, default=None
+            An LSTStack object containing the stack of auto-correlations. If provided, the
+            auto-correlations will be calibrated using the same gains calculated from the
+            cross-correlations. Note that the auto-correlations are not used to calculate the
+            gains if provided.
         run_amplitude_cal : bool, default=True
             Boolean flag to run amplitude calibration.
         run_phase_cal : bool, default=True
