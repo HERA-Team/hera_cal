@@ -54,7 +54,7 @@ class TestAverageInpaintSimultaneously:
         cal_params, _ = calibration.lstbin_absolute_calibration(
             stack_copy,
             model,
-            [],
+            all_reds=[],
             auto_stack=auto_stack_copy,
             run_amplitude_cal=True,
             run_phase_cal=False,
@@ -79,7 +79,8 @@ class TestAverageInpaintSimultaneously:
         cal_params, _ = calibration.lstbin_absolute_calibration(
             stack_copy_w_smoothing,
             model,
-            [],
+            all_reds=[],
+            auto_stack=auto_stack_copy,
             run_amplitude_cal=True,
             run_phase_cal=False,
             calibrate_inplace=True,
@@ -145,3 +146,41 @@ class TestAverageInpaintSimultaneously:
             if antpair[0] == antpair[1]:
                 continue
             assert np.all(post_cal_std[ai] <= post_cal_std_w_smoothing[ai])
+
+    def test_full_night_flagged(self):
+        stack_copy = self.stack.copy()
+        gains = np.random.normal(1, 0.1, size=(20, stack_copy.data.shape[2], 2))
+        tip_tilt = np.random.normal(0, 0.1, size=(20, self.stack.data.shape[2], 2))
+        phs_gains = np.array(
+            [
+                np.exp(1j * tip_tilt * (self.antpos[ant2] - self.antpos[ant1])[0])
+                for (ant1, ant2) in self.stack.antpairs
+            ]
+        )
+        phs_gains = np.transpose(phs_gains, (1, 0, 2, 3))
+        stack_copy.data *= gains[:, None, :, :] ** 2 * phs_gains
+        stack_copy.flags[0, :, :, :] = True
+        model = np.mean(self.stack.data, axis=0)
+
+        pre_cal_std = np.nanstd(
+            np.where(stack_copy.flags, np.nan, stack_copy.data), axis=0
+        )
+
+        cal_params, _ = calibration.lstbin_absolute_calibration(
+            stack_copy,
+            model,
+            self.all_reds,
+            run_amplitude_cal=True,
+            run_phase_cal=True,
+            calibrate_inplace=True,
+            smooth_gains=False,
+        )
+
+        post_cal_std = np.nanstd(
+            np.where(stack_copy.flags, np.nan, stack_copy.data), axis=0
+        )
+
+        for ai, antpair in enumerate(self.stack.antpairs):
+            if antpair[0] == antpair[1]:
+                continue
+            assert np.all(post_cal_std[ai] <= pre_cal_std[ai])
