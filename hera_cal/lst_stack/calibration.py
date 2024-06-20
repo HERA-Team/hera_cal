@@ -29,7 +29,9 @@ def lstbin_absolute_calibration(
         1. Amplitude calibration: The amplitude of the data is scaled to match the model using
            hera_cal.abscal.abs_amp_lincal to perform gain fits.
         2. Phase calibration: The phase of the data is adjusted to match the model by fitting
-           for the tip-tilt abscal degeneracy using hera_cal.abscal.complex_phase_abscal.
+           for the tip-tilt abscal degeneracy using hera_cal.abscal.complex_phase_abscal. Note
+           that while the tip-tilt degeneracy may be solved for in greater than 2 dimensions
+           in the general case, this function only solves for the 2D tip-tilt degeneracy.
 
 
     Parameters:
@@ -177,9 +179,8 @@ def lstbin_absolute_calibration(
                             np.ones(stack.freq_array.shape, dtype=complex)
                         )
 
-                    calibration_parameters[f"T_J{pol}"].append(
-                        np.zeros((1, stack.data.shape[2], 2))
-                    )
+                    # Store placeholder for degenerate parameters
+                    calibration_parameters[f"T_J{pol}"].append(None)
                     continue
 
                 for apidx, (ant1, ant2) in enumerate(antpairs):
@@ -206,9 +207,7 @@ def lstbin_absolute_calibration(
                 transformed_antpos = metadata["transformed_antpos"]
 
                 # Store degenerate parameters
-                calibration_parameters[f"T_J{pol}"].append(
-                    np.squeeze(metadata["Lambda_sol"])
-                )
+                calibration_parameters[f"T_J{pol}"].append(metadata["Lambda_sol"])
 
                 # Store phase gains
                 for ant in gain_ants:
@@ -224,8 +223,21 @@ def lstbin_absolute_calibration(
             phase_gains[key] = np.array(phase_gains[key])
 
         for pol in pols:
+            for nightly_cal_params in calibration_parameters[f"T_J{pol}"]:
+                if isinstance(nightly_cal_params, np.ndarray):
+                    cal_params_shape = nightly_cal_params.shape
+                    break
+
+            # Fill in tip-tilt gains with zeros if night was flagged
             calibration_parameters[f"T_J{pol}"] = np.array(
-                calibration_parameters[f"T_J{pol}"]
+                [
+                    (
+                        nightly_cal_params
+                        if nightly_cal_params is not None
+                        else np.zeros(cal_params_shape)
+                    )
+                    for nightly_cal_params in calibration_parameters[f"T_J{pol}"]
+                ]
             )
 
     else:
