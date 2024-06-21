@@ -12,6 +12,7 @@ def lstbin_absolute_calibration(
     all_reds: list[list[tuple]],
     inpaint_bands: tuple = (slice(0, None, None),),
     auto_stack: np.ndarray = None,
+    auto_model: np.ndarray = None,
     run_amplitude_cal: bool = True,
     run_phase_cal: bool = True,
     smoothing_scale: float = 10e6,
@@ -19,6 +20,7 @@ def lstbin_absolute_calibration(
     calibrate_inplace: bool = True,
     return_gains: bool = True,
     smooth_gains: bool = True,
+    use_autos_for_abscal: bool = True,
 ):
     """
     This function performs calibration on LSTStack object by comparing each day to an input
@@ -40,7 +42,8 @@ def lstbin_absolute_calibration(
             The LSTStack object to calibrate
         model : np.ndarray
             The reference model to calibrate the data to. The model should have the same
-            number of baselines, frequencies, and polarizations as the data in stack.
+            number of baselines, frequencies, and polarizations as the data in stack. The model
+            can simply be the mean of the data in stack.
         all_reds : list of list of tuples
             A list of lists of redundant baseline groups. Each element of the list is a list of tuples
             containing the redundant baseline groups. Each tuple contains the antenna numbers
@@ -52,8 +55,12 @@ def lstbin_absolute_calibration(
         auto_stack : LSTStack, default=None
             An LSTStack object containing the stack of auto-correlations. If provided, the
             auto-correlations will be calibrated using the same gains calculated from the
-            cross-correlations. Note that the auto-correlations are not used to calculate the
-            gains if provided.
+            cross-correlations. Note that the auto-correlations are used to calculate the gain
+            amplitude if use_autos_for_abscal is set to True.
+        auto_model : np.ndarray, default=None
+            The reference model to calibrate the auto-correlations to. The model should have the
+            same number of baselines, frequencies, and polarizations as the auto-correlations in
+            auto_stack.
         run_amplitude_cal : bool, default=True
             Boolean flag to run amplitude calibration.
         run_phase_cal : bool, default=True
@@ -68,6 +75,11 @@ def lstbin_absolute_calibration(
         return_gains : bool, default=True
             Boolean flag to return the gains. If set to False, the function will return an empty
             dictionary for the gains.
+        use_autos_for_abscal : bool, default=True
+            Boolean flag to use the auto-correlations for absolute calibration. If set to True,
+            the auto-correlations will be used to calculate the gain amplitude if they are provided.
+            Note that the auto_model must also be provided if this flag is set to True and autos are
+            provided. If set to False, the auto-correlations will not be used for calibration.
 
     Returns:
     -------
@@ -81,12 +93,18 @@ def lstbin_absolute_calibration(
             set to False, this dictionary will be empty.
     """
     # Assert some calibration done
-    assert (
-        run_amplitude_cal or run_phase_cal
-    ), "At least one calibration mode must be used"
-    assert (
-        stack.data.shape[1:] == model.shape
-    ), "Model must have the same number of antpairs/freqs/pols as stack.data"
+    if not (run_amplitude_cal or run_phase_cal):
+        raise ValueError("At least one calibration mode must be used")
+
+    if not (stack.data.shape[1:] == model.shape):
+        raise ValueError(
+            "Model must have the same number of antpairs/freqs/pols as stack.data"
+        )
+
+    if auto_stack is not None and use_autos_for_abscal and auto_model is None:
+        raise ValueError(
+            "auto_model must be provided if auto_stack is provided and use_autos_for_abscal is True"
+        )
 
     # Get variables used for both functions
     antpairs = stack.antpairs[:]
@@ -131,6 +149,26 @@ def lstbin_absolute_calibration(
             wgts_here[blpol] = stack.nsamples[:, apidx, :, polidx] * (
                 ~stack.flags[:, apidx, :, polidx]
             ).astype(float)
+
+    # If autos are provided and use_autos_for_abscal is True, use them for amplitude calibration
+    if use_autos_for_abscal and auto_stack is not None:
+        for polidx, pol in enumerate(pols):
+            for apidx, (ant1, ant2) in enumerate(auto_stack.antpairs):
+
+                blpol = (ant1, ant2, pol)
+
+                # Move to the next blpol if there is not a model for the data or the entire baseline is flagged
+                if np.all(auto_stack.flags[:, apidx, :, polidx]):
+                    continue
+
+                # Get model, weights, and data for each baseline
+                abscal_model[blpol] = auto_model[apidx, :, polidx] * np.ones(
+                    (len(auto_stack.nights), 1)
+                )
+                data_here[blpol] = auto_stack.data[:, apidx, :, polidx]
+                wgts_here[blpol] = auto_stack.nsamples[:, apidx, :, polidx] * (
+                    ~auto_stack.flags[:, apidx, :, polidx]
+                ).astype(float)
 
     # Check to see if all nights are flagged
     all_nights_flagged = len(data_here) == 0
