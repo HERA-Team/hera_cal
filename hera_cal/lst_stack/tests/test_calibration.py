@@ -6,7 +6,7 @@ from hera_cal.lst_stack import LSTStack
 from hera_cal import redcal
 
 
-class TestAverageInpaintSimultaneously:
+class TestLSTBinCalibration:
     def setup_class(self):
         self.uvd = mockuvd.create_uvd_identifiable(
             integration_time=24 * 3600,
@@ -47,6 +47,7 @@ class TestAverageInpaintSimultaneously:
         stack_copy.data *= gains[:, None, :, :] ** 2
         auto_stack_copy.data *= gains[:, None, :, :] ** 2
         model = np.mean(self.stack.data, axis=0)
+        auto_model = np.mean(self.auto_stack.data, axis=0)
 
         pre_cal_std = np.std(stack_copy.data, axis=0)
         pre_cal_auto_std = np.std(auto_stack_copy.data, axis=0)
@@ -56,6 +57,7 @@ class TestAverageInpaintSimultaneously:
             model,
             all_reds=[],
             auto_stack=auto_stack_copy,
+            auto_model=auto_model,
             run_amplitude_cal=True,
             run_phase_cal=False,
             calibrate_inplace=True,
@@ -81,6 +83,7 @@ class TestAverageInpaintSimultaneously:
             model,
             all_reds=[],
             auto_stack=auto_stack_copy,
+            auto_model=auto_model,
             run_amplitude_cal=True,
             run_phase_cal=False,
             calibrate_inplace=True,
@@ -184,3 +187,41 @@ class TestAverageInpaintSimultaneously:
             if antpair[0] == antpair[1]:
                 continue
             assert np.all(post_cal_std[ai] <= pre_cal_std[ai])
+
+    def test_value_errors(self):
+        stack_copy = self.stack.copy()
+        auto_stack_copy = self.auto_stack.copy()
+
+        model = np.mean(self.stack.data, axis=0)
+
+        # Test that ValueError is raised if run_amplitude_cal=True, autos are provided,
+        # use_autos_for_abscal=True, and auto_model is not provided
+        with pytest.raises(ValueError) as cm:
+            calibration.lstbin_absolute_calibration(
+                stack_copy,
+                model,
+                all_reds=[],
+                auto_stack=auto_stack_copy,
+                run_amplitude_cal=True,
+                run_phase_cal=False,
+                calibrate_inplace=True,
+                use_autos_for_abscal=True,
+            )
+
+        # Test that ValueError is raised if model and data have incompatible shapes
+        with pytest.raises(ValueError) as cm:
+            calibration.lstbin_absolute_calibration(
+                stack_copy,
+                stack_copy.data,
+                all_reds=[],
+            )
+
+        # Test that ValueError is raised if run_amplitude_cal=False and run_phase_cal=False
+        with pytest.raises(ValueError) as cm:
+            calibration.lstbin_absolute_calibration(
+                stack_copy,
+                stack_copy.data,
+                all_reds=[],
+                run_amplitude_cal=False,
+                run_phase_cal=False,
+            )
