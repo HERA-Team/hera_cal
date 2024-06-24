@@ -26,11 +26,10 @@ def _expand_degeneracies_to_ant_gains(
     gain_ants = set()
     for ap in antpairs:
         gain_ants.update(ap)
-
     gain_ants = list(gain_ants)
 
     # Get the unique antenna-polarizations
-    antpols = list(
+    unique_pols = list(
         set(sum(map(list, [utils.split_pol(pol) for pol in stack.pols]), []))
     )
 
@@ -47,8 +46,11 @@ def _expand_degeneracies_to_ant_gains(
                 )[0]
             )
 
-        fmats = {pol: [] for pol in antpols}
-        for polidx, pol in enumerate(antpols):
+        fmats = {pol: [] for pol in unique_pols}
+        for polidx, pol in enumerate(stack.pols):
+            split_pol1, split_pol2 = utils.split_pol(pol)
+            if split_pol1 != split_pol2:
+                continue
             for bandidx, band in enumerate(inpaint_bands):
                 # Get weights and basis functions for the fit
                 wgts = np.logical_not(stack.flags[:, 0, band, polidx]).astype(float)
@@ -62,7 +64,10 @@ def _expand_degeneracies_to_ant_gains(
                 fmats[pol].append(fmat)
 
     gains = {}
-    for polidx, pol in enumerate(antpols):
+    for polidx, pol in enumerate(stack.pols):
+        split_pol1, split_pol2 = utils.split_pol(pol)
+        if split_pol1 != split_pol2:
+            continue
         for ant in gain_ants:
             for bandidx, band in enumerate(inpaint_bands):
                 raw_ant_gain = amplitude_parameters[f"A_{pol}"] * (
@@ -83,7 +88,7 @@ def _expand_degeneracies_to_ant_gains(
                     raw_ant_gain *= rephasor
 
                     basis = smoothing_functions[bandidx]
-                    ant_gain = np.array(
+                    smooth_ant_gain = np.array(
                         [
                             np.dot(basis, _fmat.dot(_raw_gain))
                             for _fmat, _raw_gain in zip(
@@ -93,7 +98,7 @@ def _expand_degeneracies_to_ant_gains(
                     )
 
                     # Rephase antenna gains
-                    gains[(ant, pol)] = ant_gain * rephasor.conj()
+                    gains[(ant, pol)] = smooth_ant_gain * rephasor.conj()
                 else:
                     gains[(ant, pol)] = raw_ant_gain
 
@@ -107,7 +112,7 @@ def _lstbin_amplitude_calibration(
     auto_model: np.ndarray = None,
     use_autos_for_abscal: bool = True,
 ):
-    # Dictionaries for storing data used in abscal functions
+    # Dictionaries for storing data used in amplitude calibration function
     data_here = {}
     wgts_here = {}
     abscal_model = {}
@@ -388,6 +393,11 @@ def lstbin_absolute_calibration(
     # Check to see if all nights are flagged
     all_nights_flagged = np.all(stack.flags)
 
+    # Get the unique antenna-polarizations
+    unique_pols = list(
+        set(sum(map(list, [utils.split_pol(pol) for pol in stack.pols]), []))
+    )
+
     # Perform amplitude calibration
     if run_amplitude_cal and not all_nights_flagged:
         # Store gain solutions in paramter dictionary
@@ -403,9 +413,6 @@ def lstbin_absolute_calibration(
 
     else:
         # Fill in amplitude w/ ones if no running amplitude calibration
-        unique_pols = list(
-            set(sum(map(list, [utils.split_pol(pol) for pol in stack.pols]), []))
-        )
         for pol in unique_pols:
             calibration_parameters[f"A_{pol}"] = np.ones(
                 (len(stack.nights), stack.freq_array.size), dtype=complex
@@ -425,16 +432,13 @@ def lstbin_absolute_calibration(
         # Fill in phase w/ ones if no running phase calibration
         # Tip-tilt gains are zeros with dimensions (N_nights by N_freqs by Ndims)
         phase_gains = {}
-        unique_pols = list(
-            set(sum(map(list, [utils.split_pol(pol) for pol in stack.pols]), []))
-        )
 
         for pol in unique_pols:
             calibration_parameters[f"T_{pol}"] = np.zeros(
                 (len(stack.nights), stack.freq_array.size, 2), dtype=complex
             )
 
-    # Dictionary for gain parameters
+    # Compute for gain from calibration parameters and smooth
     gains = _expand_degeneracies_to_ant_gains(
         stack=stack,
         amplitude_parameters=calibration_parameters,
@@ -447,21 +451,20 @@ def lstbin_absolute_calibration(
     )
 
     # Iterate for each baseline the array
-    for polidx, pol in enumerate(stack.pols):
-        for apidx, (ant1, ant2) in enumerate(stack.antpairs):
-            # Construct the raw gain and remove nans and infs
-            antpol1, antpol2 = utils.split_bl((ant1, ant2, pol))
+    # Calibrate out smoothed gains
+    if calibrate_inplace:
+        for polidx, pol in enumerate(stack.pols):
+            for apidx, (ant1, ant2) in enumerate(stack.antpairs):
+                antpol1, antpol2 = utils.split_bl((ant1, ant2, pol))
 
-            # Compute gain and remove nans/infs
-            bl_gain = gains[antpol1] * gains[antpol2].conj()
-            bl_gain = np.where(stack.flags[:, 0, :, polidx], 1.0 + 0.0j, bl_gain)
-            bl_gain = np.where(np.isfinite(bl_gain), bl_gain, 1.0 + 0.0j)
+                # Compute gain and remove nans/infs
+                bl_gain = gains[antpol1] * gains[antpol2].conj()
+                bl_gain = np.where(stack.flags[:, 0, :, polidx], 1.0 + 0.0j, bl_gain)
 
-            # Calibrate out smoothed gains
-            if calibrate_inplace:
+                # Calibrate out gains
                 stack.data[:, apidx, :, polidx] /= bl_gain
 
-    if auto_stack:
+    if auto_stack and calibrate_inplace:
         for polidx, pol in enumerate(stack.pols):
             for apidx, (ant1, ant2) in enumerate(auto_stack.antpairs):
                 # Construct the raw gain and remove nans and infs
@@ -472,10 +475,7 @@ def lstbin_absolute_calibration(
                     stack.flags[:, 0, :, polidx], 1.0 + 0.0j, auto_gain
                 )
 
-                auto_gain = np.where(np.isfinite(auto_gain), auto_gain, 1.0 + 0.0j)
-
-                # Calibrate out smoothed gains
-                if calibrate_inplace:
-                    auto_stack.data[:, apidx, :, polidx] /= auto_gain
+                # Calibrate out gains
+                auto_stack.data[:, apidx, :, polidx] /= auto_gain
 
     return calibration_parameters, gains
