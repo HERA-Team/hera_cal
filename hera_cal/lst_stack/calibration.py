@@ -185,9 +185,7 @@ def lstbin_absolute_calibration(
             amplitude_gain = np.where(
                 np.isfinite(solution[f"A_J{pol}"]), solution[f"A_J{pol}"], 1.0 + 0.0j
             )
-            amplitude_gain = np.where(
-                np.isclose(amplitude_gain, 0.0), 1.0 + 0.0j, amplitude_gain
-            )
+
             calibration_parameters[f"A_J{pol}"] = amplitude_gain
     else:
         # Fill in amplitude w/ ones if no running amplitude calibration
