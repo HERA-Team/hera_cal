@@ -3,7 +3,7 @@ import pytest
 from .. import calibration
 from ...tests import mock_uvdata as mockuvd
 from hera_cal.lst_stack import LSTStack
-from hera_cal import redcal
+from hera_cal import redcal, utils
 
 
 class TestLSTBinCalibration:
@@ -225,3 +225,65 @@ class TestLSTBinCalibration:
                 run_amplitude_cal=False,
                 run_phase_cal=False,
             )
+
+    def test_cross_polarized_amp_cal(self):
+        uvd = mockuvd.create_uvd_identifiable(
+            integration_time=24 * 3600,
+            ntimes=20,
+            jd_start=2459844.0,
+            ants=[0, 1, 2, 3],
+            time_axis_faster_than_bls=False,
+            freqs=mockuvd.PHASEII_FREQS[:100],
+        )
+        auto_uvd = mockuvd.create_uvd_identifiable(
+            integration_time=24 * 3600,
+            ntimes=20,
+            jd_start=2459844.0,
+            ants=[
+                0,
+            ],
+            time_axis_faster_than_bls=False,
+            freqs=mockuvd.PHASEII_FREQS[:100],
+        )
+        stack = LSTStack(uvd)
+        auto_stack = LSTStack(auto_uvd)
+        stack.data[1:] = stack.data[0]  # All nights exactly the same
+        auto_stack.data[1:] = auto_stack.data[0]  # All nights exactly the same
+
+        amp_gains = {
+            "Jee": np.random.normal(1, 0.1, size=(20, stack.data.shape[2])),
+            "Jnn": np.random.normal(1, 0.1, size=(20, stack.data.shape[2])),
+        }
+
+        model = np.mean(stack.data, axis=0)
+        auto_model = np.mean(auto_stack.data, axis=0)
+
+        for polidx, pol in enumerate(stack.pols):
+            pol1, pol2 = utils.split_pol(pol)
+            stack.data[..., polidx] *= (
+                amp_gains[pol1][:, None, :] * amp_gains[pol2][:, None, :]
+            )
+            auto_stack.data[..., polidx] *= (
+                amp_gains[pol1][:, None, :] * amp_gains[pol2][:, None, :]
+            )
+
+        pre_cal_std = np.nanstd(np.where(stack.flags, np.nan, stack.data), axis=0)
+
+        _, _ = calibration.lstbin_absolute_calibration(
+            stack,
+            model,
+            [],
+            auto_model=auto_model,
+            auto_stack=auto_stack,
+            run_amplitude_cal=True,
+            run_phase_cal=False,
+            calibrate_inplace=True,
+            smooth_gains=False,
+        )
+
+        post_cal_std = np.nanstd(np.where(stack.flags, np.nan, stack.data), axis=0)
+
+        for ai, antpair in enumerate(stack.antpairs):
+            if antpair[0] == antpair[1]:
+                continue
+            assert np.all(post_cal_std[ai] <= pre_cal_std[ai]), f"{antpair}"
