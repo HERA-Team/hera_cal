@@ -341,7 +341,6 @@ def lstbin_absolute_calibration(
     smoothing_scale: float = 10e6,
     eigenval_cutoff: float = 1e-12,
     calibrate_inplace: bool = True,
-    return_gains: bool = True,
     smooth_gains: bool = True,
     use_autos_for_abscal: bool = True,
 ):
@@ -391,13 +390,12 @@ def lstbin_absolute_calibration(
         smoothing_scale : float, default=10e6
             The scale of the smoothing function used to smooth the gains. This is the width of the
             smoothing function in Hz.
+        smooth_gains : bool, default=True
+            Boolean flag to smooth the gains.
         eigenval_cutoff : float, default=1e-12
             The cutoff for the eigenvalues of the DPSS eigenvectors.
         calibrate_inplace : bool, default=True
             Boolean flag to calibrate the data in place.
-        return_gains : bool, default=True
-            Boolean flag to return the gains. If set to False, the function will return an empty
-            dictionary for the gains.
         use_autos_for_abscal : bool, default=True
             Boolean flag to use the auto-correlations for absolute calibration. If set to True,
             the auto-correlations will be used to calculate the gain amplitude if they are provided.
