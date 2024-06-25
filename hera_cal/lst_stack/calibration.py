@@ -61,7 +61,7 @@ def _expand_degeneracies_to_ant_gains(
                 fmat = np.array(
                     [np.dot(_xtxinv, basis.T) * _w for _xtxinv, _w in zip(xtxinv, wgts)]
                 )
-                fmats[pol].append(fmat)
+                fmats[split_pol1].append(fmat)
 
     gains = {}
     for polidx, pol in enumerate(stack.pols):
@@ -70,10 +70,10 @@ def _expand_degeneracies_to_ant_gains(
             continue
         for ant in gain_ants:
             for bandidx, band in enumerate(inpaint_bands):
-                raw_ant_gain = amplitude_parameters[f"A_{pol}"] * (
+                raw_ant_gain = amplitude_parameters[f"A_{split_pol1}"] * (
                     phase_gains.get(
-                        (ant, pol),
-                        np.ones_like(amplitude_parameters[f"A_{pol}"]),
+                        (ant, split_pol1),
+                        np.ones_like(amplitude_parameters[f"A_{split_pol1}"]),
                     )
                 )
 
@@ -92,15 +92,15 @@ def _expand_degeneracies_to_ant_gains(
                         [
                             np.dot(basis, _fmat.dot(_raw_gain))
                             for _fmat, _raw_gain in zip(
-                                fmats[pol][bandidx], raw_ant_gain
+                                fmats[split_pol1][bandidx], raw_ant_gain
                             )
                         ]
                     )
 
                     # Rephase antenna gains
-                    gains[(ant, pol)] = smooth_ant_gain * rephasor.conj()
+                    gains[(ant, split_pol1)] = smooth_ant_gain * rephasor.conj()
                 else:
-                    gains[(ant, pol)] = raw_ant_gain
+                    gains[(ant, split_pol1)] = raw_ant_gain
 
     return gains
 
@@ -204,7 +204,7 @@ def _lstbin_phase_calibration(
     unique_pols = list(
         set(sum(map(list, [utils.split_pol(pol) for pol in stack.pols]), []))
     )
-    calibration_parameters = {f"T_{utils.split_pol(pol)[0]}": [] for pol in unique_pols}
+    calibration_parameters = {f"T_{pol}": [] for pol in unique_pols}
 
     for nightidx, _ in enumerate(stack.nights):
         for polidx, pol in enumerate(stack.pols):
