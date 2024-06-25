@@ -16,7 +16,40 @@ def _expand_degeneracies_to_ant_gains(
     smoothing_scale: float = 10e6,
     eigenval_cutoff: float = 1e-12,
 ):
-    """ """
+    """
+    This function expands the degenerate calibration parameters to per-antenna gains. The function
+    also smooths the gains using DPSS basis functions if smooth_gains is set to True.
+
+    Parameters:
+    ----------
+        stack : LSTStack
+            The LSTStack object to calibrate
+        amplitude_parameters : dict
+            A dictionary containing the amplitude calibration parameters.
+        phase_gains : dict
+            A dictionary containing the gains produced from tip-tilt calibration.
+        inpaint_bands : tuple of slices
+            Defines the frequency bands to use for smoothing. Each slice object in the tuple
+            defines a separate frequency band to use for smoothing.
+        auto_stack : LSTStack, default=None
+            An LSTStack object containing the stack of auto-correlations. If provided, the
+            auto-correlations will be calibrated using the same gains calculated from the
+            cross-correlations.
+        smooth_gains : bool, default=True
+            Boolean flag to smooth the gains.
+        smoothing_scale : float, default=10e6
+            The scale of the smoothing function used to smooth the gains. This is the width of the
+            smoothing function in Hz.
+        eigenval_cutoff : float, default=1e-12
+            The cutoff for the eigenvalues of the DPSS eigenvectors.
+
+    Returns:
+    -------
+        gains : dict
+            A dictionary containing the calibrated gains for each baseline. The keys are tuples
+            containing the antenna numbers and polarization of the baseline.
+
+    """
     # Get antpairs for the stack and auto_stack
     antpairs = stack.antpairs[:]
     if auto_stack:
@@ -112,6 +145,11 @@ def _lstbin_amplitude_calibration(
     auto_model: np.ndarray = None,
     use_autos_for_abscal: bool = True,
 ):
+    """
+    This function performs amplitude calibration on LSTStack object by comparing each day to an input
+    reference model. Each day is calibrated independently using only the amplitude absolute calibration
+    degrees of freedom (per-antenna calibration is not currently supported).
+    """
     # Dictionaries for storing data used in amplitude calibration function
     data_here = {}
     wgts_here = {}
@@ -184,9 +222,13 @@ def _lstbin_phase_calibration(
     model: np.ndarray,
     all_reds: list[list[tuple]],
 ):
-    """ """
+    """
+    This function performs phase calibration on LSTStack object by comparing each day to an input
+    reference model. Each day is calibrated independently using only the tip-tilt degrees of freedom
+    (per-antenna calibration is not currently supported).
+    """
 
-    # Get antenna functions
+    # Get antennas
     gain_ants = set()
     for ap in stack.antpairs:
         gain_ants.update(ap)
@@ -324,7 +366,7 @@ def lstbin_absolute_calibration(
         model : np.ndarray
             The reference model to calibrate the data to. The model should have the same
             number of baselines, frequencies, and polarizations as the data in stack. The model
-            can simply be the mean of the data in stack.
+            can simply be the mean of the data in the stack if data are already abscal'd.
         all_reds : list of list of tuples
             A list of lists of redundant baseline groups. Each element of the list is a list of tuples
             containing the redundant baseline groups. Each tuple contains the antenna numbers
