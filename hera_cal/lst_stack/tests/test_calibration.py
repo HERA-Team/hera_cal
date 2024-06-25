@@ -251,8 +251,10 @@ class TestLSTBinCalibration:
         auto_stack.data[1:] = auto_stack.data[0]  # All nights exactly the same
 
         amp_gains = {
-            "Jee": np.random.normal(1, 0.1, size=(20, stack.data.shape[2])),
-            "Jnn": np.random.normal(1, 0.1, size=(20, stack.data.shape[2])),
+            "Jee": np.random.normal(1, 0.1, size=(20, 1))
+            * np.ones((1, stack.data.shape[2])),
+            "Jnn": np.random.normal(1, 0.1, size=(20, 1))
+            * np.ones((1, stack.data.shape[2])),
         }
 
         model = np.mean(stack.data, axis=0)
@@ -278,7 +280,7 @@ class TestLSTBinCalibration:
             run_amplitude_cal=True,
             run_phase_cal=False,
             calibrate_inplace=True,
-            smooth_gains=False,
+            smooth_gains=True,
         )
 
         post_cal_std = np.nanstd(np.where(stack.flags, np.nan, stack.data), axis=0)
