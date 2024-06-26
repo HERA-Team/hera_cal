@@ -226,7 +226,6 @@ class TestLSTBinCalibration:
                 run_phase_cal=False,
             )
 
-    """
     def test_cross_polarized_amp_cal(self):
         uvd = mockuvd.create_uvd_identifiable(
             integration_time=24 * 3600,
@@ -246,8 +245,8 @@ class TestLSTBinCalibration:
             time_axis_faster_than_bls=False,
             freqs=mockuvd.PHASEII_FREQS[:100],
         )
-        stack = LSTStack(uvd)
-        auto_stack = LSTStack(auto_uvd)
+        stack = LSTStack(uvd).copy()
+        auto_stack = LSTStack(auto_uvd).copy()
         stack.data[1:] = stack.data[0]  # All nights exactly the same
         auto_stack.data[1:] = auto_stack.data[0]  # All nights exactly the same
 
@@ -290,4 +289,3 @@ class TestLSTBinCalibration:
             if antpair[0] == antpair[1]:
                 continue
             assert np.all(post_cal_std[ai] <= pre_cal_std[ai]), f"{antpair}"
-    """
