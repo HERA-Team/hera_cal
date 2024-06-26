@@ -245,47 +245,55 @@ class TestLSTBinCalibration:
             time_axis_faster_than_bls=False,
             freqs=mockuvd.PHASEII_FREQS[:100],
         )
-        stack = LSTStack(uvd).copy()
-        auto_stack = LSTStack(auto_uvd).copy()
-        stack.data[1:] = stack.data[0]  # All nights exactly the same
-        auto_stack.data[1:] = auto_stack.data[0]  # All nights exactly the same
+        stack = LSTStack(uvd)
+        auto_stack = LSTStack(auto_uvd)
+        stack_copy = stack.copy()
+        auto_stack_copy = auto_stack.copy()
+        stack_copy.data[1:] = stack_copy.data[0]  # All nights exactly the same
+        auto_stack_copy.data[1:] = auto_stack_copy.data[
+            0
+        ]  # All nights exactly the same
 
         amp_gains = {
             "Jee": np.random.normal(1, 0.1, size=(20, 1))
-            * np.ones((1, stack.data.shape[2])),
+            * np.ones((1, stack_copy.data.shape[2])),
             "Jnn": np.random.normal(1, 0.1, size=(20, 1))
-            * np.ones((1, stack.data.shape[2])),
+            * np.ones((1, stack_copy.data.shape[2])),
         }
 
-        model = np.mean(stack.data, axis=0)
-        auto_model = np.mean(auto_stack.data, axis=0)
+        model = np.mean(stack_copy.data, axis=0)
+        auto_model = np.mean(auto_stack_copy.data, axis=0)
 
-        for polidx, pol in enumerate(stack.pols):
+        for polidx, pol in enumerate(stack_copy.pols):
             pol1, pol2 = utils.split_pol(pol)
-            stack.data[..., polidx] *= (
+            stack_copy.data[..., polidx] *= (
                 amp_gains[pol1][:, None, :] * amp_gains[pol2][:, None, :]
             )
-            auto_stack.data[..., polidx] *= (
+            auto_stack_copy.data[..., polidx] *= (
                 amp_gains[pol1][:, None, :] * amp_gains[pol2][:, None, :]
             )
 
-        pre_cal_std = np.nanstd(np.where(stack.flags, np.nan, stack.data), axis=0)
+        pre_cal_std = np.nanstd(
+            np.where(stack_copy.flags, np.nan, stack_copy.data), axis=0
+        )
 
         _, _ = calibration.lstbin_absolute_calibration(
-            stack,
+            stack_copy,
             model,
             [],
             auto_model=auto_model,
-            auto_stack=auto_stack,
+            auto_stack=auto_stack_copy,
             run_amplitude_cal=True,
             run_phase_cal=False,
             calibrate_inplace=True,
             smooth_gains=True,
         )
 
-        post_cal_std = np.nanstd(np.where(stack.flags, np.nan, stack.data), axis=0)
+        post_cal_std = np.nanstd(
+            np.where(stack_copy.flags, np.nan, stack_copy.data), axis=0
+        )
 
-        for ai, antpair in enumerate(stack.antpairs):
+        for ai, antpair in enumerate(stack_copy.antpairs):
             if antpair[0] == antpair[1]:
                 continue
             assert np.all(post_cal_std[ai] <= pre_cal_std[ai]), f"{antpair}"
