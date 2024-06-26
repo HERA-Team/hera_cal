@@ -413,21 +413,23 @@ def lstbin_absolute_calibration(
             containing the antenna numbers and polarization of the baseline. If return_gains is
             set to False, this dictionary will be empty.
     """
-    # Assert some calibration done
+    # Check to see if calibration modes are set
     if not (run_amplitude_cal or run_phase_cal):
         raise ValueError("At least one calibration mode must be used")
 
+    # Check to see if the model has the same shape as the stack
     if not (stack.data.shape[1:] == model.shape):
         raise ValueError(
             "Model must have the same number of antpairs/freqs/pols as stack.data"
         )
 
+    # Check to see if auto_model is provided if use_autos_for_abscal is True
     if auto_stack is not None and use_autos_for_abscal and auto_model is None:
         raise ValueError(
             "auto_model must be provided if auto_stack is provided and use_autos_for_abscal is True"
         )
 
-    # Function for storing calibration parameters
+    # Dictionary for storing calibration parameters
     calibration_parameters = {}
 
     # Check to see if all nights are flagged
@@ -452,7 +454,7 @@ def lstbin_absolute_calibration(
             calibration_parameters[key] = amp_cal_params[key]
 
     else:
-        # Fill in amplitude w/ ones if no running amplitude calibration
+        # Fill in amplitude w/ ones if not running amplitude calibration
         for pol in unique_pols:
             calibration_parameters[f"A_{pol}"] = np.ones(
                 (len(stack.nights), stack.freq_array.size), dtype=complex
@@ -469,7 +471,7 @@ def lstbin_absolute_calibration(
             calibration_parameters[key] = phs_cal_params[key]
 
     else:
-        # Fill in phase w/ ones if no running phase calibration
+        # Fill in phase w/ ones if not running phase calibration
         # Tip-tilt gains are zeros with dimensions (N_nights by N_freqs by Ndims)
         phase_gains = {}
 
@@ -478,7 +480,7 @@ def lstbin_absolute_calibration(
                 (len(stack.nights), stack.freq_array.size, 2), dtype=complex
             )
 
-    # Compute for gain from calibration parameters and smooth
+    # Compute antenna gains from calibration parameters and smooth
     gains = _expand_degeneracies_to_ant_gains(
         stack=stack,
         amplitude_parameters=calibration_parameters,
@@ -490,8 +492,7 @@ def lstbin_absolute_calibration(
         eigenval_cutoff=eigenval_cutoff,
     )
 
-    # Iterate for each baseline the array
-    # Calibrate out smoothed gains
+    # Iterate for each baseline in the stack and calibrate out gains
     if calibrate_inplace:
         for polidx, pol in enumerate(stack.pols):
             for apidx, (ant1, ant2) in enumerate(stack.antpairs):
@@ -504,6 +505,7 @@ def lstbin_absolute_calibration(
                 # Calibrate out gains
                 stack.data[:, apidx, :, polidx] /= bl_gain
 
+    # Do the same for the auto-correlations
     if auto_stack and calibrate_inplace:
         for polidx, pol in enumerate(stack.pols):
             for apidx, (ant1, ant2) in enumerate(auto_stack.antpairs):
