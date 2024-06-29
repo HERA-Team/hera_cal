@@ -79,6 +79,10 @@ def _expand_degeneracies_to_ant_gains(
                 )[0]
             )
 
+        # Get consensus flagging pattern
+        flags_here = np.all(stack.flags, axis=1)
+
+        # Compute matrices for linear least-squares fits
         fmats = {pol: [] for pol in unique_pols}
         for polidx, pol in enumerate(stack.pols):
             split_pol1, split_pol2 = utils.split_pol(pol)
@@ -86,7 +90,7 @@ def _expand_degeneracies_to_ant_gains(
                 continue
             for bandidx, band in enumerate(inpaint_bands):
                 # Get weights and basis functions for the fit
-                wgts = np.logical_not(stack.flags[:, 0, band, polidx]).astype(float)
+                wgts = np.logical_not(flags_here[:, band, polidx]).astype(float)
                 basis = smoothing_functions[bandidx]
 
                 # Compute matrices for linear least-squares fits
@@ -209,7 +213,7 @@ def _lstbin_amplitude_calibration(
     for pol in unique_pols:
         # Calibration parameters store in an N_nights by N_freqs array
         amplitude_gain = np.where(
-            np.isfinite(solution[f"A_{pol}"]), solution[f"A_{pol}"], 1.0 + 0.0j
+            np.all(stack.flags, axis=1), 1.0 + 0.0j, solution[f"A_{pol}"]
         )
 
         calibration_parameters[f"A_{pol}"] = amplitude_gain
@@ -302,7 +306,7 @@ def _lstbin_phase_calibration(
                     np.ones((1, stack.freq_array.shape[0]), dtype=complex),
                 )[0]
                 phase_gains[(ant, split_pol1)].append(
-                    np.where(np.isfinite(gain_here), gain_here, 1.0 + 0.0j)
+                    np.where(np.all(stack.flags, axis=1), 1.0 + 0.0j, gain_here)
                 )
 
     for key in phase_gains:
@@ -365,7 +369,8 @@ def lstbin_absolute_calibration(
         model : np.ndarray
             The reference model to calibrate the data to. The model should have the same
             number of baselines, frequencies, and polarizations as the data in stack. The model
-            can simply be the mean of the data in the stack if data are already abscal'd.
+            can simply be the mean of the data in the stack across nights (zeroth axis in LSTStack)
+            if data are already abscal'd.
         all_reds : list of list of tuples
             A list of lists of redundant baseline groups. Each element of the list is a list of tuples
             containing the redundant baseline groups. Each tuple contains the antenna numbers
@@ -406,8 +411,11 @@ def lstbin_absolute_calibration(
     -------
         calibration_parameters : dict
             A dictionary containing the calibration parameters. The keys are as follows:
-                - 'A_J{pol}' : The amplitude calibration parameters for each polarization.
-                - 'T_J{pol}' : The tip-tilt calibration parameters for each polarization
+                - 'A_J{pol}' : The amplitude calibration parameters for each polarization which has
+                               shape (N_nights, Nfreqs)
+                - 'T_J{pol}' : The tip-tilt calibration parameters for each polarization which has
+                               shape (N_nights, Nfreqs, Ndims) where Ndims in the number of tip-tilt
+                               degeneracies. For now, this is always 2.
         gains : dict
             A dictionary containing the calibrated gains for each baseline. The keys are tuples
             containing the antenna numbers and polarization of the baseline. If return_gains is
@@ -498,11 +506,8 @@ def lstbin_absolute_calibration(
             for apidx, (ant1, ant2) in enumerate(stack.antpairs):
                 antpol1, antpol2 = utils.split_bl((ant1, ant2, pol))
 
-                # Compute gain and remove nans/infs
+                # Compute gain and calibrate out
                 bl_gain = gains[antpol1] * gains[antpol2].conj()
-                bl_gain = np.where(stack.flags[:, 0, :, polidx], 1.0 + 0.0j, bl_gain)
-
-                # Calibrate out gains
                 stack.data[:, apidx, :, polidx] /= bl_gain
 
     # Do the same for the auto-correlations
@@ -512,12 +517,8 @@ def lstbin_absolute_calibration(
                 # Construct the raw gain and remove nans and infs
                 antpol1, antpol2 = utils.split_bl((ant1, ant2, pol))
 
+                # Compute gain and calibrate out
                 auto_gain = gains[antpol1] * gains[antpol2].conj()
-                auto_gain = np.where(
-                    stack.flags[:, 0, :, polidx], 1.0 + 0.0j, auto_gain
-                )
-
-                # Calibrate out gains
                 auto_stack.data[:, apidx, :, polidx] /= auto_gain
 
     return calibration_parameters, gains
