@@ -512,7 +512,7 @@ def lstbin_absolute_calibration(
 
     # Do the same for the auto-correlations
     if auto_stack and calibrate_inplace:
-        for polidx, pol in enumerate(stack.pols):
+        for polidx, pol in enumerate(auto_stack.pols):
             for apidx, (ant1, ant2) in enumerate(auto_stack.antpairs):
                 # Construct the raw gain and remove nans and infs
                 antpol1, antpol2 = utils.split_bl((ant1, ant2, pol))
