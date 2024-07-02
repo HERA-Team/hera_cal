@@ -178,7 +178,7 @@ def load_delay_filter_and_write(datafile_list, baseline_list=None, calfile_list=
         logger.info(f"Number of baselines in file: {len(baseline_list)}. Chunking in {nbl_groups} groups of {Nbls_per_load}.")
 
         for i in range(0, nbl_groups):
-            logger.info(f"Delay-Filtering baseline group {i+1}/{nbl_groups}")
+            logger.info(f"Delay-Filtering baseline group {i + 1}/{nbl_groups}")
 
             df = DelayFilter(hd, input_cal=cals)
 
