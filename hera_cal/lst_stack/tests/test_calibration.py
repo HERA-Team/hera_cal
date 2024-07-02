@@ -10,8 +10,8 @@ class TestLSTBinCalibration:
     def setup_class(self):
         self.uvd = mockuvd.create_uvd_identifiable(
             integration_time=24 * 3600,
-            ntimes=10,
-            jd_start=2459846.0,
+            ntimes=20,
+            jd_start=2459844.0,
             ants=[0, 1, 2, 3],
             time_axis_faster_than_bls=False,
             pols=["xx", "yy"],
@@ -20,8 +20,8 @@ class TestLSTBinCalibration:
 
         auto_uvd = mockuvd.create_uvd_identifiable(
             integration_time=24 * 3600,
-            ntimes=10,
-            jd_start=2459846.0,
+            ntimes=20,
+            jd_start=2459844.0,
             ants=[
                 0,
             ],
