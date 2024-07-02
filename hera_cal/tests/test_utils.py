@@ -20,7 +20,6 @@ from ..redcal import get_pos_reds
 from astropy.coordinates import EarthLocation
 from hera_sim.utils import gen_white_noise
 from .. import utils, abscal, datacontainer, io, redcal
-from ..calibrations import CAL_PATH
 from ..data import DATA_PATH
 from . import mock_uvdata as mockuvd
 from pathlib import Path
@@ -222,7 +221,7 @@ class TestFftDly(object):
         data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
         # make custom gain keys
-        d, fl, antpos, a, freqs, t, l, p = io.load_vis(data_fname, return_meta=True, pick_data_ants=False)
+        d, fl, antpos, a, freqs, t, _, p = io.load_vis(data_fname, return_meta=True, pick_data_ants=False)
         freqs /= 1e9  # in GHz
         # test basic execution
         k1 = (24, 25, 'ee')

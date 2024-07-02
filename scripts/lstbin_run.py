@@ -78,4 +78,3 @@ run_with_profiling(
     args,
     data_files, input_cals=input_cals, **kwargs
 )
-

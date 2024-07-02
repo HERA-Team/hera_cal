@@ -236,8 +236,12 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     if min_bl_cut is not None or max_bl_cut is not None:
         assert antpos is not None, 'antpos must be passed in if min_bl_cut or max_bl_cut is specified.'
         lengths = [np.mean([np.linalg.norm(antpos[bl[1]] - antpos[bl[0]]) for bl in gp]) for gp in reds]
-        reds = [gp for gp, l in zip(reds, lengths) if ((min_bl_cut is None or l > min_bl_cut)
-                                                       and (max_bl_cut is None or l < max_bl_cut))]
+        reds = [
+            gp for gp, ln in zip(reds, lengths) if (
+                (min_bl_cut is None or ln > min_bl_cut) and
+                (max_bl_cut is None or ln < max_bl_cut)
+            )
+        ]
 
     if max_dims is not None:
         while True:
@@ -659,7 +663,7 @@ class RedSol():
             None
         '''
         if reds_to_solve is None:
-            unsolved_reds = [gp for gp in self.reds if not gp[0] in self.vis]
+            unsolved_reds = [gp for gp in self.reds if gp[0] not in self.vis]
             reds_to_solve = filter_reds(unsolved_reds, ants=self.gains.keys())
         self.update_vis_from_data(data, wgts=wgts, reds_to_update=reds_to_solve)
 
@@ -683,7 +687,7 @@ class RedSol():
         for grp in extended_reds:
             try:
                 u = self.vis[grp[0]]  # RedDataContainer will take care of mapping.
-            except(KeyError):
+            except (KeyError):
                 # no redundant visibility solution for this group, so skip
                 continue
             # loop through baselines and select ones that have one solved antenna

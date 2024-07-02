@@ -10,7 +10,7 @@ from hera_cal import chunker
 from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
 
 ap = chunker.chunk_parser()
-args =parse_args(ap)
+args = parse_args(ap)
 
 run_with_profiling(
     chunker.chunk_files,

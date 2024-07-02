@@ -126,7 +126,7 @@ class DataContainer:
         complex conjugate when appropriate) and polarization capitalization.'''
         try:  # just see if the key works first
             return self._data[key]
-        except(KeyError):
+        except (KeyError):
             if isinstance(key, str):  # asking for a pol
                 return dict(zip(self._antpairs, [self[make_bl(bl, key)] for bl in self._antpairs]))
             elif len(key) == 2:  # asking for a bl
@@ -135,7 +135,7 @@ class DataContainer:
                 bl = comply_bl(key)
                 try:
                     return self._data[bl]
-                except(KeyError):
+                except (KeyError):
                     try:
                         if np.iscomplexobj(self._data[reverse_bl(bl)]):
                             return np.conj(self._data[reverse_bl(bl)])
@@ -435,7 +435,7 @@ class DataContainer:
         try:
             bl = comply_bl(key)
             return (bl in self.keys() or reverse_bl(bl) in self.keys())
-        except(BaseException):  # if key is unparsable by comply_bl or reverse_bl, then it's not in self.keys()
+        except (BaseException):  # if key is unparsable by comply_bl or reverse_bl, then it's not in self.keys()
             return False
 
     def __iter__(self):

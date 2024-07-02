@@ -16,3 +16,20 @@ filterwarnings = [
     'ignore:telescope_location is not set\. Using known values for HERA\.:UserWarning',
     "ignore:invalid value encountered in divide:RuntimeWarning",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W"
+]
+
+ignore = [
+    "E402",
+    "E501",
+    "W291",
+    "W293",
+]
