@@ -28,8 +28,8 @@ def interleaved_noise_variance_estimate(vis, kernel=[[1, -2, 1], [-2, 4, -2], [1
     Returns:
         variance: estimate of the noise variance on the input visibility with the same shape
     '''
-    assert(np.sum(kernel) == 0), 'The kernal must sum to zero for difference-based noise estimation.'
-    assert(np.array(kernel).ndim == 2), 'The kernel must be 2D.'
+    assert (np.sum(kernel) == 0), 'The kernal must sum to zero for difference-based noise estimation.'
+    assert (np.array(kernel).ndim == 2), 'The kernel must be 2D.'
     variance = np.abs(scipy.signal.convolve2d(vis, kernel, mode='same', boundary='wrap'))**2
     variance /= np.sum(np.array(kernel)**2)
     return variance
@@ -88,7 +88,7 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None)
     if dt is None:
         dt = infer_dt(data.times_by_bl, bl) * units.si.day.in_units(units.si.s)
     if df is None:
-        assert(len(data.freqs) > 1)  # cannot infer channel width if only one channel is present
+        assert (len(data.freqs) > 1)  # cannot infer channel width if only one channel is present
         df = np.median(np.ediff1d(data.freqs))
 
     ap1, ap2 = split_pol(bl[2])

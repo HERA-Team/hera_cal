@@ -375,7 +375,7 @@ def interp_peak(data, method='quinn', reject_edges=False):
         return indices, bin_shifts, peaks, new_peaks
 
 
-def echo(message, type=0, verbose=True):
+def echo(message, type=0, verbose=True):  # noqa: A002
     if verbose:
         if type == 0:
             print(message)

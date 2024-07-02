@@ -1069,7 +1069,7 @@ class Test_ReadHeraCalfits(object):
             assert qual.dtype == np.float32
             assert qual.shape == shape
         for key, qual in rv['total_quality'].items():
-            assert type(key) == str
+            assert isinstance(key, str)
             assert qual.dtype == np.float32
             assert qual.shape == shape
         assert rv['info']['pols'] == set(['Jnn', 'Jee'])
@@ -1145,7 +1145,7 @@ class Test_Visibility_IO_Legacy:
         assert flags[(24, 25, 'ee')].shape == (120, 64)
 
         # test w/ meta
-        d, f, ap, a, f, t, l, p = io.load_vis([fname, fname2], return_meta=True)
+        d, f, ap, a, f, t, _, p = io.load_vis([fname, fname2], return_meta=True)
         assert len(ap[24]) == 3
         assert len(f) == len(self.freq_array)
 
@@ -1156,7 +1156,7 @@ class Test_Visibility_IO_Legacy:
 
         # test w/ meta pick_data_ants
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        d, f, ap, a, f, t, l, p = io.load_vis(fname, return_meta=True, pick_data_ants=False)
+        d, f, ap, a, f, t, _, p = io.load_vis(fname, return_meta=True, pick_data_ants=False)
         assert len(ap[24]) == 3
         assert len(a) == 47
         assert len(f) == len(self.freq_array)
@@ -1216,13 +1216,13 @@ class Test_Visibility_IO_Legacy:
         # get data
         uvd = UVData()
         uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458044.41632.xx.HH.XRAA.uvh5"), use_future_array_shapes=True)
-        data, flgs, ap, a, f, t, l, p = io.load_vis(uvd, return_meta=True)
+        data, flgs, ap, a, f, t, lst, p = io.load_vis(uvd, return_meta=True)
         nsample = copy.deepcopy(data)
         for k in nsample.keys():
             nsample[k] = np.ones_like(nsample[k], float)
 
         # test basic execution
-        uvd = io.write_vis("ex.uvh5", data, l, f, ap, start_jd=2458044, return_uvd=True, overwrite=True, verbose=True, x_orientation='east', filetype='uvh5')
+        uvd = io.write_vis("ex.uvh5", data, lst, f, ap, start_jd=2458044, return_uvd=True, overwrite=True, verbose=True, x_orientation='east', filetype='uvh5')
         uvd.use_future_array_shapes()
         hd = HERAData("ex.uvh5")
         hd.read()
@@ -1237,7 +1237,7 @@ class Test_Visibility_IO_Legacy:
         os.remove("ex.uvh5")
 
         # test with nsample and flags
-        uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, flags=flgs, nsamples=nsample, x_orientation='east', return_uvd=True, overwrite=True, verbose=True)
+        uvd = io.write_vis("ex.uv", data, lst, f, ap, start_jd=2458044, flags=flgs, nsamples=nsample, x_orientation='east', return_uvd=True, overwrite=True, verbose=True)
         uvd.use_future_array_shapes()
         assert uvd.nsample_array.shape == (1680, 64, 1)
         assert uvd.flag_array.shape == (1680, 64, 1)
@@ -1246,8 +1246,8 @@ class Test_Visibility_IO_Legacy:
         assert uvd.x_orientation.lower() == 'east'
 
         # test exceptions
-        pytest.raises(AttributeError, io.write_vis, "ex.uv", data, l, f, ap)
-        pytest.raises(AttributeError, io.write_vis, "ex.uv", data, l, f, ap, start_jd=2458044, filetype='foo')
+        pytest.raises(AttributeError, io.write_vis, "ex.uv", data, lst, f, ap)
+        pytest.raises(AttributeError, io.write_vis, "ex.uv", data, lst, f, ap, start_jd=2458044, filetype='foo')
         if os.path.exists('ex.uv'):
             shutil.rmtree('ex.uv')
 

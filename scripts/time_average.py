@@ -18,7 +18,7 @@ else:
     baseline_list = None
 
 run_with_profiling(
-    frf.time_avg_data_and_write, 
+    frf.time_avg_data_and_write,
     args,
     flag_output=args.flag_output,
     input_data_list=args.input_data_list,
@@ -28,9 +28,8 @@ run_with_profiling(
     # wgt_by_nsample is default True in frf.time_avg_data_and_write
     # for this reason, the argparser requests the negation.
     filetype=args.filetype,
-    wgt_by_nsample=not(args.dont_wgt_by_nsample),
+    wgt_by_nsample=not (args.dont_wgt_by_nsample),
     wgt_by_favg_nsample=args.wgt_by_favg_nsample,
     clobber=args.clobber, verbose=args.verbose, ninterleave=args.ninterleave,
     equalize_interleave_times=args.equalize_interleave_times,
     equalize_interleave_ntimes=args.equalize_interleave_ntimes)
- 

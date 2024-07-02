@@ -2217,13 +2217,13 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
         for pol in pols:
             key1, key2 = antpair
             pol_num = polstr2num(pol, x_orientation=x_orientation)
-            uvd.set_data(data[antpair + (str(pol),)][:,:,np.newaxis], key1, key2, pol_num)
+            uvd.set_data(data[antpair + (str(pol),)][:, :, np.newaxis], key1, key2, pol_num)
 
             if nsamples is not None:
-                uvd.set_nsamples(nsamples[antpair + (str(pol),)][:,:,np.newaxis], key1, key2, pol_num)
+                uvd.set_nsamples(nsamples[antpair + (str(pol),)][:, :, np.newaxis], key1, key2, pol_num)
 
             if flags is not None:
-                uvd.set_flags(flags[antpair + (str(pol),)][:,:,np.newaxis], key1, key2, pol_num)
+                uvd.set_flags(flags[antpair + (str(pol),)][:, :, np.newaxis], key1, key2, pol_num)
 
     if nsamples is None:
         # default nsamples to all ones
