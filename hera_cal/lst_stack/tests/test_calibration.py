@@ -8,6 +8,7 @@ from hera_cal import redcal, utils
 
 class TestLSTBinCalibration:
     def setup_class(self):
+        self.rng = np.random.default_rng(42)
         self.uvd = mockuvd.create_uvd_identifiable(
             integration_time=24 * 3600,
             ntimes=20,
@@ -42,7 +43,7 @@ class TestLSTBinCalibration:
     def test_amp_cal(self):
         stack_copy = self.stack.copy()
         auto_stack_copy = self.auto_stack.copy()
-        gains = np.random.normal(1, 0.1, size=(20, stack_copy.data.shape[2], 2))
+        gains = self.rng.normal(1, 0.1, size=(20, stack_copy.data.shape[2], 2))
 
         stack_copy.data *= gains[:, None, :, :] ** 2
         auto_stack_copy.data *= gains[:, None, :, :] ** 2
@@ -98,7 +99,7 @@ class TestLSTBinCalibration:
 
     def test_phase_cal(self):
         stack_copy = self.stack.copy()
-        tip_tilt = np.random.normal(0, 0.1, size=(20, self.stack.data.shape[2], 2))
+        tip_tilt = self.rng.normal(0, 0.1, size=(20, self.stack.data.shape[2], 2))
         gains = np.array(
             [
                 np.exp(1j * tip_tilt * (self.antpos[ant2] - self.antpos[ant1])[0])
@@ -152,8 +153,8 @@ class TestLSTBinCalibration:
 
     def test_full_night_flagged(self):
         stack_copy = self.stack.copy()
-        gains = np.random.normal(1, 0.1, size=(20, stack_copy.data.shape[2], 2))
-        tip_tilt = np.random.normal(0, 0.1, size=(20, self.stack.data.shape[2], 2))
+        gains = self.rng.normal(1, 0.1, size=(20, stack_copy.data.shape[2], 2))
+        tip_tilt = self.rng.normal(0, 0.1, size=(20, self.stack.data.shape[2], 2))
         phs_gains = np.array(
             [
                 np.exp(1j * tip_tilt * (self.antpos[ant2] - self.antpos[ant1])[0])
@@ -195,8 +196,8 @@ class TestLSTBinCalibration:
         auto_stack_copy = self.auto_stack.copy()
         auto_stack_copy.data = self.auto_stack.data.copy()
         auto_stack_copy.flags = self.auto_stack.flags.copy()
-        gains = np.random.normal(1, 0.1, size=(20, stack_copy.data.shape[2], 2))
-        tip_tilt = np.random.normal(0, 0.1, size=(20, self.stack.data.shape[2], 2))
+        gains = self.rng.normal(1, 0.1, size=(20, stack_copy.data.shape[2], 2))
+        tip_tilt = self.rng.normal(0, 0.1, size=(20, self.stack.data.shape[2], 2))
         phs_gains = np.array(
             [
                 np.exp(1j * tip_tilt * (self.antpos[ant2] - self.antpos[ant1])[0])
