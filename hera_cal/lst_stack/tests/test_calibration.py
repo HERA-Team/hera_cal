@@ -190,7 +190,11 @@ class TestLSTBinCalibration:
 
     def test_baseline_fully_flagged(self):
         stack_copy = self.stack.copy()
+        stack_copy.data = self.stack.data.copy()
+        stack_copy.flags = self.stack.flags.copy()
         auto_stack_copy = self.auto_stack.copy()
+        auto_stack_copy.data = self.auto_stack.data.copy()
+        auto_stack_copy.flags = self.auto_stack.flags.copy()
         gains = np.random.normal(1, 0.1, size=(20, stack_copy.data.shape[2], 2))
         tip_tilt = np.random.normal(0, 0.1, size=(20, self.stack.data.shape[2], 2))
         phs_gains = np.array(
