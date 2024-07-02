@@ -212,8 +212,9 @@ def _lstbin_amplitude_calibration(
 
     for pol in unique_pols:
         # Calibration parameters store in an N_nights by N_freqs array
+        polidx = stack.pols.index(utils.join_pol(pol, pol))
         amplitude_gain = np.where(
-            np.all(stack.flags, axis=1), 1.0 + 0.0j, solution[f"A_{pol}"]
+            np.all(stack.flags[..., polidx], axis=1), 1.0 + 0.0j, solution[f"A_{pol}"]
         )
 
         calibration_parameters[f"A_{pol}"] = amplitude_gain
@@ -306,7 +307,11 @@ def _lstbin_phase_calibration(
                     np.ones((1, stack.freq_array.shape[0]), dtype=complex),
                 )[0]
                 phase_gains[(ant, split_pol1)].append(
-                    np.where(np.all(stack.flags, axis=1), 1.0 + 0.0j, gain_here)
+                    np.where(
+                        np.all(stack.flags[nightidx, :, :, polidx], axis=0),
+                        1.0 + 0.0j,
+                        gain_here,
+                    )
                 )
 
     for key in phase_gains:
