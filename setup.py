@@ -76,7 +76,8 @@ setup_args = {
             "pytest-cov",
             "hera_sim",
             "pytest-xdist",
-            "hypothesis"
+            "hypothesis",
+            "ruff",
         ]
     },
     'zip_safe': False,
