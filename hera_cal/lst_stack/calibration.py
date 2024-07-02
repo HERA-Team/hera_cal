@@ -510,15 +510,12 @@ def lstbin_absolute_calibration(
                 bl_gain = gains[antpol1] * gains[antpol2].conj()
                 stack.data[:, apidx, :, polidx] /= bl_gain
 
-    # Do the same for the auto-correlations
-    if auto_stack and calibrate_inplace:
-        for polidx, pol in enumerate(auto_stack.pols):
-            for apidx, (ant1, ant2) in enumerate(auto_stack.antpairs):
-                # Construct the raw gain and remove nans and infs
-                antpol1, antpol2 = utils.split_bl((ant1, ant2, pol))
+            if auto_stack:
+                for apidx, (ant1, ant2) in enumerate(auto_stack.antpairs):
+                    antpol1, antpol2 = utils.split_bl((ant1, ant2, pol))
 
-                # Compute gain and calibrate out
-                auto_gain = gains[antpol1] * gains[antpol2].conj()
-                auto_stack.data[:, apidx, :, polidx] /= auto_gain
+                    # Compute gain and calibrate out
+                    auto_gain = gains[antpol1] * gains[antpol2].conj()
+                    auto_stack.data[:, apidx, :, polidx] /= auto_gain
 
     return calibration_parameters, gains
