@@ -7,12 +7,13 @@ from hera_sim.antpos import linear_array, hex_array
 from .. import redcal, nucal, utils, abscal, apply_cal
 from ..datacontainer import DataContainer
 
+
 def test_get_u_bounds():
     antpos = {i: np.array([i, 0, 0]) for i in range(7)}
     freqs = np.linspace(50e6, 250e6, 10)
     radial_reds = nucal.RadialRedundancy(antpos)
     u_bounds = nucal.get_u_bounds(radial_reds, antpos, freqs)
-    
+
     # List of u-bounds should be the same length as radial reds
     assert len(u_bounds) == len(radial_reds)
 
@@ -22,9 +23,10 @@ def test_get_u_bounds():
     assert np.isclose(u_bounds[0][0], np.min(baseline_lengths) * freqs[0] / nucal.SPEED_OF_LIGHT)
     assert np.isclose(u_bounds[0][1], np.max(baseline_lengths) * freqs[-1] / nucal.SPEED_OF_LIGHT)
 
+
 def test_is_same_orientation():
     antpos = {i: np.array([i, 0, 0]) for i in range(3)}
-    
+
     # Add extra orthogonal baseline
     antpos[3] = np.array([0, 1, 0])
     bl1 = (0, 1, 'nn')
@@ -36,6 +38,7 @@ def test_is_same_orientation():
 
     # These baselines should not
     assert not nucal.is_same_orientation(bl1, bl3, antpos)
+
 
 def test_is_frequency_redundant():
     antpos = {i: np.array([i, 0, 0]) for i in range(3)}
@@ -65,6 +68,7 @@ def test_is_frequency_redundant():
     bl2 = (0, 2, "nn")
     assert not nucal.is_frequency_redundant(bl1, bl2, freqs, antpos)
 
+
 def test_get_unique_orientations():
     antpos = linear_array(7)
 
@@ -84,6 +88,7 @@ def test_get_unique_orientations():
     radial_groups = nucal.get_unique_orientations(antpos, reds, min_ubl_per_orient=5)
     for group in radial_groups:
         assert len(group) >= 5
+
 
 class TestRadialRedundancy:
     def setup_method(self):
@@ -210,7 +215,6 @@ class TestRadialRedundancy:
 
         pytest.raises(ValueError, radial_reds.append, bls)
 
-
     def test_add_radial_group(self):
         radial_reds = deepcopy(self.radial_reds)
         # Find radial group with 1 baseline
@@ -225,7 +229,7 @@ class TestRadialRedundancy:
 
         # Filter all groups with fewer than 10 baselines
         radial_reds.filter_radial_groups(min_nbls=10)
-        
+
         # Add group with a single baseline
         radial_reds.add_radial_group(group1)
 
@@ -251,13 +255,13 @@ class TestRadialRedundancy:
 
         radial_reds.add_radial_group(bls)
 
-
     def test_sort(self):
         radial_reds = deepcopy(self.radial_reds)
         radial_reds.sort(reverse=False)
         assert len(radial_reds[0]) < len(radial_reds[-1])
         radial_reds.sort(reverse=True)
         assert len(radial_reds[0]) > len(radial_reds[-1])
+
 
 def test_compute_spatial_filters():
     # Generate a mock array for generating filters
@@ -272,7 +276,7 @@ def test_compute_spatial_filters():
     assert len(spatial_filters) == sum(map(len, radial_reds))
 
     # First index of filter should equal number of frequencies
-    # Second index is number of modeling components, should be less than or 
+    # Second index is number of modeling components, should be less than or
     # equal to number of frequencies
     for bl in spatial_filters:
         assert spatial_filters[bl].shape[0] == freqs.shape[0]
@@ -284,7 +288,7 @@ def test_compute_spatial_filters():
         for bl in rdgrp:
             assert filter_shape == spatial_filters[bl].shape
 
-    # Show that filters can be used to model a common u-plane with 
+    # Show that filters can be used to model a common u-plane with
     # uneven sampling
     antpos = linear_array(6, sep=5)
     radial_reds = nucal.RadialRedundancy(antpos)
@@ -296,7 +300,7 @@ def test_compute_spatial_filters():
             blmag = np.linalg.norm(antpos[bl[1]] - antpos[bl[0]])
             data.append(np.sin(freqs * blmag / 2.998e8))
             design_matrix.append(spatial_filters[bl])
-            
+
     # Fit PSWF to mock data
     design_matrix = np.array(design_matrix)
     XTXinv = np.linalg.pinv(np.einsum('afm,afn->mn', design_matrix, design_matrix))
@@ -314,6 +318,7 @@ def test_compute_spatial_filters():
         for bl in rdgrp:
             umodes = radial_reds.baseline_lengths[bl] * freqs / 2.998e8
             assert np.allclose(spatial_filters[bl][umodes > umax], 0)
+
 
 def test_build_nucal_wgts():
     bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee')]
@@ -368,6 +373,7 @@ def test_build_nucal_wgts():
     for key in abscal_wgts:
         assert np.allclose(abscal_wgts[key], nucal_wgts[key])
 
+
 def test_project_u_model_comps_on_spec_axis():
     # Test that the projection of the u-model components on the spectral axis
     # is the same as the projection of the data on the spectral axis
@@ -383,7 +389,7 @@ def test_project_u_model_comps_on_spec_axis():
             blmag = np.linalg.norm(antpos[bl[1]] - antpos[bl[0]])
             data[bl] = np.sin(freqs * blmag / 2.998e8)[None, :]
             wgts[bl] = np.ones_like(data[bl])
-            
+
     # Get model components for a u-dependent model
     model_comps = nucal.fit_nucal_foreground_model(data, wgts, radial_reds, spatial_filters, solver='solve', return_model_comps=True)
 
@@ -393,10 +399,11 @@ def test_project_u_model_comps_on_spec_axis():
     # Get model for both cases
     model1 = nucal.evaluate_foreground_model(radial_reds, model_comps, spatial_filters)
     model2 = nucal.evaluate_foreground_model(radial_reds, model_proj, spatial_filters, spectral_filters)
-    
+
     # Check that the two models are relatively close
     for bl in data:
         assert np.sqrt(np.square(model1[bl] - model2[bl]).mean()) < 1e-4
+
 
 def test_linear_fit():
     # Create a set of mock data to fit
@@ -438,6 +445,7 @@ def test_linear_fit():
     with pytest.raises(AssertionError):
         b = nucal._linear_fit(XTX, Xy, alpha=-1)
 
+
 def test_compute_spectral_filters():
     # Create a set of mock data to fit
     freqs = np.linspace(50e6, 250e6, 200)
@@ -453,6 +461,7 @@ def test_compute_spectral_filters():
 
     # Test that the spectral filters are correct
     np.testing.assert_allclose(y, model, atol=1e-6)
+
 
 def test_evaluate_foreground_model():
     antpos = linear_array(6, sep=5)
@@ -489,6 +498,7 @@ def test_evaluate_foreground_model():
     _spatial_filters = {k: spatial_filters[k][:, :-3] for k in spatial_filters}
     with pytest.raises(AssertionError):
         model = nucal.evaluate_foreground_model(radial_reds, model_comps, _spatial_filters)
+
 
 def test_fit_nucal_foreground_model():
     antpos = linear_array(6, sep=5)
@@ -552,18 +562,19 @@ def test_fit_nucal_foreground_model():
     # Return model components
     model_comps = nucal.fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters, return_model_comps=True, share_fg_model=False)
     u_model_comps = nucal.fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, return_model_comps=True, share_fg_model=False)
-    
+
     for k in model_comps:
         assert model_comps[k].shape[0] == ntimes
         assert u_model_comps[k].shape[0] == ntimes
         assert model_comps[k].shape[1:] == (spectral_filters.shape[-1], spatial_filters[k].shape[-1])
         assert u_model_comps[k].shape[1:] == (spatial_filters[k].shape[-1],)
 
+
 class TestGradientDescent:
     def setup_method(self):
         self.freqs = np.linspace(50e6, 250e6, 400)
         self.antpos = linear_array(10, sep=2)
-        
+
         ns_antpos = linear_array(10, sep=2)
         for ant in ns_antpos:
             if ant > 0:
@@ -582,19 +593,18 @@ class TestGradientDescent:
         self.data.freqs = self.freqs
         self.frc = nucal.SpectrallyRedundantCalibrator(self.radial_reds)
 
-        # Compute the filters 
+        # Compute the filters
         self.frc._compute_filters(self.freqs, 10e-9)
 
-
         self.init_model_comps = nucal.fit_nucal_foreground_model(
-            self.data, self.data_wgts, self.radial_reds, self.frc.spatial_filters, share_fg_model=True, 
+            self.data, self.data_wgts, self.radial_reds, self.frc.spatial_filters, share_fg_model=True,
             return_model_comps=True
         )
         self.init_model_comps = nucal.project_u_model_comps_on_spec_axis(self.init_model_comps, self.frc.spectral_filters)
 
         # Calculate baseline vectors
-        self.blvecs = np.array([(self.antpos[bl[1]] - self.antpos[bl[0]])[:2] for rdgrp in self.radial_reds for bl in rdgrp])#[:, None]
-        
+        self.blvecs = np.array([(self.antpos[bl[1]] - self.antpos[bl[0]])[:2] for rdgrp in self.radial_reds for bl in rdgrp])  # [:, None]
+
         self.model_parameters = {
             "tip_tilt": np.zeros((2, 2, 400)),
             "amplitude": np.ones((2, 400)),
@@ -603,7 +613,7 @@ class TestGradientDescent:
         }
 
         self.spatial_filters = [np.array([self.frc.spatial_filters[blkey] for blkey in rdgrp]) for rdgrp in self.radial_reds]
-    
+
     def test_foreground_model(self):
         params = {
             "fg_r": [np.random.normal(0, 1, (self.data.shape[0], self.frc.spectral_filters.shape[-1], f.shape[-1])) for f in self.spatial_filters],
@@ -611,13 +621,13 @@ class TestGradientDescent:
         }
 
         model_r, model_i = nucal._foreground_model(params, self.frc.spectral_filters, self.spatial_filters)
-        
+
         # Check that the model has the correct shape
         assert model_r.shape == (len(self.data), self.data.shape[0], self.data.shape[1])
         assert model_i.shape == (len(self.data), self.data.shape[0], self.data.shape[1])
 
     def test_mean_squared_error(self):
-        
+
         # Create a mock model that's the same as the data
         model = deepcopy(self.data)
 
@@ -629,13 +639,13 @@ class TestGradientDescent:
         data_r = np.array([self.data[bl].real for rdgrp in self.radial_reds for bl in rdgrp])
         data_i = np.array([self.data[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
         wgts = np.ones_like(data_r)
-        
+
         # Compute the mean squared error
         mse = nucal._mean_squared_error(self.model_parameters, data_r, data_i, wgts, model_r, model_i, self.blvecs)
 
         # Check that the mse is zero
         assert np.isclose(mse, 0)
-    
+
     def test_calibration_loss_function(self):
         # Separate the real and imaginary components
         data_r = np.array([self.data[bl].real for rdgrp in self.radial_reds for bl in rdgrp])
@@ -655,7 +665,6 @@ class TestGradientDescent:
         data_i = np.array([amp * self.data[bl].imag for rdgrp in self.radial_reds for bl in rdgrp])
         wgts = np.ones_like(data_r)
 
-        
         # Make optimizer
         optimizer = nucal.OPTIMIZERS['novograd'](learning_rate=1e-3)
 
@@ -681,6 +690,7 @@ class TestGradientDescent:
         # Check that final loss with minor cycle is less than without
         assert metadata['loss_history'][-1] > _metadata['loss_history'][-1]
 
+
 class TestSpectrallyRedundantCalibrator:
     def setup_method(self):
         self.freqs = np.linspace(50e6, 250e6, 400)
@@ -698,18 +708,18 @@ class TestSpectrallyRedundantCalibrator:
         self.frc = nucal.SpectrallyRedundantCalibrator(self.radial_reds)
 
     def test_compute_filters(self):
-        assert self.frc._filters_computed == False
+        assert not self.frc._filters_computed
 
         # Compute filters
         self.frc._compute_filters(self.freqs, 20e-9)
-        assert self.frc._filters_computed == True
+        assert self.frc._filters_computed
 
         # Trigger check that filters are already computed
         sf = deepcopy(self.frc.spectral_filters)
         self.frc._compute_filters(self.freqs, 20e-9)
         assert np.allclose(self.frc.spectral_filters, sf)
 
-        # Recompute with different values 
+        # Recompute with different values
         self.frc._compute_filters(self.freqs, 30e-9)
         assert sf.shape != self.frc.spectral_filters.shape
 
@@ -725,14 +735,14 @@ class TestSpectrallyRedundantCalibrator:
 
         # Fit model
         model = nucal.fit_nucal_foreground_model(
-            data, self.data_wgts, self.radial_reds, self.frc.spatial_filters, 
+            data, self.data_wgts, self.radial_reds, self.frc.spatial_filters,
             return_model_comps=False, share_fg_model=True
         )
 
         # Estimate degeneracies
         amplitude, tip_tilt = self.frc._estimate_degeneracies(data, model, self.data_wgts)
 
-        # Since the data are already "perfectly calibrated" and the model should match the data to high precision, 
+        # Since the data are already "perfectly calibrated" and the model should match the data to high precision,
         # the estimated tip-tilt should be zero and the amplitude should be 1
         assert np.isclose(
             np.sqrt(np.mean(np.square(amplitude['nn'] - 1))), 0, atol=1e-5
@@ -740,7 +750,7 @@ class TestSpectrallyRedundantCalibrator:
         assert np.isclose(
             np.sqrt(np.mean(np.square(tip_tilt['nn']))), 0, atol=1e-5
         )
-    
+
         # Shape of amplitude and tip-tilt should be (ndims, ntimes, nfreqs)
         assert tip_tilt["nn"].shape == (1, 2, 400)
 
