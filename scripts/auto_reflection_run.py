@@ -18,8 +18,8 @@ kwargs.pop('dly_ranges')
 run_with_profiling(
     reflections.auto_reflection_run,
     a,
-    data=a.data, 
-    delay_ranges=a.dly_ranges, 
-    output_fname=a.output_fname, 
+    data=a.data,
+    delay_ranges=a.dly_ranges,
+    output_fname=a.output_fname,
     **kwargs
 )

@@ -30,6 +30,7 @@ warnings.warn(
     DeprecationWarning,
 )
 
+
 def baselines_same_across_nights(data_list):
     """
     Check whether the sets of baselines in the datacontainers are consistent.
@@ -175,7 +176,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     pols = list(set([pol for dc in data_list for pol in dc.pols()]))
     # iterate over data_list
     for i, d in enumerate(data_list):
-        logging.info(f"Doing data {i+1}/{len(data_list)}")
+        logging.info(f"Doing data {i + 1}/{len(data_list)}")
 
         # get lst array
         li = copy.copy(lst_list[i])
@@ -334,7 +335,7 @@ def lst_bin(data_list, lst_list, flags_list=None, nsamples_list=None, dlst=None,
     logging.info("Getting statistics")
     for i, key in enumerate(data.keys()):
         if i % max(1, (len(data) // 100)) == 0:
-            logger.info(f"Doing Key {key} [{i+1}/{len(data)}]")
+            logger.info(f"Doing Key {key} [{i + 1}/{len(data)}]")
 
         # create empty lists
         real_avg = []

@@ -734,8 +734,8 @@ class CalibrationSmoother():
 
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
-                 blacklist_wgt=0.0, pick_refant=False, propagate_refant_flags=False, freq_threshold=1.0, time_threshold=1.0,
-                 ant_threshold=1.0, ignore_calflags=False, verbose=False):
+                 blacklist_wgt=0.0, pick_refant=False, propagate_refant_flags=False, per_pol_refant=True,
+                 freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, ignore_calflags=False, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -784,6 +784,8 @@ class CalibrationSmoother():
                 at the specific frequencies and times that the reference antenna is also flagged. If False and
                 there exists times and frequencies where the reference antenna is flagged but another antenna
                 is not flagged, a ValueError will be raised. Ignored if pick_refant is False.
+            per_pol_refant: if True (default), pick a reference antenna for each polarization. If False, pick a single
+                reference antenna to serve for both polarization.
             freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
                 for all channels. If the ratio of of such times for a given channel compared to all times that are not
                 completely flagged is greater than freq_threshold, flag the entire channel for all antennas.
@@ -879,9 +881,12 @@ class CalibrationSmoother():
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
             utils.echo('Now picking reference antenna(s)...', verbose=self.verbose)
-            self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=True)
-            utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.'
-                                  for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
+            self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=per_pol_refant)
+            if per_pol_refant:
+                utils.echo('\n'.join([f'Reference Antenna {self.refant[pol][0]} selected for {pol}.'
+                                      for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
+            else:
+                utils.echo(f'Reference Antenna {self.refant} selected.', verbose=self.verbose)
             self.rephase_to_refant(propagate_refant_flags=propagate_refant_flags)
 
     def check_consistency(self):

@@ -20,7 +20,7 @@ def package_files(package_dir, subdirectory):
     return paths
 
 
-data_files = package_files('hera_cal', 'data') + package_files('hera_cal', 'calibrations')
+data_files = package_files('hera_cal', 'data')
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 
@@ -76,7 +76,8 @@ setup_args = {
             "pytest-cov",
             "hera_sim",
             "pytest-xdist",
-            "hypothesis"
+            "hypothesis",
+            "ruff",
         ]
     },
     'zip_safe': False,
