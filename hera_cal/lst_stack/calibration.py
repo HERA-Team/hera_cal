@@ -106,38 +106,35 @@ def _expand_degeneracies_to_ant_gains(
         if split_pol1 != split_pol2:
             continue
         for ant in gain_ants:
-            for bandidx, band in enumerate(inpaint_bands):
-                raw_ant_gain = amplitude_parameters[f"A_{split_pol1}"] * (
-                    phase_gains.get(
-                        (ant, split_pol1),
-                        np.ones_like(amplitude_parameters[f"A_{split_pol1}"]),
-                    )
-                )
+            raw_ant_gain = amplitude_parameters[f"A_{split_pol1}"] * (
+                phase_gains.get((ant, split_pol1), 1)
+            )
+            gg = gains[(ant, split_pol1)] = raw_ant_gain
 
-                if smooth_gains:
+            if smooth_gains:
+                for bandidx, band in enumerate(inpaint_bands):
+
                     # Rephase antenna gains
                     tau, _ = utils.fft_dly(
-                        raw_ant_gain,
+                        raw_ant_gain[band],
                         np.diff(stack.freq_array[band])[0],
                         wgts=np.logical_not(stack.flags[:, 0, band, polidx]),
                     )
                     rephasor = np.exp(-2.0j * np.pi * tau * stack.freq_array[band])
-                    raw_ant_gain *= rephasor
+                    raw_ant_gain[band] *= rephasor
 
                     basis = smoothing_functions[bandidx]
                     smooth_ant_gain = np.array(
                         [
                             np.dot(basis, _fmat.dot(_raw_gain))
                             for _fmat, _raw_gain in zip(
-                                fmats[split_pol1][bandidx], raw_ant_gain
+                                fmats[split_pol1][bandidx], raw_ant_gain[band]
                             )
                         ]
                     )
 
                     # Rephase antenna gains
-                    gains[(ant, split_pol1)] = smooth_ant_gain * rephasor.conj()
-                else:
-                    gains[(ant, split_pol1)] = raw_ant_gain
+                    gg[band] = smooth_ant_gain * rephasor.conj()
 
     return gains
 
