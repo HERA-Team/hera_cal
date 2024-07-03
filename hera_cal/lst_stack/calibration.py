@@ -116,25 +116,25 @@ def _expand_degeneracies_to_ant_gains(
 
                     # Rephase antenna gains
                     tau, _ = utils.fft_dly(
-                        raw_ant_gain[band],
+                        raw_ant_gain[:, band],
                         np.diff(stack.freq_array[band])[0],
                         wgts=np.logical_not(stack.flags[:, 0, band, polidx]),
                     )
                     rephasor = np.exp(-2.0j * np.pi * tau * stack.freq_array[band])
-                    raw_ant_gain[band] *= rephasor
+                    raw_ant_gain[:, band] *= rephasor
 
                     basis = smoothing_functions[bandidx]
                     smooth_ant_gain = np.array(
                         [
                             np.dot(basis, _fmat.dot(_raw_gain))
                             for _fmat, _raw_gain in zip(
-                                fmats[split_pol1][bandidx], raw_ant_gain[band]
+                                fmats[split_pol1][bandidx], raw_ant_gain[:, band]
                             )
                         ]
                     )
 
                     # Rephase antenna gains
-                    gg[band] = smooth_ant_gain * rephasor.conj()
+                    gg[:, band] = smooth_ant_gain * rephasor.conj()
 
     return gains
 
