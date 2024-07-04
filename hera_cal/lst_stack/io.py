@@ -173,10 +173,11 @@ def _configure_inpainted_mode(
 def format_outfile_name(
     lst: float,
     pols: list[str],
-    fname_format: str = "zen.{kind}.{lst:7.5f}.{inpaint_mode}.uvh5",
+    fname_format: str = "zen.{kind}.{lst:7.5f}.blchunk{blchunk:03}.{inpaint_mode}.uvh5",
     inpaint_mode: bool | None = None,
     kind: str | None = None,
     lst_branch_cut: float = 0.0,
+    blchunk: int = 0,
 ):
     if lst < lst_branch_cut:
         lst += 2 * np.pi
@@ -188,7 +189,8 @@ def format_outfile_name(
         inpaint_mode=(
             "inpaint" if inpaint_mode else ("flagged" if inpaint_mode is False else "")
         ),
-        kind=kind
+        kind=kind,
+        blchunk=blchunk
     )
 
 
