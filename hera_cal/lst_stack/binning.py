@@ -13,6 +13,7 @@ from functools import cached_property
 from astropy import units
 
 from pyuvdata import utils as uvutils
+from pyuvdata.telescopes import Telescope
 from .. import io
 from ..datacontainer import DataContainer
 from .. import apply_cal
@@ -695,7 +696,7 @@ class LSTStack:
     @property
     def pols(self) -> list[str]:
         """The polarizations in the data."""
-        return utils.polnum2str(self.polarization_array, x_orientation=self.x_orientation)
+        return utils.polnum2str(self.polarization_array, x_orientation=self.telescope.x_orientation)
 
     def copy(self, *args, **kwargs):
         """Return a copy of the LSTStack object."""
@@ -797,25 +798,29 @@ def lst_bin_files_from_config(
             f[wf] = False
             n[wf] *= -1
 
+        telescope = Telescope.new(
+            location=EarthLocation.from_geocentric(*meta.telescope_location, unit="m"),
+            name=meta.telescope_name,
+            antenna_names=meta.antenna_names,
+            antenna_numbers=meta.antenna_numbers,
+            antenna_positions=meta.antenna_positions,
+            x_orientation=meta.x_orientation,
+            instrument=meta.instrument,
+        )
         uv = UVData.new(
             freq_array=freqs,
             polarization_array=utils.polstr2num([_comply_vispol(p) for p in config.pols], x_orientation=meta.x_orientation),
-            antenna_positions=meta.antenna_positions,
-            telescope_location=EarthLocation.from_geocentric(*meta.telescope_location, unit="m"),
-            telescope_name=meta.telescope_name,
             times=bt,
             antpairs=antpairs,
             do_blt_outer=True,
             integration_time=np.mean(meta.integration_time),
-            antenna_names=meta.antenna_names,
-            antenna_numbers=meta.antenna_numbers,
+            telescope=telescope,
             blts_are_rectangular=True,
             data_array=d.reshape((-1, len(freqs), len(config.pols))),
             flag_array=f.reshape((-1, len(freqs), len(config.pols))),
             nsample_array=n.reshape((-1, len(freqs), len(config.pols))),
             vis_units="Jy",
             time_axis_faster_than_bls=False,
-            x_orientation=meta.x_orientation,
         )
 
         # These can be removed in future pyuvdata versions where they are set automatically.

@@ -1,4 +1,5 @@
 import numpy as np
+import re
 import pytest
 from .. import calibration
 from ...tests import mock_uvdata as mockuvd
@@ -212,9 +213,10 @@ class TestLSTBinCalibration:
         model = np.mean(self.stack.data, axis=0)
         auto_model = np.mean(self.auto_stack.data, axis=0)
 
-        pre_cal_std = np.nanstd(
-            np.where(stack_copy.flags, np.nan, stack_copy.data), axis=0
-        )
+        with pytest.warns(RuntimeWarning, match=re.escape('Degrees of freedom <= 0 for slice')):
+            pre_cal_std = np.nanstd(
+                np.where(stack_copy.flags, np.nan, stack_copy.data), axis=0
+            )
 
         cal_params, _ = calibration.lstbin_absolute_calibration(
             stack_copy,
@@ -228,9 +230,10 @@ class TestLSTBinCalibration:
             smooth_gains=False,
         )
 
-        post_cal_std = np.nanstd(
-            np.where(stack_copy.flags, np.nan, stack_copy.data), axis=0
-        )
+        with pytest.warns(RuntimeWarning, match=re.escape('Degrees of freedom <= 0 for slice')):
+            post_cal_std = np.nanstd(
+                np.where(stack_copy.flags, np.nan, stack_copy.data), axis=0
+            )
 
         for ai, antpair in enumerate(self.stack.antpairs):
             if antpair[0] == antpair[1]:

@@ -66,7 +66,7 @@ class TestLSTAlign:
             [np.unique(uvds[0].lst_array)] * len(uvds)
         )
         antpairs = uvds[0].get_antpairs()
-        antpos = uvds[0].antenna_positions
+        antpos = uvds[0].telescope.antenna_positions
 
         # Ensure that each LST is in its own bin
         lsts = np.sort(np.unique(data_lsts))
@@ -318,9 +318,9 @@ class TestLSTBinFilesForBaselines:
                 cal_files=[uvc_file],
                 redundantly_averaged=True,
                 reds=RedundantGroups.from_antpos(
-                    dict(zip(uvd.antenna_numbers, uvd.antenna_positions)),
+                    dict(zip(uvd.telescope.antenna_numbers, uvd.telescope.antenna_positions)),
                     pols=uvutils.polnum2str(
-                        uvd.polarization_array, x_orientation=uvd.x_orientation
+                        uvd.polarization_array, x_orientation=uvd.telescope.x_orientation
                     ),
                 ),
                 antpairs=uvd.get_antpairs(),
@@ -337,7 +337,7 @@ class TestLSTBinFilesForBaselines:
             rephase=False,
             antpairs=uvd_redavg.get_antpairs(),
             reds=RedundantGroups.from_antpos(
-                dict(zip(uvd_redavg.antenna_numbers, uvd_redavg.antenna_positions)),
+                dict(zip(uvd_redavg.telescope.antenna_numbers, uvd_redavg.telescope.antenna_positions)),
             ),
         )[1]
 
@@ -371,7 +371,7 @@ class TestLSTBinFilesFromConfig:
 
         # test that exposes bug fixed in 3a3ead0fd13400578b50b5fe05af39be61717206
         uvd0 = UVData.from_file(cfg.matched_files[0])
-        assert np.allclose(uvd.get_ENU_antpos()[0], uvd0.get_ENU_antpos()[0])
+        assert np.allclose(uvd.telescope.get_enu_antpos(), uvd0.telescope.get_enu_antpos())
 
     def test_redavg_with_where_inpainted(self, request, tmp_path_factory):
         # This is kind of a dodgy way to test that if the inpainted files don't have
@@ -421,7 +421,7 @@ class TestLSTStack:
         with pytest.raises(ValueError, match='time_axis_faster_than_bls must be False'):
             binning.LSTStack(uvd)
 
-        uvf = UVFlag(self.uvd, use_future_array_shapes=True)
+        uvf = UVFlag(self.uvd)
         uvf.to_waterfall()
         with pytest.raises(ValueError, match="UVFlag type must be 'baseline'"):
             binning.LSTStack(uvf)

@@ -192,7 +192,7 @@ def get_squared_zscores(
                 ))**2 / 2
 
     # convert zstack to UVFlag object
-    zstack = UVFlag(stack._uvd, mode='metric', use_future_array_shapes=True)
+    zstack = UVFlag(stack._uvd, mode='metric')
     zstack.metric_array = zsq.reshape(stack.data_array.shape)
 
     return LSTStack(zstack)
@@ -259,7 +259,7 @@ def get_squared_zscores_flagged(
         zsq[mask] = np.nan
 
     # convert zstack to UVFlag object
-    zstack = UVFlag(stack._uvd, mode='metric', use_future_array_shapes=True)
+    zstack = UVFlag(stack._uvd, mode='metric')
     zstack.metric_array = zsq.reshape(stack.data_array.shape)
     return LSTStack(zstack)
 
@@ -345,7 +345,7 @@ def downselect_zscores(
     """
     nbls = zscores.Nbls
     datapols = utils.polnum2str(
-        zscores.polarization_array, x_orientation=zscores.x_orientation
+        zscores.polarization_array, x_orientation=zscores.telescope.x_orientation
     )
     datapairs = list(
         zip(zscores.ant_1_array[:nbls], zscores.ant_2_array[:nbls])

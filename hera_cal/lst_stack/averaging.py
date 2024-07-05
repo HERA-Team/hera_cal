@@ -9,6 +9,7 @@ from hera_filters import dspec
 from scipy import constants
 from typing import Sequence
 from .. import types as tp
+from .. import utils
 from scipy import signal, linalg
 from hera_qm.time_series_metrics import true_stretches
 
@@ -132,7 +133,7 @@ def compute_std(
     logger.info("Calculating std")
 
     norm = np.sum(nsamples, axis=0)
-    normalizable = norm > 0
+    normalizable = ~norm.mask
 
     if mean is None:
         mean = np.sum(data * nsamples, axis=0)
@@ -141,14 +142,15 @@ def compute_std(
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice.")
+        warnings.filterwarnings("ignore", message="invalid value encountered in multiply")
+
         std = np.square(data.real - mean.real) + 1j * np.square(
             data.imag - mean.imag
         )
         std = np.sum(std * nsamples, axis=0)
         std[normalizable] /= norm[normalizable]
         std = np.sqrt(std.real) + 1j * np.sqrt(std.imag)
-
-        std[~normalizable] = np.inf
+        std.data[~normalizable] *= np.inf
 
     return std.data, norm
 
@@ -645,8 +647,7 @@ def average_and_inpaint_simultaneously(
     all_models = {}
 
     # Time axis is outer axis for all LSTStacks.
-    antpos, ants = stack.get_ENU_antpos(pick_data_ants=False)
-    antpos = dict(zip(ants, antpos))
+    antpos = utils.get_ENU_antpos(stack, asdict=True)
 
     complete_flags = stack.flagged_or_inpainted()
 

@@ -77,7 +77,7 @@ class Test_DelayFilter:
         dfil.write_filtered_data(res_outfilename=outfilename, add_to_history='Hello_world.', clobber=True, extra_attrs=extra_attrs)
 
         uvd = UVData()
-        uvd.read_uvh5(outfilename, use_future_array_shapes=True)
+        uvd.read_uvh5(outfilename)
         assert 'Hello_world.' in uvd.history.replace('\n', '').replace(' ', '')
         assert 'Thisfilewasproducedbythefunction' in uvd.history.replace('\n', '').replace(' ', '')
         assert uvd.telescope_name == 'PAPER'
@@ -303,7 +303,7 @@ class Test_DelayFilter:
 
         # test apriori flags and flag_yaml
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
-        uvf = UVFlag(hd, mode='flag', copy_flags=True, use_future_array_shapes=True)
+        uvf = UVFlag(hd, mode='flag', copy_flags=True)
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
@@ -397,7 +397,7 @@ class Test_DelayFilter:
         hd = io.HERAData(uvh5)
         hd.read()
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
-        uvf = UVFlag(hd, mode='flag', copy_flags=True, use_future_array_shapes=True)
+        uvf = UVFlag(hd, mode='flag', copy_flags=True)
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')

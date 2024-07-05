@@ -479,10 +479,10 @@ class ReflectionFitter(FRFilter):
                                                           'telescope_name', 'cal_style']])
             add_to_history += "\nMerged-in calibration {}".format(input_calfits)
         else:
-            kwargs = {'x_orientation': self.hd.x_orientation}
+            kwargs = {'x_orientation': self.hd.telescope.x_orientation}
 
         # write calfits
-        antnums2antnames = dict(zip(self.hd.antenna_numbers, self.hd.antenna_names))
+        antnums2antnames = dict(zip(self.hd.telescope.antenna_numbers, self.hd.telescope.antenna_names))
         echo("...writing {}".format(output_calfits), verbose=verbose)
         uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=rflags,
                            quality=quals, total_qual=tquals, zero_check=False,

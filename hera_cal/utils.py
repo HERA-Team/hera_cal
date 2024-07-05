@@ -16,6 +16,7 @@ import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT, _x_orientation_rep_dict
+from pyuvdata.utils.pol import x_orientation_pol_map
 from pyuvdata.uvdata import FastUVH5Meta
 from typing import Sequence
 from pathlib import Path
@@ -42,7 +43,7 @@ HERA_TELESCOPE_LOCATION = np.array([5109325.855210627429187297821044921875,
                                     -3239928.424753960222005844116210937500])
 
 # Defines characters to look for to see if the polarization string is in east/north format. Nominally {'e', 'n'}.
-_KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').values()])
+_KEY_CARDINAL_CHARS = set([c.lower() for c in x_orientation_pol_map('north').values()])
 # Define characters that appear in all Jones polarization strings. Nominally {'j'}.
 _KEY_JONES_CHARS = set([c.lower() for val in JONES_NUM2STR_DICT.values() for c in val
                        if np.all([c in v for v in JONES_NUM2STR_DICT.values()])])
@@ -353,26 +354,28 @@ def interp_peak(data, method='quinn', reject_edges=False):
     k1 = data[range(N1), indices]
     k2 = data[range(N1), (indices + 1) % N2]
 
-    if method == 'quinn':
-        alpha1 = (k0 / k1).real
-        alpha2 = (k2 / k1).real
-        delta1 = alpha1 / (1 - alpha1)
-        delta2 = -alpha2 / (1 - alpha2)
-        d = (delta1 + delta2) / 2 + quinn_tau(delta1 ** 2) - quinn_tau(delta2 ** 2)
-        d[~np.isfinite(d)] = 0.
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', r'invalid value encountered in divide')
+        if method == 'quinn':
+            alpha1 = (k0 / k1).real
+            alpha2 = (k2 / k1).real
+            delta1 = alpha1 / (1 - alpha1)
+            delta2 = -alpha2 / (1 - alpha2)
+            d = (delta1 + delta2) / 2 + quinn_tau(delta1 ** 2) - quinn_tau(delta2 ** 2)
+            d[~np.isfinite(d)] = 0.
 
-        numerator_ck = np.exp(2.0j * np.pi * d) - 1
-        ck = np.array([np.true_divide(numerator_ck, 2.0j * np.pi * (d - k),
-                                      where=~(d == 0)) for k in [-1, 0, 1]])
-        rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck ** 2))
-        rho[d == 0] = np.abs(k1[d == 0])
-        return indices, d, np.abs(peaks), rho
+            numerator_ck = np.exp(2.0j * np.pi * d) - 1
+            ck = np.array([np.true_divide(numerator_ck, 2.0j * np.pi * (d - k),
+                                        where=~(d == 0)) for k in [-1, 0, 1]])
+            rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck ** 2))
+            rho[d == 0] = np.abs(k1[d == 0])
+            return indices, d, np.abs(peaks), rho
 
-    elif method == 'quadratic':
-        denom = (k0 - 2 * k1 + k2)
-        bin_shifts = 0.5 * np.true_divide((k0 - k2), denom, where=~np.isclose(denom, 0.0))
-        new_peaks = k1 - 0.25 * (k0 - k2) * bin_shifts
-        return indices, bin_shifts, peaks, new_peaks
+        elif method == 'quadratic':
+            denom = (k0 - 2 * k1 + k2)
+            bin_shifts = 0.5 * np.true_divide((k0 - k2), denom, where=~np.isclose(denom, 0.0))
+            new_peaks = k1 - 0.25 * (k0 - k2) * bin_shifts
+            return indices, bin_shifts, peaks, new_peaks
 
 
 def echo(message, type=0, verbose=True):
@@ -460,14 +463,14 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     '''
     assert AIPY, "you need aipy to run this function"
     # center of array values from file
-    cofa_lat, cofa_lon, cofa_alt = uvd.telescope_location_lat_lon_alt
+    cofa_lat, cofa_lon, cofa_alt = uvd.telescope._location.lat_lon_alt()
     location = (cofa_lat, cofa_lon, cofa_alt)
 
     # get antenna positions from file
     antpos = {}
-    for i, antnum in enumerate(uvd.antenna_numbers):
+    for i, antnum in enumerate(uvd.telescope.antenna_numbers):
         # we need to add the CofA location to the relative coordinates
-        pos = uvd.antenna_positions[i, :] + uvd.telescope_location
+        pos = uvd.antenna_positions[i, :] + uvd.telescope._location.xyz()
         # convert from meters to nanoseconds
         c_ns = const.c.to('m/ns').value
         pos = pos / c_ns
@@ -759,7 +762,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
         if i == 0:
             echo("...loading {}".format(f), verbose=verbose)
             uvc = UVCal()
-            uvc.read_calfits(f, use_future_array_shapes=True)
+            uvc.read_calfits(f)
             f1 = copy.copy(f)
 
             # set flagged data to unity
@@ -767,7 +770,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
 
         else:
             uvc2 = UVCal()
-            uvc2.read_calfits(f, use_future_array_shapes=True)
+            uvc2.read_calfits(f)
 
             # set flagged data to unity
             gain_array = uvc2.gain_array
@@ -1368,7 +1371,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     if fed_container:
         pols = sorted(data.pols())
     else:
-        pols = [polnum2str(pol, x_orientation=data.x_orientation) for pol in data.polarization_array]
+        pols = [polnum2str(pol, x_orientation=data.telescope.x_orientation) for pol in data.polarization_array]
 
     # get redundant groups
     if reds is None:
@@ -1378,8 +1381,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 raise ValueError("DataContainer must have antpos dictionary to calculate reds")
             antposd = data.antpos
         else:
-            antpos, ants = data.get_ENU_antpos()
-            antposd = dict(zip(ants, antpos))
+            antposd = get_ENU_antpos(data, asdict=True)
         reds = redcal.get_pos_reds(antposd, bl_error_tol=bl_tol)
 
     # eliminate baselines not in data
@@ -1812,12 +1814,11 @@ def select_spw_ranges(inputfilename, outputfilename, spw_ranges=None, clobber=Fa
     clobber: bool, optional
     """
     hd = UVData()
-    hd.read_uvh5(inputfilename, read_data=False, use_future_array_shapes=True)
+    hd.read_uvh5(inputfilename, read_data=False)
     if spw_ranges is None:
         spw_ranges = [(0, hd.Nfreqs)]
     # read in selected spw_ranges
-    hd.read(inputfilename, freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]),
-            use_future_array_shapes=True)
+    hd.read(inputfilename, freq_chans=np.hstack([np.arange(spw[0], spw[1]).astype(int) for spw in spw_ranges]))
     hd.write_uvh5(outputfilename, clobber=clobber)
 
 
@@ -1837,3 +1838,44 @@ def select_spw_ranges_argparser():
                                                                                 "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
+
+
+def get_ENU_antpos(uvd: UVData, *, center=False, pick_data_ants=False, asdict: bool = False):
+    """
+    Get antenna positions in East, North, Up coordinates in units of meters.
+
+    Parameters
+    ----------
+    center : bool
+        If True, subtract median of antenna positions before returning the
+        positions. Note that this will make it so that the antenna positions
+        cannot be reliably converted back to ECEF positions because they will
+        not be only referenced to the telescope location.
+    pick_data_ants : bool
+        If True, return only antennas found in data
+
+    Returns
+    -------
+    antpos : ndarray
+        Antenna positions in East, North, Up coordinates in units of
+        meters, shape=(Nants, 3)
+    ants : ndarray
+        Antenna numbers matching ordering of antpos, shape=(Nants,)
+
+    """
+    antpos = uvd.telescope.get_enu_antpos()
+    ants = uvd.telescope.antenna_numbers
+    if pick_data_ants:
+        data_ants = np.unique(np.concatenate([uvd.ant_1_array, uvd.ant_2_array]))
+        telescope_ants = uvd.telescope.antenna_numbers
+        select = np.isin(telescope_ants, data_ants)
+        antpos = antpos[select, :]
+        ants = telescope_ants[select]
+
+    if center:
+        antpos -= np.median(antpos, axis=0)
+
+    if asdict:
+        return {ant: pos for ant, pos in zip(ants, antpos)}
+    else:
+        return antpos, ants

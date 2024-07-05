@@ -32,7 +32,7 @@ def test_timeavg_waterfall():
     fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
 
     uvd = UVData()
-    uvd.read_miriad(fname, use_future_array_shapes=True)
+    uvd.read_miriad(fname)
 
     d = uvd.get_data(24, 25)
     f = uvd.get_flags(24, 25)
@@ -44,7 +44,7 @@ def test_timeavg_waterfall():
         if _l not in lsts:
             lsts.append(_l)
     lsts = np.array(lsts)
-    antpos, ants = uvd.get_ENU_antpos()
+    antpos, ants = utils.get_ENU_antpos(uvd)
     blv = antpos[ants.tolist().index(24)] - antpos[ants.tolist().index(25)]
 
     # test basic execution
@@ -243,7 +243,7 @@ class Test_FRFilter:
         tmp_path = tmpdir.strpath
         input_name = os.path.join(tmp_path, 'test_input.uvh5')
         uvd = UVData()
-        uvd.read(self.fname, use_future_array_shapes=True)
+        uvd.read(self.fname)
         uvd.write_uvh5(input_name)
         output_name = os.path.join(tmp_path, 'test_output.uvh5')
         flag_output = tmp_path + '/test_output.flags.h5'
@@ -450,7 +450,7 @@ class Test_FRFilter:
 
         # test apriori flags and flag_yaml
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
-        uvf = UVFlag(hd, mode='flag', copy_flags=True, use_future_array_shapes=True)
+        uvf = UVFlag(hd, mode='flag', copy_flags=True)
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')
@@ -498,9 +498,9 @@ class Test_FRFilter:
         test_beam = os.path.join(DATA_PATH, "efield_test_nside16.beamfits")
         test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
         uvd = UVData()
-        uvd.read_uvh5(test_data, use_future_array_shapes=True)
+        uvd.read_uvh5(test_data)
         uvb = UVBeam()
-        uvb.read_beamfits(test_beam, use_future_array_shapes=True)
+        uvb.read_beamfits(test_beam)
         fr_grid, profiles = frf.build_fringe_rate_profiles(uvd, uvb)
         assert len(fr_grid) == uvd.Ntimes
 
@@ -509,12 +509,12 @@ class Test_FRFilter:
         test_beam = os.path.join(DATA_PATH, "fr_unittest_beam.beamfits")
         test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
         uvd = UVData()
-        uvd.read_uvh5(test_data, use_future_array_shapes=True)
+        uvd.read_uvh5(test_data)
         myfrf = frf.FRFilter(uvd)
         sim_c_frates = {}
         sim_w_frates = {}
         uvb = UVBeam()
-        uvb.read_beamfits(test_beam, use_future_array_shapes=True)
+        uvb.read_beamfits(test_beam)
         c_frs, w_frs = frf.get_fringe_rate_limits(uvd, uvb, percentile_low=10, percentile_high=90)
         for bl in c_frs:
             # fft data
@@ -831,7 +831,7 @@ class Test_FRFilter:
         hd = io.HERAData(uvh5)
         hd.read()
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
-        uvf = UVFlag(hd, mode='flag', copy_flags=True, use_future_array_shapes=True)
+        uvf = UVFlag(hd, mode='flag', copy_flags=True)
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.flag_array[:] = False
         flagfile = os.path.join(tmp_path, 'test_flag.h5')

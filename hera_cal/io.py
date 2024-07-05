@@ -94,7 +94,7 @@ class HERACal(UVCal):
         '''Extract and store useful metadata and array indexing dictionaries.'''
         self.freqs = np.unique(self.freq_array)
         self.times = np.unique(self.time_array)
-        self.pols = [jnum2str(j, x_orientation=self.x_orientation) for j in self.jones_array]
+        self.pols = [jnum2str(j, x_orientation=self.telescope.x_orientation) for j in self.jones_array]
         self._jnum_indices = {jnum: i for i, jnum in enumerate(self.jones_array)}
         self.ants = [(ant, pol) for ant in self.ant_array for pol in self.pols]
         self._antnum_indices = {ant: i for i, ant in enumerate(self.ant_array)}
@@ -125,7 +125,7 @@ class HERACal(UVCal):
 
         # build dict of gains, flags, and quals
         for (ant, pol) in self.ants:
-            i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
+            i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.x_orientation)]
             gains[(ant, pol)] = np.array(self.gain_array[i, :, :, ip].T)
             flags[(ant, pol)] = np.array(self.flag_array[i, :, :, ip].T)
             if quals is not None:
@@ -134,7 +134,7 @@ class HERACal(UVCal):
         # build dict of total_qual if available
         if total_qual is not None:
             for pol in self.pols:
-                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
+                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.x_orientation)]
                 total_qual[pol] = np.array(self.total_quality_array[:, :, ip].T)
 
         return gains, flags, quals, total_qual
@@ -168,10 +168,10 @@ class HERACal(UVCal):
 
         if self.filepaths is not None:
             # load data
-            self.read_calfits(self.filepaths[0], use_future_array_shapes=True)
+            self.read_calfits(self.filepaths[0])
 
             if pols is not None:
-                pols = [jstr2num(ap, x_orientation=self.x_orientation) for ap in pols]
+                pols = [jstr2num(ap, x_orientation=self.telescope.x_orientation) for ap in pols]
             # only read antennas present in the data and raise a warning.
             my_ants = np.unique(self.ant_array)
             if antenna_nums is not None:
@@ -188,7 +188,7 @@ class HERACal(UVCal):
             if len(self.filepaths) > 1:
                 for fp in self.filepaths[1:]:
                     uvc = UVCal()
-                    uvc.read_calfits(fp, use_future_array_shapes=True)
+                    uvc.read_calfits(fp)
 
                     if np.any([s is not None for s in select_dict.values()]):
                         uvc.select(inplace=True, **select_dict)
@@ -227,7 +227,7 @@ class HERACal(UVCal):
         for to_update, array in zip([gains, flags, quals], data_arrays):
             if to_update is not None:
                 for (ant, pol) in to_update.keys():
-                    i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
+                    i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.x_orientation)]
                     array[i, fSlice, tSlice, ip] = to_update[(ant, pol)].T
 
         # update total_qual
@@ -235,7 +235,7 @@ class HERACal(UVCal):
             if self.total_quality_array is None:
                 self.total_quality_array = np.zeros(self.gain_array.shape[1:], dtype=float)
             for pol in total_qual.keys():
-                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
+                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.x_orientation)]
                 self.total_quality_array[fSlice, tSlice, ip] = total_qual[pol].T
 
     def write(self, filename, spoof_missing_channels=False, **write_kwargs):
@@ -620,7 +620,8 @@ class HERAData(UVData):
         Returns:
             metadata_dict: dictionary of all items in self.HERAData_metas
         '''
-        antpos, ants = self.get_ENU_antpos(pick_data_ants=False)
+        antpos = self.telescope.get_enu_antpos()
+        ants = self.telescope.antenna_numbers
         antpos = dict(zip(ants, antpos))
         data_ants = np.unique(np.concatenate((self.ant_1_array, self.ant_2_array)))
         data_antpos = {ant: antpos[ant] for ant in data_ants}
@@ -631,7 +632,7 @@ class HERAData(UVData):
         lsts = self.lst_array[self.baseline_array == most_common_bl_num]
 
         freqs = np.unique(self.freq_array)
-        pols = [polnum2str(polnum, x_orientation=self.x_orientation) for polnum in self.polarization_array]
+        pols = [polnum2str(polnum, x_orientation=self.telescope.x_orientation) for polnum in self.polarization_array]
         antpairs = self.get_antpairs()
         bls = [antpair + (pol,) for antpair in antpairs for pol in pols]
 
@@ -652,7 +653,7 @@ class HERAData(UVData):
         self._blt_slices = get_blt_slices(self)
 
     def get_polstr_index(self, pol: str) -> int:
-        num = polstr2num(pol, x_orientation=self.x_orientation)
+        num = polstr2num(pol, x_orientation=self.telescope.x_orientation)
 
         try:
             return self._polnum_indices[num]
@@ -828,7 +829,6 @@ class HERAData(UVData):
                                  times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                  freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
                                  run_check_acceptability=run_check_acceptability,
-                                 use_future_array_shapes=True,
                                  **kwargs)
                     if self.filetype == 'uvfits':
                         self.unproject_phase()
@@ -839,7 +839,7 @@ class HERAData(UVData):
                         super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
                                      time_range=time_range, run_check=run_check, check_extra=check_extra,
                                      run_check_acceptability=run_check_acceptability,
-                                     use_future_array_shapes=True, projected=False, **kwargs)
+                                     projected=False, **kwargs)
 
                         if any([times is not None, lsts is not None, lst_range is not None,
                                 frequencies is not None, freq_chans is not None]):
@@ -1639,10 +1639,10 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
 
     elif filetype == 'h5':
         from pyuvdata import UVFlag
-        uvf = UVFlag(flagfile, use_future_array_shapes=True)
+        uvf = UVFlag(flagfile)
         assert uvf.mode == 'flag', f'The input h5-based UVFlag object must be in flag mode, got {uvf.mode}'
-        assert (np.issubsctype(uvf.polarization_array.dtype, np.signedinteger)
-                or np.issubsctype(uvf.polarization_array.dtype, np.str_)), \
+        assert (np.issubdtype(uvf.polarization_array.dtype, np.signedinteger)
+                or np.issubdtype(uvf.polarization_array.dtype, np.str_)), \
             "The input h5-based UVFlag object's polarization_array must be integers or byte strings."
         freqs = np.unique(uvf.freq_array)
         times = np.unique(uvf.time_array)
@@ -1652,9 +1652,9 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             blt_slices = get_blt_slices(uvf)
             for ip, pol in enumerate(uvf.polarization_array):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
-                    pol = polnum2str(pol, x_orientation=uvf.x_orientation)  # convert to string if possible
+                    pol = polnum2str(pol, x_orientation=uvf.telescope.x_orientation)  # convert to string if possible
                 else:
-                    pol = ','.join([polnum2str(int(p), x_orientation=uvf.x_orientation) for p in pol.split(',')])
+                    pol = ','.join([polnum2str(int(p), x_orientation=uvf.telescope.x_orientation) for p in pol.split(',')])
                 for (ant1, ant2), blt_slice in blt_slices.items():
                     flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, :, ip]
             # data container only supports standard polarizations strings
@@ -1667,17 +1667,17 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             for i, ant in enumerate(uvf.ant_array):
                 for ip, jpol in enumerate(uvf.polarization_array):
                     if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
-                        jpol = jnum2str(jpol, x_orientation=uvf.x_orientation)  # convert to string if possible
+                        jpol = jnum2str(jpol, x_orientation=uvf.telescope.x_orientation)  # convert to string if possible
                     else:
-                        jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(',')])
+                        jpol = ','.join([jnum2str(int(p), x_orientation=uvf.telescope.x_orientation) for p in jpol.split(',')])
                     flags[(ant, jpol)] = np.array(uvf.flag_array[i, :, :, ip].T)
 
         elif uvf.type == 'waterfall':  # one time x freq waterfall (per visibility polarization)
             for ip, jpol in enumerate(uvf.polarization_array):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
-                    jpol = jnum2str(jpol, x_orientation=uvf.x_orientation)  # convert to string if possible
+                    jpol = jnum2str(jpol, x_orientation=uvf.telescope.x_orientation)  # convert to string if possible
                 else:
-                    jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(',')])
+                    jpol = ','.join([jnum2str(int(p), x_orientation=uvf.telescope.x_orientation) for p in jpol.split(',')])
                 flags[jpol] = uvf.flag_array[:, :, ip]
 
     elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
@@ -1900,15 +1900,15 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         antnums = np.array(sorted(list(antpos.keys())))
         header['antpos'] = np.array([antpos[antnum] for antnum in antnums])
         header['antpos'].attrs['antnums'] = antnums
-        header['history'] = np.string_(history)
+        header['history'] = np.bytes_(history)
 
         # save firstcal metadata, saving dictionary keys as attrs
         fc_grp = outfile.create_group('fc_meta')
         ant_keys = sorted(list(fc_meta['dlys'].keys()))
         fc_grp['dlys'] = np.array([fc_meta['dlys'][ant] for ant in ant_keys])
-        fc_grp['dlys'].attrs['ants'] = np.string_(ant_keys)
+        fc_grp['dlys'].attrs['ants'] = np.bytes_(ant_keys)
         fc_grp['polarity_flips'] = np.array([fc_meta['polarity_flips'][ant] for ant in ant_keys])
-        fc_grp['polarity_flips'].attrs['ants'] = np.string_(ant_keys)
+        fc_grp['polarity_flips'].attrs['ants'] = np.bytes_(ant_keys)
 
         # save the omnical metadata, saving dictionary keys as attrs
         omni_grp = outfile.create_group('omni_meta')
@@ -1918,7 +1918,7 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         omni_grp['iter'] = np.array([omni_meta['iter'][pols] for pols in pols_keys])
         omni_grp['iter'].attrs['pols'] = pols_keys
         omni_grp['conv_crit'] = np.array([omni_meta['conv_crit'][pols] for pols in pols_keys])
-        omni_grp['conv_crit'].attrs['conv_crit'] = np.string_(pols_keys)
+        omni_grp['conv_crit'].attrs['conv_crit'] = np.bytes_(pols_keys)
 
 
 def read_redcal_meta(meta_filename):
@@ -2062,9 +2062,8 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
 
     # get meta
     if return_meta:
-        antpos, ants = hd.get_ENU_antpos(center=True, pick_data_ants=pick_data_ants)
-        antpos = odict(zip(ants, antpos))
-        return data, flags, antpos, ants, d.freqs, d.times, d.lsts, d.pols()
+        antpos = utils.get_ENU_antpos(hd, asdict=True)
+        return data, flags, antpos, list(antpos.keys()), d.freqs, d.times, d.lsts, d.pols()
     else:
         return data, flags
 
@@ -2853,7 +2852,7 @@ def uvdata_from_fastuvh5(
     uvd.spw_array = np.unique(uvd.flex_spw_id_array)
     uvd.Nspws = len(uvd.spw_array)
     uvd.Nants_data = len(np.unique(np.concatenate((uvd.ant_1_array, uvd.ant_2_array))))
-    uvd.Nants_telescope = len(uvd.antenna_numbers)
+    uvd.telescope.Nants_telescope = len(uvd.telescope.antenna_numbers)
     uvd.blts_are_rectangular = True
     uvd.time_axis_faster_than_bls = timefirst
 

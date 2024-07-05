@@ -63,7 +63,7 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
     elif isinstance(flags, UVData):
         if verbose:
             print("Note: using latitude and longitude in given UVData object")
-        latitude, longitude, altitude = flags.telescope_location_lat_lon_alt_degrees
+        latitude, longitude, altitude = flags.telescope._location_lat_lon_alt_degrees()
         times = np.unique(flags.time_array)
         dtype = 'uvd'
     if dtype in ['ndarr', 'DC']:

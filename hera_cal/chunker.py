@@ -81,7 +81,7 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
         if spw_range is None:
             spw_range = (0, chunked_files.Nfreqs)
         # convert polarizations to jones integers.
-        jones = [uvutils.polstr2num(pol, x_orientation=chunked_files.x_orientation) for pol in polarizations]
+        jones = [uvutils.polstr2num(pol, x_orientation=chunked_files.telescope.x_orientation) for pol in polarizations]
         chunked_files.select(freq_chans=np.arange(spw_range[0], spw_range[1]).astype(int), jones=jones)
     # throw away fully flagged baselines.
     if throw_away_flagged_ants:

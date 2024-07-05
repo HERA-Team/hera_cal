@@ -1914,9 +1914,9 @@ class TestRunMethods(object):
             gains, flags, quals, total_qual = hc.read()
             gains_here, flags_here, quals_here, total_qual_here = hc_here.build_calcontainers()
             np.testing.assert_almost_equal(np.unique(hc.lst_array), np.unique(hd.lst_array))
-            np.testing.assert_almost_equal(hc.telescope_location, hd.telescope_location)
-            for antnum, antpos in zip(hc.antenna_numbers, hc.antenna_positions):
-                np.testing.assert_almost_equal(antpos, hd.antenna_positions[hd.antenna_numbers == antnum].flatten())
+            assert hc.telescope.location == hd.telescope.location
+            for antnum, antpos in zip(hc.telescope.antenna_numbers, hc.telescope.antenna_positions):
+                np.testing.assert_almost_equal(antpos, hd.antenna_positions[hd.telescope.antenna_numbers == antnum].flatten())
             for ant in gains.keys():
                 np.testing.assert_almost_equal(gains[ant], gains_here[ant])
                 np.testing.assert_almost_equal(flags[ant], flags_here[ant])
@@ -1936,9 +1936,9 @@ class TestRunMethods(object):
             gains, flags, quals, total_qual = hc.read()
             gains_here, flags_here, quals_here, total_qual_here = hc_here.build_calcontainers()
             np.testing.assert_almost_equal(np.unique(hc.lst_array), np.unique(hd.lst_array))
-            np.testing.assert_almost_equal(hc.telescope_location, hd.telescope_location)
+            assert hc.telescope.location == hd.telescope.location
             for antnum, antpos in zip(hc.antenna_numbers, hc.antenna_positions):
-                np.testing.assert_almost_equal(antpos, hd.antenna_positions[hd.antenna_numbers == antnum].flatten())
+                np.testing.assert_almost_equal(antpos, hd.antenna_positions[hd.telescope.antenna_numbers == antnum].flatten())
             for ant in gains.keys():
                 np.testing.assert_array_equal(flags[ant], flags_here[ant])
                 if not np.all(flags[ant]):
