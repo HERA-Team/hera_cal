@@ -64,7 +64,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'hera_cal'
-copyright = u'2017, HERA Collaboration'
+copyright = u'2017, HERA Collaboration'  # noqa: A001
 author = u'HERA Collaboration'
 
 # The version info for the project you're documenting, acts as replacement for
