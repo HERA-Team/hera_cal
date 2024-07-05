@@ -1769,9 +1769,9 @@ def get_file_times(filepaths, filetype='uvh5'):
                 else:
                     # need to generate lst_array on the fly
                     lst_array = np.ravel(uvutils.get_lst_for_time(_f[u'Header'][u'time_array'],
-                                                                  _f[u'Header'][u'latitude'][()],
-                                                                  _f[u'Header'][u'longitude'][()],
-                                                                  _f[u'Header'][u'altitude'][()]))
+                                                                  latitude=_f[u'Header'][u'latitude'][()],
+                                                                  longitude=_f[u'Header'][u'longitude'][()],
+                                                                  altitude=_f[u'Header'][u'altitude'][()]))
 
                 # figure out which baseline has the most times in order to handle BDA appropriately
                 baseline_array = uvutils.antnums_to_baseline(

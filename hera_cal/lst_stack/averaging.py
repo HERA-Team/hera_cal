@@ -505,7 +505,6 @@ def average_and_inpaint_simultaneously_single_bl(
         CNinv_data_dpss = np.array([
             basis.T.dot(weighted_data) for weighted_data in mask[:, band] / noise_var[:, band] * stackd[:, band]
         ])
-        print(CNinv_data_dpss.shape, CNinv_data_dpss.shape)
         dpss_fits = np.array([
             a.dot(b) if np.all(np.isfinite(b)) else a.dot(np.zeros_like(b))
             for a, b in zip(CNinv_dpss_inv, CNinv_data_dpss)
