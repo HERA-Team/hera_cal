@@ -12,7 +12,7 @@ import warnings
 from pyuvdata import utils as uvutils
 
 
-def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
+def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",  # noqa: A002
                 polarizations=None, spw_range=None, throw_away_flagged_ants=False,
                 clobber=False, ant_flag_yaml=None, **read_kwargs):
     """Chunk a list of data or cal files together into a single file.
