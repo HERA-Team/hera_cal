@@ -10,6 +10,7 @@ import sys
 import shutil
 from scipy import constants
 from pyuvdata import UVData, UVFlag
+from pyuvdata.telescopes import Telescope
 import warnings
 
 from .. import io
@@ -22,11 +23,11 @@ import glob
 @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 @pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
-@pytest.mark.filterwarnings("ignore:telescope_location is not set")
-@pytest.mark.filterwarnings("ignore:antenna_positions are not set")
 @pytest.mark.filterwarnings("ignore:Antenna 53 not present in calibration solution")
 @pytest.mark.filterwarnings("ignore:Cannot preserve total_quality_array when changing number of antennas")
 @pytest.mark.filterwarnings("ignore:No new keys provided")
+@pytest.mark.filterwarnings("ignore:Mean of empty slice")
+@pytest.mark.filterwarnings("ignore:invalid value encountered in scalar divide")
 class Test_DelayFilter:
     def test_run_delay_filter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
