@@ -10,7 +10,7 @@ of the UVData select() method, but provides useful ways of specifying the select
 criteria via command-line arguments.
 """
 
-from hera_cal import io
+from hera_cal import io, utils
 from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
 from argparse import ArgumentParser
 import os

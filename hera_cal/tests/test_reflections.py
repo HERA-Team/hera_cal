@@ -55,9 +55,8 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
     np.random.seed(0)
 
     # get antenna vectors
-    antpos, ants = utils.get_ENU_antpos(uvd, center=True, pick_data_ants=True)
-    antpos_d = dict(zip(ants, antpos))
-    ant_dist = dict(zip(ants, map(np.linalg.norm, antpos)))
+    antpos = utils.get_ENU_antpos(uvd, center=True, pick_data_ants=True, asdict=True)
+    # ant_dist = {k: np.linalg.norm(v) for k, v in antpos.items()}
 
     # get autocorr
     autocorr = uvd.get_data(23, 23, 'ee')

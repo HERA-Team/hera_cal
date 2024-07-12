@@ -56,7 +56,7 @@ setup_args = {
         'astropy-healpix',
         'pyuvdata>=3',
         'linsolve',
-        'hera_qm',
+        'hera_qm>=2.2.0',
         'scikit-learn',
         'hera-filters',
         "line_profiler",

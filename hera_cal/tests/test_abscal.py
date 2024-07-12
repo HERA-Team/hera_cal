@@ -33,7 +33,7 @@ class Test_AbsCal_Funcs(object):
         self.uvd = UVData()
         self.uvd.read_miriad(self.data_file)
         self.freq_array = np.unique(self.uvd.freq_array)
-        self.antpos, self.ants = utils.get_ENU_antpos(self.uvd, pick_data_ants=True)
+        self.antpos, self.ants = self.uvd.get_enu_data_ants()
         self.antpos = odict(zip(self.ants, self.antpos))
         self.time_array = np.unique(self.uvd.time_array)
 
@@ -1694,8 +1694,7 @@ class Test_Post_Redcal_Abscal_Run(object):
          model_bl_to_load,
          data_to_model_bl_map) = abscal.match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=['ee', 'nn'], min_bl_cut=1.0)
 
-        with pytest.warns(UserWarning, match='not set or are being overwritten'):
-            rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
+        rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
         all_data_times, all_data_lsts = abscal.get_all_times_and_lsts(hd)
         all_model_times, all_model_lsts = abscal.get_all_times_and_lsts(hdm)
         d2m_time_map = abscal.get_d2m_time_map(all_data_times, all_data_lsts, all_model_times, all_model_lsts)

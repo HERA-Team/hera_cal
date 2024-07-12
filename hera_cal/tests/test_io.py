@@ -1114,7 +1114,7 @@ class Test_Visibility_IO_Legacy:
         self.uvd = UVData()
         self.uvd.read_miriad(self.data_file)
         self.freq_array = np.unique(self.uvd.freq_array)
-        self.antpos, self.ants = utils.get_ENU_antpos(self.uvd, center=True, pick_data_ants=True)
+        self.antpos, self.ants = self.uvd.get_enu_data_ants()
         self.antpos = odict(list(zip(self.ants, self.antpos)))
         self.time_array = np.unique(self.uvd.time_array)
 

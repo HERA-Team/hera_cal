@@ -1854,7 +1854,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     redcal_meta = _init_redcal_meta_dict(nTimes, nFreqs, ants, pol_load_list)
 
     # solar flagging
-    lat, lon, alt = hd.telescope._location_lat_lon_alt_degrees()
+    lat, lon, alt = hd.telescope._location.lat_lon_alt_degrees()
     solar_alts = utils.get_sun_alt(hd.times, latitude=lat, longitude=lon)
     solar_flagged = solar_alts > solar_horizon
     if verbose and np.any(solar_flagged):

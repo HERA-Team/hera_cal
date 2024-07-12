@@ -44,7 +44,7 @@ def test_timeavg_waterfall():
         if _l not in lsts:
             lsts.append(_l)
     lsts = np.array(lsts)
-    antpos, ants = utils.get_ENU_antpos(uvd)
+    antpos, ants = uvd.get_enu_data_ants()
     blv = antpos[ants.tolist().index(24)] - antpos[ants.tolist().index(25)]
 
     # test basic execution

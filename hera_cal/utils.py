@@ -1863,14 +1863,11 @@ def get_ENU_antpos(uvd: UVData, *, center=False, pick_data_ants=False, asdict: b
         Antenna numbers matching ordering of antpos, shape=(Nants,)
 
     """
-    antpos = uvd.telescope.get_enu_antpos()
-    ants = uvd.telescope.antenna_numbers
     if pick_data_ants:
-        data_ants = np.unique(np.concatenate([uvd.ant_1_array, uvd.ant_2_array]))
-        telescope_ants = uvd.telescope.antenna_numbers
-        select = np.isin(telescope_ants, data_ants)
-        antpos = antpos[select, :]
-        ants = telescope_ants[select]
+        antpos, ants = uvd.get_enu_data_ants()
+    else:
+        antpos = uvd.telescope.get_enu_antpos()
+        ants = uvd.telescope.antenna_numbers
 
     if center:
         antpos -= np.median(antpos, axis=0)
