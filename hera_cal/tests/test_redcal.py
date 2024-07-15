@@ -1796,13 +1796,11 @@ class TestRunMethods(object):
         antpos = hex_array(3, split_core=False, outriggers=0)
         pols = ['xx', 'yy']
         reds = om.get_reds(antpos, pols=pols)
-        np.random.seed(21)
+        rng = np.random.default_rng(13)
         freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
         times = np.linspace(0, 600. / 60 / 60 / 24, 3, endpoint=False)
-        df = np.median(np.diff(freqs))
-        dt = np.median(np.diff(times)) * 3600. * 24
 
-        g, tv, d = sim_red_data(reds, shape=(len(times), len(freqs)), gain_scatter=.01)
+        g, tv, d = sim_red_data(reds, shape=(len(times), len(freqs)), gain_scatter=.01, rng=rng)
         tv, d = DataContainer(tv), DataContainer(d)
         nsamples = DataContainer({bl: np.ones_like(d[bl], dtype=float) for bl in d})
 
@@ -1810,10 +1808,13 @@ class TestRunMethods(object):
             for pol in pols:
                 d[(antnum, antnum, pol)] = np.ones((len(times), len(freqs)), dtype=complex)
         d.freqs = deepcopy(freqs)
-        d.times_by_bl = {bl[0:2]: deepcopy(times) for bl in d.keys()}
+        d.times_by_bl = {bl[:2]: deepcopy(times) for bl in d.keys()}
 
         filtered_reds = om.filter_reds(reds, ex_ants=ex_ants, antpos=antpos, max_bl_cut=30)
+
         cal, sol = om.redundantly_calibrate(d, filtered_reds, run_logcal=True)
+        for ant in cal['chisq_per_ant']:
+            np.testing.assert_array_less(cal['chisq_per_ant'][ant], 1e-10)
 
         om.expand_omni_vis(sol, reds, d, nsamples, chisq=cal['chisq'], chisq_per_ant=cal['chisq_per_ant'])
         om.expand_omni_gains(sol, reds, d, nsamples, chisq_per_ant=cal['chisq_per_ant'])
@@ -1822,7 +1823,6 @@ class TestRunMethods(object):
         # test that all chisqs are 0
         for red in reds:
             for bl in red:
-                ant0, ant1 = split_bl(bl)
                 np.testing.assert_array_almost_equal(d[bl], sol.model_bl(bl))
         assert len(pols) * len(antpos) == len(sol.gains)
         for ant in cal['chisq_per_ant']:
