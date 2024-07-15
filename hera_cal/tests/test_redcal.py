@@ -1796,7 +1796,7 @@ class TestRunMethods(object):
         antpos = hex_array(3, split_core=False, outriggers=0)
         pols = ['xx', 'yy']
         reds = om.get_reds(antpos, pols=pols)
-        rng = np.random.default_rng(121)
+        rng = np.random.default_rng(21)
         freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
         times = np.linspace(0, 600. / 60 / 60 / 24, 3, endpoint=False)
 
@@ -1806,7 +1806,7 @@ class TestRunMethods(object):
 
         for antnum in antpos.keys():
             for pol in pols:
-                d[(antnum, antnum, pol)] = np.ones((len(times), len(freqs)), dtype=complex)
+                d[(antnum, antnum, pol)] = 1e4 * np.ones((len(times), len(freqs)), dtype=complex)
         d.freqs = deepcopy(freqs)
         d.times_by_bl = {bl[:2]: deepcopy(times) for bl in d.keys()}
 
