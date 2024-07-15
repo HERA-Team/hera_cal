@@ -74,7 +74,7 @@ setup_args = {
             "pytest",
             "pre-commit",
             "pytest-cov",
-            "hera_sim @ git+https://github.com/hera-team/hera_sim",
+            "hera_sim @ git+https://github.com/hera-team/hera_sim@use-uvdata-new",
             "pytest-xdist",
             "hypothesis",
             "ruff",

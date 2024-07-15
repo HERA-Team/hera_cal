@@ -1598,7 +1598,7 @@ class TestRedundantCalibrator(object):
             np.testing.assert_almost_equal(np.mean(chisq_per_ant[ant]), predicted_chisq_per_ant[ant], -np.log10(.02))
 
     def test_predict_chisq_statistically_with_excluded_antenna(self):
-        np.random.seed(21)
+        rng = np.random.default_rng(131)
         antpos = hex_array(2, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx'])
         freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
@@ -1608,9 +1608,9 @@ class TestRedundantCalibrator(object):
 
         # Simulate redundant data with noise
         noise_var = .001
-        g, tv, d = sim_red_data(reds, shape=(len(times), len(freqs)), gain_scatter=.00)
+        g, tv, d = sim_red_data(reds, shape=(len(times), len(freqs)), gain_scatter=.00, rng=rng)
         ants = g.keys()
-        n = DataContainer({bl: np.sqrt(noise_var / 2) * (np.random.randn(*vis.shape) + 1j * np.random.randn(*vis.shape)) for bl, vis in d.items()})
+        n = DataContainer({bl: np.sqrt(noise_var / 2) * (rng.normal(size=vis.shape) + 1j * rng.normal(size=vis.shape)) for bl, vis in d.items()})
         noisy_data = n + DataContainer(d)
         nsamples = DataContainer({bl: np.ones_like(d[bl], dtype=float) for bl in d})
 
@@ -1796,7 +1796,7 @@ class TestRunMethods(object):
         antpos = hex_array(3, split_core=False, outriggers=0)
         pols = ['xx', 'yy']
         reds = om.get_reds(antpos, pols=pols)
-        rng = np.random.default_rng(13)
+        rng = np.random.default_rng(121)
         freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
         times = np.linspace(0, 600. / 60 / 60 / 24, 3, endpoint=False)
 
