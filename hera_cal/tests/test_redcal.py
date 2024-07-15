@@ -299,7 +299,7 @@ class TestMethods(object):
                 assert not np.any(meta['polarity_flips'][ant, 'Jee'])
 
 
-class TestRedSol(object):
+class TestRedSol:
 
     def test_init(self):
         NANTS = 18
@@ -659,17 +659,17 @@ class TestRedundantCalibrator(object):
         info._solver(solver, d, w)
 
     def test_firstcal(self):
-        np.random.seed(21)
+        rng = np.random.default_rng(21)
         antpos = hex_array(2, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(1e8, 2e8, 1024)
 
         # test firstcal where the degeneracies of the phases and delays have already been removed so no abscal is necessary
-        gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
-        fc_delays = {ant: [[100e-9 * np.random.randn()]] for ant in gains.keys()}  # in s
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)), rng=rng)
+        fc_delays = {ant: [[100e-9 * rng.normal()]] for ant in gains.keys()}  # in s
         fc_delays = om.remove_degen_gains(reds, fc_delays)
-        fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
+        fc_offsets = {ant: [[.49 * np.pi * (rng.normal() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
         fc_offsets = om.remove_degen_gains(reds, fc_offsets)
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs)))
                     for ant, delay in fc_delays.items()}
@@ -681,9 +681,9 @@ class TestRedundantCalibrator(object):
         np.testing.assert_array_almost_equal(np.linalg.norm([sol_fc[ant] - gains[ant] for ant in sol_fc.gains]), 0, decimal=3)
 
         # test firstcal with only phases (no delays)
-        gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
-        fc_delays = {ant: [[0 * np.random.randn()]] for ant in gains.keys()}  # in s
-        fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)), rng=rng)
+        fc_delays = {ant: [[0]] for ant in gains.keys()}  # in s
+        fc_offsets = {ant: [[.49 * np.pi * (rng.normal() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
         fc_offsets = om.remove_degen_gains(reds, fc_offsets)
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs)))
                     for ant, delay in fc_delays.items()}
@@ -1539,7 +1539,7 @@ class TestRedundantCalibrator(object):
 
     def test_predict_chisq_statistically(self):
         # Show that chisq prediction works pretty well for small arrays
-        np.random.seed(21)
+        rng = np.random.default_rng(21)
         antpos = hex_array(2, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx'])
         freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
@@ -1549,9 +1549,9 @@ class TestRedundantCalibrator(object):
 
         # Simulate redundant data with noise
         noise_var = .001
-        g, tv, d = sim_red_data(reds, shape=(len(times), len(freqs)), gain_scatter=.00)
+        g, tv, d = sim_red_data(reds, shape=(len(times), len(freqs)), gain_scatter=.00, rng=rng)
         ants = g.keys()
-        n = DataContainer({bl: np.sqrt(noise_var / 2) * (np.random.randn(*vis.shape) + 1j * np.random.randn(*vis.shape)) for bl, vis in d.items()})
+        n = DataContainer({bl: np.sqrt(noise_var / 2) * (rng.normal(size=vis.shape) + 1j * rng.normal(size=vis.shape)) for bl, vis in d.items()})
         noisy_data = n + DataContainer(d)
 
         # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance
@@ -1663,21 +1663,21 @@ class TestRedundantCalibrator(object):
             assert np.mean(meta['chisq_per_ant'][ant]) <= np.mean(meta['chisq_per_ant'][6, 'Jxx'])
 
 
-class TestRedcalAndAbscal(object):
+class TestRedcalAndAbscal:
 
     def test_post_redcal_abscal(self):
         '''This test shows that performing a combination of redcal and abscal recovers the exact input gains
         up to an overall phase (which is handled by using a reference antenna).'''
         # Simulate Redundant Data
-        np.random.seed(21)
+        rng = np.random.default_rng(21)
         antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(1e8, 2e8, 256)
-        gains, true_vis, d = sim_red_data(reds, gain_scatter=.1, shape=(2, len(freqs)))
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.1, shape=(2, len(freqs)), rng=rng)
         d = DataContainer(d)
-        fc_delays = {ant: 100e-9 * np.random.randn() for ant in gains.keys()}  # in s
-        fc_offsets = {ant: 2 * np.pi * np.random.rand() for ant in gains.keys()}  # random phase offsets
+        fc_delays = {ant: 100e-9 * rng.normal() for ant in gains.keys()}  # in s
+        fc_offsets = {ant: 2 * np.pi * rng.normal() for ant in gains.keys()}  # random phase offsets
         fc_gains = {ant: np.reshape(np.exp(2.0j * np.pi * freqs * delay + 1.0j * fc_offsets[ant]),
                                     (1, len(freqs))) for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
