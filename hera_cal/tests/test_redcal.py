@@ -286,7 +286,7 @@ class TestMethods(object):
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(.1, .2, 100)
         ants = [(ant, 'Jee') for ant in antpos]
-        gains = gen_gains(freqs, ants)
+        gains = gen_gains(freqs, ants, rng=rng)
         for ant in [3, 10, 11]:
             gains[ant, 'Jee'] *= -1
         _, true_vis, data = sim_red_data(reds, gains=gains, shape=(2, len(freqs)), rng=rng)
