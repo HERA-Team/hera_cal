@@ -156,11 +156,11 @@ class TestHistoryVersion():
 class TestFftDly(object):
 
     def setup_method(self):
-        np.random.seed(0)
+        self.rng = np.random.default_rng(seed=4)
         self.freqs = np.linspace(.1, .2, 1024)
 
     def test_ideal(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        true_dlys = self.rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         df = np.median(np.diff(self.freqs))
@@ -171,7 +171,7 @@ class TestFftDly(object):
         assert np.median(np.abs(dlys - true_dlys)) < 1e-2  # median accuracy of 10 ps
 
     def test_ideal_offset(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        true_dlys = self.rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs * true_dlys + 1j * 0.123)
         df = np.median(np.diff(self.freqs))
@@ -188,9 +188,9 @@ class TestFftDly(object):
         np.testing.assert_almost_equal(offs, 0.123, decimal=1)
 
     def test_noisy(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        true_dlys = self.rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
-        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * gen_white_noise((60, 1024))
+        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * gen_white_noise((60, 1024), rng=self.rng)
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df)
         assert np.median(np.abs(dlys - true_dlys)) < 1  # median accuracy of 1 ns
