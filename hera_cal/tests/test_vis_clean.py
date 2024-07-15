@@ -987,12 +987,12 @@ class Test_VisClean:
         # dnu should have also been set here to be np.diff(np.median(freqs))
         # but it wasn't Because of this, the old version of vis_clean was cleaning with a
         # delay width = intended delay width x (manually set dnu / original dnu of the attached data)
-        np.random.seed(0)
+        rng = np.random.default_rng(seed=1)
         k = (23, 24, 'ee')
         beam_interp = Beam(HS_DATA_PATH / 'HERA_H1C_BEAM_POLY.npy')
         Op = beam_interp(V.freqs / 1e9)
         # V.data[k] += noise.sky_noise_jy(autovis=V.data[(23, 23, 'ee')], freqs=V.freqs / 1e9, lsts=V.lsts, omega_p=Op)
-        V.data[k] += noise.sky_noise_jy(V.lsts, V.freqs / 1e9, omega_p=Op, integration_time=50, autovis=V.data[(23, 23, 'ee')])
+        V.data[k] += noise.sky_noise_jy(V.lsts, V.freqs / 1e9, omega_p=Op, integration_time=50, autovis=V.data[(23, 23, 'ee')], rng=rng)
 
         # add lots of random flags
         f = np.zeros(V.Nfreqs, dtype=bool)[None, :]
