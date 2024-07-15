@@ -20,8 +20,6 @@ from ..apply_cal import calibrate_in_place
 from ..data import DATA_PATH
 from ..datacontainer import DataContainer
 
-np.random.seed(0)
-
 pytestmark = pytest.mark.filterwarnings(
     "ignore:white_noise is being deprecated",  # this is emitted by hera_sim itself...
 )
@@ -282,6 +280,7 @@ class TestMethods(object):
 
     def test_find_polarity_flipped_ants(self):
         # test normal operation
+        rng = np.random.default_rng(21)
         antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['ee', 'nn'], pol_mode='2pol')
         rc = om.RedundantCalibrator(reds)
@@ -290,7 +289,7 @@ class TestMethods(object):
         gains = gen_gains(freqs, ants)
         for ant in [3, 10, 11]:
             gains[ant, 'Jee'] *= -1
-        _, true_vis, data = sim_red_data(reds, gains=gains, shape=(2, len(freqs)))
+        _, true_vis, data = sim_red_data(reds, gains=gains, shape=(2, len(freqs)), rng=rng)
         meta, sol_fc = rc.firstcal(data, freqs)
         for ant in antpos:
             if ant in [3, 10, 11]:
@@ -820,11 +819,12 @@ class TestRedundantCalibrator(object):
                     np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, decimal=10)
 
     def test_omnical_outliers(self):
+        rng = np.random.default_rng(0)
         NANTS = 18 * 5  # need a largish array to retain 2 dec accuracy
         antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
-        gains, true_vis, d = sim_red_data(reds, gain_scatter=.0099999)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.0099999, rng=rng)
         bad_bl = (4, 5, 'xx')
         d[bad_bl] *= 30  # corrupt a measurement
         w = dict([(k, 1.) for k in d.keys()])
