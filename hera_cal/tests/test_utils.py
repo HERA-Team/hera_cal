@@ -667,7 +667,9 @@ def test_gp_interp1d():
     # plt.plot(np.abs(y[:, 10]));plt.plot(np.abs(yint_1thin[:, 10]));plt.plot(np.abs(yint_2thin[:, 10]))
     nstd = np.std(y - yint_0thin, axis=0)  # residual noise after subtraction with unthinned model
     rstd = np.std(yint_1thin - yint_2thin, axis=0)  # error flucturations between 1 and 2 thin models
-    assert np.nanmedian(nstd / rstd) > 2.0  # assert model error is on average less then half noise
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', 'divide by zero encountered in divide')
+        assert np.nanmedian(nstd / rstd) > 2.0  # assert model error is on average less then half noise
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -1100,3 +1102,12 @@ class Test_LSTBranchCut:
         lsts += n * 2 * np.pi
         best = utils.get_best_lst_branch_cut(lsts)
         assert best == 0
+
+
+def test_get_enu_antpos():
+    test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
+    uvd = UVData.from_file(test_data)
+
+    antpos, ants = utils.get_ENU_antpos(uvd)
+    antpos_dict = utils.get_ENU_antpos(uvd, asdict=True)
+    assert all(k in ants for k in antpos_dict)

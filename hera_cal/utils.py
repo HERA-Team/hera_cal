@@ -470,7 +470,7 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     antpos = {}
     for i, antnum in enumerate(uvd.telescope.antenna_numbers):
         # we need to add the CofA location to the relative coordinates
-        pos = uvd.antenna_positions[i, :] + uvd.telescope._location.xyz()
+        pos = uvd.telescope.antenna_positions[i, :] + uvd.telescope._location.xyz()
         # convert from meters to nanoseconds
         c_ns = const.c.to('m/ns').value
         pos = pos / c_ns

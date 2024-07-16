@@ -24,7 +24,7 @@ import glob
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 @pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
 @pytest.mark.filterwarnings("ignore:Antenna 53 not present in calibration solution")
-@pytest.mark.filterwarnings("ignore:Cannot preserve total_quality_array when changing number of antennas")
+@pytest.mark.filterwarnings("ignore:Changing number of antennas")
 @pytest.mark.filterwarnings("ignore:No new keys provided")
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in scalar divide")
@@ -74,14 +74,14 @@ class Test_DelayFilter:
             dfil.write_filtered_data()
         with pytest.raises(NotImplementedError):
             dfil.write_filtered_data(res_outfilename=outfilename, partial_write=True)
-        extra_attrs = dict(telescope_name="PAPER")
+        extra_attrs = {'telescope.name': "PAPER"}
         dfil.write_filtered_data(res_outfilename=outfilename, add_to_history='Hello_world.', clobber=True, extra_attrs=extra_attrs)
 
         uvd = UVData()
         uvd.read_uvh5(outfilename)
         assert 'Hello_world.' in uvd.history.replace('\n', '').replace(' ', '')
         assert 'Thisfilewasproducedbythefunction' in uvd.history.replace('\n', '').replace(' ', '')
-        assert uvd.telescope_name == 'PAPER'
+        assert uvd.telescope.name == 'PAPER'
 
         filtered_residuals, flags = io.load_vis(uvd)
 
@@ -134,10 +134,12 @@ class Test_DelayFilter:
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(tmp_path, 'temp.h5')
 
-        df.load_delay_filter_and_write(
-            uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
-            avg_red_bllens=avg_bl
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "Changing number of antennas")
+            df.load_delay_filter_and_write(
+                uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
+                avg_red_bllens=avg_bl
+            )
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -202,6 +204,7 @@ class Test_DelayFilter:
             assert np.any(n[bl] == 0)
             assert np.all(nsamples[bl] == n[bl])
 
+    @pytest.mark.filterwarnings("ignore:Changing number of antennas")
     def test_load_delay_filter_and_write_baseline_list(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
@@ -222,13 +225,14 @@ class Test_DelayFilter:
             if os.path.isdir(cdir):
                 shutil.rmtree(cdir)
             os.mkdir(cdir)
-            df.load_delay_filter_and_write(
-                datafile_list=uvh5, baseline_list=[(53, 54)],
-                calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
-                read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
-                res_outfilename=outfilename, clobber=True,
-                mode='dayenu'
-            )
+            with warnings.catch_warnings():
+                df.load_delay_filter_and_write(
+                    datafile_list=uvh5, baseline_list=[(53, 54)],
+                    calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                    read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                    res_outfilename=outfilename, clobber=True,
+                    mode='dayenu'
+                )
             hd = io.HERAData(outfilename)
             d, f, n = hd.read()
             assert len(list(d.keys())) == 1
@@ -339,6 +343,7 @@ class Test_DelayFilter:
         os.remove(outfilename)
         shutil.rmtree(cdir)
 
+    @pytest.mark.filterwarnings("ignore:Changing number of antennas")
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")

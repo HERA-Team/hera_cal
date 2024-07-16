@@ -750,7 +750,7 @@ class Test_HERAData(object):
         # check some metadata
         assert hd.Ntimes == hc.Ntimes
         assert hc.Nants_data == hd.Nants_data
-        assert hc.telescope_name == hd.telescope_name
+        assert hc.telescope.name == hd.telescope.name
 
         # check that arrays have been initialized
         assert hc.gain_array is not None
@@ -1182,7 +1182,7 @@ class Test_Visibility_IO_Legacy:
         d, f = io.load_vis([uvd1, uvd2], nested_dict=True)
         for i, j in d:
             for pol in d[i, j]:
-                uvpol = list(uvd1.polarization_array).index(polstr2num(pol, x_orientation=uvd1.x_orientation))
+                uvpol = list(uvd1.polarization_array).index(polstr2num(pol, x_orientation=uvd1.telescope.x_orientation))
                 uvmask = np.all(
                     np.array(list(zip(uvd.ant_1_array, uvd.ant_2_array))) == [i, j], axis=1)
                 np.testing.assert_equal(d[i, j][pol], np.resize(
@@ -1263,8 +1263,9 @@ class Test_Visibility_IO_Legacy:
         # make some modifications
         new_data = {key: (2.) * val for key, val in data.items()}
         new_flags = {key: np.logical_not(val) for key, val in flags.items()}
+        telkw = {'telescope.name': 'PAPER'}
         io.update_vis(fname, outname, data=new_data, flags=new_flags,
-                      add_to_history='hello world', clobber=True, telescope_name='PAPER')
+                      add_to_history='hello world', clobber=True, **telkw)
         # test modifications
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(outname, return_meta=True)
         for k in data.keys():
@@ -1272,13 +1273,13 @@ class Test_Visibility_IO_Legacy:
             assert np.all(new_flags[k] == flags[k])
         uvd2 = UVData()
         uvd2.read_miriad(outname)
-        assert pyuvdata.utils._check_histories(uvd2.history, uvd.history + 'hello world')
-        assert uvd2.telescope_name == 'PAPER'
+        assert pyuvdata.utils.history._check_histories(uvd2.history, uvd.history + 'hello world')
+        assert uvd2.telescope.name == 'PAPER'
         shutil.rmtree(outname)
 
         # test writing uvfits instead
         io.update_vis(fname, outname, data=new_data, flags=new_flags, filetype_out='uvfits',
-                      add_to_history='hello world', clobber=True, telescope_name='PAPER')
+                      add_to_history='hello world', clobber=True, **telkw)
         uvd_fits = UVData()
         uvd_fits.read_uvfits(outname)
         os.remove(outname)
@@ -1286,22 +1287,22 @@ class Test_Visibility_IO_Legacy:
         # Coverage for errors
         with pytest.raises(TypeError):
             io.update_vis(uvd, outname, data=new_data, flags=new_flags, filetype_out='not_a_real_filetype',
-                          add_to_history='hello world', clobber=True, telescope_name='PAPER')
+                          add_to_history='hello world', clobber=True, **telkw)
         with pytest.raises(NotImplementedError):
             io.update_vis(fname, outname, data=new_data, flags=new_flags, filetype_in='not_a_real_filetype',
-                          add_to_history='hello world', clobber=True, telescope_name='PAPER')
+                          add_to_history='hello world', clobber=True, **telkw)
 
         # #now try the same thing but with a UVData object instead of path
         io.update_vis(uvd, outname, data=new_data, flags=new_flags,
-                      add_to_history='hello world', clobber=True, telescope_name='PAPER')
+                      add_to_history='hello world', clobber=True, **telkw)
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(outname, return_meta=True)
         for k in data.keys():
             assert np.all(new_data[k] == data[k])
             assert np.all(new_flags[k] == flags[k])
         uvd2 = UVData()
         uvd2.read_miriad(outname)
-        assert pyuvdata.utils._check_histories(uvd2.history, uvd.history + 'hello world')
-        assert uvd2.telescope_name == 'PAPER'
+        assert pyuvdata.utils.history._check_histories(uvd2.history, uvd.history + 'hello world')
+        assert uvd2.telescope.name == 'PAPER'
         shutil.rmtree(outname)
 
 
@@ -1332,7 +1333,7 @@ class Test_Calibration_IO_Legacy:
         assert len(quals.keys()) == 36
         assert freqs.shape == (1024,)
         assert times.shape == (3,)
-        assert sorted(pols) == [parse_jpolstr('jxx', x_orientation=cal.x_orientation), parse_jpolstr('jyy', x_orientation=cal.x_orientation)]
+        assert sorted(pols) == [parse_jpolstr('jxx', x_orientation=cal.telescope.x_orientation), parse_jpolstr('jyy', x_orientation=cal.telescope.x_orientation)]
 
         cal_xx, cal_yy = UVCal(), UVCal()
         cal_xx.read_calfits(fname_xx)
@@ -1343,7 +1344,7 @@ class Test_Calibration_IO_Legacy:
         assert len(quals.keys()) == 36
         assert freqs.shape == (1024,)
         assert times.shape == (3,)
-        assert sorted(pols) == [parse_jpolstr('jxx', x_orientation=cal_xx.x_orientation), parse_jpolstr('jyy', x_orientation=cal_yy.x_orientation)]
+        assert sorted(pols) == [parse_jpolstr('jxx', x_orientation=cal_xx.telescope.x_orientation), parse_jpolstr('jyy', x_orientation=cal_yy.telescope.x_orientation)]
 
     def test_write_cal(self):
         # create fake data
@@ -1390,7 +1391,7 @@ class Test_Calibration_IO_Legacy:
             os.remove('ex.calfits')
         # test single integration write
         gains2 = odict([(k, gains[k][:1]) for k in gains.keys()])
-        uvc = io.write_cal("ex.calfits", gains2, freqs, times[:1], return_uvc=True, outdir='./')
+        uvc = io.write_cal("ex.calfits", gains2, freqs, times[:1], return_uvc=True, outdir='./', integration_time=1.0)
         # only one time, integration time defaults to 1s
         assert np.allclose(uvc.integration_time, 1.0)
         assert uvc.Ntimes == 1
@@ -1419,14 +1420,14 @@ class Test_Calibration_IO_Legacy:
             antpos_enu = uvc1.telescope.get_enu_antpos()
         else:
             antpos_enu = pyuvdata.utils.ENU_from_ECEF(
-                uvc1.antenna_positions + uvc.telescope._location.xyz(),
+                uvc1.telescope.antenna_positions + uvc.telescope._location.xyz(),
                 center_loc=uvc.telescope.location
             )
         antpos_enu_dict = {ant: antpos_enu[a_ind] for a_ind, ant in enumerate(uvc1.telescope.antenna_numbers) if ant in ants}
         uvc = io.write_cal("ex.calfits", gains, freqs, times, antnums2antnames=antnums2antnames,
                            antpos=antpos_enu_dict, return_uvc=True, write_file=False)
-        assert sorted(uvc.antenna_names) == sorted(antnums2antnames.values())
-        np.testing.assert_allclose(uvc.antenna_positions, uvc1.antenna_positions[:10])
+        assert sorted(uvc.telescope.antenna_names) == sorted(antnums2antnames.values())
+        np.testing.assert_allclose(uvc.telescope.antenna_positions, uvc1.telescope.antenna_positions[:10])
 
     def test_update_cal(self):
         # load in cal
@@ -1435,13 +1436,14 @@ class Test_Calibration_IO_Legacy:
         cal = UVCal()
         cal.read_calfits(fname)
         gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal(fname, return_meta=True)
+        telkw = {"telescope.name": "MWA"}
 
         # make some modifications
         new_gains = {key: (2. + 1.j) * val for key, val in gains.items()}
         new_flags = {key: np.logical_not(val) for key, val in flags.items()}
         new_quals = {key: 2. * val for key, val in quals.items()}
         io.update_cal(fname, outname, gains=new_gains, flags=new_flags, quals=new_quals,
-                      add_to_history='hello world', clobber=True, telescope_name='MWA')
+                      add_to_history='hello world', clobber=True, **telkw)
 
         # test modifications
         gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal(outname, return_meta=True)
@@ -1451,13 +1453,13 @@ class Test_Calibration_IO_Legacy:
             assert np.all(new_quals[k] == quals[k])
         cal2 = UVCal()
         cal2.read_calfits(outname)
-        assert pyuvdata.utils._check_histories(cal2.history, cal.history + 'hello world')
-        assert cal2.telescope_name == 'MWA'
+        assert pyuvdata.utils.history._check_histories(cal2.history, cal.history + 'hello world')
+        assert cal2.telescope.name == 'MWA'
         os.remove(outname)
 
         # now try the same thing but with a UVCal object instead of path
         io.update_cal(cal, outname, gains=new_gains, flags=new_flags, quals=new_quals,
-                      add_to_history='hello world', clobber=True, telescope_name='MWA')
+                      add_to_history='hello world', clobber=True, **telkw)
         gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal(outname, return_meta=True)
         for k in gains.keys():
             assert np.all(new_gains[k] == gains[k])
@@ -1465,8 +1467,8 @@ class Test_Calibration_IO_Legacy:
             assert np.all(new_quals[k] == quals[k])
         cal2 = UVCal()
         cal2.read_calfits(outname)
-        assert pyuvdata.utils._check_histories(cal2.history, cal.history + 'hello world')
-        assert cal2.telescope_name == 'MWA'
+        assert pyuvdata.utils.history._check_histories(cal2.history, cal.history + 'hello world')
+        assert cal2.telescope.name == 'MWA'
         os.remove(outname)
 
 
@@ -1847,3 +1849,9 @@ class Test_UVDataFromFastUVH5:
         uvd = io.uvdata_from_fastuvh5(self.meta_default, history='I made this!')
 
         assert 'I made this!' in uvd.history
+
+
+def test_pol2str():
+    assert io._pol2str(np.array([-7])[0], x_orientation=None) == "xy"
+    assert io._pol2str(np.array([-7])[0], x_orientation=None, jpol=True) == "Jxy"
+    assert io._pol2str(np.array(["-7,-8"])[0], x_orientation=None, jpol=False) == "xy,yx"

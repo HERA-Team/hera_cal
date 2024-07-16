@@ -16,6 +16,7 @@ from sklearn.gaussian_process import kernels
 import hera_sim as hs
 import copy
 from hera_cal import utils
+import warnings
 
 from .. import apply_cal, datacontainer, io, reflections
 from ..data import DATA_PATH
@@ -236,7 +237,9 @@ class Test_ReflectionFitter_Cables(object):
         # add a flagged integration
         RF.flags[bl_k][0] = True
         RF._clear_ref()
-        RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "invalid value encountered in divide")
+            RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True, write_npz=True)
         assert uvc.Ntimes == 100
         assert len(uvc.ant_array) == 5

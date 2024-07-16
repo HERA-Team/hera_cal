@@ -413,7 +413,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     if keys is None:
         keys = uvd.get_antpairpols()
 
-    antpos_trf = uvd.antenna_positions  # earth centered antenna positions
+    antpos_trf = uvd.telescope.antenna_positions  # earth centered antenna positions
     antnums = uvd.telescope.antenna_numbers  # antenna numbers.
 
     location = uvd.telescope.location

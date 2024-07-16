@@ -34,6 +34,7 @@ from functools import lru_cache
 from pyuvdata.uvdata import FastUVH5Meta
 from pyuvdata.uvdata.initializers import set_phase_params
 import pyuvdata
+from pyuvdata.utils.io.fits import _gethduaxis, _indexhdus
 
 try:
     import aipy
@@ -323,13 +324,13 @@ def read_hera_calfits(filenames, ants=None, pols=None,
     for cnt, filename in enumerate(filenames):
         with fits.open(filename) as fname:
             hdr = fname[0].header
-            _times = uvutils._fits_gethduaxis(fname[0], 3)
+            _times = _gethduaxis(fname[0], 3)
             _thash = hash(_times.tobytes())
             if _thash not in times:
                 times[_thash] = (_times, [filename])
             else:
                 times[_thash][1].append(filename)
-            hdunames = uvutils._fits_indexhdus(fname)
+            hdunames = _indexhdus(fname)
             nants = hdr['NAXIS6']
             anthdu = fname[hdunames["ANTENNAS"]]
             antdata = anthdu.data
@@ -341,7 +342,7 @@ def read_hera_calfits(filenames, ants=None, pols=None,
                     info['ants'].intersection_update(set(inds[_ahash].keys()))
                 else:
                     info['ants'] = set(inds[_ahash].keys())
-            jones_array = uvutils._fits_gethduaxis(fname[0], 2)
+            jones_array = _gethduaxis(fname[0], 2)
             _jhash = hash(jones_array.tobytes())
             if _jhash not in inds:
                 info['x_orientation'] = x_orient = hdr['XORIENT']
@@ -356,13 +357,13 @@ def read_hera_calfits(filenames, ants=None, pols=None,
             if cnt == 0:
                 if 'ANTXYZ' in antdata.names:
                     info['antpos'] = antdata["ANTXYZ"]
-                info['freqs'] = uvutils._fits_gethduaxis(fname[0], 4)
+                info['freqs'] = _gethduaxis(fname[0], 4)
                 info['gain_convention'] = gain_convention = hdr.pop("GNCONVEN")
                 info['cal_type'] = cal_type = hdr.pop("CALTYPE")
             if check:
                 assert gain_convention == 'divide'  # HERA standard
                 assert cal_type == 'gain'  # delay-style calibration currently unsupported
-                assert np.all(info['freqs'] == uvutils._fits_gethduaxis(fname[0], 4))
+                assert np.all(info['freqs'] == _gethduaxis(fname[0], 4))
 
     if ants is None:
         # generate a set of ants if we didn't have one passed in
@@ -825,11 +826,13 @@ class HERAData(UVData):
             # load data
             try:
                 if self.filetype in ['uvh5', 'uvfits']:
-                    super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
-                                 times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
-                                 freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
-                                 run_check_acceptability=run_check_acceptability,
-                                 **kwargs)
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings('ignore', 'Fixing phases using antenna positions')
+                        super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
+                                    times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
+                                    freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
+                                    run_check_acceptability=run_check_acceptability,
+                                    **kwargs)
                     if self.filetype == 'uvfits':
                         self.unproject_phase()
                 else:
@@ -1613,6 +1616,14 @@ def write_filter_cache_scratch(filter_cache, cache_dir=None, skip_keys=None):
         warnings.warn("No new keys provided. No cache file written.")
 
 
+def _pol2str(pol: np.integer | str, x_orientation: str, jpol: bool = False) -> str:
+    fnc = jnum2str if jpol else polnum2str
+    if np.issubdtype(pol.dtype, np.signedinteger):
+        return fnc(pol, x_orientation=x_orientation)  # convert to string if possible
+    else:
+        return ','.join([fnc(int(p), x_orientation=x_orientation) for p in pol.split(',')])
+
+
 def load_flags(flagfile, filetype='h5', return_meta=False):
     '''Load flags from a file and returns them as a DataContainer (for per-visibility flags)
     or dictionary (for per-antenna or per-polarization flags). More than one spectral window
@@ -1651,10 +1662,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         if uvf.type == 'baseline':  # one time x freq waterfall per baseline
             blt_slices = get_blt_slices(uvf)
             for ip, pol in enumerate(uvf.polarization_array):
-                if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
-                    pol = polnum2str(pol, x_orientation=uvf.telescope.x_orientation)  # convert to string if possible
-                else:
-                    pol = ','.join([polnum2str(int(p), x_orientation=uvf.telescope.x_orientation) for p in pol.split(',')])
+                pol = _pol2str(pol, uvf.telescope.x_orientation)
                 for (ant1, ant2), blt_slice in blt_slices.items():
                     flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, :, ip]
             # data container only supports standard polarizations strings
@@ -1664,20 +1672,14 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                 flags.freqs = freqs
 
         elif uvf.type == 'antenna':  # one time x freq waterfall per antenna
-            for i, ant in enumerate(uvf.ant_array):
-                for ip, jpol in enumerate(uvf.polarization_array):
-                    if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
-                        jpol = jnum2str(jpol, x_orientation=uvf.telescope.x_orientation)  # convert to string if possible
-                    else:
-                        jpol = ','.join([jnum2str(int(p), x_orientation=uvf.telescope.x_orientation) for p in jpol.split(',')])
+            for ip, jpol in enumerate(uvf.polarization_array):
+                jpol = _pol2str(jpol, x_orientation=uvf.telescope.x_orientation, jpol=True)
+                for i, ant in enumerate(uvf.ant_array):
                     flags[(ant, jpol)] = np.array(uvf.flag_array[i, :, :, ip].T)
 
         elif uvf.type == 'waterfall':  # one time x freq waterfall (per visibility polarization)
             for ip, jpol in enumerate(uvf.polarization_array):
-                if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
-                    jpol = jnum2str(jpol, x_orientation=uvf.telescope.x_orientation)  # convert to string if possible
-                else:
-                    jpol = ','.join([jnum2str(int(p), x_orientation=uvf.telescope.x_orientation) for p in jpol.split(',')])
+                jpol = _pol2str(jpol, x_orientation=uvf.telescope.x_orientation, jpol=True)
                 flags[jpol] = uvf.flag_array[:, :, ip]
 
     elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
@@ -2277,7 +2279,11 @@ def update_uvdata(uvd, data=None, flags=None, nsamples=None, add_to_history='', 
     # set additional attributes
     uvd.history += add_to_history
     for attribute, value in kwargs.items():
-        uvd.__setattr__(attribute, value)
+        if '.' in attribute:
+            top, bot = attribute.split('.')
+            getattr(uvd, top).__setattr__(bot, value)
+        else:
+            uvd.__setattr__(attribute, value)
     uvd.check()
 
 
@@ -2573,6 +2579,7 @@ def write_cal(fname, gains, freqs, times, antpos=None, lsts=None, flags=None, qu
         history=history,
         data=data_dict,
         **tel_params,
+        **kwargs,
     )
 
     # write to file
@@ -2620,7 +2627,11 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
     # Set additional attributes
     cal.history += add_to_history
     for attribute, value in kwargs.items():
-        cal.__setattr__(attribute, value)
+        if '.' in attribute:
+            top, bot = attribute.split('.')
+            getattr(cal, top).__setattr__(bot, value)
+        else:
+            cal.__setattr__(attribute, value)
     cal.check()
     cal.__class__ = original_class
 

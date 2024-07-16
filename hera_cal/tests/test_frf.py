@@ -385,7 +385,8 @@ class Test_FRFilter:
         for avg_bl in [True, False]:
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", message="Antenna 53 not present")
-                warnings.filterwarnings("ignore", message='Cannot preserve total_quality_array')
+                warnings.filterwarnings("ignore", message='Changing number of antennas')
+
                 frf.load_tophat_frfilter_and_write(datafile_list=uvh5, baseline_list=[(53, 54)], polarizations=['ee'],
                                                    calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
                                                    read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
@@ -639,7 +640,7 @@ class Test_FRFilter:
         for avg_bl in [True, False]:
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", message="Antenna 53 not present in calibration solution")
-                warnings.filterwarnings("ignore", message='Cannot preserve total_quality_array')
+                warnings.filterwarnings("ignore", message='Changing number of antennas')
                 frf.load_tophat_frfilter_and_write(
                     uvh5, calfile_list=cal, tol=1e-4, res_outfilename=outfilename,
                     Nbls_per_load=2, clobber=True, avg_red_bllens=avg_bl, case='sky'
@@ -934,7 +935,7 @@ class Test_FRFilter:
         calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Antenna 53 not present in calibration solution")
-            warnings.filterwarnings("ignore", message='Cannot preserve total_quality_array')
+            warnings.filterwarnings("ignore", message='Changing number of antennas')
             frf.load_tophat_frfilter_and_write(
                 uvh5, res_outfilename=outfilename, max_frate_coeffs=[0.0, 0.025],
                 cache_dir=cdir, calfile_list=calfile, read_cache=True,

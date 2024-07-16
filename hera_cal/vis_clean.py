@@ -705,7 +705,11 @@ class VisClean:
 
         # update other extra attrs
         for attribute, value in extra_attrs.items():
-            hd.__setattr__(attribute, value)
+            if '.' in attribute:
+                top, bot = attribute.split('.')
+                getattr(hd, top).__setattr__(bot, value)
+            else:
+                hd.__setattr__(attribute, value)
 
         # write to disk
         if filetype == 'miriad':
@@ -1692,7 +1696,9 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
 
         # get NEB of clean_resid: a top-hat window nulled where resid == 0 (i.e. flag pattern)
         w = (~np.isclose(clean_resid[k], 0.0)).astype(float)
-        neb = noise_eq_bandwidth(w[:, None])
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', 'invalid value encountered in divide')
+            neb = noise_eq_bandwidth(w[:, None])
 
         # get time-dependent noise level in Fourier space from FFT at high delays
         noise[k] = np.median(np.abs((rfft * neb)[:, np.abs(delays) > delay_cut]), axis=1)

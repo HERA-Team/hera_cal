@@ -12,7 +12,8 @@ import shutil
 from hera_sim.antpos import linear_array, hex_array
 from hera_sim.vis import sim_red_data
 from hera_sim.sigchain import gen_gains
-
+from astropy.coordinates import EarthLocation
+from astropy import units as un
 from .. import redcal as om
 from .. import io, abscal
 from ..utils import split_pol, conj_pol, split_bl
@@ -1858,7 +1859,8 @@ class TestRunMethods(object):
         _, _, _, chisq = hc_omni.build_calcontainers()
         np.testing.assert_array_equal(chisq['Jee'], chisq['Jnn'])
 
-        hd.telescope_location_lat_lon_alt_degrees = (-30.7, 121.4, 1051.7)  # move array longitude
+        # move array longitude
+        hd.telescope.location = EarthLocation(lat=-30.7 * un.deg, lon=121.4 * un.deg, height=1051.7 * un.m)
         redcal_meta, hc_first, hc_omni, hd_vissol = om.redcal_iteration(hd, solar_horizon=0.0)
         _, cal_flags, _, _ = hc_first.build_calcontainers()
         for flag in cal_flags.values():
@@ -1916,7 +1918,7 @@ class TestRunMethods(object):
             np.testing.assert_almost_equal(np.unique(hc.lst_array), np.unique(hd.lst_array))
             assert hc.telescope.location == hd.telescope.location
             for antnum, antpos in zip(hc.telescope.antenna_numbers, hc.telescope.antenna_positions):
-                np.testing.assert_almost_equal(antpos, hd.antenna_positions[hd.telescope.antenna_numbers == antnum].flatten())
+                np.testing.assert_almost_equal(antpos, hd.telescope.antenna_positions[hd.telescope.antenna_numbers == antnum].flatten())
             for ant in gains.keys():
                 np.testing.assert_almost_equal(gains[ant], gains_here[ant])
                 np.testing.assert_almost_equal(flags[ant], flags_here[ant])
@@ -1938,7 +1940,7 @@ class TestRunMethods(object):
             np.testing.assert_almost_equal(np.unique(hc.lst_array), np.unique(hd.lst_array))
             assert np.allclose(hc.telescope._location.xyz(), hd.telescope._location.xyz())
             for antnum, antpos in zip(hc.telescope.antenna_numbers, hc.telescope.antenna_positions):
-                np.testing.assert_almost_equal(antpos, hd.antenna_positions[hd.telescope.antenna_numbers == antnum].flatten())
+                np.testing.assert_almost_equal(antpos, hd.telescope.antenna_positions[hd.telescope.antenna_numbers == antnum].flatten())
             for ant in gains.keys():
                 np.testing.assert_array_equal(flags[ant], flags_here[ant])
                 if not np.all(flags[ant]):
