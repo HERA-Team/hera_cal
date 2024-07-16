@@ -1416,13 +1416,7 @@ class Test_Calibration_IO_Legacy:
         # test antenna number and names ordering
         # note, antnums2antnames only used if antenna_positions are also supplied.
         antnums2antnames = {a: "THISANT{}".format(a + 1) for a in ants}
-        if hasattr(uvc1, "telescope"):
-            antpos_enu = uvc1.telescope.get_enu_antpos()
-        else:
-            antpos_enu = pyuvdata.utils.ENU_from_ECEF(
-                uvc1.telescope.antenna_positions + uvc.telescope._location.xyz(),
-                center_loc=uvc.telescope.location
-            )
+        antpos_enu = uvc1.telescope.get_enu_antpos()
         antpos_enu_dict = {ant: antpos_enu[a_ind] for a_ind, ant in enumerate(uvc1.telescope.antenna_numbers) if ant in ants}
         uvc = io.write_cal("ex.calfits", gains, freqs, times, antnums2antnames=antnums2antnames,
                            antpos=antpos_enu_dict, return_uvc=True, write_file=False)

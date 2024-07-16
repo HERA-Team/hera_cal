@@ -133,7 +133,7 @@ def compute_std(
     logger.info("Calculating std")
 
     norm = np.sum(nsamples, axis=0)
-    normalizable = ~norm.mask
+    normalizable = norm > 0
 
     if mean is None:
         mean = np.sum(data * nsamples, axis=0)
