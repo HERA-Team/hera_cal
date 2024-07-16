@@ -283,14 +283,16 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df + f0
     fSlice = slice(edge_cut, len(freqs) - edge_cut)
-    offset = np.angle(
-        np.sum(
-            wgts[:, fSlice] * data[:, fSlice] * np.exp(
-                -np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)
-            ),
-            axis=1, keepdims=True
-        ) / np.sum(wgts[:, fSlice], axis=1, keepdims=True)
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', 'invalid value encountered in divide')
+        offset = np.angle(
+            np.sum(
+                wgts[:, fSlice] * data[:, fSlice] * np.exp(
+                    -np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)
+                ),
+                axis=1, keepdims=True
+            ) / np.sum(wgts[:, fSlice], axis=1, keepdims=True)
+        )
 
     return dlys, offset
 
