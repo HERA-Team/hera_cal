@@ -225,6 +225,7 @@ def test_flag_rows_with_contiguous_flags():
 
 
 @pytest.mark.filterwarnings("ignore:invalid value encountered in scalar divide")
+@pytest.mark.filterwarnings("ignore:Mean of empty slice")
 def test_get_max_contiguous_flag_from_filter_periods():
     Nfreqs = 64
     Ntimes = 60
@@ -987,12 +988,12 @@ class Test_VisClean:
         # dnu should have also been set here to be np.diff(np.median(freqs))
         # but it wasn't Because of this, the old version of vis_clean was cleaning with a
         # delay width = intended delay width x (manually set dnu / original dnu of the attached data)
-        np.random.seed(0)
+        rng = np.random.default_rng(seed=1)
         k = (23, 24, 'ee')
         beam_interp = Beam(HS_DATA_PATH / 'HERA_H1C_BEAM_POLY.npy')
         Op = beam_interp(V.freqs / 1e9)
         # V.data[k] += noise.sky_noise_jy(autovis=V.data[(23, 23, 'ee')], freqs=V.freqs / 1e9, lsts=V.lsts, omega_p=Op)
-        V.data[k] += noise.sky_noise_jy(V.lsts, V.freqs / 1e9, omega_p=Op, integration_time=50, autovis=V.data[(23, 23, 'ee')])
+        V.data[k] += noise.sky_noise_jy(V.lsts, V.freqs / 1e9, omega_p=Op, integration_time=50, autovis=V.data[(23, 23, 'ee')], rng=rng)
 
         # add lots of random flags
         f = np.zeros(V.Nfreqs, dtype=bool)[None, :]
@@ -1139,6 +1140,7 @@ class Test_VisClean:
         assert a.outfilename == 'a.out'
 
     @pytest.mark.filterwarnings("ignore:Antenna 53 not present in calibration solution")
+    @pytest.mark.filterwarnings("ignore:Changing number of antennas")
     def test_time_chunk_from_baseline_chunks(self, tmp_path):
         # First, construct some cross-talk baseline files.
         datafiles = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
@@ -1156,7 +1158,7 @@ class Test_VisClean:
             fragment_filename = tmp_path / fname
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", message="Antenna 53 not present")
-                warnings.filterwarnings("ignore", message="Cannot preserve total_quality_array")
+                warnings.filterwarnings("ignore", message="Changing number of antennas, but preserving the total_quality_array")
                 frf.load_tophat_frfilter_and_write(
                     datafiles, baseline_list=baselines, calfile_list=cals,
                     spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
@@ -1186,7 +1188,7 @@ class Test_VisClean:
         # compare to xtalk filtering the whole file.
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Antenna 53 not present")
-            warnings.filterwarnings("ignore", message="Cannot preserve total_quality_array")
+            warnings.filterwarnings("ignore", message="Changing number of antennas")
             frf.load_tophat_frfilter_and_write(
                 datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
                 calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),

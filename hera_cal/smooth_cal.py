@@ -875,7 +875,7 @@ class CalibrationSmoother():
         # build blacklists
         self.blacklist_wgt = blacklist_wgt
         self.time_blacklist = build_time_blacklist(self.time_grid, time_blacklists=time_blacklists, lst_blacklists=lst_blacklists,
-                                                   lat_lon_alt_degrees=lat_lon_alt_degrees, telescope_name=hc.telescope_name)
+                                                   lat_lon_alt_degrees=lat_lon_alt_degrees, telescope_name=hc.telescope.name)
         self.freq_blacklist = build_freq_blacklist(self.freqs, freq_blacklists=freq_blacklists, chan_blacklists=chan_blacklists)
 
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
@@ -1110,7 +1110,11 @@ class CalibrationSmoother():
             hc.update(gains=out_gains, flags=out_flags, quals=rel_diff, total_qual=avg_rel_diff)
             hc.history += utils.history_string(add_to_history)
             for attribute, value in kwargs.items():
-                hc.__setattr__(attribute, value)
+                if '.' in attribute:
+                    top, bottom = attribute.split('.')
+                    getattr(hc, top).__setattr__(bottom, value)
+                else:
+                    hc.__setattr__(attribute, value)
             hc.check()
             outfilename = cal.replace(output_replace[0], output_replace[1])
             hc.write_calfits(outfilename, clobber=clobber)

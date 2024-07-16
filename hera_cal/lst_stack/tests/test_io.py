@@ -125,7 +125,7 @@ def redavg_metas(season_redavg):
 
 @pytest.fixture(scope="module")
 def uvd_template(season_redavg):
-    return UVData.from_file(season_redavg[0][0], use_future_array_shapes=True)
+    return UVData.from_file(season_redavg[0][0])
 
 
 class TestFilterRequiredFilesByTimes:

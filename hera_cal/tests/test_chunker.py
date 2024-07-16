@@ -32,11 +32,10 @@ def test_chunk_data_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(f'{tmp_path}/chunk.*.uvh5'))
     uvd = UVData()
-    uvd.read(chunks, use_future_array_shapes=True)
+    uvd.read(chunks)
     # load in original file
     uvdo = UVData()
-    uvdo.read(data_files, freq_chans=range(32), use_future_array_shapes=True)
-    # apply_yaml_flags always makes the uvdo object use future_array_shapes!
+    uvdo.read(data_files, freq_chans=range(32))
     apply_yaml_flags(uvdo, f'{DATA_PATH}/test_input/a_priori_flags_sample_noflags.yaml',
                      throw_away_flagged_ants=True,
                      flag_freqs=False, flag_times=False, ant_indices_only=True)
@@ -56,10 +55,10 @@ def test_chunk_data_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(tmp_path + '/chunk.*.uvh5'))
     uvd = UVData()
-    uvd.read(chunks, use_future_array_shapes=True)
+    uvd.read(chunks)
     # load in original file
     uvdo = UVData()
-    uvdo.read(data_files, use_future_array_shapes=True)
+    uvdo.read(data_files)
     apply_yaml_flags(uvdo, DATA_PATH + '/test_input/a_priori_flags_sample_noflags.yaml', throw_away_flagged_ants=True,
                      flag_freqs=False, flag_times=False, ant_indices_only=True)
     assert np.all(np.isclose(uvdo.data_array, uvd.data_array))
@@ -86,10 +85,10 @@ def test_chunk_cal_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(tmp_path + '/chunk.*.calfits'))
     uvc = UVCal()
-    uvc.read(chunks, use_future_array_shapes=True)
+    uvc.read(chunks)
     # load in original file
     uvco = UVCal()
-    uvco.read(cal_files, use_future_array_shapes=True, file_type='calfits')
+    uvco.read(cal_files, file_type='calfits')
     uvco.select(freq_chans=range(32))
 
     assert np.all(np.isclose(uvco.gain_array, uvc.gain_array))
@@ -104,10 +103,10 @@ def test_chunk_cal_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(tmp_path + '/chunk.*.calfits'))
     uvc = UVCal()
-    uvc.read(chunks, use_future_array_shapes=True)
+    uvc.read(chunks)
     # load in original file
     uvco = UVCal()
-    uvco.read(cal_files, use_future_array_shapes=True, file_type='calfits')
+    uvco.read(cal_files, file_type='calfits')
 
     assert np.all(np.isclose(uvco.gain_array, uvc.gain_array))
     assert np.all(np.isclose(uvco.flag_array, uvc.flag_array))

@@ -190,7 +190,7 @@ class TestDownSelectZscores:
             integration_time=24 * 3600, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
             time_axis_faster_than_bls=False
         )
-        uvf = UVFlag(uvd, mode='metric', use_future_array_shapes=True)
+        uvf = UVFlag(uvd, mode='metric')
         uvf.metric_array[:] = 2.0
         self.zscores = LSTStack(uvf)
 
@@ -293,7 +293,7 @@ class TestReduceStackOverAxis:
             integration_time=1.0, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
             time_axis_faster_than_bls=False
         )
-        uvf = UVFlag(uvd, mode='metric', use_future_array_shapes=True)
+        uvf = UVFlag(uvd, mode='metric')
         uvf.metric_array[:] = 2.0
         self.zscores = LSTStack(uvf)
 

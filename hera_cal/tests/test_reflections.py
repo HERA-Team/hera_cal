@@ -15,6 +15,8 @@ import functools
 from sklearn.gaussian_process import kernels
 import hera_sim as hs
 import copy
+from hera_cal import utils
+import warnings
 
 from .. import apply_cal, datacontainer, io, reflections
 from ..data import DATA_PATH
@@ -32,23 +34,21 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
         uvd.read(
             os.path.join(DATA_PATH, 'PyGSM_Jy_downselect.uvh5'),
             run_check_acceptability=False,
-            use_future_array_shapes=True
         )
     else:
         if isinstance(uvd, str):
             _uvd = UVData()
-            _uvd.read(uvd, use_future_array_shapes=True)
+            _uvd.read(uvd)
             uvd = _uvd
         elif isinstance(uvd, UVData):
             uvd = deepcopy(uvd)
-    uvd.use_future_array_shapes()
 
     # TODO: use hera_sim.simulate.Simulator
     freqs = np.unique(uvd.freq_array)
     Nbls = len(np.unique(uvd.baseline_array))
 
     if cable_ants is None:
-        cable_ants = uvd.antenna_numbers
+        cable_ants = uvd.telescope.antenna_numbers
 
     def noise(n, sig):
         return stats.norm.rvs(0, sig / np.sqrt(2), n) + 1j * stats.norm.rvs(0, sig / np.sqrt(2), n)
@@ -56,9 +56,7 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
     np.random.seed(0)
 
     # get antenna vectors
-    antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=True)
-    antpos_d = dict(zip(ants, antpos))
-    ant_dist = dict(zip(ants, map(np.linalg.norm, antpos)))
+    antpos = utils.get_ENU_antpos(uvd, center=True, pick_data_ants=True, asdict=True)
 
     # get autocorr
     autocorr = uvd.get_data(23, 23, 'ee')
@@ -72,7 +70,7 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
         if isinstance(cphase, (float, np.floating, int, np.integer)):
             cphase = [cphase]
 
-        cable_gains = dict([(k, np.ones((uvd.Ntimes, uvd.Nfreqs), dtype=complex)) for k in uvd.antenna_numbers])
+        cable_gains = dict([(k, np.ones((uvd.Ntimes, uvd.Nfreqs), dtype=complex)) for k in uvd.telescope.antenna_numbers])
 
         for ca, cd, cp in zip(camp, cdelay, cphase):
             cg = hs.sigchain.gen_reflection_gains(freqs / 1e9, cable_ants, amp=[ca for a in cable_ants],
@@ -238,7 +236,9 @@ class Test_ReflectionFitter_Cables(object):
         # add a flagged integration
         RF.flags[bl_k][0] = True
         RF._clear_ref()
-        RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "invalid value encountered in divide")
+            RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True, write_npz=True)
         assert uvc.Ntimes == 100
         assert len(uvc.ant_array) == 5
@@ -284,9 +284,9 @@ class Test_ReflectionFitter_Cables(object):
         assert uvc.Ntimes == 100
 
         # test input calibration with slightly shifted frequencies
-        uvc.read_calfits("./ex.calfits", use_future_array_shapes=True)
+        uvc.read_calfits("./ex.calfits")
         uvc.freq_array += 1e-5  # assert this doesn't fail
-        uvc.use_future_array_shapes()
+
         T = reflections.ReflectionFitter(self.uvd, input_cal=uvc)
         assert isinstance(T.hc, io.HERACal)
         uvc.freq_array += 1e2  # now test it fails with a large shift
@@ -324,10 +324,10 @@ class Test_ReflectionFitter_Cables(object):
 
         # ensure gains have two humps at 150 and 250 ns
         uvc = UVCal()
-        uvc.read_calfits('./ex.calfits', use_future_array_shapes=True)
+        uvc.read_calfits('./ex.calfits')
         assert uvc.Ntimes == 1  # because time_avg=True
         uvc2 = UVCal()
-        uvc2.read_calfits('./ex.ref2.calfits', use_future_array_shapes=True)
+        uvc2.read_calfits('./ex.ref2.calfits')
         assert uvc2.Ntimes == 1  # because time_avg=True
         uvc.gain_array *= uvc2.gain_array
         aind = np.argmin(np.abs(uvc.ant_array - 23))
@@ -349,7 +349,7 @@ class Test_ReflectionFitter_Cables(object):
         assert os.path.exists("./ex.calfits")
         assert not os.path.exists("./ex.ref2.calfits")
         uvc3 = UVCal()
-        uvc3.read_calfits('./ex.calfits', use_future_array_shapes=True)
+        uvc3.read_calfits('./ex.calfits')
         np.testing.assert_array_almost_equal(uvc3.gain_array, uvc.gain_array, 12)
         os.remove("./ex.calfits")
 

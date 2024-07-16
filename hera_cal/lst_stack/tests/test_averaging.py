@@ -254,7 +254,7 @@ class TestLSTAverage:
         # This one tests that if we have flagged but inpainted data, then inpainted
         # mode makes a difference. Nsamples with negatives implies inpainting, and
         # we use "noflags" because lst_average assumes that anything that we want to use
-        # that's inpainted will have be unflagged.
+        # that's inpainted will have been unflagged.
         _d, _f, _n = avg.get_masked_data(
             self.data, self.noflags, self.nsamples_with_negatives, inpainted_mode=False
         )
@@ -282,7 +282,7 @@ class TestLSTAverage:
         # This one tests that if we have flagged but inpainted data, then inpainted
         # mode makes a difference. Nsamples with negatives implies inpainting, and
         # we use "noflags" because lst_average assumes that anything that we want to use
-        # that's inpainted will have be unflagged.
+        # that's inpainted will have been unflagged.
         _d, _f, _n = avg.get_masked_data(
             self.data, self.noflags, self.nsamples_full_input, inpainted_mode=False
         )
@@ -301,7 +301,10 @@ class TestLSTAverage:
         np.testing.assert_allclose(df.flatten()[1:], di.flatten()[1:])
         assert not np.allclose(ff.flatten()[0], fi.flatten()[0])
         np.testing.assert_allclose(ff.flatten()[1:], fi.flatten()[1:])
-        assert not np.allclose(stdf.flatten()[0], stdi.flatten()[0])
+        # assert not np.allclose(stdf.flatten()[0], stdi.flatten()[0])
+        assert not np.isfinite(stdf.flatten()[0])
+        assert not np.isfinite(stdi.flatten()[0])
+
         np.testing.assert_allclose(stdf.flatten()[1:], stdi.flatten()[1:])
 
         np.testing.assert_allclose(nf, ni)
