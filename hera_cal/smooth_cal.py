@@ -49,7 +49,9 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     df = np.median(np.diff(freqs))
     gains = deepcopy(gains)
     gains[wgts <= 0] = np.nan
-    avg_gains = np.nanmean(gains, axis=0, keepdims=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        avg_gains = np.nanmean(gains, axis=0, keepdims=True)
     unflagged_channels = np.nonzero(np.isfinite(avg_gains[0]))
     unflagged_range = slice(np.min(unflagged_channels), np.max(unflagged_channels) + 1)
     avg_gains[~np.isfinite(avg_gains)] = 0
