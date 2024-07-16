@@ -198,7 +198,8 @@ class TestFftDly(object):
         assert np.median(np.abs(dlys - true_dlys)) < 1  # median accuracy of 1 ns
 
     def test_rfi(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        rng = np.random.default_rng(seed=21)
+        true_dlys = rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         data[:, ::16] = 1000.
@@ -207,7 +208,8 @@ class TestFftDly(object):
         assert np.median(np.abs(dlys - true_dlys)) < 1e-2  # median accuracy of 10 ps
 
     def test_nan(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        rng = np.random.default_rng(seed=21)
+        true_dlys = rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         data[:, ::16] = np.nan
@@ -232,14 +234,16 @@ class TestFftDly(object):
         dlys, offs = utils.fft_dly(flat_phs, df, medfilt=True, f0=freqs[0])  # dlys in ns
         assert dlys.shape == (60, 1)
         assert np.all(np.abs(dlys) < 1)  # all delays near zero
-        true_dlys = np.random.uniform(-20, 20, size=60)
+        rng = np.random.default_rng(seed=21)
+        true_dlys = rng.uniform(-20, 20, size=60)
         true_dlys.shape = (60, 1)
         phs = np.exp(2j * np.pi * freqs.reshape((1, -1)) * (true_dlys + dlys))
         dlys, offs = utils.fft_dly(flat_phs * phs, df, medfilt=True, f0=freqs[0])
         assert np.median(np.abs(dlys - true_dlys)) < 2  # median accuracy better than 2 ns
 
     def test_error(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        rng = np.random.default_rng(seed=21)
+        true_dlys = rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         pytest.raises(ValueError, utils.interp_peak, np.fft.fft(data), method='blah')
@@ -1092,7 +1096,7 @@ class Test_LSTBranchCut:
     def test_with_crazy_periods(self):
         lsts = np.linspace(0, 1.0, 100)
 
-        n = np.random.default_rng().integers(10, size=100)
+        n = np.random.default_rng(seed=21).integers(10, size=100)
         lsts += n * 2 * np.pi
         best = utils.get_best_lst_branch_cut(lsts)
         assert best == 0
