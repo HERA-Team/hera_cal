@@ -259,6 +259,7 @@ class DataContainer:
         otherwise subtract D from each ndarray in self.
         '''
         # check type of D
+        newD = copy.deepcopy(self)
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
             if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
@@ -266,15 +267,13 @@ class DataContainer:
             if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
-            # start new object
-            newD = odict()
 
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) - D[k]
 
-            return DataContainer(newD)
+            return newD
 
         else:
             newD = copy.deepcopy(self)
