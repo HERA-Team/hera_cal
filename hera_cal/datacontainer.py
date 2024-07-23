@@ -218,6 +218,7 @@ class DataContainer:
     def __add__(self, D):
         '''
         Addition operator overload.
+        returns a copy of this container.
 
         Add the values of this DataContainer with
         the value of D. If D is another DataContainer, add
@@ -255,6 +256,8 @@ class DataContainer:
         Subtraction operator overload.
 
         Subtract D with the values of this DataContainer.
+        returns a copy of this container.
+
         If D is another DataContainer, subtract
         their values and form a new container,
         otherwise subtract D from each ndarray in self.
@@ -287,6 +290,7 @@ class DataContainer:
     def __mul__(self, D):
         '''
         Multiplication operator overload.
+        returns a copy of this container.
 
         Multiply D with the values of this DataContainer.
         If D is another DataContainer, multiply
@@ -321,6 +325,7 @@ class DataContainer:
     def __floordiv__(self, D):
         '''
         Floor division operator overload, i.e. //.
+        returns a copy of this container.
 
         Floor divide the values of this DataContainer by D.
         If D is another DataContainer, floor divide
@@ -365,6 +370,7 @@ class DataContainer:
     def __truediv__(self, D):
         '''
         True division operator overload, i.e. /.
+        returns a copy of this container.
 
         True divide the values of this DataContainer by D.
         If D is another DataContainer, true divide
