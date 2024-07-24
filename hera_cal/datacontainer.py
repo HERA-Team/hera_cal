@@ -387,8 +387,6 @@ class DataContainer:
             if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
-            # start new object
-            newD = odict()
 
             # iterate over D keys
             for i, k in enumerate(D.keys()):
