@@ -15,14 +15,14 @@ from hera_cal.red_groups import RedundantGroups
 from astropy import units
 
 try:
-    from pyuvdata import known_telescope_location
+    from pyuvdata.telescopes import known_telescope_location, Telescope
     HERA_LOC = known_telescope_location("HERA")
 except ImportError:
     # this can go away when we require pyuvdata >= 3.0
     from pyuvdata import get_telescope
     from astropy.coordinates import EarthLocation
     hera_tel = get_telescope("HERA")
-    HERA_LOC = EarthLocation.from_geocentric(*hera_tel.telescope_location * units.m)
+    HERA_LOC = hera_tel.location
 
 with open(f"{DATA_PATH}/hera_antpos.yaml", "r") as fl:
     HERA_ANTPOS = yaml.safe_load(fl)
@@ -45,7 +45,7 @@ def create_mock_hera_obs(
     empty: bool = False,
     time_axis_faster_than_bls: bool = True,
     redundantly_averaged: bool = False,
-    x_orientation: str = "n",
+    x_orientation: str = "north",
 ) -> UVData:
     tint = integration_time / (24 * 3600)
     dlst = tint * 2 * np.pi
@@ -60,10 +60,14 @@ def create_mock_hera_obs(
             jd_start += jdint
         times = np.arange(jd_start, ntimes * tint + jd_start, tint)[:ntimes]
 
-    if ants is None:
-        ants = list(HERA_ANTPOS.keys())
+    hera = Telescope.from_known_telescopes('HERA')
+    hera.instrument = 'hera'
+    hera.x_orientation = x_orientation
 
-    antpos = {k: v for k, v in HERA_ANTPOS.items() if k in ants}
+    if ants is None:
+        ants = hera.antenna_numbers
+    antpos = hera.get_enu_antpos()
+    antpos = {k: v for k, v in enumerate(antpos) if k in ants}
 
     reds = RedundantGroups.from_antpos(antpos)
 
@@ -81,13 +85,9 @@ def create_mock_hera_obs(
     uvd = UVData.new(
         freq_array=freqs,
         polarization_array=pols,
-        antenna_positions=antpos,
         antpairs=np.array(antpairs),
-        antenna_diameters=np.ones(len(antpos)) * 14.6,
-        telescope_location=HERA_LOC,
-        telescope_name="HERA",
+        telescope=hera,
         times=times,
-        x_orientation=x_orientation,
         empty=empty,
         time_axis_faster_than_bls=time_axis_faster_than_bls,
         do_blt_outer=True,
@@ -238,7 +238,6 @@ def write_files_in_hera_format(
                 flg = UVFlag()
                 flg.from_uvdata(
                     obj, copy_flags=True, waterfall=False, mode="flag",
-                    use_future_array_shapes=True
                 )
                 flg.flag_array[:] = True  # Everything inpainted.
                 flgfile = fl.with_suffix(".where_inpainted.h5")

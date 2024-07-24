@@ -12,7 +12,7 @@ import warnings
 from pyuvdata import utils as uvutils
 
 
-def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
+def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",  # noqa: A002
                 polarizations=None, spw_range=None, throw_away_flagged_ants=False,
                 clobber=False, ant_flag_yaml=None, **read_kwargs):
     """Chunk a list of data or cal files together into a single file.
@@ -81,7 +81,7 @@ def chunk_files(filenames, inputfile, outputfile, chunk_size, type="data",
         if spw_range is None:
             spw_range = (0, chunked_files.Nfreqs)
         # convert polarizations to jones integers.
-        jones = [uvutils.polstr2num(pol, x_orientation=chunked_files.x_orientation) for pol in polarizations]
+        jones = [uvutils.polstr2num(pol, x_orientation=chunked_files.telescope.x_orientation) for pol in polarizations]
         chunked_files.select(freq_chans=np.arange(spw_range[0], spw_range[1]).astype(int), jones=jones)
     # throw away fully flagged baselines.
     if throw_away_flagged_ants:

@@ -11,6 +11,10 @@ import six.moves.urllib as urllib
 from astropy.utils import iers
 from astropy.time import Time
 import warnings
+from pyuvdata.telescopes import ignore_telescope_param_update_warnings_for
+
+# Update warnings related to updating params for the HERA telescope
+ignore_telescope_param_update_warnings_for("HERA")
 
 
 @pytest.fixture(autouse=True, scope="session")

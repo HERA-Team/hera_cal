@@ -432,8 +432,8 @@ class VisClean:
             Affects self.blvecs and self.bllens in place
         """
         # get redundancies
-        antpos, ants = self.hd.get_ENU_antpos(pick_data_ants=True)
-        antpos_dict = dict(list(zip(ants, antpos)))
+        antpos_dict = utils.get_ENU_antpos(self.hd, asdict=True)
+
         reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol)
 
         # iterate over redundancies
@@ -489,7 +489,7 @@ class VisClean:
                 from HERAData object, otherwise only link metadata if possible.
         """
         # link the metadata if they exist
-        if self.hd.antenna_numbers is not None:
+        if self.hd.telescope.antenna_numbers is not None:
             mdict = self.hd.get_metadata_dict()
             self.antpos = mdict['antpos']
             self.ants = mdict['ants']
@@ -506,8 +506,8 @@ class VisClean:
             self.bls = sorted(set(self.hd.get_antpairs()))
             self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
             self.bllens = odict([(bl, np.linalg.norm(self.blvecs[bl]) / constants.c.value) for bl in self.bls])
-            self.lat = self.hd.telescope_location_lat_lon_alt[0] * 180 / np.pi  # degrees
-            self.lon = self.hd.telescope_location_lat_lon_alt[1] * 180 / np.pi  # degrees
+            self.lat = self.hd.telescope.location.lat.deg
+            self.lon = self.hd.telescope.location.lon.deg
             self.Nfreqs = len(self.freqs)
         # link the data if they exist
         if self.hd.data_array is not None and link_data:
@@ -618,7 +618,7 @@ class VisClean:
         # apply flags
         if filetype == 'uvflag':
             if isinstance(external_flags, str):
-                external_flags = UVFlag(external_flags, use_future_array_shapes=True)
+                external_flags = UVFlag(external_flags)
             uvutils.apply_uvflag(self.hd, external_flags, unflag_first=overwrite_flags, inplace=True)
         elif filetype == 'yaml':
             from hera_qm.utils import apply_yaml_flags
@@ -705,7 +705,11 @@ class VisClean:
 
         # update other extra attrs
         for attribute, value in extra_attrs.items():
-            hd.__setattr__(attribute, value)
+            if '.' in attribute:
+                top, bot = attribute.split('.')
+                getattr(hd, top).__setattr__(bot, value)
+            else:
+                hd.__setattr__(attribute, value)
 
         # write to disk
         if filetype == 'miriad':
@@ -1692,7 +1696,9 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
 
         # get NEB of clean_resid: a top-hat window nulled where resid == 0 (i.e. flag pattern)
         w = (~np.isclose(clean_resid[k], 0.0)).astype(float)
-        neb = noise_eq_bandwidth(w[:, None])
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', 'invalid value encountered in divide')
+            neb = noise_eq_bandwidth(w[:, None])
 
         # get time-dependent noise level in Fourier space from FFT at high delays
         noise[k] = np.median(np.abs((rfft * neb)[:, np.abs(delays) > delay_cut]), axis=1)

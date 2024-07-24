@@ -363,6 +363,8 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True,
     # angle after divide
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        warnings.filterwarnings("ignore", message="divide by zero encountered in divide")
+
         ydata = {k: np.angle(data[k] / model[k]) for k in keys}
 
     # make unit weights if None
@@ -476,6 +478,7 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     # difference of log-amplitudes is ydata independent variable
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        warnings.filterwarnings("ignore", message="divide by zero encountered in divide")
         ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
 
     # make weights if None
@@ -547,6 +550,7 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     # angle of visibility ratio is ydata independent variable
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        warnings.filterwarnings("ignore", message="divide by zero encountered in divide")
         ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
 
     # make weights if None
@@ -2623,7 +2627,7 @@ class AbsCal(object):
                  #!/usr/bin/env python
                  uvd = pyuvdata.UVData()
                  uvd.read_miriad(<filename>)
-                 antenna_pos, ants = uvd.get_ENU_antpos()
+                 antenna_pos, ants = uvd.telescope.get_enu_antpos()
                  antpos = dict(zip(ants, antenna_pos))
                  ----
                  This is needed only for Tip Tilt, phase slope, and delay slope calibration.
@@ -3554,8 +3558,11 @@ def get_all_times_and_lsts(hd, solar_horizon=90.0, unwrap=True):
 
     # remove times when sun was too high
     if solar_horizon < 90.0:
-        lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
-        solar_alts = utils.get_sun_alt(all_times, latitude=lat, longitude=lon)
+        solar_alts = utils.get_sun_alt(
+            all_times,
+            latitude=hd.telescope.location.lat.deg,
+            longitude=hd.telescope.location.lon.deg
+        )
         solar_flagged = solar_alts > solar_horizon
         return all_times[~solar_flagged], all_lsts[~solar_flagged]
     else:  # skip this step for speed
@@ -4051,8 +4058,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
             warnings.warn(f"Warning: Overwriting redcal gain_scale of {hc.gain_scale} with model gain_scale of {hdm.vis_units}", RuntimeWarning)
         hc.gain_scale = hdm.vis_units  # set vis_units of hera_cal based on model files.
         hd_autos = io.HERAData(raw_auto_file)
-        assert hdm.x_orientation.lower() == hd.x_orientation.lower(), 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation.lower(), hdm.x_orientation.lower())
-        assert hc.x_orientation.lower() == hd.x_orientation.lower(), 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation.lower(), hc.x_orientation.lower())
+        assert hdm.telescope.x_orientation.lower() == hd.telescope.x_orientation.lower(), 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.telescope.x_orientation.lower(), hdm.telescope.x_orientation.lower())
+        assert hc.telescope.x_orientation.lower() == hd.telescope.x_orientation.lower(), 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.telescope.x_orientation.lower(), hc.telescope.x_orientation.lower())
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
 
         # get model bls and antpos to use later in baseline matching
@@ -4110,7 +4117,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                                 model_flags.select_or_expand_times(model_times_to_load)
                             model_blvecs = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
                             utils.lst_rephase(model, model_blvecs, model.freqs, data.lsts - model.lsts,
-                                              lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
+                                              lat=hdm.telescope.location.lat.deg, inplace=True)
 
                             # Flag frequencies and times in the data that are entirely flagged in the model
                             model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
@@ -4346,19 +4353,21 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         refant_init = str(refant)
     # initialize HERACal to store new cal solutions
     hc = UVCal()
-    hc = hc.initialize_from_uvdata(uvdata=hdd, gain_convention='divide', cal_style='sky',
-                                   ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
-                                   metadata_only=False, cal_type='gain',
-                                   future_array_shapes=True)
+    hc = hc.initialize_from_uvdata(
+        uvdata=hdd, gain_convention='divide', cal_style='sky',
+        ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
+        metadata_only=False, cal_type='gain',
+    )
 
     hc = io.to_HERACal(hc)
     hc.update(flags=data_ant_flags)
     # generate cal object from model to hold model flags.
     hcm = UVCal()
-    hcm = hcm.initialize_from_uvdata(uvdata=hdm, gain_convention='divide', cal_style='sky',
-                                     ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
-                                     metadata_only=False, cal_type='gain',
-                                     future_array_shapes=True)
+    hcm = hcm.initialize_from_uvdata(
+        uvdata=hdm, gain_convention='divide', cal_style='sky',
+        ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
+        metadata_only=False, cal_type='gain',
+    )
     hcm = io.to_HERACal(hcm)
     hcm.update(flags=model_ant_flags)
     # init all gains to unity.

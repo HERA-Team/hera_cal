@@ -31,9 +31,9 @@ class Test_AbsCal_Funcs(object):
         # load into pyuvdata object
         self.data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.uvd = UVData()
-        self.uvd.read_miriad(self.data_file, use_future_array_shapes=True)
+        self.uvd.read_miriad(self.data_file)
         self.freq_array = np.unique(self.uvd.freq_array)
-        self.antpos, self.ants = self.uvd.get_ENU_antpos(center=True, pick_data_ants=True)
+        self.antpos, self.ants = self.uvd.get_enu_data_ants()
         self.antpos = odict(zip(self.ants, self.antpos))
         self.time_array = np.unique(self.uvd.time_array)
 
@@ -67,10 +67,10 @@ class Test_AbsCal_Funcs(object):
         gain_2_path = os.path.join(tmp_path, 'gain_2.calfits')
         output_path = os.path.join(tmp_path, 'output.calfits')
         uvc1 = UVCal()
-        uvc1 = uvc1.initialize_from_uvdata(self.uvd, gain_convention='divide', future_array_shapes=True,
+        uvc1 = uvc1.initialize_from_uvdata(self.uvd, gain_convention='divide',
                                            cal_style='redundant', metadata_only=False)
         uvc2 = UVCal()
-        uvc2 = uvc2.initialize_from_uvdata(self.uvd, gain_convention='divide', future_array_shapes=True,
+        uvc2 = uvc2.initialize_from_uvdata(self.uvd, gain_convention='divide',
                                            cal_style='redundant', metadata_only=False)
         uvc1.gain_array[:] = np.random.rand(*uvc1.gain_array.shape) + 1j * np.random.rand(*uvc1.gain_array.shape)
         uvc2.gain_array[:] = np.random.rand(*uvc2.gain_array.shape) + 1j * np.random.rand(*uvc2.gain_array.shape)
@@ -90,7 +90,7 @@ class Test_AbsCal_Funcs(object):
                               clobber=True, divide_gains=divide_gains)
 
         uvc3 = UVCal()
-        uvc3.read_calfits(output_path, use_future_array_shapes=True)
+        uvc3.read_calfits(output_path)
         if divide_gains:
             np.testing.assert_array_almost_equal(uvc1.gain_array / uvc2.gain_array, uvc3.gain_array)
         else:
@@ -809,13 +809,20 @@ class Test_AbsCal:
                 "ignore",
                 message="antenna_positions are not set or are being overwritten."
             )
+            warnings.filterwarnings(
+                "ignore",
+                message="antenna_diameters are not set or are being overwritten."
+            )
 
-            uvc.read_calfits(self.input_cal, use_future_array_shapes=True)
+            uvc.read_calfits(self.input_cal)
         aa = uvc.ant_array.tolist()
         g = (uvc.gain_array[aa.index(bl[0])] * uvc.gain_array[aa.index(bl[1])].conj()).squeeze().T
         gf = (uvc.flag_array[aa.index(bl[0])] + uvc.flag_array[aa.index(bl[1])]).squeeze().T
         w = self.AC.wgts[bl] * ~gf
-        AC2 = abscal.AbsCal(copy.deepcopy(self.AC.model), copy.deepcopy(self.AC.data), wgts=copy.deepcopy(self.AC.wgts), refant=24, input_cal=self.input_cal)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="antenna_diameters are not set")
+            AC2 = abscal.AbsCal(copy.deepcopy(self.AC.model), copy.deepcopy(self.AC.data), wgts=copy.deepcopy(self.AC.wgts), refant=24, input_cal=self.input_cal)
+
         np.testing.assert_array_almost_equal(self.AC.data[bl] / g * w, AC2.data[bl] * w)
 
     def test_abs_amp_logcal(self):
@@ -1197,8 +1204,8 @@ class Test_AbsCal:
 
         hd = UVData()
         hdm = UVData()
-        hd.read(data_fname, use_future_array_shapes=True)
-        hdm.read(model_fname, use_future_array_shapes=True)
+        hd.read(data_fname)
+        hdm.read(model_fname)
         # test feeding UVData objects instead.
         abscal.run_model_based_calibration(data_file=hd, model_file=hdm, auto_file=hd,
                                            output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'), precalibration_gain_file=precal_fname)
@@ -1697,7 +1704,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, bls=model_bl_to_load)
         model_bls = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
         utils.lst_rephase(model, model_bls, model.freqs, data.lsts - model.lsts,
-                          lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
+                          lat=hdm.telescope.location.lat.deg, inplace=True)
         for k in flags.keys():
             if k in model_flags:
                 flags[k] += model_flags[k]
@@ -1731,6 +1738,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         for k in delta_gains:
             np.testing.assert_array_almost_equal(np.abs(delta_gains[k]), 1)
 
+    @pytest.mark.filterwarnings("ignore:not set or are being overwritten")
     def test_post_redcal_abscal_run_units_warning(self, tmpdir):
         tmp_path = tmpdir.strpath
         calfile_units = os.path.join(tmp_path, 'redcal_units.calfits')
@@ -1743,7 +1751,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         hcr.read()
         hcr.gain_scale = 'k str'
         hcr.write_calfits(calfile_units)
-        with pytest.warns(RuntimeWarning):
+        with pytest.warns(RuntimeWarning, match='Overwriting redcal gain_scale of k str with model gain_scale of Jy'):
             hca = abscal.post_redcal_abscal_run(self.data_file, calfile_units, [model_units], phs_conv_crit=1e-4,
                                                 nInt_to_load=30, verbose=False, add_to_history='testing')
         assert hca.gain_scale == 'Jy'

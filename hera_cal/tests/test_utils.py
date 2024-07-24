@@ -156,11 +156,11 @@ class TestHistoryVersion():
 class TestFftDly(object):
 
     def setup_method(self):
-        np.random.seed(0)
+        self.rng = np.random.default_rng(seed=4)
         self.freqs = np.linspace(.1, .2, 1024)
 
     def test_ideal(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        true_dlys = self.rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         df = np.median(np.diff(self.freqs))
@@ -171,7 +171,7 @@ class TestFftDly(object):
         assert np.median(np.abs(dlys - true_dlys)) < 1e-2  # median accuracy of 10 ps
 
     def test_ideal_offset(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        true_dlys = self.rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs * true_dlys + 1j * 0.123)
         df = np.median(np.diff(self.freqs))
@@ -188,9 +188,9 @@ class TestFftDly(object):
         np.testing.assert_almost_equal(offs, 0.123, decimal=1)
 
     def test_noisy(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        true_dlys = self.rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
-        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * gen_white_noise((60, 1024))
+        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * gen_white_noise((60, 1024), rng=self.rng)
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df)
         assert np.median(np.abs(dlys - true_dlys)) < 1  # median accuracy of 1 ns
@@ -198,7 +198,8 @@ class TestFftDly(object):
         assert np.median(np.abs(dlys - true_dlys)) < 1  # median accuracy of 1 ns
 
     def test_rfi(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        rng = np.random.default_rng(seed=21)
+        true_dlys = rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         data[:, ::16] = 1000.
@@ -207,7 +208,8 @@ class TestFftDly(object):
         assert np.median(np.abs(dlys - true_dlys)) < 1e-2  # median accuracy of 10 ps
 
     def test_nan(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        rng = np.random.default_rng(seed=21)
+        true_dlys = rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         data[:, ::16] = np.nan
@@ -232,14 +234,16 @@ class TestFftDly(object):
         dlys, offs = utils.fft_dly(flat_phs, df, medfilt=True, f0=freqs[0])  # dlys in ns
         assert dlys.shape == (60, 1)
         assert np.all(np.abs(dlys) < 1)  # all delays near zero
-        true_dlys = np.random.uniform(-20, 20, size=60)
+        rng = np.random.default_rng(seed=21)
+        true_dlys = rng.uniform(-20, 20, size=60)
         true_dlys.shape = (60, 1)
         phs = np.exp(2j * np.pi * freqs.reshape((1, -1)) * (true_dlys + dlys))
         dlys, offs = utils.fft_dly(flat_phs * phs, df, medfilt=True, f0=freqs[0])
         assert np.median(np.abs(dlys - true_dlys)) < 2  # median accuracy better than 2 ns
 
     def test_error(self):
-        true_dlys = np.random.uniform(-200, 200, size=60)
+        rng = np.random.default_rng(seed=21)
+        true_dlys = rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         pytest.raises(ValueError, utils.interp_peak, np.fft.fft(data), method='blah')
@@ -273,7 +277,7 @@ class TestAAFromUV(object):
     def test_get_aa_from_uv(self):
         fn = os.path.join(DATA_PATH, self.test_file)
         uvd = UVData()
-        uvd.read_miriad(fn, use_future_array_shapes=True)
+        uvd.read_miriad(fn)
         aa = utils.get_aa_from_uv(uvd)
         # like miriad, aipy will pad the aa with non-existent antennas,
         #   because there is no concept of antenna names
@@ -289,7 +293,7 @@ class TestAA(object):
         # generate aa from file
         fn = os.path.join(DATA_PATH, self.test_file)
         uvd = UVData()
-        uvd.read_miriad(fn, use_future_array_shapes=True)
+        uvd.read_miriad(fn)
         aa = utils.get_aa_from_uv(uvd)
 
         # change one antenna position, and read it back in to check it's the same
@@ -384,15 +388,15 @@ def test_combine_calfits():
     assert os.path.exists('ex.calfits')
     # test antenna number
     uvc = UVCal()
-    uvc.read_calfits('ex.calfits', use_future_array_shapes=True)
-    assert len(uvc.antenna_numbers) == 7
+    uvc.read_calfits('ex.calfits')
+    assert len(uvc.telescope.antenna_numbers) == 7
     # test time number
     assert uvc.Ntimes == 60
     # test gain value got properly multiplied
     uvc_dly = UVCal()
-    uvc_dly.read_calfits(test_file1, use_future_array_shapes=True)
+    uvc_dly.read_calfits(test_file1)
     uvc_abs = UVCal()
-    uvc_abs.read_calfits(test_file2, use_future_array_shapes=True)
+    uvc_abs.read_calfits(test_file2)
     assert np.allclose(
         uvc_dly.gain_array[0, 10, 10, 0] * uvc_abs.gain_array[0, 10, 10, 0],
         uvc.gain_array[0, 10, 10, 0]
@@ -625,7 +629,7 @@ def test_gp_interp1d():
     # load data
     dfiles = glob.glob(os.path.join(DATA_PATH, "zen.2458043.4*.xx.HH.XRAA.uvh5"))
     uvd = UVData()
-    uvd.read(dfiles, bls=[(37, 39)], use_future_array_shapes=True)
+    uvd.read(dfiles, bls=[(37, 39)])
     times = np.unique(uvd.time_array) * 24 * 60
     times -= times.min()
     y = uvd.get_data(37, 39, 'ee')
@@ -663,7 +667,9 @@ def test_gp_interp1d():
     # plt.plot(np.abs(y[:, 10]));plt.plot(np.abs(yint_1thin[:, 10]));plt.plot(np.abs(yint_2thin[:, 10]))
     nstd = np.std(y - yint_0thin, axis=0)  # residual noise after subtraction with unthinned model
     rstd = np.std(yint_1thin - yint_2thin, axis=0)  # error flucturations between 1 and 2 thin models
-    assert np.nanmedian(nstd / rstd) > 2.0  # assert model error is on average less then half noise
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', 'divide by zero encountered in divide')
+        assert np.nanmedian(nstd / rstd) > 2.0  # assert model error is on average less then half noise
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -671,8 +677,8 @@ def test_red_average():
     # setup
     hd = io.HERAData(os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5"))
     data, flags, nsamples = hd.read()
-    antpos, ants = hd.get_ENU_antpos(pick_data_ants=True)
-    antposd = dict(zip(ants, antpos))
+    antposd = utils.get_ENU_antpos(hd, pick_data_ants=True, asdict=True)
+
     reds = redcal.get_pos_reds(antposd)
     blkey = reds[0][0] + ('ee',)
 
@@ -1092,7 +1098,16 @@ class Test_LSTBranchCut:
     def test_with_crazy_periods(self):
         lsts = np.linspace(0, 1.0, 100)
 
-        n = np.random.default_rng().integers(10, size=100)
+        n = np.random.default_rng(seed=21).integers(10, size=100)
         lsts += n * 2 * np.pi
         best = utils.get_best_lst_branch_cut(lsts)
         assert best == 0
+
+
+def test_get_enu_antpos():
+    test_data = os.path.join(DATA_PATH, "fr_unittest_data_ds.uvh5")
+    uvd = UVData.from_file(test_data)
+
+    antpos, ants = utils.get_ENU_antpos(uvd)
+    antpos_dict = utils.get_ENU_antpos(uvd, asdict=True)
+    assert all(k in ants for k in antpos_dict)

@@ -251,6 +251,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         assert pytest.raises(ValueError, smooth_cal.filter_1d, gains=gains, wgts=wgts,
                              xvals=freqs, fitting_options=None, mode='dpss_leastsq')
 
+    @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_freq_filter_dpss_skip_flagged_edges(self):
         # run freq_filter tests dpss modes.
         # test skip_wgt
@@ -404,13 +405,13 @@ class Test_Smooth_Cal_Helper_Functions(object):
     def test_to_anflags(self):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
         uvc = UVCal()
-        uvc.read(calfits_list, use_future_array_shapes=True, file_type='calfits')
-        uvf = UVFlag(uvc, mode='flag', use_future_array_shapes=True)
+        uvc.read(calfits_list, file_type='calfits')
+        uvf = UVFlag(uvc, mode='flag')
         uvflag_file = calfits_list[0].replace('/test_input/', '/test_output')
         uvf.write(uvflag_file, clobber=True)
         assert (54, 'Jee') in smooth_cal._to_antflags(io.load_flags(uvflag_file), [(54, 'Jee')], 0)
 
-        uvf = UVFlag(uvc, mode='flag', waterfall=True, use_future_array_shapes=True)
+        uvf = UVFlag(uvc, mode='flag', waterfall=True)
         uvf.write(uvflag_file, clobber=True)
         assert (54, 'Jee') in smooth_cal._to_antflags(io.load_flags(uvflag_file), [(54, 'Jee')], 0)
         os.remove(uvflag_file)
@@ -596,7 +597,7 @@ class Test_Calibration_Smoother(object):
         outfilename = os.path.join(DATA_PATH, 'test_output/smooth_test.calfits')
         g = deepcopy(self.cs.gain_grids[54, 'Jee'])
         self.cs.write_smoothed_cal(output_replace=('test_input/', 'test_output/smoothed_'),
-                                   add_to_history='hello world', clobber=True, telescope_name='PAPER')
+                                   add_to_history='hello world', clobber=True, **{"telescope.name": 'PAPER'})
         for cal in self.cs.cals:
             new_cal = io.HERACal(cal.replace('test_input/', 'test_output/smoothed_'))
             gains, flags, qual, total_qual = new_cal.read()
@@ -604,7 +605,7 @@ class Test_Calibration_Smoother(object):
             old_gains, _, _, _ = old_cal.read()
             assert 'helloworld' in new_cal.history.replace('\n', '').replace(' ', '')
             assert 'Thisfilewasproducedbythefunction' in new_cal.history.replace('\n', '').replace(' ', '')
-            assert new_cal.telescope_name == 'PAPER'
+            assert new_cal.telescope.name == 'PAPER'
             np.testing.assert_array_equal(gains[54, 'Jee'], g[self.cs.time_indices[cal], :])
 
             relative_diff, avg_relative_diff = utils.gain_relative_difference(gains, old_gains, flags)

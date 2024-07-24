@@ -10,7 +10,7 @@ of the UVData select() method, but provides useful ways of specifying the select
 criteria via command-line arguments.
 """
 
-from hera_cal import io
+from hera_cal import io, utils
 from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
 from argparse import ArgumentParser
 import os
@@ -86,7 +86,6 @@ def select(
     hd = UVData()
     logger.info(f"Reading metadata from file {infile}")
     hd.read(infile, read_data=False)
-    hd.use_future_array_shapes()
 
     # Get frequencies
     if freq_min is not None or freq_max is not None or freq_spws is not None:
@@ -179,8 +178,7 @@ def select(
                 min_bl_length is not None or max_bl_length is not None or
                 min_ew_length is not None or max_ew_length is not None
             ):
-                antpos, ants = hd.get_ENU_antpos()
-                antpos = {ant: pos for ant, pos in zip(ants, antpos)}
+                antpos = utils.get_ENU_antpos(hd, asdict=True)
 
                 if min_bl_length is not None or max_bl_length is not None:
                     min_bl_length = min_bl_length or 0

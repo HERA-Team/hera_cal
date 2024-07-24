@@ -43,10 +43,10 @@ uvd.read_uvh5(fn_in, antenna_nums=data_ants)
 
 # fix up the metadata to reflect the antennas in the dataset
 uvd.Nants_telescope = len(data_ants)
-uvd.antenna_names = [uvd.antenna_names[ind] for ind in data_ants]
-uvd.antenna_numbers = uvd.antenna_numbers[data_ants]
-uvd.antenna_positions = uvd.antenna_positions[data_ants, :]
-uvd.antenna_diameters = uvd.antenna_diameters[data_ants]
+uvd.telescope.antenna_names = [uvd.telescope.antenna_names[ind] for ind in data_ants]
+uvd.telescope.antenna_numbers = uvd.telescope.antenna_numbers[data_ants]
+uvd.telescope.antenna_positions = uvd.telescope.antenna_positions[data_ants, :]
+uvd.telescope.antenna_diameters = uvd.telescope.antenna_diameters[data_ants]
 print("writing {}...".format(fn_out))
 uvd.write_uvh5(fn_out, data_write_dtype=_hera_corr_dtype, flags_compression='lzf',
                nsample_compression='lzf', clobber=True)

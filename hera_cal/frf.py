@@ -285,8 +285,9 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
     """
     if keys is None:
         keys = uvd.get_antpairpols()
-    antpos, antnums = uvd.get_ENU_antpos()
-    sinlat = np.sin(np.abs(uvd.telescope_location_lat_lon_alt[0]))
+    antpos = uvd.telescope.get_enu_antpos()
+    antnums = uvd.telescope.antenna_numbers
+    sinlat = np.sin(np.abs(uvd.telescope.location.lat))
     frate_centers = {}
     frate_half_widths = {}
 
@@ -412,11 +413,10 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     if keys is None:
         keys = uvd.get_antpairpols()
 
-    antpos_trf = uvd.antenna_positions  # earth centered antenna positions
-    antnums = uvd.antenna_numbers  # antenna numbers.
+    antpos_trf = uvd.telescope.antenna_positions  # earth centered antenna positions
+    antnums = uvd.telescope.antenna_numbers  # antenna numbers.
 
-    lat, lon, alt = uvd.telescope_location_lat_lon_alt_degrees
-    location = EarthLocation(lon=lon * units.deg, lat=lat * units.deg, height=alt * units.m)
+    location = uvd.telescope.location
 
     # get topocentricl AzEl Beam coordinates.
     hp = HEALPix(nside=uvb.nside, order=uvb.ordering)
@@ -462,7 +462,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     # for if we are going to sum over polarizations.
     # get redundancies (will only compute fr-profile once for each red group).
     if reds is None:
-        reds = _get_key_reds(dict(zip(*uvd.get_ENU_antpos()[::-1])), keys)
+        reds = _get_key_reds(utils.get_ENU_antpos(uvd, asdict=True), keys)
 
     for redgrp in reds:
         # only explicitly calculate fr profile for the first vis in each redgroup.
@@ -610,7 +610,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
             dfr = 1. / (nfr * np.mean(np.diff(np.unique(uvd.time_array))) * 1e-3 * SDAY_SEC)
         fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
 
-    reds = _get_key_reds(dict(zip(*uvd.get_ENU_antpos()[::-1])), keys)
+    reds = _get_key_reds(utils.get_ENU_antpos(uvd, asdict=True), keys)
 
     for redgrp in reds:
         bl0 = redgrp[0]
@@ -1500,8 +1500,8 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                               times=avg_times, lsts=avg_lsts, filetype=filetype, overwrite=clobber)
                 if flag_output is not None:
                     uv_avg = UVData()
-                    uv_avg.read(output_data_name, use_future_array_shapes=True)
-                    uvf = UVFlag(uv_avg, mode='flag', copy_flags=True, use_future_array_shapes=True)
+                    uv_avg.read(output_data_name)
+                    uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
                     uvf.to_waterfall(keep_pol=False, method='and')
                     uvf.write(os.path.join(os.path.dirname(flag_output),
                                            os.path.basename(flag_output).replace('.h5', f'.interleave_{inum}.h5')), clobber=clobber)
@@ -1512,8 +1512,8 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                           nsamples=fr.avg_nsamples, times=fr.avg_times, lsts=fr.avg_lsts)
             if flag_output is not None:
                 uv_avg = UVData()
-                uv_avg.read(output_data, use_future_array_shapes=True)
-                uvf = UVFlag(uv_avg, mode='flag', copy_flags=True, use_future_array_shapes=True)
+                uv_avg.read(output_data)
+                uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
                 uvf.to_waterfall(keep_pol=False, method='and')
                 uvf.write(flag_output, clobber=clobber)
 
@@ -1817,7 +1817,7 @@ def load_tophat_frfilter_and_write(
         # Read in the beam file if provided.
         if beamfitsfile is not None:
             uvb = UVBeam()
-            uvb.read_beamfits(beamfitsfile, use_future_array_shapes=True)
+            uvb.read_beamfits(beamfitsfile)
         else:
             uvb = None
 
