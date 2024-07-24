@@ -346,6 +346,10 @@ class TestDataContainerWithRealData:
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         d, f = io.load_vis(test_file, pop_autos=True)
         d2 = d + d
+        assert type(d2.freqs)==type(d.freqs)
+        assert type(d2.lsts)==type(d.lsts)
+        assert np.allclose(d2.freqs,d.freqs)
+        assert np.allclose(d2.lsts,d.lsts)
         assert np.allclose(d2[(24, 25, 'ee')][30, 30], d[(24, 25, 'ee')][30, 30] * 2)
         # test exception
         d2, f2 = io.load_vis(test_file, pop_autos=True)
@@ -361,6 +365,10 @@ class TestDataContainerWithRealData:
         d, f = io.load_vis(test_file, pop_autos=True)
         d2 = d - d
         assert np.allclose(d2[(24, 25, 'ee')][30, 30], 0.0)
+        assert type(d2.freqs)==type(d.freqs)
+        assert type(d2.lsts)==type(d.lsts)
+        assert np.allclose(d2.freqs,d.freqs)
+        assert np.allclose(d2.lsts,d.lsts)
         # test exception
         d2, f2 = io.load_vis(test_file, pop_autos=True)
         d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:, :10]
@@ -376,6 +384,10 @@ class TestDataContainerWithRealData:
         f[(24, 25, 'ee')][:, 0] = False
         f2 = f * f
         assert not np.any(f2[(24, 25, 'ee')][0, 0])
+        assert type(f2.freqs)==type(f.freqs)
+        assert type(f2.lsts)==type(f.lsts)
+        assert np.allclose(f2.freqs,f.freqs)
+        assert np.allclose(f2.lsts,f.lsts)
         # test exception
         d2, f2 = io.load_vis(test_file, pop_autos=True)
         d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:, :10]
@@ -394,6 +406,10 @@ class TestDataContainerWithRealData:
         d, f = io.load_vis(test_file, pop_autos=True)
         d2 = d / d
         assert np.allclose(d2[(24, 25, 'ee')][30, 30], 1.0)
+        assert type(d2.freqs)==type(d.freqs)
+        assert type(d2.lsts)==type(d.lsts)
+        assert np.allclose(d2.freqs,d.freqs)
+        assert np.allclose(d2.lsts,d.lsts)
         d2 = d / 2.0
         assert np.allclose(d2[(24, 25, 'ee')][30, 30], d[(24, 25, 'ee')][30, 30] / 2.0)
         d2 = d // d
