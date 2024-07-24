@@ -4,8 +4,6 @@ import warnings
 import numpy as np
 from pathlib import Path
 import h5py
-from .. import io
-from .. import utils
 import logging
 from pyuvdata import utils as uvutils
 import re
@@ -205,9 +203,11 @@ def create_empty_uvd(
     freq_min: float | None = None,
     freq_max: float | None = None,
     channels: np.ndarray | list[int] | None = None,
-    vis_units: str = "Jy",
     lst_branch_cut: float = 0.0,
 ):
+    from .. import utils
+    from .. import io
+
     # update history
     file_list_str = "-".join(ff.path.name for ff in file_list)
     file_history = f"{history} Input files: {file_list_str}"
@@ -230,7 +230,6 @@ def create_empty_uvd(
         history=_history,
         start_jd=start_jd,
         time_axis_faster_than_bls=True,
-        vis_units=vis_units,
         lst_branch_cut=lst_branch_cut,
     )
     uvd_template.select(frequencies=freqs, polarizations=pols, inplace=True)
