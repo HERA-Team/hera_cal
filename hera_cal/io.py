@@ -2867,6 +2867,15 @@ def uvdata_from_fastuvh5(
     uvd.blts_are_rectangular = True
     uvd.time_axis_faster_than_bls = timefirst
 
+    try:
+        uvd.pol_convention = meta.pol_convention
+    except AttributeError:
+        pass
+    try:
+        uvd.vis_units = meta.vis_units
+    except AttributeError:
+        pass
+
     # This needs to be done, though it should be fixed in pyuvdata
     uvd.history += uvd.pyuvdata_version_str
 

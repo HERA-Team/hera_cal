@@ -4,8 +4,6 @@ import warnings
 import numpy as np
 from pathlib import Path
 import h5py
-from .. import io
-from .. import utils
 import logging
 from pyuvdata import utils as uvutils
 import re
@@ -173,10 +171,11 @@ def _configure_inpainted_mode(
 def format_outfile_name(
     lst: float,
     pols: list[str],
-    fname_format: str = "zen.{kind}.{lst:7.5f}.{inpaint_mode}.uvh5",
+    fname_format: str = "zen.{kind}.{lst:7.5f}.blchunk{blchunk:03}.{inpaint_mode}.uvh5",
     inpaint_mode: bool | None = None,
     kind: str | None = None,
     lst_branch_cut: float = 0.0,
+    blchunk: int = 0,
 ):
     if lst < lst_branch_cut:
         lst += 2 * np.pi
@@ -188,7 +187,8 @@ def format_outfile_name(
         inpaint_mode=(
             "inpaint" if inpaint_mode else ("flagged" if inpaint_mode is False else "")
         ),
-        kind=kind
+        kind=kind,
+        blchunk=blchunk
     )
 
 
@@ -203,9 +203,11 @@ def create_empty_uvd(
     freq_min: float | None = None,
     freq_max: float | None = None,
     channels: np.ndarray | list[int] | None = None,
-    vis_units: str = "Jy",
     lst_branch_cut: float = 0.0,
 ):
+    from .. import utils
+    from .. import io
+
     # update history
     file_list_str = "-".join(ff.path.name for ff in file_list)
     file_history = f"{history} Input files: {file_list_str}"
@@ -228,7 +230,6 @@ def create_empty_uvd(
         history=_history,
         start_jd=start_jd,
         time_axis_faster_than_bls=True,
-        vis_units=vis_units,
         lst_branch_cut=lst_branch_cut,
     )
     uvd_template.select(frequencies=freqs, polarizations=pols, inplace=True)
