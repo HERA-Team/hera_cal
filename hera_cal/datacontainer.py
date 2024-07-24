@@ -245,7 +245,6 @@ class DataContainer:
             return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 newD[k] = newD[k] + D
 
@@ -271,7 +270,6 @@ class DataContainer:
                 raise ValueError("[0] axis of dictionary values don't match")
             if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
-
 
             # iterate over D keys
             for i, k in enumerate(D.keys()):
@@ -307,7 +305,6 @@ class DataContainer:
             if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
-
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
@@ -316,7 +313,6 @@ class DataContainer:
             return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 newD[k] = newD[k] * D
 
@@ -357,7 +353,6 @@ class DataContainer:
             return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 if not (np.iscomplexobj(newD[k]) or np.iscomplexobj(D)):
                     newD[k] = newD[k] // D
@@ -387,7 +382,6 @@ class DataContainer:
             if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
-
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
@@ -396,7 +390,6 @@ class DataContainer:
             return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 newD[k] = newD[k] / D
 
