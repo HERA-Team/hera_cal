@@ -349,7 +349,11 @@ def _lstbin_cross_pol_phase_calibration(
     This function performs cross-polarization phase calibration on LSTStack object by comparing each day to an input
     reference model.
     """
-    summation = np.zeros((stack.data.shape[0], stack.data.shape[2]), dtype=complex)
+    # Dictionaries for storing data used in calibration function
+    data = {}
+    abscal_model = {}
+    wgts = {}
+    baselines = []
 
     # Loop through baselines and polarizations
     for polidx, pol in enumerate(stack.pols):
@@ -364,26 +368,20 @@ def _lstbin_cross_pol_phase_calibration(
             if np.all(stack.flags[:, apidx, :, polidx]):
                 continue
 
-            wgts = stack.nsamples[:, apidx, :, polidx] * (
+            # Get model, weights, and data for each baseline
+            wgts[(ant1, ant2, pol)] = stack.nsamples[:, apidx, :, polidx] * (
                 ~stack.flags[:, apidx, :, polidx]
             ).astype(float)
+            abscal_model[(ant1, ant2, pol)] = model[apidx, :, polidx] * np.ones(
+                (len(stack.nights), 1)
+            )
+            data[(ant1, ant2, pol)] = stack.data[:, apidx, :, polidx]
+            baselines.append((ant1, ant2, pol))
 
-            # Check order + conjugation
-            if pol1 < pol2:
-                summation += (
-                    stack.data[:, apidx, :, polidx]
-                    * np.conj(model[apidx, :, polidx])
-                    * wgts
-                )
-            else:
-                summation += (
-                    np.conj(stack.data[:, apidx, :, polidx])
-                    * model[apidx, :, polidx]
-                    * wgts
-                )
-
-    # Compute the phase difference
-    delta = np.angle(summation)
+    # Perform cross-polarization phase calibration
+    delta = abscal.cross_pol_phase_abscal(
+        model=abscal_model, data=data, model_bls=baselines, data_bls=baselines, wgts=wgts
+    )
 
     return delta
 
