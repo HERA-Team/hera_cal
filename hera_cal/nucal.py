@@ -14,33 +14,16 @@ from scipy.cluster.hierarchy import fclusterdata
 import jax
 import optax
 from jax import numpy as jnp
-
 jax.config.update("jax_enable_x64", True)
 
 
 # Approved Optax Optimizers
 OPTIMIZERS = {
-    "adabelief": optax.adabelief,
-    "adafactor": optax.adafactor,
-    "adagrad": optax.adagrad,
-    "adam": optax.adam,
-    "adamax": optax.adamax,
-    "adamaxw": optax.adamaxw,
-    "amsgrad": optax.amsgrad,
-    "adamw": optax.adamw,
-    "fromage": optax.fromage,
-    "lamb": optax.lamb,
-    "lars": optax.lars,
-    "lion": optax.lion,
-    "novograd": optax.novograd,
-    "noisy_sgd": optax.noisy_sgd,
-    "dpsgd": optax.dpsgd,
-    "radam": optax.radam,
-    "rmsprop": optax.rmsprop,
-    "sgd": optax.sgd,
-    "sm3": optax.sm3,
-    "yogi": optax.yogi,
-    "optimistic_gradient_descent": optax.optimistic_gradient_descent,
+    'adabelief': optax.adabelief, 'adafactor': optax.adafactor, 'adagrad': optax.adagrad, 'adam': optax.adam,
+    'adamax': optax.adamax, 'adamaxw': optax.adamaxw, 'amsgrad': optax.amsgrad, 'adamw': optax.adamw,
+    'fromage': optax.fromage, 'lamb': optax.lamb, 'lars': optax.lars, 'lion': optax.lion, 'novograd': optax.novograd,
+    'noisy_sgd': optax.noisy_sgd, 'dpsgd': optax.dpsgd, 'radam': optax.radam, 'rmsprop': optax.rmsprop,
+    'sgd': optax.sgd, 'sm3': optax.sm3, 'yogi': optax.yogi, 'optimistic_gradient_descent': optax.optimistic_gradient_descent
 }
 
 # Constants
@@ -159,9 +142,7 @@ def get_u_bounds(radial_reds, antpos, freqs):
     """
     ubounds = []
     for group in radial_reds:
-        umodes = [
-            np.linalg.norm(antpos[ant1] - antpos[ant2]) for (ant1, ant2, pol) in group
-        ]
+        umodes = [np.linalg.norm(antpos[ant1] - antpos[ant2]) for (ant1, ant2, pol) in group]
         umin = np.min(umodes) * freqs.min() / SPEED_OF_LIGHT
         umax = np.max(umodes) * freqs.max() / SPEED_OF_LIGHT
         ubounds.append((umin, umax))
@@ -208,9 +189,7 @@ def get_unique_orientations(antpos, reds, min_ubl_per_orient=1, blvec_error_tol=
         for red in reds:
             ant1, ant2, antpol = red[0]
             if antpol == pol:
-                vector = (antpos[ant2] - antpos[ant1]) / np.linalg.norm(
-                    antpos[ant2] - antpos[ant1]
-                )
+                vector = (antpos[ant2] - antpos[ant1]) / np.linalg.norm(antpos[ant2] - antpos[ant1])
                 # If vector has an EW component less than 0, flip it
                 if vector[0] <= 0:
                     normalized_vecs.append(-vector)
@@ -242,7 +221,6 @@ class RadialRedundancy:
     radially redundant groups by baseline length and number of baselines in a radially redundant
     group radially redundant and spatially redundant groups by baseline key.
     """
-
     def __init__(
         self, antpos, reds=None, blvec_error_tol=1e-4, pols=["nn"], bl_error_tol=1.0
     ):
@@ -271,9 +249,7 @@ class RadialRedundancy:
             self.reds = reds
 
         # Get unique orientations
-        self._radial_groups = get_unique_orientations(
-            antpos, reds=self.reds, blvec_error_tol=blvec_error_tol
-        )
+        self._radial_groups = get_unique_orientations(antpos, reds=self.reds, blvec_error_tol=blvec_error_tol)
 
         # Map baseline key to baseline length
         self.baseline_lengths = {}
@@ -309,19 +285,10 @@ class RadialRedundancy:
         # Check to see if baselines are in the same orientation and have the same polarization
         if len(group) > 1:
             for bi in range(1, len(group)):
-                if not is_same_orientation(
-                    group[0],
-                    group[bi],
-                    self.antpos,
-                    blvec_error_tol=self.blvec_error_tol,
-                ):
-                    raise ValueError(
-                        f"Baselines {group[0]} and {group[bi]} are not in the same orientation"
-                    )
+                if not is_same_orientation(group[0], group[bi], self.antpos, blvec_error_tol=self.blvec_error_tol):
+                    raise ValueError(f'Baselines {group[0]} and {group[bi]} are not in the same orientation')
                 if group[0][-1] != group[bi][-1]:
-                    raise ValueError(
-                        f"Baselines {group[0]} and {group[bi]} do not have the same polarization"
-                    )
+                    raise ValueError(f'Baselines {group[0]} and {group[bi]} do not have the same polarization')
 
     def get_radial_group(self, key):
         """
@@ -350,17 +317,12 @@ class RadialRedundancy:
         if group_key in self._bl_to_spec_red_key:
             group_key = self._bl_to_spec_red_key[group_key]
         else:
-            group_key = utils.reverse_bl(
-                self._bl_to_spec_red_key[utils.reverse_bl(group_key)]
-            )
+            group_key = utils.reverse_bl(self._bl_to_spec_red_key[utils.reverse_bl(group_key)])
 
         if group_key in self._mapped_spectral_reds:
             return self._mapped_spectral_reds[group_key]
         else:
-            return [
-                utils.reverse_bl(bl)
-                for bl in self._mapped_spectral_reds[utils.reverse_bl(group_key)]
-            ]
+            return [utils.reverse_bl(bl) for bl in self._mapped_spectral_reds[utils.reverse_bl(group_key)]]
 
     def get_redundant_group(self, key):
         """
@@ -388,10 +350,7 @@ class RadialRedundancy:
         if group_key in self._mapped_reds:
             return self._mapped_reds[group_key]
         else:
-            return [
-                utils.reverse_bl(bl)
-                for bl in self._mapped_reds[utils.reverse_bl(group_key)]
-            ]
+            return [utils.reverse_bl(bl) for bl in self._mapped_reds[utils.reverse_bl(group_key)]]
 
     def get_pol(self, pol):
         """Get all radially redundant groups with a given polarization"""
@@ -417,9 +376,7 @@ class RadialRedundancy:
         for group in self._radial_groups:
             filtered_group = []
             for bl in group:
-                if (max_bl_cut is None or self.baseline_lengths[bl] < max_bl_cut) and (
-                    min_bl_cut is None or self.baseline_lengths[bl] > min_bl_cut
-                ):
+                if (max_bl_cut is None or self.baseline_lengths[bl] < max_bl_cut) and (min_bl_cut is None or self.baseline_lengths[bl] > min_bl_cut):
                     filtered_group.append(bl)
 
             # Identify groups with fewer than min_nbls baselines
@@ -447,12 +404,7 @@ class RadialRedundancy:
 
         # If group with same heading already exists, add it to that group. Otherwise, append the group to the list
         for bl in self._mapped_spectral_reds:
-            if (
-                is_same_orientation(
-                    group[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol
-                )
-                and bl[-1] == group[0][-1]
-            ):
+            if is_same_orientation(group[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol) and bl[-1] == group[0][-1]:
                 index = self._radial_groups.index(self._mapped_spectral_reds[bl])
                 self._radial_groups[index] += group
                 self._radial_groups[index] = list(set(self._radial_groups[index]))
@@ -490,15 +442,8 @@ class RadialRedundancy:
         self._check_new_group(value)
 
         for bl in self._mapped_spectral_reds:
-            if (
-                is_same_orientation(
-                    value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol
-                )
-                and bl[-1] == value[0][-1]
-            ):
-                raise ValueError(
-                    "Radially redundant group with same orientation and polarization already exists in the data"
-                )
+            if is_same_orientation(value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol) and bl[-1] == value[0][-1]:
+                raise ValueError('Radially redundant group with same orientation and polarization already exists in the data')
 
         # Add group at index
         self._radial_groups[index] = value
@@ -524,15 +469,8 @@ class RadialRedundancy:
         self._check_new_group(value)
 
         for bl in self._mapped_spectral_reds:
-            if (
-                is_same_orientation(
-                    value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol
-                )
-                and bl[-1] == value[0][-1]
-            ):
-                raise ValueError(
-                    "Radially redundant group with same orientation and polarization already exists in the data"
-                )
+            if is_same_orientation(value[0], bl, self.antpos, blvec_error_tol=self.blvec_error_tol) and bl[-1] == value[0][-1]:
+                raise ValueError('Radially redundant group with same orientation and polarization already exists in the data')
 
         # Append new group
         self._radial_groups.append(value)
@@ -576,20 +514,10 @@ def compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=
     spectral_filters : np.ndarray
         Array of spectral filters with shape (Nfreqs, Nfilters)
     """
-    return dspec.dpss_operator(
-        freqs, [0], [spectral_filter_half_width], eigenval_cutoff=[eigenval_cutoff]
-    )[0].real
+    return dspec.dpss_operator(freqs, [0], [spectral_filter_half_width], eigenval_cutoff=[eigenval_cutoff])[0].real
 
 
-def compute_spatial_filters_single_group(
-    group,
-    freqs,
-    bls_lengths,
-    spatial_filter_half_width=1,
-    eigenval_cutoff=1e-12,
-    umin=None,
-    umax=None,
-):
+def compute_spatial_filters_single_group(group, freqs, bls_lengths, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None):
     """
     Compute prolate spheroidal wave function (PSWF) filters for a single radially redundant group.
 
@@ -637,12 +565,8 @@ def compute_spatial_filters_single_group(
     for bl in group:
         umodes = bls_lengths[bl] / SPEED_OF_LIGHT * freqs
         pswf, _ = dspec.pswf_operator(
-            umodes,
-            filter_centers=[0],
-            filter_half_widths=[spatial_filter_half_width],
-            eigenval_cutoff=[eigenval_cutoff],
-            xmin=umin,
-            xmax=umax,
+            umodes, filter_centers=[0], filter_half_widths=[spatial_filter_half_width],
+            eigenval_cutoff=[eigenval_cutoff], xmin=umin, xmax=umax
         )
 
         # Filters should be strictly real-valued
@@ -651,14 +575,7 @@ def compute_spatial_filters_single_group(
     return spatial_filters
 
 
-def compute_spatial_filters(
-    radial_reds,
-    freqs,
-    spatial_filter_half_width=1,
-    eigenval_cutoff=1e-12,
-    umin=None,
-    umax=None,
-):
+def compute_spatial_filters(radial_reds, freqs, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None):
     """
     Compute prolate spheroidal wave function (PSWF) filters for each radially redundant group in radial_reds.
     Note that if you are using a large array with a large range of short and long baselines in an individual radially
@@ -700,38 +617,17 @@ def compute_spatial_filters(
         # Compute spatial filters for each baseline in the group
         spatial_filters.update(
             compute_spatial_filters_single_group(
-                group,
-                freqs,
-                radial_reds.baseline_lengths,
-                spatial_filter_half_width,
-                eigenval_cutoff,
-                umin=umin,
-                umax=umax,
+                group, freqs, radial_reds.baseline_lengths, spatial_filter_half_width,
+                eigenval_cutoff, umin=umin, umax=umax
             )
         )
 
     return spatial_filters
 
 
-def build_nucal_wgts(
-    data_flags,
-    data_nsamples,
-    autocorrs,
-    auto_flags,
-    radial_reds,
-    freqs,
-    times_by_bl=None,
-    df=None,
-    data_is_redsol=False,
-    gain_flags=None,
-    tol=1.0,
-    antpos=None,
-    min_u_cut=None,
-    max_u_cut=None,
-    min_freq_cut=None,
-    max_freq_cut=None,
-    spw_range_flags=None,
-):
+def build_nucal_wgts(data_flags, data_nsamples, autocorrs, auto_flags, radial_reds, freqs, times_by_bl=None,
+                     df=None, data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None, min_u_cut=None,
+                     max_u_cut=None, min_freq_cut=None, max_freq_cut=None, spw_range_flags=None):
     """
     Build linear weights for data in nucal (or calculating loss) defined as
     wgts = (noise variance * nsamples)^-1 * (0 if data or model is flagged). Light wrapper
@@ -821,23 +717,14 @@ def build_nucal_wgts(
 
     # Use abscal.build_data_wgts to build wgts for nucal
     wgts = abscal.build_data_wgts(
-        data_flags,
-        data_nsamples,
-        model_flags,
-        autocorrs,
-        auto_flags,
-        times_by_bl=times_by_bl,
-        df=df,
-        data_is_redsol=data_is_redsol,
-        gain_flags=gain_flags,
-        tol=tol,
-        antpos=antpos,
+        data_flags, data_nsamples, model_flags, autocorrs, auto_flags, times_by_bl=times_by_bl, df=df,
+        data_is_redsol=data_is_redsol, gain_flags=gain_flags, tol=tol, antpos=antpos
     )
 
     return wgts
 
 
-def _linear_fit(XTX, Xy, solver="lu_solve", alpha=1e-15, cached_input={}):
+def _linear_fit(XTX, Xy, solver='lu_solve', alpha=1e-15, cached_input={}):
     """
     Solves a linear system of equations using a variety of methods. This is a light wrapper
     around np.linalg.solve, np.linalg.lstsq, and scipy.linalg.lu_solve which helps fit nucal
@@ -892,7 +779,7 @@ def _linear_fit(XTX, Xy, solver="lu_solve", alpha=1e-15, cached_input={}):
     if solver == "lu_solve":
         # Factor XTX using scipy.linalg.lu_factor
         if "LU" in cached_input:
-            L = cached_input.get("LU")
+            L = cached_input.get('LU')
         else:
             L = linalg.lu_factor(XTX)
 
@@ -900,7 +787,7 @@ def _linear_fit(XTX, Xy, solver="lu_solve", alpha=1e-15, cached_input={}):
         beta = linalg.lu_solve(L, Xy)
 
         # Save info
-        cached_output = {"LU": L}
+        cached_output = {'LU': L}
 
     elif solver == "solve":
         # Solve the linear system of equations using np.linalg.solve
@@ -912,14 +799,14 @@ def _linear_fit(XTX, Xy, solver="lu_solve", alpha=1e-15, cached_input={}):
     elif solver == "pinv":
         # Compute the pseudo-inverse of XTX using np.linalg.pinv
         if "XTXinv" in cached_input:
-            XTXinv = cached_input.get("XTXinv")
+            XTXinv = cached_input.get('XTXinv')
         else:
             XTXinv = np.linalg.pinv(XTX, rcond=alpha)
 
         # Compute the model parameters using the pseudo-inverse
         beta = np.dot(XTXinv, Xy)
 
-        cached_output = {"XTXinv": XTXinv}
+        cached_output = {'XTXinv': XTXinv}
 
     elif solver == "lstsq":
         # Compute the model parameters using np.linalg.lstsq
@@ -931,9 +818,7 @@ def _linear_fit(XTX, Xy, solver="lu_solve", alpha=1e-15, cached_input={}):
     return beta, cached_output
 
 
-def evaluate_foreground_model(
-    radial_reds, fg_model_comps, spatial_filters, spectral_filters=None
-):
+def evaluate_foreground_model(radial_reds, fg_model_comps, spatial_filters, spectral_filters=None):
     """
     Evaluates a foreground model using the model components, spatial filters, and spectral filters.
     If the model components are time-dependent, the model is evaluated for each time sample in the data.
@@ -965,20 +850,16 @@ def evaluate_foreground_model(
 
     # Assert that the model components match the baselines in the radial_reds
     for group in radial_reds:
-        assert (
-            group[0] in fg_model_comps
-        ), "fg_model_comps must contain a model component for each baseline in radial_reds."
+        assert group[0] in fg_model_comps, "fg_model_comps must contain a model component for each baseline in radial_reds."
         if use_spectral_filters:
-            assert fg_model_comps[group[0]].shape[1:] == (
-                spectral_filters.shape[-1],
-                spatial_filters[group[0]].shape[-1],
-            ), f"The number of model components must match filter shapes."
+            assert fg_model_comps[group[0]].shape[1:] == (spectral_filters.shape[-1], spatial_filters[group[0]].shape[-1]), (
+                f"The number of model components must match filter shapes."
+            )
         else:
-            assert (
-                fg_model_comps[group[0]].shape[-1]
-                == spatial_filters[group[0]].shape[-1]
-            ), f"The number of model components in fg_model_comps must match the number of \
+            assert fg_model_comps[group[0]].shape[-1] == spatial_filters[group[0]].shape[-1], (
+                f"The number of model components in fg_model_comps must match the number of \
                   eigenvectors in spatial_filters for baseline {group[0]}."
+            )
 
     # Initialize a dictionary to hold the model components
     model = {}
@@ -991,36 +872,20 @@ def evaluate_foreground_model(
         for bl in group:
             # Compute the model components for this baseline
             if use_spectral_filters:
-                model[bl] = np.array(
-                    jnp.einsum(
-                        einsum_path,
-                        spectral_filters,
-                        spatial_filters[bl],
-                        fg_model_comps[group[0]],
-                    )
-                )
+                model[bl] = np.array(jnp.einsum(
+                    einsum_path, spectral_filters, spatial_filters[bl], fg_model_comps[group[0]]
+                ))
             else:
-                model[bl] = np.array(
-                    jnp.einsum(
-                        einsum_path, spatial_filters[bl], fg_model_comps[group[0]]
-                    )
-                )
+                model[bl] = np.array(jnp.einsum(
+                    einsum_path, spatial_filters[bl], fg_model_comps[group[0]]
+                ))
 
     # Return the model as a RedDataContainer
     return RedDataContainer(model, radial_reds.reds)
 
 
-def fit_nucal_foreground_model(
-    data,
-    data_wgts,
-    radial_reds,
-    spatial_filters,
-    spectral_filters=None,
-    alpha=1e-12,
-    share_fg_model=False,
-    return_model_comps=False,
-    solver="lu_solve",
-):
+def fit_nucal_foreground_model(data, data_wgts, radial_reds, spatial_filters, spectral_filters=None, alpha=1e-12,
+                               share_fg_model=False, return_model_comps=False, solver="lu_solve"):
     """
     Compute a foreground model for a set of radially redundant baselines. The model is computed by performing a linear
     least-squares fit using a set of DPSS filters to model visibilities within a radially redundant group. If only spatial
@@ -1088,9 +953,7 @@ def fit_nucal_foreground_model(
             # Below the indices "a" corresponds to the baseline axis, "f" corresponds to the frequency axis,
             # and "t" corresponds to the time axis. The indices "m" and "n" correspond to the model components.
             if spectral_filters is None:
-                XTX = jnp.einsum(
-                    "afm,atf,afn->mn", design_matrix, wgts_here, design_matrix
-                )
+                XTX = jnp.einsum("afm,atf,afn->mn", design_matrix, wgts_here, design_matrix)
                 Xy = jnp.einsum("afm,atf->m", design_matrix, data_here * wgts_here)
 
                 # Solve for model components
@@ -1098,18 +961,9 @@ def fit_nucal_foreground_model(
             else:
                 XTX = jnp.einsum(
                     "fm,afn,atf,fk,afj->mnkj",
-                    spectral_filters,
-                    design_matrix,
-                    wgts_here,
-                    spectral_filters,
-                    design_matrix,
+                    spectral_filters, design_matrix, wgts_here, spectral_filters, design_matrix
                 ).reshape(ndim, ndim)
-                Xy = jnp.einsum(
-                    "fm,afn,atf->mn",
-                    spectral_filters,
-                    design_matrix,
-                    data_here * wgts_here,
-                ).reshape(ndim)
+                Xy = jnp.einsum("fm,afn,atf->mn", spectral_filters, design_matrix, data_here * wgts_here).reshape(ndim)
 
                 # Solve for the foreground model components
                 beta, _ = _linear_fit(XTX, Xy, alpha=alpha, solver=solver)
@@ -1126,12 +980,8 @@ def fit_nucal_foreground_model(
             for i in range(data_here.shape[1]):
                 # Compute the XTX and XTWy
                 if spectral_filters is None:
-                    XTX = jnp.einsum(
-                        "afm,af,afn->mn", design_matrix, wgts_here[:, i], design_matrix
-                    )
-                    Xy = jnp.einsum(
-                        "afm,af->m", design_matrix, data_here[:, i] * wgts_here[:, i]
-                    )
+                    XTX = jnp.einsum("afm,af,afn->mn", design_matrix, wgts_here[:, i], design_matrix)
+                    Xy = jnp.einsum("afm,af->m", design_matrix, data_here[:, i] * wgts_here[:, i])
 
                     # Solve for model components
                     beta.append(_linear_fit(XTX, Xy, solver=solver, alpha=alpha)[0])
@@ -1139,26 +989,13 @@ def fit_nucal_foreground_model(
                 else:
                     XTX = jnp.einsum(
                         "fm,afn,af,fk,afj->mnkj",
-                        spectral_filters,
-                        design_matrix,
-                        wgts_here[:, i],
-                        spectral_filters,
-                        design_matrix,
+                        spectral_filters, design_matrix, wgts_here[:, i], spectral_filters, design_matrix
                     ).reshape(ndim, ndim)
-                    Xy = jnp.einsum(
-                        "fm,afn,af->mn",
-                        spectral_filters,
-                        design_matrix,
-                        data_here[:, i] * wgts_here[:, i],
-                    ).reshape(ndim)
+                    Xy = jnp.einsum("fm,afn,af->mn", spectral_filters, design_matrix, data_here[:, i] * wgts_here[:, i]).reshape(ndim)
 
                     # Solve for the foreground model components
                     _beta, _ = _linear_fit(XTX, Xy, alpha=alpha, solver=solver)
-                    beta.append(
-                        _beta.reshape(
-                            spectral_filters.shape[-1], design_matrix.shape[-1]
-                        )
-                    )
+                    beta.append(_beta.reshape(spectral_filters.shape[-1], design_matrix.shape[-1]))
 
             # Pack solution into an array
             beta = np.array(beta)
@@ -1169,12 +1006,7 @@ def fit_nucal_foreground_model(
     if return_model_comps:
         return model_comps
     else:
-        return evaluate_foreground_model(
-            radial_reds,
-            model_comps,
-            spatial_filters=spatial_filters,
-            spectral_filters=spectral_filters,
-        )
+        return evaluate_foreground_model(radial_reds, model_comps, spatial_filters=spatial_filters, spectral_filters=spectral_filters)
 
 
 def project_u_model_comps_on_spec_axis(u_model_comps, spectral_filters):
@@ -1239,20 +1071,16 @@ def _foreground_model(model_parameters, spectral_filters, spatial_filters):
     # Loop over each radially redundant group
     # Below the indicies correspond to f -> frequency, b -> baseline, m -> spectral modes
     # n -> spatial modes, and t -> time
-    for sf, fgr, fgi in zip(
-        spatial_filters, model_parameters["fg_r"], model_parameters["fg_i"]
-    ):
-        model_r.append(jnp.einsum("fm,bfn,tmn->btf", spectral_filters, sf, fgr))
-        model_i.append(jnp.einsum("fm,bfn,tmn->btf", spectral_filters, sf, fgi))
+    for sf, fgr, fgi in zip(spatial_filters, model_parameters['fg_r'], model_parameters['fg_i']):
+        model_r.append(jnp.einsum('fm,bfn,tmn->btf', spectral_filters, sf, fgr))
+        model_i.append(jnp.einsum('fm,bfn,tmn->btf', spectral_filters, sf, fgi))
 
     # Stack models
     return jnp.vstack(model_r), jnp.vstack(model_i)
 
 
 @jax.jit
-def _mean_squared_error(
-    model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs
-):
+def _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs):
     """
     Computes the mean squared error between the data and foreground model multiplied by the
     redundant calibration degenerate parameters. Used as the loss function in the gradient descent
@@ -1286,31 +1114,18 @@ def _mean_squared_error(
     """
     # Dot baseline vector into tip-tilt parameters
     # Below the indicies correspond to b -> baseline, n -> tip-tilt parameters, t -> time, and f -> frequency
-    phase = jnp.einsum("bn,ntf->btf", idealized_blvecs, model_parameters["tip_tilt"])
+    phase = jnp.einsum('bn,ntf->btf', idealized_blvecs, model_parameters["tip_tilt"])
 
     # Compute model from foreground estimates and amplitude
-    model_r = (model_parameters["amplitude"]) * (
-        fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase)
-    )
-    model_i = (model_parameters["amplitude"]) * (
-        fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase)
-    )
+    model_r = (model_parameters["amplitude"]) * (fg_model_r * jnp.cos(phase) - fg_model_i * jnp.sin(phase))
+    model_i = (model_parameters["amplitude"]) * (fg_model_i * jnp.cos(phase) + fg_model_r * jnp.sin(phase))
 
     # Compute loss using weights and foreground model
     return jnp.sum((jnp.square(model_r - data_r) + jnp.square(model_i - data_i)) * wgts)
 
 
 @jax.jit
-def _calibration_loss_function(
-    model_parameters,
-    data_r,
-    data_i,
-    wgts,
-    spectral_filters,
-    spatial_filters,
-    idealized_blvecs,
-    alpha=0,
-):
+def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_filters, spatial_filters, idealized_blvecs, alpha=0):
     """
     Function which computes the value of the loss from the degenerate parameters, DPSS foreground components, and the data
 
@@ -1340,43 +1155,20 @@ def _calibration_loss_function(
         Mean squared error between data and foreground model
     """
     # Compute foreground model from the model_parameters and DPSS filters
-    fg_model_r, fg_model_i = _foreground_model(
-        model_parameters, spectral_filters, spatial_filters
-    )
+    fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
 
     # Regularize the loss
     param_loss = 0
-    for fgr, fgi in zip(model_parameters["fg_r"], model_parameters["fg_i"]):
+    for fgr, fgi in zip(model_parameters['fg_r'], model_parameters['fg_i']):
         param_loss += (jnp.square(fgr).sum() + jnp.square(fgi).sum()) * alpha
 
     # Compute loss
-    return (
-        _mean_squared_error(
-            model_parameters,
-            data_r,
-            data_i,
-            wgts,
-            fg_model_r,
-            fg_model_i,
-            idealized_blvecs,
-        )
-        + param_loss
-    )
+    return _mean_squared_error(model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs) + param_loss
 
 
 def _nucal_post_redcal(
-    data_r,
-    data_i,
-    wgts,
-    model_parameters,
-    optimizer,
-    spectral_filters,
-    spatial_filters,
-    idealized_blvecs,
-    major_cycle_maxiter=100,
-    convergence_criteria=1e-10,
-    minor_cycle_maxiter=10,
-    alpha=1e-12,
+    data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
+    major_cycle_maxiter=100, convergence_criteria=1e-10, minor_cycle_maxiter=10, alpha=1e-12
 ):
     """
     Function to perform frequency redundant calibration using gradient descent. Calibrates the
@@ -1440,14 +1232,8 @@ def _nucal_post_redcal(
     for step in range(major_cycle_maxiter):
         # Compute loss and gradient
         loss, gradient = jax.value_and_grad(_calibration_loss_function)(
-            model_parameters,
-            data_r,
-            data_i,
-            wgts,
-            spectral_filters=spectral_filters,
-            spatial_filters=spatial_filters,
-            idealized_blvecs=idealized_blvecs,
-            alpha=alpha,
+            model_parameters, data_r, data_i, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters,
+            idealized_blvecs=idealized_blvecs, alpha=alpha
         )
         # Update optimizer state and parameters
         updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
@@ -1457,36 +1243,22 @@ def _nucal_post_redcal(
             minor_cycle_losses = []
 
             # Compute foreground model from the model_parameters and DPSS filters
-            fg_model_r, fg_model_i = _foreground_model(
-                model_parameters, spectral_filters, spatial_filters
-            )
+            fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
             for minor_step in range(minor_cycle_maxiter):
                 # Since the foreground model is fixed, we can just use the _mean_square_error
                 # function as our loss function
                 minor_cycle_loss, gradient = jax.value_and_grad(_mean_squared_error)(
-                    model_parameters,
-                    data_r,
-                    data_i,
-                    wgts,
-                    fg_model_r,
-                    fg_model_i,
-                    idealized_blvecs=idealized_blvecs,
+                    model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs=idealized_blvecs,
                 )
                 # Update optimizer state and parameters
-                updates, opt_state = optimizer.update(
-                    gradient, opt_state, model_parameters
-                )
+                updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
                 model_parameters = optax.apply_updates(model_parameters, updates)
 
                 # Store minor cycle loss values
                 minor_cycle_losses.append(minor_cycle_loss)
 
                 # Stop if subsequent losses are within tolerance
-                if (
-                    minor_step >= 1
-                    and np.abs(minor_cycle_losses[-1] - minor_cycle_losses[-2])
-                    < convergence_criteria
-                ):
+                if minor_step >= 1 and np.abs(minor_cycle_losses[-1] - minor_cycle_losses[-2]) < convergence_criteria:
                     break
 
             losses += minor_cycle_losses
@@ -1514,7 +1286,6 @@ class SpectrallyRedundantCalibrator:
     redundant calibration degeneracies using gradient descent. The class also provides a number of helper functions for computing
     DPSS filters and estimating the degeneracies from the data.
     """
-
     def __init__(self, radial_reds):
         """
         Initialize the SpectrallyRedundantCalibrator class. Takes a RadialRedundancy object as input for
@@ -1534,16 +1305,9 @@ class SpectrallyRedundantCalibrator:
         self._filters_computed = False
         self._most_recent_filter_params = {}
 
-    def _compute_filters(
-        self,
-        freqs,
-        spectral_filter_half_width,
-        spatial_filter_half_width=1,
-        eigenval_cutoff=1e-12,
-        umin=None,
-        umax=None,
-    ):
-        """ """
+    def _compute_filters(self, freqs, spectral_filter_half_width, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None):
+        """
+        """
         # Get all parameter names and local variables
         local_vars = locals()
         local_vars.pop("self")
@@ -1554,23 +1318,14 @@ class SpectrallyRedundantCalibrator:
 
             # Loop over all parameters and check if they have changed
             for key in local_vars:
-                if not np.array_equal(
-                    local_vars[key], self._most_recent_filter_params[key]
-                ):
+                if not np.array_equal(local_vars[key], self._most_recent_filter_params[key]):
                     recompute_filters = True
                     break
 
             if recompute_filters:
-                self.spectral_filters = compute_spectral_filters(
-                    freqs, spectral_filter_half_width, eigenval_cutoff=eigenval_cutoff
-                )
+                self.spectral_filters = compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=eigenval_cutoff)
                 self.spatial_filters = compute_spatial_filters(
-                    self.radial_reds,
-                    freqs,
-                    spatial_filter_half_width,
-                    eigenval_cutoff=eigenval_cutoff,
-                    umin=umin,
-                    umax=umax,
+                    self.radial_reds, freqs, spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff, umin=umin, umax=umax
                 )
 
                 # Set most recent set of filter parameters
@@ -1582,16 +1337,9 @@ class SpectrallyRedundantCalibrator:
 
         else:
             # Compute the spectral and spatial filters
-            self.spectral_filters = compute_spectral_filters(
-                freqs, spectral_filter_half_width, eigenval_cutoff=eigenval_cutoff
-            )
+            self.spectral_filters = compute_spectral_filters(freqs, spectral_filter_half_width, eigenval_cutoff=eigenval_cutoff)
             self.spatial_filters = compute_spatial_filters(
-                self.radial_reds,
-                freqs,
-                spatial_filter_half_width,
-                eigenval_cutoff=eigenval_cutoff,
-                umin=umin,
-                umax=umax,
+                self.radial_reds, freqs, spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff, umin=umin, umax=umax
             )
 
             # Set most recent parameters
@@ -1633,25 +1381,19 @@ class SpectrallyRedundantCalibrator:
         # Unpack solution into dictionary
         # Degeneracy as written in gradient descent is exp(2 * eta) because the amplitude degeneracy
         # in nucal is written as the square of the amplitude degeneracy in the abscal solution
-        amplitude = {pol: np.exp(2 * amp_sol[f"eta_J{pol}"]) for pol in data.pols()}
+        amplitude = {
+            pol: np.exp(2 * amp_sol[f"eta_J{pol}"]) for pol in data.pols()
+        }
 
         # Estimate the tip-tilt degeneracies from the model
         tip_tilt = {}
         for pol in data.pols():
             # Get the baselines in the model
-            data_bls = [
-                blkeys
-                for blkeys in model
-                if blkeys[2] == pol and blkeys[0] != blkeys[1]
-            ]
+            data_bls = [blkeys for blkeys in model if blkeys[2] == pol and blkeys[0] != blkeys[1]]
 
             # complex_phase_abscal returns the tip-tilt degeneracies
             meta, _ = abscal.complex_phase_abscal(
-                data=data,
-                model=model,
-                reds=self.radial_reds.reds,
-                data_bls=data_bls,
-                model_bls=data_bls,
+                data=data, model=model, reds=self.radial_reds.reds, data_bls=data_bls, model_bls=data_bls
             )
 
             # Tranpose the tip-tilt parameters to have shape (ndims, ntimes, nfreq)
@@ -1660,26 +1402,9 @@ class SpectrallyRedundantCalibrator:
         return amplitude, tip_tilt
 
     def post_redcal_nucal(
-        self,
-        data,
-        data_wgts,
-        cal_flags={},
-        spatial_estimate_only=False,
-        linear_solver="lu_solve",
-        alpha=0,
-        share_fg_model=False,
-        spectral_filter_half_width=30e-9,
-        spatial_filter_half_width=1,
-        eigenval_cutoff=1e-12,
-        umin=None,
-        umax=None,
-        estimate_degeneracies=False,
-        optimizer_name="novograd",
-        learning_rate=1e-3,
-        major_cycle_maxiter=100,
-        minor_cycle_maxiter=0,
-        convergence_criteria=1e-10,
-        return_model=False,
+        self, data, data_wgts, cal_flags={}, spatial_estimate_only=False, linear_solver="lu_solve", alpha=0, share_fg_model=False,
+        spectral_filter_half_width=30e-9, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, estimate_degeneracies=False,
+        optimizer_name='novograd', learning_rate=1e-3, major_cycle_maxiter=100, minor_cycle_maxiter=0, convergence_criteria=1e-10, return_model=False
     ):
         """
         Estimates redundant calibration degeneracies by building a DPSS-based, sky-model and solving for the parameters which lead to the smoothest
@@ -1774,71 +1499,40 @@ class SpectrallyRedundantCalibrator:
         """
         # Compute spectral and spatial filters
         self._compute_filters(
-            freqs=data.freqs,
-            spectral_filter_half_width=spectral_filter_half_width,
-            spatial_filter_half_width=spatial_filter_half_width,
-            eigenval_cutoff=eigenval_cutoff,
-            umin=umin,
-            umax=umax,
+            freqs=data.freqs, spectral_filter_half_width=spectral_filter_half_width,
+            spatial_filter_half_width=spatial_filter_half_width, eigenval_cutoff=eigenval_cutoff,
+            umin=umin, umax=umax
         )
 
         # Assert that the optimizer is valid
-        assert (
-            optimizer_name in OPTIMIZERS
-        ), f"Optimizer must be one of {OPTIMIZERS}. Got {optimizer_name}."
+        assert optimizer_name in OPTIMIZERS, f"Optimizer must be one of {OPTIMIZERS}. Got {optimizer_name}."
         optimizer = OPTIMIZERS[optimizer_name](learning_rate=learning_rate)
 
         # Compute the estimates of the model components from the data
         if spatial_estimate_only:
             init_model_comps = fit_nucal_foreground_model(
-                data,
-                data_wgts,
-                self.radial_reds,
-                self.spatial_filters,
-                solver=linear_solver,
-                share_fg_model=share_fg_model,
-                return_model_comps=True,
-                alpha=alpha,
+                data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model,
+                return_model_comps=True, alpha=alpha
             )
-            init_model_comps = project_u_model_comps_on_spec_axis(
-                init_model_comps, self.spectral_filters
-            )
+            init_model_comps = project_u_model_comps_on_spec_axis(init_model_comps, self.spectral_filters)
         else:
             init_model_comps = fit_nucal_foreground_model(
-                data,
-                data_wgts,
-                self.radial_reds,
-                self.spatial_filters,
-                solver=linear_solver,
-                share_fg_model=share_fg_model,
-                spectral_filters=self.spectral_filters,
-                return_model_comps=True,
-                alpha=alpha,
+                data, data_wgts, self.radial_reds, self.spatial_filters, solver=linear_solver, share_fg_model=share_fg_model,
+                spectral_filters=self.spectral_filters, return_model_comps=True, alpha=alpha
             )
 
         # Compute idealized baseline vectors from antenna positions and calibration flags
-        idealized_antpos = abscal._get_idealized_antpos(
-            cal_flags, self.antpos, data.pols()
-        )
+        idealized_antpos = abscal._get_idealized_antpos(cal_flags, self.antpos, data.pols())
 
         if estimate_degeneracies:
             model = evaluate_foreground_model(
-                self.radial_reds,
-                init_model_comps,
-                spatial_filters=self.spatial_filters,
-                spectral_filters=self.spectral_filters,
+                self.radial_reds, init_model_comps, spatial_filters=self.spatial_filters, spectral_filters=self.spectral_filters
             )
             amplitude, tip_tilt = self._estimate_degeneracies(data, model, data_wgts)
         else:
             amplitude = {pol: np.ones((data.shape)) for pol in data.pols()}
             tip_tilt = {
-                pol: np.zeros(
-                    (
-                        idealized_antpos[list(idealized_antpos.keys())[0]].shape[0],
-                        data.shape[0],
-                        data.shape[1],
-                    )
-                )
+                pol: np.zeros((idealized_antpos[list(idealized_antpos.keys())[0]].shape[0], data.shape[0], data.shape[1]))
                 for pol in data.pols()
             }
 
@@ -1851,42 +1545,24 @@ class SpectrallyRedundantCalibrator:
             init_model_parameters = {}
 
             # Separate data into real and imaginary components
-            data_real = jnp.array(
-                [
-                    data[blkey].real
-                    for rdgrp in self.radial_reds.get_pol(pol)
-                    for blkey in rdgrp
-                ]
-            )
-            data_imag = jnp.array(
-                [
-                    data[blkey].imag
-                    for rdgrp in self.radial_reds.get_pol(pol)
-                    for blkey in rdgrp
-                ]
-            )
+            data_real = jnp.array([
+                data[blkey].real for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
+            data_imag = jnp.array([
+                data[blkey].imag for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
 
             # Initialize model parameters
             init_model_parameters = {
-                "fg_r": [
-                    init_model_comps[rdgrp[0]].real
-                    for rdgrp in self.radial_reds.get_pol(pol)
-                ],
-                "fg_i": [
-                    init_model_comps[rdgrp[0]].imag
-                    for rdgrp in self.radial_reds.get_pol(pol)
-                ],
+                "fg_r": [init_model_comps[rdgrp[0]].real for rdgrp in self.radial_reds.get_pol(pol)],
+                "fg_i": [init_model_comps[rdgrp[0]].imag for rdgrp in self.radial_reds.get_pol(pol)],
                 "amplitude": amplitude[pol],
-                "tip_tilt": tip_tilt[pol],
+                "tip_tilt": tip_tilt[pol]
             }
             # unpack wgts/filters
-            wgts = jnp.array(
-                [
-                    data_wgts[blkey]
-                    for rdgrp in self.radial_reds.get_pol(pol)
-                    for blkey in rdgrp
-                ]
-            )
+            wgts = jnp.array([
+                data_wgts[blkey] for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
 
             # Set spectral filters
             spatial_filters = [
@@ -1895,58 +1571,32 @@ class SpectrallyRedundantCalibrator:
             ]
 
             # Compute idealized baseline vectors
-            idealized_blvecs = jnp.array(
-                [
-                    idealized_antpos[blkey[1]] - idealized_antpos[blkey[0]]
-                    for rdgrp in self.radial_reds.get_pol(pol)
-                    for blkey in rdgrp
-                ]
-            )
+            idealized_blvecs = jnp.array([
+                idealized_antpos[blkey[1]] - idealized_antpos[blkey[0]]
+                for rdgrp in self.radial_reds.get_pol(pol) for blkey in rdgrp
+            ])
 
             # Run optimization
             model_parameters[pol], metadata[pol] = _nucal_post_redcal(
-                data_real,
-                data_imag,
-                wgts,
-                init_model_parameters,
-                optimizer,
-                spectral_filters=self.spectral_filters,
-                spatial_filters=spatial_filters,
-                idealized_blvecs=idealized_blvecs,
-                major_cycle_maxiter=major_cycle_maxiter,
-                convergence_criteria=convergence_criteria,
-                minor_cycle_maxiter=minor_cycle_maxiter,
-                alpha=alpha,
+                data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters,
+                spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, major_cycle_maxiter=major_cycle_maxiter,
+                convergence_criteria=convergence_criteria, minor_cycle_maxiter=minor_cycle_maxiter, alpha=alpha
             )
 
         if return_model:
             # Compute the foreground model from the model parameters
             fg_model_comps = {
-                rdgrp[0]: model_parameters[pol][f"fg_r"][ri]
-                + 1j * model_parameters[pol][f"fg_i"][ri]
-                for pol in data.pols()
-                for ri, rdgrp in enumerate(self.radial_reds.get_pol(pol))
+                rdgrp[0]: model_parameters[pol][f"fg_r"][ri] + 1j * model_parameters[pol][f"fg_i"][ri]
+                for pol in data.pols() for ri, rdgrp in enumerate(self.radial_reds.get_pol(pol))
             }
-            model = evaluate_foreground_model(
-                self.radial_reds,
-                fg_model_comps,
-                self.spatial_filters,
-                self.spectral_filters,
-            )
+            model = evaluate_foreground_model(self.radial_reds, fg_model_comps, self.spatial_filters, self.spectral_filters)
 
         # Compute the gains from the model parameters
         gains = {}
         for pol in data.pols():
             for ant in idealized_antpos:
-                gains[(ant, f"J{pol}")] = np.sqrt(
-                    model_parameters[pol][f"amplitude"]
-                ) * np.exp(
-                    1j
-                    * np.tensordot(
-                        idealized_antpos[ant],
-                        model_parameters[pol][f"tip_tilt"],
-                        axes=(0, 0),
-                    )
+                gains[(ant, f"J{pol}")] = np.sqrt(model_parameters[pol][f"amplitude"]) * np.exp(
+                    1j * np.tensordot(idealized_antpos[ant], model_parameters[pol][f"tip_tilt"], axes=(0, 0))
                 )
 
         if return_model:
