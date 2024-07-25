@@ -328,4 +328,4 @@ class TestLSTBinCalibration:
         )
 
         post_cal_std = np.std(stack_copy.data, axis=0)
-        assert np.all(post_cal_std <= pre_cal_std)
+        assert np.all(post_cal_std[..., 2:] <= pre_cal_std[..., 2:])

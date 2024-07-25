@@ -158,6 +158,12 @@ def _lstbin_amplitude_calibration(
 
     # Loop through baselines and polarizations
     for polidx, pol in enumerate(stack.pols):
+        pol1, pol2 = utils.split_pol(pol)
+
+        # Skip if baseline is cross-polarized
+        if pol1 != pol2:
+            continue
+
         for apidx, (ant1, ant2) in enumerate(stack.antpairs):
 
             blpol = (ant1, ant2, pol)
