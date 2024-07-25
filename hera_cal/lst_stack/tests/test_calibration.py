@@ -62,6 +62,7 @@ class TestLSTBinCalibration:
             auto_model=auto_model,
             run_amplitude_cal=True,
             run_phase_cal=False,
+            run_cross_pol_phase_cal=False,
             calibrate_inplace=True,
             smooth_gains=False,
         )
@@ -88,6 +89,7 @@ class TestLSTBinCalibration:
             auto_model=auto_model,
             run_amplitude_cal=True,
             run_phase_cal=False,
+            run_cross_pol_phase_cal=False,
             calibrate_inplace=True,
             smooth_gains=True,
         )
@@ -119,6 +121,7 @@ class TestLSTBinCalibration:
             self.all_reds,
             run_amplitude_cal=False,
             run_phase_cal=True,
+            run_cross_pol_phase_cal=False,
             calibrate_inplace=True,
             smooth_gains=False,
         )
@@ -139,6 +142,7 @@ class TestLSTBinCalibration:
             self.all_reds,
             run_amplitude_cal=False,
             run_phase_cal=True,
+            run_cross_pol_phase_cal=False,
             calibrate_inplace=True,
             smooth_gains=True,
         )
@@ -213,7 +217,9 @@ class TestLSTBinCalibration:
         model = np.mean(self.stack.data, axis=0)
         auto_model = np.mean(self.auto_stack.data, axis=0)
 
-        with pytest.warns(RuntimeWarning, match=re.escape('Degrees of freedom <= 0 for slice')):
+        with pytest.warns(
+            RuntimeWarning, match=re.escape("Degrees of freedom <= 0 for slice")
+        ):
             pre_cal_std = np.nanstd(
                 np.where(stack_copy.flags, np.nan, stack_copy.data), axis=0
             )
@@ -230,7 +236,9 @@ class TestLSTBinCalibration:
             smooth_gains=False,
         )
 
-        with pytest.warns(RuntimeWarning, match=re.escape('Degrees of freedom <= 0 for slice')):
+        with pytest.warns(
+            RuntimeWarning, match=re.escape("Degrees of freedom <= 0 for slice")
+        ):
             post_cal_std = np.nanstd(
                 np.where(stack_copy.flags, np.nan, stack_copy.data), axis=0
             )
@@ -277,3 +285,47 @@ class TestLSTBinCalibration:
                 run_amplitude_cal=False,
                 run_phase_cal=False,
             )
+
+    def test_relative_phase_calibration(self):
+        uvd = mockuvd.create_uvd_identifiable(
+            integration_time=24 * 3600,
+            ntimes=20,
+            jd_start=2459844.0,
+            ants=[0, 1, 2, 3],
+            time_axis_faster_than_bls=False,
+            pols=["xx", "yy", "xy", "yx"],
+            freqs=mockuvd.PHASEII_FREQS[:100],
+        )
+        stack = LSTStack(uvd)
+        stack.data[1:] = stack.data[0]  # All nights exactly the same
+
+        stack_copy = stack.copy()
+        delta = np.random.uniform(-1, 1, size=(20, 1, 1)) * np.ones((1, 10, 100))
+        gains = np.array(
+            [
+                np.ones((20, 10, 100)),
+                np.ones((20, 10, 100)),
+                np.exp(1j * delta),
+                np.exp(-1j * delta),
+            ]
+        )
+        gains = np.transpose(gains, (1, 2, 3, 0))
+
+        stack_copy.data *= gains
+        model = np.mean(stack.data, axis=0)
+
+        pre_cal_std = np.std(stack_copy.data, axis=0)
+
+        cal_params, _ = calibration.lstbin_absolute_calibration(
+            stack_copy,
+            model,
+            all_reds=[],
+            run_amplitude_cal=False,
+            run_phase_cal=False,
+            run_cross_pol_phase_cal=True,
+            calibrate_inplace=True,
+            smooth_gains=False,
+        )
+
+        post_cal_std = np.std(stack_copy.data, axis=0)
+        assert np.all(post_cal_std <= pre_cal_std)
