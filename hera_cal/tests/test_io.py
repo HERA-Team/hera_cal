@@ -589,6 +589,22 @@ class Test_HERAData(object):
             np.testing.assert_array_equal(f0[bl][~is_updated], f2[bl][~is_updated])
             np.testing.assert_array_equal(n0[bl][~is_updated], n2[bl][~is_updated])
 
+        # test 4pol update when you have baselines of the form (1, 1, 'en') but are missing (1, 1, 'ne') from d.keys()
+        # (which is especially the case when using a RedDataContainer)
+        hd = HERAData(self.four_pol, filetype='miriad')
+        d, f, n = hd.read()
+        hd.empty_arrays()
+        d2, f2, n2 = hd.build_datacontainers()
+        for bl in list(d.keys()):
+            if bl[0] == bl[1] and bl[2] == 'en':
+                np.testing.assert_array_equal(d2[bl], 0)
+                del d[bl]
+        hd.update(data=d)
+        d3, f3, n3 = hd.build_datacontainers()
+        for bl in d:
+            if bl[0] == bl[1] and bl[2] == 'en':
+                np.testing.assert_array_equal(d3[bl], d3[(bl[0], bl[1], 'ne')].conj())
+
     def test_partial_write(self):
         hd = HERAData(self.uvh5_1)
         assert hd._writers == {}
