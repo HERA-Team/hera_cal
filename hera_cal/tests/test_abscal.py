@@ -752,6 +752,33 @@ class Test_Abscal_Solvers:
         with pytest.raises(AssertionError):
             meta, delta_gains = abscal.complex_phase_abscal(data, model, reds, data_bls, model_bls)
 
+    def test_cross_pol_phase_cal(self):
+        rng = np.random.default_rng(42)
+        antpos = hex_array(3, split_core=True, outriggers=0)
+        
+        model, data = {}, {}
+        ntimes, nfreqs = 1, 2
+
+        reds = redcal.get_reds(antpos, pols=['en', 'ne'])
+        data_bls = model_bls = [group[0] for group in reds]
+
+        delta = rng.uniform(-1, 1, (ntimes, nfreqs))
+
+        for bi, bls in enumerate(data_bls):
+            model[bls] = np.ones((ntimes, nfreqs))
+
+            if bls[2] == 'en':
+                gain = np.exp(1j * delta)
+            else:
+                gain = np.exp(-1j * delta)
+
+            data[bls] = model[bls] * gain
+
+        # Solve for the phase degeneracy
+        solved_delta = abscal.cross_pol_phase_cal(model, data, model_bls, data_bls)
+    
+        # Check that the phase degeneracy was solved for correctly
+        np.testing.assert_array_almost_equal(solved_delta, delta, decimal=5)
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
