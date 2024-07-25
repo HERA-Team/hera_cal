@@ -22,7 +22,7 @@ OPTIMIZERS = {
     'adabelief': optax.adabelief, 'adafactor': optax.adafactor, 'adagrad': optax.adagrad, 'adam': optax.adam,
     'adamax': optax.adamax, 'adamaxw': optax.adamaxw, 'amsgrad': optax.amsgrad, 'adamw': optax.adamw,
     'fromage': optax.fromage, 'lamb': optax.lamb, 'lars': optax.lars, 'lion': optax.lion, 'novograd': optax.novograd,
-    'noisy_sgd': optax.noisy_sgd, 'dpsgd': optax.contrib.dpsgd, 'radam': optax.radam, 'rmsprop': optax.rmsprop,
+    'noisy_sgd': optax.noisy_sgd, 'dpsgd': optax.dpsgd, 'radam': optax.radam, 'rmsprop': optax.rmsprop,
     'sgd': optax.sgd, 'sm3': optax.sm3, 'yogi': optax.yogi, 'optimistic_gradient_descent': optax.optimistic_gradient_descent
 }
 

@@ -218,12 +218,15 @@ class DataContainer:
     def __add__(self, D):
         '''
         Addition operator overload.
+        returns a copy of this container.
 
         Add the values of this DataContainer with
         the value of D. If D is another DataContainer, add
         their values together and form a new container,
         otherwise add D to each ndarray in self.
         '''
+        # make output datacontainer
+        newD = copy.deepcopy(self)
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -233,17 +236,15 @@ class DataContainer:
                 raise ValueError("[1] axis of dictionary values don't match")
 
             # start new object
-            newD = odict()
 
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) + D[k]
 
-            return DataContainer(newD)
+            return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 newD[k] = newD[k] + D
 
@@ -254,10 +255,14 @@ class DataContainer:
         Subtraction operator overload.
 
         Subtract D with the values of this DataContainer.
+        returns a copy of this container.
+
         If D is another DataContainer, subtract
         their values and form a new container,
         otherwise subtract D from each ndarray in self.
         '''
+        # make output datacontainer
+        newD = copy.deepcopy(self)
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -266,15 +271,12 @@ class DataContainer:
             if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
-            # start new object
-            newD = odict()
-
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) - D[k]
 
-            return DataContainer(newD)
+            return newD
 
         else:
             newD = copy.deepcopy(self)
@@ -286,12 +288,15 @@ class DataContainer:
     def __mul__(self, D):
         '''
         Multiplication operator overload.
+        returns a copy of this container.
 
         Multiply D with the values of this DataContainer.
         If D is another DataContainer, multiply
         their values together and form a new container,
         otherwise multiply D with each ndarray in self.
         '''
+        # start a new output object
+        newD = copy.deepcopy(self)
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -300,18 +305,14 @@ class DataContainer:
             if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
-            # start new object
-            newD = odict()
-
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) * D[k]
 
-            return DataContainer(newD)
+            return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 newD[k] = newD[k] * D
 
@@ -320,12 +321,15 @@ class DataContainer:
     def __floordiv__(self, D):
         '''
         Floor division operator overload, i.e. //.
+        returns a copy of this container.
 
         Floor divide the values of this DataContainer by D.
         If D is another DataContainer, floor divide
         their values and form a new container,
         otherwise floor divide D from each ndarray in self.
         '''
+        # start a new output object
+        newD = copy.deepcopy(self)
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -346,10 +350,9 @@ class DataContainer:
                         div = self.__getitem__(k) / D[k]
                         newD[k] = np.real(div).astype(int) + 1j * np.imag(div).astype(int)
 
-            return DataContainer(newD)
+            return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 if not (np.iscomplexobj(newD[k]) or np.iscomplexobj(D)):
                     newD[k] = newD[k] // D
@@ -362,12 +365,15 @@ class DataContainer:
     def __truediv__(self, D):
         '''
         True division operator overload, i.e. /.
+        returns a copy of this container.
 
         True divide the values of this DataContainer by D.
         If D is another DataContainer, true divide
         their values and form a new container,
         otherwise true divide D from each ndarray in self.
         '''
+        # start a new output object
+        newD = copy.deepcopy(self)
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -376,18 +382,14 @@ class DataContainer:
             if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
-            # start new object
-            newD = odict()
-
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) / D[k]
 
-            return DataContainer(newD)
+            return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 newD[k] = newD[k] / D
 

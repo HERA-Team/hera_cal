@@ -172,7 +172,6 @@ def lst_bin_files_single_outfile(
         start_jd=config.properties['first_jd'],
         freq_min=freq_min,
         freq_max=freq_max,
-        lst_branch_cut=config.properties["lst_branch_cut"],
         lsts=config.lst_grid
     )
 
