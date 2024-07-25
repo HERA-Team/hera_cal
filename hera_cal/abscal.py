@@ -992,6 +992,73 @@ def RFI_delay_slope_cal(reds, antpos, red_data, freqs, rfi_chans, rfi_headings, 
         gains[ant] = np.exp(2j * np.pi * np.outer(dlys, freqs))
     return gains
 
+def cross_pol_phase_cal(model, data, model_bls, data_bls, wgts={}, return_gains=False, gain_ants=[]):
+    """
+    Solve for the relative phase degeneracy between two polarizations of redundantly calibrated data.
+
+    Parameters:
+    -----------
+    model : DataContainer or RedDataContainer
+        Dictionary-like container mapping baselines to model visibilities
+    data : DataContainer or RedDataContainer
+        Dictionary-like container mapping baselines to data visibilities
+    model_bls : list of tuples
+        List of baseline tuples in model to use for calibration. Must correspond the same physical separations as data_bls.
+    data_bls : list of tuples
+        List of baseline tuples in data to use from calibration.
+    wgts : dict
+        Dictionary mapping baseline tuples to weights. Default is no weights.
+    return_gains : bool
+        If True, return gains instead of the relative phase difference between the two polarizations. 
+        Default is False.
+    gain_ants : list of tuples
+        List of antenna-pol tuples to return gains for. Default is None.
+
+    Returns:
+    --------
+    If return_gains is False:
+        delta : np.ndarray
+            Array of relative phase differences between the two polarizations. 
+    If return_gains is True:
+        delta_gains : dict
+            Dictionary mapping antenna keys like (0, 'Jee') to gains of the same shape of the data
+    """
+    # Create variable for the sum of the model and data product
+    summation = np.zeros_like(data[data_bls[0]])
+
+    for model_bl, data_bl in zip(model_bls, data_bls):
+
+        # Skip if the polarizations are the same
+        model_pol1, model_pol2 = utils.split_pol(model_bl[-1])
+        if model_pol1 == model_pol2:
+            continue
+
+        # Skip if the polarizations are the same
+        data_pol1, data_pol2 = utils.split_pol(data_bl[-1])
+        if model_pol1 == model_pol2:
+            continue
+
+        if data_pol1 < data_pol2:
+            summation += (
+                data[data_bl] * np.conj(model[model_bl]) * wgts.get(data_bl, 1.0)
+            )
+        else:
+            summation += (
+                np.conj(data[data_bl]) * model[model_bl] * wgts.get(data_bl, 1.0)
+            )
+
+    if return_gains:
+        delta_gains = {}
+        for (ant, pol) in gain_ants:
+            if pol == "Jee":
+                delta_gains[(ant, pol)] = np.exp(1j * np.angle(summation))
+            else:
+                delta_gains[(ant, pol)] = np.ones_like(summation)
+
+        return delta_gains
+    
+    else:
+        return np.angle(summation)
 
 def dft_phase_slope_solver(xs, ys, data, flags=None):
     '''Solve for spatial phase slopes across an array by looking for the peak in the DFT.
