@@ -335,6 +335,53 @@ def _lstbin_phase_calibration(
     return calibration_parameters, phase_gains
 
 
+def _lstbin_cross_pol_phase_calibration(
+    stack: LSTStack,
+    model: np.ndarray,
+):
+    """
+    This function performs cross-polarization phase calibration on LSTStack object by comparing each day to an input
+    reference model.
+    """
+    summation = np.zeros((stack.data.shape[0], stack.data.shape[2]))
+
+    # Loop through baselines and polarizations
+    for polidx, pol in enumerate(stack.pols):
+        pol1, pol2 = utils.split_pol(pol)
+
+        if pol1 == pol2:
+            continue
+
+        for apidx, (ant1, ant2) in enumerate(stack.antpairs):
+
+            # Move to the next blpol if there is not a model for the data or the entire baseline is flagged
+            if np.all(stack.flags[:, apidx, :, polidx]):
+                continue
+
+            wgts = stack.nsamples[:, apidx, :, polidx] * (
+                ~stack.flags[:, apidx, :, polidx]
+            ).astype(float)
+
+            # Check order + conjugation
+            if pol1 < pol2:
+                summation += (
+                    stack.data[:, apidx, :, polidx]
+                    * np.conj(model[apidx, :, polidx])
+                    * wgts
+                )
+            else:
+                summation += (
+                    np.conj(stack.data[:, apidx, :, polidx])
+                    * model[apidx, :, polidx]
+                    * wgts
+                )
+
+    # Compute the phase difference
+    delta = np.angle(summation)
+
+    return delta
+
+
 def lstbin_absolute_calibration(
     stack: LSTStack,
     model: np.ndarray,
@@ -344,6 +391,7 @@ def lstbin_absolute_calibration(
     auto_model: np.ndarray = None,
     run_amplitude_cal: bool = True,
     run_phase_cal: bool = True,
+    run_cross_pol_phase_cal: bool = True,
     smoothing_scale: float = 10e6,
     eigenval_cutoff: float = 1e-12,
     calibrate_inplace: bool = True,
@@ -489,6 +537,21 @@ def lstbin_absolute_calibration(
             calibration_parameters[f"T_{pol}"] = np.zeros(
                 (len(stack.nights), stack.freq_array.size, 2), dtype=complex
             )
+
+    if run_cross_pol_phase_cal and not all_nights_flagged:
+        for pol in stack.pols:
+            pol1, pol2 = utils.split_pol(pol)
+
+            if pol1 != pol2:
+                cross_pols_in_data = True
+                break
+        else:
+            cross_pols_in_data = False
+
+        if cross_pols_in_data:
+            delta = _lstbin_cross_pol_phase_calibration(stack=stack, model=model)
+            calibration_parameters["delta"] = delta
+            phase_gains["Jee"] = np.exp(1j * delta) * phase_gains.get("Jee", 1.0)
 
     # Compute antenna gains from calibration parameters and smooth
     gains = _expand_degeneracies_to_ant_gains(
