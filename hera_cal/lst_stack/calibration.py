@@ -343,7 +343,7 @@ def _lstbin_cross_pol_phase_calibration(
     This function performs cross-polarization phase calibration on LSTStack object by comparing each day to an input
     reference model.
     """
-    summation = np.zeros((stack.data.shape[0], stack.data.shape[2]))
+    summation = np.zeros((stack.data.shape[0], stack.data.shape[2]), dtype=complex)
 
     # Loop through baselines and polarizations
     for polidx, pol in enumerate(stack.pols):
@@ -554,7 +554,24 @@ def lstbin_absolute_calibration(
         if cross_pols_in_data:
             delta = _lstbin_cross_pol_phase_calibration(stack=stack, model=model)
             calibration_parameters["delta"] = delta
-            phase_gains["Jee"] = np.exp(1j * delta) * phase_gains.get("Jee", 1.0)
+
+            # Get antennas
+            gain_ants = set()
+            for ap in stack.antpairs:
+                gain_ants.update(ap)
+
+            gain_ants = list(gain_ants)
+
+            for ant in gain_ants:
+                for pol in unique_pols:
+                    if pol != "Jee":
+                        phase_gains[(ant, pol)] = phase_gains.get(
+                            (ant, pol), np.ones_like(delta)
+                        )
+                    else:
+                        phase_gains[(ant, pol)] = phase_gains.get(
+                            (ant, pol), 1.0
+                        ) * np.exp(1j * delta)
 
     # Compute antenna gains from calibration parameters and smooth
     gains = _expand_degeneracies_to_ant_gains(
