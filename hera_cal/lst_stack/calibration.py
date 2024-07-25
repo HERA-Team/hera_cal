@@ -442,6 +442,9 @@ def lstbin_absolute_calibration(
             Boolean flag to run amplitude calibration.
         run_phase_cal : bool, default=True
             Boolean flag to run tip-tilt calibration.
+        run_cross_pol_phase_cal : bool, default=True
+            Boolean flag to run cross-polarization relative phase calibration. This is only used
+            if the data contains cross-polarization baselines.
         smoothing_scale : float, default=10e6
             The scale of the smoothing function used to smooth the gains. This is the width of the
             smoothing function in Hz.
@@ -472,7 +475,7 @@ def lstbin_absolute_calibration(
             set to False, this dictionary will be empty.
     """
     # Check to see if calibration modes are set
-    if not (run_amplitude_cal or run_phase_cal):
+    if not (run_amplitude_cal or run_phase_cal or run_cross_pol_phase_cal):
         raise ValueError("At least one calibration mode must be used")
 
     # Check to see if the model has the same shape as the stack
