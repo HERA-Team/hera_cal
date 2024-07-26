@@ -287,6 +287,7 @@ class TestLSTBinCalibration:
             )
 
     def test_relative_phase_calibration(self):
+        rng = np.random.default_rng(42)
         uvd = mockuvd.create_uvd_identifiable(
             integration_time=24 * 3600,
             ntimes=20,
@@ -300,7 +301,7 @@ class TestLSTBinCalibration:
         stack.data[1:] = stack.data[0]  # All nights exactly the same
 
         stack_copy = stack.copy()
-        delta = np.random.uniform(-1, 1, size=(20, 1, 1)) * np.ones((1, 10, 100))
+        delta = rng.uniform(-1, 1, size=(20, 1, 1)) * np.ones((1, 10, 100))
         gains = np.array(
             [
                 np.ones((20, 10, 100)),
@@ -328,4 +329,4 @@ class TestLSTBinCalibration:
         )
 
         post_cal_std = np.std(stack_copy.data, axis=0)
-        assert np.all(post_cal_std[..., 2:] <= pre_cal_std[..., 2:])
+        assert np.all(np.isclose(post_cal_std[..., 2:], 0))

@@ -344,10 +344,11 @@ def _lstbin_phase_calibration(
 def _lstbin_cross_pol_phase_calibration(
     stack: LSTStack,
     model: np.ndarray,
+    refpol="Jee",
 ):
     """
     This function performs cross-polarization phase calibration on LSTStack object by comparing each day to an input
-    reference model.
+    reference model. Function returns the phase difference between the two polarizations in radians.
     """
     # Dictionaries for storing data used in calibration function
     data = {}
@@ -380,7 +381,7 @@ def _lstbin_cross_pol_phase_calibration(
 
     # Perform cross-polarization phase calibration
     delta = abscal.cross_pol_phase_cal(
-        model=abscal_model, data=data, model_bls=baselines, data_bls=baselines, wgts=wgts
+        model=abscal_model, data=data, model_bls=baselines, data_bls=baselines, wgts=wgts, return_gains=False, refpol=refpol
     )
 
     return delta
@@ -401,6 +402,7 @@ def lstbin_absolute_calibration(
     calibrate_inplace: bool = True,
     smooth_gains: bool = True,
     use_autos_for_abscal: bool = True,
+    refpol: str = "Jee",
 ):
     """
     This function performs calibration on LSTStack object by comparing each day to an input
@@ -463,6 +465,9 @@ def lstbin_absolute_calibration(
             the auto-correlations will be used to calculate the gain amplitude if they are provided.
             Note that the auto_model must also be provided if this flag is set to True and autos are
             provided. If set to False, the auto-correlations will not be used for calibration.
+        refpol : str, default='Jee'
+            The reference polarization to use for cross-polarization phase calibration. This is
+            the polarization that the other polarizations are calibrated to. The default is 'Jee'.
 
     Returns:
     -------
@@ -546,14 +551,7 @@ def lstbin_absolute_calibration(
             )
 
     if run_cross_pol_phase_cal and not all_nights_flagged:
-        for pol in stack.pols:
-            pol1, pol2 = utils.split_pol(pol)
-
-            if pol1 != pol2:
-                cross_pols_in_data = True
-                break
-        else:
-            cross_pols_in_data = False
+        cross_pols_in_data  = any(utils.split_pol(pol)[0] != utils.split_pol(pol)[1] for pol in stack.pols)
 
         if cross_pols_in_data:
             delta = _lstbin_cross_pol_phase_calibration(stack=stack, model=model)
@@ -568,7 +566,7 @@ def lstbin_absolute_calibration(
 
             for ant in gain_ants:
                 for pol in unique_pols:
-                    if pol != "Jee":
+                    if pol != refpol:
                         phase_gains[(ant, pol)] = phase_gains.get(
                             (ant, pol), np.ones_like(delta)
                         )
