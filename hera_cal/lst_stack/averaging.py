@@ -700,12 +700,12 @@ def average_and_inpaint_simultaneously(
         stack, get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
     )
 
-    # Map polarizations to pol indices for correct noise variance computation
+    # Map antenna polarizations to visibility pol indices for correct noise variance computation
     pol_to_idx = {}
     for polidx, pol in enumerate(stack.pols):
-        pol1, pol2 = utils.split_pol(pol)
-        if pol1 == pol2:
-            pol_to_idx[pol1] = polidx
+        jpol1, jpol2 = utils.split_pol(pol)
+        if jpol1 == jpol2:
+            pol_to_idx[jpol1] = polidx
 
     # Compute noise variance
     if auto_stack.data.shape[1] != 1:
@@ -736,10 +736,10 @@ def average_and_inpaint_simultaneously(
             flagged_mean = lstavg["data"][iap, :, polidx]
             avg_flgs = lstavg["flags"][iap, :, polidx]
 
-            pol1, pol2 = utils.split_pol(pol)
+            jpol1, jpol2 = utils.split_pol(pol)
             # Compute noise variance for all days in stack
             base_noise_var = (
-                np.abs(auto_stack.data[:, 0, :, pol_to_idx[pol1]] * auto_stack.data[:, 0, :, pol_to_idx[pol2]])
+                np.abs(auto_stack.data[:, 0, :, pol_to_idx[jpol1]] * auto_stack.data[:, 0, :, pol_to_idx[jpol2]])
                 / (stack.dt * stack.df).value
             )
 
