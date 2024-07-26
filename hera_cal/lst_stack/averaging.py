@@ -334,7 +334,7 @@ def reduce_lst_bins(
             "nsamples": np.zeros(data.shape[1:]),
             "days_binned": np.zeros(data.shape[1:]),
             "median": (np.full(data.shape[1:], np.nan, dtype=complex) if get_mad else None),
-            "mad": (np.full(data.shape[1:], np.nan, dtype=complex) if get_mad else None),
+            "mad": (np.full(data.shape[1:], np.inf, dtype=complex) if get_mad else None),
         }
 
     data, flags, nsamples = get_masked_data(
