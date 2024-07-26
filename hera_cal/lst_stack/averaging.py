@@ -737,10 +737,11 @@ def average_and_inpaint_simultaneously(
             flagged_mean = lstavg["data"][iap, :, polidx]
             avg_flgs = lstavg["flags"][iap, :, polidx]
 
-            pol1, pol2 = utils.split_pol(pol)
+            antpol1, antpol2 = utils.split_pol(pol)
             # Compute noise variance for all days in stack
             base_noise_var = (
-                np.abs(auto_stack.data[:, 0, :, pol_to_idx[pol1]] * auto_stack.data[:, 0, :, pol_to_idx[pol2]])
+                np.abs(auto_stack.data[:, 0, :, antpol_to_vispol_idx[antpol1]] *
+                       auto_stack.data[:, 0, :, antpol_to_vispol_idx[antpol2]])
                 / (stack.dt * stack.df).value
             )
 
