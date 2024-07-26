@@ -779,6 +779,16 @@ class Test_Abscal_Solvers:
     
         # Check that the phase degeneracy was solved for correctly
         np.testing.assert_array_almost_equal(solved_delta, delta, decimal=5)
+        gain_ants = set()
+        for bl in data_bls:
+            gain_ants.extend(utils.split_bl(bl))
+        gain_ants = list(gain_ants)
+        gains = abscal.cross_pol_phase_cal(model, data, model_bls, data_bls, return_gains=True, gain_ants=gain_ants)
+
+        for k in gains:
+            # Check that the gains are correct
+            if k[-1] == 'Jnn':
+                np.testing.assert_array_almost_equal(gains[k], 1.0 + 0.0j, decimal=5)
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
