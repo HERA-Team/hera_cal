@@ -1005,6 +1005,14 @@ class HERAData(UVData):
             for bl in dc.keys():
                 _set_subslice(data_array, bl, dc[bl])
 
+                # explicitly handle cross-polarized autos
+                if bl[0] == bl[1]:
+                    if utils.split_pol(bl[2])[0] != utils.split_pol(bl[2])[1]:
+                        pol_reversed_bl = utils.reverse_bl(bl)
+                        if pol_reversed_bl not in dc.keys():
+                            if pol_reversed_bl in dc:
+                                _set_subslice(data_array, pol_reversed_bl, dc[pol_reversed_bl])
+
         return data_array
 
     def partial_write(self, output_path, data=None, flags=None, nsamples=None,
