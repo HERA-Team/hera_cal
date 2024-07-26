@@ -781,7 +781,7 @@ class Test_Abscal_Solvers:
         np.testing.assert_array_almost_equal(solved_delta, delta, decimal=5)
         gain_ants = set()
         for bl in data_bls:
-            gain_ants.extend(utils.split_bl(bl))
+            gain_ants.update(set(utils.split_bl(bl)))
         gain_ants = list(gain_ants)
         gains = abscal.cross_pol_phase_cal(model, data, model_bls, data_bls, return_gains=True, gain_ants=gain_ants)
 
