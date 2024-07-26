@@ -328,15 +328,13 @@ def reduce_lst_bins(
     if data.shape[0] == 0:
         # We have no data to reduce (no data in this LST bin)
         return {
-            "data": np.nan * np.ones(data.shape[1:], dtype=complex),
+            "data": np.full(data.shape[1:], np.nan, dtype=complex),
             "flags": np.ones(data.shape[1:], dtype=bool),
-            "std": np.inf * np.ones(data.shape[1:], dtype=complex),
+            "std": np.full(data.shape[1:], np.inf, dtype=complex),
             "nsamples": np.zeros(data.shape[1:]),
             "days_binned": np.zeros(data.shape[1:]),
-            "median": (
-                np.nan * np.ones(data.shape[1:], dtype=complex) if get_mad else None
-            ),
-            "mad": np.inf * np.ones(data.shape[1:], dtype=complex) if get_mad else None,
+            "median": (np.full(data.shape[1:], np.nan, dtype=complex) if get_mad else None),
+            "mad": (np.full(data.shape[1:], np.nan, dtype=complex) if get_mad else None),
         }
 
     data, flags, nsamples = get_masked_data(
