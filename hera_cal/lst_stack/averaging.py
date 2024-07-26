@@ -707,7 +707,7 @@ def average_and_inpaint_simultaneously(
     for polidx, pol in enumerate(stack.pols):
         pol1, pol2 = utils.split_pol(pol)
         if pol1 == pol2:
-            pol_to_idx[pol] = polidx
+            pol_to_idx[pol1] = polidx
 
     # Compute noise variance
     if auto_stack.data.shape[1] != 1:
