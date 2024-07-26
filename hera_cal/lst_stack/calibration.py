@@ -379,7 +379,7 @@ def _lstbin_cross_pol_phase_calibration(
             baselines.append((ant1, ant2, pol))
 
     # Perform cross-polarization phase calibration
-    delta = abscal.cross_pol_phase_abscal(
+    delta = abscal.cross_pol_phase_cal(
         model=abscal_model, data=data, model_bls=baselines, data_bls=baselines, wgts=wgts
     )
 
