@@ -467,7 +467,7 @@ def lstbin_absolute_calibration(
             provided. If set to False, the auto-correlations will not be used for calibration.
         refpol : str, default='Jee'
             The reference polarization to use for cross-polarization phase calibration. This is
-            the polarization that the other polarizations are calibrated to. The default is 'Jee'.
+            the polarization that the other polarization is calibrated to. The default is 'Jee'.
 
     Returns:
     -------
