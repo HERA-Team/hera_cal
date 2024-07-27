@@ -1014,7 +1014,8 @@ def cross_pol_phase_cal(model, data, model_bls, data_bls, wgts={}, return_gains=
     gain_ants : list of tuples
         List of antenna-pol tuples to return gains for. Default is None.
     refpol : str
-        Reference polarization to use for relative phase calibration. Default is 'Jee'.
+        Reference polarization to use for relative phase calibration. Gains in the refpol are not changed by relative
+        polarization calibration. Default is 'Jee'.
 
     Returns:
     --------
