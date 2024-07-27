@@ -1029,6 +1029,11 @@ def cross_pol_phase_cal(model, data, model_bls, data_bls, wgts={}, return_gains=
     # Create variable for the sum of the model and data product
     summation = np.zeros_like(data[data_bls[0]])
 
+    unique_pols = list(set(sum([utils.split_pol(bl[-1]) for bl in data_bls], [])))
+
+    if refpol not in unique_pols:
+        raise ValueError(f"Reference polarization {refpol} not found in data.")
+
     for model_bl, data_bl in zip(model_bls, data_bls):
 
         # Skip if the polarizations are the same
