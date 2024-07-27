@@ -1033,6 +1033,8 @@ def cross_pol_phase_cal(model, data, model_bls, data_bls, wgts={}, return_gains=
 
     if refpol not in unique_pols:
         raise ValueError(f"Reference polarization {refpol} not found in data.")
+    if len(unique_pols) != 2:
+        raise ValueError("Cross-polarization phase calibration only works for two polarizations.")
 
     for model_bl, data_bl in zip(model_bls, data_bls):
 
