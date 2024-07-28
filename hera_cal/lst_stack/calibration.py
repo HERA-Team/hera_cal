@@ -370,13 +370,19 @@ def _lstbin_cross_pol_phase_calibration(
                 continue
 
             # Get model, weights, and data for each baseline
-            wgts[(ant1, ant2, pol)] = stack.nsamples[:, apidx, :, polidx] * (
-                ~stack.flags[:, apidx, :, polidx]
-            ).astype(float)
+            wgts[(ant1, ant2, pol)] = np.where(
+                np.isfinite(stack.data[:, apidx, :, polidx]),
+                stack.nsamples[:, apidx, :, polidx] * (
+                    ~stack.flags[:, apidx, :, polidx]
+                ).astype(float),
+                0.0,
+            )
             abscal_model[(ant1, ant2, pol)] = model[apidx, :, polidx] * np.ones(
                 (len(stack.nights), 1)
             )
-            data[(ant1, ant2, pol)] = stack.data[:, apidx, :, polidx]
+            data[(ant1, ant2, pol)] = np.where(
+                np.isfinite(stack.data[:, apidx, :, polidx]), stack.data[:, apidx, :, polidx], 0
+            )
             baselines.append((ant1, ant2, pol))
 
     # Perform cross-polarization phase calibration
