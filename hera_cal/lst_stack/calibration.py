@@ -112,9 +112,8 @@ def _expand_degeneracies_to_ant_gains(
         for polidx, pol in enumerate(stack.pols) 
         if utils.split_pol(pol)[0] == utils.split_pol(pol)[1]
     }
-    unique_pols = list(antpol_to_idx.keys())
 
-    for polidx, pol in enumerate(unique_pols):
+    for pol, polidx in antpol_to_idx.items():
         for ant in gain_ants:
             raw_ant_gain = amplitude_parameters[f"A_{pol}"] * (
                 phase_gains.get((ant, pol), 1)
@@ -128,7 +127,7 @@ def _expand_degeneracies_to_ant_gains(
                     tau, _ = utils.fft_dly(
                         raw_ant_gain[:, band],
                         np.diff(stack.freq_array[band])[0],
-                        wgts=np.logical_not(stack.flags[:, 0, band, antpol_to_idx[pol]]),
+                        wgts=np.logical_not(stack.flags[:, 0, band, polidx]),
                     )
                     rephasor = np.exp(-2.0j * np.pi * tau * stack.freq_array[band])
                     raw_ant_gain[:, band] *= rephasor
@@ -144,11 +143,11 @@ def _expand_degeneracies_to_ant_gains(
                     )
 
                     # Get the shape of the flags array for the given band and polarization
-                    flag_shape = flags[:, band, antpol_to_idx[pol]].shape
+                    flag_shape = flags[:, band, polidx].shape
 
                     # Determine the per-day flags for the given band and polarization
                     per_day_flags = np.repeat(
-                        np.all(flags[:, band, antpol_to_idx[pol]], axis=1)[:, np.newaxis],
+                        np.all(flags[:, band, polidx], axis=1)[:, np.newaxis],
                         flag_shape[1],
                         axis=1
                     )
