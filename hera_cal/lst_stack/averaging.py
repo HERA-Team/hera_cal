@@ -638,7 +638,7 @@ def average_and_inpaint_simultaneously(
     auto_stack: LSTStack,
     inpaint_bands: tuple[slice] = (slice(0, None, None),),
     return_models: bool = True,
-    cache: dict = {},
+    cache: dict | None = None,
     filter_properties: dict | None = None,
     eigenval_cutoff: list[float] = [1e-12],
     round_filter_half_width: bool = True,
@@ -685,7 +685,10 @@ def average_and_inpaint_simultaneously(
     all_models : dict
         The inpainting models for each baseline (if return_models is True).
     """
-    filter_properties = filter_properties or {}
+    filter_properties = ({} if filter_properties is None else filter_properties)
+
+    # Initialize cache if none is given, but it won't be passed back to the user
+    cache = ({} if cache is None else cache)
 
     # Dictionary for model storage
     all_models = {}
