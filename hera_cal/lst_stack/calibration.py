@@ -100,16 +100,26 @@ def _expand_degeneracies_to_ant_gains(
                 )
                 fmats[split_pol1].append(fmat)
 
+    # Dictionary for storing gains
     gains = {}
-    for polidx, pol in enumerate(stack.pols):
-        split_pol1, split_pol2 = utils.split_pol(pol)
-        if split_pol1 != split_pol2:
-            continue
+
+    # Get flags common to all baselines
+    flags = np.all(stack.flags, axis=1)
+
+    # Map antenna-polarizations to visibility indices
+    antpol_to_idx = {
+        utils.split_pol(pol)[0]: polidx
+        for polidx, pol in enumerate(stack.pols) 
+        if utils.split_pol(pol)[0] == utils.split_pol(pol)[1]
+    }
+    unique_pols = list(antpol_to_idx.keys())
+
+    for polidx, pol in enumerate(unique_pols):
         for ant in gain_ants:
-            raw_ant_gain = amplitude_parameters[f"A_{split_pol1}"] * (
-                phase_gains.get((ant, split_pol1), 1)
+            raw_ant_gain = amplitude_parameters[f"A_{pol}"] * (
+                phase_gains.get((ant, pol), 1)
             )
-            gg = gains[(ant, split_pol1)] = raw_ant_gain
+            gg = gains[(ant, pol)] = raw_ant_gain
 
             if smooth_gains:
                 for bandidx, band in enumerate(inpaint_bands):
@@ -118,7 +128,7 @@ def _expand_degeneracies_to_ant_gains(
                     tau, _ = utils.fft_dly(
                         raw_ant_gain[:, band],
                         np.diff(stack.freq_array[band])[0],
-                        wgts=np.logical_not(stack.flags[:, 0, band, polidx]),
+                        wgts=np.logical_not(stack.flags[:, 0, band, antpol_to_idx[pol]]),
                     )
                     rephasor = np.exp(-2.0j * np.pi * tau * stack.freq_array[band])
                     raw_ant_gain[:, band] *= rephasor
@@ -128,13 +138,27 @@ def _expand_degeneracies_to_ant_gains(
                         [
                             np.dot(basis, _fmat.dot(_raw_gain))
                             for _fmat, _raw_gain in zip(
-                                fmats[split_pol1][bandidx], raw_ant_gain[:, band]
+                                fmats[pol][bandidx], raw_ant_gain[:, band]
                             )
                         ]
                     )
 
+                    # Get the shape of the flags array for the given band and polarization
+                    flag_shape = flags[:, band, antpol_to_idx[pol]].shape
+
+                    # Determine the per-day flags for the given band and polarization
+                    per_day_flags = np.repeat(
+                        np.all(flags[:, band, antpol_to_idx[pol]], axis=1)[:, np.newaxis],
+                        flag_shape[1],
+                        axis=1
+                    )
+
                     # Rephase antenna gains
-                    gg[:, band] = smooth_ant_gain * rephasor.conj()
+                    gg[:, band] = np.where(
+                        per_day_flags, 1.0 + 0.0j, smooth_ant_gain * rephasor.conj()
+                    )
+
+
 
     return gains
 
