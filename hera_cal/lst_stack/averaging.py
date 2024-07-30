@@ -447,7 +447,8 @@ def average_and_inpaint_simultaneously_single_bl(
     inpainted_mean = np.zeros(len(freqs), dtype=stackd.dtype)
     total_nsamples = np.zeros(len(freqs), dtype=float)
 
-    cache = cache or {}
+    # Initialize cache if none is given, but it won't be passed back to the user
+    cache = ({} if cache is None else cache)
 
     for band in inpaint_bands:
         # if the band is already entirely flagged for all nights, continue
