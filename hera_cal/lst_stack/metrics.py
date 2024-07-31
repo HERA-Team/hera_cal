@@ -359,7 +359,7 @@ def downselect_zscores(
 
         if len(selpols) == len(datapols):
             pols = None
-        elif len(pols) == 1:
+        elif len(selpols) == 1:
             pols = datapols.index(selpols[0])
         else:
             pols = [datapols.index(pol) for pol in selpols]
