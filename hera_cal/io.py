@@ -1007,11 +1007,13 @@ class HERAData(UVData):
 
                 # explicitly handle cross-polarized autos
                 if bl[0] == bl[1]:
-                    if utils.split_pol(bl[2])[0] != utils.split_pol(bl[2])[1]:
-                        pol_reversed_bl = utils.reverse_bl(bl)
-                        if pol_reversed_bl not in dc.keys():
-                            if pol_reversed_bl in dc:
-                                _set_subslice(data_array, pol_reversed_bl, dc[pol_reversed_bl])
+                    # ensure that we're not looking at (pseudo-)stokes visibilities
+                    if utils.polnum2str(bl[2]) < 0:
+                        if utils.split_pol(bl[2])[0] != utils.split_pol(bl[2])[1]:
+                            pol_reversed_bl = utils.reverse_bl(bl)
+                            if pol_reversed_bl not in dc.keys():
+                                if pol_reversed_bl in dc:
+                                    _set_subslice(data_array, pol_reversed_bl, dc[pol_reversed_bl])
 
         return data_array
 
