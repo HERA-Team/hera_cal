@@ -357,20 +357,12 @@ def downselect_zscores(
         selpols = {p for a, b, p in bls}
         antpairs = list({bl[:2] for bl in bls})  # only antpairs
 
-        if 'ee' in selpols and 'nn' in selpols:
+        if len(selpols) == len(datapols):
             pols = None
-        elif 'ee' in selpols:
-            pols = 'ee'
-        elif 'nn' in selpols:
-            pols = 'nn'
-
-    # Get pol indices
-    if pols is None:
-        pols = slice(None)
-    elif isinstance(pols, str):
-        pols = [datapols.index(pols)]
-    else:
-        pols = [datapols.index(p) for p in pols]
+        elif len(pols) == 1:
+            pols = datapols.index(selpols[0])
+        else:
+            pols = [datapols.index(pol) for pol in selpols]
 
     # Get bl indices
     if antpairs is None:
