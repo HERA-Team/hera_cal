@@ -354,15 +354,13 @@ def downselect_zscores(
     if bl_selectors is not None:
         allbls = [(a, b, p) for a, b in datapairs for p in datapols]
         bls = get_selected_bls(allbls, min_days=0, selectors=bl_selectors)
-        selpols = {p for a, b, p in bls}
+        pols = {p for a, b, p in bls}
         antpairs = list({bl[:2] for bl in bls})  # only antpairs
 
-        if len(selpols) == len(datapols):
-            pols = None
-        elif len(selpols) == 1:
-            pols = datapols.index(list(selpols)[0])
-        else:
-            pols = [datapols.index(pol) for pol in selpols]
+    if pols is None or len(pols) == len(datapols):
+        pols = slice(None, None)
+    else:
+        pols = [datapols.index(pol) for pol in pols]
 
     # Get bl indices
     if antpairs is None:
