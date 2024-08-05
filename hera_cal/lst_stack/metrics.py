@@ -86,10 +86,15 @@ def get_nightly_predicted_variance_stack(
 
     Output is an array with same shape as stack.data, containing the variance.
     """
+    from ..utils import split_pol, join_pol
+
+    pol1 = [join_pol(split_pol(pol)[0], split_pol(pol)[0]) for pol in stack.pols]
+    pol2 = [join_pol(split_pol(pol)[1], split_pol(pol)[1]) for pol in stack.pols]
+
     auto = np.array([
         [
-            auto_stats.mean[(ap[0], ap[0], pol)] * auto_stats.mean[(ap[1], ap[1], pol)]
-            for pol in stack.pols
+            auto_stats.mean[(ap[0], ap[0], p1)] * auto_stats.mean[(ap[1], ap[1], p2)]
+            for p1, p2 in zip(pol1, pol2)
         ] for ap in stack.antpairs
     ]).transpose((0, 2, 1))  # nbls, nfreq, npol
 
