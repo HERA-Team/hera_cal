@@ -183,12 +183,12 @@ def solve_2D_DPSS(gains, weights, time_filters, freq_filters, method="pinv", cac
         # einsum indices are (t -> time, f -> freq, i > time filter index, j -> freq filter index, m ->
         # time filter index, n -> freq filter index)
         XTX = jnp.einsum(
-            "ti,fj,tf,tm,fn->ijmn", time_filters, freq_filters, weights, time_filters, freq_filters, optimize=True
+            "ti,fj,tf,tm,fn->ijmn", time_filters.conj(), freq_filters.conj(), weights, time_filters, freq_filters, optimize=True
         )
         XTX = np.reshape(XTX, (ncomps, ncomps))
 
     # Calculate X^T W y using the property (A \otimes B) vec(y) = (A Y B)
-    XTWy = jnp.ravel(jnp.dot(jnp.dot(jnp.transpose(time_filters), (gains * weights)), freq_filters))
+    XTWy = jnp.ravel(jnp.dot(jnp.dot(jnp.transpose(time_filters.conj()), (gains * weights)), freq_filters.conj()))
 
     # Compute beta and reshape into a 2D array
     beta, cached_output = _linear_fit(XTX, XTWy, solver=method, cached_input=cached_input)
