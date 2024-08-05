@@ -115,6 +115,21 @@ class Test_Smooth_Cal_Helper_Functions(object):
         fit_lsq = X @ np.linalg.pinv((X.T * weights.ravel()) @ X) @ (X.T * weights.ravel()) @ gains.ravel()
         np.testing.assert_array_almost_equal(fit_lsq, fit2.ravel())
 
+        # Check that this works when the basis functions are complex
+        freqs = np.linspace(100e6, 150e6, 100)
+        x = np.linspace(0, 2 * np.pi, 50)
+        X = dspec.dpss_operator(freqs, [0], [20e-9], eigenval_cutoff=[1e-12])[0].real
+        Y = dspec.dft_operator(x, [0], [0.1])
+
+        ncomps = X.shape[-1] * Y.shape[-1]
+        values = np.random.normal(0, 1, ncomps) + 1j * np.random.normal(0, 1, ncomps)
+        beta = np.reshape(values, (X.shape[1], Y.shape[1]))
+        gains = np.dot(np.dot(X, beta), np.transpose(Y))
+        weights = np.ones(gains.shape)
+
+        fit1, cached_output = smooth_cal.solve_2D_DPSS(gains, weights, X, Y)
+        np.testing.assert_array_almost_equal(gains, fit1)
+
     def test_time_filter(self):
         gains = np.ones((10, 10), dtype=complex)
         gains[3, 5] = 10.0
