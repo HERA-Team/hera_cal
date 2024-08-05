@@ -86,10 +86,15 @@ def get_nightly_predicted_variance_stack(
 
     Output is an array with same shape as stack.data, containing the variance.
     """
+    from ..utils import split_pol, join_pol
+
+    pol1 = [join_pol(split_pol(pol)[0], split_pol(pol)[0]) for pol in stack.pols]
+    pol2 = [join_pol(split_pol(pol)[1], split_pol(pol)[1]) for pol in stack.pols]
+
     auto = np.array([
         [
-            auto_stats.mean[(ap[0], ap[0], pol)] * auto_stats.mean[(ap[1], ap[1], pol)]
-            for pol in stack.pols
+            auto_stats.mean[(ap[0], ap[0], p1)] * auto_stats.mean[(ap[1], ap[1], p2)]
+            for p1, p2 in zip(pol1, pol2)
         ] for ap in stack.antpairs
     ]).transpose((0, 2, 1))  # nbls, nfreq, npol
 
@@ -354,23 +359,13 @@ def downselect_zscores(
     if bl_selectors is not None:
         allbls = [(a, b, p) for a, b in datapairs for p in datapols]
         bls = get_selected_bls(allbls, min_days=0, selectors=bl_selectors)
-        selpols = {p for a, b, p in bls}
+        pols = {p for a, b, p in bls}
         antpairs = list({bl[:2] for bl in bls})  # only antpairs
 
-        if 'ee' in selpols and 'nn' in selpols:
-            pols = None
-        elif 'ee' in selpols:
-            pols = 'ee'
-        elif 'nn' in selpols:
-            pols = 'nn'
-
-    # Get pol indices
-    if pols is None:
-        pols = slice(None)
-    elif isinstance(pols, str):
-        pols = [datapols.index(pols)]
+    if pols is None or len(pols) == len(datapols):
+        pols = slice(None, None)
     else:
-        pols = [datapols.index(p) for p in pols]
+        pols = [datapols.index(pol) for pol in pols]
 
     # Get bl indices
     if antpairs is None:
