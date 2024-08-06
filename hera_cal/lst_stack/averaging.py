@@ -705,9 +705,9 @@ def average_and_inpaint_simultaneously(
     )
     # Trick the LST-binner into performing the average over autopairs instead of LSTs
     auto_redavg = reduce_lst_bins(
-        data=auto_stack.data.transpose((1, 0)),
-        flags=auto_stack.flags.transpose((1, 0)),
-        nsamples=auto_stack.nsamples.transpose((1, 0)),
+        data=auto_stack.data.transpose((1, 0, 2, 3)),
+        flags=auto_stack.flags.transpose((1, 0, 2, 3)),
+        nsamples=auto_stack.nsamples.transpose((1, 0, 2, 3)),
         get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
     )
 
