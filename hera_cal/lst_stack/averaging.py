@@ -712,12 +712,6 @@ def average_and_inpaint_simultaneously(
         if antpol1 == antpol2:
             antpol_to_vispol_idx[antpol1] = polidx
 
-    # Compute noise variance
-    if auto_stack.data.shape[1] != 1:
-        raise NotImplementedError(
-            "This code only works with redundantly averaged data, which has only one unique auto per polarization"
-        )
-
     for iap, antpair in enumerate(stack.antpairs):
         # Get the baseline vector and length
         bl_vec = (antpos[antpair[1]] - antpos[antpair[0]])[:]
@@ -742,11 +736,15 @@ def average_and_inpaint_simultaneously(
             avg_flgs = lstavg["flags"][iap, :, polidx]
 
             antpol1, antpol2 = utils.split_pol(pol)
+
+            auto_iap = [a for a, b in auto_stack.antpairs].index(antpair[0])
+
             # Compute noise variance for all days in stack
             base_noise_var = (
-                np.abs(auto_stack.data[:, 0, :, antpol_to_vispol_idx[antpol1]] *
-                       auto_stack.data[:, 0, :, antpol_to_vispol_idx[antpol2]])
-                / (stack.dt * stack.df).value
+                np.abs(
+                    auto_stack.get_data((antpair[0], antpair[0], utils.join_pol(antpol1, antpol1))) *
+                    auto_stack.get_data((antpair[1], antpair[1], utils.join_pol(antpol2, antpol2)))
+                ) / (stack.dt * stack.df).value
             )
 
             # Shortcut early if there are no flags in the stack. In that case,
