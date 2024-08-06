@@ -828,9 +828,6 @@ class TestAverageInpaintSimultaneously:
             time_axis_faster_than_bls=False,
         )
         auto_stack = LSTStack(auto_uvd)
-
-        with pytest.raises(
-            NotImplementedError,
-            match="This code only works with redundantly averaged data",
-        ):
-            avg.average_and_inpaint_simultaneously(self.stack, auto_stack)
+        lstavg, _ = avg.average_and_inpaint_simultaneously(self.stack, auto_stack)
+        assert not np.any(np.isnan(lstavg['data']))
+        np.testing.assert_allclose(lstavg["data"], self.stack.data[0])
