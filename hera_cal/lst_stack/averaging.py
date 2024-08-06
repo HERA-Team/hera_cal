@@ -300,7 +300,7 @@ def reduce_lst_bins(
         LST bin, in addition to the mean and standard deviation.
     get_std
         Whether to compute the standard deviation of the data in each LST bin.
-    fill_value
+    mean_fill_value
         The value to use for the mean when there are no samples. This must be either
         nan, zero or inf.
 
@@ -703,6 +703,9 @@ def average_and_inpaint_simultaneously(
     lstavg = reduce_lst_bins(
         stack, get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
     )
+    auto_lstavg = reduce_lst_bins(
+        auto_stack, get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
+    )
 
     # Map antenna polarizations to visibility pol indices for correct noise variance computation
     # even for cross-polarized visibilities, which use the auto-polarized autocorrelations.
@@ -740,8 +743,8 @@ def average_and_inpaint_simultaneously(
             # Compute noise variance for all days in stack
             base_noise_var = (
                 np.abs(
-                    auto_stack.get_data((antpair[0], antpair[0], utils.join_pol(antpol1, antpol1))) *
-                    auto_stack.get_data((antpair[1], antpair[1], utils.join_pol(antpol2, antpol2)))
+                    auto_lstavg['data'][..., antpol_to_vispol_idx[antpol1]] *
+                    auto_lstavg['data'][..., antpol_to_vispol_idx[antpol2]]
                 ) / (stack.dt * stack.df).value
             )
 
