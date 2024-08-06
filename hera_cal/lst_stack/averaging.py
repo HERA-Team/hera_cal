@@ -703,8 +703,12 @@ def average_and_inpaint_simultaneously(
     lstavg = reduce_lst_bins(
         stack, get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
     )
-    auto_lstavg = reduce_lst_bins(
-        auto_stack, get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
+    # Trick the LST-binner into performing the average over autopairs instead of LSTs
+    auto_redavg = reduce_lst_bins(
+        data=auto_stack.data.transpose((1, 0)),
+        flags=auto_stack.flags.transpose((1, 0)),
+        nsamples=auto_stack.nsamples.transpose((1, 0)),
+        get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
     )
 
     # Map antenna polarizations to visibility pol indices for correct noise variance computation
@@ -743,8 +747,8 @@ def average_and_inpaint_simultaneously(
             # Compute noise variance for all days in stack
             base_noise_var = (
                 np.abs(
-                    auto_lstavg['data'][..., antpol_to_vispol_idx[antpol1]] *
-                    auto_lstavg['data'][..., antpol_to_vispol_idx[antpol2]]
+                    auto_redavg['data'][..., antpol_to_vispol_idx[antpol1]] *
+                    auto_redavg['data'][..., antpol_to_vispol_idx[antpol2]]
                 ) / (stack.dt * stack.df).value
             )
 
