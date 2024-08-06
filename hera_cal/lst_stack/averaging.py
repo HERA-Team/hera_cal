@@ -737,8 +737,6 @@ def average_and_inpaint_simultaneously(
 
             antpol1, antpol2 = utils.split_pol(pol)
 
-            auto_iap = [a for a, b in auto_stack.antpairs].index(antpair[0])
-
             # Compute noise variance for all days in stack
             base_noise_var = (
                 np.abs(
