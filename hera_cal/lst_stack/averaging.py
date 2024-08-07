@@ -300,7 +300,7 @@ def reduce_lst_bins(
         LST bin, in addition to the mean and standard deviation.
     get_std
         Whether to compute the standard deviation of the data in each LST bin.
-    fill_value
+    mean_fill_value
         The value to use for the mean when there are no samples. This must be either
         nan, zero or inf.
 
@@ -703,6 +703,13 @@ def average_and_inpaint_simultaneously(
     lstavg = reduce_lst_bins(
         stack, get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
     )
+    # Trick the LST-binner into performing the average over autopairs instead of LSTs
+    auto_redavg = reduce_lst_bins(
+        data=auto_stack.data.transpose((1, 0, 2, 3)),
+        flags=auto_stack.flags.transpose((1, 0, 2, 3)),
+        nsamples=auto_stack.nsamples.transpose((1, 0, 2, 3)),
+        get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
+    )
 
     # Map antenna polarizations to visibility pol indices for correct noise variance computation
     # even for cross-polarized visibilities, which use the auto-polarized autocorrelations.
@@ -711,12 +718,6 @@ def average_and_inpaint_simultaneously(
         antpol1, antpol2 = utils.split_pol(vispol)
         if antpol1 == antpol2:
             antpol_to_vispol_idx[antpol1] = polidx
-
-    # Compute noise variance
-    if auto_stack.data.shape[1] != 1:
-        raise NotImplementedError(
-            "This code only works with redundantly averaged data, which has only one unique auto per polarization"
-        )
 
     for iap, antpair in enumerate(stack.antpairs):
         # Get the baseline vector and length
@@ -742,11 +743,13 @@ def average_and_inpaint_simultaneously(
             avg_flgs = lstavg["flags"][iap, :, polidx]
 
             antpol1, antpol2 = utils.split_pol(pol)
+
             # Compute noise variance for all days in stack
             base_noise_var = (
-                np.abs(auto_stack.data[:, 0, :, antpol_to_vispol_idx[antpol1]] *
-                       auto_stack.data[:, 0, :, antpol_to_vispol_idx[antpol2]])
-                / (stack.dt * stack.df).value
+                np.abs(
+                    auto_redavg['data'][..., antpol_to_vispol_idx[antpol1]] *
+                    auto_redavg['data'][..., antpol_to_vispol_idx[antpol2]]
+                ) / (stack.dt * stack.df).value
             )
 
             # Shortcut early if there are no flags in the stack. In that case,
