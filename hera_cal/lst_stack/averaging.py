@@ -708,8 +708,12 @@ def average_and_inpaint_simultaneously(
         data=auto_stack.data.transpose((1, 0, 2, 3)),
         flags=auto_stack.flags.transpose((1, 0, 2, 3)),
         nsamples=auto_stack.nsamples.transpose((1, 0, 2, 3)),
-        get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
+        get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=np.inf
     )
+
+    # Something weird happens in reduce_lst_bins due to MaskedArrays, and the flagged
+    # values don't actually get set to inf properly. We just force it here to be sure.
+    auto_redavg['data'][auto_redavg['flags']] = np.inf + 0j
 
     # Map antenna polarizations to visibility pol indices for correct noise variance computation
     # even for cross-polarized visibilities, which use the auto-polarized autocorrelations.
