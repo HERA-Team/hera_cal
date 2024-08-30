@@ -755,7 +755,7 @@ class Test_Abscal_Solvers:
     def test_cross_pol_phase_cal(self):
         rng = np.random.default_rng(42)
         antpos = hex_array(3, split_core=True, outriggers=0)
-        
+
         model, data = {}, {}
         ntimes, nfreqs = 1, 2
 
@@ -775,20 +775,21 @@ class Test_Abscal_Solvers:
             data[bls] = model[bls] * gain
 
         # Solve for the phase degeneracy
-        solved_delta = abscal.cross_pol_phase_cal(model, data, model_bls, data_bls)
-    
+        solved_delta = abscal.cross_pol_phase_cal(model, data, model_bls, data_bls, refpol='Jnn')
+
         # Check that the phase degeneracy was solved for correctly
         np.testing.assert_array_almost_equal(solved_delta, delta, decimal=5)
         gain_ants = set()
         for bl in data_bls:
             gain_ants.update(set(utils.split_bl(bl)))
         gain_ants = list(gain_ants)
-        gains = abscal.cross_pol_phase_cal(model, data, model_bls, data_bls, return_gains=True, gain_ants=gain_ants)
+        gains = abscal.cross_pol_phase_cal(model, data, model_bls, data_bls, return_gains=True, gain_ants=gain_ants, refpol='Jnn')
 
         for k in gains:
             # Check that the gains are correct
             if k[-1] == 'Jnn':
                 np.testing.assert_array_almost_equal(gains[k], 1.0 + 0.0j, decimal=5)
+
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
