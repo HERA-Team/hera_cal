@@ -992,6 +992,7 @@ def RFI_delay_slope_cal(reds, antpos, red_data, freqs, rfi_chans, rfi_headings, 
         gains[ant] = np.exp(2j * np.pi * np.outer(dlys, freqs))
     return gains
 
+
 def cross_pol_phase_cal(model, data, model_bls, data_bls, wgts={}, return_gains=False, gain_ants=[], refpol="Jee"):
     """
     Solve for the relative phase degeneracy between two polarizations of redundantly calibrated data.
@@ -1009,7 +1010,7 @@ def cross_pol_phase_cal(model, data, model_bls, data_bls, wgts={}, return_gains=
     wgts : dict
         Dictionary mapping baseline tuples to weights. Default is no weights.
     return_gains : bool
-        If True, return gains instead of the relative phase difference between the two polarizations. 
+        If True, return gains instead of the relative phase difference between the two polarizations.
         Default is False.
     gain_ants : list of tuples
         List of antenna-pol tuples to return gains for. Default is None.
@@ -1021,7 +1022,7 @@ def cross_pol_phase_cal(model, data, model_bls, data_bls, wgts={}, return_gains=
     --------
     If return_gains is False:
         delta : np.ndarray
-            Array of relative phase differences between the two polarizations in units of radians. 
+            Array of relative phase differences between the two polarizations in units of radians.
     If return_gains is True:
         delta_gains : dict
             Dictionary mapping antenna keys like (0, 'Jee') to gains of the same shape of the data
@@ -1050,25 +1051,26 @@ def cross_pol_phase_cal(model, data, model_bls, data_bls, wgts={}, return_gains=
 
         if refpol == data_pol1:
             summation += (
-                data[data_bl] * np.conj(model[model_bl]) * wgts.get(data_bl, 1.0)
+                np.conj(data[data_bl]) * model[model_bl] * wgts.get(data_bl, 1.0)
             )
         else:
             summation += (
-                np.conj(data[data_bl]) * model[model_bl] * wgts.get(data_bl, 1.0)
+                data[data_bl] * np.conj(model[model_bl]) * wgts.get(data_bl, 1.0)
             )
 
     if return_gains:
         delta_gains = {}
         for (ant, pol) in gain_ants:
             if pol == refpol:
-                delta_gains[(ant, pol)] = np.exp(1j * np.angle(summation))
-            else:
                 delta_gains[(ant, pol)] = np.ones_like(summation)
+            else:
+                delta_gains[(ant, pol)] = np.exp(1j * np.angle(summation))
 
         return delta_gains
-    
+
     else:
         return np.angle(summation)
+
 
 def dft_phase_slope_solver(xs, ys, data, flags=None):
     '''Solve for spatial phase slopes across an array by looking for the peak in the DFT.
