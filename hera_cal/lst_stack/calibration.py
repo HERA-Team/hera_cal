@@ -109,7 +109,7 @@ def _expand_degeneracies_to_ant_gains(
     # Map antenna-polarizations to visibility indices
     antpol_to_idx = {
         utils.split_pol(pol)[0]: polidx
-        for polidx, pol in enumerate(stack.pols) 
+        for polidx, pol in enumerate(stack.pols)
         if utils.split_pol(pol)[0] == utils.split_pol(pol)[1]
     }
 
@@ -156,8 +156,6 @@ def _expand_degeneracies_to_ant_gains(
                     gg[:, band] = np.where(
                         per_day_flags, 1.0 + 0.0j, smooth_ant_gain * rephasor.conj()
                     )
-
-
 
     return gains
 
@@ -580,7 +578,7 @@ def lstbin_absolute_calibration(
             )
 
     if run_cross_pol_phase_cal and not all_nights_flagged:
-        cross_pols_in_data  = any(utils.split_pol(pol)[0] != utils.split_pol(pol)[1] for pol in stack.pols)
+        cross_pols_in_data = any(utils.split_pol(pol)[0] != utils.split_pol(pol)[1] for pol in stack.pols)
 
         if cross_pols_in_data:
             delta = _lstbin_cross_pol_phase_calibration(stack=stack, model=model)
@@ -595,7 +593,7 @@ def lstbin_absolute_calibration(
 
             for ant in gain_ants:
                 for pol in unique_pols:
-                    if pol != refpol:
+                    if pol == refpol:
                         phase_gains[(ant, pol)] = phase_gains.get(
                             (ant, pol), np.ones_like(delta)
                         )

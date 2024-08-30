@@ -306,8 +306,8 @@ class TestLSTBinCalibration:
             [
                 np.ones((20, 10, 100)),
                 np.ones((20, 10, 100)),
-                np.exp(1j * delta),
                 np.exp(-1j * delta),
+                np.exp(1j * delta),
             ]
         )
         gains = np.transpose(gains, (1, 2, 3, 0))
