@@ -2094,7 +2094,7 @@ def get_frop_for_noise(times, filter_cent_use, filter_half_wid_use, freqs,
             
         # Apply the rephase to the weights matrix since it's mathematically equivalent and convenient
         if rephase: 
-            wres = lst_rephase(wres.reshape(Nchunk * chunk_size, 1, Nfreqs),
+            wres = utils.lst_rephase(wres.reshape(Nchunk * chunk_size, 1, Nfreqs),
                                bl_vec, freqs, dlst, lat=lat, inplace=False)
             wres = wres.reshape(Nchunk, chunk_size, Nfreqs)
             
