@@ -17,6 +17,7 @@ import yaml
 from scipy import stats
 from scipy import constants
 from pyuvdata import UVFlag, UVBeam
+from hera_filters import dspec
 from .. import utils
 from .. import datacontainer, io, frf
 from ..data import DATA_PATH
@@ -1066,3 +1067,85 @@ class Test_FRFilter:
         assert a.max_frate_coeffs[1] == -0.229
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
+
+def test_get_frop_for_noise():
+    uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+    hd = io.HERAData([uvh5])
+    bl = (53, 54, 'ee')
+    data, flags, nsamples = hd.read(bls=(53, 54, "ee"))
+    times = data.times * 24 * 3600
+    print([key for key in data.keys()])
+
+    # Have to get some FRF parameters, but getting realistic ones is cumbersome
+    # This file has ~600s so the resolution is only ~1.7 mHz
+    # Integration time is 10s, so the Nyquist fringe rate is 200 mHz
+    # This is a short baseline so its fringe-rate profile is underresolved anyway
+    # Just filter around 0 and see that it's similar to what the pipeline gives
+    filt_cent = 0
+    filt_hw = 0.005
+    eval_cutoff = 1e-12
+    
+    # Make random weights for extra fun
+    np.random.seed(1)
+    weights = np.random.exponential(size=data.shape)
+    
+    
+    frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                  freqs=data.freqs, weights=weights, 
+                                  coherent_avg=False, cutoff=eval_cutoff)
+    
+    frf_dat = (frop * data[bl]).sum(axis=1)
+    frf_dat_pipeline = copy.deepcopy(data)
+
+    # From main_beam_FR_filter in single_baseline_notebook
+    # TODO: graduate that code into hera_cal and put here
+    d_mdl = np.zeros_like(data[bl])
+
+    d_mdl, _, _ = dspec.fourier_filter(times, data[bl], 
+                                       wgts=weights, filter_centers=[filt_cent],
+                                       filter_half_widths=[filt_hw], 
+                                       mode='dpss_solve', 
+                                       eigenval_cutoff=[eval_cutoff], 
+                                       suppression_factors=[eval_cutoff], 
+                                       max_contiguous_edge_flags=len(data.times), 
+                                       filter_dims=0)
+    frf_dat_pipeline[bl] = d_mdl
+
+    assert np.allclose(frf_dat_pipeline[bl], frf_dat)
+
+    # Now do coherent averaging
+    # TODO: These lines are non-interleaved versions of some lines in the 
+    # single-baseline PS notebook. They seem useful -- maybe just make them 
+    # standard functions?
+    dt = times[1] - times[0]
+    Navg = int(np.round(300. / dt))
+    n_avg_int = int(np.ceil(len(data.lsts) / Navg))
+    target_lsts = [np.mean(np.unwrap(data.lsts)[i * Navg:(i+1) * Navg]) 
+                   for i in range(n_avg_int)]
+    dlst = [target_lsts[i] - l for i in range(n_avg_int) 
+            for l in np.unwrap(data.lsts)[i * Navg:(i+1) * Navg]]
+    bl_vec =  data.antpos[bl[0]] - data.antpos[bl[1]]
+
+
+    frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                  freqs=data.freqs, weights=weights, 
+                                  coherent_avg=True, cutoff=eval_cutoff,
+                                  dlst=dlst, nsamples=nsamples[bl], t_avg=300.,
+                                  bl_vec=bl_vec)
+    frf_dat = (frop * data[bl]).sum(axis=1)
+
+    utils.lst_rephase(frf_dat_pipeline, {bl: bl_vec}, data.freqs, dlst, 
+                      lat=hd.telescope_location_lat_lon_alt_degrees[0], 
+                      inplace=True)
+    avg_data = frf.timeavg_waterfall(frf_dat_pipeline[bl], Navg,
+                                     flags=np.zeros_like(flags[bl]),
+                                     nsamples=nsamples[bl], 
+                                     extra_arrays={'times': data.times},
+                                     lsts=data.lsts, freqs=data.freqs,
+                                     rephase=False, bl_vec=bl_vec, 
+                                     verbose=False)[0]
+    
+    assert np.allclose(avg_data, frf_dat)
+    
+
+

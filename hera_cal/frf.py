@@ -2044,7 +2044,7 @@ def get_frop_for_noise(times, filter_cent_use, filter_half_wid_use, freqs,
         
     Returns:
         frop (array):
-            Filter operator. Shape (Ntimes_coarse, Ntimes_fine, Nfreqs.)
+            Filter operator. Shape (Ntimes_coarse, Ntimes_fine, Nfreqs).
     """
 
     # Time handling is a slightly modified port from hera_filters/hera_cal
