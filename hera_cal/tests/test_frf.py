@@ -1146,6 +1146,25 @@ def test_get_frop_for_noise():
                                      verbose=False)[0]
     
     assert np.allclose(avg_data, frf_dat)
+
+    # Test uniform weights
+    weights = np.ones_like(data[bl])
+    frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                  freqs=data.freqs, weights=weights, 
+                                  coherent_avg=False, cutoff=eval_cutoff)
+    d_mdl, _, _ = dspec.fourier_filter(times, data[bl], 
+                                       wgts=weights,
+                                       filter_centers=[filt_cent],
+                                       filter_half_widths=[filt_hw], 
+                                       mode='dpss_solve', 
+                                       eigenval_cutoff=[eval_cutoff], 
+                                       suppression_factors=[eval_cutoff], 
+                                       max_contiguous_edge_flags=len(data.times), 
+                                       filter_dims=0)
+    frf_dat_pipeline[bl] = d_mdl
+    frf_dat = (frop * data[bl]).sum(axis=1)
+    assert np.allclose(frf_dat_pipeline[bl], frf_dat)
+
     
 
 
