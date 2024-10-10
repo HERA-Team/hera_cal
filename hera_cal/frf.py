@@ -2152,12 +2152,15 @@ def prep_var_for_frop(data, nsamples, weights, cross_antpairpol, freq_slice,
                                             nsamples=nsamples, auto_ant=auto_ant)
     var = var[:, freq_slice]
 
-    # Check all the infs are weighted to zero and replace with default value
-    all_infs_zero = np.all(weights[cross_antpairpol][:, freq_slice][np.isinf(var)]) == 0
-    if not all_infs_zero:
-        print(f"Not all infinite variance locations are of zero weight!")
-
-    var[np.isinf(var)] = default_value
+    var_isinf = np.isinf(var)
+    if np.any(var_isinf):
+        # Check all the infs are weighted to zero and replace with default value
+        all_infs_zero = np.all(weights[cross_antpairpol][:, freq_slice][var_isinf]) == 0
+        if not all_infs_zero:
+            warnings.warn("Not all infinite variance locations are of zero weight!")
+        
+        print(f"Replacing infinite variances with default value: {default_value}")
+        var[var_isinf] = default_value
     
     return var
 

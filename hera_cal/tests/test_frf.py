@@ -19,7 +19,7 @@ from scipy import constants
 from pyuvdata import UVFlag, UVBeam
 from hera_filters import dspec
 from .. import utils
-from .. import datacontainer, io, frf
+from .. import datacontainer, io, frf, noise
 from ..data import DATA_PATH
 import warnings
 
@@ -1079,7 +1079,7 @@ def test_get_frop_for_noise():
     # Have to get some FRF parameters, but getting realistic ones is cumbersome
     # This file has ~600s so the resolution is only ~1.7 mHz
     # Integration time is 10s, so the Nyquist fringe rate is 200 mHz
-    # This is a short baseline so its fringe-rate profile is underresolved anyway
+    # This is a short baseline so its fringe-rate profile is living in the first bin or so
     # Just filter around 0 and see that it's similar to what the pipeline gives
     filt_cent = 0
     filt_hw = 0.005
@@ -1164,6 +1164,48 @@ def test_get_frop_for_noise():
     frf_dat_pipeline[bl] = d_mdl
     frf_dat = (frop * data[bl]).sum(axis=1)
     assert np.allclose(frf_dat_pipeline[bl], frf_dat)
+
+
+def test_prep_var_for_frop():
+    uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+    hd = io.HERAData([uvh5])
+    data, flags, nsamples = hd.read()
+    # The first 37 freqs give 0 variance so just exclude them to make the rest
+    # of the test more transparent
+    freq_slice = slice(37, 1024)
+    cross_antpairpol = (53, 54, 'ee')
+    weights = copy.deepcopy(nsamples)
+
+    # This should return the exact same thing as the original noise prediction function
+    var_for_frop = frf.prep_var_for_frop(data, nsamples, weights,
+                                         cross_antpairpol, freq_slice)
+    var = noise.predict_noise_variance_from_autos(cross_antpairpol, data, nsamples=nsamples)
+
+    assert np.array_equal(var[:, freq_slice], var_for_frop)
+
+    # Now tell it to only use one antenna; they should all be different
+    var_for_frop = frf.prep_var_for_frop(data, nsamples, weights,
+                                         cross_antpairpol, freq_slice,
+                                         auto_ant=53)
+    
+    assert np.logical_not(np.any(var_for_frop == var[:, freq_slice]))
+
+    # Now give it some nsamples == 0 to deal with
+    # Should replace all of one channel with a peculiarly chosen value of 2.3
+    nsamples[cross_antpairpol][:, 48] = 0
+    with pytest.warns(UserWarning, 
+                      match="Not all infinite variance locations are of zero weight!"):
+        var_for_frop = frf.prep_var_for_frop(data, nsamples, weights,
+                                            cross_antpairpol, freq_slice,
+                                            auto_ant=53,
+                                            default_value=2.3)
+    assert np.all(var_for_frop[:, 48-37] == 2.3) 
+
+
+    
+
+
+
 
     
 
