@@ -2059,6 +2059,10 @@ def get_frop_for_noise(times, filter_cent_use, filter_half_wid_use, freqs,
     
     if weights is None: 
         weights = np.ones([Ntimes, Nfreqs])
+    elif weights.shape != (Ntimes, Nfreqs):
+            raise ValueError(f"weights has wrong shape {weights.shape} "
+                             f"compared to (Ntimes, Nfreqs) = {(Ntimes, Nfreqs)}"
+                             " May need to be sliced along an axis.")
         
     #####Index Legend#####
     # a = DPSS mode      #
@@ -2078,6 +2082,10 @@ def get_frop_for_noise(times, filter_cent_use, filter_half_wid_use, freqs,
         chunk_remainder = Ntimes % chunk_size
 
         tavg_weights = nsamples if wgt_tavg_by_nsample else np.where(weights, np.ones([Ntimes, Nfreqs]), 0)
+        if tavg_weights.shape != (Ntimes, Nfreqs):
+            raise ValueError(f"nsamples has wrong shape {nsamples.shape} "
+                             f"compared to (Ntimes, Nfreqs) = {(Ntimes, Nfreqs)}"
+                             " May need to be sliced along an axis.")
         if chunk_remainder > 0: # Stack some 0s that get 0 weight so we can do the reshaping below without incident
             
             dmatr_stack_shape = [chunk_size - chunk_remainder, Nmodes]
@@ -2183,7 +2191,8 @@ def get_FRF_cov(frop, var):
     Ncoarse = frop.shape[0]
     cov = np.zeros([Nfreqs, Ncoarse, Ncoarse], dtype=complex)
     for freq_ind in range(Nfreqs):
-        cov[freq_ind] = np.tensordot((frop[:, :, freq_ind] * var[:, freq_ind]), frop[:, :, freq_ind].T.conj(), axes=1)
+        cov[freq_ind] = np.tensordot((frop[:, :, freq_ind] * var[:, freq_ind]),
+                                      frop[:, :, freq_ind].T.conj(), axes=1)
             
     return cov
 
