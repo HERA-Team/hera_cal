@@ -1074,7 +1074,6 @@ def test_get_frop_for_noise():
     bl = (53, 54, 'ee')
     data, flags, nsamples = hd.read(bls=(53, 54, "ee"))
     times = data.times * 24 * 3600
-    print([key for key in data.keys()])
 
     # Have to get some FRF parameters, but getting realistic ones is cumbersome
     # This file has ~600s so the resolution is only ~1.7 mHz
@@ -1200,6 +1199,102 @@ def test_prep_var_for_frop():
                                             auto_ant=53,
                                             default_value=2.3)
     assert np.all(var_for_frop[:, 48-37] == 2.3) 
+
+def test_get_FRF_cov():
+    uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+    hd = io.HERAData([uvh5])
+    data, flags, nsamples = hd.read()
+    # The first 37 freqs give 0 variance so just exclude them to make the rest
+    # of the test more transparent
+    freq_slice = slice(37, 1024)
+    cross_antpairpol = (53, 54, 'ee')
+    weights = copy.deepcopy(nsamples)
+    times = data.times * 24 * 3600
+    eval_cutoff = 1e-12
+
+    var_for_frop = frf.prep_var_for_frop(data, nsamples, weights,
+                                         cross_antpairpol, freq_slice,
+                                         auto_ant=53)
+    
+    dt = times[1] - times[0]
+    Navg = int(np.round(300. / dt))
+    n_avg_int = int(np.ceil(len(data.lsts) / Navg))
+    target_lsts = [np.mean(np.unwrap(data.lsts)[i * Navg:(i+1) * Navg]) 
+                   for i in range(n_avg_int)]
+    dlst = [target_lsts[i] - l for i in range(n_avg_int) 
+            for l in np.unwrap(data.lsts)[i * Navg:(i+1) * Navg]]
+    bl_vec =  data.antpos[cross_antpairpol[0]] - data.antpos[cross_antpairpol[1]]
+
+    # Need to give it some complex structure
+    filt_cent = 0.005
+    filt_hw = 0.005
+    frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                  freqs=data.freqs[freq_slice], 
+                                  weights=weights[cross_antpairpol][:, freq_slice], 
+                                  coherent_avg=True, cutoff=eval_cutoff,
+                                  dlst=dlst, nsamples=nsamples[cross_antpairpol][:, freq_slice], 
+                                  t_avg=300., bl_vec=bl_vec)
+    
+    cov = frf.get_FRF_cov(frop, var_for_frop)
+
+    # Check that at least it's (close to) hermitian at every frequency
+    # Tests for value sensibility exist in single baseline PS notebook
+    for freq_ind in range(1024 - 37):
+        assert np.allclose(cov[freq_ind], cov[freq_ind].T.conj())
+
+
+    # Pretend we forgot to slice things
+    with pytest.raises(ValueError, match="nsamples has wrong shape"):
+            frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                          freqs=data.freqs[freq_slice], 
+                                          weights=weights[cross_antpairpol][:, freq_slice], 
+                                          coherent_avg=True, cutoff=eval_cutoff,
+                                          dlst=dlst, nsamples=nsamples[cross_antpairpol], 
+                                          t_avg=300., bl_vec=bl_vec)
+            
+    with pytest.raises(ValueError, match="weights has wrong shape"):
+            frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                          freqs=data.freqs[freq_slice], 
+                                          weights=weights[cross_antpairpol], 
+                                          coherent_avg=True, cutoff=eval_cutoff,
+                                          dlst=dlst, nsamples=nsamples[cross_antpairpol], 
+                                          t_avg=300., bl_vec=bl_vec)
+
+def test_get_corr_and_factor():
+    # Actually just going to test an easy analytic case here
+    base = np.array([[2, 1, 0], 
+                     [1, 3, 1], 
+                     [0, 1, 4]])
+    cov = np.array([base, 2 * base])
+    corr = frf.get_corr(cov)
+
+    answer = np.array([[1, 1/np.sqrt(6), 0], 
+                       [1/np.sqrt(6), 1, 1/np.sqrt(12)],
+                       [0, 1/np.sqrt(12), 1]])
+
+    answer = np.array([answer, answer])
+
+    assert np.allclose(corr, answer)
+
+    factor = frf.get_correction_factor_from_cov(cov)
+
+    # A block diagonal "implementation"
+    blocklen = np.prod(cov.shape[:2])
+    sum_sq = 7
+    Neff = blocklen**2 / sum_sq
+    factor_answer = blocklen / Neff
+
+    assert np.allclose(factor, factor_answer)
+
+    tslc = slice(1, 3)
+    factor_slice = frf.get_correction_factor_from_cov(cov, tslc=tslc)
+
+    blocklen = 4
+    sum_sq = 2 * (2 + 2 / 12)
+    Neff = blocklen**2 / sum_sq
+    factor_slice_answer = blocklen / Neff
+
+    assert np.allclose(factor_slice, factor_slice_answer)
 
 
     
