@@ -1202,7 +1202,7 @@ def test_prep_var_for_frop():
     # Should replace all of one channel with a peculiarly chosen value of 2.3
     nsamples[cross_antpairpol][:, 48] = 0
     with pytest.warns(UserWarning, 
-                      match="Not all infinite variance locations are of zero weight!"):
+                      match="Not all nonfinite variance locations are of zero weight!"):
         var_for_frop = frf.prep_var_for_frop(data, nsamples, weights,
                                             cross_antpairpol, freq_slice,
                                             auto_ant=53,
