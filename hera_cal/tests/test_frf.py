@@ -1091,7 +1091,8 @@ def test_get_frop_for_noise():
     
     frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
                                   freqs=data.freqs, weights=weights, 
-                                  coherent_avg=False, cutoff=eval_cutoff)
+                                  coherent_avg=False, 
+                                  eigenval_cutoff=eval_cutoff)
     
     frf_dat = (frop * data[bl]).sum(axis=1)
     frf_dat_pipeline = copy.deepcopy(data)
@@ -1128,8 +1129,9 @@ def test_get_frop_for_noise():
 
     frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
                                   freqs=data.freqs, weights=weights, 
-                                  coherent_avg=True, cutoff=eval_cutoff,
-                                  dlst=dlst, nsamples=nsamples[bl], t_avg=300.,
+                                  coherent_avg=True, 
+                                  eigenval_cutoff=eval_cutoff, dlst=dlst,
+                                  nsamples=nsamples[bl], t_avg=300.,
                                   bl_vec=bl_vec)
     frf_dat = (frop * data[bl]).sum(axis=1)
 
@@ -1150,7 +1152,8 @@ def test_get_frop_for_noise():
     weights = np.ones_like(data[bl])
     frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
                                   freqs=data.freqs, weights=weights, 
-                                  coherent_avg=False, cutoff=eval_cutoff)
+                                  coherent_avg=False,
+                                  eigenval_cutoff=eval_cutoff)
     d_mdl, _, _ = dspec.fourier_filter(times, data[bl], 
                                        wgts=weights,
                                        filter_centers=[filt_cent],
@@ -1231,8 +1234,9 @@ def test_get_FRF_cov():
     frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
                                   freqs=data.freqs[freq_slice], 
                                   weights=weights[cross_antpairpol][:, freq_slice], 
-                                  coherent_avg=True, cutoff=eval_cutoff,
-                                  dlst=dlst, nsamples=nsamples[cross_antpairpol][:, freq_slice], 
+                                  coherent_avg=True,
+                                  eigenval_cutoff=eval_cutoff, dlst=dlst,
+                                  nsamples=nsamples[cross_antpairpol][:, freq_slice], 
                                   t_avg=300., bl_vec=bl_vec)
     
     cov = frf.get_FRF_cov(frop, var_for_frop)
@@ -1248,16 +1252,20 @@ def test_get_FRF_cov():
             frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
                                           freqs=data.freqs[freq_slice], 
                                           weights=weights[cross_antpairpol][:, freq_slice], 
-                                          coherent_avg=True, cutoff=eval_cutoff,
-                                          dlst=dlst, nsamples=nsamples[cross_antpairpol], 
+                                          coherent_avg=True, 
+                                          eigenval_cutoff=eval_cutoff,
+                                          dlst=dlst, 
+                                          nsamples=nsamples[cross_antpairpol], 
                                           t_avg=300., bl_vec=bl_vec)
             
     with pytest.raises(ValueError, match="weights has wrong shape"):
             frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
                                           freqs=data.freqs[freq_slice], 
                                           weights=weights[cross_antpairpol], 
-                                          coherent_avg=True, cutoff=eval_cutoff,
-                                          dlst=dlst, nsamples=nsamples[cross_antpairpol], 
+                                          coherent_avg=True, 
+                                          eigenval_cutoff=eval_cutoff,
+                                          dlst=dlst, 
+                                          nsamples=nsamples[cross_antpairpol], 
                                           t_avg=300., bl_vec=bl_vec)
 
 def test_get_corr_and_factor():
