@@ -186,9 +186,9 @@ class Test_FRFilter:
         bl = (24, 25, 'ee')
         window = 'blackmanharris'
         ec = 0
-        np.random.seed(0)
-        self.F.data[bl] = np.reshape(stats.norm.rvs(0, 1, self.F.Ntimes * self.F.Nfreqs)
-                                     + 1j * stats.norm.rvs(0, 1, self.F.Ntimes * self.F.Nfreqs), (self.F.Ntimes, self.F.Nfreqs))
+        rng = np.random.default_rng(seed=0)
+        self.F.data[bl] = np.reshape(rng.normal(0, 1, self.F.Ntimes * self.F.Nfreqs)
+                                     + 1j * rng.normal(0, 1, self.F.Ntimes * self.F.Nfreqs), (self.F.Ntimes, self.F.Nfreqs))
         # fr filter noise
         self.F.filter_data(self.F.data, frps, overwrite=True, verbose=False, axis=0, keys=[bl])
 
@@ -1085,8 +1085,8 @@ def test_get_frop_for_noise():
     eval_cutoff = 1e-12
     
     # Make random weights for extra fun
-    np.random.seed(1)
-    weights = np.random.exponential(size=data.shape)
+    rng = np.random.default_rng(seed=1)
+    weights = rng.exponential(size=data.shape)
     
     
     frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
