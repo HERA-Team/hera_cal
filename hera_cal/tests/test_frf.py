@@ -17,8 +17,9 @@ import yaml
 from scipy import stats
 from scipy import constants
 from pyuvdata import UVFlag, UVBeam
+from hera_filters import dspec
 from .. import utils
-from .. import datacontainer, io, frf
+from .. import datacontainer, io, frf, noise
 from ..data import DATA_PATH
 import warnings
 
@@ -185,9 +186,9 @@ class Test_FRFilter:
         bl = (24, 25, 'ee')
         window = 'blackmanharris'
         ec = 0
-        np.random.seed(0)
-        self.F.data[bl] = np.reshape(stats.norm.rvs(0, 1, self.F.Ntimes * self.F.Nfreqs)
-                                     + 1j * stats.norm.rvs(0, 1, self.F.Ntimes * self.F.Nfreqs), (self.F.Ntimes, self.F.Nfreqs))
+        rng = np.random.default_rng(seed=0)
+        self.F.data[bl] = np.reshape(rng.normal(0, 1, self.F.Ntimes * self.F.Nfreqs)
+                                     + 1j * rng.normal(0, 1, self.F.Ntimes * self.F.Nfreqs), (self.F.Ntimes, self.F.Nfreqs))
         # fr filter noise
         self.F.filter_data(self.F.data, frps, overwrite=True, verbose=False, axis=0, keys=[bl])
 
@@ -1066,3 +1067,245 @@ class Test_FRFilter:
         assert a.max_frate_coeffs[1] == -0.229
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
+
+def test_get_frop_for_noise():
+    uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+    hd = io.HERAData([uvh5])
+    bl = (53, 54, 'ee')
+    data, flags, nsamples = hd.read(bls=(53, 54, "ee"))
+    times = data.times * 24 * 3600
+
+    # Have to get some FRF parameters, but getting realistic ones is cumbersome
+    # This file has ~600s so the resolution is only ~1.7 mHz
+    # Integration time is 10s, so the Nyquist fringe rate is 200 mHz
+    # This is a short baseline so its fringe-rate profile is living in the first bin or so
+    # Just filter around 0 and see that it's similar to what the pipeline gives
+    filt_cent = 0
+    filt_hw = 0.005
+    eval_cutoff = 1e-12
+    
+    # Make random weights for extra fun
+    rng = np.random.default_rng(seed=1)
+    weights = rng.exponential(size=data.shape)
+    
+    
+    frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                  freqs=data.freqs, weights=weights, 
+                                  coherent_avg=False, 
+                                  eigenval_cutoff=eval_cutoff)
+    
+    frf_dat = (frop * data[bl]).sum(axis=1)
+    frf_dat_pipeline = copy.deepcopy(data)
+
+    # From main_beam_FR_filter in single_baseline_notebook
+    # TODO: graduate that code into hera_cal and put here
+    d_mdl = np.zeros_like(data[bl])
+
+    d_mdl, _, _ = dspec.fourier_filter(times, data[bl], 
+                                       wgts=weights, filter_centers=[filt_cent],
+                                       filter_half_widths=[filt_hw], 
+                                       mode='dpss_solve', 
+                                       eigenval_cutoff=[eval_cutoff], 
+                                       suppression_factors=[eval_cutoff], 
+                                       max_contiguous_edge_flags=len(data.times), 
+                                       filter_dims=0)
+    frf_dat_pipeline[bl] = d_mdl
+
+    assert np.allclose(frf_dat_pipeline[bl], frf_dat)
+
+    # Now do coherent averaging
+    # TODO: These lines are non-interleaved versions of some lines in the 
+    # single-baseline PS notebook. They seem useful -- maybe just make them 
+    # standard functions?
+    dt = times[1] - times[0]
+    Navg = int(np.round(300. / dt))
+    n_avg_int = int(np.ceil(len(data.lsts) / Navg))
+    target_lsts = [np.mean(np.unwrap(data.lsts)[i * Navg:(i+1) * Navg]) 
+                   for i in range(n_avg_int)]
+    dlst = [target_lsts[i] - l for i in range(n_avg_int) 
+            for l in np.unwrap(data.lsts)[i * Navg:(i+1) * Navg]]
+    bl_vec =  data.antpos[bl[0]] - data.antpos[bl[1]]
+
+
+    frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                  freqs=data.freqs, weights=weights, 
+                                  coherent_avg=True, 
+                                  eigenval_cutoff=eval_cutoff, dlst=dlst,
+                                  nsamples=nsamples[bl], t_avg=300.,
+                                  bl_vec=bl_vec)
+    frf_dat = (frop * data[bl]).sum(axis=1)
+
+    utils.lst_rephase(frf_dat_pipeline, {bl: bl_vec}, data.freqs, dlst, 
+                      lat=hd.telescope_location_lat_lon_alt_degrees[0], 
+                      inplace=True)
+    avg_data = frf.timeavg_waterfall(frf_dat_pipeline[bl], Navg,
+                                     flags=np.zeros_like(flags[bl]),
+                                     nsamples=nsamples[bl], 
+                                     extra_arrays={'times': data.times},
+                                     lsts=data.lsts, freqs=data.freqs,
+                                     rephase=False, bl_vec=bl_vec, 
+                                     verbose=False)[0]
+    
+    assert np.allclose(avg_data, frf_dat)
+
+    # Test uniform weights
+    weights = np.ones_like(data[bl])
+    frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                  freqs=data.freqs, weights=weights, 
+                                  coherent_avg=False,
+                                  eigenval_cutoff=eval_cutoff)
+    d_mdl, _, _ = dspec.fourier_filter(times, data[bl], 
+                                       wgts=weights,
+                                       filter_centers=[filt_cent],
+                                       filter_half_widths=[filt_hw], 
+                                       mode='dpss_solve', 
+                                       eigenval_cutoff=[eval_cutoff], 
+                                       suppression_factors=[eval_cutoff], 
+                                       max_contiguous_edge_flags=len(data.times), 
+                                       filter_dims=0)
+    frf_dat_pipeline[bl] = d_mdl
+    frf_dat = (frop * data[bl]).sum(axis=1)
+    assert np.allclose(frf_dat_pipeline[bl], frf_dat)
+
+    # Check that setting weights to None does the same as uniform weights
+    frop_none = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                       freqs=data.freqs, weights=None, 
+                                       coherent_avg=False,
+                                       eigenval_cutoff=eval_cutoff)
+    assert np.array_equal(frop, frop_none)
+
+def test_prep_var_for_frop():
+    uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+    hd = io.HERAData([uvh5])
+    data, flags, nsamples = hd.read()
+    # The first 37 freqs give 0 variance so just exclude them to make the rest
+    # of the test more transparent
+    freq_slice = slice(37, 1024)
+    cross_antpairpol = (53, 54, 'ee')
+    weights = copy.deepcopy(nsamples)
+
+    # This should return the exact same thing as the original noise prediction function
+    var_for_frop = frf.prep_var_for_frop(data, nsamples, weights,
+                                         cross_antpairpol, freq_slice)
+    var = noise.predict_noise_variance_from_autos(cross_antpairpol, data, nsamples=nsamples)
+
+    assert np.array_equal(var[:, freq_slice], var_for_frop)
+
+    # Now tell it to only use one antenna; they should all be different
+    var_for_frop = frf.prep_var_for_frop(data, nsamples, weights,
+                                         cross_antpairpol, freq_slice,
+                                         auto_ant=53)
+    
+    assert np.logical_not(np.any(var_for_frop == var[:, freq_slice]))
+
+    # Now give it some nsamples == 0 to deal with
+    # Should replace all of one channel with a peculiarly chosen value of 2.3
+    nsamples[cross_antpairpol][:, 48] = 0
+    with pytest.warns(UserWarning, 
+                      match="Not all nonfinite variance locations are of zero weight!"):
+        var_for_frop = frf.prep_var_for_frop(data, nsamples, weights,
+                                            cross_antpairpol, freq_slice,
+                                            auto_ant=53,
+                                            default_value=2.3)
+    assert np.all(var_for_frop[:, 48-37] == 2.3) 
+
+def test_get_FRF_cov():
+    uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+    hd = io.HERAData([uvh5])
+    data, flags, nsamples = hd.read()
+    # The first 37 freqs give 0 variance so just exclude them to make the rest
+    # of the test more transparent
+    freq_slice = slice(37, 1024)
+    cross_antpairpol = (53, 54, 'ee')
+    weights = copy.deepcopy(nsamples)
+    times = data.times * 24 * 3600
+    eval_cutoff = 1e-12
+
+    var_for_frop = frf.prep_var_for_frop(data, nsamples, weights,
+                                         cross_antpairpol, freq_slice,
+                                         auto_ant=53)
+    
+    dt = times[1] - times[0]
+    Navg = int(np.round(300. / dt))
+    n_avg_int = int(np.ceil(len(data.lsts) / Navg))
+    target_lsts = [np.mean(np.unwrap(data.lsts)[i * Navg:(i+1) * Navg]) 
+                   for i in range(n_avg_int)]
+    dlst = [target_lsts[i] - l for i in range(n_avg_int) 
+            for l in np.unwrap(data.lsts)[i * Navg:(i+1) * Navg]]
+    bl_vec =  data.antpos[cross_antpairpol[0]] - data.antpos[cross_antpairpol[1]]
+
+    # Need to give it some complex structure
+    filt_cent = 0.005
+    filt_hw = 0.005
+    frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                  freqs=data.freqs[freq_slice], 
+                                  weights=weights[cross_antpairpol][:, freq_slice], 
+                                  coherent_avg=True,
+                                  eigenval_cutoff=eval_cutoff, dlst=dlst,
+                                  nsamples=nsamples[cross_antpairpol][:, freq_slice], 
+                                  t_avg=300., bl_vec=bl_vec)
+    
+    cov = frf.get_FRF_cov(frop, var_for_frop)
+
+    # Check that at least it's (close to) hermitian at every frequency
+    # Tests for value sensibility exist in single baseline PS notebook
+    for freq_ind in range(1024 - 37):
+        assert np.allclose(cov[freq_ind], cov[freq_ind].T.conj())
+
+
+    # Pretend we forgot to slice things
+    with pytest.raises(ValueError, match="nsamples has wrong shape"):
+            frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                          freqs=data.freqs[freq_slice], 
+                                          weights=weights[cross_antpairpol][:, freq_slice], 
+                                          coherent_avg=True, 
+                                          eigenval_cutoff=eval_cutoff,
+                                          dlst=dlst, 
+                                          nsamples=nsamples[cross_antpairpol], 
+                                          t_avg=300., bl_vec=bl_vec)
+            
+    with pytest.raises(ValueError, match="weights has wrong shape"):
+            frop = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                          freqs=data.freqs[freq_slice], 
+                                          weights=weights[cross_antpairpol], 
+                                          coherent_avg=True, 
+                                          eigenval_cutoff=eval_cutoff,
+                                          dlst=dlst, 
+                                          nsamples=nsamples[cross_antpairpol], 
+                                          t_avg=300., bl_vec=bl_vec)
+
+def test_get_corr_and_factor():
+    # Actually just going to test an easy analytic case here
+    base = np.array([[2, 1, 0], 
+                     [1, 3, 1], 
+                     [0, 1, 4]])
+    cov = np.array([base, 2 * base])
+    corr = frf.get_corr(cov)
+
+    answer = np.array([[1, 1/np.sqrt(6), 0], 
+                       [1/np.sqrt(6), 1, 1/np.sqrt(12)],
+                       [0, 1/np.sqrt(12), 1]])
+
+    answer = np.array([answer, answer])
+
+    assert np.allclose(corr, answer)
+
+    factor = frf.get_correction_factor_from_cov(cov)
+
+    # A block diagonal "implementation"
+    blocklen = np.prod(cov.shape[:2])
+    sum_sq = 7
+    Neff = blocklen**2 / sum_sq
+    factor_answer = blocklen / Neff
+
+    assert np.allclose(factor, factor_answer)
+
+    tslc = slice(1, 3)
+    factor_slice = frf.get_correction_factor_from_cov(cov, tslc=tslc)
+
+    blocklen = 4
+    sum_sq = 2 * (2 + 2 / 12)
+    Neff = blocklen**2 / sum_sq
+    factor_slice_answer = blocklen / Neff
+
+    assert np.allclose(factor_slice, factor_slice_answer)
