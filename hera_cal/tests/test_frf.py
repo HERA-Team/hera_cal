@@ -1303,13 +1303,3 @@ def test_get_corr_and_factor():
     factor_slice_answer = blocklen / Neff
 
     assert np.allclose(factor_slice, factor_slice_answer)
-
-
-    
-
-
-
-
-    
-
-
