@@ -2147,8 +2147,9 @@ def prep_var_for_frop(data, nsamples, weights, cross_antpairpol, freq_slice,
             A slice into the frequency axis of the data that all gets filtered
             identically (a PS analysis band).
         auto_ant: int
-            If not None, should be a single integer specifying a single antenna's
-            autos (this is used because the redundantly averaged data have a single auto file for all antennas).
+            If not None, should be a single integer specifying a single 
+            antenna's autos (this is used because the redundantly averaged data
+            have a single auto file for all antennas).
         default_value: (float)
             The default variance to use in locations with 0 nsamples to avoid
             nans.
@@ -2161,15 +2162,15 @@ def prep_var_for_frop(data, nsamples, weights, cross_antpairpol, freq_slice,
                                             nsamples=nsamples, auto_ant=auto_ant)
     var = var[:, freq_slice]
 
-    var_isinf = np.isinf(var)
-    if np.any(var_isinf):
-        # Check all the infs are weighted to zero and replace with default value
-        all_infs_zero = np.all(weights[cross_antpairpol][:, freq_slice][var_isinf]) == 0
-        if not all_infs_zero:
-            warnings.warn("Not all infinite variance locations are of zero weight!")
+    var_isnotfinite = ~np.isfinite(var)
+    if np.any(var_isnotfinite):
+        # Check all the infs/nans are weighted to zero and replace with default value
+        all_nonfinite_zero = np.all(weights[cross_antpairpol][:, freq_slice][var_isnotfinite]) == 0
+        if not all_nonfinite_zero:
+            warnings.warn("Not all nonfinite variance locations are of zero weight!")
         
-        print(f"Replacing infinite variances with default value: {default_value}")
-        var[var_isinf] = default_value
+        print(f"Replacing nonfinite variances with default value: {default_value}")
+        var[var_isnotfinite] = default_value
     
     return var
 
