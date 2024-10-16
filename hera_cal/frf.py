@@ -2218,7 +2218,10 @@ def get_corr(cov):
 def get_correction_factor_from_cov(cov, tslc=None):
     """
     Get a correction factor for PS noise variance prediction in the absence
-    of propagating the noise covariances all the way to delay space.
+    of propagating the noise covariances all the way to delay space. This is 
+    based on HERA memo #132, where it is shown that one may calculate an 
+    effective number of degrees of freedom based on the variance of a 
+    generalized chi-square random variable.
 
     Parameters:
         cov: array
