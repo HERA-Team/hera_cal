@@ -1177,7 +1177,9 @@ def test_get_frop_for_noise():
 def test_prep_var_for_frop():
     uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
     hd = io.HERAData([uvh5])
-    data, flags, nsamples = hd.read(fix_autos=True)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Fixing auto-correlations")
+        data, flags, nsamples = hd.read()
     # The first 37 freqs give 0 variance so just exclude them to make the rest
     # of the test more transparent
     freq_slice = slice(37, 1024)
@@ -1213,7 +1215,9 @@ def test_prep_var_for_frop():
 def test_get_FRF_cov():
     uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
     hd = io.HERAData([uvh5])
-    data, flags, nsamples = hd.read(fix_autos=True)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Fixing auto-correlations")
+        data, flags, nsamples = hd.read()
     # The first 37 freqs give 0 variance so just exclude them to make the rest
     # of the test more transparent
     freq_slice = slice(37, 1024)
