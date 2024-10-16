@@ -1790,8 +1790,10 @@ class Test_Post_Redcal_Abscal_Run(object):
         hcr.gain_scale = 'k str'
         hcr.write_calfits(calfile_units)
         with pytest.warns(RuntimeWarning, match='Overwriting redcal gain_scale of k str with model gain_scale of Jy'):
-            hca = abscal.post_redcal_abscal_run(self.data_file, calfile_units, [model_units], phs_conv_crit=1e-4,
-                                                nInt_to_load=30, verbose=False, add_to_history='testing')
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="All-NaN slice encountered")
+                hca = abscal.post_redcal_abscal_run(self.data_file, calfile_units, [model_units], phs_conv_crit=1e-4,
+                                                    nInt_to_load=30, verbose=False, add_to_history='testing')
         assert hca.gain_scale == 'Jy'
 
     def test_post_redcal_abscal_run(self, tmpdir):
