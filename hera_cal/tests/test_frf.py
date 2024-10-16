@@ -1167,6 +1167,12 @@ def test_get_frop_for_noise():
     frf_dat = (frop * data[bl]).sum(axis=1)
     assert np.allclose(frf_dat_pipeline[bl], frf_dat)
 
+    # Check that setting weights to None does the same as uniform weights
+    frop_none = frf.get_frop_for_noise(times, filt_cent, filt_hw, 
+                                       freqs=data.freqs, weights=None, 
+                                       coherent_avg=False,
+                                       eigenval_cutoff=eval_cutoff)
+    assert np.array_equal(frop, frop_none)
 
 def test_prep_var_for_frop():
     uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
