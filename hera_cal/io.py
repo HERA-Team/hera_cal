@@ -1008,7 +1008,7 @@ class HERAData(UVData):
                 # explicitly handle cross-polarized autos
                 if bl[0] == bl[1]:
                     # ensure that we're not looking at (pseudo-)stokes visibilities
-                    if polstr2num(bl[2], x_orientation=self.x_orientation) < 0:
+                    if polstr2num(bl[2], x_orientation=self.telescope.x_orientation) < 0:
                         if utils.split_pol(bl[2])[0] != utils.split_pol(bl[2])[1]:
                             pol_reversed_bl = utils.reverse_bl(bl)
                             if pol_reversed_bl not in dc.keys():
