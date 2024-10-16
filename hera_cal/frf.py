@@ -2001,9 +2001,10 @@ def time_average_argparser():
     return ap
 
 def get_frop_for_noise(times, filter_cent_use, filter_half_wid_use, freqs,
-                       t_avg=300., cutoff=1e-9, weights=None, coherent_avg=True,
-                       wgt_tavg_by_nsample=True, nsamples=None, rephase=True,
-                       bl_vec=None, lat=-30.721526120689507, dlst=None):
+                       t_avg=300., eigenval_cutoff=1e-9, weights=None, 
+                       coherent_avg=True, wgt_tavg_by_nsample=True, 
+                       nsamples=None, rephase=True, bl_vec=None, 
+                       lat=-30.721526120689507, dlst=None):
     """
     Get FRF + coherent time average operator for the purposes of noise 
     covariance calculation. Composes time averaging and the main lobe FRF into
@@ -2020,7 +2021,7 @@ def get_frop_for_noise(times, filter_cent_use, filter_half_wid_use, freqs,
             Frequencies in the data (in Hz).
         t_avg (float):
             Desired coherent averaging length, in seconds.
-        cutoff (float):
+        eigenval_cutoff (float):
             Eigenvalue cutoff for DPSS modes.
         weights (array):
             Array of weights to use for main lobe filter.
@@ -2054,7 +2055,7 @@ def get_frop_for_noise(times, filter_cent_use, filter_half_wid_use, freqs,
     
     dmatr, _ = dspec.dpss_operator(times, np.array([filter_cent_use, ]),
                                    np.array([filter_half_wid_use, ]),
-                                   eigenval_cutoff=np.array([cutoff, ]))
+                                   eigenval_cutoff=np.array([eigenval_cutoff, ]))
     Nmodes = dmatr.shape[-1]
     
     if weights is None: 
