@@ -2036,7 +2036,7 @@ def get_frop_for_noise(times, filter_cent_use, filter_half_wid_use, freqs,
         rephase (bool):
             Whether to rephase before averaging.
         bl_vec (array):
-            Baseline vector in ENU
+            Baseline vector in meters in ENU coordinate system
         lat (float):
             Array latitude in degrees North.
         dlst (float or array_like):
