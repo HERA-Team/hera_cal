@@ -1221,9 +1221,11 @@ def test_get_FRF_cov():
     times = data.times * 24 * 3600
     eval_cutoff = 1e-12
 
+    # Set verbose to true just to cover the line -- not super important that
+    # we test it actually went to some console/log/whatever
     var_for_frop = frf.prep_var_for_frop(data, nsamples, weights,
                                          cross_antpairpol, freq_slice,
-                                         auto_ant=53)
+                                         auto_ant=53, verbose=True)
     
     dt = times[1] - times[0]
     Navg = int(np.round(300. / dt))

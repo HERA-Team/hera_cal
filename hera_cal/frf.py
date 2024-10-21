@@ -2127,7 +2127,7 @@ def get_frop_for_noise(times, filter_cent_use, filter_half_wid_use, freqs,
     return frop
 
 def prep_var_for_frop(data, nsamples, weights, cross_antpairpol, freq_slice, 
-                      auto_ant=None, default_value=0.):
+                      auto_ant=None, default_value=0., verbose=False):
     """
     Wrapper around hera_cal.noise.predict_noise_variance_from_autos that preps
     the noise variance calculation for FRF + coherent average.
@@ -2153,6 +2153,8 @@ def prep_var_for_frop(data, nsamples, weights, cross_antpairpol, freq_slice,
         default_value: (float)
             The default variance to use in locations with 0 nsamples to avoid
             nans.
+        verbose: (bool)
+            Whether to print that it had to replace from nonfinite variances.
 
     Returns:
         var: array
@@ -2169,7 +2171,8 @@ def prep_var_for_frop(data, nsamples, weights, cross_antpairpol, freq_slice,
         if not all_nonfinite_zero:
             warnings.warn("Not all nonfinite variance locations are of zero weight!")
         
-        print(f"Replacing nonfinite variances with default value: {default_value}")
+        if verbose:
+            print(f"Replacing nonfinite variances with default value: {default_value}")
         var[var_isnotfinite] = default_value
     
     return var
