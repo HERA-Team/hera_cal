@@ -2097,14 +2097,14 @@ def get_frop_for_noise(times, filter_cent_use, filter_half_wid_use, freqs,
             dlst = np.append(dlst, np.zeros(chunk_size - chunk_remainder, dtype=float))
 
         dres = dmatr.reshape(Nchunk, chunk_size, Nmodes)
-        wres = tavg_weights.reshape(Nchunk, chunk_size, Nfreqs)
+        wres = tavg_weights.reshape(Nchunk, chunk_size, Nfreqs).astype(complex)
         wnorm = wres.sum(axis=1)[:, np.newaxis]
         # normalize for an average
         wres = np.where(wnorm > 0, wres / wnorm, 0)
 
         # Apply the rephase to the weights matrix since it's mathematically equivalent and convenient
         if rephase:
-            wres = utils.lst_rephase(wres.reshape(Nchunk * chunk_size, 1, Nfreqs).astype(complex),
+            wres = utils.lst_rephase(wres.reshape(Nchunk * chunk_size, 1, Nfreqs),
                                bl_vec, freqs, dlst, lat=lat, inplace=False)
             wres = wres.reshape(Nchunk, chunk_size, Nfreqs)
 
