@@ -2236,7 +2236,8 @@ def get_correction_factor_from_cov(cov, tslc=None):
             The time-time covariance matrix at every frequency
         tslc: slice
             A time slice to use in case some times should be excluded from the
-            calculation of this factor.
+            calculation of this factor. Can also be a boolean mask with the same
+            length as one of the dimensions of cov.
 
     Returns:
         correction_factor: array
@@ -2247,9 +2248,14 @@ def get_correction_factor_from_cov(cov, tslc=None):
     if tslc is None:
         Ncotimes = corr.shape[1]
         Neff = Ncotimes**2 / np.sum(np.abs(corr)**2, axis=(1, 2))
-    else:
+    elif isinstance(tslc, slice):
         Ncotimes = tslc.stop - tslc.start
         Neff = Ncotimes**2 / np.sum(np.abs(corr[:, tslc, tslc])**2, axis=(1, 2))
+    elif isinstance(tslc, np.ndarray) and tslc.dtype == bool:
+        Ncotimes = np.sum(tslc)  # Count of True values in the boolean mask
+        Neff = Ncotimes**2 / np.sum(np.abs(corr[:, tslc][:, :, tslc])**2, axis=(1, 2))
+    else:
+        raise ValueError("tslc must be None, a slice, or a boolean numpy array.")
     correction_factor = np.mean(Ncotimes / Neff)  # Average over frequency since they are independent.
 
     return correction_factor
