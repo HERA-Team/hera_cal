@@ -1296,6 +1296,7 @@ def test_get_corr_and_factor():
 
     assert np.allclose(corr, answer)
 
+    # Test for tslc=None case
     factor = frf.get_correction_factor_from_cov(cov)
 
     # A block diagonal "implementation"
@@ -1306,6 +1307,7 @@ def test_get_corr_and_factor():
 
     assert np.allclose(factor, factor_answer)
 
+    # Test for tslc as a slice
     tslc = slice(1, 3)
     factor_slice = frf.get_correction_factor_from_cov(cov, tslc=tslc)
 
@@ -1315,3 +1317,18 @@ def test_get_corr_and_factor():
     factor_slice_answer = blocklen / Neff
 
     assert np.allclose(factor_slice, factor_slice_answer)
+
+    # Test for tslc as a boolean array
+    tslc_bool = np.array([False, True, True])
+    factor_bool = frf.get_correction_factor_from_cov(cov, tslc=tslc_bool)
+
+    blocklen = 4  # Only two True values per time slice
+    sum_sq = 2 * (2 + 2 / 12)
+    Neff = blocklen**2 / sum_sq
+    factor_bool_answer = blocklen / Neff
+
+    assert np.allclose(factor_bool, factor_bool_answer)
+
+    # Test for invalid tslc type (e.g., an integer)
+    with pytest.raises(ValueError, match="tslc must be None, a slice, or a boolean numpy array."):
+        frf.get_correction_factor_from_cov(cov, tslc=5)
