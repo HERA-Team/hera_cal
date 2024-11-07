@@ -435,10 +435,96 @@ class EMInpainter:
 
         for attr_name, arg in zip(attr_names, args):
             setattr(self, attr_name, arg)
-        # inverse variance, so put 0s where there were no observations
-        self.inv_noise_var = np.where(~stackf, stackn / base_noise_var , 0)
+
         self.nfreq = self.stackd.shape[1]
+        self.nmodes = self.basis.shape[0]
+        self.n_nights = self.stackd.shape[0]
+
+        self.stackd_real = np.concatenate(
+            [
+                self.stackd.real, 
+                self.stackd.imag,
+            ],
+            axis=1,
+        )
+        # inverse variance, so put 0s where there were no observations
+        # Factors of 2 because splitting real/imag
+        self.inv_noise_var = 2 * np.where(~stackf, stackn / base_noise_var , 0)
+        self.inv_noise_var_dpss = np.zeros(
+            [
+                self.num_nights,
+                2 * self.nmodes,
+                2 * self.nmodes,
+            ]
+        )
+
+        stackd_inv_var_weight = self.inv_noise_var_dpss * self.stackd
+        self.stackd_proj = np.zeros([self.n_nights, 2 * self.nmodes])
+
+        zeros = np.zeros([self.nmodes, self.nmodes])
+        # Take advantage of real basis functions throughout this loop
+        for night in range(self.n_nights): 
+            ATNinvA = np.tensordot(
+                self.basis.T * self.inv_noise_var[night],
+                self.basis,
+                axes=1
+            )
+            self.inv_noise_var_dps[night] = np.block(
+                [
+                    [ATNinvA, zeros],
+                    [zeros, ATNinvA]
+                ]
+            )
+            stackd_proj_night = basis.T @ stackd_inv_var_weight[night]
+            self.stackd_proj[night] == np.concatenate(
+                [
+                    stackd_proj_night.real, 
+                    stackd_proj_night.imag
+                ]
+            )
+
+    def do_EM(self):
+        """
+        Do the EM algorithm.
+
+        Returns
+        -------
+        nightly_model
+            The MAP complex DPSS coefficients for each night, shape (num_nights, nmodes)
+        exp_norm_mean
+            The complex DPSS coefficients of the marginal mean; not the sample
+            mean, shape(num_nights, nmodes)
+        exp_var
+            The marginal variances of the systematic process; left as real/imag
+            separated in case of non-circularity shape (2*nmodes).
+        """
+        # Factor of 2 for real/imag
+        model_shape = [2 * self.self.nmodes, self.n_nights]
+        if self.EM_seed is not None:
+            rng = np.random.default_rng(seed=self.EM_seed)
+            model_guess = rng.normal(size=model_shape)
+        else:
+            model_guess = np.ones(model_shape)
         
+        cond_norm_prec = self.norm_prec + self.n_nights
+        cond_ig_df = self.ig_df + self.n_nights
+        for iter_ind in range(self.Niter): # TODO: Consider a convergence criterion
+            model_guess_mean = np.mean(model_guess, axis=1)
+            exp_norm_mean = (self.norm_prec * self.norm_mean 
+                              + self.n_nights * model_guess_mean) / cond_norm_prec
+            
+            cond_sum_sqs = np.sum((model_guess.T - model_guess_mean)**2, axis=0)
+            prior_sum_sqs = self.norm_prec * self.n_nights / cond_norm_prec * (model_guess_mean - self.norm_mean)**2
+            exp_ig_scale = self.ig_scale + cond_sum_sqs + prior_sum_sqs
+
+            LHS_ops = self.inv_noise_var_dpss + np.diag(cond_ig_df / exp_ig_scale)
+            rhs_vecs = self.stackd_proj_night + cond_ig_df * exp_norm_mean / exp_ig_scale
+            model_guess = np.linalg.solve(LHS_ops, rhs_vecs)
+        nightly_model = model_guess[:, :self.nmodes] + 1.j * model_guess[:, self.nmodes:] 
+        exp_norm_mean = exp_norm_mean[:self.nmodes] + 1.j * exp_norm_mean[self.nmodes:]
+        exp_var = exp_ig_scale / cond_ig_df
+        
+        return nightly_model, exp_norm_mean, exp_var
         
 
 
