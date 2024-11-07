@@ -355,6 +355,93 @@ def reduce_lst_bins(
     return o
 
 
+class EMInpainter:
+    """
+    Mostly just a container for model hyperparameters and relevant data, along 
+    with some methods to do inpainting with an EM algorithm.
+    """
+
+    def __init__(
+        self,
+        stackd: np.ndarray,
+        stackf: np.ndarray,
+        stackn: np.ndarray,
+        base_noise_var: np.ndarray,  
+        basis: np.ndarray, 
+        Niter: int = 1000,
+        EM_seed: int | None = None,
+        ig_scale: float = 0.,
+        ig_df: float = 0.,
+        norm_mean: float = 0.,
+        norm_prec: float = 0.,
+    ):
+        """
+        Initialize an EMInpainter object.
+        
+        Parameters
+        ----------
+        stackd : np.ndarray
+            The stacked data, shape (n_nights, nfreq).
+        stackf : np.ndarray
+            The stacked flags, shape (n_nights, nfreq).
+        stackn : np.ndarray
+            The stacked nsamples, shape (n_nights, nfreq).
+        base_noise_var : np.ndarray
+            The expected noise variance for each night, shape (n_nights, nfreq).
+        basis: np.ndarray
+            The design matrix for the relatively low-order basis that describes
+            the visibilities, shape (nmodes, nfreq)
+        Niter: int
+            Number of iterations to do EM for. Default 1000, which seems to
+            perform well in numerical tests on random draws.    
+        EM_seed: int
+            Seed for a Normal random number generator to initialize the EM 
+            algorithm.
+        ig_scale: float
+            Inverse gamma scale parameter for systematic variance prior. Default
+            of 0 corresponds to an improper power law prior.
+        ig_df: float
+            Inverse gamma degrees of freedom parameter. Default of 0 corresponds
+            to an improper prior with tails that go like a log-flat prior.
+        norm_mean: float
+            Mean of the Normal prior on the 'mean over nights' parameter.
+        norm_prec: float
+            Precision parameter for the Normal prior on the 'mean' over nights
+            parameter. Default of 0 corresponds to an improper flat prior.
+        """
+        attr_names = [
+            "stackd",
+            "stackf",
+            "basis",
+            "Niter",
+            "EM_seed",
+            "ig_scale",
+            "ig_df",
+            "norm_mean",
+            "norm_prec",
+        ]
+
+        args = [
+            stackd,
+            stackf,
+            basis,
+            Niter,
+            EM_seed,
+            ig_scale,
+            ig_df,
+            norm_mean,
+            norm_prec,
+        ]
+
+        for attr_name, arg in zip(attr_names, args):
+            setattr(self, attr_name, arg)
+        # inverse variance, so put 0s where there were no observations
+        self.inv_noise_var = np.where(~stackf, stackn / base_noise_var , 0)
+        self.nfreq = self.stackd.shape[1]
+        
+        
+
+
 def average_and_inpaint_simultaneously_single_bl(
     freqs: np.ndarray,
     stackd: np.ndarray,
