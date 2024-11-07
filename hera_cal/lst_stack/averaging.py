@@ -372,6 +372,8 @@ def average_and_inpaint_simultaneously_single_bl(
     sample_cov_fraction: float = 0.0,
     eigenval_cutoff: float = (0.01,),
     cache: dict | None = None,
+    mode: str = "one_shot",
+    Niter: int = 1000
 ):
     """
     Average and inpaint simultaneously for a single baseline.
@@ -414,6 +416,13 @@ def average_and_inpaint_simultaneously_single_bl(
         The eigenvalue cutoff for determining DPSS filters.
     cache : dict
         A cache for storing DPSS filter matrices.
+    mode: str
+        Must be 'one_shot' or 'EM'. 'EM' applies an Expectation-Maximization
+        algorithm to find the posterior mode of a Bayesian hierarchical model,
+        while 'one_shot' approximates this mode with a reasonable guess at the
+        relevant hyperparameters. 
+    Niter: int
+        Number of iteration to perform EM algorithm if mode is 'EM'.
 
     Returns
     -------
@@ -425,6 +434,8 @@ def average_and_inpaint_simultaneously_single_bl(
     models
         The inpainting models as a numpy array of shape (n_nights, nfreq).
     """
+    assert (mode in ["one_shot", "EM"]), "mode kwarg must be 'one_shot' or 'EM'"
+
     # DPSS inpainting model
     model = np.zeros_like(stackd)
     mask = (~stackf).astype(float)
@@ -487,123 +498,126 @@ def average_and_inpaint_simultaneously_single_bl(
             eigenval_cutoff=eigenval_cutoff,
         )[0].real
 
-        # Do the caching on a per night basis - find better way to do this
-        CNinv_1sample_dpss = []
-        CNinv_1sample_dpss_inv = []
-        for night_index in range(n_nights):
-            # compute fits for dpss basis functions
-            hash_key = dspec._fourier_filter_hash(
-                filter_centers=filter_centers,
-                filter_half_widths=filter_half_widths,
-                x=freqs[band],
-                w=(base_noise_var[night_index, band] * mask[night_index, band]),
+        if mode == "one_shot":
+            # Do the caching on a per night basis - find better way to do this
+            CNinv_1sample_dpss = []
+            CNinv_1sample_dpss_inv = []
+            for night_index in range(n_nights):
+                # compute fits for dpss basis functions
+                hash_key = dspec._fourier_filter_hash(
+                    filter_centers=filter_centers,
+                    filter_half_widths=filter_half_widths,
+                    x=freqs[band],
+                    w=(base_noise_var[night_index, band] * mask[night_index, band]),
+                )
+
+                # If key exists in cache, load in filter and inverse
+                if hash_key in cache:
+                    _CNinv_1sample_dpss, _CNinv_1sample_dpss_inv = cache[hash_key]
+                    CNinv_1sample_dpss.append(_CNinv_1sample_dpss)
+                    CNinv_1sample_dpss_inv.append(_CNinv_1sample_dpss_inv)
+                else:
+                    _CNinv_1sample_dpss = np.dot(
+                        basis.T
+                        * mask[night_index, band]
+                        / base_noise_var[night_index, band],
+                        basis,
+                    )
+                    _CNinv_1sample_dpss_inv = np.linalg.pinv(_CNinv_1sample_dpss)
+                    CNinv_1sample_dpss.append(_CNinv_1sample_dpss)
+                    CNinv_1sample_dpss_inv.append(_CNinv_1sample_dpss_inv)
+                    cache[hash_key] = (_CNinv_1sample_dpss, _CNinv_1sample_dpss_inv)
+
+            # Compute data covariance
+            CNinv_dpss = CNinv_1sample_dpss * nsamples_by_night[:, np.newaxis]
+            CNinv_dpss_inv = CNinv_1sample_dpss_inv / nsamples_by_night[:, np.newaxis]
+            sum_CNinv_dpss = np.sum(CNinv_dpss, axis=0)
+
+            # compute matrix product + get per-day DPSS fits
+            noise_var = base_noise_var / nsamples_by_night
+            CNinv_data_dpss = np.array(
+                [
+                    basis.T.dot(weighted_data)
+                    for weighted_data in mask[:, band]
+                    / noise_var[:, band]
+                    * stackd[:, band]
+                ]
+            )
+            dpss_fits = np.array(
+                [
+                    a.dot(b) if np.all(np.isfinite(b)) else a.dot(np.zeros_like(b))
+                    for a, b in zip(CNinv_dpss_inv, CNinv_data_dpss)
+                ]
             )
 
-            # If key exists in cache, load in filter and inverse
-            if hash_key in cache:
-                _CNinv_1sample_dpss, _CNinv_1sample_dpss_inv = cache[hash_key]
-                CNinv_1sample_dpss.append(_CNinv_1sample_dpss)
-                CNinv_1sample_dpss_inv.append(_CNinv_1sample_dpss_inv)
+            # Find nights that are entirely flagged in this band
+            is_unflagged_night = ~np.all(stackf[:, band], axis=1)
+
+            # Compute weighted sample mean from per-day DPSS-fits and noise-weighted covariance matrix
+            inv_sum_CNinv_dpss = np.linalg.pinv(sum_CNinv_dpss)
+            sample_mean_dpss = inv_sum_CNinv_dpss @ np.einsum(
+                "nde,nd->e", CNinv_dpss[is_unflagged_night], dpss_fits[is_unflagged_night]
+            )
+
+            # Compute weighted sample covariance of DPSS coefficients, then restrict it to the diagonal variance, then invert
+            weighted_diff_dpss = np.array(
+                [
+                    np.dot(CNinv_dpss[i], (dpss_fits - sample_mean_dpss)[i])
+                    for i in range(n_nights)
+                    if is_unflagged_night[i]
+                ]
+            )
+            sample_cov_dpss = np.sum(
+                [
+                    np.outer(_weighted_diff_dpss, _weighted_diff_dpss.conj())
+                    for _weighted_diff_dpss in weighted_diff_dpss
+                ],
+                axis=0,
+            )
+
+            # Calculate effective nights
+            effective_nights = np.sum(np.mean(mask[:, band], axis=1))
+
+            # TODO: Sample covariance is overestimated and has a fudge factor, this is probably close to correct
+            # but not exactly right. We should revisit this.
+            if effective_nights <= 1:
+                sample_cov_dpss_inv = np.zeros_like(sample_cov_dpss)
             else:
-                _CNinv_1sample_dpss = np.dot(
-                    basis.T
-                    * mask[night_index, band]
-                    / base_noise_var[night_index, band],
-                    basis,
+                sample_cov_dpss = (
+                    (
+                        inv_sum_CNinv_dpss
+                        @ (sample_cov_dpss - use_unbiased_estimator * sum_CNinv_dpss)
+                        @ inv_sum_CNinv_dpss
+                    )
+                    * effective_nights**2
+                    / (effective_nights - 1)
                 )
-                _CNinv_1sample_dpss_inv = np.linalg.pinv(_CNinv_1sample_dpss)
-                CNinv_1sample_dpss.append(_CNinv_1sample_dpss)
-                CNinv_1sample_dpss_inv.append(_CNinv_1sample_dpss_inv)
-                cache[hash_key] = (_CNinv_1sample_dpss, _CNinv_1sample_dpss_inv)
+                sample_cov_dpss = sample_cov_fraction * sample_cov_dpss + (
+                    1.0 - sample_cov_fraction
+                ) * np.diag(np.diag(sample_cov_dpss))
+                sample_cov_dpss_inv = np.linalg.pinv(sample_cov_dpss)
 
-        # Compute data covariance
-        CNinv_dpss = CNinv_1sample_dpss * nsamples_by_night[:, np.newaxis]
-        CNinv_dpss_inv = CNinv_1sample_dpss_inv / nsamples_by_night[:, np.newaxis]
-        sum_CNinv_dpss = np.sum(CNinv_dpss, axis=0)
-
-        # compute matrix product + get per-day DPSS fits
-        noise_var = base_noise_var / nsamples_by_night
-        CNinv_data_dpss = np.array(
-            [
-                basis.T.dot(weighted_data)
-                for weighted_data in mask[:, band]
-                / noise_var[:, band]
-                * stackd[:, band]
-            ]
-        )
-        dpss_fits = np.array(
-            [
-                a.dot(b) if np.all(np.isfinite(b)) else a.dot(np.zeros_like(b))
-                for a, b in zip(CNinv_dpss_inv, CNinv_data_dpss)
-            ]
-        )
-
-        # Find nights that are entirely flagged in this band
-        is_unflagged_night = ~np.all(stackf[:, band], axis=1)
-
-        # Compute weighted sample mean from per-day DPSS-fits and noise-weighted covariance matrix
-        inv_sum_CNinv_dpss = np.linalg.pinv(sum_CNinv_dpss)
-        sample_mean_dpss = inv_sum_CNinv_dpss @ np.einsum(
-            "nde,nd->e", CNinv_dpss[is_unflagged_night], dpss_fits[is_unflagged_night]
-        )
-
-        # Compute weighted sample covariance of DPSS coefficients, then restrict it to the diagonal variance, then invert
-        weighted_diff_dpss = np.array(
-            [
-                np.dot(CNinv_dpss[i], (dpss_fits - sample_mean_dpss)[i])
-                for i in range(n_nights)
-                if is_unflagged_night[i]
-            ]
-        )
-        sample_cov_dpss = np.sum(
-            [
-                np.outer(_weighted_diff_dpss, _weighted_diff_dpss.conj())
-                for _weighted_diff_dpss in weighted_diff_dpss
-            ],
-            axis=0,
-        )
-
-        # Calculate effective nights
-        effective_nights = np.sum(np.mean(mask[:, band], axis=1))
-
-        # TODO: Sample covariance is overestimated and has a fudge factor, this is probably close to correct
-        # but not exactly right. We should revisit this.
-        if effective_nights <= 1:
-            sample_cov_dpss_inv = np.zeros_like(sample_cov_dpss)
-        else:
-            sample_cov_dpss = (
-                (
-                    inv_sum_CNinv_dpss
-                    @ (sample_cov_dpss - use_unbiased_estimator * sum_CNinv_dpss)
-                    @ inv_sum_CNinv_dpss
-                )
-                * effective_nights**2
-                / (effective_nights - 1)
+            CNinv_data_dpss = np.where(np.isfinite(CNinv_data_dpss), CNinv_data_dpss, 0)
+            LU_decomp = [
+                linalg.lu_factor(nightly_inv + sample_cov_dpss_inv)
+                for nightly_inv in CNinv_dpss
+            ]  # LU decomposition of Sigma_{N,i}^-1
+            sample_cov_inv_sample_mean_dpss = sample_cov_dpss_inv.dot(sample_mean_dpss)
+            post_mean = np.array(
+                [
+                    linalg.lu_solve(
+                        _LU_decomp,
+                        (nightly_weighted_data + sample_cov_inv_sample_mean_dpss),
+                    )
+                    for _LU_decomp, nightly_weighted_data in zip(LU_decomp, CNinv_data_dpss)
+                ]
             )
-            sample_cov_dpss = sample_cov_fraction * sample_cov_dpss + (
-                1.0 - sample_cov_fraction
-            ) * np.diag(np.diag(sample_cov_dpss))
-            sample_cov_dpss_inv = np.linalg.pinv(sample_cov_dpss)
+            model[:, band] = basis.dot(post_mean.T).T
 
-        CNinv_data_dpss = np.where(np.isfinite(CNinv_data_dpss), CNinv_data_dpss, 0)
-        LU_decomp = [
-            linalg.lu_factor(nightly_inv + sample_cov_dpss_inv)
-            for nightly_inv in CNinv_dpss
-        ]  # LU decomposition of Sigma_{N,i}^-1
-        sample_cov_inv_sample_mean_dpss = sample_cov_dpss_inv.dot(sample_mean_dpss)
-        post_mean = np.array(
-            [
-                linalg.lu_solve(
-                    _LU_decomp,
-                    (nightly_weighted_data + sample_cov_inv_sample_mean_dpss),
-                )
-                for _LU_decomp, nightly_weighted_data in zip(LU_decomp, CNinv_data_dpss)
-            ]
-        )
-        model[:, band] = basis.dot(post_mean.T).T
-
-        # If we've made it this far, set averaged flags to False
-        avg_flgs[band] = False
+            # If we've made it this far, set averaged flags to False
+            avg_flgs[band] = False
+        else: # Already asserted it must be EM
+            raise NotImplementedError("EM mode is not implemented yet.")
 
     # Shortcut here if everything is flagged.
     # Note that we can have avg_flgs be all flagged when not all of stackf is flagged
