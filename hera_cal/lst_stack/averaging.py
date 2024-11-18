@@ -406,7 +406,7 @@ class EMInpainter:
         norm_mean: float
             Mean of the Normal prior on the 'mean over nights' parameter.
         norm_prec: float
-            Precision parameter for the Normal prior on the 'mean' over nights
+            Precision parameter for the Normal prior on the 'mean over nights'
             parameter. Default of 0 corresponds to an improper flat prior.
         """
         attr_names = [
@@ -546,7 +546,12 @@ def average_and_inpaint_simultaneously_single_bl(
     eigenval_cutoff: float = (0.01,),
     cache: dict | None = None,
     mode: str = "one_shot",
-    Niter: int = 1000
+    Niter: int = 1000,
+    EM_seed: int | None = None,
+    ig_scale: float = 0.,
+    ig_df: float = 0.,
+    norm_mean: float=0.,
+    norm_prec: float=0., 
 ):
     """
     Average and inpaint simultaneously for a single baseline.
@@ -596,7 +601,22 @@ def average_and_inpaint_simultaneously_single_bl(
         relevant hyperparameters. 
     Niter: int
         Number of iteration to perform EM algorithm if mode is 'EM'.
+    EM_seed: int
+        Seed for a Normal random number generator to initialize the EM 
+        algorithm.
+    ig_scale: float
+        Inverse gamma scale parameter for systematic variance prior. Default
+        of 0 corresponds to an improper power law prior.
+    ig_df: float
+        Inverse gamma degrees of freedom parameter. Default of 0 corresponds
+        to an improper prior with tails that go like a log-flat prior.
+    norm_mean: float
+        Mean of the Normal prior on the 'mean over nights' parameter.
+    norm_prec: float
+        Precision parameter for the Normal prior on the 'mean over nights'
+        parameter. Default of 0 corresponds to an improper flat prior.
 
+    
     Returns
     -------
     mean
@@ -790,7 +810,22 @@ def average_and_inpaint_simultaneously_single_bl(
             # If we've made it this far, set averaged flags to False
             avg_flgs[band] = False
         else: # Already asserted it must be EM
-            raise NotImplementedError("EM mode is not implemented yet.")
+            emi = EMInpainter(
+                stackd[:, band],
+                stackf[:, band],
+                stackn[:, band],
+                base_noise_var[:, band],
+                basis,
+                Niter=Niter,
+                EM_seed=EM_seed,
+                ig_scale=ig_scale,
+                ig_df=ig_df,
+                norm_mean=norm_mean,
+                norm_prec=norm_prec,
+            )
+            #TODO: Decide whether the nuisance parameters will be interesting to look at
+            nightly_model, exp_norm_mean, exp_var = emi.do_EM() 
+            model[:, band] = basis.dot(nightly_model.T).T
 
     # Shortcut here if everything is flagged.
     # Note that we can have avg_flgs be all flagged when not all of stackf is flagged
@@ -818,6 +853,7 @@ def average_and_inpaint_simultaneously_single_bl(
         inpainted_mean[total_nsamples == 0] *= np.nan
 
     return inpainted_mean, avg_flgs, model
+
 
 
 def average_and_inpaint_simultaneously(
