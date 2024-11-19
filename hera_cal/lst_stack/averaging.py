@@ -423,6 +423,7 @@ class EMInpainter:
             "ig_df",
             "norm_mean",
             "norm_prec",
+            "complex_valued",
         ]
 
         args = [
@@ -435,6 +436,7 @@ class EMInpainter:
             ig_df,
             norm_mean,
             norm_prec,
+            complex_valued,
         ]
 
         for attr_name, arg in zip(attr_names, args):
@@ -445,10 +447,11 @@ class EMInpainter:
         self.n_nights = self.stackd.shape[0]
 
 
-        if not complex_valued:
+        if not self.complex_valued:
             self.stackd = np.copy(self.stackd.real)
         # Factors of 2 if splitting real/imag
-        self.domain_factor = (1 + int(complex_valued))
+        real_valued = not self.complex_valued
+        self.domain_factor = 2 - int(real_valued)
         # inverse variance, so put 0s where there were no observations
         self.inv_noise_var = self.domain_factor * np.where(
             ~stackf, 
@@ -475,7 +478,7 @@ class EMInpainter:
             )
             stackd_proj_night = basis.T @ stackd_inv_var_weight[night]
 
-            if not complex_valued:
+            if complex_valued:
                 self.inv_noise_var_dpss[night] = np.block(
                     [
                         [ATNinvA, zeros],
