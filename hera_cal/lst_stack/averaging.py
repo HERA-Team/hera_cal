@@ -955,10 +955,6 @@ def average_and_inpaint_simultaneously(
     norm_prec: float
         Precision parameter for the Normal prior on the 'mean over nights'
         parameter. Default of 0 corresponds to an improper flat prior.
-    complex_valued: bool
-        Whether the input data are complex-valued (e.g. the autos are 
-        real-valued but often stored in a complex-valued array). Only used in
-        'EM' mode.
 
     Returns
     -------
@@ -1017,6 +1013,8 @@ def average_and_inpaint_simultaneously(
             **filter_properties,
         )
 
+        is_an_auto = (antpair[0] == antpair[1]) # EM wants to know about autos
+
         # Round up filter half width to the nearest nanosecond
         # allows the cache to be hit more frequently
         if round_filter_half_width:
@@ -1031,6 +1029,8 @@ def average_and_inpaint_simultaneously(
             avg_flgs = lstavg["flags"][iap, :, polidx]
 
             antpol1, antpol2 = utils.split_pol(pol)
+            real_valued = (is_an_auto and (antpol1 == antpol2))
+            complex_valued = not real_valued
 
             # Compute noise variance for all days in stack
             base_noise_var = (
