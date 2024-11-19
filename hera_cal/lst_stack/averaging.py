@@ -532,8 +532,11 @@ class EMInpainter:
             rhs_vecs = self.stackd_proj + cond_ig_df * exp_norm_mean / exp_ig_scale
             model_guess = np.linalg.solve(LHS_ops, rhs_vecs).T
 
-        nightly_model = model_guess[:self.nmodes] + 1.j * model_guess[self.nmodes:] 
-        exp_norm_mean = exp_norm_mean[:self.nmodes] + 1.j * exp_norm_mean[self.nmodes:]
+        nightly_model = model_guess[:self.nmodes] 
+        exp_norm_mean = exp_norm_mean[:self.nmodes]
+        if self.complex_valued:
+            nightly_model += 1.j * model_guess[self.nmodes:] 
+            exp_norm_mean += 1.j * exp_norm_mean[self.nmodes:]
         exp_var = exp_ig_scale / cond_ig_df
         
         return nightly_model, exp_norm_mean, exp_var
