@@ -390,7 +390,7 @@ class EMInpainter:
             The expected noise variance for each night, shape (n_nights, nfreq).
         basis: np.ndarray
             The design matrix for the relatively low-order basis that describes
-            the visibilities, shape (nmodes, nfreq)
+            the visibilities, shape (nfreq, nmodes)
         Niter: int
             Number of iterations to do EM for. Default 1000, which seems to
             perform well in numerical tests on random draws.    
@@ -437,7 +437,7 @@ class EMInpainter:
             setattr(self, attr_name, arg)
 
         self.nfreq = self.stackd.shape[1]
-        self.nmodes = self.basis.shape[0]
+        self.nmodes = self.basis.shape[1]
         self.n_nights = self.stackd.shape[0]
 
         self.stackd_real = np.concatenate(
@@ -452,13 +452,13 @@ class EMInpainter:
         self.inv_noise_var = 2 * np.where(~stackf, stackn / base_noise_var , 0)
         self.inv_noise_var_dpss = np.zeros(
             [
-                self.num_nights,
+                self.n_nights,
                 2 * self.nmodes,
                 2 * self.nmodes,
             ]
         )
 
-        stackd_inv_var_weight = self.inv_noise_var_dpss * self.stackd
+        stackd_inv_var_weight = self.inv_noise_var * self.stackd
         self.stackd_proj = np.zeros([self.n_nights, 2 * self.nmodes])
 
         zeros = np.zeros([self.nmodes, self.nmodes])
@@ -469,7 +469,7 @@ class EMInpainter:
                 self.basis,
                 axes=1
             )
-            self.inv_noise_var_dps[night] = np.block(
+            self.inv_noise_var_dpss[night] = np.block(
                 [
                     [ATNinvA, zeros],
                     [zeros, ATNinvA]
@@ -499,7 +499,7 @@ class EMInpainter:
             separated in case of non-circularity shape (2*nmodes).
         """
         # Factor of 2 for real/imag
-        model_shape = [2 * self.self.nmodes, self.n_nights]
+        model_shape = [2 * self.nmodes, self.n_nights]
         if self.EM_seed is not None:
             rng = np.random.default_rng(seed=self.EM_seed)
             model_guess = rng.normal(size=model_shape)
@@ -517,10 +517,12 @@ class EMInpainter:
             prior_sum_sqs = self.norm_prec * self.n_nights / cond_norm_prec * (model_guess_mean - self.norm_mean)**2
             exp_ig_scale = self.ig_scale + cond_sum_sqs + prior_sum_sqs
 
+
             LHS_ops = self.inv_noise_var_dpss + np.diag(cond_ig_df / exp_ig_scale)
-            rhs_vecs = self.stackd_proj_night + cond_ig_df * exp_norm_mean / exp_ig_scale
-            model_guess = np.linalg.solve(LHS_ops, rhs_vecs)
-        nightly_model = model_guess[:, :self.nmodes] + 1.j * model_guess[:, self.nmodes:] 
+            rhs_vecs = self.stackd_proj + cond_ig_df * exp_norm_mean / exp_ig_scale
+            model_guess = np.linalg.solve(LHS_ops, rhs_vecs).T
+
+        nightly_model = model_guess[:self.nmodes] + 1.j * model_guess[self.nmodes:] 
         exp_norm_mean = exp_norm_mean[:self.nmodes] + 1.j * exp_norm_mean[self.nmodes:]
         exp_var = exp_ig_scale / cond_ig_df
         
@@ -825,7 +827,9 @@ def average_and_inpaint_simultaneously_single_bl(
             )
             #TODO: Decide whether the nuisance parameters will be interesting to look at
             nightly_model, exp_norm_mean, exp_var = emi.do_EM() 
-            model[:, band] = basis.dot(nightly_model.T).T
+            model[:, band] = basis.dot(nightly_model).T
+            # If we've made it this far, set averaged flags to False
+            avg_flgs[band] = False
 
     # Shortcut here if everything is flagged.
     # Note that we can have avg_flgs be all flagged when not all of stackf is flagged
@@ -869,6 +873,13 @@ def average_and_inpaint_simultaneously(
     max_convolved_flag_frac: float = 0.667,
     use_unbiased_estimator: bool = False,
     sample_cov_fraction: float = 0.0,
+    mode: str = "one_shot",
+    Niter: int = 1000,
+    EM_seed: int | None = None,
+    ig_scale: float = 0.,
+    ig_df: float = 0.,
+    norm_mean: float=0.,
+    norm_prec: float=0., 
 ):
     """
     Average and inpaint simultaneously for all baselines in a stack.
@@ -900,6 +911,27 @@ def average_and_inpaint_simultaneously(
         Whether to use an unbiased estimator.
     inpaint_sample_cov_fraction : float
         A factor to use to down-weight off-diagonal elements of the sample covariance.
+    mode: str
+        Must be 'one_shot' or 'EM'. 'EM' applies an Expectation-Maximization
+        algorithm to find the posterior mode of a Bayesian hierarchical model,
+        while 'one_shot' approximates this mode with a reasonable guess at the
+        relevant hyperparameters. 
+    Niter: int
+        Number of iteration to perform EM algorithm if mode is 'EM'.
+    EM_seed: int
+        Seed for a Normal random number generator to initialize the EM 
+        algorithm.
+    ig_scale: float
+        Inverse gamma scale parameter for systematic variance prior. Default
+        of 0 corresponds to an improper power law prior.
+    ig_df: float
+        Inverse gamma degrees of freedom parameter. Default of 0 corresponds
+        to an improper prior with tails that go like a log-flat prior.
+    norm_mean: float
+        Mean of the Normal prior on the 'mean over nights' parameter.
+    norm_prec: float
+        Precision parameter for the Normal prior on the 'mean over nights'
+        parameter. Default of 0 corresponds to an improper flat prior.
 
     Returns
     -------
@@ -908,6 +940,8 @@ def average_and_inpaint_simultaneously(
     all_models : dict
         The inpainting models for each baseline (if return_models is True).
     """
+    assert (mode in ["one_shot", "EM"]), "mode kwarg must be 'one_shot' or 'EM'"
+
     filter_properties = ({} if filter_properties is None else filter_properties)
 
     # Initialize cache if none is given, but it won't be passed back to the user
@@ -1001,6 +1035,13 @@ def average_and_inpaint_simultaneously(
                 filter_half_widths=filter_half_widths,
                 eigenval_cutoff=eigenval_cutoff,
                 cache=cache,
+                mode=mode,
+                Niter=Niter,
+                EM_seed=EM_seed,
+                ig_scale=ig_scale,
+                ig_df=ig_df,
+                norm_mean=norm_mean,
+                norm_prec=norm_prec, 
             )
 
             if return_models:
