@@ -374,6 +374,7 @@ class EMInpainter:
         ig_df: float = 0.,
         norm_mean: float = 0.,
         norm_prec: float = 0.,
+        complex_valued=True,
     ):
         """
         Initialize an EMInpainter object.
@@ -408,6 +409,9 @@ class EMInpainter:
         norm_prec: float
             Precision parameter for the Normal prior on the 'mean over nights'
             parameter. Default of 0 corresponds to an improper flat prior.
+        real_valued: bool
+            Whether the input data are real-valued (e.g. the autos, which are
+            often stored in a complex-valued array despite being real).
         """
         attr_names = [
             "stackd",
@@ -440,27 +444,27 @@ class EMInpainter:
         self.nmodes = self.basis.shape[1]
         self.n_nights = self.stackd.shape[0]
 
-        self.stackd_real = np.concatenate(
-            [
-                self.stackd.real, 
-                self.stackd.imag,
-            ],
-            axis=1,
-        )
+
+        if not complex_valued:
+            self.stackd = np.copy(self.stackd.real)
+        # Factors of 2 if splitting real/imag
+        self.domain_factor = (1 + int(complex_valued))
         # inverse variance, so put 0s where there were no observations
-        # Factors of 2 because splitting real/imag
-        self.inv_noise_var = 2 * np.where(~stackf, stackn / base_noise_var , 0)
+        self.inv_noise_var = self.domain_factor * np.where(
+            ~stackf, 
+            stackn / base_noise_var ,
+            0
+        )
         self.inv_noise_var_dpss = np.zeros(
             [
                 self.n_nights,
-                2 * self.nmodes,
-                2 * self.nmodes,
+                self.domain_factor * self.nmodes,
+                self.domain_factor * self.nmodes,
             ]
         )
-
+       
         stackd_inv_var_weight = self.inv_noise_var * self.stackd
-        self.stackd_proj = np.zeros([self.n_nights, 2 * self.nmodes])
-
+        self.stackd_proj = np.zeros([self.n_nights, self.domain_factor * self.nmodes])
         zeros = np.zeros([self.nmodes, self.nmodes])
         # Take advantage of real basis functions throughout this loop
         for night in range(self.n_nights): 
@@ -469,19 +473,25 @@ class EMInpainter:
                 self.basis,
                 axes=1
             )
-            self.inv_noise_var_dpss[night] = np.block(
-                [
-                    [ATNinvA, zeros],
-                    [zeros, ATNinvA]
-                ]
-            )
             stackd_proj_night = basis.T @ stackd_inv_var_weight[night]
-            self.stackd_proj[night] == np.concatenate(
-                [
-                    stackd_proj_night.real, 
-                    stackd_proj_night.imag
-                ]
-            )
+
+            if not complex_valued:
+                self.inv_noise_var_dpss[night] = np.block(
+                    [
+                        [ATNinvA, zeros],
+                        [zeros, ATNinvA]
+                    ]
+                )
+            
+                self.stackd_proj[night] == np.concatenate(
+                    [
+                        stackd_proj_night.real, 
+                        stackd_proj_night.imag
+                    ]
+                )
+            else:
+                self.inv_noise_var_dpss[night] = ATNinvA
+                self.stackd_proj[night] = stackd_proj_night
 
     def do_EM(self):
         """
@@ -498,8 +508,8 @@ class EMInpainter:
             The marginal variances of the systematic process; left as real/imag
             separated in case of non-circularity shape (2*nmodes).
         """
-        # Factor of 2 for real/imag
-        model_shape = [2 * self.nmodes, self.n_nights]
+
+        model_shape = [self.domain_factor * self.nmodes, self.n_nights]
         if self.EM_seed is not None:
             rng = np.random.default_rng(seed=self.EM_seed)
             model_guess = rng.normal(size=model_shape)
