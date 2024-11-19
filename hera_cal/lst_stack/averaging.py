@@ -374,7 +374,7 @@ class EMInpainter:
         ig_df: float = 0.,
         norm_mean: float = 0.,
         norm_prec: float = 0.,
-        complex_valued=True,
+        complex_valued:bool = True,
     ):
         """
         Initialize an EMInpainter object.
@@ -409,9 +409,9 @@ class EMInpainter:
         norm_prec: float
             Precision parameter for the Normal prior on the 'mean over nights'
             parameter. Default of 0 corresponds to an improper flat prior.
-        real_valued: bool
-            Whether the input data are real-valued (e.g. the autos, which are
-            often stored in a complex-valued array despite being real).
+        complex_valued: bool
+            Whether the input data are complex-valued (e.g. the autos are 
+            real-valued but often stored in a complex-valued array).
         """
         attr_names = [
             "stackd",
@@ -563,7 +563,8 @@ def average_and_inpaint_simultaneously_single_bl(
     ig_scale: float = 0.,
     ig_df: float = 0.,
     norm_mean: float=0.,
-    norm_prec: float=0., 
+    norm_prec: float=0.,
+    complex_valued:bool = True, 
 ):
     """
     Average and inpaint simultaneously for a single baseline.
@@ -627,6 +628,10 @@ def average_and_inpaint_simultaneously_single_bl(
     norm_prec: float
         Precision parameter for the Normal prior on the 'mean over nights'
         parameter. Default of 0 corresponds to an improper flat prior.
+    complex_valued: bool
+        Whether the input data are complex-valued (e.g. the autos are 
+        real-valued but often stored in a complex-valued array). Only used in
+        'EM' mode.
 
     
     Returns
@@ -834,6 +839,7 @@ def average_and_inpaint_simultaneously_single_bl(
                 ig_df=ig_df,
                 norm_mean=norm_mean,
                 norm_prec=norm_prec,
+                complex_valued=complex_valued,
             )
             #TODO: Decide whether the nuisance parameters will be interesting to look at
             nightly_model, exp_norm_mean, exp_var = emi.do_EM() 
@@ -889,7 +895,8 @@ def average_and_inpaint_simultaneously(
     ig_scale: float = 0.,
     ig_df: float = 0.,
     norm_mean: float=0.,
-    norm_prec: float=0., 
+    norm_prec: float=0.,
+    complex_valued:bool = True, 
 ):
     """
     Average and inpaint simultaneously for all baselines in a stack.
@@ -942,6 +949,10 @@ def average_and_inpaint_simultaneously(
     norm_prec: float
         Precision parameter for the Normal prior on the 'mean over nights'
         parameter. Default of 0 corresponds to an improper flat prior.
+    complex_valued: bool
+        Whether the input data are complex-valued (e.g. the autos are 
+        real-valued but often stored in a complex-valued array). Only used in
+        'EM' mode.
 
     Returns
     -------
@@ -1051,7 +1062,8 @@ def average_and_inpaint_simultaneously(
                 ig_scale=ig_scale,
                 ig_df=ig_df,
                 norm_mean=norm_mean,
-                norm_prec=norm_prec, 
+                norm_prec=norm_prec,
+                complex_valued=complex_valued, 
             )
 
             if return_models:
