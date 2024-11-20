@@ -478,20 +478,21 @@ class EMInpainter:
             )
             stackd_proj_night = basis.T @ stackd_inv_var_weight[night]
 
-            if complex_valued:
+            if self.complex_valued:
                 self.inv_noise_var_dpss[night] = np.block(
                     [
                         [ATNinvA, zeros],
                         [zeros, ATNinvA]
                     ]
                 )
-            
-                self.stackd_proj[night] == np.concatenate(
+
+                self.stackd_proj[night] = np.concatenate(
                     [
                         stackd_proj_night.real, 
                         stackd_proj_night.imag
                     ]
                 )
+
             else:
                 self.inv_noise_var_dpss[night] = ATNinvA
                 self.stackd_proj[night] = stackd_proj_night
@@ -902,7 +903,6 @@ def average_and_inpaint_simultaneously(
     ig_df: float = 0.,
     norm_mean: float=0.,
     norm_prec: float=0.,
-    complex_valued:bool = True, 
 ):
     """
     Average and inpaint simultaneously for all baselines in a stack.
