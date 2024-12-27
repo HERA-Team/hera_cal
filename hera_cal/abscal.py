@@ -2550,9 +2550,12 @@ def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
     unwrap(data_lsts, m0_lsts[0] - m0_dlst / 2)  # shift data relative to model
 
     def lst_overlap(m_lsts, m_dlst):
-        if (m_lsts[0] - m_dlst / 2 < data_lsts[-1] + atol) & (m_lsts[-1] + m_dlst / 2 > data_lsts[0] - atol):
-            return 'during'
-        elif (m_lsts[0] - m_dlst / 2 < data_lsts[-1] + atol) & (m_lsts[-1] + m_dlst / 2 < data_lsts[0] - atol):
+        def intervals_overlap(s1, e1, s2, e2):
+            return (s1 < e2) and (e1 > s2)
+        for shift in [0, -2 * np.pi, 2 * np.pi]:
+            if intervals_overlap(m_lsts[0] - m_dlst / 2 + shift, m_lsts[-1] + m_dlst / 2 + shift, data_lsts[0] - atol, data_lsts[-1] + atol):
+                return 'during'
+        if (m_lsts[-1] + m_dlst / 2) < (data_lsts[0] - atol):
             return 'before'
         else:
             return 'after'
