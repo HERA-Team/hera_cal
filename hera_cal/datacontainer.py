@@ -596,6 +596,41 @@ class DataContainer:
 
         return obj
 
+    def deinterleave(self, ninterleaves, tslice=slice(None)):
+        '''Breaks DataContainers into ninterleave separate containers and returns a list of DataContainers deinterleaved (i.e. alternating)
+        in time. Also updates .times and .lsts attributes. Integrations at the end that do not evenly divide are dropped.
+
+        Parameters
+        ----------
+        ninterleave : int
+            Number of deinterleaved DataContainers to split this datacontainer into.
+        tslice : slice
+            Slice of times to deinterleave. Default is all integrations.
+
+        Returns
+        -------
+        list of DataContainers
+            List of deinterleaved DataContainers.
+        '''
+
+        # check that times and lsts are set
+        if not hasattr(self, 'times') or self.times is None:
+            raise ValueError('Cannot deinterleave if self.times is not set.')
+        if not hasattr(self, 'lsts') or self.lsts is None:
+            raise ValueError('Cannot deinterleave if self.lsts is not set.')
+
+        # perfrom deinterleave
+        deint_dcs = []
+        for i in range(ninterleaves):
+            islice = slice(i, (len(self.times[tslice]) // ninterleaves) * ninterleaves, ninterleaves)  # ensures all slices have same shape
+            new_dc = copy.deepcopy(self)
+            new_dc.times = self.times[tslice][islice]
+            new_dc.lsts = self.lsts[tslice][islice]
+            for bl in new_dc:
+                new_dc[bl] = self[bl][tslice, :][islice, :]
+            deint_dcs.append(new_dc)
+        return deint_dcs
+
 
 class RedDataContainer(DataContainer):
     '''Structure for containing redundant visibilities that can be accessed by any
