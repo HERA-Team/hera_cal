@@ -511,7 +511,7 @@ def average_and_inpaint_simultaneously_single_bl(
                     / base_noise_var[night_index, band],
                     basis,
                 )
-                _CNinv_1sample_dpss_inv = np.linalg.pinv(_CNinv_1sample_dpss)
+                _CNinv_1sample_dpss_inv = np.linalg.pinv(_CNinv_1sample_dpss, hermitian=True)
                 CNinv_1sample_dpss.append(_CNinv_1sample_dpss)
                 CNinv_1sample_dpss_inv.append(_CNinv_1sample_dpss_inv)
                 cache[hash_key] = (_CNinv_1sample_dpss, _CNinv_1sample_dpss_inv)
@@ -542,7 +542,7 @@ def average_and_inpaint_simultaneously_single_bl(
         is_unflagged_night = ~np.all(stackf[:, band], axis=1)
 
         # Compute weighted sample mean from per-day DPSS-fits and noise-weighted covariance matrix
-        inv_sum_CNinv_dpss = np.linalg.pinv(sum_CNinv_dpss)
+        inv_sum_CNinv_dpss = np.linalg.pinv(sum_CNinv_dpss, hermitian=True)
         sample_mean_dpss = inv_sum_CNinv_dpss @ np.einsum(
             "nde,nd->e", CNinv_dpss[is_unflagged_night], dpss_fits[is_unflagged_night]
         )
