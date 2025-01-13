@@ -7,6 +7,61 @@ write_to = "hera_cal/_version.py"
 parentdir_prefix_version = "hera_cal-"
 fallback_version  = "0.0.0"
 
+[project]
+name = "hera-calibration"
+description = "A collection of calibration routines to run on the HERA instrument."
+readme = "README.md"
+authors = [
+  {name="HERA Team"},
+]
+license = {text="BSD"}
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved",
+  "License :: OSI Approved :: MIT License",
+  "Natural Language :: English",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering :: Astronomy",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+dynamic=["version"]
+requires-python = ">=3.9"
+dependencies = [
+    'numpy>=1.10',
+    "scipy>=1.9.0",
+    "h5py",
+    "hdf5plugin",
+    "astropy",
+    "astropy-healpix",
+    "pyuvdata>=3.1.2",
+    "linsolve",
+    "hera_qm>=2.2.0",
+    "scikit-learn",
+    "hera-filters",
+    "line_profiler",
+    "aipy",
+    "rich",
+    "jax",
+    "jaxlib",
+    "optax",
+    "attrs",
+    "frozendict",
+    "toml",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pre-commit",
+    "pytest-cov",
+    "hera_sim>=4.3.0",
+    "pytest-xdist",
+    "hypothesis",
+    "ruff",
+]
+
 [tool.pytest]
 addopts = "--ignore=scripts --cov=hera_cal --cov-config=.coveragerc"
 
