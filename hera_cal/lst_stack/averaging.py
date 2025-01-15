@@ -503,12 +503,12 @@ class EMInpainter:
 
         Returns
         -------
-        model_guess
+        model_guess: 
             The MAP complex DPSS coefficients for each night, shape (num_nights, nmodes)
-        exp_norm_mean
+        exp_norm_mean: np.ndarray
             The complex DPSS coefficients of the marginal mean; not the sample
             mean, shape(num_nights, nmodes)
-        exp_var
+        exp_var: np.ndarray
             The marginal variances of the systematic process; left as real/imag
             separated in case of non-circularity shape (2*nmodes).
         """
@@ -545,8 +545,31 @@ class EMInpainter:
         
         return model_guess, exp_norm_mean, exp_var
 
-    def logpost_unnorm(self, model_guess, exp_norm_mean, exp_var):
+    def logpost_unnorm(
+        self, 
+        model_guess: np.ndarray, 
+        exp_norm_mean: np.ndarray,
+        exp_var: np.nd_array,
+    ):
+        """
+        Calculate an unnormalized posterior at particular parameter values.
 
+        Parameters
+        ----------
+        model_guess: np.ndarray
+            The MAP complex DPSS coefficients for each night, shape (num_nights, nmodes)
+        exp_norm_mean: np.ndarray
+            The complex DPSS coefficients of the marginal mean; not the sample
+            mean, shape(num_nights, nmodes)
+        exp_var: np.ndarray
+            The marginal variances of the systematic process; left as real/imag
+            separated in case of non-circularity shape (2*nmodes).
+
+        Returns
+        -------
+        logpost: float
+            The log-posterior, ignoring constant terms like the Bayesian evidence, etc.
+        """
         # Get outermost chisq term
         # Has flags so we do this one manually instead of using scipy
         res = self.stackd - model_guess @ self.basis.T
