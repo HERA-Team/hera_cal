@@ -23,11 +23,15 @@ jobs:
           python-version: ${{ env.PYTHON }}
 
       - name: Install build
-        run: pip install build
+        run: pip install build twine
 
       - name: Build a binary wheel and a source tarball
         run: |
           python -m build
+
+      - name: Twine Check
+        run: twine check dist/*
+
       - name: Publish to PyPI
         if: startsWith(github.event.ref, 'refs/tags')
         uses: pypa/gh-action-pypi-publish@v1.9.0

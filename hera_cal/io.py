@@ -1762,8 +1762,8 @@ def get_file_times(filepaths, filetype='uvh5'):
             assert AIPY, "you need aipy to use the miriad filetype"
             uv = aipy.miriad.UV(f)
             # get integration time
-            int_time = uv['inttime'] / (units.si.day.in_units(units.si.s))
-            int_time_rad = uv['inttime'] * 2 * np.pi / (units.si.sday.in_units(units.si.s))
+            int_time = uv['inttime'] / (units.si.day.to(units.si.s))
+            int_time_rad = uv['inttime'] * 2 * np.pi / (units.si.sday.to(units.si.s))
             # get start and stop, add half an integration
             start_lst = uv['lst'] + int_time_rad / 2.0
             start_time = uv['time'] + int_time / 2.0
