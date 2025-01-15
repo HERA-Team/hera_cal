@@ -628,7 +628,8 @@ def average_and_inpaint_simultaneously_single_bl(
     ig_df: float = 0.,
     norm_mean: float=0.,
     norm_prec: float=0.,
-    complex_valued:bool = True, 
+    complex_valued: bool = True, 
+    return_nuisace: bool = False,
 ):
     """
     Average and inpaint simultaneously for a single baseline.
@@ -696,6 +697,8 @@ def average_and_inpaint_simultaneously_single_bl(
         Whether the input data are complex-valued (e.g. the autos are 
         real-valued but often stored in a complex-valued array). Only used in
         'EM' mode.
+    return_nuisance: bool
+        Whether to return the nuisance parameters
 
     
     Returns
@@ -707,6 +710,15 @@ def average_and_inpaint_simultaneously_single_bl(
         ``avg_flgs`` was given as input, it will be modified in-place (and also returned).
     models
         The inpainting models as a numpy array of shape (n_nights, nfreq).
+    
+    Optional Returns
+    ----------------
+    post_mean
+        The nightly solution in DPSS space
+    sample_mean
+        The estimated mean-over-nights parameter in DPSS space
+    sample_cov
+        The estimated systematic covariance in DPSS space
     """
     assert (mode in ["one_shot", "EM"]), "mode kwarg must be 'one_shot' or 'EM'"
 
@@ -905,9 +917,9 @@ def average_and_inpaint_simultaneously_single_bl(
                 norm_prec=norm_prec,
                 complex_valued=complex_valued,
             )
-            #TODO: Decide whether the nuisance parameters will be interesting to look at
-            nightly_model, exp_norm_mean, exp_var = emi.do_EM() 
-            model[:, band] = basis.dot(nightly_model).T
+            # Technically these aren't really post_mean, sample_mean and sample_cov but it prevents annoying branching later
+            post_mean, sample_mean, sample_var = emi.do_EM() 
+            model[:, band] = basis.dot(post_mean).T
             # If we've made it this far, set averaged flags to False
             avg_flgs[band] = False
 
@@ -935,9 +947,10 @@ def average_and_inpaint_simultaneously_single_bl(
     with np.errstate(divide="ignore", invalid="ignore"):
         inpainted_mean /= total_nsamples
         inpainted_mean[total_nsamples == 0] *= np.nan
-
-    return inpainted_mean, avg_flgs, model
-
+    if return_nuisance:
+        return inpainted_mean, avg_flgs, model, post_mean, sample_mean, sample_cov
+    else:
+        return inpainted_mean, avg_flgs, model
 
 
 def average_and_inpaint_simultaneously(
