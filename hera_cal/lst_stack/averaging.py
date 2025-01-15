@@ -629,7 +629,7 @@ def average_and_inpaint_simultaneously_single_bl(
     norm_mean: float=0.,
     norm_prec: float=0.,
     complex_valued: bool = True, 
-    return_nuisace: bool = False,
+    return_nuisance: bool = False,
 ):
     """
     Average and inpaint simultaneously for a single baseline.
