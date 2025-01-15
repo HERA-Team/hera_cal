@@ -1034,6 +1034,12 @@ def average_and_inpaint_simultaneously(
         The LST-averaged data, flags, standard deviation, and nsamples.
     all_models : dict
         The inpainting models for each baseline (if return_models is True).
+
+    Optional Returns
+    ----------------
+    nuisance: dict
+        A dictionary of dictionaries. Outer keys are the types of nuisance 
+        parameter. Inner keys are the antpairpols.
     """
     assert (mode in ["one_shot", "EM"]), "mode kwarg must be 'one_shot' or 'EM'"
 
