@@ -10,7 +10,7 @@ from scipy import constants
 from typing import Sequence
 from .. import types as tp
 from .. import utils
-from scipy import signal, linalg
+from scipy import signal, linalg, stats
 from hera_qm.time_series_metrics import true_stretches
 
 logger = logging.getLogger(__name__)
@@ -544,6 +544,40 @@ class EMInpainter:
         exp_var = exp_ig_scale / cond_ig_df
         
         return model_guess, exp_norm_mean, exp_var
+
+    def logpost_unnorm(self, model_guess, exp_norm_mean, exp_var):
+
+        # Get outermost chisq term
+        # Has flags so we do this one manually instead of using scipy
+        res = self.stackd - model_guess @ self.basis.T
+        chisq = np.sum(res**2 * self.inv_noise_var)
+
+        logdet = 0.
+        for night in range(self.n_nights):
+            night_flags = self.stackf[night]
+            night_inv_var = self.inv_noise_var[night][~night_flags]
+            Nfreq_unflagged_night = len(night_inv_var)
+            # minus sign because it's the inverse noise variance
+            # Ignore addition of factors of 2pi since irrelevant in unnormalized case
+            logdet -= np.sum(np.log(night_inv_var))
+
+        
+        d_given_a_term = -0.5 * (logdet + chisq)
+        exp_cov = np.diag(exp_var)
+        a_given_muC_term = stats.multivariate_normal(mean=exp_norm_mean, cov=exp_cov).logpdf(model_guess)
+        if self.norm_prec > 0:
+            mu_given_Cmu0_term = stats.multivariate_normal(mean=self.norm_mean, cov=exp_cov / self.norm_prec).logpdf(exp_norm_mean)
+        else: # Flat prior changes logpost_unnorm by constant -- irrelevant since unnormalized anyway
+            mu_given_Cmu0_term = 0. 
+        
+        # Factors of 2 because we have defined ig_df and ig_scale unconventionally
+        if self.ig_scale > 0:
+            Cterm = stats.invgamma(df=self.ig_df/2, scale=self.ig_scale/2).logpdf(exp_var).sum()
+        else:
+            Cterm = np.sum(-(self.ig_df + 2) / 2 * np.log(exp_var))
+
+        return d_given_a_term + a_given_muC_term + mu_given_Cmu0_term + Cterm
+        
         
 
 
