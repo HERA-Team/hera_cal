@@ -700,7 +700,6 @@ def average_and_inpaint_simultaneously_single_bl(
     return_nuisance: bool
         Whether to return the nuisance parameters
 
-    
     Returns
     -------
     mean
@@ -971,8 +970,9 @@ def average_and_inpaint_simultaneously(
     EM_seed: int | None = None,
     ig_scale: float = 0.,
     ig_df: float = 0.,
-    norm_mean: float=0.,
-    norm_prec: float=0.,
+    norm_mean: float= 0.,
+    norm_prec: float= 0.,
+    return_nuisance: bool = False,
 ):
     """
     Average and inpaint simultaneously for all baselines in a stack.
@@ -1025,6 +1025,8 @@ def average_and_inpaint_simultaneously(
     norm_prec: float
         Precision parameter for the Normal prior on the 'mean over nights'
         parameter. Default of 0 corresponds to an improper flat prior.
+    return_nuisance: bool
+        Whether to return the nuisance parameters
 
     Returns
     -------
@@ -1042,6 +1044,13 @@ def average_and_inpaint_simultaneously(
 
     # Dictionary for model storage
     all_models = {}
+
+    if return_nuisance:
+        nuisance = {
+            "post_mean": {},
+            "sample_mean": {},
+            "sample_cov": {},
+        }
 
     # Time axis is outer axis for all LSTStacks.
     antpos = utils.get_ENU_antpos(stack, asdict=True)
@@ -1083,7 +1092,8 @@ def average_and_inpaint_simultaneously(
             **filter_properties,
         )
 
-        is_an_auto = (antpair[0] == antpair[1]) # EM wants to know about autos
+        # EM wants to know about autos, but related to keyword, so do not protect with an if
+        is_an_auto = (antpair[0] == antpair[1]) 
 
         # Round up filter half width to the nearest nanosecond
         # allows the cache to be hit more frequently
@@ -1099,6 +1109,7 @@ def average_and_inpaint_simultaneously(
             avg_flgs = lstavg["flags"][iap, :, polidx]
 
             antpol1, antpol2 = utils.split_pol(pol)
+            # EM wants to know about data domain, but related to keyword, so do not protect with an if
             real_valued = (is_an_auto and (antpol1 == antpol2))
             complex_valued = not real_valued
 
@@ -1115,37 +1126,74 @@ def average_and_inpaint_simultaneously(
             if (not np.any(stackf)) or np.all(stackf):
                 continue
 
-            flagged_mean[:], _, model = average_and_inpaint_simultaneously_single_bl(
-                freqs=stack.freq_array,
-                stackd=stackd,
-                stackf=stackf,
-                stackn=stackn,
-                avg_flgs=avg_flgs,
-                base_noise_var=base_noise_var,
-                df=stack.df,
-                filter_centers=filter_centers,
-                inpaint_bands=inpaint_bands,
-                max_gap_factor=max_gap_factor,
-                max_convolved_flag_frac=max_convolved_flag_frac,
-                use_unbiased_estimator=use_unbiased_estimator,
-                sample_cov_fraction=sample_cov_fraction,
-                filter_half_widths=filter_half_widths,
-                eigenval_cutoff=eigenval_cutoff,
-                cache=cache,
-                mode=mode,
-                Niter=Niter,
-                EM_seed=EM_seed,
-                ig_scale=ig_scale,
-                ig_df=ig_df,
-                norm_mean=norm_mean,
-                norm_prec=norm_prec,
-                complex_valued=complex_valued, 
-            )
+            antpairpol = (antpair[0], antpair[1], pol)
+            if return_nuisance:
+                flagged_mean[:], _, model, post_mean, sample_mean, sample_cov = average_and_inpaint_simultaneously_single_bl(
+                    freqs=stack.freq_array,
+                    stackd=stackd,
+                    stackf=stackf,
+                    stackn=stackn,
+                    avg_flgs=avg_flgs,
+                    base_noise_var=base_noise_var,
+                    df=stack.df,
+                    filter_centers=filter_centers,
+                    inpaint_bands=inpaint_bands,
+                    max_gap_factor=max_gap_factor,
+                    max_convolved_flag_frac=max_convolved_flag_frac,
+                    use_unbiased_estimator=use_unbiased_estimator,
+                    sample_cov_fraction=sample_cov_fraction,
+                    filter_half_widths=filter_half_widths,
+                    eigenval_cutoff=eigenval_cutoff,
+                    cache=cache,
+                    mode=mode,
+                    Niter=Niter,
+                    EM_seed=EM_seed,
+                    ig_scale=ig_scale,
+                    ig_df=ig_df,
+                    norm_mean=norm_mean,
+                    norm_prec=norm_prec,
+                    complex_valued=complex_valued,
+                    return_nuisance=return_nuisance, 
+                )
+                nuisance["post_mean"][antpairpol] = post_mean
+                nuisance["sample_mean"][antpairpol] = sample_mean
+                nuisance["sample_cov"][antpairpol] = sample_cov
+            else:
+                flagged_mean[:], _, model = average_and_inpaint_simultaneously_single_bl(
+                    freqs=stack.freq_array,
+                    stackd=stackd,
+                    stackf=stackf,
+                    stackn=stackn,
+                    avg_flgs=avg_flgs,
+                    base_noise_var=base_noise_var,
+                    df=stack.df,
+                    filter_centers=filter_centers,
+                    inpaint_bands=inpaint_bands,
+                    max_gap_factor=max_gap_factor,
+                    max_convolved_flag_frac=max_convolved_flag_frac,
+                    use_unbiased_estimator=use_unbiased_estimator,
+                    sample_cov_fraction=sample_cov_fraction,
+                    filter_half_widths=filter_half_widths,
+                    eigenval_cutoff=eigenval_cutoff,
+                    cache=cache,
+                    mode=mode,
+                    Niter=Niter,
+                    EM_seed=EM_seed,
+                    ig_scale=ig_scale,
+                    ig_df=ig_df,
+                    norm_mean=norm_mean,
+                    norm_prec=norm_prec,
+                    complex_valued=complex_valued, 
+                    return_nuisance=return_nuisance,
+                )
 
             if return_models:
-                all_models[(antpair[0], antpair[1], pol)] = model.copy()
+                all_models[antpairpol] = model.copy()
 
     # Set data that is flagged to nan
     lstavg["data"][lstavg["flags"]] = np.nan
 
-    return lstavg, all_models
+    if return_nuisance:
+        return lstavg, all_models, nuisance
+    else:
+        return lstavg, all_models
