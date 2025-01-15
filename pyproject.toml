@@ -113,11 +113,16 @@ select = [
     # "UP",   # pyupgrade
 ]
 
+exclude = [
+    "scripts/notebooks/*.ipynb",  # For now, ignore notebooks when linting.
+]
+
 ignore = [
     "E402",
     "E501",
     "W291",
     "W293",
+    "A005",   # module io shadows python stdlib
     # Following Rulesets we really don't want
     "AIR",    # airflow - unused library
     "ASYNC",  # async  -- unused library
