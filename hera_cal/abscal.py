@@ -2549,6 +2549,17 @@ def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
         lsts[lsts < lsts[0]] += 2 * np.pi  # also ensure that it's increasing internally
     unwrap(data_lsts, m0_lsts[0] - m0_dlst / 2)  # shift data relative to model
 
+    # There is an edge-case in which the first data lst is just below the first model lst
+    # but after the last model lst, and the other data lsts are above the first model lst.
+    # In this case, we will keep thinking we are too low in LST, so we move up til we've
+    # exhausted all the model files, but we should have been moving down.
+    mlast_dlst, _, mlast_lsts, _ = io.get_file_times(modelfiles[0], filetype=filetype)
+    if (
+        data_lsts[0] > mlast_lsts[-1] + mlast_dlst / 2
+        and data_lsts[-1] - 2 * np.pi > m0_lsts[0] - m0_dlst / 2
+    ):
+        data_lsts -= 2 * np.pi
+
     def lst_overlap(m_lsts, m_dlst):
         def intervals_overlap(s1, e1, s2, e2):
             return (s1 < e2) and (e1 > s2)
