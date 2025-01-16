@@ -173,7 +173,7 @@ def add_noise_to_uvd(uvd, autos: bool = False):
     hd = io.to_HERAData(uvd)
 
     data, flags, nsamples = hd.read()
-    dt = (data.times[1] - data.times[0]) * units.si.day.in_units(units.si.s)
+    dt = (data.times[1] - data.times[0]) * units.si.day.to(units.si.s)
     df = data.freqs[1] - data.freqs[0]
 
     for bl in data.bls():
