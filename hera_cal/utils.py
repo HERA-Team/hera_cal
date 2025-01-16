@@ -1572,10 +1572,10 @@ def match_files_to_lst_bins(
     # The files in the list MUST NOT wrap around in LST, i.e.
     # there is 24 hours or less of time in the files.
     if metadata_list[-1].times[-1] < metadata_list[0].times[0]:
-        raise ValueError("After sorting, the last file in the list is is before the first.")
+        raise ValueError("After sorting, the last file in the list is before the first.")
 
     if metadata_list[-1].times[-1] > meta.times[0] + 1.0:
-        raise ValueError("The input files span greater than 24 hours, cannot use this function. Use match_times instead.")
+        raise ValueError("The input files span greater than 24 hours, cannot use this function.")
 
     jd_edges = LST2JD(
         np.array(lst_edges),
