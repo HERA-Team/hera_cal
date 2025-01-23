@@ -1795,6 +1795,9 @@ def get_file_times(filepaths, filetype='uvh5'):
                 time_array = time_array[baseline_array == most_common_bl_num]
                 lst_array = lst_array[baseline_array == most_common_bl_num]
 
+                # Handle phase wraps
+                lst_array[lst_array < lst_array[0]] += 2 * np.pi
+
                 # figure out dtime and dlst, handling the case where a diff cannot be done.
                 if len(time_array) > 1:
                     int_time = np.median(np.diff(time_array))

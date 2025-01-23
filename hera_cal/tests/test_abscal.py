@@ -234,9 +234,17 @@ class Test_AbsCal_Funcs(object):
         # test basic execution
         relevant_mfiles = abscal.match_times(dfiles[0], mfiles, filetype='miriad')
         assert len(relevant_mfiles) == 2
+        relevant_mfiles = abscal.match_times(dfiles[0], mfiles[0:1], filetype='miriad')
+        assert len(relevant_mfiles) == 1
+        relevant_mfiles = abscal.match_times(dfiles[0], mfiles[1:2], filetype='miriad')
+        assert len(relevant_mfiles) == 1
         # test basic execution
         relevant_mfiles = abscal.match_times(dfiles[1], mfiles, filetype='miriad')
         assert len(relevant_mfiles) == 1
+        relevant_mfiles = abscal.match_times(dfiles[1], mfiles[1:2], filetype='miriad')
+        assert len(relevant_mfiles) == 1
+        relevant_mfiles = abscal.match_times(dfiles[1], mfiles[0:1], filetype='miriad')
+        assert len(relevant_mfiles) == 0
         # test no overlap
         mfiles = sorted(glob.glob(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcA')))
         relevant_mfiles = abscal.match_times(dfiles[0], mfiles, filetype='miriad')
