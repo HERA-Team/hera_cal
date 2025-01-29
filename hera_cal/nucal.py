@@ -761,10 +761,11 @@ def _linear_fit(XTX, Xy, solver='lu_solve', alpha=1e-15, cached_input={}):
     # Assert that the method is valid
     assert solver in [
         "lu_solve",
+        "cho_solve",
         "solve",
         "pinv",
         "lstsq",
-    ], "method must be one of {}".format(["lu_solve", "solve", "pinv", "lstsq"])
+    ], "method must be one of {}".format(["lu_solve", "cho_solve", "solve", "pinv", "lstsq"])
 
     # Assert that the regularization tolerance is non-negative
     assert alpha >= 0.0, "alpha must be non-negative."
@@ -788,6 +789,19 @@ def _linear_fit(XTX, Xy, solver='lu_solve', alpha=1e-15, cached_input={}):
 
         # Save info
         cached_output = {'LU': L}
+
+    elif solver == "cho_solve":
+        # Factor XTX using scipy.linalg.cho_factor
+        if "c_and_lower" in cached_input:
+            c_and_lower = cached_input.get('c_and_lower')
+        else:
+            c_and_lower = linalg.cho_factor(XTX)
+
+        # Solve the linear system of equations using scipy.linalg.cho_solve
+        beta = linalg.cho_solve(c_and_lower, Xy)
+
+        # Save info
+        cached_output = {'c_and_lower': c_and_lower}
 
     elif solver == "solve":
         # Solve the linear system of equations using np.linalg.solve

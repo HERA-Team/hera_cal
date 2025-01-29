@@ -425,13 +425,14 @@ def test_linear_fit():
     np.testing.assert_allclose(b1, b1_cached)
     b2, _ = nucal._linear_fit(XTX, Xy, solver='solve')
     b3, _ = nucal._linear_fit(XTX, Xy, solver='lstsq')
-    b4, cached_input = nucal._linear_fit(XTX, Xy, solver='pinv')
-    assert cached_input.get('XTXinv') is not None
+    b4, _ = nucal._linear_fit(XTX, Xy, solver='pinv')
+    b5, _ = nucal._linear_fit(XTX, Xy, solver='cho_solve')
 
     # Show that all modes give the same result
     np.testing.assert_allclose(b1, b2, atol=1e-6)
     np.testing.assert_allclose(b1, b3, atol=1e-6)
     np.testing.assert_allclose(b1, b4, atol=1e-6)
+    np.testing.assert_allclose(b1, b5, atol=1e-6)
 
     # Test that the fit is correct
     model = np.dot(X, b4)
@@ -444,6 +445,11 @@ def test_linear_fit():
     # Test that an error is raised if the tolerance is negative
     with pytest.raises(AssertionError):
         b = nucal._linear_fit(XTX, Xy, alpha=-1)
+
+    for mode in ['lu_solve', 'cho_solve', 'pinv', 'lstsq', 'solve']:
+        b, cached_input = nucal._linear_fit(XTX, Xy, solver=mode)
+        b_cached, _ = nucal._linear_fit(XTX, Xy, solver=mode, cached_input=cached_input)
+        np.testing.assert_allclose(b, b_cached)
 
 
 def test_compute_spectral_filters():
