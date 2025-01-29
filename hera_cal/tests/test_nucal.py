@@ -426,12 +426,14 @@ def test_linear_fit():
     b2, _ = nucal._linear_fit(XTX, Xy, solver='solve')
     b3, _ = nucal._linear_fit(XTX, Xy, solver='lstsq')
     b4, cached_input = nucal._linear_fit(XTX, Xy, solver='pinv')
+    b5, _ = nucal._linear_fit(XTX, Xy, solver='cho_solve')
     assert cached_input.get('XTXinv') is not None
 
     # Show that all modes give the same result
     np.testing.assert_allclose(b1, b2, atol=1e-6)
     np.testing.assert_allclose(b1, b3, atol=1e-6)
     np.testing.assert_allclose(b1, b4, atol=1e-6)
+    np.testing.assert_allclose(b1, b5, atol=1e-6)
 
     # Test that the fit is correct
     model = np.dot(X, b4)
