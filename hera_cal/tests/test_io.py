@@ -1268,10 +1268,10 @@ class Test_Visibility_IO_Legacy:
             shutil.rmtree('ex.uv')
 
     @pytest.mark.filterwarnings("ignore:writing default values for restfreq")
-    def test_update_vis(self):
+    def test_update_vis(self, tmpdir):
         # load in cal
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        outname = os.path.join(DATA_PATH, "test_output/zen.2458043.12552.xx.HH.modified.uvORA")
+        outname = os.path.join(tmpdir, "zen.2458043.12552.xx.HH.modified.uvORA")
         uvd = UVData()
         uvd.read_miriad(fname)
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
