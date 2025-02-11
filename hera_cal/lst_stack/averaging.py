@@ -902,7 +902,7 @@ def average_and_inpaint_per_night_single_bl(
     post_inpaint_flags = _get_post_inpaint_flags(
         stackf,
         spws=spws,
-        max_allowed_gap_siz=max_allowed_gap_size,
+        max_allowed_gap_size=max_allowed_gap_size,
         max_convolved_flag_frac=max_convolved_flag_frac,
     )
 
@@ -957,6 +957,13 @@ def average_and_inpaint_simultaneously(
     """
     Average and inpaint simultaneously for all baselines in a stack.
 
+    Note that "simultaneously" here refers to the fact that all baselines and nights
+    are considered at the same time. However, there are two distinct methods that can
+    be invoked from this function: one is a true "simultaneous" inpainting in which
+    the night-to-night covariance of the solutions is used to re-weight the per-night
+    models, while the other constructs inpainting models for each night separately.
+    This is controlled by the ``use_night_to_night_cov`` parameter.
+
     Parameters
     ----------
     stack : LSTStack
@@ -984,6 +991,9 @@ def average_and_inpaint_simultaneously(
         Whether to use an unbiased estimator.
     inpaint_sample_cov_fraction : float
         A factor to use to down-weight off-diagonal elements of the sample covariance.
+    use_night_to_night_cov : bool
+        Whether to use the night-to-night covariance of the solutions to inform the
+        inpainting model per-night.
 
     Returns
     -------
