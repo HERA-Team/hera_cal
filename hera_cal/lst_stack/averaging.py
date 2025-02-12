@@ -861,6 +861,8 @@ def average_and_inpaint_per_night_single_bl(
         The eigenvalue cutoff for determining DPSS filters.
     cache : dict
         A cache for storing DPSS filter matrices.
+    spws
+        The spectral windows to consider when flagging out large gaps.
 
     Returns
     -------
@@ -923,7 +925,7 @@ def _get_post_inpaint_flags(
     ) | stackf
 
     nf = stackf.shape[1]
-    flaggy_flags = np.zeros_like(stackf, dtype=bool)
+    post_inpaint_flags = np.zeros_like(stackf, dtype=bool)
     for night, convflg in enumerate(convolved_flags):
         flagged_stretches = true_stretches(convflg)
         for stretch in flagged_stretches:
@@ -935,8 +937,8 @@ def _get_post_inpaint_flags(
                         band.start <= stretch.start < (band.stop or nf)
                         or band.start <= stretch.stop < (band.stop or nf)
                     ):
-                        flaggy_flags[night, band] = True
-    return flaggy_flags
+                        post_inpaint_flags[night, band] = True
+    return post_inpaint_flags
 
 
 def average_and_inpaint_simultaneously(
@@ -953,6 +955,7 @@ def average_and_inpaint_simultaneously(
     use_unbiased_estimator: bool = False,
     sample_cov_fraction: float = 0.0,
     use_night_to_night_cov: bool = True,
+    spws: tuple[slice] = (slice(0, None, None),),
 ):
     """
     Average and inpaint simultaneously for all baselines in a stack.
@@ -1101,7 +1104,7 @@ def average_and_inpaint_simultaneously(
                     **kw
                 )
             else:
-                flagged_mean[:], _, model = average_and_inpaint_per_night_single_bl(**kw)
+                flagged_mean[:], _, model = average_and_inpaint_per_night_single_bl(spws=spws, **kw)
             if return_models:
                 all_models[(antpair[0], antpair[1], pol)] = model.copy()
 
