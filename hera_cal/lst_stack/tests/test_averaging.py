@@ -454,6 +454,20 @@ class TestGetPostInpaintFlags:
         assert not np.any(flags[0, 30:50])
 
 
+class TestGetInpaintedMean:
+    def test_exceptions(self):
+        stackd = np.ones((10, 50))
+        stackf = np.zeros((10, 50), dtype=bool)
+        stackn = np.ones((10, 50))
+        model = np.zeros((10, 50))
+        avg_flgs = np.all(stackf, axis=0)
+        with pytest.raises(ValueError, match="stackd, stackn, stackf, and model must all have the same shape"):
+            avg._get_inpainted_mean(stackd, stackf, stackn[:5], model, avg_flgs)
+
+        with pytest.raises(ValueError, match="avg_flgs must have the same shape as the frequency axis"):
+            avg._get_inpainted_mean(stackd, stackf, stackn, model, avg_flgs[:5])
+
+
 class TestAverageInpaintSimultaneouslySingleBl:
     """
     Testing at a single-bl level makes it easier to test more cases, so we use this
@@ -833,11 +847,12 @@ class TestAverageInpaintSimultaneously:
         assert len(models) == 0
         assert np.all(np.isnan(lstavg["data"]))
 
-    def test_fully_flagged_channel(self):
+    @pytest.mark.parametrize("night_to_night_cov", [True, False])
+    def test_fully_flagged_channel(self, night_to_night_cov: bool):
         self.stack.flags[:, 0, self.stack.Nfreqs // 2, 0] = True
 
         lstavg, models = avg.average_and_inpaint_simultaneously(
-            self.stack, self.auto_stack, return_models=True
+            self.stack, self.auto_stack, return_models=True, use_night_to_night_cov=night_to_night_cov
         )
         self.stack.flags[:] = False
 
