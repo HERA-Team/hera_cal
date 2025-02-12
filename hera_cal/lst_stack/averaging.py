@@ -361,6 +361,17 @@ def _get_convolved_flags(
     max_convolved_flag_frac: float,
     axis: int = -1,
 ):
+    """
+    Homogenize flags by applying a triangular convolution filter.
+
+    This routine identifies regions of high flagged density, by applying a convolution
+    filter to the flags. The convolution filter is a triangle with a base of width
+    `2*max_allowed_gap_size-1`. Pixels/channels with convolved flag fraction greater
+    than `max_convolved_flag_frac` are flagged.
+
+    Note that this can *unflag* existing isolated flags, while applying new flags to
+    pixels that were not flagged but sit in large flagged regions.
+    """
     # Now we have all the per-night models. Next thing to do is to make sure we flag
     # anything where the flag gaps are too big.
     convolution_kernel = np.append(
