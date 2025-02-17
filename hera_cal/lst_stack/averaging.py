@@ -489,7 +489,7 @@ def average_and_inpaint_simultaneously_single_bl(
         cache=cache,
     )
 
-    inpainted_mean, avg_flgs = _get_inpainted_mean(stackd, stackn, stackf, model, avg_flgs)
+    inpainted_mean = _get_inpainted_mean(stackd, stackn, stackf, model, avg_flgs)
 
     return inpainted_mean, avg_flgs, model
 
@@ -744,7 +744,7 @@ def _get_inpainted_mean(
     # Note that we can have avg_flgs be all flagged when not all of stackf is flagged
     # because we flag the average on "largest gaps". That's why we shortcut early here.
     if np.all(avg_flgs):
-        return np.nan * inpainted_mean, avg_flgs
+        return np.nan * inpainted_mean
 
     # Inpainted mean is going to be sum(n_i * {model if flagged else data_i}) / sum(n_i)
     # where n_i is the nsamples for the i-th integration. The total_nsamples is
@@ -767,7 +767,7 @@ def _get_inpainted_mean(
         inpainted_mean /= total_nsamples
         inpainted_mean[total_nsamples == 0] *= np.nan
 
-    return inpainted_mean, total_nsamples <= 0
+    return inpainted_mean
 
 
 def _get_CNinv_1sample(
@@ -919,9 +919,11 @@ def average_and_inpaint_per_night_single_bl(
         max_convolved_flag_frac=max_convolved_flag_frac,
     )
 
-    inpaint_mean, avg_flgs = _get_inpainted_mean(
+    inpaint_mean = _get_inpainted_mean(
         stackd, stackn, stackf, model, avg_flgs, post_inpaint_flags
     )
+    avg_flgs |= np.all(post_inpaint_flags, axis=0)
+
     return inpaint_mean, avg_flgs, model
 
 
