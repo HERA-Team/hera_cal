@@ -922,6 +922,8 @@ def average_and_inpaint_per_night_single_bl(
     inpaint_mean = _get_inpainted_mean(
         stackd, stackn, stackf, model, avg_flgs, post_inpaint_flags
     )
+    avg_flgs |= np.all(post_inpaint_flags, axis=0)
+
     return inpaint_mean, avg_flgs, model
 
 
