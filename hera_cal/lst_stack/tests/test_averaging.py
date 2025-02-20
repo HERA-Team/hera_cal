@@ -468,76 +468,76 @@ class TestGetInpaintedMean:
             avg._get_inpainted_mean(stackd, stackf, stackn, model, avg_flgs[:5])
 
 
+def mock_stacks(
+    nnights=14,
+    nfreqs=1536,
+    add_tones: bool = False,
+    add_noise: bool = True,
+    gain_spread: float = 0.0,
+    nsamples_func: callable = np.ones,
+    flag_func: callable = partial(np.zeros, dtype=bool),
+):
+    rng = np.random.default_rng(42)
+
+    freqs = mockuvd.PHASEII_FREQS[:nfreqs]
+
+    basis = dpss_operator(
+        freqs,
+        filter_centers=[0],
+        filter_half_widths=[200e-9],
+        eigenval_cutoff=[1e-9],
+    )[0].real
+
+    ncoeff = basis.shape[-1]
+
+    def gauss_noise(size, scale=1.0):
+        return scale * (
+            rng.normal(size=size) + 1j * rng.normal(size=size)
+        )
+
+    coeffs_mean = gauss_noise(ncoeff, 10)  # avg dpss coeffs
+    coeffs = coeffs_mean + gauss_noise(
+        (nnights, ncoeff), 0.01
+    )  # daily variation in dpss coeffs
+    d_true = np.einsum("nc,fc->nf", coeffs, basis)
+
+    if add_tones:
+        tones = gauss_noise((nnights, 1), 0.1) * np.exp(
+            2j * np.pi * freqs[None, :] * 190e-9
+        )  # a ripple
+        d_true += tones
+
+    # daily variation in gain
+    gains = (
+        1 + gain_spread * rng.uniform(size=d_true.shape[0]) - gain_spread / 2
+    )
+    d_true *= gains[:, None]
+
+    nsamples = nsamples_func(d_true.shape)
+    flags = flag_func(d_true.shape)
+
+    if add_noise:
+        n_true = gauss_noise(d_true.shape, 0.04) / nsamples**0.5
+        d_true += n_true
+
+    nsamples[flags] *= -1
+
+    return freqs, d_true, flags, nsamples
+
+
+def random_nsamples(shape):
+    rng = np.random.default_rng(1)
+    n = rng.integers(1, 10, size=shape[0]).astype(float)
+    return n[:, None] * np.ones(shape)
+
+
 class TestAverageInpaintSimultaneouslySingleBl:
     """
     Testing at a single-bl level makes it easier to test more cases, so we use this
     class to do a bunch of precision tests.
     """
-
-    def setup_class(self):
-        self.rng = np.random.default_rng(42)
-
-    def create_data(
-        self,
-        nnights=14,
-        nfreqs=1536,
-        add_tones: bool = False,
-        add_noise: bool = True,
-        gain_spread: float = 0.0,
-        nsamples_func: callable = np.ones,
-        flag_func: callable = partial(np.zeros, dtype=bool),
-    ):
-        freqs = mockuvd.PHASEII_FREQS[:nfreqs]
-
-        basis = dpss_operator(
-            freqs,
-            filter_centers=[0],
-            filter_half_widths=[200e-9],
-            eigenval_cutoff=[1e-9],
-        )[0].real
-
-        ncoeff = basis.shape[-1]
-
-        def gauss_noise(size, scale=1.0):
-            return scale * (
-                self.rng.normal(size=size) + 1j * self.rng.normal(size=size)
-            )
-
-        coeffs_mean = gauss_noise(ncoeff, 10)  # avg dpss coeffs
-        coeffs = coeffs_mean + gauss_noise(
-            (nnights, ncoeff), 0.01
-        )  # daily variation in dpss coeffs
-        d_true = np.einsum("nc,fc->nf", coeffs, basis)
-
-        if add_tones:
-            tones = gauss_noise((nnights, 1), 0.1) * np.exp(
-                2j * np.pi * freqs[None, :] * 190e-9
-            )  # a ripple
-            d_true += tones
-
-        # daily variation in gain
-        gains = (
-            1 + gain_spread * self.rng.uniform(size=d_true.shape[0]) - gain_spread / 2
-        )
-        d_true *= gains[:, None]
-
-        nsamples = nsamples_func(d_true.shape)
-        flags = flag_func(d_true.shape)
-
-        if add_noise:
-            n_true = gauss_noise(d_true.shape, 0.04) / nsamples**0.5
-            d_true += n_true
-
-        nsamples[flags] *= -1
-
-        return freqs, d_true, flags, nsamples
-
-    def random_nsamples(self, shape):
-        n = self.rng.integers(1, 10, size=shape[0]).astype(float)
-        return n[:, None] * np.ones(shape)
-
     def test_no_flags_no_nsamples(self, avg_inp_function: callable):
-        freqs, d, f, n = self.create_data()
+        freqs, d, f, n = mock_stacks()
 
         inp_mean, ff, model = avg_inp_function(
             freqs=freqs,
@@ -555,8 +555,8 @@ class TestAverageInpaintSimultaneouslySingleBl:
     @pytest.mark.parametrize("gain_spread", [0.0, 0.1, 0.5])
     @pytest.mark.parametrize("add_tones", [False, True])
     def test_no_flags_with_nsamples(self, gain_spread, add_tones, avg_inp_function):
-        freqs, d, f, n = self.create_data(
-            nsamples_func=self.random_nsamples,
+        freqs, d, f, n = mock_stacks(
+            nsamples_func=random_nsamples,
             gain_spread=gain_spread,
             add_tones=add_tones,
         )
@@ -579,7 +579,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
     @pytest.mark.parametrize("gap_size", [1, 3])
     @pytest.mark.parametrize("nnights_flagged", [1, 2, 7, 13, 14])
     def test_small_flag_gap(self, gain_spread, add_tones, gap_size, nnights_flagged, avg_inp_function):
-        freqs, d, f, n = self.create_data(gain_spread=gain_spread, add_tones=add_tones)
+        freqs, d, f, n = mock_stacks(gain_spread=gain_spread, add_tones=add_tones)
         slc = slice(750, 750 + gap_size)
         f[:nnights_flagged, slc] = True
 
@@ -605,7 +605,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
     @pytest.mark.parametrize("gap_size", [10, 20])
     @pytest.mark.parametrize("nnights_flagged", [1, 2, 7])
     def test_large_flag_gap(self, gain_spread, add_tones, gap_size, nnights_flagged, avg_inp_function):
-        freqs, d, f, n = self.create_data(gain_spread=gain_spread, add_tones=add_tones)
+        freqs, d, f, n = mock_stacks(gain_spread=gain_spread, add_tones=add_tones)
         slc = slice(750, 750 + gap_size)
         f[:nnights_flagged, slc] = True
 
@@ -639,7 +639,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
                 "Expected failure of simultaneous inpainting with large bias in large gaps"
             )
 
-        freqs, d, f, n = self.create_data(gain_spread=gain_spread, add_tones=add_tones)
+        freqs, d, f, n = mock_stacks(gain_spread=gain_spread, add_tones=add_tones)
         slc = slice(750, 750 + gap_size)
         f[:nnights_flagged, slc] = True
 
@@ -671,7 +671,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
     def test_uneven_flags(
         self, gain_spread, add_tones, gap_size, nnights_flagged, bias, avg_inp_function
     ):
-        freqs, d, f, n = self.create_data(gain_spread=gain_spread, add_tones=add_tones)
+        freqs, d, f, n = mock_stacks(gain_spread=gain_spread, add_tones=add_tones)
 
         slc = slice(750 - gap_size, 750 + gap_size)
         for i in range(nnights_flagged):
@@ -709,7 +709,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         if gap_size > 1:
             pytest.xfail("Expected failure of simultaneous inpainting at band edge")
 
-        freqs, d, f, n = self.create_data(gain_spread=gain_spread, add_tones=add_tones)
+        freqs, d, f, n = mock_stacks(gain_spread=gain_spread, add_tones=add_tones)
 
         slc = slice(0, gap_size)
         f[:nnights_flagged, slc] = True
@@ -735,7 +735,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         )
 
     def test_non_uniform_nsamples(self, avg_inp_function):
-        freqs, d, f, n = self.create_data()
+        freqs, d, f, n = mock_stacks()
         n[0, 1] = 25.0
 
         with pytest.raises(
@@ -752,7 +752,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
             )
 
     def test_fully_flagged(self, avg_inp_function):
-        freqs, d, f, n = self.create_data()
+        freqs, d, f, n = mock_stacks()
         f[:] = True
 
         data, flg, m = avg_inp_function(
@@ -769,7 +769,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         assert np.all(flg)
 
     def test_too_long_flag_gap(self):
-        freqs, d, f, n = self.create_data()
+        freqs, d, f, n = mock_stacks()
         f[:, 100:200] = True
 
         data, flg, m = avg.average_and_inpaint_simultaneously_single_bl(
@@ -787,7 +787,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         assert np.all(flg)
 
     def test_single_night_corner_case(self, avg_inp_function):
-        freqs, d, f, n = self.create_data(nnights=1)
+        freqs, d, f, n = mock_stacks(nnights=1)
         data, flg, m = avg_inp_function(
             freqs=freqs,
             stackd=d,
@@ -799,6 +799,32 @@ class TestAverageInpaintSimultaneouslySingleBl:
         )
 
         assert np.all(data == d)
+
+
+class TestAverageInpaintPerNightSingleBl:
+    """Tests for the per-night lst-stack inpainting.
+
+    We have already tested the per-night inpainter within the
+    `TestAverageInpaintSimultaneouslySingleBl` class using parameterizations,
+    so we only need to test more specific behaviours here.
+    """
+    def test_post_inpaint_flags(self):
+        freqs, d, f, n = mock_stacks(nnights=1)
+        f[100:200] = True
+
+        data, flg, m = avg.average_and_inpaint_per_night_single_bl(
+            freqs=freqs,
+            stackd=d,
+            stackf=f,
+            stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape),
+            df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9],
+            max_gap_factor=1,
+        )
+
+        # The data has a too-large gap, so all data must be flagged
+        assert np.all(flg)
 
 
 class TestAverageInpaintSimultaneously:

@@ -489,7 +489,7 @@ def average_and_inpaint_simultaneously_single_bl(
         cache=cache,
     )
 
-    inpainted_mean = _get_inpainted_mean(stackd, stackn, stackf, model, avg_flgs)
+    inpainted_mean, _ = _get_inpainted_mean(stackd, stackn, stackf, model, avg_flgs)
 
     return inpainted_mean, avg_flgs, model
 
@@ -694,7 +694,7 @@ def _get_inpainted_mean(
     model: np.ndarray,
     avg_flgs: np.ndarray,
     post_inpaint_flags: np.ndarray | None = None,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     """Average an LST-stack over nights.
 
     Parameters
@@ -720,7 +720,8 @@ def _get_inpainted_mean(
     -------
     inpainted_mean
         the inpainted mean over nights (Nfreqs, ...)
-
+    total_nsamples
+        the total number of samples used in the average (Nfreqs, ...)
     """
     if post_inpaint_flags is None:
         # These are per-night flags that must be respected even after inpainting,
@@ -744,7 +745,7 @@ def _get_inpainted_mean(
     # Note that we can have avg_flgs be all flagged when not all of stackf is flagged
     # because we flag the average on "largest gaps". That's why we shortcut early here.
     if np.all(avg_flgs):
-        return np.nan * inpainted_mean
+        return np.nan * inpainted_mean, np.zeros(avg_flgs.shape)
 
     # Inpainted mean is going to be sum(n_i * {model if flagged else data_i}) / sum(n_i)
     # where n_i is the nsamples for the i-th integration. The total_nsamples is
@@ -767,7 +768,7 @@ def _get_inpainted_mean(
         inpainted_mean /= total_nsamples
         inpainted_mean[total_nsamples == 0] *= np.nan
 
-    return inpainted_mean
+    return inpainted_mean, total_nsamples
 
 
 def _get_CNinv_1sample(
@@ -919,10 +920,11 @@ def average_and_inpaint_per_night_single_bl(
         max_convolved_flag_frac=max_convolved_flag_frac,
     )
 
-    inpaint_mean = _get_inpainted_mean(
+    inpaint_mean, total_nsamples = _get_inpainted_mean(
         stackd, stackn, stackf, model, avg_flgs, post_inpaint_flags
     )
-    avg_flgs |= np.all(post_inpaint_flags, axis=0)
+    # We update avg_flgs in-place because that's what the wrapper function expects.
+    avg_flgs[:] = total_nsamples <= 0
 
     return inpaint_mean, avg_flgs, model
 
