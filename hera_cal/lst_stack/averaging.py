@@ -913,7 +913,7 @@ def average_and_inpaint_per_night_single_bl(
     # Now we have all the per-night models. Next thing to do is to make sure we flag
     # anything where the flag gaps are too big.
     max_allowed_gap_size = max_gap_factor * filter_half_widths[0] ** -1 / df
-    post_inpaint_flags = _get_post_inpaint_flags(
+    post_inpaint_flags, convolved_flags = _get_post_inpaint_flags(
         stackf,
         spws=spws,
         max_allowed_gap_size=max_allowed_gap_size,
@@ -921,7 +921,7 @@ def average_and_inpaint_per_night_single_bl(
     )
 
     inpaint_mean, total_nsamples = _get_inpainted_mean(
-        stackd, stackn, stackf, model, avg_flgs, post_inpaint_flags
+        stackd, stackn, convolved_flags, model, avg_flgs, post_inpaint_flags
     )
     # We update avg_flgs in-place because that's what the wrapper function expects.
     avg_flgs[:] = total_nsamples <= 0
@@ -953,7 +953,7 @@ def _get_post_inpaint_flags(
                         or band.start <= stretch.stop < (band.stop or nf)
                     ):
                         post_inpaint_flags[night, band] = True
-    return post_inpaint_flags
+    return post_inpaint_flags, convolved_flags
 
 
 def average_and_inpaint_simultaneously(
