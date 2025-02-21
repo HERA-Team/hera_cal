@@ -333,7 +333,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
                         dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9,
-                        skip_flagged_edges=True, fix_phase_flips=False, use_sparse_solver=False, 
+                        skip_flagged_edges=True, fix_phase_flips=False, use_sparse_solver=False,
                         precondition_solver=True, **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
@@ -359,7 +359,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                     0 fringe rate, or both. Only used when method is 'CLEAN'
         window: window function for filtering applied to the filtered axis. Only used with when method used is 'CLEAN'.
             See aipy.dsp.gen_window for options.
-        maxiter: Maximum number of iterations for aipy.deconv.clean or hera_filters.dspec.sparse_linear_fit_2D 
+        maxiter: Maximum number of iterations for aipy.deconv.clean or hera_filters.dspec.sparse_linear_fit_2D
             to converge.
         method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
             'CLEAN': uses the CLEAN algorithm to smooth calibration solutions
@@ -457,7 +457,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                     precondition_solver=precondition_solver,
                 )
                 filtered = np.dot(time_filters, np.dot(beta, freq_filters.T))
-                cached_output = {} # no cached output for sparse solver
+                cached_output = {}  # no cached output for sparse solver
             else:
                 filtered, cached_output = solve_2D_DPSS(
                     gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, method=fit_method,
@@ -1014,7 +1014,7 @@ class CalibrationSmoother():
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect', window='tukey',
                             maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9, skip_flagged_edges=True,
-                            fix_phase_flips=False, flag_phase_flip_ints=False, flag_phase_flip_ants=False, 
+                            fix_phase_flips=False, flag_phase_flip_ints=False, flag_phase_flip_ants=False,
                             use_sparse_solver=False, precondition_solver=True, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
@@ -1094,7 +1094,7 @@ class CalibrationSmoother():
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, dpss_vectors=dpss_vectors, eigenval_cutoff=eigenval_cutoff,
                                                      method=method, fit_method=fit_method, cached_input=cached_input,
-                                                     skip_flagged_edges=skip_flagged_edges, fix_phase_flips=fix_phase_flips, 
+                                                     skip_flagged_edges=skip_flagged_edges, fix_phase_flips=fix_phase_flips,
                                                      use_sparse_solver=use_sparse_solver, precondition_solver=precondition_solver, **win_kwargs)
                 flipped = (info['phase_flips'] == -1)
                 if np.any(flipped):
