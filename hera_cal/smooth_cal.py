@@ -333,7 +333,8 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
                         dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9,
-                        skip_flagged_edges=True, fix_phase_flips=False, **win_kwargs):
+                        skip_flagged_edges=True, fix_phase_flips=False, use_sparse_solver=False, 
+                        precondition_solver=True, **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -349,7 +350,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             Note that freq_scale is in MHz while freqs is in Hz.
         time_scale: time scale in seconds. Defined analogously to freq_scale.
             Note that time_scale is in seconds, times is in days.
-        tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
+        tol: Algorithm convergence tolerance for CLEAN(see aipy.deconv.clean) and
+            sparse linear least squares solver (see hera_filters.dspec.sparse_linear_fit_2D)
         filter_mode: either 'rect' or 'plus':
             'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0
                     and fringe rate = 0
@@ -357,7 +359,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                     0 fringe rate, or both. Only used when method is 'CLEAN'
         window: window function for filtering applied to the filtered axis. Only used with when method used is 'CLEAN'.
             See aipy.dsp.gen_window for options.
-        maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+        maxiter: Maximum number of iterations for aipy.deconv.clean or hera_filters.dspec.sparse_linear_fit_2D 
+            to converge.
         method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
             'CLEAN': uses the CLEAN algorithm to smooth calibration solutions
             'DPSS': uses discrete prolate spheroidal sequences (DPSS) to filter calibration solutions
@@ -382,6 +385,11 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         fix_phase_flips : bool, optional
             If True, will try to find integrations whose phases appear to be 180 degrees rotated from the first unflagged
             integration. These will be flipped before smoothing and then flipped back after smoothing. Default is False.
+        use_sparse_solver : bool, optional
+            If True and method='DPSS, use the sparse linear least squares solver in hera_filters.dspec.sparse_linear_fit_2D.
+            Default is False.
+        precondition_solver : bool, optional
+            If True and use_sparse_solver=True, use a preconditioner in the sparse solver. Default is True.
         win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
             Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
 
@@ -437,10 +445,24 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             time_filters, freq_filters = dpss_vectors
 
             # Filter gain solutions
-            filtered, cached_output = solve_2D_DPSS(
-                gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, method=fit_method,
-                cached_input=cached_input
-            )
+            if use_sparse_solver:
+                beta, _ = hera_filters.dspec.sparse_linear_fit_2D(
+                    data=gout,
+                    weights=wout,
+                    axis_1_basis=time_filters,
+                    axis_2_basis=freq_filters,
+                    atol=tol,
+                    btol=tol,
+                    iter_lim=maxiter,
+                    precondition_solver=precondition_solver,
+                )
+                filtered = np.dot(time_filters, np.dot(beta, freq_filters.T))
+                cached_output = {} # no cached output for sparse solver
+            else:
+                filtered, cached_output = solve_2D_DPSS(
+                    gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, method=fit_method,
+                    cached_input=cached_input
+                )
 
             if skip_flagged_edges:
                 ((tstart, tend),), ((fstart, fend),) = edges
@@ -992,7 +1014,8 @@ class CalibrationSmoother():
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect', window='tukey',
                             maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9, skip_flagged_edges=True,
-                            fix_phase_flips=False, flag_phase_flip_ints=False, flag_phase_flip_ants=False, **win_kwargs):
+                            fix_phase_flips=False, flag_phase_flip_ints=False, flag_phase_flip_ants=False, 
+                            use_sparse_solver=False, precondition_solver=True, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -1026,6 +1049,11 @@ class CalibrationSmoother():
                 just before and just after a phase flip, since the phase flip could have occured mid-integration. Default is False.
             flag_phase_flip_ants: Optional bool. If True and fix_phase_flips is also True, will flag antennas that have a phase flip
                 for ALL integrations. Default is False.
+            use_sparse_solver : bool, optional
+                If True and method='DPSS, use the sparse linear least squares solver in hera_filters.dspec.sparse_linear_fit_2D.
+                Default is False.
+            precondition_solver : bool, optional
+                If True and use_sparse_solver=True, use a preconditioner in the sparse solver. Default is True.
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
@@ -1066,7 +1094,8 @@ class CalibrationSmoother():
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, dpss_vectors=dpss_vectors, eigenval_cutoff=eigenval_cutoff,
                                                      method=method, fit_method=fit_method, cached_input=cached_input,
-                                                     skip_flagged_edges=skip_flagged_edges, fix_phase_flips=fix_phase_flips, **win_kwargs)
+                                                     skip_flagged_edges=skip_flagged_edges, fix_phase_flips=fix_phase_flips, 
+                                                     use_sparse_solver=use_sparse_solver, precondition_solver=precondition_solver, **win_kwargs)
                 flipped = (info['phase_flips'] == -1)
                 if np.any(flipped):
                     print(f'{np.sum(np.diff(flipped))} phase flips detected on antenna {ant}. '
