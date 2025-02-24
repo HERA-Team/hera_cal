@@ -720,13 +720,15 @@ def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
     return freq_blacklist_array
 
 
-def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None, blacklist_wgt=0.0):
+def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None, waterfall_blacklist=None, blacklist_wgt=0.0):
     '''Builds a wgts_grid float array (Ntimes, Nfreqs) with 0s flagged or blacklisted data and 1s otherwise.'''
     wgts_grid = np.ones_like(flag_grid, dtype=float)
     if time_blacklist is not None:
         wgts_grid[time_blacklist, :] = blacklist_wgt
     if freq_blacklist is not None:
         wgts_grid[:, freq_blacklist] = blacklist_wgt
+    if waterfall_blacklist is not None:
+        wgts_grid[waterfall_blacklist] = blacklist_wgt
     wgts_grid[flag_grid] = 0.0
     return wgts_grid
 
@@ -796,7 +798,9 @@ class CalibrationSmoother():
                 this is not required.
             freq_blacklists: list of pairs of frequencies in Hz hours bounding (inclusively) spectral regions
                 that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
-                N.B. Blacklisted frequencies are not necessarily flagged.
+                N.B. Blacklisted frequencies are not necessarily flagged. Also note that there is a "hidden"
+                waterfall_blacklist parameter on this object that is a dictionary mapping antennas to boolean arrays
+                that allows for specific freqs/times to be blacklisted for specific antennas. This has to be set manually.
             chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions
                 that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted channels are not necessarily flagged.
@@ -901,6 +905,7 @@ class CalibrationSmoother():
         self.time_blacklist = build_time_blacklist(self.time_grid, time_blacklists=time_blacklists, lst_blacklists=lst_blacklists,
                                                    lat_lon_alt_degrees=lat_lon_alt_degrees, telescope_name=hc.telescope.name)
         self.freq_blacklist = build_freq_blacklist(self.freqs, freq_blacklists=freq_blacklists, chan_blacklists=chan_blacklists)
+        self.waterfall_blacklist = {}  # needs to be manually set by an advanced user as ant-->boolean waterfall
 
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
@@ -964,7 +969,8 @@ class CalibrationSmoother():
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now smoothing antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in time...', verbose=self.verbose)
             if not np.all(self.flag_grids[ant]):
-                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist, self.blacklist_wgt)
+                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist,
+                                             self.waterfall_blacklist.get(ant, None), self.blacklist_wgt)
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
@@ -993,7 +999,8 @@ class CalibrationSmoother():
         cache = {}
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + f' in {ax}...', verbose=self.verbose)
-            wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
+            wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist,
+                                         self.waterfall_blacklist.get(ant, None), self.blacklist_wgt)
             if ax == 'freq':
                 xaxis = self.freqs
             else:
@@ -1077,7 +1084,8 @@ class CalibrationSmoother():
             gain_grid = self.gain_grids[ant]
             if not np.all(self.flag_grids[ant]):
                 utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
-                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist, self.blacklist_wgt)
+                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist,
+                                             self.waterfall_blacklist.get(ant, None), self.blacklist_wgt)
 
                 # If the weights grid is the same as the previous, the solution matrix can be reused to speed up computation
                 if method == 'DPSS' or method == 'dpss_leastsq':
