@@ -427,26 +427,26 @@ class TestGetPostInpaintFlags:
     def test_big_gap(self):
         stackf = np.zeros((1, 50), dtype=bool)
         stackf[0, 10:20] = True
-        flags = avg._get_post_inpaint_flags(stackf, max_allowed_gap_size=1)
+        flags, _ = avg._get_post_inpaint_flags(stackf, max_allowed_gap_size=1)
         assert np.all(flags)
 
     def test_small_gap(self):
         stackf = np.zeros((1, 50), dtype=bool)
         stackf[0, 15:17] = True
-        flags = avg._get_post_inpaint_flags(stackf, max_allowed_gap_size=10)
+        flags, _ = avg._get_post_inpaint_flags(stackf, max_allowed_gap_size=10)
         assert not np.any(flags)
 
     def test_interrupted_gap(self):
         stackf = np.zeros((1, 50), dtype=bool)
         stackf[0, 13:19] = True
         stackf[0, 20:25] = True
-        flags = avg._get_post_inpaint_flags(stackf, max_allowed_gap_size=10)
+        flags, _ = avg._get_post_inpaint_flags(stackf, max_allowed_gap_size=10)
         assert np.all(flags)
 
     def test_gap_straddling_spw(self):
         stackf = np.zeros((1, 50), dtype=bool)
         stackf[0, 12:24] = True
-        flags = avg._get_post_inpaint_flags(
+        flags, cnvflg = avg._get_post_inpaint_flags(
             stackf, spws=(slice(0, 15), slice(15, 30), slice(30, 50)), max_allowed_gap_size=10
         )
         assert np.all(flags[0, 0:15])
@@ -539,7 +539,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
     def test_no_flags_no_nsamples(self, avg_inp_function: callable):
         freqs, d, f, n = mock_stacks()
 
-        inp_mean, ff, model = avg_inp_function(
+        inp_mean, ff, model, _ = avg_inp_function(
             freqs=freqs,
             stackd=d,
             stackf=f,
@@ -561,7 +561,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
             add_tones=add_tones,
         )
 
-        inp_mean, ff, model = avg_inp_function(
+        inp_mean, ff, model, pinf = avg_inp_function(
             freqs=freqs,
             stackd=d,
             stackf=f,
@@ -583,7 +583,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         slc = slice(750, 750 + gap_size)
         f[:nnights_flagged, slc] = True
 
-        inp_mean, ff, model = avg_inp_function(
+        inp_mean, ff, model, pinf = avg_inp_function(
             freqs=freqs,
             stackd=d,
             stackf=f,
@@ -609,7 +609,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         slc = slice(750, 750 + gap_size)
         f[:nnights_flagged, slc] = True
 
-        inp_mean, ff, model = avg_inp_function(
+        inp_mean, ff, model, pinf = avg_inp_function(
             freqs=freqs,
             stackd=d,
             stackf=f,
@@ -646,7 +646,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         # Do the bias
         d[:nnights_flagged] *= bias
 
-        inp_mean, ff, model = avg_inp_function(
+        inp_mean, ff, model, pinf = avg_inp_function(
             freqs=freqs,
             stackd=d,
             stackf=f,
@@ -683,7 +683,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         # Do the bias
         d[:nnights_flagged] *= bias
 
-        inp_mean, ff, model = avg_inp_function(
+        inp_mean, ff, model, pinf = avg_inp_function(
             freqs=freqs,
             stackd=d,
             stackf=f,
@@ -717,7 +717,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         # Do the bias
         d[:nnights_flagged] *= bias
 
-        inp_mean, ff, model = avg_inp_function(
+        inp_mean, ff, model, pinf = avg_inp_function(
             freqs=freqs,
             stackd=d,
             stackf=f,
@@ -755,7 +755,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         freqs, d, f, n = mock_stacks()
         f[:] = True
 
-        data, flg, m = avg_inp_function(
+        data, flg, m, pinf = avg_inp_function(
             freqs=freqs,
             stackd=d,
             stackf=f,
@@ -772,7 +772,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
         freqs, d, f, n = mock_stacks()
         f[:, 100:200] = True
 
-        data, flg, m = avg.average_and_inpaint_simultaneously_single_bl(
+        data, flg, m, pinf = avg.average_and_inpaint_simultaneously_single_bl(
             freqs=freqs,
             stackd=d,
             stackf=f,
@@ -788,7 +788,7 @@ class TestAverageInpaintSimultaneouslySingleBl:
 
     def test_single_night_corner_case(self, avg_inp_function):
         freqs, d, f, n = mock_stacks(nnights=1)
-        data, flg, m = avg_inp_function(
+        data, flg, m, pinf = avg_inp_function(
             freqs=freqs,
             stackd=d,
             stackf=f,
@@ -810,9 +810,9 @@ class TestAverageInpaintPerNightSingleBl:
     """
     def test_post_inpaint_flags(self):
         freqs, d, f, n = mock_stacks(nnights=1)
-        f[100:200] = True
-
-        data, flg, m = avg.average_and_inpaint_per_night_single_bl(
+        f[:, 100:200] = True
+        print(f.shape)
+        data, flg, m, pinf = avg.average_and_inpaint_per_night_single_bl(
             freqs=freqs,
             stackd=d,
             stackf=f,
@@ -853,7 +853,7 @@ class TestAverageInpaintSimultaneously:
 
     @pytest.mark.parametrize("night_to_night_cov", [True, False])
     def test_no_flags(self, night_to_night_cov: bool):
-        lstavg, models = avg.average_and_inpaint_simultaneously(
+        lstavg, models, pinf = avg.average_and_inpaint_simultaneously(
             self.stack, self.auto_stack, return_models=True, use_night_to_night_cov=night_to_night_cov
         )
 
@@ -865,7 +865,7 @@ class TestAverageInpaintSimultaneously:
     def test_all_flagged(self):
         self.stack.flags[:] = True
 
-        lstavg, models = avg.average_and_inpaint_simultaneously(
+        lstavg, models, pinf = avg.average_and_inpaint_simultaneously(
             self.stack, self.auto_stack, return_models=True
         )
         self.stack.flags[:] = False
@@ -877,7 +877,7 @@ class TestAverageInpaintSimultaneously:
     def test_fully_flagged_channel(self, night_to_night_cov: bool):
         self.stack.flags[:, 0, self.stack.Nfreqs // 2, 0] = True
 
-        lstavg, models = avg.average_and_inpaint_simultaneously(
+        lstavg, models, pinf = avg.average_and_inpaint_simultaneously(
             self.stack, self.auto_stack, return_models=True, use_night_to_night_cov=night_to_night_cov
         )
         self.stack.flags[:] = False
@@ -897,7 +897,7 @@ class TestAverageInpaintSimultaneously:
     def test_fully_flagged_integration(self):
         self.stack.flags[0, 0, :, 0] = True
 
-        lstavg, models = avg.average_and_inpaint_simultaneously(
+        lstavg, models, pinf = avg.average_and_inpaint_simultaneously(
             self.stack, self.auto_stack, return_models=True
         )
         self.stack.flags[:] = False
@@ -920,6 +920,6 @@ class TestAverageInpaintSimultaneously:
             time_axis_faster_than_bls=False,
         )
         auto_stack = LSTStack(auto_uvd)
-        lstavg, _ = avg.average_and_inpaint_simultaneously(self.stack, auto_stack)
+        lstavg, _, _ = avg.average_and_inpaint_simultaneously(self.stack, auto_stack)
         assert not np.any(np.isnan(lstavg['data']))
         np.testing.assert_allclose(lstavg["data"], self.stack.data[0])

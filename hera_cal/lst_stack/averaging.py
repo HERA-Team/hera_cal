@@ -491,7 +491,7 @@ def average_and_inpaint_simultaneously_single_bl(
 
     inpainted_mean, _ = _get_inpainted_mean(stackd, stackn, stackf, model, avg_flgs)
 
-    return inpainted_mean, avg_flgs, model
+    return inpainted_mean, avg_flgs, model, None
 
 
 def _get_posterior_mean_dpss(
@@ -888,7 +888,6 @@ def average_and_inpaint_per_night_single_bl(
     """
     # DPSS inpainting model
     avg_flgs = avg_flgs if avg_flgs is not None else np.all(stackf, axis=0)
-
     if hasattr(df, "unit"):
         df = df.to_value("Hz")
 
@@ -925,7 +924,6 @@ def average_and_inpaint_per_night_single_bl(
     )
     # We update avg_flgs in-place because that's what the wrapper function expects.
     avg_flgs[:] = total_nsamples <= 0
-
     return inpaint_mean, avg_flgs, model, post_inpaint_flags
 
 
@@ -1038,6 +1036,7 @@ def average_and_inpaint_simultaneously(
     lstavg = reduce_lst_bins(
         stack, get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
     )
+
     # Trick the LST-binner into performing the average over autopairs instead of LSTs
     auto_redavg = reduce_lst_bins(
         data=auto_stack.data.transpose((1, 0, 2, 3)),
@@ -1116,14 +1115,14 @@ def average_and_inpaint_simultaneously(
                 cache=cache,
             )
             if use_night_to_night_cov:
-                flagged_mean[:], _, model = average_and_inpaint_simultaneously_single_bl(
+                flagged_mean[:], _, model, _ = average_and_inpaint_simultaneously_single_bl(
                     use_unbiased_estimator=use_unbiased_estimator,
                     sample_cov_fraction=sample_cov_fraction,
                     **kw
                 )
             else:
                 flagged_mean[:], _, model, post_inpaint_flags = average_and_inpaint_per_night_single_bl(spws=spws, **kw)
-                all_post_inpaint_flags[:, iap, :, polidx] = post_inpaint_flags.copy()
+                all_post_inpaint_flags.flags[:, iap, :, polidx] = post_inpaint_flags.copy()
 
             if return_models:
                 all_models[(antpair[0], antpair[1], pol)] = model.copy()
