@@ -420,6 +420,9 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts_grid = smooth_cal._build_wgts_grid(flag_grid, time_blacklist=[False, True], freq_blacklist=[False, False, True], blacklist_wgt=.1)
         np.testing.assert_array_equal(wgts_grid, [[0, 1, .1], [.1, .1, .1]])
 
+        wgts_grid = smooth_cal._build_wgts_grid(flag_grid, waterfall_blacklist=[[False, True, False], [False, False, False]], blacklist_wgt=.1)
+        np.testing.assert_array_equal(wgts_grid, [[0, .1, 1], [1, 1, 1]])
+
     def test_to_anflags(self):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
         uvc = UVCal()
