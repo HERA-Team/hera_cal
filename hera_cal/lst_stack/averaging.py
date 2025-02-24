@@ -1116,14 +1116,15 @@ def average_and_inpaint_simultaneously(
                 cache=cache,
             )
             if use_night_to_night_cov:
-                flagged_mean[:], _, model, post_inpaint_flags = average_and_inpaint_simultaneously_single_bl(
+                flagged_mean[:], _, model = average_and_inpaint_simultaneously_single_bl(
                     use_unbiased_estimator=use_unbiased_estimator,
                     sample_cov_fraction=sample_cov_fraction,
                     **kw
                 )
-                all_post_inpaint_flags[:, iap, :, polidx] = post_inpaint_flags.copy()
             else:
-                flagged_mean[:], _, model = average_and_inpaint_per_night_single_bl(spws=spws, **kw)
+                flagged_mean[:], _, model, post_inpaint_flags = average_and_inpaint_per_night_single_bl(spws=spws, **kw)
+                all_post_inpaint_flags[:, iap, :, polidx] = post_inpaint_flags.copy()
+
             if return_models:
                 all_models[(antpair[0], antpair[1], pol)] = model.copy()
 
