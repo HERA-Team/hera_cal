@@ -926,7 +926,7 @@ def average_and_inpaint_per_night_single_bl(
     # We update avg_flgs in-place because that's what the wrapper function expects.
     avg_flgs[:] = total_nsamples <= 0
 
-    return inpaint_mean, avg_flgs, model
+    return inpaint_mean, avg_flgs, model, post_inpaint_flags
 
 
 def _get_post_inpaint_flags(
@@ -971,7 +971,7 @@ def average_and_inpaint_simultaneously(
     sample_cov_fraction: float = 0.0,
     use_night_to_night_cov: bool = True,
     spws: tuple[slice] = (slice(0, None, None),),
-):
+) -> tuple[dict, dict, dict]:
     """
     Average and inpaint simultaneously for all baselines in a stack.
 
@@ -1058,6 +1058,9 @@ def average_and_inpaint_simultaneously(
         if antpol1 == antpol2:
             antpol_to_vispol_idx[antpol1] = polidx
 
+    all_post_inpaint_flags = stack.copy(metadata_only=True)
+    all_post_inpaint_flags.flag_array = stack.flag_array.copy()
+
     for iap, antpair in enumerate(stack.antpairs):
         # Get the baseline vector and length
         bl_vec = (antpos[antpair[1]] - antpos[antpair[0]])[:]
@@ -1113,11 +1116,12 @@ def average_and_inpaint_simultaneously(
                 cache=cache,
             )
             if use_night_to_night_cov:
-                flagged_mean[:], _, model = average_and_inpaint_simultaneously_single_bl(
+                flagged_mean[:], _, model, post_inpaint_flags = average_and_inpaint_simultaneously_single_bl(
                     use_unbiased_estimator=use_unbiased_estimator,
                     sample_cov_fraction=sample_cov_fraction,
                     **kw
                 )
+                all_post_inpaint_flags[:, iap, :, polidx] = post_inpaint_flags.copy()
             else:
                 flagged_mean[:], _, model = average_and_inpaint_per_night_single_bl(spws=spws, **kw)
             if return_models:
@@ -1126,4 +1130,4 @@ def average_and_inpaint_simultaneously(
     # Set data that is flagged to nan
     lstavg["data"][lstavg["flags"]] = np.nan
 
-    return lstavg, all_models
+    return lstavg, all_models, all_post_inpaint_flags
