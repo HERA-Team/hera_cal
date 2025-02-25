@@ -760,7 +760,7 @@ class CalibrationSmoother():
 
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
-                 blacklist_wgt=0.0, pick_refant=False, propagate_refant_flags=False, per_pol_refant=True,
+                 waterfall_blacklist={}, blacklist_wgt=0.0, pick_refant=False, propagate_refant_flags=False, per_pol_refant=True,
                  freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, ignore_calflags=False, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
@@ -798,12 +798,12 @@ class CalibrationSmoother():
                 this is not required.
             freq_blacklists: list of pairs of frequencies in Hz hours bounding (inclusively) spectral regions
                 that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
-                N.B. Blacklisted frequencies are not necessarily flagged. Also note that there is a "hidden"
-                waterfall_blacklist parameter on this object that is a dictionary mapping antennas to boolean arrays
-                that allows for specific freqs/times to be blacklisted for specific antennas. This has to be set manually.
+                N.B. Blacklisted frequencies are not necessarily flagged.
             chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions
                 that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted channels are not necessarily flagged.
+            waterfall_blacklist: dictionary mapping antenna keys to Ntimes x Nfreqs boolean arrays where True means
+                that those waterfall pixels get blacklist_wgt in smoothing, but are not necessarily flagged.
             blacklist_wgt: float weight to give to blacklisted times or frequencies. 0.0 weight will create
                 problems at edge times and frequencies when using DPSS filtering.
             pick_refant: if True, automatically picks one reference anteanna per polarization. The refants chosen have the
@@ -905,7 +905,7 @@ class CalibrationSmoother():
         self.time_blacklist = build_time_blacklist(self.time_grid, time_blacklists=time_blacklists, lst_blacklists=lst_blacklists,
                                                    lat_lon_alt_degrees=lat_lon_alt_degrees, telescope_name=hc.telescope.name)
         self.freq_blacklist = build_freq_blacklist(self.freqs, freq_blacklists=freq_blacklists, chan_blacklists=chan_blacklists)
-        self.waterfall_blacklist = {}  # needs to be manually set by an advanced user as ant-->boolean waterfall
+        self.set_waterfall_blacklist(waterfall_blacklist)
 
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
@@ -947,6 +947,16 @@ class CalibrationSmoother():
             rephase_to_refant(self.gain_grids, self.refant, flags=self.flag_grids, propagate_refant_flags=propagate_refant_flags)
         elif warn:
             warnings.warn('No rephasing done because self.refant has not been set.', RuntimeWarning)
+
+    def set_waterfall_blacklist(self, waterfall_blacklist):
+        '''Manually set the waterfall blacklist. This is a dictionary mapping antenna keys to boolean arrays that get weight
+        of self.blacklist_wgt when smoothing, though they are not necessarily flagged.'''
+        for ant in waterfall_blacklist:
+            # perform checks
+            assert ant in self.gain_grids, f'Antenna {ant} not found in self.gain_grids.'
+            assert waterfall_blacklist[ant].shape == self.gain_grids[ant].shape, f'Waterfall blacklist for antenna {ant} has the wrong shape.'
+            assert waterfall_blacklist[ant].dtype == bool, f'Waterfall blacklist for antenna {ant} must be a boolean.'
+        self.waterfall_blacklist = waterfall_blacklist
 
     def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
