@@ -510,6 +510,16 @@ class Test_Calibration_Smoother(object):
         assert self.cs.flag_grids[54, 'Jee'].shape == (180, 1024)
         np.testing.assert_array_equal(self.cs.flag_grids[54, 'Jee'][60:120, :], True)
 
+    def test_set_waterfall_blacklist(self):
+        self.cs.set_waterfall_blacklist({(54, 'Jee'): np.ones((180, 1024), dtype=bool)})
+        np.testing.assert_array_equal(self.cs.waterfall_blacklist[(54, 'Jee')], True)
+        with pytest.raises(AssertionError):
+            self.cs.set_waterfall_blacklist({(54, 'Jee'): np.ones((180, 1025), dtype=bool)})
+        with pytest.raises(AssertionError):
+            self.cs.set_waterfall_blacklist({(351, 'Jee'): np.ones((180, 1024), dtype=bool)})
+        with pytest.raises(AssertionError):
+            self.cs.set_waterfall_blacklist({(54, 'Jee'): np.ones((180, 1024), dtype=float)})
+
     @pytest.mark.parametrize("ax", ['freq', 'time'])
     def test_1D_filtering(self, ax):
         g = deepcopy(self.cs.gain_grids[54, 'Jee'])
