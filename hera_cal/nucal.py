@@ -3,8 +3,6 @@ from . import redcal
 from . import abscal
 from .datacontainer import DataContainer, RedDataContainer
 
-import inspect
-import warnings
 import numpy as np
 from scipy import linalg
 from hera_filters import dspec
@@ -13,6 +11,7 @@ from scipy.cluster.hierarchy import fclusterdata
 
 import jax
 import optax
+import jaxopt
 from jax import numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
@@ -1182,7 +1181,7 @@ def _calibration_loss_function(model_parameters, data_r, data_i, wgts, spectral_
 
 def _nucal_post_redcal(
     data_r, data_i, wgts, model_parameters, optimizer, spectral_filters, spatial_filters, idealized_blvecs,
-    major_cycle_maxiter=100, convergence_criteria=1e-10, minor_cycle_maxiter=10, alpha=1e-12
+    major_cycle_maxiter=100, convergence_criteria=1e-10, minor_cycle_maxiter=10, alpha=1e-12, use_lbfgs=False
 ):
     """
     Function to perform frequency redundant calibration using gradient descent. Calibrates the
@@ -1226,6 +1225,8 @@ def _nucal_post_redcal(
     alpha : float, optional, default=0
         Regularization parameter to use for the loss function. If alpha is non-zero, the loss function will be regularized
         by the sum of the squares of the foreground model parameters.
+    use_lbfgs : bool, optional, default=False
+        If True, the L-BFGS optimizer is used for the optimization. If False, the gradient descent optimizer is used.
 
     Returns:
     -------
@@ -1243,48 +1244,60 @@ def _nucal_post_redcal(
     previous_loss = np.inf
 
     # Start gradient descent
-    for step in range(major_cycle_maxiter):
-        # Compute loss and gradient
-        loss, gradient = jax.value_and_grad(_calibration_loss_function)(
-            model_parameters, data_r, data_i, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters,
+    if use_lbfgs:
+        # Create the L-BFGS solver
+        solver = jaxopt.LBFGS(
+            _calibration_loss_function, maxiter=major_cycle_maxiter, tolerance=convergence_criteria
+        )
+
+        # Run the solver
+        solution, meta = solver.run(
+            model_parameters, data_r=data_r, data_i=data_i, spectral_filters=spectral_filters, spatial_filters=spatial_filters,
             idealized_blvecs=idealized_blvecs, alpha=alpha
         )
-        # Update optimizer state and parameters
-        updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
-        model_parameters = optax.apply_updates(model_parameters, updates)
+    else:
+        for step in range(major_cycle_maxiter):
+            # Compute loss and gradient
+            loss, gradient = jax.value_and_grad(_calibration_loss_function)(
+                model_parameters, data_r, data_i, wgts, spectral_filters=spectral_filters, spatial_filters=spatial_filters,
+                idealized_blvecs=idealized_blvecs, alpha=alpha
+            )
+            # Update optimizer state and parameters
+            updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
+            model_parameters = optax.apply_updates(model_parameters, updates)
 
-        if minor_cycle_maxiter > 0:
-            minor_cycle_losses = []
+            if minor_cycle_maxiter > 0:
+                minor_cycle_losses = []
 
-            # Compute foreground model from the model_parameters and DPSS filters
-            fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
-            for minor_step in range(minor_cycle_maxiter):
-                # Since the foreground model is fixed, we can just use the _mean_square_error
-                # function as our loss function
-                minor_cycle_loss, gradient = jax.value_and_grad(_mean_squared_error)(
-                    model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs=idealized_blvecs,
-                )
-                # Update optimizer state and parameters
-                updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
-                model_parameters = optax.apply_updates(model_parameters, updates)
+                # Compute foreground model from the model_parameters and DPSS filters
+                fg_model_r, fg_model_i = _foreground_model(model_parameters, spectral_filters, spatial_filters)
+                for minor_step in range(minor_cycle_maxiter):
+                    # Since the foreground model is fixed, we can just use the _mean_square_error
+                    # function as our loss function
+                    minor_cycle_loss, gradient = jax.value_and_grad(_mean_squared_error)(
+                        model_parameters, data_r, data_i, wgts, fg_model_r, fg_model_i, idealized_blvecs=idealized_blvecs,
+                    )
+                    # Update optimizer state and parameters
+                    updates, opt_state = optimizer.update(gradient, opt_state, model_parameters)
+                    model_parameters = optax.apply_updates(model_parameters, updates)
 
-                # Store minor cycle loss values
-                minor_cycle_losses.append(minor_cycle_loss)
+                    # Store minor cycle loss values
+                    minor_cycle_losses.append(minor_cycle_loss)
 
-                # Stop if subsequent losses are within tolerance
-                if minor_step >= 1 and np.abs(minor_cycle_losses[-1] - minor_cycle_losses[-2]) < convergence_criteria:
-                    break
+                    # Stop if subsequent losses are within tolerance
+                    if minor_step >= 1 and np.abs(minor_cycle_losses[-1] - minor_cycle_losses[-2]) < convergence_criteria:
+                        break
 
-            losses += minor_cycle_losses
+                losses += minor_cycle_losses
 
-        # Store loss values
-        losses.append(loss)
+            # Store loss values
+            losses.append(loss)
 
-        # Stop if subsequent losses are within tolerance
-        if step >= 1 and np.abs(losses[-1] - previous_loss) < convergence_criteria:
-            break
+            # Stop if subsequent losses are within tolerance
+            if step >= 1 and np.abs(losses[-1] - previous_loss) < convergence_criteria:
+                break
 
-        previous_loss = loss
+            previous_loss = loss
 
     # Save the metadata in dictionary
     metadata = {"niter": step + 1, "loss_history": np.array(losses)}
@@ -1418,7 +1431,8 @@ class SpectrallyRedundantCalibrator:
     def post_redcal_nucal(
         self, data, data_wgts, cal_flags={}, spatial_estimate_only=False, linear_solver="lu_solve", alpha=0, share_fg_model=False,
         spectral_filter_half_width=30e-9, spatial_filter_half_width=1, eigenval_cutoff=1e-12, umin=None, umax=None, estimate_degeneracies=False,
-        optimizer_name='novograd', learning_rate=1e-3, major_cycle_maxiter=100, minor_cycle_maxiter=0, convergence_criteria=1e-10, return_model=False
+        optimizer_name='novograd', learning_rate=1e-3, major_cycle_maxiter=100, minor_cycle_maxiter=0, convergence_criteria=1e-10, return_model=False,
+        use_lbfgs=False
     ):
         """
         Estimates redundant calibration degeneracies by building a DPSS-based, sky-model and solving for the parameters which lead to the smoothest
@@ -1496,6 +1510,8 @@ class SpectrallyRedundantCalibrator:
             convergence_criteria, the optimization will stop.
         return_model : bool, default=False
             If True, the model visibilities will be returned.
+        use_lbfgs : bool, default=False
+            If True, the L-BFGS optimizer will be used for the optimization. If False, the gradient descent optimizer will be used.
 
         Returns:
         -------
@@ -1594,7 +1610,8 @@ class SpectrallyRedundantCalibrator:
             model_parameters[pol], metadata[pol] = _nucal_post_redcal(
                 data_real, data_imag, wgts, init_model_parameters, optimizer, spectral_filters=self.spectral_filters,
                 spatial_filters=spatial_filters, idealized_blvecs=idealized_blvecs, major_cycle_maxiter=major_cycle_maxiter,
-                convergence_criteria=convergence_criteria, minor_cycle_maxiter=minor_cycle_maxiter, alpha=alpha
+                convergence_criteria=convergence_criteria, minor_cycle_maxiter=minor_cycle_maxiter, alpha=alpha, 
+                use_lbfgs=use_lbfgs
             )
 
         if return_model:

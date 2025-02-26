@@ -45,6 +45,7 @@ dependencies = [
     "rich",
     "jax",
     "jaxlib",
+    "jaxopt",
     "optax",
     "attrs",
     "frozendict",
