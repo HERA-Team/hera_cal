@@ -25,7 +25,7 @@ is 1. This is implemented in the :func:`excess_variance` function.
 from __future__ import annotations
 from scipy.stats import rv_continuous
 import numpy as np
-from scipy.stats import chi2, gamma
+from scipy.stats import gamma
 
 
 class MixtureModel(rv_continuous):

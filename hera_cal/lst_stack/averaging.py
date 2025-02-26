@@ -489,9 +489,9 @@ def average_and_inpaint_simultaneously_single_bl(
         cache=cache,
     )
 
-    inpainted_mean = _get_inpainted_mean(stackd, stackn, stackf, model, avg_flgs)
+    inpainted_mean, _ = _get_inpainted_mean(stackd, stackn, stackf, model, avg_flgs)
 
-    return inpainted_mean, avg_flgs, model
+    return inpainted_mean, avg_flgs, model, None
 
 
 def _get_posterior_mean_dpss(
@@ -694,7 +694,7 @@ def _get_inpainted_mean(
     model: np.ndarray,
     avg_flgs: np.ndarray,
     post_inpaint_flags: np.ndarray | None = None,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     """Average an LST-stack over nights.
 
     Parameters
@@ -720,7 +720,8 @@ def _get_inpainted_mean(
     -------
     inpainted_mean
         the inpainted mean over nights (Nfreqs, ...)
-
+    total_nsamples
+        the total number of samples used in the average (Nfreqs, ...)
     """
     if post_inpaint_flags is None:
         # These are per-night flags that must be respected even after inpainting,
@@ -744,7 +745,7 @@ def _get_inpainted_mean(
     # Note that we can have avg_flgs be all flagged when not all of stackf is flagged
     # because we flag the average on "largest gaps". That's why we shortcut early here.
     if np.all(avg_flgs):
-        return np.nan * inpainted_mean
+        return np.nan * inpainted_mean, np.zeros(avg_flgs.shape)
 
     # Inpainted mean is going to be sum(n_i * {model if flagged else data_i}) / sum(n_i)
     # where n_i is the nsamples for the i-th integration. The total_nsamples is
@@ -767,7 +768,7 @@ def _get_inpainted_mean(
         inpainted_mean /= total_nsamples
         inpainted_mean[total_nsamples == 0] *= np.nan
 
-    return inpainted_mean
+    return inpainted_mean, total_nsamples
 
 
 def _get_CNinv_1sample(
@@ -887,7 +888,6 @@ def average_and_inpaint_per_night_single_bl(
     """
     # DPSS inpainting model
     avg_flgs = avg_flgs if avg_flgs is not None else np.all(stackf, axis=0)
-
     if hasattr(df, "unit"):
         df = df.to_value("Hz")
 
@@ -912,19 +912,44 @@ def average_and_inpaint_per_night_single_bl(
     # Now we have all the per-night models. Next thing to do is to make sure we flag
     # anything where the flag gaps are too big.
     max_allowed_gap_size = max_gap_factor * filter_half_widths[0] ** -1 / df
-    post_inpaint_flags = _get_post_inpaint_flags(
-        stackf,
-        spws=spws,
-        max_allowed_gap_size=max_allowed_gap_size,
-        max_convolved_flag_frac=max_convolved_flag_frac,
-    )
+    if max_allowed_gap_size < np.inf and max_convolved_flag_frac < 1:
+        post_inpaint_flags, convolved_flags = _get_post_inpaint_flags(
+            stackf,
+            spws=spws,
+            max_allowed_gap_size=max_allowed_gap_size,
+            max_convolved_flag_frac=max_convolved_flag_frac,
+        )
+    else:
+        post_inpaint_flags = np.zeros_like(stackf)
+        convolved_flags = np.zeros_like(stackf)
 
-    inpaint_mean = _get_inpainted_mean(
-        stackd, stackn, stackf, model, avg_flgs, post_inpaint_flags
+    inpaint_mean, total_nsamples = _get_inpainted_mean(
+        stackd, stackn, convolved_flags, model, avg_flgs, post_inpaint_flags
     )
-    avg_flgs |= np.all(post_inpaint_flags, axis=0)
+    # We update avg_flgs in-place because that's what the wrapper function expects.
+    avg_flgs[:] = total_nsamples <= 0
+    return inpaint_mean, avg_flgs, model, post_inpaint_flags
 
-    return inpaint_mean, avg_flgs, model
+
+def broadcast_flags_over_spws(
+    flags,
+    max_allowed_gap_size: float | int,
+    spws: list[slice] = (slice(0, None, None),),
+):
+    post_inpaint_flags = np.zeros_like(flags, dtype=bool)
+    for night, convflg in enumerate(flags):
+        flagged_stretches = true_stretches(convflg)
+        for stretch in flagged_stretches:
+            if stretch.stop - stretch.start > max_allowed_gap_size:
+                # Flag out data in the sub-bands that overlap with the stretch
+
+                for band in spws:
+                    if (
+                        (stretch.start < band.stop and stretch.stop > band.start)
+                    ):
+                        post_inpaint_flags[night, band] = True
+
+    return post_inpaint_flags
 
 
 def _get_post_inpaint_flags(
@@ -937,21 +962,7 @@ def _get_post_inpaint_flags(
         stackf, max_allowed_gap_size, max_convolved_flag_frac
     ) | stackf
 
-    nf = stackf.shape[1]
-    post_inpaint_flags = np.zeros_like(stackf, dtype=bool)
-    for night, convflg in enumerate(convolved_flags):
-        flagged_stretches = true_stretches(convflg)
-        for stretch in flagged_stretches:
-            if stretch.stop - stretch.start > max_allowed_gap_size:
-                # Flag out data in the sub-bands that overlap with the stretch
-
-                for band in spws:
-                    if (
-                        band.start <= stretch.start < (band.stop or nf)
-                        or band.start <= stretch.stop < (band.stop or nf)
-                    ):
-                        post_inpaint_flags[night, band] = True
-    return post_inpaint_flags
+    return broadcast_flags_over_spws(convolved_flags, max_allowed_gap_size, spws), convolved_flags
 
 
 def average_and_inpaint_simultaneously(
@@ -969,7 +980,7 @@ def average_and_inpaint_simultaneously(
     sample_cov_fraction: float = 0.0,
     use_night_to_night_cov: bool = True,
     spws: tuple[slice] = (slice(0, None, None),),
-):
+) -> tuple[dict, dict, dict]:
     """
     Average and inpaint simultaneously for all baselines in a stack.
 
@@ -1036,6 +1047,7 @@ def average_and_inpaint_simultaneously(
     lstavg = reduce_lst_bins(
         stack, get_std=False, get_mad=False, inpainted_mode=False, mean_fill_value=0.0
     )
+
     # Trick the LST-binner into performing the average over autopairs instead of LSTs
     auto_redavg = reduce_lst_bins(
         data=auto_stack.data.transpose((1, 0, 2, 3)),
@@ -1055,6 +1067,9 @@ def average_and_inpaint_simultaneously(
         antpol1, antpol2 = utils.split_pol(vispol)
         if antpol1 == antpol2:
             antpol_to_vispol_idx[antpol1] = polidx
+
+    all_post_inpaint_flags = stack.copy(metadata_only=True)
+    all_post_inpaint_flags.flag_array = stack.flag_array.copy()
 
     for iap, antpair in enumerate(stack.antpairs):
         # Get the baseline vector and length
@@ -1111,17 +1126,19 @@ def average_and_inpaint_simultaneously(
                 cache=cache,
             )
             if use_night_to_night_cov:
-                flagged_mean[:], _, model = average_and_inpaint_simultaneously_single_bl(
+                flagged_mean[:], _, model, _ = average_and_inpaint_simultaneously_single_bl(
                     use_unbiased_estimator=use_unbiased_estimator,
                     sample_cov_fraction=sample_cov_fraction,
                     **kw
                 )
             else:
-                flagged_mean[:], _, model = average_and_inpaint_per_night_single_bl(spws=spws, **kw)
+                flagged_mean[:], _, model, post_inpaint_flags = average_and_inpaint_per_night_single_bl(spws=spws, **kw)
+                all_post_inpaint_flags.flags[:, iap, :, polidx] = post_inpaint_flags.copy()
+
             if return_models:
                 all_models[(antpair[0], antpair[1], pol)] = model.copy()
 
     # Set data that is flagged to nan
     lstavg["data"][lstavg["flags"]] = np.nan
 
-    return lstavg, all_models
+    return lstavg, all_models, all_post_inpaint_flags
