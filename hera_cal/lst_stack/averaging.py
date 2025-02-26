@@ -912,12 +912,16 @@ def average_and_inpaint_per_night_single_bl(
     # Now we have all the per-night models. Next thing to do is to make sure we flag
     # anything where the flag gaps are too big.
     max_allowed_gap_size = max_gap_factor * filter_half_widths[0] ** -1 / df
-    post_inpaint_flags, convolved_flags = _get_post_inpaint_flags(
-        stackf,
-        spws=spws,
-        max_allowed_gap_size=max_allowed_gap_size,
-        max_convolved_flag_frac=max_convolved_flag_frac,
-    )
+    if max_allowed_gap_size < np.inf and max_convolved_flag_frac < 1:
+        post_inpaint_flags, convolved_flags = _get_post_inpaint_flags(
+            stackf,
+            spws=spws,
+            max_allowed_gap_size=max_allowed_gap_size,
+            max_convolved_flag_frac=max_convolved_flag_frac,
+        )
+    else:
+        post_inpaint_flags = np.zeros_like(stackf)
+        convolved_flags = np.zeros_like(stackf)
 
     inpaint_mean, total_nsamples = _get_inpainted_mean(
         stackd, stackn, convolved_flags, model, avg_flgs, post_inpaint_flags
@@ -925,6 +929,27 @@ def average_and_inpaint_per_night_single_bl(
     # We update avg_flgs in-place because that's what the wrapper function expects.
     avg_flgs[:] = total_nsamples <= 0
     return inpaint_mean, avg_flgs, model, post_inpaint_flags
+
+
+def broadcast_flags_over_spws(
+    flags,
+    max_allowed_gap_size: float | int,
+    spws: list[slice] = (slice(0, None, None),),
+):
+    post_inpaint_flags = np.zeros_like(flags, dtype=bool)
+    for night, convflg in enumerate(flags):
+        flagged_stretches = true_stretches(convflg)
+        for stretch in flagged_stretches:
+            if stretch.stop - stretch.start > max_allowed_gap_size:
+                # Flag out data in the sub-bands that overlap with the stretch
+
+                for band in spws:
+                    if (
+                        (stretch.start < band.stop and stretch.stop > band.start)
+                    ):
+                        post_inpaint_flags[night, band] = True
+
+    return post_inpaint_flags
 
 
 def _get_post_inpaint_flags(
@@ -937,21 +962,7 @@ def _get_post_inpaint_flags(
         stackf, max_allowed_gap_size, max_convolved_flag_frac
     ) | stackf
 
-    nf = stackf.shape[1]
-    post_inpaint_flags = np.zeros_like(stackf, dtype=bool)
-    for night, convflg in enumerate(convolved_flags):
-        flagged_stretches = true_stretches(convflg)
-        for stretch in flagged_stretches:
-            if stretch.stop - stretch.start > max_allowed_gap_size:
-                # Flag out data in the sub-bands that overlap with the stretch
-
-                for band in spws:
-                    if (
-                        band.start <= stretch.start < (band.stop or nf)
-                        or band.start <= stretch.stop < (band.stop or nf)
-                    ):
-                        post_inpaint_flags[night, band] = True
-    return post_inpaint_flags, convolved_flags
+    return broadcast_flags_over_spws(convolved_flags, max_allowed_gap_size, spws), convolved_flags
 
 
 def average_and_inpaint_simultaneously(
