@@ -1251,7 +1251,7 @@ def _nucal_post_redcal(
         )
 
         # Run the solver
-        solution, meta = solver.run(
+        model_parameters, metadata = solver.run(
             model_parameters, data_r=data_r, data_i=data_i, spectral_filters=spectral_filters, spatial_filters=spatial_filters,
             idealized_blvecs=idealized_blvecs, alpha=alpha
         )
@@ -1299,8 +1299,8 @@ def _nucal_post_redcal(
 
             previous_loss = loss
 
-    # Save the metadata in dictionary
-    metadata = {"niter": step + 1, "loss_history": np.array(losses)}
+        # Save the metadata in dictionary
+        metadata = {"niter": step + 1, "loss_history": np.array(losses)}
 
     return model_parameters, metadata
 
