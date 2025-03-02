@@ -921,10 +921,9 @@ def average_and_inpaint_per_night_single_bl(
         )
     else:
         post_inpaint_flags = np.zeros_like(stackf)
-        convolved_flags = np.zeros_like(stackf)
 
     inpaint_mean, total_nsamples = _get_inpainted_mean(
-        stackd, stackn, convolved_flags, model, avg_flgs, post_inpaint_flags
+        stackd, stackn, stackf, model, avg_flgs, post_inpaint_flags
     )
     # We update avg_flgs in-place because that's what the wrapper function expects.
     avg_flgs[:] = total_nsamples <= 0
