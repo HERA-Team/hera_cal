@@ -918,6 +918,7 @@ def average_and_inpaint_per_night_single_bl(
             spws=spws,
             max_allowed_gap_size=max_allowed_gap_size,
             max_convolved_flag_frac=max_convolved_flag_frac,
+            inpaint_bands=inpaint_bands,
         )
     else:
         post_inpaint_flags = np.zeros_like(stackf)
@@ -934,17 +935,26 @@ def broadcast_flags_over_spws(
     flags,
     max_allowed_gap_size: float | int,
     spws: list[slice] = (slice(0, None, None),),
+    inpaint_bands=(slice(0, None, None),),
 ):
     post_inpaint_flags = np.zeros_like(flags, dtype=bool)
+
+    # Don't count flags between inpaint bands (in FM) as contributing to the gap size
+    # otherwise just a single flag on the edge of FM causes the whole spw to be
+    # flagged.
+    not_in_inpaint_bands = np.ones(flags.shape[1], dtype=bool)
+    for band in inpaint_bands:
+        not_in_inpaint_bands[band] = False
+
     for night, convflg in enumerate(flags):
-        flagged_stretches = true_stretches(convflg)
+        flagged_stretches = true_stretches(np.where(not_in_inpaint_bands, False, convflg))
         for stretch in flagged_stretches:
             if stretch.stop - stretch.start > max_allowed_gap_size:
                 # Flag out data in the sub-bands that overlap with the stretch
 
                 for band in spws:
                     if (
-                        (stretch.start < band.stop and stretch.stop > band.start)
+                        (stretch.start < (band.stop or flags.shape[1] - 1) and stretch.stop > band.start)
                     ):
                         post_inpaint_flags[night, band] = True
 
@@ -956,12 +966,13 @@ def _get_post_inpaint_flags(
     max_allowed_gap_size: float | int,
     spws: list[slice] = (slice(0, None, None),),
     max_convolved_flag_frac: float = 0.66667,
+    inpaint_bands=(slice(0, None, None),),
 ) -> np.ndarray:
     convolved_flags = _get_convolved_flags(
         stackf, max_allowed_gap_size, max_convolved_flag_frac
     ) | stackf
 
-    return broadcast_flags_over_spws(convolved_flags, max_allowed_gap_size, spws), convolved_flags
+    return broadcast_flags_over_spws(convolved_flags, max_allowed_gap_size, spws, inpaint_bands), convolved_flags
 
 
 def average_and_inpaint_simultaneously(

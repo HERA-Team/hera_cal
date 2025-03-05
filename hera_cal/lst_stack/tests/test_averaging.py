@@ -453,6 +453,17 @@ class TestGetPostInpaintFlags:
         assert np.all(flags[0, 15:30])
         assert not np.any(flags[0, 30:50])
 
+    def test_gap_til_edge_of_spw(self):
+        stackf = np.zeros((1, 100), dtype=bool)
+        stackf[0, 12:50] = True
+        flags, _ = avg._get_post_inpaint_flags(
+            stackf, spws=(slice(0, 12), slice(12, 50), slice(50, 100)),
+            max_allowed_gap_size=10
+        )
+        assert not np.any(flags[0, 0:12])
+        assert np.all(flags[0, 12:50])
+        assert not np.any(flags[0, 50:100])
+
 
 class TestGetInpaintedMean:
     def test_exceptions(self):
