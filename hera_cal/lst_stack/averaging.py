@@ -516,7 +516,7 @@ class EMInpainter:
         model_shape = [self.domain_factor * self.nmodes, self.n_nights]
         if self.EM_seed is not None:
             rng = np.random.default_rng(seed=self.EM_seed)
-            model_guess = rng.normal(size=model_shape)
+            model_guess = rng.normal(size=model_shape, scale=1000) 
         else:
             model_guess = np.ones(model_shape)
         
@@ -917,7 +917,7 @@ def average_and_inpaint_simultaneously_single_bl(
                 complex_valued=complex_valued,
             )
             # Technically these aren't really post_mean, sample_mean and sample_cov but it prevents annoying branching later
-            post_mean, sample_mean, sample_var = emi.do_EM() 
+            post_mean, sample_mean_dpss, sample_cov_dpss = emi.do_EM() 
             model[:, band] = basis.dot(post_mean).T
             # If we've made it this far, set averaged flags to False
             avg_flgs[band] = False
@@ -947,7 +947,7 @@ def average_and_inpaint_simultaneously_single_bl(
         inpainted_mean /= total_nsamples
         inpainted_mean[total_nsamples == 0] *= np.nan
     if return_nuisance:
-        return inpainted_mean, avg_flgs, model, post_mean, sample_mean, sample_cov
+        return inpainted_mean, avg_flgs, model, post_mean, sample_mean_dpss, sample_cov_dpss
     else:
         return inpainted_mean, avg_flgs, model
 
