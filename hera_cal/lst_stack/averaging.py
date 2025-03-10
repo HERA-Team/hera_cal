@@ -837,6 +837,7 @@ def average_and_inpaint_per_night_single_bl(
     eigenval_cutoff: float = (0.01,),
     cache: dict | None = None,
     spws: list[slice] = (slice(0, None, None),),
+    post_inpaint_flag_buffer_size: int = 2,
 ):
     """
     Average and inpaint simultaneously for a single baseline.
@@ -875,6 +876,10 @@ def average_and_inpaint_per_night_single_bl(
         A cache for storing DPSS filter matrices.
     spws
         The spectral windows to consider when flagging out large gaps.
+    post_inpaint_flag_buffer_size
+        The buffer size to use when flagging out large gaps in the post-inpaint
+        flags. The buffer size is the number of channels on each edge of each SPW for
+        which overlapping flagged regions are not considered "part of" the SPW.
 
     Returns
     -------
@@ -919,6 +924,7 @@ def average_and_inpaint_per_night_single_bl(
             max_allowed_gap_size=max_allowed_gap_size,
             max_convolved_flag_frac=max_convolved_flag_frac,
             inpaint_bands=inpaint_bands,
+            buffer_size=post_inpaint_flag_buffer_size,
         )
     else:
         post_inpaint_flags = np.zeros_like(stackf)
@@ -932,10 +938,11 @@ def average_and_inpaint_per_night_single_bl(
 
 
 def broadcast_flags_over_spws(
-    flags,
+    flags: np.ndarray,
     max_allowed_gap_size: float | int,
     spws: list[slice] = (slice(0, None, None),),
     inpaint_bands=(slice(0, None, None),),
+    buffer_size: int = 2,
 ):
     post_inpaint_flags = np.zeros_like(flags, dtype=bool)
 
@@ -954,7 +961,8 @@ def broadcast_flags_over_spws(
 
                 for band in spws:
                     if (
-                        (stretch.start < (band.stop or flags.shape[1] - 1) and stretch.stop > band.start)
+                        (stretch.start < (band.stop or flags.shape[1] - 1) - buffer_size
+                         and stretch.stop > band.start + buffer_size)
                     ):
                         post_inpaint_flags[night, band] = True
 
@@ -967,12 +975,16 @@ def _get_post_inpaint_flags(
     spws: list[slice] = (slice(0, None, None),),
     max_convolved_flag_frac: float = 0.66667,
     inpaint_bands=(slice(0, None, None),),
+    buffer_size: int = 2
 ) -> np.ndarray:
     convolved_flags = _get_convolved_flags(
         stackf, max_allowed_gap_size, max_convolved_flag_frac
     ) | stackf
 
-    return broadcast_flags_over_spws(convolved_flags, max_allowed_gap_size, spws, inpaint_bands), convolved_flags
+    return (
+        broadcast_flags_over_spws(convolved_flags, max_allowed_gap_size, spws, inpaint_bands, buffer_size),
+        convolved_flags
+    )
 
 
 def average_and_inpaint_simultaneously(
@@ -990,6 +1002,7 @@ def average_and_inpaint_simultaneously(
     sample_cov_fraction: float = 0.0,
     use_night_to_night_cov: bool = True,
     spws: tuple[slice] = (slice(0, None, None),),
+    post_inpaint_flag_buffer_size: int = 2,
 ) -> tuple[dict, dict, dict]:
     """
     Average and inpaint simultaneously for all baselines in a stack.
@@ -1142,7 +1155,9 @@ def average_and_inpaint_simultaneously(
                     **kw
                 )
             else:
-                flagged_mean[:], _, model, post_inpaint_flags = average_and_inpaint_per_night_single_bl(spws=spws, **kw)
+                flagged_mean[:], _, model, post_inpaint_flags = average_and_inpaint_per_night_single_bl(
+                    spws=spws, post_inpaint_flag_buffer_size=post_inpaint_flag_buffer_size, **kw
+                )
                 all_post_inpaint_flags.flags[:, iap, :, polidx] = post_inpaint_flags.copy()
 
             if return_models:
