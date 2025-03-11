@@ -303,6 +303,9 @@ class Test_Smooth_Cal_Helper_Functions(object):
         ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, method='DPSS', skip_flagged_edges=False,
                                                   eigenval_cutoff=1e-12)
         np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
+        ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, method='DPSS', skip_flagged_edges=True,
+                                                  eigenval_cutoff=1e-12, use_sparse_solver=True)
+        np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
 
         # test rephasing
         gains = np.ones((100, 100), dtype=complex)
@@ -417,6 +420,9 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts_grid = smooth_cal._build_wgts_grid(flag_grid, time_blacklist=[False, True], freq_blacklist=[False, False, True], blacklist_wgt=.1)
         np.testing.assert_array_equal(wgts_grid, [[0, 1, .1], [.1, .1, .1]])
 
+        wgts_grid = smooth_cal._build_wgts_grid(flag_grid, waterfall_blacklist=[[False, True, False], [False, False, False]], blacklist_wgt=.1)
+        np.testing.assert_array_equal(wgts_grid, [[0, .1, 1], [1, 1, 1]])
+
     def test_to_anflags(self):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
         uvc = UVCal()
@@ -503,6 +509,16 @@ class Test_Calibration_Smoother(object):
         assert self.cs.gain_grids[54, 'Jee'].shape == (180, 1024)
         assert self.cs.flag_grids[54, 'Jee'].shape == (180, 1024)
         np.testing.assert_array_equal(self.cs.flag_grids[54, 'Jee'][60:120, :], True)
+
+    def test_set_waterfall_blacklist(self):
+        self.cs.set_waterfall_blacklist({(54, 'Jee'): np.ones((180, 1024), dtype=bool)})
+        np.testing.assert_array_equal(self.cs.waterfall_blacklist[(54, 'Jee')], True)
+        with pytest.raises(AssertionError):
+            self.cs.set_waterfall_blacklist({(54, 'Jee'): np.ones((180, 1025), dtype=bool)})
+        with pytest.raises(AssertionError):
+            self.cs.set_waterfall_blacklist({(351, 'Jee'): np.ones((180, 1024), dtype=bool)})
+        with pytest.raises(AssertionError):
+            self.cs.set_waterfall_blacklist({(54, 'Jee'): np.ones((180, 1024), dtype=float)})
 
     @pytest.mark.parametrize("ax", ['freq', 'time'])
     def test_1D_filtering(self, ax):

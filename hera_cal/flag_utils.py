@@ -253,3 +253,43 @@ def factorize_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
 
     else:
         raise ValueError("Didn't recognize data structure of flags")
+
+
+def get_minimal_slices(flag_wf, freqs=None, freq_cuts=[]):
+    '''Gets the minimal boxes that contain all False pixels in flag_wf, potentially in multiple bands in frequency.
+
+    Arguments:
+        flag_wf: 2D ndarray of flags, shape (Ntimes, Nfreqs)
+        freqs: 1D ndarray of frequencies (required if freq_cuts is not empty)
+        freq_cuts: list of frequencies that separate bands, in the same units as freqs.
+            If empty, flag_wf is treated as a single band.
+
+    Returns:
+        time_slice: slice object for the time dimension in time indices. If flag_wf is all True, returns None.
+        band_slices: list of slice objects for the frequency dimension in channel numbers. If any band is all True
+            in flag_wf, returns None for that band.
+    '''
+    time_slice = None
+    band_slices = [None for i in range(len(freq_cuts) + 1)]  # initialize with None
+    # check that freqs is appropriately fed in
+    if len(freq_cuts) > 0:
+        if freqs is None or len(freqs) != flag_wf.shape[1]:
+            raise ValueError("freqs must be fed if freq_cuts is not empty")
+    else:
+        freqs = np.arange(flag_wf.shape[1])  # won't matter, since it'll be between -inf and inf
+
+    if not np.all(flag_wf):
+        # get time slice
+        not_always_flagged_tinds = np.arange(flag_wf.shape[0])[~np.all(flag_wf, axis=1)]
+        time_slice = slice(np.min(not_always_flagged_tinds), np.max(not_always_flagged_tinds) + 1)
+
+        # get band slices
+        cuts = [-np.inf] + sorted(list(freq_cuts)) + [np.inf]
+        not_all_flagged = ~np.all(flag_wf, axis=0)
+        for i in range(len(cuts) - 1):
+            in_band_and_not_all_flagged = (freqs > cuts[i]) & (freqs < cuts[i + 1]) & not_all_flagged
+            if np.any(in_band_and_not_all_flagged):
+                band_slices[i] = (slice(np.min(np.argwhere(in_band_and_not_all_flagged)),
+                                        np.max(np.argwhere(in_band_and_not_all_flagged)) + 1))
+
+    return time_slice, band_slices
