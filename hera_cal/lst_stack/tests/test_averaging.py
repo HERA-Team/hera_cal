@@ -822,7 +822,6 @@ class TestAverageInpaintPerNightSingleBl:
     def test_post_inpaint_flags(self):
         freqs, d, f, n = mock_stacks(nnights=1)
         f[:, 100:200] = True
-        print(f.shape)
         data, flg, m, pinf = avg.average_and_inpaint_per_night_single_bl(
             freqs=freqs,
             stackd=d,
@@ -836,6 +835,23 @@ class TestAverageInpaintPerNightSingleBl:
 
         # The data has a too-large gap, so all data must be flagged
         assert np.all(flg)
+
+    def test_no_post_inpaint_flags(self):
+        freqs, d, f, n = mock_stacks(nnights=3)
+        f[:, 100:200] = True
+        data, flg, m, pinf = avg.average_and_inpaint_per_night_single_bl(
+            freqs=freqs,
+            stackd=d,
+            stackf=f,
+            stackn=n,
+            base_noise_var=0.04**2 * np.ones(d.shape),
+            df=(freqs[1] - freqs[0]) * un.Hz,
+            filter_half_widths=[200e-9],
+            max_gap_factor=np.inf,
+            max_convolved_flag_frac=1,
+        )
+        assert not np.any(pinf)
+        assert not np.any(flg)  # inpainting means we don't have any flags.
 
 
 class TestAverageInpaintSimultaneously:
