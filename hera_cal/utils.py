@@ -15,7 +15,7 @@ from scipy import signal, interpolate
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
-from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT, _x_orientation_rep_dict
+from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT
 from pyuvdata.utils.pol import x_orientation_pol_map
 from pyuvdata.uvdata import FastUVH5Meta
 from typing import Sequence
