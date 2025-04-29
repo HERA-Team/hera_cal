@@ -1,13 +1,13 @@
-name: Publish Python distributions to PyPI and TestPyPI
+name: Check Build
 
 on:
-  push:
-    tags:
-      - '*'
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  build-n-publish:
-    name: Build and publish to PyPI
+  build:
+    name: Test the Build
     runs-on: ubuntu-latest
     env:
       ENV_NAME: publish
@@ -31,10 +31,3 @@ jobs:
 
       - name: Twine Check
         run: twine check dist/*
-
-      - name: Publish to PyPI
-        if: startsWith(github.event.ref, 'refs/tags')
-        uses: pypa/gh-action-pypi-publish@v1.12
-        with:
-          user: __token__
-          password: ${{ secrets.PyPI }}
