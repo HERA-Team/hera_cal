@@ -12,6 +12,8 @@ jobs:
     env:
       ENV_NAME: publish
       PYTHON: 3.12
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     steps:
       - uses: actions/checkout@main
         with:
