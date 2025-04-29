@@ -34,7 +34,4 @@ jobs:
 
       - name: Publish to PyPI
         if: startsWith(github.event.ref, 'refs/tags')
-        uses: pypa/gh-action-pypi-publish@v1.12
-        with:
-          user: __token__
-          password: ${{ secrets.PyPI }}
+        uses: pypa/gh-action-pypi-publish@release/v1
