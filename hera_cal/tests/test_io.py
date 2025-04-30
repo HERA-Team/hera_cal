@@ -61,13 +61,13 @@ class Test_HERACal:
         gains, flags, quals, total_qual = hc.read()
         uvc = UVCal()
         uvc.read_calfits(self.fname)
-        np.testing.assert_array_equal(uvc.gain_array[0, :, :, 0].T, gains[9, parse_jpolstr('jxx', x_orientation=hc.telescope.x_orientation)])
-        np.testing.assert_array_equal(uvc.flag_array[0, :, :, 0].T, flags[9, parse_jpolstr('jxx', x_orientation=hc.telescope.x_orientation)])
-        np.testing.assert_array_equal(uvc.quality_array[0, :, :, 0].T, quals[9, parse_jpolstr('jxx', x_orientation=hc.telescope.x_orientation)])
-        np.testing.assert_array_equal(uvc.total_quality_array[:, :, 0].T, total_qual[parse_jpolstr('jxx', x_orientation=hc.telescope.x_orientation)])
+        np.testing.assert_array_equal(uvc.gain_array[0, :, :, 0].T, gains[9, parse_jpolstr('jxx', x_orientation=hc.telescope.get_x_orientation_from_feeds())])
+        np.testing.assert_array_equal(uvc.flag_array[0, :, :, 0].T, flags[9, parse_jpolstr('jxx', x_orientation=hc.telescope.get_x_orientation_from_feeds())])
+        np.testing.assert_array_equal(uvc.quality_array[0, :, :, 0].T, quals[9, parse_jpolstr('jxx', x_orientation=hc.telescope.get_x_orientation_from_feeds())])
+        np.testing.assert_array_equal(uvc.total_quality_array[:, :, 0].T, total_qual[parse_jpolstr('jxx', x_orientation=hc.telescope.get_x_orientation_from_feeds())])
         np.testing.assert_array_equal(np.unique(uvc.freq_array), hc.freqs)
         np.testing.assert_array_equal(np.unique(uvc.time_array), hc.times)
-        assert hc.pols == [parse_jpolstr('jxx', x_orientation=hc.telescope.x_orientation), parse_jpolstr('jyy', x_orientation=hc.telescope.x_orientation)]
+        assert hc.pols == [parse_jpolstr('jxx', x_orientation=hc.telescope.get_x_orientation_from_feeds()), parse_jpolstr('jyy', x_orientation=hc.telescope.get_x_orientation_from_feeds())]
         assert set([ant[0] for ant in hc.ants]) == set(uvc.ant_array)
 
         # test list loading
@@ -78,7 +78,7 @@ class Test_HERACal:
         assert len(quals.keys()) == 36
         assert hc.freqs.shape == (1024,)
         assert hc.times.shape == (3,)
-        assert sorted(hc.pols) == [parse_jpolstr('jxx', x_orientation=hc.telescope.x_orientation), parse_jpolstr('jyy', x_orientation=hc.telescope.x_orientation)]
+        assert sorted(hc.pols) == [parse_jpolstr('jxx', x_orientation=hc.telescope.get_x_orientation_from_feeds()), parse_jpolstr('jyy', x_orientation=hc.telescope.get_x_orientation_from_feeds())]
 
     def test_read_select(self):
         # test read multiple files and select times
@@ -353,7 +353,7 @@ class Test_HERAData(object):
             np.testing.assert_array_equal(hd._get_slice(hd.data_array, bl), hd.get_data(bl))
         np.testing.assert_array_equal(hd._get_slice(hd.data_array, (54, 53, 'EE')),
                                       hd.get_data((54, 53, 'EE')))
-        np.testing.assert_array_equal(hd._get_slice(hd.data_array, (53, 54))[parse_polstr('XX', x_orientation=hd.telescope.x_orientation)],
+        np.testing.assert_array_equal(hd._get_slice(hd.data_array, (53, 54))[parse_polstr('XX', x_orientation=hd.telescope.get_x_orientation_from_feeds())],
                                       hd.get_data((53, 54, 'EE')))
         np.testing.assert_array_equal(hd._get_slice(hd.data_array, 'EE')[(53, 54)],
                                       hd.get_data((53, 54, 'EE')))
@@ -447,7 +447,7 @@ class Test_HERAData(object):
         assert hd.last_read_kwargs['polarizations'] is None
         for dc in [d, f, n]:
             assert len(dc) == 1
-            assert list(dc.keys()) == [(53, 54, parse_polstr('XX', x_orientation=hd.telescope.x_orientation))]
+            assert list(dc.keys()) == [(53, 54, parse_polstr('XX', x_orientation=hd.telescope.get_x_orientation_from_feeds()))]
             assert dc[53, 54, 'ee'].shape == (10, 100)
         with pytest.raises(ValueError):
             d, f, n = hd.read(polarizations=['xy'])
@@ -493,7 +493,7 @@ class Test_HERAData(object):
         assert hd.last_read_kwargs['polarizations'] == ['XX']
         for dc in [d, f, n]:
             assert len(dc) == 1
-            assert list(dc.keys()) == [(52, 53, parse_polstr('XX', x_orientation=hd.telescope.x_orientation))]
+            assert list(dc.keys()) == [(52, 53, parse_polstr('XX', x_orientation=hd.telescope.get_x_orientation_from_feeds()))]
             assert dc[52, 53, 'ee'].shape == (10, 30)
         with pytest.raises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
@@ -507,7 +507,7 @@ class Test_HERAData(object):
         for dc in [d, f, n]:
             assert len(dc) == 1
             assert list(dc.keys()) == [
-                (ant_pairs[0][0], ant_pairs[0][1], parse_polstr('XX', x_orientation=hd.telescope.x_orientation))
+                (ant_pairs[0][0], ant_pairs[0][1], parse_polstr('XX', x_orientation=hd.telescope.get_x_orientation_from_feeds()))
             ]
             assert dc[ant_pairs[0][0], ant_pairs[0][1], 'ee'].shape == (60, 10)
 
@@ -609,7 +609,7 @@ class Test_HERAData(object):
         hd = HERAData(self.uvh5_1)
         assert hd._writers == {}
         d, f, n = hd.read(bls=hd.bls[0])
-        assert hd.last_read_kwargs['bls'] == (53, 53, parse_polstr('XX', x_orientation=hd.telescope.x_orientation))
+        assert hd.last_read_kwargs['bls'] == (53, 53, parse_polstr('XX', x_orientation=hd.telescope.get_x_orientation_from_feeds()))
         d[(53, 53, 'EE')] *= 2.0
         hd.partial_write('out.h5', data=d, clobber=True)
         assert 'out.h5' in hd._writers
@@ -622,12 +622,12 @@ class Test_HERAData(object):
                     assert np.all(getattr(hd, meta)[k] == getattr(hd._writers['out.h5'], meta)[k])
 
         d, f, n = hd.read(bls=hd.bls[1])
-        assert hd.last_read_kwargs['bls'] == (53, 54, parse_polstr('XX', x_orientation=hd.telescope.x_orientation))
+        assert hd.last_read_kwargs['bls'] == (53, 54, parse_polstr('XX', x_orientation=hd.telescope.get_x_orientation_from_feeds()))
         d[(53, 54, 'EE')] *= 2.0
         hd.partial_write('out.h5', data=d, clobber=True)
 
         d, f, n = hd.read(bls=hd.bls[2])
-        assert hd.last_read_kwargs['bls'] == (54, 54, parse_polstr('XX', x_orientation=hd.telescope.x_orientation))
+        assert hd.last_read_kwargs['bls'] == (54, 54, parse_polstr('XX', x_orientation=hd.telescope.get_x_orientation_from_feeds()))
         d[(54, 54, 'EE')] *= 2.0
         hd.partial_write('out.h5', data=d, clobber=True, inplace=True)
         d_after, _, _ = hd.build_datacontainers()
@@ -677,7 +677,7 @@ class Test_HERAData(object):
 
         hd = HERAData(self.miriad_1, filetype='miriad')
         d, f, n = next(hd.iterate_over_bls(bls=[(52, 53, 'xx')]))
-        assert list(d.keys()) == [(52, 53, parse_polstr('XX', x_orientation=hd.telescope.x_orientation))]
+        assert list(d.keys()) == [(52, 53, parse_polstr('XX', x_orientation=hd.telescope.get_x_orientation_from_feeds()))]
         with pytest.raises(NotImplementedError):
             next(hd.iterate_over_bls())
 
@@ -1051,7 +1051,7 @@ class Test_ReadHeraCalfits(object):
                                   verbose=True)
         assert np.allclose(hc.times, rv['info']['times'])
         assert np.allclose(hc.freqs, rv['info']['freqs'])
-        assert hc.telescope.x_orientation == rv['info']['x_orientation']
+        assert hc.telescope.get_x_orientation_from_feeds() == rv['info']['x_orientation']
         assert hc.gain_convention == rv['info']['gain_convention']
         for key, gain in g.items():
             assert np.allclose(gain, rv['gains'][key])
@@ -1138,13 +1138,13 @@ class Test_Visibility_IO_Legacy:
         data, flags = io.load_vis(fname, pop_autos=False)
         assert data[(24, 25, 'ee')].shape == (60, 64)
         assert flags[(24, 25, 'ee')].shape == (60, 64)
-        assert (24, 24, parse_polstr('EE', x_orientation=self.uvd.telescope.x_orientation)) in data
+        assert (24, 24, parse_polstr('EE', x_orientation=self.uvd.telescope.get_x_orientation_from_feeds())) in data
         data, flags = io.load_vis([fname])
         assert data[(24, 25, 'ee')].shape == (60, 64)
 
         # test pop autos
         data, flags = io.load_vis(fname, pop_autos=True)
-        assert (24, 24, parse_polstr('EE', x_orientation=self.uvd.telescope.x_orientation)) not in data
+        assert (24, 24, parse_polstr('EE', x_orientation=self.uvd.telescope.get_x_orientation_from_feeds())) not in data
 
         # test uvd object
         uvd = UVData()
@@ -1198,7 +1198,7 @@ class Test_Visibility_IO_Legacy:
         d, f = io.load_vis([uvd1, uvd2], nested_dict=True)
         for i, j in d:
             for pol in d[i, j]:
-                uvpol = list(uvd1.polarization_array).index(polstr2num(pol, x_orientation=uvd1.telescope.x_orientation))
+                uvpol = list(uvd1.polarization_array).index(polstr2num(pol, x_orientation=uvd1.telescope.get_x_orientation_from_feeds()))
                 uvmask = np.all(
                     np.array(list(zip(uvd.ant_1_array, uvd.ant_2_array))) == [i, j], axis=1)
                 np.testing.assert_equal(d[i, j][pol], np.resize(
@@ -1209,7 +1209,7 @@ class Test_Visibility_IO_Legacy:
         d, f = io.load_vis([filename1, filename2], nested_dict=True)
         for i, j in d:
             for pol in d[i, j]:
-                uvpol = list(uvd.polarization_array).index(polstr2num(pol, x_orientation=uvd.telescope.x_orientation))
+                uvpol = list(uvd.polarization_array).index(polstr2num(pol, x_orientation=uvd.telescope.get_x_orientation_from_feeds()))
                 uvmask = np.all(
                     np.array(list(zip(uvd.ant_1_array, uvd.ant_2_array))) == [i, j], axis=1)
                 np.testing.assert_equal(d[i, j][pol], np.resize(
@@ -1247,7 +1247,7 @@ class Test_Visibility_IO_Legacy:
         assert hd.data_array.shape == (1680, 64, 1)
         assert np.allclose(data[(24, 25, 'ee')][30, 32], uvd.get_data(24, 25, 'ee')[30, 32])
         assert np.allclose(data[(24, 25, 'ee')][30, 32], hd.get_data(24, 25, 'ee')[30, 32])
-        assert hd.telescope.x_orientation.lower() == 'east'
+        assert hd.telescope.get_x_orientation_from_feeds().lower() == 'east'
         for ant in ap:
             np.testing.assert_array_almost_equal(hd.antpos[ant], ap[ant])
         os.remove("ex.uvh5")
@@ -1259,7 +1259,7 @@ class Test_Visibility_IO_Legacy:
         assert uvd.flag_array.shape == (1680, 64, 1)
         assert np.allclose(nsample[(24, 25, 'ee')][30, 32], uvd.get_nsamples(24, 25, 'ee')[30, 32])
         assert np.allclose(flgs[(24, 25, 'ee')][30, 32], uvd.get_flags(24, 25, 'ee')[30, 32])
-        assert uvd.telescope.x_orientation.lower() == 'east'
+        assert uvd.telescope.get_x_orientation_from_feeds().lower() == 'east'
 
         # test exceptions
         pytest.raises(AttributeError, io.write_vis, "ex.uv", data, lst, f, ap)
@@ -1349,7 +1349,7 @@ class Test_Calibration_IO_Legacy:
         assert len(quals.keys()) == 36
         assert freqs.shape == (1024,)
         assert times.shape == (3,)
-        assert sorted(pols) == [parse_jpolstr('jxx', x_orientation=cal.telescope.x_orientation), parse_jpolstr('jyy', x_orientation=cal.telescope.x_orientation)]
+        assert sorted(pols) == [parse_jpolstr('jxx', x_orientation=cal.telescope.get_x_orientation_from_feeds()), parse_jpolstr('jyy', x_orientation=cal.telescope.get_x_orientation_from_feeds())]
 
         cal_xx, cal_yy = UVCal(), UVCal()
         cal_xx.read_calfits(fname_xx)
@@ -1360,7 +1360,7 @@ class Test_Calibration_IO_Legacy:
         assert len(quals.keys()) == 36
         assert freqs.shape == (1024,)
         assert times.shape == (3,)
-        assert sorted(pols) == [parse_jpolstr('jxx', x_orientation=cal_xx.telescope.x_orientation), parse_jpolstr('jyy', x_orientation=cal_yy.telescope.x_orientation)]
+        assert sorted(pols) == [parse_jpolstr('jxx', x_orientation=cal_xx.telescope.get_x_orientation_from_feeds()), parse_jpolstr('jyy', x_orientation=cal_yy.telescope.get_x_orientation_from_feeds())]
 
     def test_write_cal(self):
         # create fake data
