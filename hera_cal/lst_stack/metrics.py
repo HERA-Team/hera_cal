@@ -350,7 +350,7 @@ def downselect_zscores(
     """
     nbls = zscores.Nbls
     datapols = utils.polnum2str(
-        zscores.polarization_array, x_orientation=zscores.telescope.x_orientation
+        zscores.polarization_array, x_orientation=zscores.telescope.get_x_orientation_from_feeds()
     )
     datapairs = list(
         zip(zscores.ant_1_array[:nbls], zscores.ant_2_array[:nbls])
