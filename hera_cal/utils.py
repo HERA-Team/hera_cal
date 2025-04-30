@@ -1373,7 +1373,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     if fed_container:
         pols = sorted(data.pols())
     else:
-        pols = [polnum2str(pol, x_orientation=data.telescope.x_orientation) for pol in data.polarization_array]
+        pols = [polnum2str(pol, x_orientation=data.telescope.get_x_orientation_from_feeds()) for pol in data.polarization_array]
 
     # get redundant groups
     if reds is None:
