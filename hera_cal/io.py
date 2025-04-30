@@ -2212,7 +2212,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
                 antenna_names=antenna_names,
                 antenna_positions=antenna_positions,
                 instrument=instrument,
-                x_orientation=x_orientation,
             )
         }
     else:
@@ -2223,7 +2222,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
             "antenna_names": antenna_names,
             "antenna_positions": antenna_positions,
             "instrument": instrument,
-            "x_orientation": x_orientation,
         }
     uvd = UVData.new(
         freq_array=freq_array,
@@ -2236,6 +2234,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
         history=history,
         **tel_params,
     )
+    uvd.telescope.set_feeds_from_x_orientation(x_orientation, feeds=['x', 'y'])  # assumes linear polarization
 
     # set data
     for antpair in antpairs:
@@ -2560,7 +2559,6 @@ def write_cal(fname, gains, freqs, times, antpos=None, lsts=None, flags=None, qu
     if hasattr(UVCal(), "telescope"):
         if antpos is None:
             tel_use = Telescope.from_known_telescopes(telescope_name)
-            tel_use.x_orientation = x_orientation
         else:
             tel_use = Telescope.new(
                 name=telescope_name,
@@ -2568,8 +2566,8 @@ def write_cal(fname, gains, freqs, times, antpos=None, lsts=None, flags=None, qu
                 antenna_numbers=antenna_numbers,
                 antenna_names=antenna_names,
                 antenna_positions=antenna_positions,
-                x_orientation=x_orientation,
             )
+        tel_use.set_feeds_from_x_orientation(x_orientation, feeds=['x', 'y'])  # assumes linear polarization
         tel_params = {"telescope": tel_use}
     else:
         if antpos is None:
