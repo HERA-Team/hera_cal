@@ -320,7 +320,7 @@ class TestLSTBinFilesForBaselines:
                 reds=RedundantGroups.from_antpos(
                     dict(zip(uvd.telescope.antenna_numbers, uvd.telescope.antenna_positions)),
                     pols=uvutils.polnum2str(
-                        uvd.polarization_array, x_orientation=uvd.telescope.x_orientation
+                        uvd.polarization_array, x_orientation=uvd.telescope.get_x_orientation_from_feeds()
                     ),
                 ),
                 antpairs=uvd.get_antpairs(),
