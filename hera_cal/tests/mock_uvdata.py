@@ -62,7 +62,7 @@ def create_mock_hera_obs(
 
     hera = Telescope.from_known_telescopes('HERA')
     hera.instrument = 'hera'
-    hera.x_orientation = x_orientation
+    hera.set_feed_from_x_orientation(x_orientation)
 
     if ants is None:
         ants = hera.antenna_numbers
