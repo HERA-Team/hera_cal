@@ -95,7 +95,7 @@ class HERACal(UVCal):
         '''Extract and store useful metadata and array indexing dictionaries.'''
         self.freqs = np.unique(self.freq_array)
         self.times = np.unique(self.time_array)
-        self.pols = [jnum2str(j, x_orientation=self.telescope.x_orientation) for j in self.jones_array]
+        self.pols = [jnum2str(j, x_orientation=self.telescope.get_x_orientation_from_feeds()) for j in self.jones_array]
         self._jnum_indices = {jnum: i for i, jnum in enumerate(self.jones_array)}
         self.ants = [(ant, pol) for ant in self.ant_array for pol in self.pols]
         self._antnum_indices = {ant: i for i, ant in enumerate(self.ant_array)}
@@ -126,7 +126,7 @@ class HERACal(UVCal):
 
         # build dict of gains, flags, and quals
         for (ant, pol) in self.ants:
-            i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.x_orientation)]
+            i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.get_x_orientation_from_feeds())]
             gains[(ant, pol)] = np.array(self.gain_array[i, :, :, ip].T)
             flags[(ant, pol)] = np.array(self.flag_array[i, :, :, ip].T)
             if quals is not None:
@@ -135,7 +135,7 @@ class HERACal(UVCal):
         # build dict of total_qual if available
         if total_qual is not None:
             for pol in self.pols:
-                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.x_orientation)]
+                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.get_x_orientation_from_feeds())]
                 total_qual[pol] = np.array(self.total_quality_array[:, :, ip].T)
 
         return gains, flags, quals, total_qual
@@ -172,7 +172,7 @@ class HERACal(UVCal):
             self.read_calfits(self.filepaths[0])
 
             if pols is not None:
-                pols = [jstr2num(ap, x_orientation=self.telescope.x_orientation) for ap in pols]
+                pols = [jstr2num(ap, x_orientation=self.telescope.get_x_orientation_from_feeds()) for ap in pols]
             # only read antennas present in the data and raise a warning.
             my_ants = np.unique(self.ant_array)
             if antenna_nums is not None:
@@ -228,7 +228,7 @@ class HERACal(UVCal):
         for to_update, array in zip([gains, flags, quals], data_arrays):
             if to_update is not None:
                 for (ant, pol) in to_update.keys():
-                    i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.x_orientation)]
+                    i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.get_x_orientation_from_feeds())]
                     array[i, fSlice, tSlice, ip] = to_update[(ant, pol)].T
 
         # update total_qual
@@ -236,7 +236,7 @@ class HERACal(UVCal):
             if self.total_quality_array is None:
                 self.total_quality_array = np.zeros(self.gain_array.shape[1:], dtype=float)
             for pol in total_qual.keys():
-                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.x_orientation)]
+                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.get_x_orientation_from_feeds())]
                 self.total_quality_array[fSlice, tSlice, ip] = total_qual[pol].T
 
     def write(self, filename, spoof_missing_channels=False, **write_kwargs):
@@ -633,7 +633,7 @@ class HERAData(UVData):
         lsts = self.lst_array[self.baseline_array == most_common_bl_num]
 
         freqs = np.unique(self.freq_array)
-        pols = [polnum2str(polnum, x_orientation=self.telescope.x_orientation) for polnum in self.polarization_array]
+        pols = [polnum2str(polnum, x_orientation=self.telescope.get_x_orientation_from_feeds()) for polnum in self.polarization_array]
         antpairs = self.get_antpairs()
         bls = [antpair + (pol,) for antpair in antpairs for pol in pols]
 
@@ -654,7 +654,7 @@ class HERAData(UVData):
         self._blt_slices = get_blt_slices(self)
 
     def get_polstr_index(self, pol: str) -> int:
-        num = polstr2num(pol, x_orientation=self.telescope.x_orientation)
+        num = polstr2num(pol, x_orientation=self.telescope.get_x_orientation_from_feeds())
 
         try:
             return self._polnum_indices[num]
@@ -1008,7 +1008,7 @@ class HERAData(UVData):
                 # explicitly handle cross-polarized autos
                 if bl[0] == bl[1]:
                     # ensure that we're not looking at (pseudo-)stokes visibilities
-                    if polstr2num(bl[2], x_orientation=self.telescope.x_orientation) < 0:
+                    if polstr2num(bl[2], x_orientation=self.telescope.get_x_orientation_from_feeds()) < 0:
                         if utils.split_pol(bl[2])[0] != utils.split_pol(bl[2])[1]:
                             pol_reversed_bl = utils.reverse_bl(bl)
                             if pol_reversed_bl not in dc.keys():
@@ -1672,7 +1672,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         if uvf.type == 'baseline':  # one time x freq waterfall per baseline
             blt_slices = get_blt_slices(uvf)
             for ip, pol in enumerate(uvf.polarization_array):
-                pol = _pol2str(pol, uvf.telescope.x_orientation)
+                pol = _pol2str(pol, uvf.telescope.get_x_orientation_from_feeds())
                 for (ant1, ant2), blt_slice in blt_slices.items():
                     flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, :, ip]
             # data container only supports standard polarizations strings
@@ -1683,13 +1683,13 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
 
         elif uvf.type == 'antenna':  # one time x freq waterfall per antenna
             for ip, jpol in enumerate(uvf.polarization_array):
-                jpol = _pol2str(jpol, x_orientation=uvf.telescope.x_orientation, jpol=True)
+                jpol = _pol2str(jpol, x_orientation=uvf.telescope.get_x_orientation_from_feeds(), jpol=True)
                 for i, ant in enumerate(uvf.ant_array):
                     flags[(ant, jpol)] = np.array(uvf.flag_array[i, :, :, ip].T)
 
         elif uvf.type == 'waterfall':  # one time x freq waterfall (per visibility polarization)
             for ip, jpol in enumerate(uvf.polarization_array):
-                jpol = _pol2str(jpol, x_orientation=uvf.telescope.x_orientation, jpol=True)
+                jpol = _pol2str(jpol, x_orientation=uvf.telescope.get_x_orientation_from_feeds(), jpol=True)
                 flags[jpol] = uvf.flag_array[:, :, ip]
 
     elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
