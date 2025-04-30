@@ -804,9 +804,11 @@ def lst_bin_files_from_config(
             antenna_names=meta.antenna_names,
             antenna_numbers=meta.antenna_numbers,
             antenna_positions=meta.antenna_positions,
-            x_orientation=meta.x_orientation,
             instrument=meta.instrument,
+            mount_type=meta.mount_type,
+            antenna_diameters=meta.antenna_diameters
         )
+        telescope.set_feeds_from_x_orientation(meta.x_orientation, feeds=['x', 'y'])  # assumes linear polarization
         uv = UVData.new(
             freq_array=freqs,
             polarization_array=utils.polstr2num([_comply_vispol(p) for p in config.pols], x_orientation=meta.x_orientation),
