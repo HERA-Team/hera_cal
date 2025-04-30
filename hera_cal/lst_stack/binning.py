@@ -696,7 +696,7 @@ class LSTStack:
     @property
     def pols(self) -> list[str]:
         """The polarizations in the data."""
-        return utils.polnum2str(self.polarization_array, x_orientation=self.telescope.x_orientation)
+        return utils.polnum2str(self.polarization_array, x_orientation=self.telescope.get_x_orientation_from_feeds())
 
     def copy(self, *args, **kwargs):
         """Return a copy of the LSTStack object."""
