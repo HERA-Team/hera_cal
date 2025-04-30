@@ -471,7 +471,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         echo(f"Generating FR-Profile of {bl} at {str(datetime.datetime.now())}", verbose=verbose)
         # sum beams from all frequencies
         # get polarization index
-        polindex = np.where(uvutils.polstr2num(bl[-1], x_orientation=uvb.x_orientation) == uvb.polarization_array)[0][0]
+        polindex = np.where(uvutils.polstr2num(bl[-1], x_orientation=uvb.get_x_orientation_from_feeds()) == uvb.polarization_array)[0][0]
         # get baseline vector in equitorial coordinates.
         blvec = antpos_trf[antnums == bl[1]] - antpos_trf[antnums == bl[0]]
         # initialize binned power.
