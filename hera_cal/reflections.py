@@ -476,7 +476,7 @@ class ReflectionFitter(FRFilter):
             if cal.Nfreqs > Nfreqs:
                 freq_array = cal.freq_array
             kwargs = {
-                'x_orientation': cal.telescope.x_orientation,
+                'x_orientation': cal.telescope.get_x_orientation_from_feeds(),
                 'telescope_name': cal.telescope.name,
                 'cal_style': cal.cal_style,
                 'gain_convention': cal.gain_convention,
@@ -484,7 +484,7 @@ class ReflectionFitter(FRFilter):
             }
             add_to_history += "\nMerged-in calibration {}".format(input_calfits)
         else:
-            kwargs = {'x_orientation': self.hd.telescope.x_orientation, }
+            kwargs = {'x_orientation': self.hd.telescope.get_x_orientation_from_feeds()}
 
             if self.hd.integration_time is not None:
                 unique_intg = np.unique(self.hd.integration_time)
