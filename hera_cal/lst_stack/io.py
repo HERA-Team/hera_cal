@@ -237,7 +237,7 @@ def create_empty_uvd(
     # Need to set the polarization array manually because even though the select
     # operation does the down-select, it doesn't re-order the pols.
     uvd_template.polarization_array = np.array(
-        uvutils.polstr2num(pols, x_orientation=uvd_template.telescope.x_orientation)
+        uvutils.polstr2num(pols, x_orientation=uvd_template.telescope.get_x_orientation_from_feeds())
     )
     return uvd_template
 
