@@ -741,7 +741,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     last_day_index = np.argmax([np.min([time for tarr in tarrs for time in tarr]) for tarrs in time_arrs])
     zeroth_file_on_last_day_index = np.argmin([np.min(tarr) for tarr in time_arrs[last_day_index]])
     hd = io.HERAData(data_files[last_day_index][zeroth_file_on_last_day_index])
-    x_orientation = hd.telescope.x_orientation
+    x_orientation = hd.telescope.get_x_orientation_from_feeds()
 
     # get metadata
     freq_array = hd.freqs
