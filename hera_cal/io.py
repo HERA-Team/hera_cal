@@ -1298,10 +1298,10 @@ def read_hera_hdf5(filenames, bls=None, pols=None, full_read_thresh=0.002,
                 npols = pol_array.size
                 # the following errors if x_orientation not set in this hdf5
                 if 'x_orientation' in h:
-                    x_orient = str(h['x_orientation'][()], encoding='utf-8')
+                    info['x_orientation'] = str(h['x_orientation'][()], encoding='utf-8')
                 else:
-                    x_orient = uvutils.pol.get_x_orientation_from_feeds(np.char.decode(h['feed_array'][()], encoding='utf-8'), h['feed_angle'][()])
-                pol_indices = {uvutils.parse_polstr(POL_NUM2STR_DICT[n], x_orientation=x_orient): cnt
+                    info['x_orientation'] = uvutils.pol.get_x_orientation_from_feeds(np.char.decode(h['feed_array'][()], encoding='utf-8'), h['feed_angle'][()])
+                pol_indices = {uvutils.parse_polstr(POL_NUM2STR_DICT[n], x_orientation=info['x_orientation']): cnt
                                for cnt, n in enumerate(pol_array)}
                 info['pols'] = list(pol_indices.keys())
                 info['ants'] = antenna_numbers = h['antenna_numbers'][()]
@@ -1474,7 +1474,7 @@ class HERADataFastReader():
 
         # update metadata internally
         self.info = rv['info']
-        for meta in HERAData.HERAData_metas:
+        for meta in HERAData.HERAData_metas + ['x_orientation',]:
             if meta in rv['info']:
                 setattr(self, meta, rv['info'][meta])
             else:
