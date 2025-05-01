@@ -347,14 +347,16 @@ def read_hera_calfits(filenames, ants=None, pols=None,
             if _jhash not in inds:
                 if 'XORIENT' in hdr:
                     # using old standard for x_orientation (prior to pyuvdata 3.2)
-                    info['x_orientation'] = x_orient = hdr['XORIENT']
+                    info['x_orientation'] = hdr['XORIENT']
                 else:
                     # using new standard for x_orientation
                     feed_array = np.array([[item.strip().lower() for item in antdata["POLTYA"]],
                                            [item.strip().lower() for item in antdata["POLTYB"]]]).T
                     feed_angle = np.radians([antdata["POLAA"], antdata["POLAB"]]).T
-                    info['x_orientation'] = uvutils.pol.get_x_orientation_from_feeds(feed_array, feed_angle)
-                _pols = [uvutils.parse_jpolstr(uvutils.JONES_NUM2STR_DICT[num], x_orientation=x_orient)
+                    print(feed_array, feed_angle)
+                    print(uvutils.pol.get_x_orientation_from_feeds(feed_array, feed_angle))
+                    info['x_orientation'] = uvutils.pol.get_x_orientation_from_feeds(feed_array, feed_angle, tols=[1e-6, 0])
+                _pols = [uvutils.parse_jpolstr(uvutils.JONES_NUM2STR_DICT[num], x_orientation=info['x_orientation'])
                          for num in jones_array]
                 if 'pols' in info:
                     info['pols'] = info['pols'].union(set(_pols))
