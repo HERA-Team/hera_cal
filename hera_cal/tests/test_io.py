@@ -1015,6 +1015,29 @@ class Test_HERADataFastReader:
         for ap in hd1.lsts_by_bl:
             np.testing.assert_allclose(hd1.lsts_by_bl[ap], hd2.lsts_by_bl[ap])
 
+    @pytest.mark.filterwarnings("ignore:Combined frequencies are separated by more than their channel width")
+    def test_roundtrip_hd_x_orientation(self, tmp_path):
+        # Read original with HERAData
+        hd = io.HERAData(self.uvh5_1)
+        # ensure metadata is loaded
+        hd.read()
+
+        # Write out via HERAData
+        out_file = tmp_path / "roundtrip.uvh5"
+        hd.write_uvh5(str(out_file), clobber=True)
+
+        # Initialize fast reader on the written file
+        fr = io.HERADataFastReader(str(out_file))
+        # Load only metadata to get x_orientation
+        fr.read(read_flags=False, read_nsamples=False, check=True)
+
+        # Compare x_orientation matches original
+        orig_x_orient = hd.telescope.get_x_orientation_from_feeds()
+        fr_x_orient = fr.x_orientation
+        assert fr_x_orient == orig_x_orient, (
+            f"FastReader x_orientation '{fr_x_orient}' != original '{orig_x_orient}'"
+        )
+
     def test_errors(self):
         hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
         with pytest.raises(NotImplementedError):
