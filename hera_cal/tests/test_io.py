@@ -1119,6 +1119,25 @@ class Test_ReadHeraCalfits(object):
             assert k in rv1['gains']
             np.testing.assert_array_equal(rv1['gains'][k], rv2['gains'][k])
 
+    def test_heracal_roundtrip_with_read_hera_calfits(self, tmp_path):
+        # Load with HERACal
+        hc = io.HERACal(self.fname_2pol)
+        gains, flags, quals, total_qual = hc.read()
+        print(hc.telescope.get_x_orientation_from_feeds())
+
+        # Write out a new calfits file
+        out = tmp_path / "roundtrip.calfits"
+        hc.write_calfits(str(out), clobber=True)
+
+        # Now load it via read_hera_calfits
+        rv = io.read_hera_calfits(str(out), read_gains=True, read_flags=True, read_quality=True,
+                                  read_tot_quality=False, check=True, verbose=True)
+
+        # Check x_orientation round-trips correctly
+        assert rv["info"]["x_orientation"] == hc.telescope.get_x_orientation_from_feeds()
+
+        # And clean up (tmp_path gets auto-deleted)
+
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class Test_Visibility_IO_Legacy:
