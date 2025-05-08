@@ -745,6 +745,10 @@ def average_and_inpaint_simultaneously_single_bl(
 
     # Initialize cache if none is given, but it won't be passed back to the user
     cache = ({} if cache is None else cache)
+    if return_nuisance:
+        post_means = {}
+        sample_means_dpss = {}
+        sample_covs_dpss = {}
 
     for band in inpaint_bands:
         # if the band is already entirely flagged for all nights, continue
@@ -901,6 +905,12 @@ def average_and_inpaint_simultaneously_single_bl(
 
             # If we've made it this far, set averaged flags to False
             avg_flgs[band] = False
+
+            if return_nuisance:
+                    band_tuple = (band.start, band.stop)
+                    post_means[band_tuple] = post_mean
+                    sample_means_dpss[band_tuple] = sample_mean_dpss
+                    sample_covs_dpss[band_tuple] = sample_cov_dpss
         else: # Already asserted it must be EM
             emi = EMInpainter(
                 stackd[:, band],
@@ -921,6 +931,12 @@ def average_and_inpaint_simultaneously_single_bl(
             model[:, band] = basis.dot(post_mean).T
             # If we've made it this far, set averaged flags to False
             avg_flgs[band] = False
+
+            if return_nuisance:
+                    band_tuple = (band.start, band.stop)
+                    post_means[band_tuple] = post_mean
+                    sample_means_dpss[band_tuple] = sample_mean_dpss
+                    sample_covs_dpss[band_tuple] = sample_cov_dpss
 
     # Shortcut here if everything is flagged.
     # Note that we can have avg_flgs be all flagged when not all of stackf is flagged
@@ -947,7 +963,7 @@ def average_and_inpaint_simultaneously_single_bl(
         inpainted_mean /= total_nsamples
         inpainted_mean[total_nsamples == 0] *= np.nan
     if return_nuisance:
-        return inpainted_mean, avg_flgs, model, post_mean, sample_mean_dpss, sample_cov_dpss
+        return inpainted_mean, avg_flgs, model, post_means, sample_means_dpss, sample_covs_dpss
     else:
         return inpainted_mean, avg_flgs, model
 
