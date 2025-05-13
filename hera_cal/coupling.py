@@ -71,13 +71,63 @@ def build_coupling_grid(antpos, uvw_grid, ratio: int = 1):
     # Get the antenna pairs
     antpair = np.array([antpos[i] for i in range(len(antpos))])
     # Project the antenna positions onto a grid defined by the ratio
-    uvw_grid = project_coordinates(antpair, antpos, ratio)
+    uvw_grid = project_baselines_to_grid(antpair, antpos, ratio)
     # Build the coupling grid
     coupling_grid = np.zeros((len(antpair), len(uvw_grid)))
     for i in range(len(antpair)):
         coupling_grid[i] = uvw_grid[i]
     return coupling_grid
 
+
+def loss_function_redundantly_averaged(
+    data: jnp.ndarray,
+    alpha: float,
+    coupling_coefficients: jnp.ndarray,
+):
+    """
+    """
+    pass
+
+"""
+Group of loss functions for coupling coefficients
+"""
+@jax.jit
+def _scaled_log_1p(data, alpha):
+    """
+    Computes the scaled log(1 + x) function.
+
+    Parameters
+    ----------
+        data : jnp.array
+            The input data.
+        alpha : float
+            The scaling factor.
+    
+    Returns
+    -------
+        jnp.array
+            The scaled log(1 + x) values.
+    """
+    return jnp.log1p(data * alpha)
+
+@jax.jit
+def _scaled_log_1p_normalized(data):
+    """
+    Computes the scaled log(max(x - 1, 0)) function.
+
+    Parameters
+    ----------
+        data : jnp.array
+            The input data.
+        alpha : float
+            The scaling factor.
+    
+    Returns
+    -------
+        jnp.array
+            The scaled log(1 + x) values.
+    """
+    return jnp.log1p(jnp.maximum(data - 1, 0))
 
 """
 Coupling Model for Non-Redundant Baselines
