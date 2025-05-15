@@ -125,9 +125,6 @@ def test_get_minimal_slices_not_all_flagged_empty_freq_cuts():
         [True, True, True, True, True],
         [True, True, True, True, True]
     ], dtype=bool)
-    # When freq_cuts is empty, the function sets freqs = np.arange(nfreqs)
-    time_slice, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=None, freq_cuts=[])
-    # The False pixel is in row index 1.
     time_slices, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=None, freq_cuts=[])
     # Only one band, so inspect index 0
     assert time_slices[0].start == 1 and time_slices[0].stop == 2
