@@ -97,28 +97,28 @@ def test_factorize_flags():
 
 def test_get_minimal_slices_all_true_empty_freq_cuts():
     # When flag_wf is all True and freq_cuts is empty,
-    # freqs is set automatically (using np.arange) and the function
-    # should return None for time_slice and [None] for band_slices.
+    # freqs is set automatically and the function
+    # should return [None] for time_slices and [None] for band_slices.
     flag_wf = np.ones((5, 5), dtype=bool)
-    time_slice, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=None, freq_cuts=[])
-    assert time_slice is None
+    time_slices, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=None, freq_cuts=[])
+    assert time_slices == [None]
     assert band_slices == [None]
 
 
 def test_get_minimal_slices_all_true_nonempty_freq_cuts():
     # When flag_wf is all True and freq_cuts is non-empty,
     # freqs must be provided; since no False pixels exist,
-    # the function returns None for time_slice and [None, None] for band_slices.
+    # the function returns [None, None] for both time_slices and band_slices.
     flag_wf = np.ones((3, 4), dtype=bool)
     freq_cuts = [2.5]
     freqs = np.array([1, 2, 3, 4])
-    time_slice, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=freqs, freq_cuts=freq_cuts)
-    assert time_slice is None
+    time_slices, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=freqs, freq_cuts=freq_cuts)
+    assert time_slices == [None, None]
     assert band_slices == [None, None]
 
 
 def test_get_minimal_slices_not_all_flagged_empty_freq_cuts():
-    # Test with empty freq_cuts (default freqs will be used) and a single False pixel.
+    # Single-band case (freq_cuts=[]). One False pixel at row 1, col 1.
     flag_wf = np.array([
         [True, True, True, True, True],
         [True, False, True, True, True],
@@ -128,33 +128,35 @@ def test_get_minimal_slices_not_all_flagged_empty_freq_cuts():
     # When freq_cuts is empty, the function sets freqs = np.arange(nfreqs)
     time_slice, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=None, freq_cuts=[])
     # The False pixel is in row index 1.
-    assert time_slice.start == 1 and time_slice.stop == 2
-    # Default freqs becomes [0, 1, 2, 3, 4]; the False pixel is at column index 1.
+    time_slices, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=None, freq_cuts=[])
+    # Only one band, so inspect index 0
+    assert time_slices[0].start == 1 and time_slices[0].stop == 2
     assert band_slices[0] is not None
     assert band_slices[0].start == 1 and band_slices[0].stop == 2
 
 
 def test_get_minimal_slices_not_all_flagged_nonempty_freq_cuts():
-    # Test with non-empty freq_cuts and False pixels in different frequency bands.
+    # Two-band case (freq_cuts=[3.5]). False at (1,1) in band0 and (2,4) in band1.
     flag_wf = np.ones((4, 6), dtype=bool)
-    flag_wf[1, 1] = False  # False pixel in band 0 (freq < 3.5)
-    flag_wf[2, 4] = False  # False pixel in band 1 (freq > 3.5)
+    flag_wf[1, 1] = False
+    flag_wf[2, 4] = False
     freqs = np.array([1, 2, 3, 4, 5, 6])
     freq_cuts = [3.5]
-    time_slice, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=freqs, freq_cuts=freq_cuts)
-    # Time slice should cover rows 1 and 2.
-    assert time_slice.start == 1 and time_slice.stop == 3
-    # For band 0: interval (-inf, 3.5) covers freqs [1,2,3]; False pixel at column index 1.
+    time_slices, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=freqs, freq_cuts=freq_cuts)
+
+    # Per‐band time slices
+    assert time_slices[0].start == 1 and time_slices[0].stop == 2
+    assert time_slices[1].start == 2 and time_slices[1].stop == 3
+
+    # Per‐band frequency slices
     assert band_slices[0] is not None
     assert band_slices[0].start == 1 and band_slices[0].stop == 2
-    # For band 1: interval (3.5, inf) covers freqs [4,5,6]; False pixel at column index 4.
     assert band_slices[1] is not None
     assert band_slices[1].start == 4 and band_slices[1].stop == 5
 
 
 def test_get_minimal_slices_missing_freqs_error():
-    # When freq_cuts is non-empty and freqs is None,
-    # the function should raise a ValueError.
+    # freq_cuts non-empty but freqs=None should still raise ValueError
     flag_wf = np.array([[True, False],
                         [True, True]])
     freq_cuts = [1.5]
@@ -163,27 +165,27 @@ def test_get_minimal_slices_missing_freqs_error():
 
 
 def test_get_minimal_slices_wrong_shape_freqs_error():
-    # When freq_cuts is non-empty and the length of freqs does not match flag_wf's columns,
-    # the function should raise a ValueError.
+    # freq_cuts non-empty with mismatched freqs length should raise ValueError
     flag_wf = np.array([[True, False, True],
                         [True, True, True]])
-    freqs = np.array([1, 2])  # Incorrect length.
+    freqs = np.array([1, 2])
     freq_cuts = [1.5]
     with pytest.raises(ValueError):
         flag_utils.get_minimal_slices(flag_wf, freqs=freqs, freq_cuts=freq_cuts)
 
 
 def test_get_minimal_slices_band_without_false():
-    # Test a case where one frequency band (as defined by freq_cuts) does not contain any False pixels.
+    # Two-band case where band1 has no False pixels
     flag_wf = np.ones((3, 6), dtype=bool)
-    flag_wf[1, 1] = False  # False pixel only in band 0.
+    flag_wf[1, 1] = False  # only in band0
     freqs = np.array([1, 2, 3, 4, 5, 6])
     freq_cuts = [3.5]
-    time_slice, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=freqs, freq_cuts=freq_cuts)
-    # Time slice should cover row 1.
-    assert time_slice.start == 1 and time_slice.stop == 2
-    # Band 0 should capture the False pixel at column 1.
+    time_slices, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=freqs, freq_cuts=freq_cuts)
+
+    # band0 populated, band1 stays None
+    assert time_slices[0].start == 1 and time_slices[0].stop == 2
     assert band_slices[0] is not None
     assert band_slices[0].start == 1 and band_slices[0].stop == 2
-    # Band 1 should remain None because there are no False pixels in that band.
+
+    assert time_slices[1] is None
     assert band_slices[1] is None
