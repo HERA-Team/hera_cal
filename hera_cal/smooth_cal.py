@@ -364,7 +364,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
             'CLEAN': uses the CLEAN algorithm to smooth calibration solutions
             'DPSS': uses discrete prolate spheroidal sequences (DPSS) to filter calibration solutions
-        dpss_vectors: Dictionary mapping a tuple of slices (one along the time axis and one along the frequency axis) to
+        dpss_vectors: Dictionary mapping a tuple of tuples defining slices (one along the time axis and one along the frequency axis) to
             a tuple of 2 1D DPSS filters, one for the time axis and one for the frequency axis
             that form the least squares design matrix, X, when the outer product of the two is taken.
             If dpss_vectors is not provided, it will be calculated using smooth_cal.dpss_filters and the
@@ -372,7 +372,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         fit_method: Method used to fit the DPSS model to the data. Either 'lstsq', 'pinv', 'lu_solve', or 'solve'.
             Only used when the filtering method is 'DPSS'. 'lu_solve' tends to be the fastest, but 'pinv' is more
             stable.
-        cached_input: Dictionary mapping a tuple of slices (one along the time axis and one along the frequency axis) to
+        cached_input: Dictionary mapping a tuple of tuples defining slices (one along the time axis and one along the frequency axis) to
             intermediate products computed when performing linear least-squares with the DPSS basis vectors.
             Useful for filtering many gain grids with similar flagging patterns. Can be obtained using
             the 'cached_output' return value from a previous call to the solve_2D_DPSS function and can also be found the 'info' dictionary
@@ -445,16 +445,19 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             dly = single_iterative_fft_dly((phase_flips * gains)[tslice, band], wgts[tslice, band], freqs[band])
             rephasor[tslice, band] = phase_flips[tslice] * np.exp(-2.0j * np.pi * dly * freqs[band])
 
+            # create key out of slices that's hashable before python 3.12
+            slice_key = ((tslice.start, tslice.stop, tslice.step), (band.start, band.stop, band.step))
+
             if filter_mode == 'rect':
                 # Generate filters if not provided
-                if (tslice, band) not in dpss_vectors:
-                    dpss_vectors[(tslice, band)] = dpss_filters(
+                if slice_key not in dpss_vectors:
+                    dpss_vectors[slice_key] = dpss_filters(
                         freqs=freqs[band], times=times[tslice], freq_scale=freq_scale, time_scale=time_scale,
                         eigenval_cutoff=eigenval_cutoff
                     )
 
                 # Unpack DPSS vectors
-                time_filters, freq_filters = dpss_vectors[(tslice, band)]
+                time_filters, freq_filters = dpss_vectors[slice_key]
 
                 # Filter gain solutions
                 if use_sparse_solver:
@@ -469,15 +472,15 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                         precondition_solver=precondition_solver,
                     )
                     filtered_here = np.dot(time_filters, np.dot(beta, freq_filters.T))
-                    cached_output[(tslice, band)] = {}  # no cached output for sparse solver
+                    cached_output[slice_key] = {}  # no cached output for sparse solver
                 else:
-                    filtered_here, cached_output[(tslice, band)] = solve_2D_DPSS(
+                    filtered_here, cached_output[slice_key] = solve_2D_DPSS(
                         gains=(gains * rephasor)[tslice, band],
                         weights=wgts[tslice, band],
                         time_filters=time_filters,
                         freq_filters=freq_filters,
                         method=fit_method,
-                        cached_input=(cached_input[(tslice, band)] if (tslice, band) in cached_input else {})
+                        cached_input=cached_input.get(slice_key, {}),
                     )
 
             elif filter_mode == 'plus':
