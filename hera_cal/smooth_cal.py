@@ -333,7 +333,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
                         dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9,
-                        skip_flagged_edges=True, fix_phase_flips=False, use_sparse_solver=False,
+                        skip_flagged_edges=True, freq_cuts=[], fix_phase_flips=False, use_sparse_solver=False,
                         precondition_solver=True, **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
@@ -364,24 +364,28 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
             'CLEAN': uses the CLEAN algorithm to smooth calibration solutions
             'DPSS': uses discrete prolate spheroidal sequences (DPSS) to filter calibration solutions
-        dpss_vectors: Tuple of 2 1D DPSS filters, one for the time axis and one for the frequency axis
+        dpss_vectors: Dictionary mapping a tuple of tuples defining slices (one along the time axis and one along the frequency axis) to
+            a tuple of 2 1D DPSS filters, one for the time axis and one for the frequency axis
             that form the least squares design matrix, X, when the outer product of the two is taken.
-            If dpss_vectors is not provided, one will be calculated using smooth_cal.dpss_filters and the
+            If dpss_vectors is not provided, it will be calculated using smooth_cal.dpss_filters and the
             time and frequency scale. Only used when the method is 'DPSS'
         fit_method: Method used to fit the DPSS model to the data. Either 'lstsq', 'pinv', 'lu_solve', or 'solve'.
             Only used when the filtering method is 'DPSS'. 'lu_solve' tends to be the fastest, but 'pinv' is more
             stable.
-        cached_input: Dictionary of intermediate products computed when performing linear least-squares with the DPSS basis vectors.
+        cached_input: Dictionary mapping a tuple of tuples defining slices (one along the time axis and one along the frequency axis) to
+            intermediate products computed when performing linear least-squares with the DPSS basis vectors.
             Useful for filtering many gain grids with similar flagging patterns. Can be obtained using
             the 'cached_output' return value from a previous call to the solve_2D_DPSS function and can also be found the 'info' dictionary
             returned by this function. If method is 'lu_solve', cached_input will have a key 'LU' which is the output of scipy.linalg.lu_factor.
             If method is 'pinv', cached_input will have a key 'XTXinv' which is the output of np.linalg.pinv. If
-            other methods are used, nucal._linear_fit will not use cached_input.
+            other methods are used, solve_2D_DPSS will not use cached_input.
         eigenval_cutoff: sinc_matrix eigenvalue cutoffs to use for included dpss modes.
             Only used when the filtering method is 'DPSS'
         skip_flagged_edges : bool, optional
             if True, do not filter over flagged edge times/freqs (filter over sub-region). Only used when method used is 'DPSS'.
             Default is True
+        freq_cuts : list of frequencies that separate bands, in the same units as freqs. If empty, the whole band is used for filtering.
+            Only used when method is 'DPSS' and when skip_flagged_edges is True.
         fix_phase_flips : bool, optional
             If True, will try to find integrations whose phases appear to be 180 degrees rotated from the first unflagged
             integration. These will be flipped before smoothing and then flipped back after smoothing. Default is False.
@@ -426,62 +430,71 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     if method == 'DPSS' or method == 'dpss_leastsq':
         info = {}
         if skip_flagged_edges:
-            xout, gout, wout, edges, chunks = truncate_flagged_edges(gains * rephasor, wgts, (times, freqs), ax='both')
-
+            tslices, bands = flag_utils.get_minimal_slices(np.isclose(wgts, 0.0), freqs=freqs, freq_cuts=freq_cuts)
         else:
-            gout = deepcopy(gains * rephasor)
-            wout = deepcopy(wgts)
-            xout = (times, freqs)
+            tslices, bands = flag_utils.get_minimal_slices(np.zeros_like(wgts, dtype=bool))
 
-        if filter_mode == 'rect':
-            # Generate filters if not provided
-            if dpss_vectors is None:
-                dpss_vectors = dpss_filters(
-                    freqs=xout[1], times=xout[0], freq_scale=freq_scale, time_scale=time_scale,
-                    eigenval_cutoff=eigenval_cutoff
-                )
+        # initialize filtered and caching dicts
+        filtered = deepcopy(gains)
+        cached_output = {}
+        if dpss_vectors is None:
+            dpss_vectors = {}
+        for tslice, band in zip(tslices, bands):
 
-            # Unpack DPSS vectors
-            time_filters, freq_filters = dpss_vectors
+            # recompute and overwrite rephasor just for the current time slice and band
+            dly = single_iterative_fft_dly((phase_flips * gains)[tslice, band], wgts[tslice, band], freqs[band])
+            rephasor[tslice, band] = phase_flips[tslice] * np.exp(-2.0j * np.pi * dly * freqs[band])
 
-            # Filter gain solutions
-            if use_sparse_solver:
-                beta, _ = hera_filters.dspec.sparse_linear_fit_2D(
-                    data=gout,
-                    weights=wout,
-                    axis_1_basis=time_filters,
-                    axis_2_basis=freq_filters,
-                    atol=tol,
-                    btol=tol,
-                    iter_lim=maxiter,
-                    precondition_solver=precondition_solver,
-                )
-                filtered = np.dot(time_filters, np.dot(beta, freq_filters.T))
-                cached_output = {}  # no cached output for sparse solver
+            # create key out of slices that's hashable before python 3.12
+            slice_key = ((tslice.start, tslice.stop, tslice.step), (band.start, band.stop, band.step))
+
+            if filter_mode == 'rect':
+                # Generate filters if not provided
+                if slice_key not in dpss_vectors:
+                    dpss_vectors[slice_key] = dpss_filters(
+                        freqs=freqs[band], times=times[tslice], freq_scale=freq_scale, time_scale=time_scale,
+                        eigenval_cutoff=eigenval_cutoff
+                    )
+
+                # Unpack DPSS vectors
+                time_filters, freq_filters = dpss_vectors[slice_key]
+
+                # Filter gain solutions
+                if use_sparse_solver:
+                    beta, _ = hera_filters.dspec.sparse_linear_fit_2D(
+                        data=(gains * rephasor)[tslice, band],
+                        weights=wgts[tslice, band],
+                        axis_1_basis=time_filters,
+                        axis_2_basis=freq_filters,
+                        atol=tol,
+                        btol=tol,
+                        iter_lim=maxiter,
+                        precondition_solver=precondition_solver,
+                    )
+                    filtered_here = np.dot(time_filters, np.dot(beta, freq_filters.T))
+                    cached_output[slice_key] = {}  # no cached output for sparse solver
+                else:
+                    filtered_here, cached_output[slice_key] = solve_2D_DPSS(
+                        gains=(gains * rephasor)[tslice, band],
+                        weights=wgts[tslice, band],
+                        time_filters=time_filters,
+                        freq_filters=freq_filters,
+                        method=fit_method,
+                        cached_input=cached_input.get(slice_key, {}),
+                    )
+
+            elif filter_mode == 'plus':
+                raise NotImplementedError("filter_mode 'plus' only implemented for CLEAN")
+
             else:
-                filtered, cached_output = solve_2D_DPSS(
-                    gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, method=fit_method,
-                    cached_input=cached_input
-                )
+                raise ValueError("DPSS mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
 
-            if skip_flagged_edges:
-                ((tstart, tend),), ((fstart, fend),) = edges
-                # Create a mask to fill-in flagged region
-                mask = np.ones(gains.shape, dtype=bool)
-                mask[tstart:gains.shape[0] - tend, fstart:gains.shape[1] - fend] = False
-                # Restore flagged region with zeros and fill-in with original data
-                filtered = restore_flagged_edges(filtered, chunks, edges, ax='both')
-                filtered[mask] = gains[mask]
+            # put results from this band/tslice back into filtered
+            filtered[tslice, band] = filtered_here
 
             # Store design matrices and cached matrices for computational speed-up
             info['cached_input'] = cached_output
             info['dpss_vectors'] = dpss_vectors
-
-        elif filter_mode == 'plus':
-            raise NotImplementedError("filter_mode 'plus' only implemented for CLEAN")
-
-        else:
-            raise ValueError("DPSS mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
 
     elif method == 'CLEAN':
         assert AIPY, "You need aipy to use this function"
@@ -1030,7 +1043,8 @@ class CalibrationSmoother():
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect', window='tukey',
-                            maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9, skip_flagged_edges=True,
+                            maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9,
+                            skip_flagged_edges=True, freq_cuts=[],
                             fix_phase_flips=False, flag_phase_flip_ints=False, flag_phase_flip_ants=False,
                             use_sparse_solver=False, precondition_solver=True, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
@@ -1059,6 +1073,8 @@ class CalibrationSmoother():
                 'lu_solve' is the fastest. 'pinv' tends to be more stable.
             skip_flagged_edges : if True, do not filter over flagged edge times (filter over sub-region)
                 Default is True, only used when method='DPSS'
+            freq_cuts: list of frequencies that separate bands, in the same units as self.freqs. If empty, the whole band is used
+                for filtering. Only used when method is 'DPSS' and when skip_flagged_edges is True.
             fix_phase_flips: Optional bool. If True, will try to find integrations whose phases appear to be 180 degrees
                 rotated from the first unflagged  integration. These will be flipped before smoothing and then flipped back
                 after smoothing. Will also print info about phase-flips found. Default is False.
@@ -1112,7 +1128,7 @@ class CalibrationSmoother():
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, dpss_vectors=dpss_vectors, eigenval_cutoff=eigenval_cutoff,
                                                      method=method, fit_method=fit_method, cached_input=cached_input,
-                                                     skip_flagged_edges=skip_flagged_edges, fix_phase_flips=fix_phase_flips,
+                                                     skip_flagged_edges=skip_flagged_edges, freq_cuts=freq_cuts, fix_phase_flips=fix_phase_flips,
                                                      use_sparse_solver=use_sparse_solver, precondition_solver=precondition_solver, **win_kwargs)
                 flipped = (info['phase_flips'] == -1)
                 if np.any(flipped):

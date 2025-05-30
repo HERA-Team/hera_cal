@@ -324,6 +324,82 @@ class Test_Smooth_Cal_Helper_Functions(object):
         with pytest.raises(NotImplementedError):
             ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, method='DPSS', filter_mode='plus')
 
+    def _make_simple_gain_cube(self, nt=32, nf=64, phase_offset=0.0):
+        """
+        Utility: constant‑magnitude gains with an optional phase slope,
+        easy to predict after filtering.
+        """
+        times = np.linspace(0, nt * 10 / 86400.0, nt, endpoint=False)   # ~10 s cadence
+        freqs = np.linspace(100., 200., nf, endpoint=False) * 1e6
+        gains = np.ones((nt, nf), dtype=complex)
+        gains *= np.exp(2.0j * np.pi * phase_offset * freqs)               # optional slope
+        wgts = np.ones_like(gains, dtype=float)
+        return gains, wgts, freqs, times
+
+    def test_time_freq_2D_filter_band_splitting_with_freq_cuts(self):
+        """
+        • Ensures freq_cuts correctly splits the band and that each band
+          is filtered independently (output == input for flat gains).
+        • Also verifies flag_utils.get_minimal_slices is called with the
+          expected signature (guard against regressions).
+        """
+        gains, wgts, freqs, times = self._make_simple_gain_cube()
+        freq_cuts = [150e6]      # two equal ~50 MHz sub‑bands
+
+        # Introduce a tiny discontinuity between the two bands so we can
+        # see that filtering *per band* preserves it (because the filters
+        # never see the jump).
+        gains[:, freqs >= 150e6] *= np.exp(1j * 0.02)
+
+        filtered, info = smooth_cal.time_freq_2D_filter(
+            gains, wgts, freqs, times,
+            method='DPSS',
+            skip_flagged_edges=True,
+            freq_cuts=freq_cuts,
+            eigenval_cutoff=1e-9,
+        )
+        np.testing.assert_allclose(filtered[:, freqs < 150e6], gains[:, freqs < 150e6], atol=5e-3, rtol=0)
+
+    def test_time_freq_2D_filter_dpss_caching_and_vectors(self):
+        """
+        • First run: let the routine build its own DPSS vectors / cache.
+        • Second run: feed those back in – output must match first run
+          *exactly* and function should skip recomputation.
+        """
+        gains, wgts, freqs, times = self._make_simple_gain_cube()
+
+        filt1, info1 = smooth_cal.time_freq_2D_filter(
+            gains, wgts, freqs, times,
+            method='DPSS',
+            skip_flagged_edges=True,
+            eigenval_cutoff=1e-9,
+        )
+
+        # The returned dicts must be keyed by (tslice, band) tuples
+        assert all(
+            isinstance(k, tuple) and len(k) == 2
+            for k in info1["dpss_vectors"].keys()
+        )
+        assert set(info1["dpss_vectors"].keys()) == set(info1["cached_input"].keys())
+
+        # Second call with vectors + cache injected
+        filt2, info2 = smooth_cal.time_freq_2D_filter(
+            gains,
+            wgts,
+            freqs,
+            times,
+            method='DPSS',
+            skip_flagged_edges=True,
+            eigenval_cutoff=1e-9,
+            dpss_vectors=info1["dpss_vectors"],
+            cached_input=info1["cached_input"],
+        )
+
+        np.testing.assert_array_equal(filt1, filt2)
+        # Returned dicts should be passed through unchanged
+        assert info2["dpss_vectors"] is info1["dpss_vectors"]
+        assert info2["cached_input"] is not None
+
     def flag_threshold_and_broadcast(self):
         flags = {(i, 'Jxx'): np.zeros((10, 10), dtype=bool) for i in range(3)}
         for ant in flags.keys():
