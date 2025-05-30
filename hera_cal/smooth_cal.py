@@ -364,24 +364,28 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         method: Algorithm used to smooth calibration solutions. Either 'CLEAN' or 'DPSS':
             'CLEAN': uses the CLEAN algorithm to smooth calibration solutions
             'DPSS': uses discrete prolate spheroidal sequences (DPSS) to filter calibration solutions
-        dpss_vectors: Tuple of 2 1D DPSS filters, one for the time axis and one for the frequency axis
+        dpss_vectors: Dictionary mapping a tuple of slices (one along the time axis and one along the frequency axis) to
+            a tuple of 2 1D DPSS filters, one for the time axis and one for the frequency axis
             that form the least squares design matrix, X, when the outer product of the two is taken.
-            If dpss_vectors is not provided, one will be calculated using smooth_cal.dpss_filters and the
+            If dpss_vectors is not provided, it will be calculated using smooth_cal.dpss_filters and the
             time and frequency scale. Only used when the method is 'DPSS'
         fit_method: Method used to fit the DPSS model to the data. Either 'lstsq', 'pinv', 'lu_solve', or 'solve'.
             Only used when the filtering method is 'DPSS'. 'lu_solve' tends to be the fastest, but 'pinv' is more
             stable.
-        cached_input: Dictionary of intermediate products computed when performing linear least-squares with the DPSS basis vectors.
+        cached_input: Dictionary mapping a tuple of slices (one along the time axis and one along the frequency axis) to
+            intermediate products computed when performing linear least-squares with the DPSS basis vectors.
             Useful for filtering many gain grids with similar flagging patterns. Can be obtained using
             the 'cached_output' return value from a previous call to the solve_2D_DPSS function and can also be found the 'info' dictionary
             returned by this function. If method is 'lu_solve', cached_input will have a key 'LU' which is the output of scipy.linalg.lu_factor.
             If method is 'pinv', cached_input will have a key 'XTXinv' which is the output of np.linalg.pinv. If
-            other methods are used, nucal._linear_fit will not use cached_input.
+            other methods are used, solve_2D_DPSS will not use cached_input.
         eigenval_cutoff: sinc_matrix eigenvalue cutoffs to use for included dpss modes.
             Only used when the filtering method is 'DPSS'
         skip_flagged_edges : bool, optional
             if True, do not filter over flagged edge times/freqs (filter over sub-region). Only used when method used is 'DPSS'.
             Default is True
+        freq_cuts : list of frequencies that separate bands, in the same units as freqs. If empty, the whole band is used for filtering.
+            Only used when method is 'DPSS' and when skip_flagged_edges is True.
         fix_phase_flips : bool, optional
             If True, will try to find integrations whose phases appear to be 180 degrees rotated from the first unflagged
             integration. These will be flipped before smoothing and then flipped back after smoothing. Default is False.
