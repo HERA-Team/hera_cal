@@ -1040,7 +1040,8 @@ class CalibrationSmoother():
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect', window='tukey',
-                            maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9, skip_flagged_edges=True,
+                            maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9,
+                            skip_flagged_edges=True, freq_cuts=[],
                             fix_phase_flips=False, flag_phase_flip_ints=False, flag_phase_flip_ants=False,
                             use_sparse_solver=False, precondition_solver=True, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
@@ -1069,6 +1070,8 @@ class CalibrationSmoother():
                 'lu_solve' is the fastest. 'pinv' tends to be more stable.
             skip_flagged_edges : if True, do not filter over flagged edge times (filter over sub-region)
                 Default is True, only used when method='DPSS'
+            freq_cuts: list of frequencies that separate bands, in the same units as self.freqs. If empty, the whole band is used
+                for filtering. Only used when method is 'DPSS' and when skip_flagged_edges is True.
             fix_phase_flips: Optional bool. If True, will try to find integrations whose phases appear to be 180 degrees
                 rotated from the first unflagged  integration. These will be flipped before smoothing and then flipped back
                 after smoothing. Will also print info about phase-flips found. Default is False.
