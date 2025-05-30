@@ -333,7 +333,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
                         dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9,
-                        skip_flagged_edges=True, fix_phase_flips=False, use_sparse_solver=False,
+                        skip_flagged_edges=True, freq_cuts=[], fix_phase_flips=False, use_sparse_solver=False,
                         precondition_solver=True, **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
@@ -426,62 +426,68 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     if method == 'DPSS' or method == 'dpss_leastsq':
         info = {}
         if skip_flagged_edges:
-            xout, gout, wout, edges, chunks = truncate_flagged_edges(gains * rephasor, wgts, (times, freqs), ax='both')
-
+            tslices, bands = flag_utils.get_minimal_slices(np.isclose(wgts, 0.0), freqs=freqs, freq_cuts=freq_cuts)
         else:
-            gout = deepcopy(gains * rephasor)
-            wout = deepcopy(wgts)
-            xout = (times, freqs)
+            tslices, bands = flag_utils.get_minimal_slices(np.zeros_like(wgts, dtype=bool))
 
-        if filter_mode == 'rect':
-            # Generate filters if not provided
-            if dpss_vectors is None:
-                dpss_vectors = dpss_filters(
-                    freqs=xout[1], times=xout[0], freq_scale=freq_scale, time_scale=time_scale,
-                    eigenval_cutoff=eigenval_cutoff
-                )
+        # initialize filtered and caching dicts
+        filtered = deepcopy(gains)
+        cached_output = {}
+        if dpss_vectors is None:
+            dpss_vectors = {}
+        for tslice, band in zip(tslices, bands):
 
-            # Unpack DPSS vectors
-            time_filters, freq_filters = dpss_vectors
+            # recompute and overwrite rephasor just for the current time slice and band
+            dly = single_iterative_fft_dly((phase_flips * gains)[tslice, band], wgts[tslice, band], freqs[band])
+            rephasor[tslice, band] = phase_flips[tslice] * np.exp(-2.0j * np.pi * dly * freqs[band])
 
-            # Filter gain solutions
-            if use_sparse_solver:
-                beta, _ = hera_filters.dspec.sparse_linear_fit_2D(
-                    data=gout,
-                    weights=wout,
-                    axis_1_basis=time_filters,
-                    axis_2_basis=freq_filters,
-                    atol=tol,
-                    btol=tol,
-                    iter_lim=maxiter,
-                    precondition_solver=precondition_solver,
-                )
-                filtered = np.dot(time_filters, np.dot(beta, freq_filters.T))
-                cached_output = {}  # no cached output for sparse solver
+            if filter_mode == 'rect':
+                # Generate filters if not provided
+                if (tslice, band) not in dpss_vectors:
+                    dpss_vectors[(tslice, band)] = dpss_filters(
+                        freqs=freqs[band], times=times[tslice], freq_scale=freq_scale, time_scale=time_scale,
+                        eigenval_cutoff=eigenval_cutoff
+                    )
+
+                # Unpack DPSS vectors
+                time_filters, freq_filters = dpss_vectors[(tslice, band)]
+
+                # Filter gain solutions
+                if use_sparse_solver:
+                    beta, _ = hera_filters.dspec.sparse_linear_fit_2D(
+                        data=(gains * rephasor)[tslice, band],
+                        weights=wgts[tslice, band],
+                        axis_1_basis=time_filters,
+                        axis_2_basis=freq_filters,
+                        atol=tol,
+                        btol=tol,
+                        iter_lim=maxiter,
+                        precondition_solver=precondition_solver,
+                    )
+                    filtered_here = np.dot(time_filters, np.dot(beta, freq_filters.T))
+                    cached_output[(tslice, band)] = {}  # no cached output for sparse solver
+                else:
+                    filtered_here, cached_output[(tslice, band)] = solve_2D_DPSS(
+                        gains=(gains * rephasor)[tslice, band],
+                        weights=wgts[tslice, band],
+                        time_filters=time_filters,
+                        freq_filters=freq_filters,
+                        method=fit_method,
+                        cached_input=(cached_input[(tslice, band)] if (tslice, band) in cached_input else {})
+                    )
+
+            elif filter_mode == 'plus':
+                raise NotImplementedError("filter_mode 'plus' only implemented for CLEAN")
+
             else:
-                filtered, cached_output = solve_2D_DPSS(
-                    gains=gout, weights=wout, time_filters=time_filters, freq_filters=freq_filters, method=fit_method,
-                    cached_input=cached_input
-                )
+                raise ValueError("DPSS mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
 
-            if skip_flagged_edges:
-                ((tstart, tend),), ((fstart, fend),) = edges
-                # Create a mask to fill-in flagged region
-                mask = np.ones(gains.shape, dtype=bool)
-                mask[tstart:gains.shape[0] - tend, fstart:gains.shape[1] - fend] = False
-                # Restore flagged region with zeros and fill-in with original data
-                filtered = restore_flagged_edges(filtered, chunks, edges, ax='both')
-                filtered[mask] = gains[mask]
+            # put results from this band/tslice back into filtered
+            filtered[tslice, band] = filtered_here
 
             # Store design matrices and cached matrices for computational speed-up
             info['cached_input'] = cached_output
             info['dpss_vectors'] = dpss_vectors
-
-        elif filter_mode == 'plus':
-            raise NotImplementedError("filter_mode 'plus' only implemented for CLEAN")
-
-        else:
-            raise ValueError("DPSS mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
 
     elif method == 'CLEAN':
         assert AIPY, "You need aipy to use this function"
