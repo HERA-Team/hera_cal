@@ -80,7 +80,7 @@ def _expand_degeneracies_to_ant_gains(
             )
 
         # Get consensus flagging pattern
-        flags_here = np.all(stack.flags, axis=1)
+        flags_here = np.all(stack.flagged_or_inpainted(), axis=1)
 
         # Compute matrices for linear least-squares fits
         fmats = {pol: [] for pol in unique_pols}
@@ -104,7 +104,7 @@ def _expand_degeneracies_to_ant_gains(
     gains = {}
 
     # Get flags common to all baselines
-    flags = np.all(stack.flags, axis=1)
+    flags = np.all(stack.flagged_or_inpainted(), axis=1)
 
     # Map antenna-polarizations to visibility indices
     antpol_to_idx = {
@@ -177,6 +177,9 @@ def _lstbin_amplitude_calibration(
     wgts_here = {}
     abscal_model = {}
 
+    # Get flags for all nights
+    flags = stack.flagged_or_inpainted()
+
     # Loop through baselines and polarizations
     for polidx, pol in enumerate(stack.pols):
         pol1, pol2 = utils.split_pol(pol)
@@ -190,7 +193,7 @@ def _lstbin_amplitude_calibration(
             blpol = (ant1, ant2, pol)
 
             # Move to the next blpol if there is not a model for the data or the entire baseline is flagged
-            if np.all(stack.flags[:, apidx, :, polidx]):
+            if np.all(flags[:, apidx, :, polidx]):
                 continue
 
             # Get model, weights, and data for each baseline
@@ -199,18 +202,26 @@ def _lstbin_amplitude_calibration(
             )
             data_here[blpol] = stack.data[:, apidx, :, polidx]
             wgts_here[blpol] = stack.nsamples[:, apidx, :, polidx] * (
-                ~stack.flags[:, apidx, :, polidx]
+                ~flags[:, apidx, :, polidx]
             ).astype(float)
 
     # If autos are provided and use_autos_for_abscal is True, use them for amplitude calibration
     if use_autos_for_abscal and auto_stack is not None:
+        # Check if auto_stack is flagged or inpainted
+        auto_flags = auto_stack.flagged_or_inpainted()
         for polidx, pol in enumerate(stack.pols):
+            pol1, pol2 = utils.split_pol(pol)
+
+            # Skip if baseline is cross-polarized
+            if pol1 != pol2:
+                continue
+
             for apidx, (ant1, ant2) in enumerate(auto_stack.antpairs):
 
                 blpol = (ant1, ant2, pol)
 
                 # Move to the next blpol if there is not a model for the data or the entire baseline is flagged
-                if np.all(auto_stack.flags[:, apidx, :, polidx]):
+                if np.all(auto_flags[:, apidx, :, polidx]):
                     continue
 
                 # Get model, weights, and data for each baseline
@@ -219,7 +230,7 @@ def _lstbin_amplitude_calibration(
                 )
                 data_here[blpol] = auto_stack.data[:, apidx, :, polidx]
                 wgts_here[blpol] = auto_stack.nsamples[:, apidx, :, polidx] * (
-                    ~auto_stack.flags[:, apidx, :, polidx]
+                    ~auto_flags[:, apidx, :, polidx]
                 ).astype(float)
 
     # Perform amplitude calibration
@@ -238,7 +249,7 @@ def _lstbin_amplitude_calibration(
         # Calibration parameters store in an N_nights by N_freqs array
         polidx = stack.pols.index(utils.join_pol(pol, pol))
         amplitude_gain = np.where(
-            np.all(stack.flags[..., polidx], axis=1), 1.0 + 0.0j, solution[f"A_{pol}"]
+            np.all(flags[..., polidx], axis=1), 1.0 + 0.0j, solution[f"A_{pol}"]
         )
 
         calibration_parameters[f"A_{pol}"] = amplitude_gain
@@ -277,6 +288,9 @@ def _lstbin_phase_calibration(
     )
     calibration_parameters = {f"T_{pol}": [] for pol in unique_pols}
 
+    # Get flags for all nights
+    flags = stack.flagged_or_inpainted()
+
     for nightidx, _ in enumerate(stack.nights):
         for polidx, pol in enumerate(stack.pols):
             cal_bls = []
@@ -289,7 +303,7 @@ def _lstbin_phase_calibration(
             if split_pol1 != split_pol2:
                 continue
 
-            if np.all(stack.flags[nightidx, :, :, polidx]):
+            if np.all(flags[nightidx, :, :, polidx]):
                 # Store phase gains
                 for ant in gain_ants:
                     phase_gains[(ant, f"{split_pol1}")].append(
@@ -303,7 +317,7 @@ def _lstbin_phase_calibration(
             for apidx, (ant1, ant2) in enumerate(stack.antpairs):
                 blpol = (ant1, ant2, pol)
 
-                if np.all(stack.flags[nightidx, apidx, :, polidx]):
+                if np.all(flags[nightidx, apidx, :, polidx]):
                     continue
 
                 cal_bls.append(blpol)
@@ -332,7 +346,7 @@ def _lstbin_phase_calibration(
                 )[0]
                 phase_gains[(ant, split_pol1)].append(
                     np.where(
-                        np.all(stack.flags[nightidx, :, :, polidx], axis=0),
+                        np.all(flags[nightidx, :, :, polidx], axis=0),
                         1.0 + 0.0j,
                         gain_here,
                     )
@@ -377,6 +391,9 @@ def _lstbin_cross_pol_phase_calibration(
     wgts = {}
     baselines = []
 
+    # Get flags for all nights
+    flags = stack.flagged_or_inpainted()
+
     # Loop through baselines and polarizations
     for polidx, pol in enumerate(stack.pols):
         pol1, pol2 = utils.split_pol(pol)
@@ -387,14 +404,14 @@ def _lstbin_cross_pol_phase_calibration(
         for apidx, (ant1, ant2) in enumerate(stack.antpairs):
 
             # Move to the next blpol if there is not a model for the data or the entire baseline is flagged
-            if np.all(stack.flags[:, apidx, :, polidx]):
+            if np.all(flags[:, apidx, :, polidx]):
                 continue
 
             # Get model, weights, and data for each baseline
             wgts[(ant1, ant2, pol)] = np.where(
                 np.isfinite(stack.data[:, apidx, :, polidx]),
                 stack.nsamples[:, apidx, :, polidx] * (
-                    ~stack.flags[:, apidx, :, polidx]
+                    ~flags[:, apidx, :, polidx]
                 ).astype(float),
                 0.0,
             )
@@ -530,7 +547,7 @@ def lstbin_absolute_calibration(
     calibration_parameters = {}
 
     # Check to see if all nights are flagged
-    all_nights_flagged = np.all(stack.flags)
+    all_nights_flagged = np.all(stack.flagged_or_inpainted())
 
     # Get the unique antenna-polarizations
     unique_pols = list(
