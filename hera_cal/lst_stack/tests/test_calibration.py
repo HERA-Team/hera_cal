@@ -352,7 +352,7 @@ class TestLSTBinCalibration:
         auto_stack_copy.data *= gains[:, None, :, :] ** 2
         model = np.mean(self.stack.data, axis=0)
         auto_model = np.mean(self.auto_stack.data, axis=0)
-        
+
         # Calculate parameters with positive nsamples
         cal_params, gains = calibration.lstbin_absolute_calibration(
             stack_copy,

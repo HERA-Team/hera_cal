@@ -219,7 +219,7 @@ def _lstbin_amplitude_calibration(
 
             # Compute the weights for the baseline from the number of samples and flags
             # Here, we use the absolute value of the number of samples to ensure we have a positive weight
-            # when the data has been flagged and inpainted.  
+            # when the data has been flagged and inpainted.
             wgts_here[blpol] = np.abs(stack.nsamples[:, apidx, :, polidx]) * (
                 ~flags[:, apidx, :, polidx]
             ).astype(float)
