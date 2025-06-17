@@ -86,7 +86,7 @@ def _expand_degeneracies_to_ant_gains(
 
         # Get consensus flagging pattern
         if use_inpainted_data:
-            flags_here = stack.flags | (~stack.inpainted())
+            flags_here = np.all(stack.flags | (~stack.inpainted()), axis=1)
         else:
             flags_here = np.all(stack.flagged_or_inpainted(), axis=1)
 
@@ -113,7 +113,7 @@ def _expand_degeneracies_to_ant_gains(
 
     # Get flags common to all baselines
     if use_inpainted_data:
-        flags = stack.flags | (~stack.inpainted())
+        flags = np.all(stack.flags | (~stack.inpainted()), axis=1)
     else:
         flags = np.all(stack.flagged_or_inpainted(), axis=1)
 
