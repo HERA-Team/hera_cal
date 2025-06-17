@@ -330,3 +330,63 @@ class TestLSTBinCalibration:
 
         post_cal_std = np.std(stack_copy.data, axis=0)
         assert np.all(np.isclose(post_cal_std[..., 2:], 0))
+
+    def test_negative_nsamples(self):
+        stack_copy = self.stack.copy()
+        auto_stack_copy = self.auto_stack.copy()
+        stack_copy.data = self.stack.data.copy()
+        stack_copy.flags = self.stack.flags.copy()
+        auto_stack_copy = self.auto_stack.copy()
+        auto_stack_copy.data = self.auto_stack.data.copy()
+        auto_stack_copy.flags = self.auto_stack.flags.copy()
+        gains = self.rng.normal(1, 0.1, size=(20, stack_copy.data.shape[2], 2))
+        tip_tilt = self.rng.normal(0, 0.1, size=(20, self.stack.data.shape[2], 2))
+        phs_gains = np.array(
+            [
+                np.exp(1j * tip_tilt * (self.antpos[ant2] - self.antpos[ant1])[0])
+                for (ant1, ant2) in self.stack.antpairs
+            ]
+        )
+        phs_gains = np.transpose(phs_gains, (1, 0, 2, 3))
+        stack_copy.data *= gains[:, None, :, :] ** 2 * phs_gains
+        auto_stack_copy.data *= gains[:, None, :, :] ** 2
+        model = np.mean(self.stack.data, axis=0)
+        auto_model = np.mean(self.auto_stack.data, axis=0)
+        
+        # Calculate parameters with positive nsamples
+        cal_params, gains = calibration.lstbin_absolute_calibration(
+            stack_copy,
+            model,
+            all_reds=[],
+            run_amplitude_cal=False,
+            run_phase_cal=False,
+            run_cross_pol_phase_cal=True,
+            calibrate_inplace=False,
+            smooth_gains=False,
+        )
+
+        # Now set nsamples to negative values
+        stack_copy.nsamples = -np.abs(stack_copy.nsamples)
+        auto_stack_copy.nsamples = -np.abs(auto_stack_copy.nsamples)
+        cal_params_neg, gains_neg = calibration.lstbin_absolute_calibration(
+            stack_copy,
+            model,
+            all_reds=[],
+            run_amplitude_cal=False,
+            run_phase_cal=False,
+            run_cross_pol_phase_cal=True,
+            calibrate_inplace=False,
+            smooth_gains=False,
+        )
+
+        # Check that the parameters are the same
+        for key in cal_params:
+            assert np.allclose(
+                cal_params[key], cal_params_neg[key], equal_nan=True
+            ), f"Mismatch in {key} after setting nsamples to negative values."
+
+        # Check that gains are the same
+        for key in gains:
+            assert np.allclose(
+                gains[key], gains_neg[key], equal_nan=True
+            ), f"Mismatch in gains for {key} after setting nsamples to negative values."

@@ -216,6 +216,10 @@ def _lstbin_amplitude_calibration(
                 (len(stack.nights), 1)
             )
             data_here[blpol] = stack.data[:, apidx, :, polidx]
+
+            # Compute the weights for the baseline from the number of samples and flags
+            # Here, we use the absolute value of the number of samples to ensure we have a positive weight
+            # when the data has been flagged and inpainted.  
             wgts_here[blpol] = np.abs(stack.nsamples[:, apidx, :, polidx]) * (
                 ~flags[:, apidx, :, polidx]
             ).astype(float)
@@ -250,6 +254,10 @@ def _lstbin_amplitude_calibration(
                     (len(auto_stack.nights), 1)
                 )
                 data_here[blpol] = auto_stack.data[:, apidx, :, polidx]
+
+                # Compute the weights for the baseline from the number of samples and flags
+                # Here, we use the absolute value of the number of samples to ensure we have a positive weight
+                # when the data has been flagged and inpainted.
                 wgts_here[blpol] = np.abs(auto_stack.nsamples[:, apidx, :, polidx]) * (
                     ~auto_flags[:, apidx, :, polidx]
                 ).astype(float)
@@ -438,7 +446,9 @@ def _lstbin_cross_pol_phase_calibration(
             if np.all(flags[:, apidx, :, polidx]):
                 continue
 
-            # Get model, weights, and data for each baseline
+            # Compute the weights for the baseline from the number of samples and flags
+            # Here, we use the absolute value of the number of samples to ensure we have a positive weight
+            # when the data has been flagged and inpainted.
             wgts[(ant1, ant2, pol)] = np.where(
                 np.isfinite(stack.data[:, apidx, :, polidx]),
                 np.abs(stack.nsamples[:, apidx, :, polidx]) * (
