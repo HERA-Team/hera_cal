@@ -222,7 +222,7 @@ def _lstbin_amplitude_calibration(
 
     # If autos are provided and use_autos_for_abscal is True, use them for amplitude calibration
     if use_autos_for_abscal and auto_stack is not None:
-        
+
         # Use inpainted data if specified
         if use_inpainted_data:
             auto_flags = auto_stack.flags
@@ -270,8 +270,8 @@ def _lstbin_amplitude_calibration(
         # Calibration parameters store in an N_nights by N_freqs array
         polidx = stack.pols.index(utils.join_pol(pol, pol))
         amplitude_gain = np.where(
-            np.all(flags[..., polidx], axis=1), 
-            1.0 + 0.0j, 
+            np.all(flags[..., polidx], axis=1),
+            1.0 + 0.0j,
             solution[f"A_{pol}"]
         )
 
@@ -633,9 +633,9 @@ def lstbin_absolute_calibration(
 
         if cross_pols_in_data:
             delta = _lstbin_cross_pol_phase_calibration(
-                stack=stack, 
-                model=model, 
-                refpol=refpol, 
+                stack=stack,
+                model=model,
+                refpol=refpol,
                 use_inpainted_data=use_inpainted_data
             )
             calibration_parameters["delta"] = delta
