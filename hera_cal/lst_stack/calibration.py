@@ -15,6 +15,7 @@ def _expand_degeneracies_to_ant_gains(
     smooth_gains: bool = True,
     smoothing_scale: float = 10e6,
     eigenval_cutoff: float = 1e-12,
+    use_inpainted_data: bool = True,
 ):
     """
     This function expands the degenerate calibration parameters to per-antenna gains. The function
@@ -42,6 +43,10 @@ def _expand_degeneracies_to_ant_gains(
             smoothing function in Hz.
         eigenval_cutoff : float, default=1e-12
             The cutoff for the eigenvalues of the DPSS eigenvectors.
+        use_inpainted_data : bool, default=True
+            Boolean flag to use inpainted data for gain smoothing. If set to True, all channels that had
+            been inpainted over will be used to smooth the gains. If set to False, only the
+            unflagged channels will be used to smooth the gains.
 
     Returns:
     -------
@@ -80,7 +85,10 @@ def _expand_degeneracies_to_ant_gains(
             )
 
         # Get consensus flagging pattern
-        flags_here = np.all(stack.flagged_or_inpainted(), axis=1)
+        if use_inpainted_data:
+            flags_here = stack.flags | (~stack.inpainted())
+        else:
+            flags_here = np.all(stack.flagged_or_inpainted(), axis=1)
 
         # Compute matrices for linear least-squares fits
         fmats = {pol: [] for pol in unique_pols}
@@ -104,7 +112,10 @@ def _expand_degeneracies_to_ant_gains(
     gains = {}
 
     # Get flags common to all baselines
-    flags = np.all(stack.flagged_or_inpainted(), axis=1)
+    if use_inpainted_data:
+        flags = stack.flags | (~stack.inpainted())
+    else:
+        flags = np.all(stack.flagged_or_inpainted(), axis=1)
 
     # Map antenna-polarizations to visibility indices
     antpol_to_idx = {
@@ -166,6 +177,7 @@ def _lstbin_amplitude_calibration(
     auto_stack: LSTStack = None,
     auto_model: np.ndarray = None,
     use_autos_for_abscal: bool = True,
+    use_inpainted_data: bool = True,
 ):
     """
     This function performs amplitude calibration on LSTStack object by comparing each day to an input
@@ -178,7 +190,10 @@ def _lstbin_amplitude_calibration(
     abscal_model = {}
 
     # Get flags for all nights
-    flags = stack.flagged_or_inpainted()
+    if use_inpainted_data:
+        flags = stack.flags | (~stack.inpainted())
+    else:
+        flags = stack.flagged_or_inpainted()
 
     # Loop through baselines and polarizations
     for polidx, pol in enumerate(stack.pols):
@@ -201,14 +216,20 @@ def _lstbin_amplitude_calibration(
                 (len(stack.nights), 1)
             )
             data_here[blpol] = stack.data[:, apidx, :, polidx]
-            wgts_here[blpol] = stack.nsamples[:, apidx, :, polidx] * (
+            wgts_here[blpol] = np.abs(stack.nsamples[:, apidx, :, polidx]) * (
                 ~flags[:, apidx, :, polidx]
             ).astype(float)
 
     # If autos are provided and use_autos_for_abscal is True, use them for amplitude calibration
     if use_autos_for_abscal and auto_stack is not None:
-        # Check if auto_stack is flagged or inpainted
-        auto_flags = auto_stack.flagged_or_inpainted()
+        
+        # Use inpainted data if specified
+        if use_inpainted_data:
+            auto_flags = auto_stack.flags | (~auto_stack.inpainted())
+        else:
+            # Use the flagged or inpainted data
+            auto_flags = auto_stack.flagged_or_inpainted()
+
         for polidx, pol in enumerate(stack.pols):
             pol1, pol2 = utils.split_pol(pol)
 
@@ -229,7 +250,7 @@ def _lstbin_amplitude_calibration(
                     (len(auto_stack.nights), 1)
                 )
                 data_here[blpol] = auto_stack.data[:, apidx, :, polidx]
-                wgts_here[blpol] = auto_stack.nsamples[:, apidx, :, polidx] * (
+                wgts_here[blpol] = np.abs(auto_stack.nsamples[:, apidx, :, polidx]) * (
                     ~auto_flags[:, apidx, :, polidx]
                 ).astype(float)
 
@@ -261,6 +282,7 @@ def _lstbin_phase_calibration(
     stack: LSTStack,
     model: np.ndarray,
     all_reds: list[list[tuple]],
+    use_inpainted_data: bool = True,
 ):
     """
     This function performs phase calibration on LSTStack object by comparing each day to an input
@@ -289,7 +311,10 @@ def _lstbin_phase_calibration(
     calibration_parameters = {f"T_{pol}": [] for pol in unique_pols}
 
     # Get flags for all nights
-    flags = stack.flagged_or_inpainted()
+    if use_inpainted_data:
+        flags = stack.flags | (~stack.inpainted())
+    else:
+        flags = stack.flagged_or_inpainted()
 
     for nightidx, _ in enumerate(stack.nights):
         for polidx, pol in enumerate(stack.pols):
@@ -380,6 +405,7 @@ def _lstbin_cross_pol_phase_calibration(
     stack: LSTStack,
     model: np.ndarray,
     refpol="Jee",
+    use_inpainted_data: bool = True,
 ):
     """
     This function performs cross-polarization phase calibration on LSTStack object by comparing each day to an input
@@ -392,7 +418,10 @@ def _lstbin_cross_pol_phase_calibration(
     baselines = []
 
     # Get flags for all nights
-    flags = stack.flagged_or_inpainted()
+    if use_inpainted_data:
+        flags = stack.flags | (~stack.inpainted())
+    else:
+        flags = stack.flagged_or_inpainted()
 
     # Loop through baselines and polarizations
     for polidx, pol in enumerate(stack.pols):
@@ -410,7 +439,7 @@ def _lstbin_cross_pol_phase_calibration(
             # Get model, weights, and data for each baseline
             wgts[(ant1, ant2, pol)] = np.where(
                 np.isfinite(stack.data[:, apidx, :, polidx]),
-                stack.nsamples[:, apidx, :, polidx] * (
+                np.abs(stack.nsamples[:, apidx, :, polidx]) * (
                     ~flags[:, apidx, :, polidx]
                 ).astype(float),
                 0.0,
@@ -446,6 +475,7 @@ def lstbin_absolute_calibration(
     calibrate_inplace: bool = True,
     smooth_gains: bool = True,
     use_autos_for_abscal: bool = True,
+    use_inpainted_data: bool = True,
     refpol: str = "Jee",
 ):
     """
@@ -563,6 +593,7 @@ def lstbin_absolute_calibration(
             auto_stack=auto_stack,
             auto_model=auto_model,
             use_autos_for_abscal=use_autos_for_abscal,
+            use_inpainted_data=use_inpainted_data,
         )
         for key in amp_cal_params:
             calibration_parameters[key] = amp_cal_params[key]
@@ -580,6 +611,7 @@ def lstbin_absolute_calibration(
             stack=stack,
             model=model,
             all_reds=all_reds,
+            use_inpainted_data=use_inpainted_data,
         )
         for key in phs_cal_params:
             calibration_parameters[key] = phs_cal_params[key]
@@ -598,7 +630,12 @@ def lstbin_absolute_calibration(
         cross_pols_in_data = any(utils.split_pol(pol)[0] != utils.split_pol(pol)[1] for pol in stack.pols)
 
         if cross_pols_in_data:
-            delta = _lstbin_cross_pol_phase_calibration(stack=stack, model=model)
+            delta = _lstbin_cross_pol_phase_calibration(
+                stack=stack, 
+                model=model, 
+                refpol=refpol, 
+                use_inpainted_data=use_inpainted_data
+            )
             calibration_parameters["delta"] = delta
 
             # Get antennas
