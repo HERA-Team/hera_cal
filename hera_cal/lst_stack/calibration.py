@@ -270,7 +270,9 @@ def _lstbin_amplitude_calibration(
         # Calibration parameters store in an N_nights by N_freqs array
         polidx = stack.pols.index(utils.join_pol(pol, pol))
         amplitude_gain = np.where(
-            np.all(flags[..., polidx], axis=1), 1.0 + 0.0j, solution[f"A_{pol}"]
+            np.all(flags[..., polidx], axis=1), 
+            1.0 + 0.0j, 
+            solution[f"A_{pol}"]
         )
 
         calibration_parameters[f"A_{pol}"] = amplitude_gain
