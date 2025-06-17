@@ -86,7 +86,7 @@ def _expand_degeneracies_to_ant_gains(
 
         # Get consensus flagging pattern
         if use_inpainted_data:
-            flags_here = np.all(stack.flags & (stack.nsamples > 0), axis=1)
+            flags_here = np.all(stack.flags, axis=1)
         else:
             flags_here = np.all(stack.flagged_or_inpainted(), axis=1)
 
@@ -113,7 +113,7 @@ def _expand_degeneracies_to_ant_gains(
 
     # Get flags common to all baselines
     if use_inpainted_data:
-        flags = np.all(stack.flags & (stack.nsamples > 0), axis=1)
+        flags = np.all(stack.flags, axis=1)
     else:
         flags = np.all(stack.flagged_or_inpainted(), axis=1)
 
@@ -191,7 +191,7 @@ def _lstbin_amplitude_calibration(
 
     # Get flags for all nights
     if use_inpainted_data:
-        flags = stack.flags & (stack.nsamples > 0)
+        flags = stack.flags
     else:
         flags = stack.flagged_or_inpainted()
 
@@ -225,7 +225,7 @@ def _lstbin_amplitude_calibration(
         
         # Use inpainted data if specified
         if use_inpainted_data:
-            auto_flags = auto_stack.flags & (auto_stack.nsamples > 0)
+            auto_flags = auto_stack.flags
         else:
             # Use the flagged or inpainted data
             auto_flags = auto_stack.flagged_or_inpainted()
@@ -312,7 +312,7 @@ def _lstbin_phase_calibration(
 
     # Get flags for all nights
     if use_inpainted_data:
-        flags = stack.flags & (stack.nsamples > 0)
+        flags = stack.flags
     else:
         flags = stack.flagged_or_inpainted()
 
@@ -419,7 +419,7 @@ def _lstbin_cross_pol_phase_calibration(
 
     # Get flags for all nights
     if use_inpainted_data:
-        flags = stack.flags & (stack.nsamples > 0)
+        flags = stack.flags
     else:
         flags = stack.flagged_or_inpainted()
 
