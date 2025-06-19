@@ -356,6 +356,13 @@ nights = {nights}
         assert cfg.datadir == str(tmp_path)
         assert "0_1" in cfg.bl_to_file_map
 
+    def test_error_wrong_type(self, tmp_path):
+        toml_file = tmp_path / "cfg.toml"
+        with toml_file.open("w") as fl:
+            fl.write("[Options]\nmakeflow_type = 'analysis'\n")
+        with pytest.raises(ValueError):
+            config.LSTBinConfiguratorSingleBaseline.from_toml(toml_file)
+
 
 class TestLSTConfig:
     def get_lstconfig(self, season: str, request) -> config.LSTConfig:
