@@ -740,7 +740,7 @@ class LSTBinConfiguratorSingleBaseline():
                 if bl in bl_to_file_map:
                     bl_to_file_map[bl].append(template.format(baseline=bl))
                 elif reverse_bl in bl_to_file_map:
-                    bl_to_file_map[reverse_bl].append(template.format(baseline=reverse_bl))
+                    bl_to_file_map[reverse_bl].append(template.format(baseline=bl))
                 else:
                     bl_to_file_map[bl] = [template.format(baseline=bl)]
         return bl_to_file_map
