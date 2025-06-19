@@ -305,6 +305,96 @@ class TestLSTBinConfigurator:
         assert cfg.data_files == allfiles
 
 
+class TestLSTBinConfiguratorSingleBaseline():
+    """Tests for the LSTBinConfiguratorSingleBaseline class."""
+
+    def _create_files(self, tmp_path: Path, nights: list[str], baselines: list[str]):
+        """Helper to create fake single-baseline files."""
+        for night in nights:
+            night_dir = tmp_path / night
+            night_dir.mkdir(parents=True, exist_ok=True)
+            for bl in baselines:
+                fl = night_dir / f"{bl}.uvh5"
+                fl.touch()
+
+    def test_build_bl_to_file_map(self, tmp_path):
+        nights = ["2458001", "2458002"]
+        baselines = ["0_1", "1_2"]
+        self._create_files(tmp_path, nights, baselines)
+
+        cfg = config.LSTBinConfiguratorSingleBaseline(
+            datadir=tmp_path, nights=nights, fileglob="{night}/{baseline}.uvh5"
+        )
+
+        for bl in baselines:
+            assert bl in cfg.bl_to_file_map
+            assert len(cfg.bl_to_file_map[bl]) == len(nights)
+            for n, fl in zip(nights, cfg.bl_to_file_map[bl]):
+                assert Path(fl) == tmp_path / n / f"{bl}.uvh5"
+
+    def test_from_toml(self, tmp_path):
+        nights = ["2458001", "2458002"]
+        baselines = ["0_1"]
+        self._create_files(tmp_path, nights, baselines)
+
+        toml_file = tmp_path / "cfg.toml"
+        with toml_file.open("w") as fl:
+            fl.write(
+                """
+[Options]
+makeflow_type = 'lstbin_single_baseline'
+[FILE_CFG.datafiles]
+datadir = '{datadir}'
+nights = {nights}
+""".format(datadir=tmp_path, nights=nights) +
+"fileglob = '{night}/{baseline}.uvh5'"
+            )
+        cfg = config.LSTBinConfiguratorSingleBaseline.from_toml(toml_file)
+
+        assert cfg.nights == nights
+        assert cfg.datadir == str(tmp_path)
+        assert "0_1" in cfg.bl_to_file_map
+
+    def test_error_wrong_type(self, tmp_path):
+        toml_file = tmp_path / "cfg.toml"
+        with toml_file.open("w") as fl:
+            fl.write("[Options]\nmakeflow_type = 'analysis'\n")
+        with pytest.raises(ValueError):
+            config.LSTBinConfiguratorSingleBaseline.from_toml(toml_file)
+
+    def test_error_on_reverse_baselines_same_night(self, tmp_path):
+        """Ensure an error is raised if both baseline orientations exist."""
+        night = "2458001"
+        self._create_files(tmp_path, [night], ["0_1", "1_0"])
+
+        with pytest.raises(ValueError):
+            config.LSTBinConfiguratorSingleBaseline(
+                datadir=tmp_path,
+                nights=[night],
+                fileglob="{night}/{baseline}.uvh5",
+            )
+
+    def test_reverse_baseline_appends_to_existing_key(self, tmp_path):
+        """Check that reversed baselines are grouped under the same key."""
+        night1 = "2458001"
+        night2 = "2458002"
+        self._create_files(tmp_path, [night1], ["0_1"])
+        self._create_files(tmp_path, [night2], ["1_0"])
+
+        cfg = config.LSTBinConfiguratorSingleBaseline(
+            datadir=tmp_path,
+            nights=[night1, night2],
+            fileglob="{night}/{baseline}.uvh5",
+        )
+
+        assert "0_1" in cfg.bl_to_file_map
+        assert "1_0" not in cfg.bl_to_file_map
+        assert sorted(cfg.bl_to_file_map["0_1"]) == sorted([
+            str(tmp_path / night1 / "0_1.uvh5"),
+            str(tmp_path / night2 / "1_0.uvh5"),
+        ])
+
+
 class TestLSTConfig:
     def get_lstconfig(self, season: str, request) -> config.LSTConfig:
         cfg = config.LSTBinConfigurator(
