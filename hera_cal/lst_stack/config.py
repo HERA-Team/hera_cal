@@ -702,10 +702,9 @@ class LSTBinConfiguratorSingleBaseline():
         Parameters
         ----------
         toml_file : str or Path
-            The path to a toml file that contains the "lstbin_single_baseline" type
-            LSTBinConfiguratorSingleBaseline. The toml file should have a section
-            called "FILE_CFG" with a sub-section called "datafiles" that contains
-            "datadir", "nights", and "fileglob" keys.
+            The path to a toml file has makeflow_type = "lstbin_single_baseline".
+            The toml file should have a section called "FILE_CFG" with a sub-section
+            called "datafiles" that contains "datadir", "nights", and "fileglob" keys.
         '''
         dct = toml.load(Path(toml_file))
         if dct['Options']['makeflow_type'] != 'lstbin_single_baseline':
