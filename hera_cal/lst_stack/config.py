@@ -669,7 +669,7 @@ class LSTBinConfigurator:
 
 
 class LSTBinConfiguratorSingleBaseline():
-    '''This is a much simpler, less fully featured verion of LSTBinConfigurator,
+    '''This is a much simpler, less fully featured version of LSTBinConfigurator,
     designed for LST-binning single baseline (generally 4-pol) files together
     across nights. Its main goal is '''
 
@@ -680,7 +680,7 @@ class LSTBinConfiguratorSingleBaseline():
         ----------
         datadir : str or Path
             The directory where the analysis takes place. When combined with fileglob,
-            this should give complete paths to singe-baseline, full-night files.
+            this should give complete paths to single-baseline, full-night files.
         nights : list of str
             A list of JD nights to include. Each night should be a string that can be
             used to replace the "{night}" in fileglob.

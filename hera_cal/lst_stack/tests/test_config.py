@@ -10,7 +10,6 @@ import toml
 import attrs
 import re
 import copy
-import os
 
 
 class TestFixdLST:
