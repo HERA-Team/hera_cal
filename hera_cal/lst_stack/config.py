@@ -723,9 +723,9 @@ class LSTBinConfiguratorSingleBaseline():
             with the order reversed (e.g. "1_0" for "0_1") and include them too.
         '''
         bl_to_file_map = {}
-        for night in cfg.nights:
+        for night in self.nights:
             # find all unique values of {baseline} after replacing {night} in datadir + fileglob
-            template = os.path.join(cfg.datadir, cfg.fileglob.replace('{night}', night))
+            template = os.path.join(self.datadir, self.fileglob.replace('{night}', night))
             prefix, suffix = template.split('{baseline}', 1)
             rx = re.compile(rf'{re.escape(prefix)}(.+?){re.escape(suffix)}$')
             bls = {rx.match(f).group(1) for f in glob.glob(template.replace('{baseline}', '*'))}
