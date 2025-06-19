@@ -362,6 +362,38 @@ nights = {nights}
         with pytest.raises(ValueError):
             config.LSTBinConfiguratorSingleBaseline.from_toml(toml_file)
 
+    def test_error_on_reverse_baselines_same_night(self, tmp_path):
+        """Ensure an error is raised if both baseline orientations exist."""
+        night = "2458001"
+        self._create_files(tmp_path, [night], ["0_1", "1_0"])
+
+        with pytest.raises(ValueError):
+            config.LSTBinConfiguratorSingleBaseline(
+                datadir=tmp_path,
+                nights=[night],
+                fileglob="{night}/{baseline}.uvh5",
+            )
+
+    def test_reverse_baseline_appends_to_existing_key(self, tmp_path):
+        """Check that reversed baselines are grouped under the same key."""
+        night1 = "2458001"
+        night2 = "2458002"
+        self._create_files(tmp_path, [night1], ["0_1"])
+        self._create_files(tmp_path, [night2], ["1_0"])
+
+        cfg = config.LSTBinConfiguratorSingleBaseline(
+            datadir=tmp_path,
+            nights=[night1, night2],
+            fileglob="{night}/{baseline}.uvh5",
+        )
+
+        assert "0_1" in cfg.bl_to_file_map
+        assert "1_0" not in cfg.bl_to_file_map
+        assert sorted(cfg.bl_to_file_map["0_1"]) == sorted([
+            str(tmp_path / night1 / "0_1.uvh5"),
+            str(tmp_path / night2 / "1_0.uvh5"),
+        ])
+
 
 class TestLSTConfig:
     def get_lstconfig(self, season: str, request) -> config.LSTConfig:
