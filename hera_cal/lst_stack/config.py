@@ -674,6 +674,7 @@ class LSTBinConfiguratorSingleBaseline():
     across nights. Its main goal is to use a toml to find all files matching a given
     (generally redundantly averaged) baseline across nights, assuming that all redundantly
     averaged baselines with the same separation are keyed by the same antenna pair.
+    Unlike LSTBinConfigurator, it only looks at filenames, not metadata, to find files.
     It is used by hera_opm.mf_tools.build_lstbin_single_baseline_makeflow_from_config().'''
 
     def __init__(self, datadir: str | Path, nights: list[str], fileglob: str):
