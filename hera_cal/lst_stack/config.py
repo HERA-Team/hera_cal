@@ -671,10 +671,13 @@ class LSTBinConfigurator:
 class LSTBinConfiguratorSingleBaseline():
     '''This is a much simpler, less fully featured version of LSTBinConfigurator,
     designed for LST-binning single baseline (generally 4-pol) files together
-    across nights. Its main goal is '''
+    across nights. Its main goal is to use a toml to find all files matching a given
+    (generally redundantly averaged) baseline across nights, assuming that all redundantly
+    averaged baselines with the same separation are keyed by the same antenna pair.
+    It is used by hera_opm.mf_tools.build_lstbin_single_baseline_makeflow_from_config().'''
 
     def __init__(self, datadir: str | Path, nights: list[str], fileglob: str):
-        '''Constuctors object from a datadir, nights, and fileglob.
+        '''Constuct object from a datadir, nights, and fileglob.
 
         Parameters
         ----------
@@ -711,7 +714,9 @@ class LSTBinConfiguratorSingleBaseline():
             raise ValueError(f"Expected 'makeflow_type' to be 'lstbin_single_baseline', "
                              f"but got {dct['Options']['makeflow_type']}.")
         datafiles_cfg = dct['FILE_CFG']['datafiles']
-        return cls(datafiles_cfg['datadir'], datafiles_cfg['nights'], datafiles_cfg['fileglob'])
+        return cls(datadir=datafiles_cfg['datadir'],
+                   nights=datafiles_cfg['nights'],
+                   fileglob=datafiles_cfg['fileglob'])
 
     def build_bl_to_file_map(self) -> dict[str, list[str]]:
         '''Build a dictionary mapping from baseline to file paths.
@@ -720,9 +725,9 @@ class LSTBinConfiguratorSingleBaseline():
         -------
         bl_to_file_map : dict[str, list[str]]
             A dictionary mapping from baseline names (e.g. "0_1") to lists of file paths, one per night
-            on which that baseline was found. All baselines with the same separation must be keyed by the
-            same antenna pair. Ideally, they'd also be in the same order, but this function will find those
-            with the order reversed (e.g. "1_0" for "0_1") and include them too.
+            on which that baseline was found. All redundantly averaged baselines with the same separation
+            must be keyed by the same antenna pair. Ideally, they'd also be in the same order, but this
+            function will find those with the order reversed (e.g. "1_0" for "0_1") and include them too.
         '''
         bl_to_file_map = {}
         for night in self.nights:
