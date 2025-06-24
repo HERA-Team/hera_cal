@@ -57,6 +57,9 @@ import h5py
 from .io import apply_filename_rules, filter_required_files_by_times
 from abc import ABC
 import toml
+import os
+import re
+import glob
 
 logger = logging.getLogger(__name__)
 
@@ -663,6 +666,90 @@ class LSTBinConfigurator:
                 dct[k] = None
 
         return cls(**dct)
+
+
+class LSTBinConfiguratorSingleBaseline():
+    '''This is a much simpler, less fully featured version of LSTBinConfigurator,
+    designed for LST-binning single baseline (generally 4-pol) files together
+    across nights. Its main goal is to use a toml to find all files matching a given
+    (generally redundantly averaged) baseline across nights, assuming that all redundantly
+    averaged baselines with the same separation are keyed by the same antenna pair.
+    Unlike LSTBinConfigurator, it only looks at filenames, not metadata, to find files.
+    It is used by hera_opm.mf_tools.build_lstbin_single_baseline_makeflow_from_config().'''
+
+    def __init__(self, datadir: str | Path, nights: list[str], fileglob: str):
+        '''Constuct object from a datadir, nights, and fileglob.
+
+        Parameters
+        ----------
+        datadir : str or Path
+            The directory where the analysis takes place. When combined with fileglob,
+            this should give complete paths to single-baseline, full-night files.
+        nights : list of str
+            A list of JD nights to include. Each night should be a string that can be
+            used to replace the "{night}" in fileglob.
+        fileglob : str
+            A string glob pattern to search for files. This string should contain at least
+            one instance of "{night}" to be replaced by JDs in ``nights``. Likewise, the
+            string should also contain an instance of "{baseline}" which can be replaced
+            by the baseline name (e.g. "0_1") to find the file for that night and baseline.
+        '''
+        self.datadir = datadir
+        self.nights = nights
+        self.fileglob = fileglob
+        self.bl_to_file_map = self.build_bl_to_file_map()
+
+    @classmethod
+    def from_toml(cls, toml_file: str | Path) -> LSTBinConfiguratorSingleBaseline:
+        '''Build a LSTBinConfiguratorSingleBaseline from a toml file
+
+        Parameters
+        ----------
+        toml_file : str or Path
+            The path to a toml file has makeflow_type = "lstbin_single_baseline".
+            The toml file should have a section called "FILE_CFG" with a sub-section
+            called "datafiles" that contains "datadir", "nights", and "fileglob" keys.
+        '''
+        dct = toml.load(Path(toml_file))
+        if dct['Options']['makeflow_type'] != 'lstbin_single_baseline':
+            raise ValueError(f"Expected 'makeflow_type' to be 'lstbin_single_baseline', "
+                             f"but got {dct['Options']['makeflow_type']}.")
+        datafiles_cfg = dct['FILE_CFG']['datafiles']
+        return cls(datadir=datafiles_cfg['datadir'],
+                   nights=datafiles_cfg['nights'],
+                   fileglob=datafiles_cfg['fileglob'])
+
+    def build_bl_to_file_map(self) -> dict[str, list[str]]:
+        '''Build a dictionary mapping from baseline to file paths.
+
+        Returns
+        -------
+        bl_to_file_map : dict[str, list[str]]
+            A dictionary mapping from baseline names (e.g. "0_1") to lists of file paths, one per night
+            on which that baseline was found. All redundantly averaged baselines with the same separation
+            must be keyed by the same antenna pair. Ideally, they'd also be in the same order, but this
+            function will find those with the order reversed (e.g. "1_0" for "0_1") and include them too.
+        '''
+        bl_to_file_map = {}
+        for night in self.nights:
+            # find all unique values of {baseline} after replacing {night} in datadir + fileglob
+            template = os.path.join(self.datadir, self.fileglob.replace('{night}', night))
+            prefix, suffix = template.split('{baseline}', 1)
+            rx = re.compile(rf'{re.escape(prefix)}(.+?){re.escape(suffix)}$')
+            bls = {rx.match(f).group(1) for f in glob.glob(template.replace('{baseline}', '*'))}
+
+            # put files into m
+            for bl in bls:
+                reverse_bl = '_'.join(bl.split('_')[::-1])
+                if (reverse_bl != bl) and (reverse_bl in bls):
+                    raise ValueError(f'Found both {bl} and {reverse_bl} on {night}.')
+                if bl in bl_to_file_map:
+                    bl_to_file_map[bl].append(template.format(baseline=bl))
+                elif reverse_bl in bl_to_file_map:
+                    bl_to_file_map[reverse_bl].append(template.format(baseline=bl))
+                else:
+                    bl_to_file_map[bl] = [template.format(baseline=bl)]
+        return bl_to_file_map
 
 
 def _nested_list_of(cls):
