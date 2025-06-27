@@ -213,6 +213,17 @@ def test_get_minimal_slices_band_without_false():
             np.array([[1, 0, 1],
                       [0, 1, 2]], dtype=float),
         ),
+        # 3-D case
+        (
+            np.array([[[0, 1, 0],      # first row, first “plane”
+                       [0, 0, 2]],
+                      [[3, 0, 0],      # second “plane”
+                       [0, 0, 0]]]),
+            np.array([[[1, 0, 1],
+                       [2, 1, 0]],
+                      [[0, 1, 2],
+                       [np.inf, np.inf, np.inf]]], dtype=float),
+        ),
     ],
 )
 def test_expected_values(arr, expected):
