@@ -315,6 +315,7 @@ def distance_to_nearest_nonzero(arr: np.ndarray) -> np.ndarray:
         to the nearest nonzero entry in `arr` along the last axis.
     """
     L = arr.shape[-1]  # length of the last axis
+    # Use a floating-point index array to support comparisons with -np.inf and np.inf.
     idx = np.arange(L, dtype=float)  # shape (L,)
     # Broadcast `idx` so it has one trailing axis of length L
     idx = idx.reshape((1,) * (arr.ndim - 1) + (L,))
