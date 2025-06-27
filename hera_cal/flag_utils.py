@@ -296,3 +296,37 @@ def get_minimal_slices(flag_wf, freqs=None, freq_cuts=[]):
                 time_slices[i] = slice(np.min(not_always_flagged_tinds), np.max(not_always_flagged_tinds) + 1)
 
     return time_slices, band_slices
+
+
+def distance_to_nearest_nonzero(arr: np.ndarray) -> np.ndarray:
+    """
+    For each index in `arr`, return the distance (number of indices)
+    to the nearest nonzero entry along the last axis.
+
+    Parameters
+    ----------
+    arr : ndarray
+        Input array.
+
+    Returns
+    -------
+    dist : ndarray
+        Array of the same shape as `arr`, where each entry contains the distance
+        to the nearest nonzero entry in `arr` along the last axis.
+    """
+    L = arr.shape[-1]  # length of the last axis
+    idx = np.arange(L, dtype=float)  # shape (L,)
+    # Broadcast `idx` so it has one trailing axis of length L
+    idx = idx.reshape((1,) * (arr.ndim - 1) + (L,))
+
+    # Nearest non-zero on the left
+    left_pos = np.where(arr != 0, idx, -np.inf)
+    left_pos = np.maximum.accumulate(left_pos, axis=-1)
+    dist_left = np.where(~np.isfinite(left_pos), np.inf, idx - left_pos)
+
+    # Nearest non-zero on the right
+    right_pos = np.where(arr != 0, idx, np.inf)
+    right_pos = np.minimum.accumulate(right_pos[..., ::-1], axis=-1)[..., ::-1]
+    dist_right = np.where(~np.isfinite(right_pos), np.inf, right_pos - idx)
+
+    return np.minimum(dist_left, dist_right)
