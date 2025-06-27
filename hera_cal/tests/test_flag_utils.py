@@ -186,3 +186,71 @@ def test_get_minimal_slices_band_without_false():
 
     assert time_slices[1] is None
     assert band_slices[1] is None
+
+
+@pytest.mark.parametrize(
+    "arr, expected",
+    [
+        # 1-D – interior non-zeros
+        (
+            np.array([0, 0, 3, 0, 0, 5, 0]),
+            np.array([2, 1, 0, 1, 1, 0, 1], dtype=float),
+        ),
+        # 1-D – non-zero only at start
+        (
+            np.array([4, 0, 0, 0, 0]),
+            np.array([0, 1, 2, 3, 4], dtype=float),
+        ),
+        # 1-D – non-zero only at end
+        (
+            np.array([0, 0, 0, 0, 7]),
+            np.array([4, 3, 2, 1, 0], dtype=float),
+        ),
+        # 2-D – verify broadcasting across leading axes
+        (
+            np.array([[0, 1, 0],
+                      [2, 0, 0]]),
+            np.array([[1, 0, 1],
+                      [0, 1, 2]], dtype=float),
+        ),
+    ],
+)
+def test_expected_values(arr, expected):
+    """Exact values for simple cases."""
+    result = flag_utils.distance_to_nearest_nonzero(arr)
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_all_zeros_returns_inf():
+    """If there are no non-zeros at all, the distance should be ∞ everywhere."""
+    arr = np.zeros((3, 4, 5))
+    out = flag_utils.distance_to_nearest_nonzero(arr)
+    assert out.shape == arr.shape
+    assert np.all(np.isinf(out))
+
+
+def test_random_nd_matches_bruteforce():
+    """
+    For a random 3-D array, compare against a slow but simple
+    brute-force implementation to ensure correctness on N-D input.
+    """
+    rng = np.random.default_rng(0)
+    arr = rng.integers(-1, 2, size=(4, 3, 7))  # -1, 0, or 1
+
+    def brute_force(a):
+        out = np.empty_like(a, dtype=float)
+        *lead_axes, L = a.shape
+        for index in np.ndindex(*lead_axes):
+            line = a[index]                      # shape (L,)
+            nz = np.flatnonzero(line)
+            if nz.size == 0:
+                out[index] = np.inf
+                continue
+            for i in range(L):
+                out[index + (i,)] = np.abs(i - nz).min()
+        return out
+
+    np.testing.assert_array_equal(
+        flag_utils.distance_to_nearest_nonzero(arr),
+        brute_force(arr),
+    )
