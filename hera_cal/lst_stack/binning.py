@@ -805,7 +805,7 @@ def lst_bin_files_from_config(
             antenna_numbers=meta.antenna_numbers,
             antenna_positions=meta.antenna_positions,
             instrument=meta.instrument,
-            mount_type=meta.mount_type,
+            mount_type=getattr(meta, "mount_type", None),
             antenna_diameters=meta.antenna_diameters
         )
         telescope.set_feeds_from_x_orientation(meta.x_orientation, feeds=['x', 'y'])  # assumes linear polarization
