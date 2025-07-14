@@ -790,6 +790,11 @@ def lst_bin_files_from_config(
     freqs, _ = _get_freqs_chans(meta.freq_array, freq_min, freq_max)
 
     out = []
+    try:
+        mount_type = meta.mount_type
+    except KeyError:
+        mount_type = None
+
     for (d, f, n, wf, bt) in zip(data, flags, nsamples, where_inpainted, binned_times):
 
         # To enable inpaint-mode, set nsamples where things are flagged and inpainted
@@ -805,7 +810,7 @@ def lst_bin_files_from_config(
             antenna_numbers=meta.antenna_numbers,
             antenna_positions=meta.antenna_positions,
             instrument=meta.instrument,
-            mount_type=getattr(meta, "mount_type", None),
+            mount_type=mount_type,
             antenna_diameters=meta.antenna_diameters
         )
         telescope.set_feeds_from_x_orientation(meta.x_orientation, feeds=['x', 'y'])  # assumes linear polarization
