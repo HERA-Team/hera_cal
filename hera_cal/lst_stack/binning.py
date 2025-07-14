@@ -790,6 +790,9 @@ def lst_bin_files_from_config(
     freqs, _ = _get_freqs_chans(meta.freq_array, freq_min, freq_max)
 
     out = []
+
+    # mount_type didn't always exist so older uvh5 files don't have it and will
+    # error.
     try:
         mount_type = meta.mount_type
     except KeyError:
