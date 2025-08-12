@@ -10,6 +10,7 @@ import sys
 from collections import OrderedDict as odict
 import copy
 import glob
+from astropy import units as u
 from pyuvdata import UVData
 from pyuvdata import utils as uvutils
 import unittest
@@ -1332,3 +1333,45 @@ def test_get_corr_and_factor():
     # Test for invalid tslc type (e.g., an integer)
     with pytest.raises(ValueError, match="tslc must be None, a slice, or a boolean numpy array."):
         frf.get_correction_factor_from_cov(cov, tslc=5)
+
+
+def test_get_FR_buffer_from_spectra():
+    """
+    Smoke + behavior test for frf.get_FR_buffer_from_spectra. Requires an autocorr FR spectrum file.
+    """
+    # Locate an auto_fr_spectrum_file
+    auto_path = os.path.join(DATA_PATH, "test_input/spectra_cache_hera_auto.h5")
+
+    # Use an existing small test data set to get realistic times/freqs
+    test_data = os.path.join(DATA_PATH, "zen.2458098.43124.subband.uvh5")
+    uvd = UVData()
+    uvd.read_uvh5(test_data)
+    jds = np.unique(uvd.time_array)  # Julian days
+    freqs = uvd.freq_array.squeeze()  # Hz
+
+    # Sanity: we need at least a few times
+    assert jds.size > 8
+    assert freqs.ndim == 1 and freqs.size > 0
+
+    # Compute Nyquist fringe rate (in mHz): 0.5 / Δt_ks
+    dt_ks = np.median(np.diff(jds)) * u.day.to(u.ks)
+    nyquist_mhz = 0.5 / dt_ks
+
+    # Two different Gaussian cutoffs: smaller cutoff -> wider buffer
+    cut1, cut2 = 1e-3, 1e-6
+    buf1 = frf.get_FR_buffer_from_spectra(auto_path, jds, freqs, gauss_fit_buffer_cut=cut1)
+    buf2 = frf.get_FR_buffer_from_spectra(auto_path, jds, freqs, gauss_fit_buffer_cut=cut2)
+
+    # Basic checks
+    assert np.isfinite(buf1) and np.isfinite(buf2)
+    assert (buf1 > 0) and (buf2 > 0)
+    # Should be comfortably below Nyquist
+    assert buf1 < nyquist_mhz
+    assert buf2 < nyquist_mhz
+
+    # Scaling check: buffer ∝ sqrt(-2 ln(cut)) ⇒ ratio ~ sqrt[ ln(1/cut2) / ln(1/cut1) ]
+    expected_ratio = np.sqrt(np.log(1.0 / cut2) / np.log(1.0 / cut1))  # ~ √2
+    actual_ratio = buf2 / buf1
+    assert actual_ratio > 1.0
+    # Allow generous tolerance because the fitted sigma is estimated a beam simulation
+    assert np.isclose(actual_ratio, expected_ratio, rtol=0.25)
