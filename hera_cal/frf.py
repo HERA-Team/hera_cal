@@ -8,6 +8,7 @@ from hera_cal.noise import predict_noise_variance_from_autos
 
 from . import utils
 from scipy.interpolate import interp1d
+from scipy import optimize
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
 from pyuvdata import UVData, UVFlag, UVBeam
@@ -15,7 +16,7 @@ import argparse
 from . import io
 from . import vis_clean
 import warnings
-from astropy.coordinates import SkyCoord, EarthLocation, AltAz, ITRS
+from astropy.coordinates import SkyCoord, AltAz, ITRS
 from astropy import units
 import astropy.constants as const
 from astropy_healpix import HEALPix
@@ -31,6 +32,7 @@ from .utils import echo
 import os
 import yaml
 import re
+import h5py
 
 SPEED_OF_LIGHT = const.c.si.value
 SDAY_SEC = units.sday.to("s")
@@ -328,6 +330,56 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
         frate_half_widths[utils.reverse_bl(k)] = frate_half_widths[k]
 
     return frate_centers, frate_half_widths
+
+
+def get_FR_buffer_from_spectra(auto_fr_spectrum_file, jds, freqs, gauss_fit_buffer_cut=1e-5):
+    '''This function computes an appropriate buffer to fringe-rate half-widths for a given antpair and times.
+    These are used to pad the widths given by hera_cal.frf.sky_frates() for the basic calculation, with a
+    Gaussian fit the the FR spectra of the autocorrelation at the highest frequency (and thus widest FR range)
+    in the (subset of) frequencies given.
+
+    Arguments:
+        auto_fr_spectrum_file: path to the HDF5 file containing the autocorrelation fringe-rate spectrum
+        jds: times in units of days
+        freqs: frequencies in Hz
+        gauss_fit_buffer_cut: where to cutoff the Gaussian fit to figure out the halfwidth buffer
+
+    Returns:
+        fr_buffer: FR buffer to add to FR half-widths (in mHz)
+    '''
+    with h5py.File(auto_fr_spectrum_file, "r") as h5f:
+        metadata = h5f["metadata"]
+        bl_to_index_map = {tuple(ap): int(index) for index, antpairs in metadata["baseline_groups"].items() for ap in antpairs}
+        spectrum_freqs = metadata["frequencies_MHz"][()] * 1e6
+        m_modes = metadata["erh_mode_integer_index"][()]
+        mmode_spectrum = h5f["erh_mode_power_spectrum"][:, :, bl_to_index_map[0, 0]]  # use autocorrelation
+
+    # convert to fringe rate, accouting for the fact that we have less than 24 hours of LST
+    def m2f(m_modes):
+        # Convert m-modes to fringe-rates in mHz.
+        return m_modes / units.sday.to(units.ks)
+    times_ks = (jds - jds[0] + np.median(np.diff(jds))) * units.day.to(units.ks)
+    m2f_phasors = np.exp(2j * np.pi * m2f(m_modes)[None, :] * times_ks[:, None])
+    m2f_mixer = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(m2f_phasors, axes=0), axis=0), axes=0)
+    # f is fringe rate, m is m-mode, n is nu (i.e. freqeuency)
+    fr_spectrum = np.abs(np.einsum('fm,mn,mf->fn', m2f_mixer, mmode_spectrum, m2f_mixer.T.conj()))
+
+    # create interpolator as a funciton of frequency
+    fr_spec_interpolator = interpolate.interp1d(spectrum_freqs, fr_spectrum, kind='cubic', fill_value='extrapolate')
+    frates = np.fft.fftshift(np.fft.fftfreq(len(times_ks), d=np.median(np.diff(times_ks))))
+
+    # take top frequency (widest FR) per band
+    band_top_fr_spectrum = fr_spec_interpolator(freqs[-1])
+    band_top_fr_spectrum /= np.max(band_top_fr_spectrum)
+
+    # fit gaussian to get a decent estimate of the width without being too sensitive to the FT of the limited time range
+    def _gaussian(x, a, sigma):
+        return a * np.exp(-(x**2) / (2 * sigma**2))
+    initial_guess = [1.0, np.std(frates[band_top_fr_spectrum > 1e-2])]
+    popt, _ = optimize.curve_fit(_gaussian, frates, band_top_fr_spectrum, p0=initial_guess)
+    fr_buffer = np.abs(2 * popt[1]**2 * np.log(gauss_fit_buffer_cut))**.5  # how far out in the gaussian fit should we go
+
+    return fr_buffer
 
 
 def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=True, nfr=None,
