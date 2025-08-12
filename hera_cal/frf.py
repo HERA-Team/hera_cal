@@ -365,7 +365,7 @@ def get_FR_buffer_from_spectra(auto_fr_spectrum_file, jds, freqs, gauss_fit_buff
     fr_spectrum = np.abs(np.einsum('fm,mn,mf->fn', m2f_mixer, mmode_spectrum, m2f_mixer.T.conj()))
 
     # create interpolator as a funciton of frequency
-    fr_spec_interpolator = interpolate.interp1d(spectrum_freqs, fr_spectrum, kind='cubic', fill_value='extrapolate')
+    fr_spec_interpolator = interp1d(spectrum_freqs, fr_spectrum, kind='cubic', fill_value='extrapolate')
     frates = np.fft.fftshift(np.fft.fftfreq(len(times_ks), d=np.median(np.diff(times_ks))))
 
     # take top frequency (widest FR) per band
@@ -375,7 +375,7 @@ def get_FR_buffer_from_spectra(auto_fr_spectrum_file, jds, freqs, gauss_fit_buff
     # fit gaussian to get a decent estimate of the width without being too sensitive to the FT of the limited time range
     def _gaussian(x, a, sigma):
         return a * np.exp(-(x**2) / (2 * sigma**2))
-    initial_guess = [1.0, np.std(frates[band_top_fr_spectrum > 1e-2])]
+    initial_guess = [1.0, np.std(frates[band_top_fr_spectrum > 1e-3])]
     popt, _ = optimize.curve_fit(_gaussian, frates, band_top_fr_spectrum, p0=initial_guess)
     fr_buffer = np.abs(2 * popt[1]**2 * np.log(gauss_fit_buffer_cut))**.5  # how far out in the gaussian fit should we go
 
