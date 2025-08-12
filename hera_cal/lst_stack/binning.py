@@ -623,8 +623,13 @@ class SingleBaselineStacker():
         and removes any times at the beginning or end of the data set that have no data.
 
         Data are stored internally as lists of numpy arrays, just as lst_stack.binning.lst_bin_files_for_baselines() returns.
-
-        self.data: list of length Nlst, each element is (Nnights, Nfreqs, )
+        - self.data: list of length Nlst, each element is complex and shape (Nnights, Nfreqs, Npols)
+        - self.flags: list of length Nlst, each element is bool and shape (Nnights, Nfreqs, Npols)
+        - self.nsamples: list of length Nlst, each element is float and shape (Nnights, Nfreqs, Npols)
+        - self.where_inpainted: list of length Nlst, each element is bool and shape (Nnights, Nfreqs, Npols) or None
+        - self.times_in_bins: list of length Nlst, each element is float and shape (Nnights,)
+        - self.lsts_in_bins: list of length Nlst, each element is float and shape (Nnights,)
+        - self.bin_lst: array of shape (Nlst,) containing the LST bin centres
 
         Parameters
         ----------
