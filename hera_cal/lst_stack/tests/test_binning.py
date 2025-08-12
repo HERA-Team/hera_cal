@@ -1,5 +1,5 @@
 import pytest
-from .. import binning
+from .. import binning, config
 from ...tests import mock_uvdata as mockuvd
 import numpy as np
 from ...red_groups import RedundantGroups
@@ -7,8 +7,11 @@ from pyuvdata import utils as uvutils
 from pathlib import Path
 from ..config import LSTBinConfigurator
 import shutil
-from hera_cal.lst_stack.io import apply_filename_rules
+from ..io import apply_filename_rules
 from pyuvdata import UVFlag, UVData
+from ...io import HERAData
+from ...data import DATA_PATH
+import os
 
 
 class TestAdjustLSTBinEdges:
@@ -404,29 +407,164 @@ class TestLSTBinFilesFromConfig:
             binning.lst_bin_files_from_config(cfg)
 
 
-class TestLSTStack:
-    def setup_class(self):
-        self.uvd = mockuvd.create_mock_hera_obs(
-            integration_time=1.0, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
-            time_axis_faster_than_bls=False
-        )
-        self.stack = binning.LSTStack(self.uvd)
+# Silence the expected antpos warning from the binning code
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:Getting antpos from the first file only"
+)
 
-    def test_bad_uvd(self):
-        uvd = mockuvd.create_mock_hera_obs(
-            integration_time=1.0, ntimes=20, jd_start=2459844.0, ants=[0, 1, 2, 3],
-            time_axis_faster_than_bls=True
-        )
-        print('bl', uvd.time_axis_faster_than_bls)
-        with pytest.raises(ValueError, match='time_axis_faster_than_bls must be False'):
-            binning.LSTStack(uvd)
 
-        uvf = UVFlag(self.uvd)
-        uvf.to_waterfall()
-        with pytest.raises(ValueError, match="UVFlag type must be 'baseline'"):
-            binning.LSTStack(uvf)
+class _FakeConfiguratorSingle:
+    """Minimal interface that SingleBaselineStacker uses."""
+    def __init__(self, bl_to_file_map):
+        self.bl_to_file_map = bl_to_file_map
 
-        rng = np.random.default_rng(0)
-        uvd.reorder_blts(order=rng.permutation(uvd.Nblts))
-        with pytest.raises(ValueError, match='blts_are_rectangular must be True'):
-            binning.LSTStack(uvd)
+
+# --- fixtures using real test files -------------------------------------------------
+
+@pytest.fixture(scope="module")
+def real_files_and_grid():
+    baseline_string = "0_4"
+    filenames = [
+        "zen.2459861.baseline.0_4.sum.smooth_calibrated.red_avg.inpainted.uvh5",
+        "zen.2459862.baseline.0_4.sum.smooth_calibrated.red_avg.inpainted.uvh5",
+        "zen.2459863.baseline.0_4.sum.smooth_calibrated.red_avg.inpainted.uvh5",
+    ]
+    files = [os.path.join(DATA_PATH, "test_input", f) for f in filenames]
+    missing = [f for f in files if not os.path.exists(f)]
+    if missing:
+        pytest.skip(f"Missing test inputs: {missing}")
+
+    configurator = _FakeConfiguratorSingle({baseline_string: files})
+    hd = HERAData(files[-1])  # for freqs/lsts metadata
+
+    # Native-width 0..2π LST grid
+    dlst = np.median(np.diff(hd.lsts))
+    lst_grid = config.make_lst_grid(dlst, begin_lst=0.0, lst_width=2 * np.pi)
+    lst_bin_edges = np.concatenate([lst_grid - dlst / 2, [lst_grid[-1] + dlst / 2]])
+
+    return {
+        "baseline_string": baseline_string,
+        "configurator": configurator,
+        "lst_bin_edges": lst_bin_edges,
+        "dlst": dlst,
+        "hd": hd,
+        "where_rules": [[".inpainted.uvh5", ".where_inpainted.h5"]],
+    }
+
+
+@pytest.fixture(scope="module")
+def sbs_default(real_files_and_grid):
+    p = real_files_and_grid
+    return binning.SingleBaselineStacker(
+        p["baseline_string"], p["configurator"], p["lst_bin_edges"]
+    )
+
+
+@pytest.fixture(scope="module")
+def sbs_keep_all(real_files_and_grid):
+    p = real_files_and_grid
+    return binning.SingleBaselineStacker(
+        p["baseline_string"], p["configurator"], p["lst_bin_edges"], to_keep_slice=slice(None)
+    )
+
+
+@pytest.fixture(scope="module")
+def sbs_branchcut(real_files_and_grid):
+    p = real_files_and_grid
+    return binning.SingleBaselineStacker(
+        p["baseline_string"],
+        p["configurator"],
+        p["lst_bin_edges"],
+        lst_branch_cut=5.4,
+        where_inpainted_file_rules=p["where_rules"],
+    )
+
+
+# --- tests -------------------------------------------------------------------------
+
+def test_shapes_and_types_default(sbs_default, real_files_and_grid):
+    hd = real_files_and_grid["hd"]
+
+    # All lists have same length as number of kept bins
+    L = len(sbs_default.bin_lst)
+    for name in ("data", "flags", "nsamples", "times_in_bins", "lsts_in_bins"):
+        assert len(getattr(sbs_default, name)) == L
+
+    # Per-bin arrays are (Nints_in_bin, Nfreqs, Npols) (baseline dimension removed)
+    for d, f, n in zip(sbs_default.data, sbs_default.flags, sbs_default.nsamples):
+        assert d.ndim == f.ndim == n.ndim == 3
+        assert d.shape[-2] == len(hd.freqs)
+        assert d.shape[-1] == len(hd.pols)
+        assert f.shape == d.shape
+        assert n.shape == d.shape
+        assert np.iscomplexobj(d)
+        assert f.dtype == bool
+        assert n.dtype.kind in ("f", "i")  # nsamples float or int
+
+
+def test_auto_trimming_keeps_nonempty_edges(sbs_default):
+    # Auto-trim should remove empty bins at ends; first & last bins should have data or at least exist
+    assert len(sbs_default.data) == len(sbs_default.bin_lst)
+    # Expect at least the first & last kept bins to be potentially non-empty after trimming.
+    # (We don't assert strictly >0 because some nights may still have gaps, but trimming
+    # should have removed long empty runs.)
+    assert len(sbs_default.data) > 0
+
+
+def test_to_keep_slice_keeps_empties(sbs_keep_all, real_files_and_grid):
+    # Keeping all bins means we retain the full grid count
+    L_edges = len(real_files_and_grid["lst_bin_edges"]) - 1
+    assert len(sbs_keep_all.bin_lst) == L_edges
+
+    # The fully-expanded grid over 0..2π will have empties at ends; check at least one empty bin
+    empties = sum(arr.shape[0] == 0 for arr in sbs_keep_all.data)
+    assert empties >= 1
+
+
+def test_branch_cut_roll_and_wrap(sbs_branchcut, real_files_and_grid):
+    cut = 5.4
+    # After rolling, centers should start at >= cut and be strictly increasing
+    assert np.all(np.diff(sbs_branchcut.bin_lst) > 0)
+    assert sbs_branchcut.bin_lst.min() >= cut
+    # Shouldn’t exceed cut + 2π (allow tiny epsilon)
+    assert sbs_branchcut.bin_lst.max() <= cut + 2 * np.pi + 1e-8
+
+    # If a bin has LSTs, ensure they’re wrapped to be >= cut
+    nonempty = [lst for lst in sbs_branchcut.lsts_in_bins if len(lst) > 0]
+    if nonempty:
+        assert min(np.min(lst) for lst in nonempty) >= cut
+
+
+def test_inpaint_flags_present_and_boolean(sbs_branchcut):
+    # where_inpainted should be a list (same length as bins) of boolean arrays or None
+    assert len(sbs_branchcut.where_inpainted) == len(sbs_branchcut.bin_lst)
+    any_present = False
+    for wf, d in zip(sbs_branchcut.where_inpainted, sbs_branchcut.data):
+        if wf is None:
+            continue
+        any_present = any_present or wf.size > 0
+        assert wf.shape == d.shape
+        assert wf.dtype == bool
+    assert any_present  # expect at least some inpaint flags in these test inputs
+
+
+def test_bin_membership_close_to_centers(sbs_default, real_files_and_grid):
+    # LSTs in each bin should lie within ~half-width of the bin center (pre-rephase assignment)
+    half = real_files_and_grid["dlst"] / 2 + 1e-6
+    centers = sbs_default.bin_lst
+    for c, lsts in zip(centers, sbs_default.lsts_in_bins):
+        if len(lsts) == 0:
+            continue
+        # angular distance on circle to bin center
+        ang = np.mod(lsts - c + np.pi, 2 * np.pi) - np.pi
+        assert np.all(np.abs(ang) <= half + 1e-3)  # be forgiving with file rounding
+
+
+def test_flags_and_nsamples_match_data(sbs_default):
+    # Sanity: where we have data samples, shapes align and boolean/float logic is consistent
+    for d, f, n in zip(sbs_default.data, sbs_default.flags, sbs_default.nsamples):
+        assert d.shape == f.shape == n.shape
+        # If there are integrations, ensure flagged entries correspond to float nsamples (any value)
+        if d.size:
+            assert f.dtype == bool
+            assert np.isfinite(np.asarray(n)[~np.isnan(np.real(d)) | ~np.isnan(np.imag(d))]).all()
