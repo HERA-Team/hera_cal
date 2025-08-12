@@ -661,6 +661,7 @@ class SingleBaselineStacker():
         # Cut out baseline dimension
         for list_obj in (self.data, self.flags, self.nsamples, self.where_inpainted):
             for j, arr in enumerate(list_obj):
+                # for where_inpainted, arr may be None (if where_inpainted_file_rules is None), so don't slice in that case
                 if (arr is not None) or (list_obj is not self.where_inpainted):
                     list_obj[j] = arr[:, 0, :, :].copy()
 
