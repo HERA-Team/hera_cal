@@ -9,7 +9,7 @@ from typing import Sequence
 from ..red_groups import RedundantGroups
 from pyuvdata.uvdata import FastUVH5Meta
 from pyuvdata import UVData, UVFlag
-from functools import cached_property
+from functools import cached_property, reduce
 from astropy import units
 
 from pyuvdata import utils as uvutils
@@ -17,10 +17,11 @@ from pyuvdata.telescopes import Telescope
 from .. import io
 from ..datacontainer import DataContainer
 from .. import apply_cal
-from .config import LSTConfigSingle
+from .config import LSTConfigSingle, LSTBinConfiguratorSingleBaseline
 logger = logging.getLogger(__name__)
 from astropy.coordinates import EarthLocation
 from ..utils import _comply_vispol
+from hera_qm.time_series_metrics import true_stretches
 
 
 def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
@@ -601,6 +602,109 @@ def lst_bin_files_for_baselines(
         lsts_in_bins.append(lsts[mask])
 
     return bin_lst, data, flags, nsamples, where_inpainted, times_in_bins, lsts_in_bins
+
+
+class SingleBaselineStacker():
+    '''Utility class to wrapped around lst_stack.binning.lst_bin_files_for_baselines() that loads
+    single baseline data from multiple nights and stores it internally.'''
+
+    # lists of numpy arrays whose length is the number of LST bins and whose 0th dimension is the number of nights
+    _list_objects = ('data', 'flags', 'nsamples', 'where_inpainted', 'times_in_bins', 'lsts_in_bins')
+
+    def __init__(self,
+                 bl_str: str,
+                 configurator: LSTBinConfiguratorSingleBaseline,
+                 lst_bin_edges: np.ndarray,
+                 lst_branch_cut: float | None = None,
+                 where_inpainted_file_rules: list[list[str]] = None,
+                 to_keep_slice: slice | None = None,
+                ):
+        """Creates a SingleBaselineStacker object that loads data for a single baseline, optionally rolls to start after a branch cut,
+        and removes any times at the beginning or end of the data set that have no data.
+
+        Data are stored internally as lists of numpy arrays, just as lst_stack.binning.lst_bin_files_for_baselines() returns.
+
+        self.data: list of length Nlst, each element is (Nnights, Nfreqs, )
+
+        Parameters
+        ----------
+        bl_str : str
+            The baseline string in the filenames of data to load, e.g., '0_4'.
+        configurator : LSTBinConfiguratorSingleBaseline
+            The configurator object that contains the mapping from baseline strings to data files.
+        lst_bin_edges : np.ndarray
+            Array of LST bin edges (should be one more than the number of bins).
+        lst_branch_cut : float | None
+            If provided, the LSTs will be rolled to start after this branch cut (in radians).
+        where_inpainted_file_rules : list[list[str]] | None
+            If provided, a list of pairs of strings that will be used to replace parts of the filenames to find
+            the "where inpainted" files, UVFlag files that record where that data was previously inpainted.
+        to_keep_slice : slice | None
+            For advanced users only. Typically, times are removed at the beginning and end of the data set if they have no data.
+            This option allows that behavior to be overridden with an explicit slice into an array of length len(lst_bin_edges) - 1.
+        """
+
+        self.bl_str = bl_str
+        self.configurator = configurator
+        self.lst_bin_edges = lst_bin_edges
+        self.lst_branch_cut = lst_branch_cut
+        self.where_inpainted_file_rules = where_inpainted_file_rules
+
+        # Load the data
+        self.bin_lst, self.data, self.flags, self.nsamples, self.where_inpainted, self.times_in_bins, self.lsts_in_bins = self._load_data()
+
+        # Cut out baseline dimension
+        for list_obj in (self.data, self.flags, self.nsamples, self.where_inpainted):
+            for j, arr in enumerate(list_obj):
+                if (arr is not None) or (list_obj is not self.where_inpainted):
+                    list_obj[j] = arr[:, 0, :, :].copy()
+
+        # Roll the lists to the branch cut
+        if lst_branch_cut is not None:
+            self._roll_lists_to_lst_branch_cut()
+
+        # Figure out which times to keep and remove others
+        if to_keep_slice is None:
+            lst_has_data = np.array([~np.all(f) & (len(f) > 0) for f in self.flags])
+            ts = true_stretches(~lst_has_data)
+            start = ts[0].stop if ts[0].start == 0 else 0
+            stop = ts[-1].start if ts[-1].stop == len(self.flags) else len(self.flags)
+            self._to_keep_slice = slice(start, stop)
+        else:
+            self._to_keep_slice = to_keep_slice
+        for list_obj in self._list_objects:
+            setattr(self, list_obj, getattr(self, list_obj)[self._to_keep_slice])
+        self.bin_lst = self.bin_lst[self._to_keep_slice]
+
+    def _load_data(self):
+        '''Wrapper around lst_stack.binning.lst_bin_files_for_baselines().'''
+        files_here = self.configurator.bl_to_file_map[self.bl_str]
+        where_inpainted_files = ([reduce(lambda txt, pair: txt.replace(*pair), self.where_inpainted_file_rules, df)
+                                  for df in files_here]
+                                 if self.where_inpainted_file_rules is not None else None)
+        self.hd = io.HERAData(files_here[-1])
+        return lst_bin_files_for_baselines(data_files=files_here,
+                                           lst_bin_edges=self.lst_bin_edges,
+                                           antpairs=self.hd.antpairs,
+                                           freqs=self.hd.freqs,
+                                           pols=self.hd.pols,
+                                           rephase=True,
+                                           where_inpainted_files=where_inpainted_files)
+
+    def _roll_lists_to_lst_branch_cut(self):
+        '''Rolls the lists to the branch cut defined by lst_branch_cut. This is done in place,
+        so the lists are modified directly. LSTs after the branch cut are adjusted by adding 2 pi.'''
+        branch_cut_idx = np.searchsorted(self.bin_lst, self.lst_branch_cut)
+
+        # Roll all internal arrays.
+        self.bin_lst[:] = np.roll(self.bin_lst, -branch_cut_idx)  # modified in place
+        for list_obj in self._list_objects:
+            to_roll = getattr(self, list_obj)
+            to_roll[:] = to_roll[branch_cut_idx:] + to_roll[0:branch_cut_idx]  # modified in place
+
+        # adds 2 pi to lsts after the branch cut
+        self.bin_lst[self.bin_lst < self.lst_branch_cut] += 2 * np.pi
+        self.lsts_in_bins = [np.where(lst < self.lst_branch_cut, lst + 2 * np.pi, lst) for lst in self.lsts_in_bins]
 
 
 class LSTStack:
