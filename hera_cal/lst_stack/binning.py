@@ -608,20 +608,49 @@ class SingleBaselineStacker:
     """Class to hold multi-night single-baseline data.
 
     Wraps around ``lst_stack.binning.lst_bin_files_for_baselines()`` and loads
-    single baseline data from multiple nights and stores it internally.
-    """
+    single baseline data from multiple nights and stores it internally."""
 
     # lists of numpy arrays whose length is the number of LST bins and whose 0th dimension is the number of nights
     _list_objects = ('data', 'flags', 'nsamples', 'where_inpainted', 'times_in_bins', 'lsts_in_bins')
 
     def __init__(self,
-                 bl_str: str,
-                 configurator: LSTBinConfiguratorSingleBaseline,
-                 lst_bin_edges: np.ndarray,
-                 lst_branch_cut: float | None = None,
-                 where_inpainted_file_rules: list[list[str]] = None,
-                 to_keep_slice: slice | None = None,
-                ):
+            *,
+            bin_lst: np.ndarray,
+            data: list[np.ndarray],
+            flags: list[np.ndarray],
+            nsamples: list[np.ndarray],
+            where_inpainted: list[np.ndarray | None],
+            times_in_bins: list[np.ndarray],
+            lsts_in_bins: list[np.ndarray],
+            bl_str: str | None = None,
+            configurator: LSTBinConfiguratorSingleBaseline | None = None,
+            lst_branch_cut: float | None = None,
+            hd: io.HERAData | None = None,
+    ):
+        """Creates a SingleBaselineStacker object with all of the parameters saved to self.[parameter_name].
+        Typically, one uses the class method from_configurator() to create an instance of this class."""
+        # store exactly what we're given
+        self.bin_lst = bin_lst
+        self.data = data
+        self.flags = flags
+        self.nsamples = nsamples
+        self.where_inpainted = where_inpainted
+        self.times_in_bins = times_in_bins
+        self.lsts_in_bins = lsts_in_bins
+        self.bl_str = bl_str
+        self.configurator = configurator
+        self.lst_branch_cut = lst_branch_cut
+        self.hd = hd
+
+    @classmethod
+    def from_configurator(cls,
+            bl_str: str,
+            configurator: LSTBinConfiguratorSingleBaseline,
+            lst_bin_edges: np.ndarray,
+            lst_branch_cut: float | None = None,
+            where_inpainted_file_rules: list[list[str]] | None = None,
+            to_keep_slice: slice | None = None,
+        ) -> SingleBaselineStacker:
         """Creates a SingleBaselineStacker object that loads data for a single baseline, optionally rolls to start after a branch cut,
         and removes any times at the beginning or end of the data set that have no data.
 
@@ -633,6 +662,12 @@ class SingleBaselineStacker:
         - self.times_in_bins: list of length Nlst, each element is float and shape (Nnights,)
         - self.lsts_in_bins: list of length Nlst, each element is float and shape (Nnights,)
         - self.bin_lst: array of shape (Nlst,) containing the LST bin centres
+
+        Additionally, the following parameters are stored:
+        - self.bl_str: the baseline string used to load the data, e.g., '0_4'
+        - self.configurator: the configurator object that contains the mapping from baseline strings to data files
+        - self.lst_branch_cut: the LST branch cut in radians, if provided
+        - self.hd: the HERAData object for the last file loaded, which contains metadata like antenna positions, frequencies, etc.
 
         Parameters
         ----------
@@ -651,69 +686,78 @@ class SingleBaselineStacker:
             For advanced users only. Typically, times are removed at the beginning and end of the data set if they have no data.
             This option allows that behavior to be overridden with an explicit slice into an array of length len(lst_bin_edges) - 1.
         """
-
-        self.bl_str = bl_str
-        self.configurator = configurator
-        self.lst_bin_edges = lst_bin_edges
-        self.lst_branch_cut = lst_branch_cut
-        self.where_inpainted_file_rules = where_inpainted_file_rules
-
         # Load the data
-        self.bin_lst, self.data, self.flags, self.nsamples, self.where_inpainted, self.times_in_bins, self.lsts_in_bins = self._load_data()
+        files_here = configurator.bl_to_file_map[bl_str]
+        where_inpainted_files = ([reduce(lambda txt, pair: txt.replace(*pair), where_inpainted_file_rules, df) for df in files_here]
+                                 if where_inpainted_file_rules is not None else None)
+        hd = io.HERAData(files_here[-1])
+        (bin_lst,
+         data,
+         flags,
+         nsamples,
+         where_inpainted,
+         times_in_bins,
+         lsts_in_bins) = lst_bin_files_for_baselines(data_files=files_here,
+                                                     lst_bin_edges=lst_bin_edges,
+                                                     antpairs=hd.antpairs,
+                                                     freqs=hd.freqs,
+                                                     pols=hd.pols,
+                                                     rephase=True,
+                                                     where_inpainted_files=where_inpainted_files)
 
         # Cut out baseline dimension
-        for list_obj in (self.data, self.flags, self.nsamples, self.where_inpainted):
+        for list_obj in (data, flags, nsamples, where_inpainted):
             for j, arr in enumerate(list_obj):
-                # for where_inpainted, arr may be None (if where_inpainted_file_rules is None), so don't slice in that case
-                if (arr is not None) or (list_obj is not self.where_inpainted):
+                if arr is not None and arr.ndim == 4:
                     list_obj[j] = arr[:, 0, :, :].copy()
 
         # Roll the lists to the branch cut
         if lst_branch_cut is not None:
-            self._roll_lists_to_lst_branch_cut()
+            cls._roll_lists_to_lst_branch_cut(lst_branch_cut, bin_lst, lsts_in_bins, data,
+                                              flags, nsamples, where_inpainted, times_in_bins)
 
         # Figure out which times to keep and remove others
         if to_keep_slice is None:
-            lst_has_data = np.array([~np.all(f) & (len(f) > 0) for f in self.flags])
+            lst_has_data = np.array([~np.all(f) & (len(f) > 0) for f in flags])
             ts = true_stretches(~lst_has_data)
-            start = ts[0].stop if ts[0].start == 0 else 0
-            stop = ts[-1].start if ts[-1].stop == len(self.flags) else len(self.flags)
-            self._to_keep_slice = slice(start, stop)
-        else:
-            self._to_keep_slice = to_keep_slice
-        for list_obj in self._list_objects:
-            setattr(self, list_obj, getattr(self, list_obj)[self._to_keep_slice])
-        self.bin_lst = self.bin_lst[self._to_keep_slice]
+            start = ts[0].stop if (len(ts) and ts[0].start == 0) else 0
+            stop = ts[-1].start if (len(ts) and ts[-1].stop == len(flags)) else len(flags)
+            to_keep_slice = slice(start, stop)
+        bin_lst, data, flags, nsamples, where_inpainted, times_in_bins, lsts_in_bins = (
+            obj[to_keep_slice] for obj in (bin_lst, data, flags, nsamples, where_inpainted, times_in_bins, lsts_in_bins))
 
-    def _load_data(self):
-        '''Wrapper around lst_stack.binning.lst_bin_files_for_baselines().'''
-        files_here = self.configurator.bl_to_file_map[self.bl_str]
-        where_inpainted_files = ([reduce(lambda txt, pair: txt.replace(*pair), self.where_inpainted_file_rules, df)
-                                  for df in files_here]
-                                 if self.where_inpainted_file_rules is not None else None)
-        self.hd = io.HERAData(files_here[-1])
-        return lst_bin_files_for_baselines(data_files=files_here,
-                                           lst_bin_edges=self.lst_bin_edges,
-                                           antpairs=self.hd.antpairs,
-                                           freqs=self.hd.freqs,
-                                           pols=self.hd.pols,
-                                           rephase=True,
-                                           where_inpainted_files=where_inpainted_files)
+        # Create the SingleBaselineStacker object
+        return cls(bin_lst=bin_lst,
+                   data=data,
+                   flags=flags,
+                   nsamples=nsamples,
+                   where_inpainted=where_inpainted,
+                   times_in_bins=times_in_bins,
+                   lsts_in_bins=lsts_in_bins,
+                   bl_str=bl_str,
+                   configurator=configurator,
+                   lst_branch_cut=lst_branch_cut,
+                   hd=hd)
 
-    def _roll_lists_to_lst_branch_cut(self):
+    @staticmethod
+    def _roll_lists_to_lst_branch_cut(lst_branch_cut: float,
+                                      bin_lst: np.ndarray,
+                                      lsts_in_bins: list[np.ndarray],
+                                      *list_objects: list[np.ndarray]
+                                      ) -> None:
         '''Rolls the lists to the branch cut defined by lst_branch_cut. This is done in place,
         so the lists are modified directly. LSTs after the branch cut are adjusted by adding 2 pi.'''
-        branch_cut_idx = np.searchsorted(self.bin_lst, self.lst_branch_cut)
+        branch_cut_idx = np.searchsorted(bin_lst, lst_branch_cut)
 
         # Roll all internal arrays.
-        self.bin_lst[:] = np.roll(self.bin_lst, -branch_cut_idx)  # modified in place
-        for list_obj in self._list_objects:
-            to_roll = getattr(self, list_obj)
-            to_roll[:] = to_roll[branch_cut_idx:] + to_roll[0:branch_cut_idx]  # modified in place
+        bin_lst[:] = np.roll(bin_lst, -branch_cut_idx)  # modified in place
+        lsts_in_bins[:] = lsts_in_bins[branch_cut_idx:] + lsts_in_bins[0:branch_cut_idx]  # modified in place
+        for list_obj in list_objects:
+            list_obj[:] = list_obj[branch_cut_idx:] + list_obj[0:branch_cut_idx]  # modified in place
 
         # adds 2 pi to lsts after the branch cut
-        self.bin_lst[self.bin_lst < self.lst_branch_cut] += 2 * np.pi
-        self.lsts_in_bins = [np.where(lst < self.lst_branch_cut, lst + 2 * np.pi, lst) for lst in self.lsts_in_bins]
+        bin_lst[bin_lst < lst_branch_cut] += 2 * np.pi
+        lsts_in_bins[:] = [np.where(lst < lst_branch_cut, lst + 2 * np.pi, lst) for lst in lsts_in_bins]
 
 
 class LSTStack:
