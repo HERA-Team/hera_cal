@@ -456,7 +456,7 @@ def real_files_and_grid():
 def sbs_default(real_files_and_grid):
     p = real_files_and_grid
     return binning.SingleBaselineStacker.from_configurator(
-        p["baseline_string"], p["configurator"], p["lst_bin_edges"]
+        p["configurator"], p["baseline_string"], p["lst_bin_edges"]
     )
 
 
@@ -464,7 +464,7 @@ def sbs_default(real_files_and_grid):
 def sbs_keep_all(real_files_and_grid):
     p = real_files_and_grid
     return binning.SingleBaselineStacker.from_configurator(
-        p["baseline_string"], p["configurator"], p["lst_bin_edges"], to_keep_slice=slice(None)
+        p["configurator"], p["baseline_string"], p["lst_bin_edges"], to_keep_slice=slice(None)
     )
 
 
@@ -472,8 +472,8 @@ def sbs_keep_all(real_files_and_grid):
 def sbs_branchcut(real_files_and_grid):
     p = real_files_and_grid
     return binning.SingleBaselineStacker.from_configurator(
-        p["baseline_string"],
         p["configurator"],
+        p["baseline_string"],
         p["lst_bin_edges"],
         lst_branch_cut=5.4,
         where_inpainted_file_rules=p["where_rules"],
