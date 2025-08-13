@@ -604,7 +604,7 @@ def lst_bin_files_for_baselines(
     return bin_lst, data, flags, nsamples, where_inpainted, times_in_bins, lsts_in_bins
 
 
-class SingleBaselineStacker():
+class SingleBaselineStacker:
     '''Utility class to wrapped around lst_stack.binning.lst_bin_files_for_baselines() that loads
     single baseline data from multiple nights and stores it internally.'''
 
