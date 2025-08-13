@@ -606,7 +606,7 @@ def lst_bin_files_for_baselines(
 
 class SingleBaselineStacker:
     """Class to hold multi-night single-baseline data.
-    
+
     Wraps around ``lst_stack.binning.lst_bin_files_for_baselines()`` and loads
     single baseline data from multiple nights and stores it internally.
     """
