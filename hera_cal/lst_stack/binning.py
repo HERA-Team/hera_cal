@@ -605,8 +605,11 @@ def lst_bin_files_for_baselines(
 
 
 class SingleBaselineStacker:
-    '''Utility class to wrapped around lst_stack.binning.lst_bin_files_for_baselines() that loads
-    single baseline data from multiple nights and stores it internally.'''
+    """Class to hold multi-night single-baseline data.
+    
+    Wraps around ``lst_stack.binning.lst_bin_files_for_baselines()`` and loads
+    single baseline data from multiple nights and stores it internally.
+    """
 
     # lists of numpy arrays whose length is the number of LST bins and whose 0th dimension is the number of nights
     _list_objects = ('data', 'flags', 'nsamples', 'where_inpainted', 'times_in_bins', 'lsts_in_bins')
