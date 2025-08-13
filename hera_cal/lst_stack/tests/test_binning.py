@@ -455,7 +455,7 @@ def real_files_and_grid():
 @pytest.fixture(scope="module")
 def sbs_default(real_files_and_grid):
     p = real_files_and_grid
-    return binning.SingleBaselineStacker(
+    return binning.SingleBaselineStacker.from_configurator(
         p["baseline_string"], p["configurator"], p["lst_bin_edges"]
     )
 
@@ -463,7 +463,7 @@ def sbs_default(real_files_and_grid):
 @pytest.fixture(scope="module")
 def sbs_keep_all(real_files_and_grid):
     p = real_files_and_grid
-    return binning.SingleBaselineStacker(
+    return binning.SingleBaselineStacker.from_configurator(
         p["baseline_string"], p["configurator"], p["lst_bin_edges"], to_keep_slice=slice(None)
     )
 
@@ -471,7 +471,7 @@ def sbs_keep_all(real_files_and_grid):
 @pytest.fixture(scope="module")
 def sbs_branchcut(real_files_and_grid):
     p = real_files_and_grid
-    return binning.SingleBaselineStacker(
+    return binning.SingleBaselineStacker.from_configurator(
         p["baseline_string"],
         p["configurator"],
         p["lst_bin_edges"],
