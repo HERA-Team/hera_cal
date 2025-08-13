@@ -646,8 +646,8 @@ class SingleBaselineStacker:
 
     @classmethod
     def from_configurator(cls,
-            bl_str: str,
             configurator: LSTBinConfiguratorSingleBaseline,
+            bl_str: str,
             lst_bin_edges: np.ndarray,
             lst_branch_cut: float | None = None,
             where_inpainted_file_rules: list[list[str]] | None = None,
@@ -673,10 +673,10 @@ class SingleBaselineStacker:
 
         Parameters
         ----------
-        bl_str : str
-            The baseline string in the filenames of data to load, e.g., '0_4'.
         configurator : LSTBinConfiguratorSingleBaseline
             The configurator object that contains the mapping from baseline strings to data files.
+        bl_str : str
+            The baseline string in the filenames of data to load, e.g., '0_4'.
         lst_bin_edges : np.ndarray
             Array of LST bin edges (should be one more than the number of bins).
         lst_branch_cut : float | None
