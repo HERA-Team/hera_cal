@@ -625,6 +625,7 @@ class SingleBaselineStacker:
             bl_str: str | None = None,
             configurator: LSTBinConfiguratorSingleBaseline | None = None,
             lst_branch_cut: float | None = None,
+            slice_kept: slice | None = None,
             hd: io.HERAData | None = None,
     ):
         """Creates a SingleBaselineStacker object with all of the parameters saved to self.[parameter_name].
@@ -640,6 +641,7 @@ class SingleBaselineStacker:
         self.bl_str = bl_str
         self.configurator = configurator
         self.lst_branch_cut = lst_branch_cut
+        self.slice_kept = slice_kept
         self.hd = hd
 
     @classmethod
@@ -737,6 +739,7 @@ class SingleBaselineStacker:
                    bl_str=bl_str,
                    configurator=configurator,
                    lst_branch_cut=lst_branch_cut,
+                   slice_kept=to_keep_slice,
                    hd=hd)
 
     @staticmethod
