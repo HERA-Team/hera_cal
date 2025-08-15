@@ -611,7 +611,8 @@ class SingleBaselineStacker:
     single baseline data from multiple nights and stores it internally.
 
     It also provides a method average_over_nights() to average the data across nights, accounting for
-    flags, nsamples, and where the data was inpainted.
+    flags, nsamples, and where the data was inpainted. In general, where_inpainted data is not flagged, but rather
+    it *was* flagged at some point previously and has since been inpainted, necessitating special bookkeeping.
     """
 
     # lists of numpy arrays whose length is the number of LST bins and whose 0th dimension is the number of nights
@@ -784,7 +785,7 @@ class SingleBaselineStacker:
         lst_avg_data : np.ndarray
             The averaged data, shape (Nlst, Nfreqs, Npols)
         lst_avg_flags : np.ndarray
-            The flags for the averaged data, shape (Nlst, Nfreqs, Npols)
+            The flags for the averaged data, shape (Nlst, Nfreqs, Npols). N.B. that inpainted data is not flagged.
         lst_avg_nsamples : np.ndarray
             The number of unflagged samples going into each data point, shape (Nlst, Nfreqs, Npols)
         """
