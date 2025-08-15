@@ -808,9 +808,9 @@ class SingleBaselineStacker:
 
             # compute weights as flagged nsamples
             weights = np.where(f, 0, n)
+
             # set weights to 1 where it'd be flagged over all nights so that there's no issue with averaging
-            for pidx in range(d.shape[-1]):
-                weights[:, lst_avg_flags[lidx, :, pidx], pidx] = 1
+            weights[:, lst_avg_flags[lidx], :] = 1
 
             # compute average data, setting flagged data to 0 rather than np.nan since its weight is 0
             lst_avg_data[lidx] = np.average(np.where(f, 0, d), axis=0, weights=weights)
