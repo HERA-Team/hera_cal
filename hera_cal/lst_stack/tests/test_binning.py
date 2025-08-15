@@ -568,3 +568,129 @@ def test_flags_and_nsamples_match_data(sbs_default):
         if d.size:
             assert f.dtype == bool
             assert np.isfinite(np.asarray(n)[~np.isnan(np.real(d)) | ~np.isnan(np.imag(d))]).all()
+
+# --- average_over_nights tests -------------------------------------------------------------
+
+
+def test_average_over_nights_shapes_and_dtypes(sbs_branchcut):
+    """Output has (Nlst, Nfreqs, Npols) shape and correct dtypes."""
+    out_d, out_f, out_n = sbs_branchcut.average_over_nights(inpainted_data_are_samples=False)
+    nfreq = len(sbs_branchcut.hd.freqs)
+    npol = len(sbs_branchcut.hd.pols)
+    assert out_d.shape == out_f.shape == out_n.shape == (len(sbs_branchcut.bin_lst), nfreq, npol)
+    assert np.iscomplexobj(out_d)
+    assert out_f.dtype == bool
+    assert out_n.dtype.kind in ("f", "i")
+
+
+def test_average_over_nights_flags_AND_consistency(sbs_branchcut):
+    """Flags should be AND across nights."""
+    out_d, out_f, out_n = sbs_branchcut.average_over_nights(inpainted_data_are_samples=False)
+
+    # manual AND across nights, per-bin
+    for lidx, f in enumerate(sbs_branchcut.flags):
+        expected_flags = np.all(f, axis=0)
+        assert np.array_equal(out_f[lidx], expected_flags)
+
+
+def test_average_over_nights_weighted_mean_matches_manual(sbs_branchcut):
+    """Average equals weighted mean with nsamples as weights (flagged weight=0),
+    with columns fully flagged given weight=1 to keep denominator sane."""
+    out_d, out_f, _ = sbs_branchcut.average_over_nights(inpainted_data_are_samples=False)
+
+    for lidx, (d, f, n, wip) in enumerate(zip(
+        sbs_branchcut.data, sbs_branchcut.flags, sbs_branchcut.nsamples, sbs_branchcut.where_inpainted
+    )):
+        # flags AND across nights
+        fully_flagged = np.all(f, axis=0)  # (Nfreq, Npol)
+
+        # weights: flagged -> 0
+        weights = np.where(f, 0, n).astype(float)  # (Nnight, Nfreq, Npol)
+
+        # where fully flagged across nights, set weights to 1 across nights (per-pol)
+        for p in range(d.shape[-1]):
+            mask_fp = fully_flagged[:, p]
+            if np.any(mask_fp):
+                weights[:, mask_fp, p] = 1.0
+
+        # zero-out flagged data for the numerator
+        d_used = np.where(f, 0.0, d)
+
+        num = np.sum(d_used * weights, axis=0)
+        den = np.sum(weights, axis=0)
+        # (den should be >= 1 where fully flagged because we set weights=1; still be safe)
+        den = np.where(den == 0, 1.0, den)
+
+        expected = num / den
+        np.testing.assert_allclose(out_d[lidx], expected, rtol=0, atol=1e-12)
+
+
+def test_average_over_nights_inpainted_toggle_changes_nsamples_when_wip_present(sbs_branchcut):
+    """When where_inpainted is present, excluding inpainted samples should reduce some nsample counts."""
+    d0, f0, n_excl = sbs_branchcut.average_over_nights(inpainted_data_are_samples=False)
+    d1, f1, n_incl = sbs_branchcut.average_over_nights(inpainted_data_are_samples=True)
+
+    # flags identical regardless of toggle
+    assert np.array_equal(f0, f1)
+    # data identical (toggle affects only nsamples in output, not averaging weights in your implementation)
+    np.testing.assert_allclose(d0, d1, rtol=0, atol=1e-12)
+
+    # If any inpainted True entries exist, we expect some strict reduction
+    any_wip = False
+    for wip in sbs_branchcut.where_inpainted:
+        if wip is not None and wip.size and np.any(wip):
+            any_wip = True
+            break
+
+    # In all cases, exclusion <= inclusion
+    assert np.all(n_excl <= n_incl)
+    if any_wip:
+        assert np.any(n_excl < n_incl)
+
+
+def test_average_over_nights_does_not_mutate_input(sbs_branchcut):
+    """Check that average_over_nights does not mutate internal arrays."""
+    # snapshot simple checksums
+    before = []
+    for d, f, n in zip(sbs_branchcut.data, sbs_branchcut.flags, sbs_branchcut.nsamples):
+        before.append((
+            np.asarray(d).sum(dtype=np.complex128),
+            np.asarray(f, dtype=np.int64).sum(),
+            np.asarray(n, dtype=np.float64).sum(),
+        ))
+    _ = sbs_branchcut.average_over_nights(inpainted_data_are_samples=False)
+    after = []
+    for d, f, n in zip(sbs_branchcut.data, sbs_branchcut.flags, sbs_branchcut.nsamples):
+        after.append((
+            np.asarray(d).sum(dtype=np.complex128),
+            np.asarray(f, dtype=np.int64).sum(),
+            np.asarray(n, dtype=np.float64).sum(),
+        ))
+    for (bd, bf, bn), (ad, af, an) in zip(before, after):
+        # exact equality for bool/int sums; complex sum up to FP noise
+        assert bf == af
+        assert bn == an
+        np.testing.assert_allclose(bd, ad, rtol=0, atol=0.0)
+
+
+def test_average_over_nights_runs_without_where_inpainted_when_counting_inpainted(sbs_default):
+    """On objects with where_inpainted=None, average_over_nights should still run with inpainted_data_are_samples=True."""
+    d, f, n = sbs_default.average_over_nights(inpainted_data_are_samples=True)
+    nfreq = len(sbs_default.hd.freqs)
+    npol = len(sbs_default.hd.pols)
+    assert d.shape == f.shape == n.shape == (len(sbs_default.bin_lst), nfreq, npol)
+
+
+def test_average_over_nights_handles_empty_bins(sbs_keep_all):
+    """Test that average_over_nights handles empty bins correctly."""
+    # sbs_keep_all keeps empty edge bins by design
+    d0, f0, n0 = sbs_keep_all.average_over_nights(inpainted_data_are_samples=True)
+    d1, f1, n1 = sbs_keep_all.average_over_nights(inpainted_data_are_samples=False)
+    # Should not raise, and shapes should be correct
+    assert d0.shape == d1.shape == (len(sbs_keep_all.bin_lst), len(sbs_keep_all.hd.freqs), len(sbs_keep_all.hd.pols))
+    # Empty bins (0 nights) should remain zeros/True flags
+    for lidx, arr in enumerate(sbs_keep_all.data):
+        if arr.shape[0] == 0:
+            assert np.allclose(d0[lidx], 0)
+            assert np.allclose(n0[lidx], 0)
+            assert np.all(f0[lidx])
