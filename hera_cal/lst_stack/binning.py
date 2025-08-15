@@ -608,7 +608,11 @@ class SingleBaselineStacker:
     """Class to hold multi-night single-baseline data.
 
     Wraps around ``lst_stack.binning.lst_bin_files_for_baselines()`` and loads
-    single baseline data from multiple nights and stores it internally."""
+    single baseline data from multiple nights and stores it internally.
+
+    It also provides a method average_over_nights() to average the data across nights, accounting for
+    flags, nsamples, and where the data was inpainted.
+    """
 
     # lists of numpy arrays whose length is the number of LST bins and whose 0th dimension is the number of nights
     _list_objects = ('data', 'flags', 'nsamples', 'where_inpainted', 'times_in_bins', 'lsts_in_bins')
@@ -761,6 +765,63 @@ class SingleBaselineStacker:
         # adds 2 pi to lsts after the branch cut
         bin_lst[bin_lst < lst_branch_cut] += 2 * np.pi
         lsts_in_bins[:] = [np.where(lst < lst_branch_cut, lst + 2 * np.pi, lst) for lst in lsts_in_bins]
+
+    def average_over_nights(self, inpainted_data_are_samples: bool = False) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Compute nightly averaged data, flags, and nsamples. Data is averaged with nsamples as weights
+        (or 0 if flagged), regardless of whether the data is inpainted. Flags are ANDed across nights.
+        Nsamples are summed across nights, but inpainted data is not counted as samples (by default).
+
+        Wherever self.where_inpainted is None, it is assumed that the data was not inpainted.
+
+        Parameters
+        ----------
+        inpainted_data_are_samples : bool
+            If False (default), inpainted data is not counted as samples in the output lst_avg_nsamples. They
+            are still counted as samples when computing the weight with which to average data across nights.
+
+        Returns
+        -------
+        lst_avg_data : np.ndarray
+            The averaged data, shape (Nlst, Nfreqs, Npols)
+        lst_avg_flags : np.ndarray
+            The flags for the averaged data, shape (Nlst, Nfreqs, Npols)
+        lst_avg_nsamples : np.ndarray
+            The number of unflagged samples going into each data point, shape (Nlst, Nfreqs, Npols)
+        """
+        # Initialize empty arrays to hold the results
+        lst_avg_data = np.zeros((len(self.bin_lst), len(self.hd.freqs), len(self.hd.pols)), dtype=complex)
+        lst_avg_flags = np.ones((len(self.bin_lst), len(self.hd.freqs), len(self.hd.pols)), dtype=bool)
+        lst_avg_nsamples = np.zeros((len(self.bin_lst), len(self.hd.freqs), len(self.hd.pols)), dtype=float)
+
+        for lidx, (d, f, n, wip) in list(enumerate(zip(self.data, self.flags, self.nsamples, self.where_inpainted))):
+
+            # If no data for this LST bin, continue, leaving the data 0, the flags True, and nsamples 0
+            if d.shape[0] == 0:
+                continue
+
+            # If there's no information about inpainting, assume no inpainting
+            if wip is None:
+                wip = np.zeros_like(f, dtype=bool)
+
+            # flag if all nights are flagged
+            lst_avg_flags[lidx] = np.all(f, axis=0)
+
+            # compute weights as flagged nsamples
+            weights = np.where(f, 0, n)
+            # set weights to 1 where it'd be flagged over all nights so that there's no issue with averaging
+            for pidx in range(d.shape[-1]):
+                weights[:, lst_avg_flags[lidx, :, pidx], pidx] = 1
+
+            # compute average data, setting flagged data to 0 rather than np.nan since its weight is 0
+            lst_avg_data[lidx] = np.average(np.where(f, 0, d), axis=0, weights=weights)
+
+            # compute nsamples, where flagged (or inpainted) data are set to 0
+            if inpainted_data_are_samples:
+                lst_avg_nsamples[lidx] = np.sum(np.where(f, 0, n), axis=0)
+            else:
+                lst_avg_nsamples[lidx] = np.sum(np.where(f | wip, 0, n), axis=0)
+
+        return lst_avg_data, lst_avg_flags, lst_avg_nsamples
 
 
 class LSTStack:
