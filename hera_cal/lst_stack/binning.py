@@ -793,7 +793,7 @@ class SingleBaselineStacker:
         lst_avg_flags = np.ones((len(self.bin_lst), len(self.hd.freqs), len(self.hd.pols)), dtype=bool)
         lst_avg_nsamples = np.zeros((len(self.bin_lst), len(self.hd.freqs), len(self.hd.pols)), dtype=float)
 
-        for lidx, (d, f, n, wip) in list(enumerate(zip(self.data, self.flags, self.nsamples, self.where_inpainted))):
+        for lidx, (d, f, n, wip) in enumerate(zip(self.data, self.flags, self.nsamples, self.where_inpainted)):
 
             # If no data for this LST bin, continue, leaving the data 0, the flags True, and nsamples 0
             if d.shape[0] == 0:
