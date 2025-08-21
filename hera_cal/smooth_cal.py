@@ -412,7 +412,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
 
     # Build rephasor to take out average delay and handle phase flips
     dly = single_iterative_fft_dly(gains, wgts, freqs)
-    rephasor = rephasor = np.exp(-2.0j * np.pi * dly * freqs)
+    rephasor = np.exp(-2.0j * np.pi * dly * freqs)
     if fix_phase_flips:
         # average delay-rephased gain, compute phase of average, and then find phase flips
         avg_rephased_gain = np.ma.average(gains * rephasor, weights=wgts, axis=1, keepdims=True)
