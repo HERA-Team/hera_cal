@@ -1165,8 +1165,10 @@ class CalibrationSmoother():
 
                 # compute the time/freq averaged relative difference between gain_grids[ant] and filtered
                 relative_diff = np.where(self.flag_grids[ant], np.nan, np.abs(self.gain_grids[ant] - filtered) / np.abs(filtered))
-                meta['time_avg_rel_diff'][ant] = np.nanmean(relative_diff, axis=0)
-                meta['freq_avg_rel_diff'][ant] = np.nanmean(relative_diff, axis=1)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message="Mean of empty slice", category=RuntimeWarning)
+                    meta['time_avg_rel_diff'][ant] = np.nanmean(relative_diff, axis=0)
+                    meta['freq_avg_rel_diff'][ant] = np.nanmean(relative_diff, axis=1)
 
                 self.gain_grids[ant] = filtered
 
