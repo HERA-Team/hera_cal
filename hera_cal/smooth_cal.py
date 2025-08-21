@@ -1093,6 +1093,14 @@ class CalibrationSmoother():
                 If True and use_sparse_solver=True, use a preconditioner in the sparse solver. Default is True.
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
+
+        Returns:
+            meta : dict
+                Dictionary containing per-antpol information about the smoothing process
+                    - 'phase_flipped': boolean array indicating which integrations were phase flipped
+                    - 'phases': array of avg phases for each integration (used for determining flips)
+                    - 'time_avg_rel_diff': time-averaged relative difference between original and filtered data
+                    - 'freq_avg_rel_diff': frequency-averaged relative difference between original and filtered data
         '''
         # Keep track of the size of the weights grid after removing flagged edges
         if skip_flagged_edges:
@@ -1103,6 +1111,7 @@ class CalibrationSmoother():
         dpss_vectors = None
         cached_input = {}
         wgts_old = np.zeros(1)
+        meta = {'time_avg_rel_diff': {}, 'freq_avg_rel_diff': {}, 'phase_flipped': {}, 'phases': {}}
 
         # Sort antennas by number of flagged times/freqs to increase chances of reusing cached input
         idx = np.argsort([self.flag_grids[ant].sum() for ant in self.gain_grids])
@@ -1144,17 +1153,26 @@ class CalibrationSmoother():
                     # apply flags before and after phase flips
                     elif flag_phase_flip_ints:
                         most_recent_unflagged_tind = 0
-                        for tind, flipped_here in enumerate(info['phase_flips'] == -1):
+                        for tind, flipped_here in enumerate(flipped):
                             if not np.all(self.flag_grids[ant][tind, :]):
                                 # if the flip state has changed since the most recent unflagged integration
                                 if (info['phase_flips'][most_recent_unflagged_tind] == -1) != flipped_here:
                                     self.flag_grids[ant][most_recent_unflagged_tind, :] = True
                                     self.flag_grids[ant][tind, :] = True
                                 most_recent_unflagged_tind = tind
+                meta['phase_flipped'][ant] = flipped
+                meta['phases'][ant] = info['phases']
+
+                # compute the time/freq averaged relative difference between gain_grids[ant] and filtered
+                relative_diff = np.where(self.flag_grids[ant], np.nan, np.abs(self.gain_grids[ant] - filtered) / np.abs(filtered))
+                meta['time_avg_rel_diff'][ant] = np.nanmean(relative_diff, axis=0)
+                meta['freq_avg_rel_diff'][ant] = np.nanmean(relative_diff, axis=1)
 
                 self.gain_grids[ant] = filtered
 
         self.rephase_to_refant(warn=False)
+
+        return meta
 
     def write_smoothed_cal(self, output_replace=('.flagged_abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
