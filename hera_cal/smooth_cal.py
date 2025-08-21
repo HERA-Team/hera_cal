@@ -424,6 +424,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             rephasor = np.exp(-2.0j * np.pi * dly * freqs)
     else:
         phase_flips = np.ones_like(times)[:, np.newaxis]
+
     # include phase_flips in rephasor
     rephasor = phase_flips * rephasor
 
@@ -522,7 +523,10 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     else:
         raise ValueError("Filter method {} not recognized. Must be 'CLEAN' or 'DPSS'".format(method))
 
+    # record phases and phase_flips for later assessment if desired
     info['phase_flips'] = np.squeeze(phase_flips)
+    info['phases'] = (np.squeeze(phases) if fix_phase_flips else None)
+
     return filtered / rephasor, info
 
 
