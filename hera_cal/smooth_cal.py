@@ -457,7 +457,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         # average delay-rephased gain, compute phase of average, and then find phase flips
         avg_rephased_gain = np.ma.average(gains * rephasor, weights=wgts, axis=1, keepdims=True)
         phases = np.where(avg_rephased_gain.mask, np.nan, np.angle(avg_rephased_gain))
-        phase_flips = np.where(detect_phase_flips(phases), -1, 1)
+        time_smoothed_phases = flip_agnostic_phase_smoothing(phases, times, time_scale, eigenval_cutoff=eigenval_cutoff)
+        phase_flips = np.where(detect_phase_flips(phases - time_smoothed_phases), -1, 1)
         if np.any(phase_flips == -1):
             # recompute single dly
             dly = single_iterative_fft_dly(phase_flips * gains, wgts, freqs)
