@@ -10,6 +10,7 @@ import argparse
 import pyuvdata
 from collections.abc import Iterable
 import hera_filters
+from hera_qm.time_series_metrics import true_stretches
 
 try:
     import aipy
@@ -67,6 +68,54 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
             break
 
     return np.sum(taus)
+
+
+def flip_agnostic_phase_smoothing(phases, times, time_scale, eigenval_cutoff=1e-9):
+    """Given a set of phases, compute a smoothed version of them that can use used to take out
+    slowly varying temporal structure while using the fact that e^(2 i phi) is immune to phase flips.
+
+    Arguments:
+        phases: ndarray of shape (Ntimes) of phases in radians. np.nan indicates flagged data
+        times: ndarray of shape=(Ntimes) of Julian dates as floats in units of days
+        time_scale: float, the scale of the time filter in seconds
+        eigenval_cutoff: float, the cutoff for the DPSS eigenvalues
+
+    Returns:
+        smoothed_phase: ndarray of shape (Ntimes) of smoothed phases in radians
+    """
+    # figure out the first and last non-nan phases (nans are flags)
+    ts = true_stretches(np.isfinite(phases))
+    tslice = slice(ts[0].start, ts[-1].stop)
+
+    # smooth e^(2 i phi), which should ignore phase flips
+    to_filt = np.exp(2.0j * phases[tslice])[:, None]
+    filtered = hera_filters.dspec.fourier_filter(times[tslice],
+                                                 np.where(np.isfinite(to_filt), to_filt, 0),
+                                                 wgts=np.isfinite(to_filt).astype(float),
+                                                 filter_centers=[0],
+                                                 filter_half_widths=[(time_scale / 3600 / 24)**-1],
+                                                 mode='dpss_solve',
+                                                 eigenval_cutoff=[eigenval_cutoff],
+                                                 suppression_factors=[eigenval_cutoff],
+                                                 max_contiguous_edge_flags=len(phases),
+                                                 filter_dims=0,
+                                                 cache_solver_products=False,)[0][:, 0]
+    # renormalize to always have unit magnitude
+    filtered /= np.abs(filtered)
+
+    # compute smoothed phase as half the angle
+    smoothed_phase = 0.5 * np.unwrap(np.angle(filtered))
+
+    # the above squaring and square rooting could mean we're off by pi, so fix that
+    reference = np.exp(1.0j * smoothed_phase)
+    complexes = np.exp(1.0j * phases)
+    if np.abs(np.nanmedian(reference) - np.nanmedian(complexes)) > np.abs(np.nanmedian(reference) + np.nanmedian(complexes)):
+        smoothed_phase += np.pi
+
+    # return final phases, mod 2pi, with the same shape as the original
+    result = np.array(phases)
+    result[tslice] = smoothed_phase % (2 * np.pi)
+    return result
 
 
 def detect_phase_flips(phases):
