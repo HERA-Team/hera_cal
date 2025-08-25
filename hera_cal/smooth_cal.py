@@ -567,6 +567,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     # record phases and phase_flips for later assessment if desired
     info['phase_flips'] = np.squeeze(phase_flips)
     info['phases'] = (np.squeeze(phases) if fix_phase_flips else None)
+    info['time_smoothed_phases'] = (np.squeeze(time_smoothed_phases) if fix_phase_flips else None)
 
     return filtered / rephasor, info
 
@@ -1152,7 +1153,7 @@ class CalibrationSmoother():
         dpss_vectors = None
         cached_input = {}
         wgts_old = np.zeros(1)
-        meta = {'time_avg_rel_diff': {}, 'freq_avg_rel_diff': {}, 'phase_flipped': {}, 'phases': {}}
+        meta = {'time_avg_rel_diff': {}, 'freq_avg_rel_diff': {}, 'phase_flipped': {}, 'phases': {}, 'time_smoothed_phases': {}}
 
         # Sort antennas by number of flagged times/freqs to increase chances of reusing cached input
         idx = np.argsort([self.flag_grids[ant].sum() for ant in self.gain_grids])
@@ -1203,6 +1204,7 @@ class CalibrationSmoother():
                                 most_recent_unflagged_tind = tind
                 meta['phase_flipped'][ant] = flipped
                 meta['phases'][ant] = info['phases']
+                meta['time_smoothed_phases'][ant] = info['time_smoothed_phases']
 
                 # compute the time/freq averaged relative difference between gain_grids[ant] and filtered
                 relative_diff = np.where(self.flag_grids[ant], np.nan, np.abs(self.gain_grids[ant] - filtered) / np.abs(filtered))
