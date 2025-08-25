@@ -84,11 +84,11 @@ def flip_agnostic_phase_smoothing(phases, times, time_scale, eigenval_cutoff=1e-
         smoothed_phase: ndarray of shape (Ntimes) of smoothed phases in radians
     """
     # figure out the first and last non-nan phases (nans are flags)
-    ts = true_stretches(np.isfinite(phases))
+    ts = true_stretches(np.isfinite(np.squeeze(phases)))
     tslice = slice(ts[0].start, ts[-1].stop)
 
     # smooth e^(2 i phi), which should ignore phase flips
-    to_filt = np.exp(2.0j * phases[tslice])[:, None]
+    to_filt = np.exp(2.0j * np.squeeze(phases[tslice]))[:, None]
     filtered = hera_filters.dspec.fourier_filter(times[tslice],
                                                  np.where(np.isfinite(to_filt), to_filt, 0),
                                                  wgts=np.isfinite(to_filt).astype(float),
@@ -113,9 +113,9 @@ def flip_agnostic_phase_smoothing(phases, times, time_scale, eigenval_cutoff=1e-
         smoothed_phase += np.pi
 
     # return final phases, mod 2pi, with the same shape as the original
-    result = np.array(phases)
+    result = np.array(np.squeeze(phases))
     result[tslice] = smoothed_phase % (2 * np.pi)
-    return result
+    return result.reshape(phases.shape)
 
 
 def detect_phase_flips(phases):
