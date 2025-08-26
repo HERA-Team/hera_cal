@@ -127,13 +127,22 @@ def detect_phase_flips(phases):
 
     Returns:
         phase_flipped: boolean array the same shape as phases where True means pi radians flipped
-            relative to the first unflagged phase.
+            relative to the first unflagged phase. Integrations with np.nan phases will be marked
+            as whatever the previous integration was.
     """
+    original_shape = np.array(phases).shape
     complexes = np.exp(1.0j * phases)
+    phase_flipped = np.zeros(len(complexes), dtype=bool)
     first_nonnan = np.ravel(complexes)[np.isfinite(np.ravel(complexes))][0]
-    # check if each number is closer to first_nonnan or -first_nonnan
-    phase_flipped = np.abs(complexes - first_nonnan) > np.abs(complexes + first_nonnan)
-    return phase_flipped
+    previous_non_nan_result = False
+    for i in range(len(complexes)):
+        if not np.isnan(complexes[i]):
+            # check if each number is closer to first_nonnan or -first_nonnan
+            phase_flipped[i] = np.abs(complexes[i] - first_nonnan) > np.abs(complexes[i] + first_nonnan)
+            previous_non_nan_result = phase_flipped[i]
+        else:
+            phase_flipped[i] = previous_non_nan_result
+    return phase_flipped.reshape(original_shape)
 
 
 def dpss_filters(freqs, times, freq_scale=10, time_scale=1800, eigenval_cutoff=1e-9):
