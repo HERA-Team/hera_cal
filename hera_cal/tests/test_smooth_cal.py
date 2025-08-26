@@ -59,6 +59,86 @@ class Test_Smooth_Cal_Helper_Functions(object):
         phase_flipped = smooth_cal.detect_phase_flips(np.array([np.nan, 1, 1, 4, np.nan, 4]))
         np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
 
+    def _make_times(self, N=256, dt_sec=10.0, jd0=2458000.0):
+        """Helper: evenly spaced JD times with dt in seconds."""
+        return jd0 + np.arange(N) * (dt_sec / 86400.0)
+
+    def _phase_err(self, out_phase, true_phase):
+        """
+        Helper: 2π-aware phase error using complex exponentials.
+        Returns absolute wrapped error in radians.
+        """
+        return np.abs(np.angle(np.exp(1.0j * out_phase) * np.exp(-1.0j * true_phase)))
+
+    def test_flip_agnostic_phase_smoothing_no_flips(self):
+        """
+        If there are no flips, the smoother should reproduce the slow phase trend
+        (up to tiny numerical differences).
+        """
+        N = 256
+        times = self._make_times(N=N, dt_sec=10.0)
+        # very gentle, low-fringe phase (well within low-pass)
+        true_phase = 0.15 * np.sin(2 * np.pi * (np.arange(N) / (N * 2.5)))
+        # add small noise so there is something to "smooth"
+        rng = np.random.default_rng(0)
+        noisy = (true_phase + 0.03 * rng.standard_normal(N)).astype(float)
+
+        out = smooth_cal.flip_agnostic_phase_smoothing(noisy, times, time_scale=1200.0, eigenval_cutoff=1e-9)
+
+        err = self._phase_err(out, true_phase)
+        assert np.nanmax(err) < 0.2  # generous, but should typically be ~0.05–0.1
+
+        # shape preserved
+        assert out.shape == noisy.shape
+
+    def test_flip_agnostic_phase_smoothing_ignores_pi_flips(self):
+        """
+        A π flip in the middle should be ignored; output should follow the
+        underlying slow phase, not the flipped one.
+        """
+        N = 300
+        times = self._make_times(N=N, dt_sec=10.0)
+        base = 0.25 * np.sin(2 * np.pi * (np.arange(N) / (N * 2.0)))
+        phases = base.copy()
+        phases[N // 2 :] = (phases[N // 2 :] + np.pi)  # inject a clean flip
+
+        out = smooth_cal.flip_agnostic_phase_smoothing(phases, times, time_scale=1800.0, eigenval_cutoff=1e-9)
+
+        # Compare against the *unflipped* base
+        err = self._phase_err(out, base)
+        assert np.all(err < 0.01)
+
+    def test_flip_agnostic_phase_smoothing_preserves_end_nans_and_fills_interior(self):
+        """
+        Leading/trailing NaNs remain NaN; interior NaNs are filled by the smoothing.
+        """
+        N = 200
+        times = self._make_times(N=N, dt_sec=10.0)
+        base = 0.2 * np.sin(2 * np.pi * (np.arange(N) / (N * 3.0)))
+
+        phases = base.copy()
+        # Leading/trailing NaNs (flags at edges)
+        phases[:7] = np.nan
+        phases[-11:] = np.nan
+        # Interior NaNs (gap inside the valid tslice)
+        phases[80:90] = np.nan
+
+        out = smooth_cal.flip_agnostic_phase_smoothing(phases, times, time_scale=1500.0, eigenval_cutoff=1e-9)
+
+        # Ends should remain NaN
+        assert np.all(np.isnan(out[:7]))
+        assert np.all(np.isnan(out[-11:]))
+
+        # Interior gap should be filled (finite)
+        assert np.all(np.isfinite(out[80:90]))
+
+        # Where both input and base are finite (middle region), result should track base
+        mid_mask = np.ones(N, dtype=bool)
+        mid_mask[:7] = False
+        mid_mask[-11:] = False
+        err = self._phase_err(out[mid_mask], base[mid_mask])
+        assert np.all(err < 0.01)
+
     def test_dpss_filters(self):
         times = np.linspace(0, 10 * 10 / 60. / 60. / 24., 40, endpoint=False)
         freqs = np.linspace(100., 200., 50, endpoint=False) * 1e6
@@ -405,14 +485,14 @@ class Test_Smooth_Cal_Helper_Functions(object):
         for ant in flags.keys():
             flags[ant][4, 0:6] = True
             flags[ant][0:4, 4] = True
-        flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5, ant_threshold=1.0)
+        self.flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5, ant_threshold=1.0)
         for ant in flags.keys():
             assert np.all(flags[ant][4, :])
             assert np.all(flags[ant][:, 4])
 
         assert not np.all(flags[(0, 'Jxx')])
         flags[(0, 'Jxx')][0:8, :] = True
-        flag_threshold_and_broadcast(flags, freq_threshold=1.0, time_threshold=1.0, ant_threshold=0.5)
+        self.flag_threshold_and_broadcast(flags, freq_threshold=1.0, time_threshold=1.0, ant_threshold=0.5)
         assert np.all(flags[0, 'Jxx'])
         assert not np.all(flags[1, 'Jxx'])
 

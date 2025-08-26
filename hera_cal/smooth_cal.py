@@ -10,6 +10,7 @@ import argparse
 import pyuvdata
 from collections.abc import Iterable
 import hera_filters
+from hera_qm.time_series_metrics import true_stretches
 
 try:
     import aipy
@@ -69,6 +70,54 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     return np.sum(taus)
 
 
+def flip_agnostic_phase_smoothing(phases, times, time_scale, eigenval_cutoff=1e-9):
+    """Given a set of phases, compute a smoothed version of them that can use used to take out
+    slowly varying temporal structure while using the fact that e^(2 i phi) is immune to phase flips.
+
+    Arguments:
+        phases: ndarray of shape (Ntimes) of phases in radians. np.nan indicates flagged data
+        times: ndarray of shape=(Ntimes) of Julian dates as floats in units of days
+        time_scale: float, the scale of the time filter in seconds
+        eigenval_cutoff: float, the cutoff for the DPSS eigenvalues
+
+    Returns:
+        smoothed_phase: ndarray of shape (Ntimes) of smoothed phases in radians
+    """
+    # figure out the first and last non-nan phases (nans are flags)
+    ts = true_stretches(np.isfinite(np.squeeze(phases)))
+    tslice = slice(ts[0].start, ts[-1].stop)
+
+    # smooth e^(2 i phi), which should ignore phase flips
+    to_filt = np.exp(2.0j * np.squeeze(phases[tslice]))[:, None]
+    filtered = hera_filters.dspec.fourier_filter(times[tslice],
+                                                 np.where(np.isfinite(to_filt), to_filt, 0),
+                                                 wgts=np.isfinite(to_filt).astype(float),
+                                                 filter_centers=[0],
+                                                 filter_half_widths=[(time_scale / 3600 / 24)**-1],
+                                                 mode='dpss_solve',
+                                                 eigenval_cutoff=[eigenval_cutoff],
+                                                 suppression_factors=[eigenval_cutoff],
+                                                 max_contiguous_edge_flags=len(phases),
+                                                 filter_dims=0,
+                                                 cache_solver_products=False,)[0][:, 0]
+    # renormalize to always have unit magnitude
+    filtered /= np.abs(filtered)
+
+    # compute smoothed phase as half the angle
+    smoothed_phase = 0.5 * np.unwrap(np.angle(filtered))
+
+    # the above squaring and square rooting could mean we're off by pi, so fix that
+    reference = np.exp(1.0j * smoothed_phase)
+    complexes = np.exp(1.0j * phases)
+    if np.abs(np.nanmedian(reference) - np.nanmedian(complexes)) > np.abs(np.nanmedian(reference) + np.nanmedian(complexes)):
+        smoothed_phase += np.pi
+
+    # return final phases, mod 2pi, with the same shape as the original
+    result = np.array(np.squeeze(phases))
+    result[tslice] = smoothed_phase % (2 * np.pi)
+    return result.reshape(phases.shape)
+
+
 def detect_phase_flips(phases):
     """Detect phases that are flipped relative to the first unflagged integration.
 
@@ -78,21 +127,21 @@ def detect_phase_flips(phases):
 
     Returns:
         phase_flipped: boolean array the same shape as phases where True means pi radians flipped
-            relative to the first unflagged phase.
+            relative to the first unflagged phase. Integrations with np.nan phases will be marked
+            as whatever the previous integration was.
     """
     original_shape = np.array(phases).shape
-    complexes = np.exp(1.0j * np.ravel(phases))
+    complexes = np.exp(1.0j * phases)
     phase_flipped = np.zeros(len(complexes), dtype=bool)
-    currently_flipped = False
-    previous_non_nan = np.nan  # ensures that first non-nan integration is not flipped
+    first_nonnan = np.ravel(complexes)[np.isfinite(np.ravel(complexes))][0]
+    previous_non_nan_result = False
     for i in range(len(complexes)):
         if not np.isnan(complexes[i]):
-            flip_here = np.abs(complexes[i] - previous_non_nan) > np.abs(complexes[i] + previous_non_nan)
-            phase_flipped[i] = currently_flipped ^ flip_here
-            currently_flipped = phase_flipped[i]
-            previous_non_nan = complexes[i]
+            # check if each number is closer to first_nonnan or -first_nonnan
+            phase_flipped[i] = np.abs(complexes[i] - first_nonnan) > np.abs(complexes[i] + first_nonnan)
+            previous_non_nan_result = phase_flipped[i]
         else:
-            phase_flipped[i] = currently_flipped
+            phase_flipped[i] = previous_non_nan_result
     return phase_flipped.reshape(original_shape)
 
 
@@ -412,18 +461,20 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
 
     # Build rephasor to take out average delay and handle phase flips
     dly = single_iterative_fft_dly(gains, wgts, freqs)
-    rephasor = rephasor = np.exp(-2.0j * np.pi * dly * freqs)
+    rephasor = np.exp(-2.0j * np.pi * dly * freqs)
     if fix_phase_flips:
         # average delay-rephased gain, compute phase of average, and then find phase flips
         avg_rephased_gain = np.ma.average(gains * rephasor, weights=wgts, axis=1, keepdims=True)
         phases = np.where(avg_rephased_gain.mask, np.nan, np.angle(avg_rephased_gain))
-        phase_flips = np.where(detect_phase_flips(phases), -1, 1)
+        time_smoothed_phases = flip_agnostic_phase_smoothing(phases, times, time_scale, eigenval_cutoff=eigenval_cutoff)
+        phase_flips = np.where(detect_phase_flips(phases - time_smoothed_phases), -1, 1)
         if np.any(phase_flips == -1):
             # recompute single dly
             dly = single_iterative_fft_dly(phase_flips * gains, wgts, freqs)
             rephasor = np.exp(-2.0j * np.pi * dly * freqs)
     else:
         phase_flips = np.ones_like(times)[:, np.newaxis]
+
     # include phase_flips in rephasor
     rephasor = phase_flips * rephasor
 
@@ -522,7 +573,11 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     else:
         raise ValueError("Filter method {} not recognized. Must be 'CLEAN' or 'DPSS'".format(method))
 
+    # record phases and phase_flips for later assessment if desired
     info['phase_flips'] = np.squeeze(phase_flips)
+    info['phases'] = (np.squeeze(phases) if fix_phase_flips else None)
+    info['time_smoothed_phases'] = (np.squeeze(time_smoothed_phases) if fix_phase_flips else None)
+
     return filtered / rephasor, info
 
 
@@ -1089,6 +1144,14 @@ class CalibrationSmoother():
                 If True and use_sparse_solver=True, use a preconditioner in the sparse solver. Default is True.
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
+
+        Returns:
+            meta : dict
+                Dictionary containing per-antpol information about the smoothing process
+                    - 'phase_flipped': boolean array indicating which integrations were phase flipped
+                    - 'phases': array of avg phases for each integration (used for determining flips)
+                    - 'time_avg_rel_diff': time-averaged relative difference between original and filtered data
+                    - 'freq_avg_rel_diff': frequency-averaged relative difference between original and filtered data
         '''
         # Keep track of the size of the weights grid after removing flagged edges
         if skip_flagged_edges:
@@ -1099,6 +1162,7 @@ class CalibrationSmoother():
         dpss_vectors = None
         cached_input = {}
         wgts_old = np.zeros(1)
+        meta = {'time_avg_rel_diff': {}, 'freq_avg_rel_diff': {}, 'phase_flipped': {}, 'phases': {}, 'time_smoothed_phases': {}}
 
         # Sort antennas by number of flagged times/freqs to increase chances of reusing cached input
         idx = np.argsort([self.flag_grids[ant].sum() for ant in self.gain_grids])
@@ -1140,17 +1204,29 @@ class CalibrationSmoother():
                     # apply flags before and after phase flips
                     elif flag_phase_flip_ints:
                         most_recent_unflagged_tind = 0
-                        for tind, flipped_here in enumerate(info['phase_flips'] == -1):
+                        for tind, flipped_here in enumerate(flipped):
                             if not np.all(self.flag_grids[ant][tind, :]):
                                 # if the flip state has changed since the most recent unflagged integration
                                 if (info['phase_flips'][most_recent_unflagged_tind] == -1) != flipped_here:
                                     self.flag_grids[ant][most_recent_unflagged_tind, :] = True
                                     self.flag_grids[ant][tind, :] = True
                                 most_recent_unflagged_tind = tind
+                meta['phase_flipped'][ant] = flipped
+                meta['phases'][ant] = info['phases']
+                meta['time_smoothed_phases'][ant] = info['time_smoothed_phases']
+
+                # compute the time/freq averaged relative difference between gain_grids[ant] and filtered
+                relative_diff = np.where(self.flag_grids[ant], np.nan, np.abs(self.gain_grids[ant] - filtered) / np.abs(filtered))
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message="Mean of empty slice", category=RuntimeWarning)
+                    meta['time_avg_rel_diff'][ant] = np.nanmean(relative_diff, axis=0)
+                    meta['freq_avg_rel_diff'][ant] = np.nanmean(relative_diff, axis=1)
 
                 self.gain_grids[ant] = filtered
 
         self.rephase_to_refant(warn=False)
+
+        return meta
 
     def write_smoothed_cal(self, output_replace=('.flagged_abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
