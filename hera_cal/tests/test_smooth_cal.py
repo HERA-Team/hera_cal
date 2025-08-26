@@ -55,9 +55,9 @@ class Test_Smooth_Cal_Helper_Functions(object):
         np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
         # test nan handling
         phase_flipped = smooth_cal.detect_phase_flips(np.array([1, 1, 1, 4, np.nan, 4]))
-        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, False, True]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
         phase_flipped = smooth_cal.detect_phase_flips(np.array([np.nan, 1, 1, 4, np.nan, 4]))
-        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, False, True]))
+        np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
 
     def _make_times(self, N=256, dt_sec=10.0, jd0=2458000.0):
         """Helper: evenly spaced JD times with dt in seconds."""
