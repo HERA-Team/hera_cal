@@ -300,6 +300,8 @@ def lst_bin_files_for_baselines(
     freq_min: float | None = None,
     freq_max: float | None = None,
     where_inpainted_files: list[list[str | Path | None]] | None = None,
+    cal_file_loader: callable | None = None,
+    cal_file_loader_kwargs: dict | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[np.ndarray]]:
     """Produce a set of LST-binned (but not averaged) data for a set of baselines.
 
@@ -365,6 +367,14 @@ def lst_bin_files_for_baselines(
         A list of lists of strings, one for each file, where each file is a UVFlag file
         specifying which data are in-painted. If not provided, no inpainting will be
         assumed.
+    cal_file_loader
+        A callable that takes a calibration file path, a list of baselines, and a list
+        of polarizations, and returns the corresponding calibration solutions. If
+        not provided, will use the default HERAData/HERACal readers to read the
+        calibration solutions. Useful if the calibration files are in a different
+        format than HERACal files.
+    cal_file_loader_kwargs
+        A dictionary of keyword arguments to pass to ``cal_file_loader``.
 
     Returns
     -------
@@ -514,13 +524,21 @@ def lst_bin_files_for_baselines(
         # load calibration
         if calfl is not None:
             logger.info(f"Opening and applying {calfl}")
-            uvc = io.to_HERACal(calfl)
-            gains, cal_flags, _, _ = uvc.read(freq_chans=freq_chans)
-            # down select times if necessary
-            if len(tind) < uvc.Ntimes and uvc.Ntimes > 1:
-                # If uvc has Ntimes == 1, then broadcast across time will work automatically
-                uvc.select(times=uvc.time_array[tind])
-                gains, cal_flags, _, _ = uvc.build_calcontainers()
+            if cal_file_loader is not None:
+                gains, cal_flags = cal_file_loader(
+                    calfl, 
+                    baselines=bls_to_load, 
+                    pols=pols, 
+                    **(cal_file_loader_kwargs or {})
+                )
+            else:
+                uvc = io.to_HERACal(calfl)
+                gains, cal_flags, _, _ = uvc.read(freq_chans=freq_chans)
+                # down select times if necessary
+                if len(tind) < uvc.Ntimes and uvc.Ntimes > 1:
+                    # If uvc has Ntimes == 1, then broadcast across time will work automatically
+                    uvc.select(times=uvc.time_array[tind])
+                    gains, cal_flags, _, _ = uvc.build_calcontainers()
 
             apply_cal.calibrate_in_place(
                 _data,

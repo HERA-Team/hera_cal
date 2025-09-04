@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import h5py
 import numpy as np
 from .. import abscal, utils
 from hera_filters import dspec
@@ -699,3 +700,183 @@ def lstbin_absolute_calibration(
                     auto_stack.data[:, apidx, :, polidx] /= auto_gain
 
     return calibration_parameters, gains
+
+def write_single_baseline_lstcal_solutions(filename, all_calibration_parameters, flag_array, transformed_antpos, times, freqs, pols, compression=None, compression_opts=None):
+    """
+    Write single-baseline LST calibration solutions and metadata to an HDF5 file.
+
+    This function creates an HDF5 file with two main groups: ``/data`` and ``/Header``.
+    The ``/data`` group stores the calibration parameters and flag array, while the
+    ``/Header`` group stores metadata such as version, times, frequencies, antenna
+    positions, and polarizations.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the HDF5 file to create.
+    all_calibration_parameters : dict of {str: np.ndarray}
+        Dictionary mapping calibration parameter names (e.g., gains, delays) to
+        numpy arrays containing their values.
+    flag_array : np.ndarray
+        Boolean array indicating flagged (invalid) data samples.
+    transformed_antpos : dict of {int: array_like}
+        Dictionary mapping antenna numbers to their transformed positions (typically
+        in ENU or another projected coordinate system).
+    times : np.ndarray
+        Array of observation times corresponding to the calibration solutions.
+    freqs : np.ndarray
+        Array of frequencies corresponding to the calibration solutions.
+    pols : list of str
+        List of polarization strings (e.g., ``["ee", "nn", "en", "ne"]``).
+
+    """
+    with h5py.File(filename, 'w') as file:
+        # /data group
+        dgrp = file.create_group("data")
+        for pname in all_calibration_parameters:
+            dgrp.create_dataset(
+                pname,
+                data=all_calibration_parameters[pname],
+                compression=compression,
+                compression_opts=compression_opts,
+            )
+        dgrp.create_dataset(
+            "flag_array",
+            data=flag_array,
+            compression=compression,
+            compression_opts=compression_opts,
+        )
+
+
+        # Create header for metadata
+        header = file.create_group("Header")
+        header['times'] = times
+        header['freqs'] = freqs
+
+        # Extract antenna numbers (keys) and positions (values)
+        ant_nums = list(transformed_antpos.keys())
+        ant_positions = list(transformed_antpos.values())
+        header["antenna_numbers"] = np.array(ant_nums, dtype=int)
+        header["antenna_positions"] = np.array(ant_positions)
+
+        # Store polarizations
+        pols_encoded = [p.encode('utf-8') for p in pols]
+        header["polarization_array"] = pols_encoded
+
+def load_single_baseline_lstcal_solutions(filename):
+    """
+    Load single-baseline LST calibration solutions and metadata from an HDF5 file.
+
+    Returns
+    -------
+    all_calibration_parameters : dict[str, np.ndarray]
+        Dict of parameter name -> array, from the /data group (all except 'flag_array').
+    flag_array : np.ndarray
+        Boolean array from /data/flag_array.
+    transformed_antpos : dict[int, np.ndarray]
+        Dict mapping antenna number -> position vector, from /Header.
+    times : np.ndarray
+        /Header/times dataset.
+    freqs : np.ndarray
+        /Header/freqs dataset.
+    pols : list[str]
+        List of polarization strings from /Header/polarization_array.
+    """
+    with h5py.File(filename, "r") as file:
+        # --- data ---
+        dgrp = file["data"]
+        flag_array = np.asarray(dgrp["flag_array"], dtype=bool)
+        all_calibration_parameters = {
+            name: np.asarray(ds) for name, ds in dgrp.items() if name != "flag_array"
+        }
+
+        # --- header ---
+        hdr = file["Header"]
+        times = np.asarray(hdr["times"])
+        freqs = np.asarray(hdr["freqs"])
+
+        ant_nums = np.asarray(hdr["antenna_numbers"], dtype=int)
+        ant_positions = np.asarray(hdr["antenna_positions"])
+        transformed_antpos = {
+            int(a): pos for a, pos in zip(ant_nums, ant_positions)
+        }
+
+        pols = [p.decode("utf-8") for p in hdr["polarization_array"]]
+
+    return all_calibration_parameters, flag_array, transformed_antpos, times, freqs, pols
+
+def load_single_baseline_lstcal_gains(filename, baselines, polarizations, refpol="Jee"):
+    """
+    Load single-baseline LST calibration solutions from an HDF5 file and compute
+    the antenna gains for the specified baselines and polarizations.
+
+    Parameters:
+    ----------
+        filename : str
+            Path to the HDF5 file containing the calibration solutions. The file should have been
+            created using the `write_single_baseline_lstcal_solutions` function.
+        baselines : list[tuple[int, int]]
+            A list of tuples specifying the antenna pairs (i, j) for which to extract gains.
+        polarizations : list[str]
+            A list of polarization strings (e.g., ["ee", "nn"]) for which to extract gains.
+        refpol : str, default='Jee'
+            The reference polarization to use for cross-polarization phase calibration. This is
+            the polarization that the other polarization is calibrated to. The default is 'Jee'.
+
+    Returns:
+    -------
+        gains : dict
+            A dictionary containing the calibrated gains for each antenna. The keys are tuples
+            containing the antenna numbers and polarization.
+
+    """
+    # Load calibration solutions
+    (
+        all_calibration_parameters, 
+        flag_array, 
+        transformed_antpos, 
+        _, 
+        _, 
+        pols
+    ) = load_single_baseline_lstcal_solutions(filename)
+
+    # Get unique gain polarizations from input polarizations
+    gain_pols = list(set(sum([list(utils.split_pol(pol)) for pol in polarizations], [])))
+
+    # Check that requested polarizations are in the file
+    for pol in polarizations:
+        if pol not in pols:
+            raise ValueError(f"Polarization {pol} not in gain polarizations: {pols}")
+        
+    # Sanity checks on required params
+    for pol in gain_pols:
+        for key in (f"amplitude_{pol}", f"tip_tilt_{pol}"):
+            if key not in all_calibration_parameters:
+                raise KeyError(f"Missing calibration parameter '{key}' in file.")
+       
+    # Compute antenna gains from calibration parameters
+    gains = {}
+    cal_flags = {}
+    unique_ants = list(set(sum(map(list, baselines), [])))
+
+    flags = {
+        f"J{pol}": np.all(flag_array[pi])
+        for pi, pol in enumerate(pols)
+    }
+    cal_flags = {
+        (ant, pol): flags[pol[1:]]
+        for ant in unique_ants
+        for pol in gain_pols
+    }
+
+    # Compute antenna gains from calibration parameters
+    for ant in unique_ants:
+        for pol in gain_pols:
+            gains[(ant, pol)] = all_calibration_parameters[f"amplitude_{pol}"].astype(complex)
+            gains[(ant, pol)] *= np.exp(
+                1j * np.einsum("tfc,c->tf", all_calibration_parameters[f"tip_tilt_{pol}"], transformed_antpos[ant])
+            )
+            if pol != refpol:
+                gains[(ant, pol)] *= np.exp(1j * all_calibration_parameters[f"cross_pol"])
+
+    return gains, cal_flags
