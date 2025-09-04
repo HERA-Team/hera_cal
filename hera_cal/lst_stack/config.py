@@ -719,7 +719,7 @@ class LSTBinConfiguratorSingleBaseline():
                    nights=datafiles_cfg['nights'],
                    fileglob=datafiles_cfg['fileglob'])
 
-    def build_bl_to_file_map(self, cal_file_template: str) -> dict[str, list[str]]:
+    def build_bl_to_file_map(self) -> dict[str, list[str]]:
         '''Build a dictionary mapping from baseline to file paths.
 
         Returns
@@ -739,9 +739,6 @@ class LSTBinConfiguratorSingleBaseline():
             rx = re.compile(rf'{re.escape(prefix)}(.+?){re.escape(suffix)}$')
             bls = {rx.match(f).group(1) for f in glob.glob(template.replace('{baseline}', '*'))}
 
-            # Get the name of the cal file for this night
-            if cal_file_template:
-                cal_file_path = cal_file_template.format(night=night)
 
             # put files into m
             for bl in bls:
