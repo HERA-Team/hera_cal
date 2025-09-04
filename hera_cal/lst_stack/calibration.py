@@ -701,6 +701,7 @@ def lstbin_absolute_calibration(
 
     return calibration_parameters, gains
 
+
 def write_single_baseline_lstcal_solutions(filename, all_calibration_parameters, flag_array, transformed_antpos, times, freqs, pols, compression=None, compression_opts=None):
     """
     Write single-baseline LST calibration solutions and metadata to an HDF5 file.
@@ -747,7 +748,6 @@ def write_single_baseline_lstcal_solutions(filename, all_calibration_parameters,
             compression_opts=compression_opts,
         )
 
-
         # Create header for metadata
         header = file.create_group("Header")
         header['times'] = times
@@ -762,6 +762,7 @@ def write_single_baseline_lstcal_solutions(filename, all_calibration_parameters,
         # Store polarizations
         pols_encoded = [p.encode('utf-8') for p in pols]
         header["polarization_array"] = pols_encoded
+
 
 def load_single_baseline_lstcal_solutions(filename):
     """
@@ -805,6 +806,7 @@ def load_single_baseline_lstcal_solutions(filename):
 
     return all_calibration_parameters, flag_array, transformed_antpos, times, freqs, pols
 
+
 def load_single_baseline_lstcal_gains(filename, baselines, polarizations, refpol="Jee"):
     """
     Load single-baseline LST calibration solutions from an HDF5 file and compute
@@ -832,11 +834,11 @@ def load_single_baseline_lstcal_gains(filename, baselines, polarizations, refpol
     """
     # Load calibration solutions
     (
-        all_calibration_parameters, 
-        flag_array, 
-        transformed_antpos, 
-        _, 
-        _, 
+        all_calibration_parameters,
+        flag_array,
+        transformed_antpos,
+        _,
+        _,
         pols
     ) = load_single_baseline_lstcal_solutions(filename)
 
@@ -847,13 +849,13 @@ def load_single_baseline_lstcal_gains(filename, baselines, polarizations, refpol
     for pol in polarizations:
         if pol not in pols:
             raise ValueError(f"Polarization {pol} not in gain polarizations: {pols}")
-        
+
     # Sanity checks on required params
     for pol in gain_pols:
         for key in (f"amplitude_{pol}", f"tip_tilt_{pol}"):
             if key not in all_calibration_parameters:
                 raise KeyError(f"Missing calibration parameter '{key}' in file.")
-       
+
     # Compute antenna gains from calibration parameters
     gains = {}
     cal_flags = {}

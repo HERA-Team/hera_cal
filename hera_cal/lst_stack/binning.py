@@ -526,9 +526,9 @@ def lst_bin_files_for_baselines(
             logger.info(f"Opening and applying {calfl}")
             if cal_file_loader is not None:
                 gains, cal_flags = cal_file_loader(
-                    calfl, 
-                    baselines=bls_to_load, 
-                    pols=pols, 
+                    calfl,
+                    baselines=bls_to_load,
+                    pols=pols,
                     **(cal_file_loader_kwargs or {})
                 )
             else:

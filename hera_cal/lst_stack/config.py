@@ -731,14 +731,13 @@ class LSTBinConfiguratorSingleBaseline():
             function will find those with the order reversed (e.g. "1_0" for "0_1") and include them too.
         '''
         bl_to_file_map = {}
-    
+
         for night in self.nights:
             # find all unique values of {baseline} after replacing {night} in datadir + fileglob
             template = os.path.join(self.datadir, self.fileglob.replace('{night}', night))
             prefix, suffix = template.split('{baseline}', 1)
             rx = re.compile(rf'{re.escape(prefix)}(.+?){re.escape(suffix)}$')
             bls = {rx.match(f).group(1) for f in glob.glob(template.replace('{baseline}', '*'))}
-
 
             # put files into m
             for bl in bls:
@@ -759,9 +758,9 @@ class LSTBinConfiguratorSingleBaseline():
         Parameters
         ----------
         cal_file_template : str
-            A template string for the calfiles that contain gains for an entire night. 
+            A template string for the calfiles that contain gains for an entire night.
             This string should contain "{night}" which will be replaced by each night in ``nights``.
-    
+
         Returns
         -------
         bl_to_calfile_map : dict[str, list[str]]
@@ -772,17 +771,17 @@ class LSTBinConfiguratorSingleBaseline():
             for "0_1") and include them too.
         '''
         self.bl_to_calfile_map = {}
-    
+
         for night in self.nights:
             # find all unique values of {baseline} after replacing {night} in datadir + fileglob
             template = os.path.join(self.datadir, self.fileglob.replace('{night}', night))
             prefix, suffix = template.split('{baseline}', 1)
             rx = re.compile(rf'{re.escape(prefix)}(.+?){re.escape(suffix)}$')
             bls = {rx.match(f).group(1) for f in glob.glob(template.replace('{baseline}', '*'))}
-    
+
             # Get the name of the cal file for this night
             cal_file_path = cal_file_template.format(night=night)
-    
+
             # put files into m
             for bl in bls:
                 reverse_bl = '_'.join(bl.split('_')[::-1])
@@ -796,6 +795,7 @@ class LSTBinConfiguratorSingleBaseline():
                     self.bl_to_calfile_map[bl] = [cal_file_path]
 
         return self.bl_to_calfile_map
+
 
 def _nested_list_of(cls):
     """
