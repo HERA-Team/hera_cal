@@ -719,7 +719,7 @@ class LSTBinConfiguratorSingleBaseline():
                    nights=datafiles_cfg['nights'],
                    fileglob=datafiles_cfg['fileglob'])
 
-    def build_bl_to_file_map(self) -> dict[str, list[str]]:
+    def build_bl_to_file_map(self, cal_file_template: str) -> dict[str, list[str]]:
         '''Build a dictionary mapping from baseline to file paths.
 
         Returns
@@ -731,12 +731,17 @@ class LSTBinConfiguratorSingleBaseline():
             function will find those with the order reversed (e.g. "1_0" for "0_1") and include them too.
         '''
         bl_to_file_map = {}
+    
         for night in self.nights:
             # find all unique values of {baseline} after replacing {night} in datadir + fileglob
             template = os.path.join(self.datadir, self.fileglob.replace('{night}', night))
             prefix, suffix = template.split('{baseline}', 1)
             rx = re.compile(rf'{re.escape(prefix)}(.+?){re.escape(suffix)}$')
             bls = {rx.match(f).group(1) for f in glob.glob(template.replace('{baseline}', '*'))}
+
+            # Get the name of the cal file for this night
+            if cal_file_template:
+                cal_file_path = cal_file_template.format(night=night)
 
             # put files into m
             for bl in bls:
@@ -751,6 +756,49 @@ class LSTBinConfiguratorSingleBaseline():
                     bl_to_file_map[bl] = [template.format(baseline=bl)]
         return bl_to_file_map
 
+    def build_bl_to_calfile_map(self, cal_file_template: str) -> dict[str, list[str]]:
+        '''Build a dictionary mapping from baseline to calfile paths.
+
+        Parameters
+        ----------
+        cal_file_template : str
+            A template string for the calfiles that contain gains for an entire night. 
+            This string should contain "{night}" which will be replaced by each night in ``nights``.
+    
+        Returns
+        -------
+        bl_to_calfile_map : dict[str, list[str]]
+            A dictionary mapping from baseline names (e.g. "0_1") to lists of calfile paths,
+            one per night on which that baseline was found. All redundantly averaged baselines with
+            the same separation must be keyed by the same antenna pair. Ideally, they'd also be in
+            the same order, but this function will find those with the order reversed (e.g. "1_0"
+            for "0_1") and include them too.
+        '''
+        self.bl_to_calfile_map = {}
+    
+        for night in self.nights:
+            # find all unique values of {baseline} after replacing {night} in datadir + fileglob
+            template = os.path.join(self.datadir, self.fileglob.replace('{night}', night))
+            prefix, suffix = template.split('{baseline}', 1)
+            rx = re.compile(rf'{re.escape(prefix)}(.+?){re.escape(suffix)}$')
+            bls = {rx.match(f).group(1) for f in glob.glob(template.replace('{baseline}', '*'))}
+    
+            # Get the name of the cal file for this night
+            cal_file_path = cal_file_template.format(night=night)
+    
+            # put files into m
+            for bl in bls:
+                reverse_bl = '_'.join(bl.split('_')[::-1])
+                if (reverse_bl != bl) and (reverse_bl in bls):
+                    raise ValueError(f'Found both {bl} and {reverse_bl} on {night}.')
+                if bl in self.bl_to_calfile_map:
+                    self.bl_to_calfile_map[bl].append(cal_file_path)
+                elif reverse_bl in self.bl_to_calfile_map:
+                    self.bl_to_calfile_map[reverse_bl].append(cal_file_path)
+                else:
+                    self.bl_to_calfile_map[bl] = [cal_file_path]
+
+        return self.bl_to_calfile_map
 
 def _nested_list_of(cls):
     """

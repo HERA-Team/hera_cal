@@ -675,6 +675,8 @@ class SingleBaselineStacker:
             lst_branch_cut: float | None = None,
             where_inpainted_file_rules: list[list[str]] | None = None,
             to_keep_slice: slice | None = None,
+            cal_file_loader: callable | None = None,
+            cal_file_loader_kwargs: dict | None = None,
         ) -> SingleBaselineStacker:
         """Creates a SingleBaselineStacker object that loads data for a single baseline, optionally rolls to start after a branch cut,
         and removes any times at the beginning or end of the data set that have no data.
@@ -710,9 +712,24 @@ class SingleBaselineStacker:
         to_keep_slice : slice | None
             For advanced users only. Typically, times are removed at the beginning and end of the data set if they have no data.
             This option allows that behavior to be overridden with an explicit slice into an array of length len(lst_bin_edges) - 1.
+        cal_file_loader : callable | None
+            A callable that takes a calibration file path, a list of baselines, and a list
+            of polarizations, and returns the corresponding calibration solutions. If
+            not provided, will use the default HERAData/HERACal readers to read the
+            calibration solutions. Useful if the calibration files are in a different
+            format than HERACal files.
+        cal_file_loader_kwargs : dict | None
+            A dictionary of keyword arguments to pass to ``cal_file_loader``.
         """
         # Load the data
         files_here = configurator.bl_to_file_map[bl_str]
+
+        # Load the cal files if they exist
+        if hasattr(configurator, 'bl_to_calfile_map'):
+            cal_files = configurator.bl_to_calfile_map[bl_str]
+        else:
+            cal_files = None
+
         where_inpainted_files = ([reduce(lambda txt, pair: txt.replace(*pair), where_inpainted_file_rules, df) for df in files_here]
                                  if where_inpainted_file_rules is not None else None)
         hd = io.HERAData(files_here[-1])
@@ -722,13 +739,18 @@ class SingleBaselineStacker:
          nsamples,
          where_inpainted,
          times_in_bins,
-         lsts_in_bins) = lst_bin_files_for_baselines(data_files=files_here,
-                                                     lst_bin_edges=lst_bin_edges,
-                                                     antpairs=hd.antpairs,
-                                                     freqs=hd.freqs,
-                                                     pols=hd.pols,
-                                                     rephase=True,
-                                                     where_inpainted_files=where_inpainted_files)
+         lsts_in_bins) = lst_bin_files_for_baselines(
+            data_files=files_here,
+            lst_bin_edges=lst_bin_edges,
+            antpairs=hd.antpairs,
+            freqs=hd.freqs,
+            pols=hd.pols,
+            rephase=True,
+            where_inpainted_files=where_inpainted_files,
+            cal_files=cal_files,
+            cal_file_loader=cal_file_loader,
+            cal_file_loader_kwargs=cal_file_loader_kwargs,
+         )
 
         # Cut out baseline dimension
         for list_obj in (data, flags, nsamples, where_inpainted):
