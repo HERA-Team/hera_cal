@@ -866,7 +866,7 @@ def load_single_baseline_lstcal_gains(filename, baselines, polarizations, refpol
         for pi, pol in enumerate(pols)
     }
     cal_flags = {
-        (ant, pol): flags[pol[1:]]
+        (ant, pol): flags[pol]
         for ant in unique_ants
         for pol in gain_pols
     }
