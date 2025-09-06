@@ -531,6 +531,7 @@ def lst_bin_files_for_baselines(
                     polarizations=pols,
                     **(cal_file_loader_kwargs or {})
                 )
+                gain_convention = "divide"
             else:
                 uvc = io.to_HERACal(calfl)
                 gains, cal_flags, _, _ = uvc.read(freq_chans=freq_chans)
@@ -539,13 +540,14 @@ def lst_bin_files_for_baselines(
                     # If uvc has Ntimes == 1, then broadcast across time will work automatically
                     uvc.select(times=uvc.time_array[tind])
                     gains, cal_flags, _, _ = uvc.build_calcontainers()
+                gain_convention = uvc.gain_convention
 
             apply_cal.calibrate_in_place(
                 _data,
                 gains,
                 data_flags=_flags,
                 cal_flags=cal_flags,
-                gain_convention=uvc.gain_convention,
+                gain_convention=gain_convention,
             )
 
         for i, bl in enumerate(antpairs):
