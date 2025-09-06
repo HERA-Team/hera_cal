@@ -528,7 +528,7 @@ def lst_bin_files_for_baselines(
                 gains, cal_flags = cal_file_loader(
                     calfl,
                     baselines=bls_to_load,
-                    pols=pols,
+                    polarizations=pols,
                     **(cal_file_loader_kwargs or {})
                 )
             else:
