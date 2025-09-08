@@ -391,6 +391,7 @@ class TestLSTBinCalibration:
                 gains[key], gains_neg[key], equal_nan=True
             ), f"Mismatch in gains for {key} after setting nsamples to negative values."
 
+
 @pytest.fixture
 def sample_file(tmp_path):
     """
