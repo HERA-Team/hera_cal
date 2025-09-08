@@ -876,7 +876,7 @@ def load_single_baseline_lstcal_gains(filename, baselines, polarizations, refpol
         for pol in gain_pols:
             gains[(ant, pol)] = all_calibration_parameters[f"amplitude_{pol}"].astype(complex)
             gains[(ant, pol)] *= np.exp(
-                1j * np.einsum("tfc,c->tf", all_calibration_parameters[f"tip_tilt_{pol}"], transformed_antpos[ant])
+                -1j * np.einsum("tfc,c->tf", all_calibration_parameters[f"tip_tilt_{pol}"], transformed_antpos[ant])
             )
             if pol != refpol:
                 gains[(ant, pol)] *= np.exp(1j * all_calibration_parameters[f"cross_pol"])
