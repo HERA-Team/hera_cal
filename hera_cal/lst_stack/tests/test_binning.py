@@ -1,5 +1,5 @@
 import pytest
-from .. import binning, config
+from .. import binning, config, calibration
 from ...tests import mock_uvdata as mockuvd
 import numpy as np
 from ...red_groups import RedundantGroups
@@ -12,6 +12,7 @@ from pyuvdata import UVFlag, UVData
 from ...io import HERAData
 from ...data import DATA_PATH
 import os
+import copy
 
 
 class TestAdjustLSTBinEdges:
@@ -451,6 +452,46 @@ def real_files_and_grid():
         "where_rules": [[".inpainted.uvh5", ".where_inpainted.h5"]],
     }
 
+@pytest.fixture(scope="module")
+def real_files_and_grid_uncalibrated():
+    baseline_string = "0_4"
+    filenames = [
+        "zen.2459861.baseline.0_4.sum.uvh5",
+        "zen.2459862.baseline.0_4.sum.uvh5",
+        "zen.2459863.baseline.0_4.sum.uvh5",
+    ]
+    calfilenames = [
+        "zen.2459861.lstcal.hdf5",
+        "zen.2459862.lstcal.hdf5",
+        "zen.2459863.lstcal.hdf5",
+    ]
+    files = [os.path.join(DATA_PATH, "test_input", f) for f in filenames]
+    calfiles = [os.path.join(DATA_PATH, "test_input", f) for f in calfilenames]
+    missing = [f for f in files if not os.path.exists(f)]
+    if missing:
+        pytest.skip(f"Missing test inputs: {missing}")
+
+    configurator_uncal = _FakeConfiguratorSingle({baseline_string: files})
+    hd = HERAData(files[-1])  # for freqs/lsts metadata
+
+    configurator_cal = _FakeConfiguratorSingle({baseline_string: files})
+    configurator_cal.bl_to_calfile_map = {baseline_string: calfiles}
+
+    # Native-width 0..2π LST grid
+    dlst = np.median(np.diff(hd.lsts))
+    lst_grid = config.make_lst_grid(dlst, begin_lst=0.0, lst_width=2 * np.pi)
+    lst_bin_edges = np.concatenate([lst_grid - dlst / 2, [lst_grid[-1] + dlst / 2]])
+
+    return {
+        "baseline_string": baseline_string,
+        "configurator_uncal": configurator_uncal,
+        "configurator_cal": configurator_cal,
+        "lst_bin_edges": lst_bin_edges,
+        "dlst": dlst,
+        "hd": hd,
+        "where_rules": [[".inpainted.uvh5", ".where_inpainted.h5"]],
+    }
+
 
 @pytest.fixture(scope="module")
 def sbs_default(real_files_and_grid):
@@ -478,6 +519,24 @@ def sbs_branchcut(real_files_and_grid):
         lst_branch_cut=5.4,
         where_inpainted_file_rules=p["where_rules"],
     )
+
+@pytest.fixture(scope="module")
+def sbs_with_lstcal(real_files_and_grid_uncalibrated):
+    p = real_files_and_grid_uncalibrated
+    uncal_crosses = binning.SingleBaselineStacker.from_configurator(
+        p['configurator_uncal'],
+        p["baseline_string"],
+        p["lst_bin_edges"],
+    )
+
+    cal_crosses = binning.SingleBaselineStacker.from_configurator(
+        p['configurator_cal'],
+        p["baseline_string"],
+        p["lst_bin_edges"],
+        cal_file_loader=calibration.load_single_baseline_lstcal_gains,
+    )
+
+    return uncal_crosses, cal_crosses
 
 
 # --- tests -------------------------------------------------------------------------
@@ -568,6 +627,26 @@ def test_flags_and_nsamples_match_data(sbs_default):
         if d.size:
             assert f.dtype == bool
             assert np.isfinite(np.asarray(n)[~np.isnan(np.real(d)) | ~np.isnan(np.imag(d))]).all()
+
+def test_calc_with_lstcal(sbs_with_lstcal):
+    uncal_crosses, cal_crosses = sbs_with_lstcal
+    lst_avg_uncal, _, _ = uncal_crosses.average_over_nights()
+    lst_avg_cal, _, _ = cal_crosses.average_over_nights()
+    uncalibrated_var = np.array([
+        np.nanmean(np.where(f, np.nan, np.abs(np.square(d - lst_avg_uncal[ci])))) 
+        for ci, (d, f) in enumerate(zip(uncal_crosses.data, uncal_crosses.flags))
+    ])
+
+    calibrated_var = np.array([
+        np.nanmean(np.where(f, np.nan, np.abs(np.square(d - lst_avg_cal[ci])))) 
+        for ci, (d, f) in enumerate(zip(cal_crosses.data, cal_crosses.flags))
+    ])
+
+    # Variance after calibration should be lower in bins where both have data
+    assert np.all(
+        uncalibrated_var[np.isfinite(uncalibrated_var) & np.isfinite(calibrated_var)] > 
+        calibrated_var[np.isfinite(uncalibrated_var) & np.isfinite(calibrated_var)]
+    ), "Variance after calibration should be lower in bins where both have data"
 
 # --- average_over_nights tests -------------------------------------------------------------
 
