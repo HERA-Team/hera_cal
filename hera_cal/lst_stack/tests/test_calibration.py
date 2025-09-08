@@ -1,3 +1,4 @@
+import h5py
 import numpy as np
 import re
 import pytest
@@ -502,10 +503,10 @@ def test_load_gains_basic(sample_file):
     )
 
     # Flags: 'ee' -> False (not fully flagged); 'nn' -> True (fully flagged)
-    assert cal_flags[(0, "Jee")] is False
-    assert cal_flags[(1, "Jee")] is False
-    assert cal_flags[(0, "Jnn")] is True
-    assert cal_flags[(1, "Jnn")] is True
+    assert not cal_flags[(0, "Jee")]
+    assert not cal_flags[(1, "Jee")]
+    assert cal_flags[(0, "Jnn")]
+    assert cal_flags[(1, "Jnn")]
 
 
 def test_unknown_polarization_raises(sample_file):
