@@ -702,33 +702,64 @@ def lstbin_absolute_calibration(
     return calibration_parameters, gains
 
 
-def write_single_baseline_lstcal_solutions(filename, all_calibration_parameters, flag_array, transformed_antpos, times, freqs, pols, compression=None, compression_opts=None):
+def write_single_baseline_lstcal_solutions(
+        filename: str,
+        all_calibration_parameters: dict,
+        flag_array: np.ndarray,
+        transformed_antpos: dict,
+        times: np.ndarray,
+        freqs: np.ndarray,
+        pols: list,
+        compression=None,
+        compression_opts=None
+    ):
     """
     Write single-baseline LST calibration solutions and metadata to an HDF5 file.
 
-    This function creates an HDF5 file with two main groups: ``/data`` and ``/Header``.
-    The ``/data`` group stores the calibration parameters and flag array, while the
-    ``/Header`` group stores metadata such as version, times, frequencies, antenna
-    positions, and polarizations.
+    The file has two top-level groups:
+      - ``/data``: parameter datasets and flags
+      - ``/Header``: metadata
+
+    HDF5 layout
+    -----------
+    /data
+        /<param_name>           (array)   e.g. "amplitude_Jee" (ntimes, nfreqs), "tip_tilt_Jee" (ntimes, nfreqs, ndims), etc.
+        /flag_array             (bool)    shape (Npol, ntimes, nfreqs)
+    /Header
+        times                   (float64) shape (ntimes)
+        freqs                   (float64) shape (nfreqs)
+        antenna_numbers         (int32)   shape (Nant)
+        antenna_positions       (float64) shape (Nant, ndims)
+        polarization_array      (str)     shape (Npol), variable-length UTF-8 strings
+        (attrs)
+            format_version = "1.0"
+            units_times = "JD" (suggested; optional)
+            units_freqs = "Hz" (suggested; optional)
+            coords_antpos = "ENU meters" (suggested; optional)
 
     Parameters
     ----------
-    filename : str
-        Path to the HDF5 file to create.
-    all_calibration_parameters : dict of {str: np.ndarray}
-        Dictionary mapping calibration parameter names (e.g., gains, delays) to
-        numpy arrays containing their values.
-    flag_array : np.ndarray
-        Boolean array indicating flagged (invalid) data samples.
-    transformed_antpos : dict of {int: array_like}
-        Dictionary mapping antenna numbers to their transformed positions (typically
-        in ENU or another projected coordinate system).
-    times : np.ndarray
-        Array of observation times corresponding to the calibration solutions.
-    freqs : np.ndarray
-        Array of frequencies corresponding to the calibration solutions.
-    pols : list of str
-        List of polarization strings (e.g., ``["ee", "nn", "en", "ne"]``).
+    filename
+        Path to the HDF5 file to create (overwritten if exists).
+    all_calibration_parameters
+        Mapping from parameter name to array. Common examples:
+        - ``"amplitude_J{pol}"``: gain amplitudes, shape (ntimes, nfreqs)
+        - ``"tip_tilt_J{pol}"`` : phase-gradients per dimension, shape (ntimes, nfreqs, ndims)
+        - ``"cross_pol"``    : cross-pol phase term, shape (ntimes, nfreqs) (optional)
+        Add one dataset per parameter key.
+    flag_array
+        Boolean flags with shape ``[Npol, ntimes, nfreqs]`` (True = flagged).
+    transformed_antpos
+        Dict mapping antenna_number to position (e.g., ENU meters).
+    times
+        1D array of times corresponding to the zeroth axis.
+    freqs
+        1D array of frequencies corresponding to the first axis.
+    pols
+        List of polarization strings (e.g., ``["ee", "nn", "en", "ne"]``) in the same order
+        as the first axis of ``flag_array``.
+    compression, compression_opts
+        Optional h5py compression settings (e.g., ``compression="gzip", compression_opts=4``).
 
     """
     with h5py.File(filename, 'w') as file:
@@ -754,17 +785,17 @@ def write_single_baseline_lstcal_solutions(filename, all_calibration_parameters,
         header['freqs'] = freqs
 
         # Extract antenna numbers (keys) and positions (values)
-        ant_nums = list(transformed_antpos.keys())
-        ant_positions = list(transformed_antpos.values())
-        header["antenna_numbers"] = np.array(ant_nums, dtype=int)
-        header["antenna_positions"] = np.array(ant_positions)
+        ant_nums = np.array(sorted(transformed_antpos.keys()), dtype=np.int32)
+        ant_positions = np.vstack([np.asarray(transformed_antpos[a], dtype=float) for a in ant_nums])
+        header["antenna_numbers"] = ant_nums
+        header["antenna_positions"] = ant_positions
 
         # Store polarizations
         pols_encoded = [p.encode('utf-8') for p in pols]
         header["polarization_array"] = pols_encoded
 
 
-def load_single_baseline_lstcal_solutions(filename):
+def load_single_baseline_lstcal_solutions(filename: str):
     """
     Load single-baseline LST calibration solutions and metadata from an HDF5 file.
 
@@ -809,28 +840,34 @@ def load_single_baseline_lstcal_solutions(filename):
 
 def load_single_baseline_lstcal_gains(filename, baselines, polarizations, refpol="Jee"):
     """
-    Load single-baseline LST calibration solutions from an HDF5 file and compute
-    the antenna gains for the specified baselines and polarizations.
+    Load single-baseline LST calibration solutions and construct per-antenna complex gains.
 
-    Parameters:
+    Expected parameter keys in the file (by convention):
+      - ``amplitude_<Jpol>``: real-valued amplitudes, shape (ntimes, nfreqs)
+      - ``tip_tilt_<Jpol>`` : real-valued phase gradients, shape (ntimes, nfreqs, ndims)
+      - ``cross_pol``       : (optional) phase offset to apply when ``Jpol != refpol``, shape (ntimes, nfreqs)
+
+    The ``polarizations`` argument may include visibility-pol strings (e.g., ``"ee"``, ``"nn"``, ``"en"``, ``"ne"``);
+    these are mapped to the set of Jones pols required to build gains (e.g., ``"en"`` -> ``{"Jee","Jnn"}``).
+
+    Parameters
     ----------
-        filename : str
-            Path to the HDF5 file containing the calibration solutions. The file should have been
-            created using the `write_single_baseline_lstcal_solutions` function.
-        baselines : list[tuple[int, int]]
-            A list of tuples specifying the antenna pairs (i, j) for which to extract gains.
-        polarizations : list[str]
-            A list of polarization strings (e.g., ["ee", "nn"]) for which to extract gains.
-        refpol : str, default='Jee'
-            The reference polarization to use for cross-polarization phase calibration. This is
-            the polarization that the other polarization is calibrated to. The default is 'Jee'.
+    filename
+        Path to the HDF5 file created by `write_single_baseline_lstcal_solutions`.
+    baselines
+        List of antenna index pairs (i, j). Antenna IDs here determine which antennas receive gains.
+    polarizations
+        Visibility polarization strings to support (e.g., ``["ee", "nn"]`` or ``["en"]``).
+    refpol
+        Reference Jones polarization for cross-pol phase (default ``"Jee"``).
 
-    Returns:
+    Returns
     -------
-        gains : dict
-            A dictionary containing the calibrated gains for each antenna. The keys are tuples
-            containing the antenna numbers and polarization.
-
+    gains
+        Dict mapping ``(ant, Jpol) -> complex ndarray (ntimes, nfreqs)``.
+    cal_flags
+        Dict mapping ``(ant, Jpol) -> bool``; True if all samples for the corresponding
+        visibility-pol in the file were flagged.
     """
     # Load calibration solutions
     (
