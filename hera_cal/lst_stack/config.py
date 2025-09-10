@@ -782,7 +782,7 @@ class LSTBinConfiguratorSingleBaseline():
             # Get the name of the cal file for this night
             cal_file_path = cal_file_template.format(night=night)
 
-            # put files into m
+            # put files into bl_to_calfile_map
             for bl in bls:
                 reverse_bl = '_'.join(bl.split('_')[::-1])
                 if (reverse_bl != bl) and (reverse_bl in bls):

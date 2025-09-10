@@ -481,11 +481,11 @@ def test_roundtrip_load(sample_file):
 def test_load_gains_basic(sample_file):
     """Gains have correct amplitude and phases; flags summarized per-Jones-pol."""
     path = str(sample_file["path"])
-    baselines = [(0, 1)]
+    antpairs = [(0, 1)]
     requested_pols = ["ee", "nn"]
 
     gains, cal_flags = calibration.load_single_baseline_lstcal_gains(
-        path, baselines=baselines, polarizations=requested_pols, refpol="Jee"
+        path, antpairs=antpairs, polarizations=requested_pols, refpol="Jee"
     )
 
     ntimes, nfreqs = sample_file["ntimes"], sample_file["nfreqs"]
@@ -514,7 +514,7 @@ def test_unknown_polarization_raises(sample_file):
     path = str(sample_file["path"])
     with pytest.raises(ValueError, match="not in gain polarizations"):
         calibration.load_single_baseline_lstcal_gains(
-            path, baselines=[(0, 1)], polarizations=["ee", "xy"]
+            path, antpairs=[(0, 1)], polarizations=["ee", "xy"]
         )
 
 
@@ -537,7 +537,7 @@ def test_missing_parameter_raises(tmp_path, sample_file):
 
     with pytest.raises(KeyError, match="Missing calibration parameter 'tip_tilt_Jee'"):
         calibration.load_single_baseline_lstcal_gains(
-            str(path), baselines=[(0, 1)], polarizations=["ee"]
+            str(path), antpairs=[(0, 1)], polarizations=["ee"]
         )
 
 
