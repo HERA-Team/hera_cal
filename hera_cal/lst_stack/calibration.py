@@ -838,7 +838,7 @@ def load_single_baseline_lstcal_solutions(filename: str):
     return all_calibration_parameters, flag_array, transformed_antpos, times, freqs, pols
 
 
-def load_single_baseline_lstcal_gains(filename, baselines, polarizations, refpol="Jee"):
+def load_single_baseline_lstcal_gains(filename, antpairs, polarizations, refpol="Jee"):
     """
     Load single-baseline LST calibration solutions and construct per-antenna complex gains.
 
@@ -854,7 +854,7 @@ def load_single_baseline_lstcal_gains(filename, baselines, polarizations, refpol
     ----------
     filename
         Path to the HDF5 file created by `write_single_baseline_lstcal_solutions`.
-    baselines
+    antpairs
         List of antenna index pairs (i, j). Antenna IDs here determine which antennas receive gains.
     polarizations
         Visibility polarization strings to support (e.g., ``["ee", "nn"]`` or ``["en"]``).
@@ -896,7 +896,7 @@ def load_single_baseline_lstcal_gains(filename, baselines, polarizations, refpol
     # Compute antenna gains from calibration parameters
     gains = {}
     cal_flags = {}
-    unique_ants = list(set(sum(map(list, baselines), [])))
+    unique_ants = list(set(sum(map(list, antpairs), [])))
 
     flags = {
         f"J{pol}": np.all(flag_array[pi])
