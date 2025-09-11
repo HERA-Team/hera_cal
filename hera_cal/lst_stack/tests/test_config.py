@@ -342,7 +342,7 @@ class TestLSTBinConfiguratorSingleBaseline():
         )
 
         cal_template = str(tmp_path / "cals" / "cal_{night}.h5")
-        out = cfg.visfile_to_calfile_map(cal_template)
+        out = cfg.build_visfile_to_calfile_map(cal_template)
 
         for bl in cfg.bl_to_file_map:
             for visfile in cfg.bl_to_file_map[bl]:

@@ -753,7 +753,7 @@ class LSTBinConfiguratorSingleBaseline():
                     bl_to_file_map[bl] = [template.format(baseline=bl)]
         return bl_to_file_map
 
-    def visfile_to_calfile_map(self, cal_file_template: str) -> dict[str, list[str]]:
+    def build_visfile_to_calfile_map(self, cal_file_template: str) -> dict[str, list[str]]:
         '''Build a dictionary mapping from visibility file to calfile paths.
 
         Parameters
