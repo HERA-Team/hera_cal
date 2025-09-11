@@ -729,7 +729,7 @@ class SingleBaselineStacker:
         # Load the cal files if they exist
         if hasattr(configurator, 'visfile_to_calfile_map'):
             cal_files = [
-                configurator.visfile_to_calfile_map[visfile] 
+                configurator.visfile_to_calfile_map[visfile]
                 for visfile in configurator.bl_to_calfile_map[bl_str]
             ]
         else:
