@@ -440,6 +440,7 @@ def sample_file(tmp_path):
         all_calibration_parameters=all_params,
         flag_array=flag_array,
         transformed_antpos=transformed_antpos_unsorted,
+        antpos=transformed_antpos_unsorted,
         times=times,
         freqs=freqs,
         pols=pols,
@@ -460,9 +461,14 @@ def sample_file(tmp_path):
 
 def test_roundtrip_load(sample_file):
     """Writer -> loader round-trip preserves data, metadata, and polarizations."""
-    (params, flags, antpos, times, freqs, pols) = calibration.load_single_baseline_lstcal_solutions(
+    (params, flags, metadata) = calibration.load_single_baseline_lstcal_solutions(
         str(sample_file["path"])
     )
+
+    times = metadata["times"]
+    freqs = metadata["freqs"]
+    pols = metadata["polarizations"]
+    antpos = metadata["transformed_antpos"]
 
     np.testing.assert_allclose(times, sample_file["times"])
     np.testing.assert_allclose(freqs, sample_file["freqs"])
@@ -485,7 +491,7 @@ def test_load_gains_basic(sample_file):
     requested_pols = ["ee", "nn"]
 
     gains, cal_flags = calibration.load_single_baseline_lstcal_gains(
-        path, antpairs=antpairs, polarizations=requested_pols, refpol="Jee"
+        path, antpairs=antpairs, polarizations=requested_pols
     )
 
     ntimes, nfreqs = sample_file["ntimes"], sample_file["nfreqs"]
@@ -530,6 +536,7 @@ def test_missing_parameter_raises(tmp_path, sample_file):
         all_calibration_parameters=params,
         flag_array=sample_file["flag_array"],
         transformed_antpos=sample_file["antpos"],
+        antpos=sample_file["antpos"],
         times=sample_file["times"],
         freqs=sample_file["freqs"],
         pols=sample_file["pols"],
@@ -543,12 +550,16 @@ def test_missing_parameter_raises(tmp_path, sample_file):
 
 def test_shapes_and_types_are_consistent(sample_file):
     """Basic sanity: loaded arrays have expected shapes and dtypes."""
-    params, flag_array, antpos, times, freqs, pols = calibration.load_single_baseline_lstcal_solutions(
+    params, flags, metadata = calibration.load_single_baseline_lstcal_solutions(
         str(sample_file["path"])
     )
     ntimes, nfreqs = sample_file["ntimes"], sample_file["nfreqs"]
+    times = metadata["times"]
+    freqs = metadata["freqs"]
+    pols = metadata["polarizations"]
 
-    assert flag_array.shape == (len(pols), ntimes, nfreqs)
+    for pol in pols:
+        assert flags[pol].shape == (ntimes, nfreqs)
     assert times.ndim == 1 and times.shape[0] == ntimes
     assert freqs.ndim == 1 and freqs.shape[0] == nfreqs
     assert params["amplitude_Jee"].shape == (ntimes, nfreqs)
