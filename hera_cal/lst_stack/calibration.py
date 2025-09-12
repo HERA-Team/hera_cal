@@ -803,7 +803,7 @@ def write_single_baseline_lstcal_solutions(
         # Store polarizations
         pols_encoded = [p.encode('utf-8') for p in pols]
         header["polarization_array"] = pols_encoded
-        header['refpol'] = refpol
+        header['refpol'] = refpol.encode('utf-8')
 
 
 def load_single_baseline_lstcal_solutions(filename: str):
@@ -862,7 +862,7 @@ def load_single_baseline_lstcal_solutions(filename: str):
         }
 
         metadata['pols'] = [p.decode("utf-8") for p in hdr["polarization_array"]]
-        metadata['refpol'] = hdr['refpol'].decode("utf-8")
+        metadata['refpol'] = hdr['refpol'][()].decode("utf-8")
 
         flags = {
             pol: flag_array[idx]

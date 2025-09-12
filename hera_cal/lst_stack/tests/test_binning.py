@@ -476,7 +476,7 @@ def real_files_and_grid_uncalibrated():
     hd = HERAData(files[-1])  # for freqs/lsts metadata
 
     configurator_cal = _FakeConfiguratorSingle({baseline_string: files})
-    configurator_cal.bl_to_calfile_map = {baseline_string: calfiles}
+    configurator_cal.visfile_to_calfile_map = {visfile: calfile for visfile, calfile in zip(files, calfiles)}
 
     # Native-width 0..2π LST grid
     dlst = np.median(np.diff(hd.lsts))

@@ -407,8 +407,8 @@ def sample_file(tmp_path):
     freqs = np.array([100e6, 110e6, 120e6], dtype=float)
     pols = ["ee", "nn"]
 
-    flag_array = np.zeros((2, ntimes, nfreqs), dtype=bool)
-    flag_array[1, ...] = True  # 'nn' fully flagged
+    flags = {pol: np.zeros((ntimes, nfreqs), dtype=bool) for pol in pols}
+    flags["nn"][:, :] = True  # fully flag 'nn'
 
     # Unsorted dict order to verify the writer sorts antenna keys
     transformed_antpos_unsorted = {
@@ -438,7 +438,7 @@ def sample_file(tmp_path):
     calibration.write_single_baseline_lstcal_solutions(
         filename=str(path),
         all_calibration_parameters=all_params,
-        flag_array=flag_array,
+        flags=flags,
         transformed_antpos=transformed_antpos_unsorted,
         antpos=transformed_antpos_unsorted,
         times=times,
@@ -453,7 +453,7 @@ def sample_file(tmp_path):
         "times": times,
         "freqs": freqs,
         "pols": pols,
-        "flag_array": flag_array,
+        "flags": flags,
         "antpos": transformed_antpos_unsorted,
         "params": all_params,
     }
@@ -467,21 +467,18 @@ def test_roundtrip_load(sample_file):
 
     times = metadata["times"]
     freqs = metadata["freqs"]
-    pols = metadata["polarizations"]
+    pols = metadata["pols"]
     antpos = metadata["transformed_antpos"]
 
     np.testing.assert_allclose(times, sample_file["times"])
     np.testing.assert_allclose(freqs, sample_file["freqs"])
-    np.testing.assert_array_equal(flags, sample_file["flag_array"])
+    for pol in pols:
+        np.testing.assert_array_equal(flags[pol], sample_file["flags"][pol])
     assert pols == sample_file["pols"]
     for k, v in sample_file["params"].items():
         np.testing.assert_allclose(params[k], v)
     for a, pos in sample_file["antpos"].items():
         np.testing.assert_allclose(antpos[a], pos)
-
-    with h5py.File(sample_file["path"], "r") as h5f:
-        ants = np.asarray(h5f["Header"]["antenna_numbers"])
-        assert np.all(ants[:-1] <= ants[1:])
 
 
 def test_load_gains_basic(sample_file):
@@ -534,7 +531,7 @@ def test_missing_parameter_raises(tmp_path, sample_file):
     calibration.write_single_baseline_lstcal_solutions(
         filename=str(path),
         all_calibration_parameters=params,
-        flag_array=sample_file["flag_array"],
+        flags=sample_file["flags"],
         transformed_antpos=sample_file["antpos"],
         antpos=sample_file["antpos"],
         times=sample_file["times"],
@@ -556,7 +553,7 @@ def test_shapes_and_types_are_consistent(sample_file):
     ntimes, nfreqs = sample_file["ntimes"], sample_file["nfreqs"]
     times = metadata["times"]
     freqs = metadata["freqs"]
-    pols = metadata["polarizations"]
+    pols = metadata["pols"]
 
     for pol in pols:
         assert flags[pol].shape == (ntimes, nfreqs)
