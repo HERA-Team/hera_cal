@@ -322,7 +322,6 @@ class TestLSTBinConfiguratorSingleBaseline():
                 fl = night_dir / f"{bl}.uvh5"
                 fl.touch()
 
-
     def test_build_bl_to_file_map(self, tmp_path):
         nights = ["2458001", "2458002"]
         baselines = ["0_1", "1_2"]
