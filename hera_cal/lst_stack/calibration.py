@@ -932,7 +932,7 @@ def load_single_baseline_lstcal_gains(filename, antpairs, polarizations):
     unique_ants = list(set(sum(map(list, antpairs), [])))
 
     cal_flags = {
-        (ant, pol): np.all(flags[pol[1:]])
+        (ant, pol): np.all(flags[utils.join_pol(pol, pol)])
         for ant in unique_ants
         for pol in gain_pols
     }
