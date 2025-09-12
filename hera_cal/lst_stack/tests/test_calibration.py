@@ -1,3 +1,4 @@
+import h5py
 import numpy as np
 import re
 import pytest
@@ -390,3 +391,174 @@ class TestLSTBinCalibration:
             assert np.allclose(
                 gains[key], gains_neg[key], equal_nan=True
             ), f"Mismatch in gains for {key} after setting nsamples to negative values."
+
+
+@pytest.fixture
+def sample_file(tmp_path):
+    """
+    Create a small, deterministic test file via the writer.
+    Ant 0 at origin -> no tip/tilt phase; Ant 1 at x=1 -> picks up tilt[...,0].
+    'nn' polarization is fully flagged; 'ee' is not.
+    """
+    path = tmp_path / "lstcal_test.h5"
+
+    ntimes, nfreqs, ndims = 2, 3, 3
+    times = np.array([2450000.0, 2450000.5], dtype=float)
+    freqs = np.array([100e6, 110e6, 120e6], dtype=float)
+    pols = ["ee", "nn"]
+
+    flags = {pol: np.zeros((ntimes, nfreqs), dtype=bool) for pol in pols}
+    flags["nn"][:, :] = True  # fully flag 'nn'
+
+    # Unsorted dict order to verify the writer sorts antenna keys
+    transformed_antpos_unsorted = {
+        1: np.array([1.0, 0.0, 0.0], dtype=float),
+        0: np.array([0.0, 0.0, 0.0], dtype=float),
+    }
+
+    # Parameter fields
+    amplitude_Jee = np.ones((ntimes, nfreqs), dtype=float)
+    tip_tilt_Jee = np.zeros((ntimes, nfreqs, ndims), dtype=float)
+    tip_tilt_Jee[..., 0] = 0.1  # only x-gradient
+
+    amplitude_Jnn = 2.0 * np.ones((ntimes, nfreqs), dtype=float)
+    tip_tilt_Jnn = np.zeros((ntimes, nfreqs, ndims), dtype=float)
+    tip_tilt_Jnn[..., 0] = 0.2  # only x-gradient
+
+    cross_pol = 0.3 * np.ones((ntimes, nfreqs), dtype=float)  # applied when Jpol != refpol
+
+    all_params = {
+        "A_Jee": amplitude_Jee,
+        "T_Jee": tip_tilt_Jee,
+        "A_Jnn": amplitude_Jnn,
+        "T_Jnn": tip_tilt_Jnn,
+        "cross_pol": cross_pol,
+    }
+
+    calibration.write_single_baseline_lstcal_solutions(
+        filename=str(path),
+        all_calibration_parameters=all_params,
+        flags=flags,
+        transformed_antpos=transformed_antpos_unsorted,
+        antpos=transformed_antpos_unsorted,
+        times=times,
+        freqs=freqs,
+        pols=pols,
+    )
+
+    return {
+        "path": path,
+        "ntimes": ntimes,
+        "nfreqs": nfreqs,
+        "times": times,
+        "freqs": freqs,
+        "pols": pols,
+        "flags": flags,
+        "antpos": transformed_antpos_unsorted,
+        "params": all_params,
+    }
+
+
+def test_roundtrip_load(sample_file):
+    """Writer -> loader round-trip preserves data, metadata, and polarizations."""
+    (params, flags, metadata) = calibration.load_single_baseline_lstcal_solutions(
+        str(sample_file["path"])
+    )
+
+    times = metadata["times"]
+    freqs = metadata["freqs"]
+    pols = metadata["pols"]
+    antpos = metadata["transformed_antpos"]
+
+    np.testing.assert_allclose(times, sample_file["times"])
+    np.testing.assert_allclose(freqs, sample_file["freqs"])
+    for pol in pols:
+        np.testing.assert_array_equal(flags[pol], sample_file["flags"][pol])
+    assert pols == sample_file["pols"]
+    for k, v in sample_file["params"].items():
+        np.testing.assert_allclose(params[k], v)
+    for a, pos in sample_file["antpos"].items():
+        np.testing.assert_allclose(antpos[a], pos)
+
+
+def test_load_gains_basic(sample_file):
+    """Gains have correct amplitude and phases; flags summarized per-Jones-pol."""
+    path = str(sample_file["path"])
+    antpairs = [(0, 1)]
+    requested_pols = ["ee", "nn"]
+
+    gains, cal_flags = calibration.load_single_baseline_lstcal_gains(
+        path, antpairs=antpairs, polarizations=requested_pols
+    )
+
+    ntimes, nfreqs = sample_file["ntimes"], sample_file["nfreqs"]
+
+    # Ant 0 at origin: no tip/tilt phase
+    np.testing.assert_allclose(gains[(0, "Jee")], np.ones((ntimes, nfreqs), dtype=complex))
+
+    # For Jnn: amplitude=2 and cross_pol applied (since Jnn != Jee): phase +0.3
+    np.testing.assert_allclose(gains[(0, "Jnn")], 2.0 * np.exp(1j * 0.3) * np.ones((ntimes, nfreqs)))
+
+    # Ant 1 at x=1: picks up tilt[...,0]
+    np.testing.assert_allclose(gains[(1, "Jee")], np.exp(-1j * 0.1) * np.ones((ntimes, nfreqs)))
+    np.testing.assert_allclose(
+        gains[(1, "Jnn")], 2.0 * np.exp(-1j * 0.2) * np.exp(1j * 0.3) * np.ones((ntimes, nfreqs))
+    )
+
+    # Flags: 'ee' -> False (not fully flagged); 'nn' -> True (fully flagged)
+    assert not cal_flags[(0, "Jee")]
+    assert not cal_flags[(1, "Jee")]
+    assert cal_flags[(0, "Jnn")]
+    assert cal_flags[(1, "Jnn")]
+
+
+def test_unknown_polarization_raises(sample_file):
+    """Requesting a polarization not present in the file should raise ValueError."""
+    path = str(sample_file["path"])
+    with pytest.raises(ValueError, match="not in gain polarizations"):
+        calibration.load_single_baseline_lstcal_gains(
+            path, antpairs=[(0, 1)], polarizations=["ee", "xy"]
+        )
+
+
+def test_missing_parameter_raises(tmp_path, sample_file):
+    """Missing a required parameter dataset should raise KeyError."""
+    path = tmp_path / "missing_param.h5"
+
+    params = dict(sample_file["params"])
+    params.pop("T_Jee")  # required by the gains function
+
+    calibration.write_single_baseline_lstcal_solutions(
+        filename=str(path),
+        all_calibration_parameters=params,
+        flags=sample_file["flags"],
+        transformed_antpos=sample_file["antpos"],
+        antpos=sample_file["antpos"],
+        times=sample_file["times"],
+        freqs=sample_file["freqs"],
+        pols=sample_file["pols"],
+    )
+
+    with pytest.raises(KeyError, match="Missing calibration parameter 'T_Jee'"):
+        calibration.load_single_baseline_lstcal_gains(
+            str(path), antpairs=[(0, 1)], polarizations=["ee"]
+        )
+
+
+def test_shapes_and_types_are_consistent(sample_file):
+    """Basic sanity: loaded arrays have expected shapes and dtypes."""
+    params, flags, metadata = calibration.load_single_baseline_lstcal_solutions(
+        str(sample_file["path"])
+    )
+    ntimes, nfreqs = sample_file["ntimes"], sample_file["nfreqs"]
+    times = metadata["times"]
+    freqs = metadata["freqs"]
+    pols = metadata["pols"]
+
+    for pol in pols:
+        assert flags[pol].shape == (ntimes, nfreqs)
+    assert times.ndim == 1 and times.shape[0] == ntimes
+    assert freqs.ndim == 1 and freqs.shape[0] == nfreqs
+    assert params["A_Jee"].shape == (ntimes, nfreqs)
+    assert params["T_Jee"].shape[-1] == 3
+    assert isinstance(pols[0], str)

@@ -42,6 +42,7 @@ which is the specific LSTs in each file that fall into the bin (note that not al
 in this list will be in the bin -- at least one LST in each file will be in the bin).
 """
 from __future__ import annotations
+from tempfile import template
 import numpy as np
 from pathlib import Path
 from pyuvdata.uvdata import FastUVH5Meta
@@ -731,6 +732,7 @@ class LSTBinConfiguratorSingleBaseline():
             function will find those with the order reversed (e.g. "1_0" for "0_1") and include them too.
         '''
         bl_to_file_map = {}
+
         for night in self.nights:
             # find all unique values of {baseline} after replacing {night} in datadir + fileglob
             template = os.path.join(self.datadir, self.fileglob.replace('{night}', night))
@@ -750,6 +752,39 @@ class LSTBinConfiguratorSingleBaseline():
                 else:
                     bl_to_file_map[bl] = [template.format(baseline=bl)]
         return bl_to_file_map
+
+    def build_visfile_to_calfile_map(self, cal_file_template: str) -> dict[str, list[str]]:
+        '''Build a dictionary mapping from visibility file to calfile paths.
+
+        Parameters
+        ----------
+        cal_file_template : str
+            A template string for the calfiles that contain gains for an entire night.
+            This string should contain "{night}" which will be replaced by each night in ``nights``.
+
+        Returns
+        -------
+        visfile_to_calfile_map : dict[str, list[str]]
+            A dictionary mapping from single-baseline visibility file names (e.g. "0_1") to lists of calfile paths,
+            one per night on which that visibility file was found. All redundantly averaged visibility
+            files with the same separation must be keyed by the same antenna pair. Ideally, they'd also be in
+            the same order, but this function will find those with the order reversed (e.g. "1_0"
+            for "0_1") and include them too.
+        '''
+        assert hasattr(self, 'bl_to_file_map'), (
+            'bl_to_file_map not found. Make sure to run build_bl_to_file_map() first.'
+        )
+        self.visfile_to_calfile_map = {}
+
+        for _, input_files in self.bl_to_file_map.items():
+            for visfile in input_files:
+                matches = re.findall(r"\d{7}", visfile)[0]  # find the JD in the filename
+                if len(matches) < 1:
+                    raise ValueError(f"Could not find a unique night in {visfile}.")
+                cal_file_path = cal_file_template.format(night=matches[0])
+                self.visfile_to_calfile_map[visfile] = cal_file_path
+
+        return self.visfile_to_calfile_map
 
 
 def _nested_list_of(cls):

@@ -332,6 +332,22 @@ class TestLSTBinConfiguratorSingleBaseline():
             for n, fl in zip(nights, cfg.bl_to_file_map[bl]):
                 assert Path(fl) == tmp_path / n / f"{bl}.uvh5"
 
+    def test_build_visfile_to_calfile_map(self, tmp_path):
+        nights = ["2458001", "2458002"]
+        baselines = ["0_1", "1_2"]
+        self._create_files(tmp_path, nights, baselines)
+
+        cfg = config.LSTBinConfiguratorSingleBaseline(
+            datadir=tmp_path, nights=nights, fileglob="{night}/{baseline}.uvh5"
+        )
+
+        cal_template = str(tmp_path / "cals" / "cal_{night}.h5")
+        out = cfg.build_visfile_to_calfile_map(cal_template)
+
+        for bl in cfg.bl_to_file_map:
+            for visfile in cfg.bl_to_file_map[bl]:
+                assert visfile in out
+
     def test_from_toml(self, tmp_path):
         nights = ["2458001", "2458002"]
         baselines = ["0_1"]
