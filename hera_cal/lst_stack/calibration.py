@@ -725,7 +725,7 @@ def write_single_baseline_lstcal_solutions(
     HDF5 layout
     -----------
     /data
-        /<param_name>           (array)   e.g. "amplitude_Jee" (ntimes, nfreqs), "tip_tilt_Jee" (ntimes, nfreqs, ndims), and "cross_pol" (ntimes, nfreqs)
+        /<param_name>           (array)   e.g. "A_Jee" (ntimes, nfreqs), "T_Jee" (ntimes, nfreqs, ndims), and "cross_pol" (ntimes, nfreqs)
         /flag_array             (bool)    shape (ntimes, nfreqs, npol)
     /Header
         times                   (float64) shape (ntimes)
@@ -741,8 +741,8 @@ def write_single_baseline_lstcal_solutions(
         Path to the HDF5 file to create (overwritten if exists).
     all_calibration_parameters: dict
         Mapping from parameter name to array. The expected keys are:
-        - ``"amplitude_J{pol}"``: gain amplitudes, shape (ntimes, nfreqs)
-        - ``"tip_tilt_J{pol}"`` : phase-gradients per dimension, shape (ntimes, nfreqs, ndims)
+        - ``"A_J{pol}"``: gain amplitudes, shape (ntimes, nfreqs)
+        - ``"T_J{pol}"`` : phase-gradients per dimension, shape (ntimes, nfreqs, ndims)
         - ``"cross_pol"``    : cross-pol phase term, shape (ntimes, nfreqs) (optional)
         Add one dataset per parameter key.
     flags: dict[str, np.ndarray]
@@ -877,8 +877,8 @@ def load_single_baseline_lstcal_gains(filename, antpairs, polarizations):
     Load single-baseline LST calibration solutions and construct per-antenna complex gains.
 
     Expected parameter keys in the file (by convention):
-      - ``amplitude_<Jpol>``: real-valued amplitudes, shape (ntimes, nfreqs)
-      - ``tip_tilt_<Jpol>`` : real-valued phase gradients, shape (ntimes, nfreqs, ndims)
+      - ``A_<Jpol>``: real-valued amplitudes, shape (ntimes, nfreqs)
+      - ``T_<Jpol>`` : real-valued phase gradients, shape (ntimes, nfreqs, ndims)
       - ``cross_pol``       : (optional) phase offset to apply when ``Jpol != refpol``, shape (ntimes, nfreqs)
 
     The ``polarizations`` argument may include visibility-pol strings (e.g., ``"ee"``, ``"nn"``, ``"en"``, ``"ne"``);
@@ -922,7 +922,7 @@ def load_single_baseline_lstcal_gains(filename, antpairs, polarizations):
 
     # Sanity checks on required params
     for pol in gain_pols:
-        for key in (f"amplitude_{pol}", f"tip_tilt_{pol}"):
+        for key in (f"A_{pol}", f"T_{pol}"):
             if key not in all_calibration_parameters:
                 raise KeyError(f"Missing calibration parameter '{key}' in file.")
 
@@ -940,9 +940,9 @@ def load_single_baseline_lstcal_gains(filename, antpairs, polarizations):
     # Compute antenna gains from calibration parameters
     for ant in unique_ants:
         for pol in gain_pols:
-            gains[(ant, pol)] = all_calibration_parameters[f"amplitude_{pol}"].astype(complex)
+            gains[(ant, pol)] = all_calibration_parameters[f"A_{pol}"].astype(complex)
             gains[(ant, pol)] *= np.exp(
-                -1j * np.einsum("tfc,c->tf", all_calibration_parameters[f"tip_tilt_{pol}"], transformed_antpos[ant])
+                -1j * np.einsum("tfc,c->tf", all_calibration_parameters[f"T_{pol}"], transformed_antpos[ant])
             )
             if pol != metadata['refpol'] and "cross_pol" in all_calibration_parameters:
                 gains[(ant, pol)] *= np.exp(1j * all_calibration_parameters[f"cross_pol"])

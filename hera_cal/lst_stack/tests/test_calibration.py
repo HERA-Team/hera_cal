@@ -428,10 +428,10 @@ def sample_file(tmp_path):
     cross_pol = 0.3 * np.ones((ntimes, nfreqs), dtype=float)  # applied when Jpol != refpol
 
     all_params = {
-        "amplitude_Jee": amplitude_Jee,
-        "tip_tilt_Jee": tip_tilt_Jee,
-        "amplitude_Jnn": amplitude_Jnn,
-        "tip_tilt_Jnn": tip_tilt_Jnn,
+        "A_Jee": amplitude_Jee,
+        "T_Jee": tip_tilt_Jee,
+        "A_Jnn": amplitude_Jnn,
+        "T_Jnn": tip_tilt_Jnn,
         "cross_pol": cross_pol,
     }
 
@@ -526,7 +526,7 @@ def test_missing_parameter_raises(tmp_path, sample_file):
     path = tmp_path / "missing_param.h5"
 
     params = dict(sample_file["params"])
-    params.pop("tip_tilt_Jee")  # required by the gains function
+    params.pop("T_Jee")  # required by the gains function
 
     calibration.write_single_baseline_lstcal_solutions(
         filename=str(path),
@@ -539,7 +539,7 @@ def test_missing_parameter_raises(tmp_path, sample_file):
         pols=sample_file["pols"],
     )
 
-    with pytest.raises(KeyError, match="Missing calibration parameter 'tip_tilt_Jee'"):
+    with pytest.raises(KeyError, match="Missing calibration parameter 'T_Jee'"):
         calibration.load_single_baseline_lstcal_gains(
             str(path), antpairs=[(0, 1)], polarizations=["ee"]
         )
@@ -559,6 +559,6 @@ def test_shapes_and_types_are_consistent(sample_file):
         assert flags[pol].shape == (ntimes, nfreqs)
     assert times.ndim == 1 and times.shape[0] == ntimes
     assert freqs.ndim == 1 and freqs.shape[0] == nfreqs
-    assert params["amplitude_Jee"].shape == (ntimes, nfreqs)
-    assert params["tip_tilt_Jee"].shape[-1] == 3
+    assert params["A_Jee"].shape == (ntimes, nfreqs)
+    assert params["T_Jee"].shape[-1] == 3
     assert isinstance(pols[0], str)
