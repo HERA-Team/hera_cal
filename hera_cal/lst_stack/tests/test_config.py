@@ -313,9 +313,15 @@ class TestLSTBinConfiguratorSingleBaseline():
         for night in nights:
             night_dir = tmp_path / night
             night_dir.mkdir(parents=True, exist_ok=True)
+            cal_dir = tmp_path / "cals"
+            cal_dir.mkdir(parents=True, exist_ok=True)
+            calfl = cal_dir / f"cal_{night}.h5"
+            calfl.touch()
+
             for bl in baselines:
                 fl = night_dir / f"{bl}.uvh5"
                 fl.touch()
+
 
     def test_build_bl_to_file_map(self, tmp_path):
         nights = ["2458001", "2458002"]
@@ -347,6 +353,7 @@ class TestLSTBinConfiguratorSingleBaseline():
         for bl in cfg.bl_to_file_map:
             for visfile in cfg.bl_to_file_map[bl]:
                 assert visfile in out
+                assert Path(out[visfile]).exists()
 
     def test_from_toml(self, tmp_path):
         nights = ["2458001", "2458002"]
