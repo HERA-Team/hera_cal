@@ -382,8 +382,8 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
                         dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9,
-                        skip_flagged_edges=True, freq_cuts=[], fix_phase_flips=False, use_sparse_solver=False,
-                        precondition_solver=True, **win_kwargs):
+                        skip_flagged_edges=True, freq_cuts=[], fix_phase_flips=False, phase_flip_time_scale=None,
+                        use_sparse_solver=False, precondition_solver=True, **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -438,6 +438,9 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         fix_phase_flips : bool, optional
             If True, will try to find integrations whose phases appear to be 180 degrees rotated from the first unflagged
             integration. These will be flipped before smoothing and then flipped back after smoothing. Default is False.
+        phase_flip_time_scale : float, optional
+            The timescale in seconds over which to smooth the phases to determine if a phase flip has occurred.
+            If None, will use the time_scale. Only used if fix_phase_flips is True.
         use_sparse_solver : bool, optional
             If True and method='DPSS, use the sparse linear least squares solver in hera_filters.dspec.sparse_linear_fit_2D.
             Default is False.
@@ -466,7 +469,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         # average delay-rephased gain, compute phase of average, and then find phase flips
         avg_rephased_gain = np.ma.average(gains * rephasor, weights=wgts, axis=1, keepdims=True)
         phases = np.where(avg_rephased_gain.mask, np.nan, np.angle(avg_rephased_gain))
-        time_smoothed_phases = flip_agnostic_phase_smoothing(phases, times, time_scale, eigenval_cutoff=eigenval_cutoff)
+        time_scale_here = (phase_flip_time_scale if phase_flip_time_scale is not None else time_scale)
+        time_smoothed_phases = flip_agnostic_phase_smoothing(phases, times, time_scale_here, eigenval_cutoff=eigenval_cutoff)
         phase_flips = np.where(detect_phase_flips(phases - time_smoothed_phases), -1, 1)
         if np.any(phase_flips == -1):
             # recompute single dly
@@ -1100,7 +1104,8 @@ class CalibrationSmoother():
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect', window='tukey',
                             maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9,
                             skip_flagged_edges=True, freq_cuts=[],
-                            fix_phase_flips=False, flag_phase_flip_ints=False, flag_phase_flip_ants=False,
+                            fix_phase_flips=False, phase_flip_time_scale=None,
+                            flag_phase_flip_ints=False, flag_phase_flip_ants=False,
                             use_sparse_solver=False, precondition_solver=True, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
@@ -1133,6 +1138,8 @@ class CalibrationSmoother():
             fix_phase_flips: Optional bool. If True, will try to find integrations whose phases appear to be 180 degrees
                 rotated from the first unflagged  integration. These will be flipped before smoothing and then flipped back
                 after smoothing. Will also print info about phase-flips found. Default is False.
+            phase_flip_time_scale: Optional float in seconds. If fix_phase_flips is True, this is the time scale over which
+                to smooth the phases to determine if a phase flip has occured. If None, will use time_scale.
             flag_phase_flip_ints: Optional bool. If True and fix_phase_flips is also True, will flag antennas on the integrations
                 just before and just after a phase flip, since the phase flip could have occured mid-integration. Default is False.
             flag_phase_flip_ants: Optional bool. If True and fix_phase_flips is also True, will flag antennas that have a phase flip
@@ -1192,7 +1199,8 @@ class CalibrationSmoother():
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, dpss_vectors=dpss_vectors, eigenval_cutoff=eigenval_cutoff,
                                                      method=method, fit_method=fit_method, cached_input=cached_input,
-                                                     skip_flagged_edges=skip_flagged_edges, freq_cuts=freq_cuts, fix_phase_flips=fix_phase_flips,
+                                                     skip_flagged_edges=skip_flagged_edges, freq_cuts=freq_cuts,
+                                                     fix_phase_flips=fix_phase_flips, phase_flip_time_scale=phase_flip_time_scale,
                                                      use_sparse_solver=use_sparse_solver, precondition_solver=precondition_solver, **win_kwargs)
                 flipped = (info['phase_flips'] == -1)
                 if np.any(flipped):
