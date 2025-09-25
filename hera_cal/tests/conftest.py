@@ -10,6 +10,11 @@ import pytest
 import six.moves.urllib as urllib
 from astropy.utils import iers
 from astropy.time import Time
+import warnings
+from pyuvdata.telescopes import ignore_telescope_param_update_warnings_for
+
+# Update warnings related to updating params for the HERA telescope
+ignore_telescope_param_update_warnings_for("HERA")
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -27,6 +32,13 @@ def setup_and_teardown_package():
     except (Exception):
         iers.conf.auto_max_age = None
 
-    yield
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Fixing auto-correlations to be be real-only")
+        warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        warnings.filterwarnings("ignore", message="divide by zero encountered in divide")
+        warnings.filterwarnings("ignore", message="Mean of empty slice")
+        warnings.filterwarnings("ignore", message="The uvw_array does not match the expected values given the antenna position")
+        warnings.filterwarnings("ignore", message="telescope_location is not set")
+        yield
 
     iers.conf.auto_max_age = 30

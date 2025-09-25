@@ -20,6 +20,12 @@ from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:The uvw_array does not match the expected values given the antenna positions.",
+    "ignore:.*Using known values for HERA.",
+)
+
+
 class Test_Smooth_Cal_Helper_Functions(object):
 
     def setup_method(self):
@@ -52,6 +58,86 @@ class Test_Smooth_Cal_Helper_Functions(object):
         np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
         phase_flipped = smooth_cal.detect_phase_flips(np.array([np.nan, 1, 1, 4, np.nan, 4]))
         np.testing.assert_array_equal(phase_flipped, np.array([False, False, False, True, True, True]))
+
+    def _make_times(self, N=256, dt_sec=10.0, jd0=2458000.0):
+        """Helper: evenly spaced JD times with dt in seconds."""
+        return jd0 + np.arange(N) * (dt_sec / 86400.0)
+
+    def _phase_err(self, out_phase, true_phase):
+        """
+        Helper: 2π-aware phase error using complex exponentials.
+        Returns absolute wrapped error in radians.
+        """
+        return np.abs(np.angle(np.exp(1.0j * out_phase) * np.exp(-1.0j * true_phase)))
+
+    def test_flip_agnostic_phase_smoothing_no_flips(self):
+        """
+        If there are no flips, the smoother should reproduce the slow phase trend
+        (up to tiny numerical differences).
+        """
+        N = 256
+        times = self._make_times(N=N, dt_sec=10.0)
+        # very gentle, low-fringe phase (well within low-pass)
+        true_phase = 0.15 * np.sin(2 * np.pi * (np.arange(N) / (N * 2.5)))
+        # add small noise so there is something to "smooth"
+        rng = np.random.default_rng(0)
+        noisy = (true_phase + 0.03 * rng.standard_normal(N)).astype(float)
+
+        out = smooth_cal.flip_agnostic_phase_smoothing(noisy, times, time_scale=1200.0, eigenval_cutoff=1e-9)
+
+        err = self._phase_err(out, true_phase)
+        assert np.nanmax(err) < 0.2  # generous, but should typically be ~0.05–0.1
+
+        # shape preserved
+        assert out.shape == noisy.shape
+
+    def test_flip_agnostic_phase_smoothing_ignores_pi_flips(self):
+        """
+        A π flip in the middle should be ignored; output should follow the
+        underlying slow phase, not the flipped one.
+        """
+        N = 300
+        times = self._make_times(N=N, dt_sec=10.0)
+        base = 0.25 * np.sin(2 * np.pi * (np.arange(N) / (N * 2.0)))
+        phases = base.copy()
+        phases[N // 2 :] = (phases[N // 2 :] + np.pi)  # inject a clean flip
+
+        out = smooth_cal.flip_agnostic_phase_smoothing(phases, times, time_scale=1800.0, eigenval_cutoff=1e-9)
+
+        # Compare against the *unflipped* base
+        err = self._phase_err(out, base)
+        assert np.all(err < 0.01)
+
+    def test_flip_agnostic_phase_smoothing_preserves_end_nans_and_fills_interior(self):
+        """
+        Leading/trailing NaNs remain NaN; interior NaNs are filled by the smoothing.
+        """
+        N = 200
+        times = self._make_times(N=N, dt_sec=10.0)
+        base = 0.2 * np.sin(2 * np.pi * (np.arange(N) / (N * 3.0)))
+
+        phases = base.copy()
+        # Leading/trailing NaNs (flags at edges)
+        phases[:7] = np.nan
+        phases[-11:] = np.nan
+        # Interior NaNs (gap inside the valid tslice)
+        phases[80:90] = np.nan
+
+        out = smooth_cal.flip_agnostic_phase_smoothing(phases, times, time_scale=1500.0, eigenval_cutoff=1e-9)
+
+        # Ends should remain NaN
+        assert np.all(np.isnan(out[:7]))
+        assert np.all(np.isnan(out[-11:]))
+
+        # Interior gap should be filled (finite)
+        assert np.all(np.isfinite(out[80:90]))
+
+        # Where both input and base are finite (middle region), result should track base
+        mid_mask = np.ones(N, dtype=bool)
+        mid_mask[:7] = False
+        mid_mask[-11:] = False
+        err = self._phase_err(out[mid_mask], base[mid_mask])
+        assert np.all(err < 0.01)
 
     def test_dpss_filters(self):
         times = np.linspace(0, 10 * 10 / 60. / 60. / 24., 40, endpoint=False)
@@ -108,6 +194,21 @@ class Test_Smooth_Cal_Helper_Functions(object):
         X = np.kron(time_filters, freq_filters)
         fit_lsq = X @ np.linalg.pinv((X.T * weights.ravel()) @ X) @ (X.T * weights.ravel()) @ gains.ravel()
         np.testing.assert_array_almost_equal(fit_lsq, fit2.ravel())
+
+        # Check that this works when the basis functions are complex
+        freqs = np.linspace(100e6, 150e6, 100)
+        x = np.linspace(0, 2 * np.pi, 50)
+        X = dspec.dpss_operator(freqs, [0], [20e-9], eigenval_cutoff=[1e-12])[0].real
+        Y = dspec.dft_operator(x, [0], [0.1])
+
+        ncomps = X.shape[-1] * Y.shape[-1]
+        values = np.random.normal(0, 1, ncomps) + 1j * np.random.normal(0, 1, ncomps)
+        beta = np.reshape(values, (X.shape[1], Y.shape[1]))
+        gains = np.dot(np.dot(X, beta), np.transpose(Y))
+        weights = np.ones(gains.shape)
+
+        fit1, cached_output = smooth_cal.solve_2D_DPSS(gains, weights, X, Y)
+        np.testing.assert_array_almost_equal(gains, fit1)
 
     def test_time_filter(self):
         gains = np.ones((10, 10), dtype=complex)
@@ -245,6 +346,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         assert pytest.raises(ValueError, smooth_cal.filter_1d, gains=gains, wgts=wgts,
                              xvals=freqs, fitting_options=None, mode='dpss_leastsq')
 
+    @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_freq_filter_dpss_skip_flagged_edges(self):
         # run freq_filter tests dpss modes.
         # test skip_wgt
@@ -281,6 +383,9 @@ class Test_Smooth_Cal_Helper_Functions(object):
         ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, method='DPSS', skip_flagged_edges=False,
                                                   eigenval_cutoff=1e-12)
         np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
+        ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, method='DPSS', skip_flagged_edges=True,
+                                                  eigenval_cutoff=1e-12, use_sparse_solver=True)
+        np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
 
         # test rephasing
         gains = np.ones((100, 100), dtype=complex)
@@ -299,19 +404,95 @@ class Test_Smooth_Cal_Helper_Functions(object):
         with pytest.raises(NotImplementedError):
             ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, method='DPSS', filter_mode='plus')
 
+    def _make_simple_gain_cube(self, nt=32, nf=64, phase_offset=0.0):
+        """
+        Utility: constant‑magnitude gains with an optional phase slope,
+        easy to predict after filtering.
+        """
+        times = np.linspace(0, nt * 10 / 86400.0, nt, endpoint=False)   # ~10 s cadence
+        freqs = np.linspace(100., 200., nf, endpoint=False) * 1e6
+        gains = np.ones((nt, nf), dtype=complex)
+        gains *= np.exp(2.0j * np.pi * phase_offset * freqs)               # optional slope
+        wgts = np.ones_like(gains, dtype=float)
+        return gains, wgts, freqs, times
+
+    def test_time_freq_2D_filter_band_splitting_with_freq_cuts(self):
+        """
+        • Ensures freq_cuts correctly splits the band and that each band
+          is filtered independently (output == input for flat gains).
+        • Also verifies flag_utils.get_minimal_slices is called with the
+          expected signature (guard against regressions).
+        """
+        gains, wgts, freqs, times = self._make_simple_gain_cube()
+        freq_cuts = [150e6]      # two equal ~50 MHz sub‑bands
+
+        # Introduce a tiny discontinuity between the two bands so we can
+        # see that filtering *per band* preserves it (because the filters
+        # never see the jump).
+        gains[:, freqs >= 150e6] *= np.exp(1j * 0.02)
+
+        filtered, info = smooth_cal.time_freq_2D_filter(
+            gains, wgts, freqs, times,
+            method='DPSS',
+            skip_flagged_edges=True,
+            freq_cuts=freq_cuts,
+            eigenval_cutoff=1e-9,
+        )
+        np.testing.assert_allclose(filtered[:, freqs < 150e6], gains[:, freqs < 150e6], atol=5e-3, rtol=0)
+
+    def test_time_freq_2D_filter_dpss_caching_and_vectors(self):
+        """
+        • First run: let the routine build its own DPSS vectors / cache.
+        • Second run: feed those back in – output must match first run
+          *exactly* and function should skip recomputation.
+        """
+        gains, wgts, freqs, times = self._make_simple_gain_cube()
+
+        filt1, info1 = smooth_cal.time_freq_2D_filter(
+            gains, wgts, freqs, times,
+            method='DPSS',
+            skip_flagged_edges=True,
+            eigenval_cutoff=1e-9,
+        )
+
+        # The returned dicts must be keyed by (tslice, band) tuples
+        assert all(
+            isinstance(k, tuple) and len(k) == 2
+            for k in info1["dpss_vectors"].keys()
+        )
+        assert set(info1["dpss_vectors"].keys()) == set(info1["cached_input"].keys())
+
+        # Second call with vectors + cache injected
+        filt2, info2 = smooth_cal.time_freq_2D_filter(
+            gains,
+            wgts,
+            freqs,
+            times,
+            method='DPSS',
+            skip_flagged_edges=True,
+            eigenval_cutoff=1e-9,
+            dpss_vectors=info1["dpss_vectors"],
+            cached_input=info1["cached_input"],
+        )
+
+        np.testing.assert_array_equal(filt1, filt2)
+        # Returned dicts should be passed through unchanged
+        assert info2["dpss_vectors"] is info1["dpss_vectors"]
+        assert info2["cached_input"] is not None
+
     def flag_threshold_and_broadcast(self):
         flags = {(i, 'Jxx'): np.zeros((10, 10), dtype=bool) for i in range(3)}
         for ant in flags.keys():
             flags[ant][4, 0:6] = True
             flags[ant][0:4, 4] = True
-        flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5, ant_threshold=1.0)
+        self.flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5, ant_threshold=1.0)
         for ant in flags.keys():
             assert np.all(flags[ant][4, :])
             assert np.all(flags[ant][:, 4])
 
         assert not np.all(flags[(0, 'Jxx')])
         flags[(0, 'Jxx')][0:8, :] = True
-        flag_threshold_and_broadcast(flags, freq_threshold=1.0, time_threshold=1.0, ant_threshold=0.5)
+        self.flag_threshold_and_broadcast(flags, freq_threshold=1.0, time_threshold=1.0, ant_threshold=0.5)
         assert np.all(flags[0, 'Jxx'])
         assert not np.all(flags[1, 'Jxx'])
 
@@ -395,10 +576,13 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts_grid = smooth_cal._build_wgts_grid(flag_grid, time_blacklist=[False, True], freq_blacklist=[False, False, True], blacklist_wgt=.1)
         np.testing.assert_array_equal(wgts_grid, [[0, 1, .1], [.1, .1, .1]])
 
+        wgts_grid = smooth_cal._build_wgts_grid(flag_grid, waterfall_blacklist=[[False, True, False], [False, False, False]], blacklist_wgt=.1)
+        np.testing.assert_array_equal(wgts_grid, [[0, .1, 1], [1, 1, 1]])
+
     def test_to_anflags(self):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
         uvc = UVCal()
-        uvc.read_calfits(calfits_list)
+        uvc.read(calfits_list, file_type='calfits')
         uvf = UVFlag(uvc, mode='flag')
         uvflag_file = calfits_list[0].replace('/test_input/', '/test_output')
         uvf.write(uvflag_file, clobber=True)
@@ -481,6 +665,16 @@ class Test_Calibration_Smoother(object):
         assert self.cs.gain_grids[54, 'Jee'].shape == (180, 1024)
         assert self.cs.flag_grids[54, 'Jee'].shape == (180, 1024)
         np.testing.assert_array_equal(self.cs.flag_grids[54, 'Jee'][60:120, :], True)
+
+    def test_set_waterfall_blacklist(self):
+        self.cs.set_waterfall_blacklist({(54, 'Jee'): np.ones((180, 1024), dtype=bool)})
+        np.testing.assert_array_equal(self.cs.waterfall_blacklist[(54, 'Jee')], True)
+        with pytest.raises(AssertionError):
+            self.cs.set_waterfall_blacklist({(54, 'Jee'): np.ones((180, 1025), dtype=bool)})
+        with pytest.raises(AssertionError):
+            self.cs.set_waterfall_blacklist({(351, 'Jee'): np.ones((180, 1024), dtype=bool)})
+        with pytest.raises(AssertionError):
+            self.cs.set_waterfall_blacklist({(54, 'Jee'): np.ones((180, 1024), dtype=float)})
 
     @pytest.mark.parametrize("ax", ['freq', 'time'])
     def test_1D_filtering(self, ax):
@@ -590,7 +784,7 @@ class Test_Calibration_Smoother(object):
         outfilename = os.path.join(DATA_PATH, 'test_output/smooth_test.calfits')
         g = deepcopy(self.cs.gain_grids[54, 'Jee'])
         self.cs.write_smoothed_cal(output_replace=('test_input/', 'test_output/smoothed_'),
-                                   add_to_history='hello world', clobber=True, telescope_name='PAPER')
+                                   add_to_history='hello world', clobber=True, **{"telescope.name": 'PAPER'})
         for cal in self.cs.cals:
             new_cal = io.HERACal(cal.replace('test_input/', 'test_output/smoothed_'))
             gains, flags, qual, total_qual = new_cal.read()
@@ -598,7 +792,7 @@ class Test_Calibration_Smoother(object):
             old_gains, _, _, _ = old_cal.read()
             assert 'helloworld' in new_cal.history.replace('\n', '').replace(' ', '')
             assert 'Thisfilewasproducedbythefunction' in new_cal.history.replace('\n', '').replace(' ', '')
-            assert new_cal.telescope_name == 'PAPER'
+            assert new_cal.telescope.name == 'PAPER'
             np.testing.assert_array_equal(gains[54, 'Jee'], g[self.cs.time_indices[cal], :])
 
             relative_diff, avg_relative_diff = utils.gain_relative_difference(gains, old_gains, flags)

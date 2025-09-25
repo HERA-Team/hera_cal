@@ -24,7 +24,7 @@ def test_chunk_data_files(tmpdir):
         output = tmp_path + f'/chunk.{chunk}.uvh5'
         chunker.chunk_files(data_files, data_files[chunk], output, 2,
                             polarizations=['ee'], spw_range=[0, 32],
-                            throw_away_flagged_ants=True, 
+                            throw_away_flagged_ants=True,
                             ant_flag_yaml=f'{DATA_PATH}/test_input/a_priori_flags_sample_noflags.yaml')
 
     # test that chunked files contain identical data (when combined)
@@ -32,12 +32,11 @@ def test_chunk_data_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(f'{tmp_path}/chunk.*.uvh5'))
     uvd = UVData()
-    uvd.read(chunks, use_future_array_shapes=True)
+    uvd.read(chunks)
     # load in original file
     uvdo = UVData()
-    uvdo.read(data_files, freq_chans=range(32), use_future_array_shapes=True)
-    # apply_yaml_flags always makes the uvdo object use future_array_shapes!
-    apply_yaml_flags(uvdo, f'{DATA_PATH}/test_input/a_priori_flags_sample_noflags.yaml', 
+    uvdo.read(data_files, freq_chans=range(32))
+    apply_yaml_flags(uvdo, f'{DATA_PATH}/test_input/a_priori_flags_sample_noflags.yaml',
                      throw_away_flagged_ants=True,
                      flag_freqs=False, flag_times=False, ant_indices_only=True)
     assert np.all(np.isclose(uvdo.data_array, uvd.data_array))
@@ -56,10 +55,10 @@ def test_chunk_data_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(tmp_path + '/chunk.*.uvh5'))
     uvd = UVData()
-    uvd.read(chunks, use_future_array_shapes=True)
+    uvd.read(chunks)
     # load in original file
     uvdo = UVData()
-    uvdo.read(data_files, use_future_array_shapes=True)
+    uvdo.read(data_files)
     apply_yaml_flags(uvdo, DATA_PATH + '/test_input/a_priori_flags_sample_noflags.yaml', throw_away_flagged_ants=True,
                      flag_freqs=False, flag_times=False, ant_indices_only=True)
     assert np.all(np.isclose(uvdo.data_array, uvd.data_array))
@@ -67,6 +66,8 @@ def test_chunk_data_files(tmpdir):
     assert np.all(np.isclose(uvdo.nsample_array, uvd.nsample_array))
 
 
+@pytest.mark.filterwarnings("ignore:telescope_location is not set")
+@pytest.mark.filterwarnings("ignore:antenna_positions are not set")
 def test_chunk_cal_files(tmpdir):
     # list of data files:
     tmp_path = tmpdir.strpath
@@ -84,10 +85,10 @@ def test_chunk_cal_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(tmp_path + '/chunk.*.calfits'))
     uvc = UVCal()
-    uvc.read_calfits(chunks)
+    uvc.read(chunks)
     # load in original file
     uvco = UVCal()
-    uvco.read_calfits(cal_files)
+    uvco.read(cal_files, file_type='calfits')
     uvco.select(freq_chans=range(32))
 
     assert np.all(np.isclose(uvco.gain_array, uvc.gain_array))
@@ -102,10 +103,10 @@ def test_chunk_cal_files(tmpdir):
     # load in chunks
     chunks = sorted(glob.glob(tmp_path + '/chunk.*.calfits'))
     uvc = UVCal()
-    uvc.read_calfits(chunks)
+    uvc.read(chunks)
     # load in original file
     uvco = UVCal()
-    uvco.read_calfits(cal_files)
+    uvco.read(cal_files, file_type='calfits')
 
     assert np.all(np.isclose(uvco.gain_array, uvc.gain_array))
     assert np.all(np.isclose(uvco.flag_array, uvc.flag_array))

@@ -33,9 +33,8 @@ class Test_AbsCal_Funcs(object):
         self.data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.uvd = UVData()
         self.uvd.read_miriad(self.data_file)
-        self.uvd.use_future_array_shapes()
         self.freq_array = np.unique(self.uvd.freq_array)
-        self.antpos, self.ants = self.uvd.get_ENU_antpos(center=True, pick_data_ants=True)
+        self.antpos, self.ants = self.uvd.get_enu_data_ants()
         self.antpos = odict(zip(self.ants, self.antpos))
         self.time_array = np.unique(self.uvd.time_array)
 
@@ -69,10 +68,10 @@ class Test_AbsCal_Funcs(object):
         gain_2_path = os.path.join(tmp_path, 'gain_2.calfits')
         output_path = os.path.join(tmp_path, 'output.calfits')
         uvc1 = UVCal()
-        uvc1 = uvc1.initialize_from_uvdata(self.uvd, gain_convention='divide', future_array_shapes=False,
+        uvc1 = uvc1.initialize_from_uvdata(self.uvd, gain_convention='divide',
                                            cal_style='redundant', metadata_only=False)
         uvc2 = UVCal()
-        uvc2 = uvc2.initialize_from_uvdata(self.uvd, gain_convention='divide', future_array_shapes=False,
+        uvc2 = uvc2.initialize_from_uvdata(self.uvd, gain_convention='divide',
                                            cal_style='redundant', metadata_only=False)
         uvc1.gain_array[:] = np.random.rand(*uvc1.gain_array.shape) + 1j * np.random.rand(*uvc1.gain_array.shape)
         uvc2.gain_array[:] = np.random.rand(*uvc2.gain_array.shape) + 1j * np.random.rand(*uvc2.gain_array.shape)
@@ -205,6 +204,7 @@ class Test_AbsCal_Funcs(object):
         assert np.array(li).ndim == 1
 
     @pytest.mark.filterwarnings("ignore:Casting complex values to real discards the imaginary part")
+    @pytest.mark.filterwarnings("ignore:This function will be deprecated")
     def test_avg_data_across_red_bls(self):
         # test basic execution
         wgts = copy.deepcopy(self.wgts)
@@ -235,9 +235,17 @@ class Test_AbsCal_Funcs(object):
         # test basic execution
         relevant_mfiles = abscal.match_times(dfiles[0], mfiles, filetype='miriad')
         assert len(relevant_mfiles) == 2
+        relevant_mfiles = abscal.match_times(dfiles[0], mfiles[0:1], filetype='miriad')
+        assert len(relevant_mfiles) == 1
+        relevant_mfiles = abscal.match_times(dfiles[0], mfiles[1:2], filetype='miriad')
+        assert len(relevant_mfiles) == 1
         # test basic execution
         relevant_mfiles = abscal.match_times(dfiles[1], mfiles, filetype='miriad')
         assert len(relevant_mfiles) == 1
+        relevant_mfiles = abscal.match_times(dfiles[1], mfiles[1:2], filetype='miriad')
+        assert len(relevant_mfiles) == 1
+        relevant_mfiles = abscal.match_times(dfiles[1], mfiles[0:1], filetype='miriad')
+        assert len(relevant_mfiles) == 0
         # test no overlap
         mfiles = sorted(glob.glob(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcA')))
         relevant_mfiles = abscal.match_times(dfiles[0], mfiles, filetype='miriad')
@@ -342,8 +350,9 @@ class Test_AbsCal_Funcs(object):
 
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
 @pytest.mark.filterwarnings("ignore:divide by zero encountered in true_divide")
+@pytest.mark.filterwarnings("ignore:divide by zero encountered in divide")
 @pytest.mark.filterwarnings("ignore:divide by zero encountered in log")
-class Test_Abscal_Solvers(object):
+class Test_Abscal_Solvers:
     def test_abs_amp_lincal_1pol(self):
         antpos = hex_array(2, split_core=False, outriggers=0)
         reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
@@ -807,11 +816,51 @@ class Test_Abscal_Solvers(object):
         )
         assert np.isclose(gains[(0, 'Jnn')][0, 0], 1.0 + 0.0j)
 
+    def test_cross_pol_phase_cal(self):
+        rng = np.random.default_rng(42)
+        antpos = hex_array(3, split_core=True, outriggers=0)
+
+        model, data = {}, {}
+        ntimes, nfreqs = 1, 2
+
+        reds = redcal.get_reds(antpos, pols=['en', 'ne'])
+        data_bls = model_bls = [group[0] for group in reds]
+
+        delta = rng.uniform(-1, 1, (ntimes, nfreqs))
+
+        for bi, bls in enumerate(data_bls):
+            model[bls] = np.ones((ntimes, nfreqs))
+
+            if bls[2] == 'en':
+                gain = np.exp(1j * delta)
+            else:
+                gain = np.exp(-1j * delta)
+
+            data[bls] = model[bls] * gain
+
+        # Solve for the phase degeneracy
+        solved_delta = abscal.cross_pol_phase_cal(model, data, model_bls, data_bls, refpol='Jnn')
+
+        # Check that the phase degeneracy was solved for correctly
+        np.testing.assert_array_almost_equal(solved_delta, delta, decimal=5)
+        gain_ants = set()
+        for bl in data_bls:
+            gain_ants.update(set(utils.split_bl(bl)))
+        gain_ants = list(gain_ants)
+        gains = abscal.cross_pol_phase_cal(model, data, model_bls, data_bls, return_gains=True, gain_ants=gain_ants, refpol='Jnn')
+
+        for k in gains:
+            # Check that the gains are correct
+            if k[-1] == 'Jnn':
+                np.testing.assert_array_almost_equal(gains[k], 1.0 + 0.0j, decimal=5)
+
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
 @pytest.mark.filterwarnings("ignore:divide by zero encountered in true_divide")
 @pytest.mark.filterwarnings("ignore:divide by zero encountered in log")
-class Test_AbsCal(object):
+@pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
+@pytest.mark.filterwarnings("ignore:Selected frequencies are not evenly spaced")
+class Test_AbsCal:
     def setup_method(self):
         np.random.seed(0)
         # load into pyuvdata object
@@ -821,7 +870,7 @@ class Test_AbsCal(object):
         self.input_cal = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA.abs.calfits")
 
         # make custom gain keys
-        d, fl, ap, a, f, t, l, p = io.load_vis(self.data_fname, return_meta=True, pick_data_ants=False)
+        d, fl, ap, a, f, _, _, p = io.load_vis(self.data_fname, return_meta=True, pick_data_ants=False)
         self.freq_array = f
         self.antpos = ap
         gain_pols = np.unique([split_pol(pp) for pp in p])
@@ -852,12 +901,29 @@ class Test_AbsCal(object):
         # test with input cal
         bl = (24, 25, 'ee')
         uvc = UVCal()
-        uvc.read_calfits(self.input_cal)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="telescope_location is not set. Using known values for HERA"
+            )
+            warnings.filterwarnings(
+                "ignore",
+                message="antenna_positions are not set or are being overwritten."
+            )
+            warnings.filterwarnings(
+                "ignore",
+                message="antenna_diameters are not set or are being overwritten."
+            )
+
+            uvc.read_calfits(self.input_cal)
         aa = uvc.ant_array.tolist()
         g = (uvc.gain_array[aa.index(bl[0])] * uvc.gain_array[aa.index(bl[1])].conj()).squeeze().T
         gf = (uvc.flag_array[aa.index(bl[0])] + uvc.flag_array[aa.index(bl[1])]).squeeze().T
         w = self.AC.wgts[bl] * ~gf
-        AC2 = abscal.AbsCal(copy.deepcopy(self.AC.model), copy.deepcopy(self.AC.data), wgts=copy.deepcopy(self.AC.wgts), refant=24, input_cal=self.input_cal)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="antenna_diameters are not set")
+            AC2 = abscal.AbsCal(copy.deepcopy(self.AC.model), copy.deepcopy(self.AC.data), wgts=copy.deepcopy(self.AC.wgts), refant=24, input_cal=self.input_cal)
+
         np.testing.assert_array_almost_equal(self.AC.data[bl] / g * w, AC2.data[bl] * w)
 
     def test_abs_amp_logcal(self):
@@ -1119,7 +1185,7 @@ class Test_AbsCal(object):
     def test_mock_data(self):
         # load into pyuvdata object
         data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        data, flgs, ap, a, f, t, l, p = io.load_vis(data_file, return_meta=True)
+        data, flgs, ap, a, f, t, _, p = io.load_vis(data_file, return_meta=True)
         wgts = odict()
         for k in flgs.keys():
             wgts[k] = (~flgs[k]).astype(float)
@@ -1164,7 +1230,10 @@ class Test_AbsCal(object):
         tmppath = tmpdir.strpath
 
         hd = io.HERAData(data_file)
-        data, flags, nsamples = hd.read()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Fixing auto-correlations to be be real-only")
+            data, flags, nsamples = hd.read()
+
         antpairs = hd.get_antpairs()
 
         hdm = io.HERAData(data_file)
@@ -1176,7 +1245,7 @@ class Test_AbsCal(object):
         uvc_precal = UVCal()
         uvc_precal = uvc_precal.initialize_from_uvdata(uvdata=hd, gain_convention='divide', cal_style='sky',
                                                        ref_antenna_name='Amadeus', sky_catalog='The Library of Congress.',
-                                                       metadata_only=False, sky_field='The Fields of Athenry', cal_type='gain')
+                                                       metadata_only=False, cal_type='gain')
         uvc_precal.gain_array[:] = 1. + 0j
         uvc_precal.write_calfits(precal_fname)
 
@@ -1195,8 +1264,14 @@ class Test_AbsCal(object):
 
         # Now run abscal run
         cal_fname = os.path.join(tmppath, 'test_cal.calfits')
-        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname,
-                                           output_filename=cal_fname, clobber=True, precalibration_gain_file=precal_fname)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Mean of empty slice")
+
+            abscal.run_model_based_calibration(
+                data_file=data_fname, model_file=model_fname,
+                output_filename=cal_fname, clobber=True, precalibration_gain_file=precal_fname
+            )
+
         # check that gains equal to 1/sqrt(scale_factor)
         hc = io.HERACal(cal_fname)
         gains, gain_flags, _, _ = hc.read()
@@ -1205,8 +1280,14 @@ class Test_AbsCal(object):
 
         # Now run abscal run with dly_lincal
         cal_fname = os.path.join(tmppath, 'test_cal.calfits')
-        abscal.run_model_based_calibration(data_file=data_fname, model_file=model_fname, dly_lincal=True,
-                                           output_filename=cal_fname, clobber=True, precalibration_gain_file=precal_fname)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Mean of empty slice")
+
+            abscal.run_model_based_calibration(
+                data_file=data_fname, model_file=model_fname, dly_lincal=True,
+                output_filename=cal_fname, clobber=True, precalibration_gain_file=precal_fname
+            )
+
         # check that gains equal to 1/sqrt(scale_factor)
         hc = io.HERACal(cal_fname)
         gains, gain_flags, _, _ = hc.read()
@@ -1225,9 +1306,7 @@ class Test_AbsCal(object):
         hd = UVData()
         hdm = UVData()
         hd.read(data_fname)
-        hd.use_future_array_shapes()
         hdm.read(model_fname)
-        hdm.use_future_array_shapes()
         # test feeding UVData objects instead.
         abscal.run_model_based_calibration(data_file=hd, model_file=hdm, auto_file=hd,
                                            output_filename=cal_fname, clobber=True, refant=(0, 'Jnn'), precalibration_gain_file=precal_fname)
@@ -1246,6 +1325,7 @@ class Test_AbsCal(object):
         tmppath = tmpdir.strpath
 
         hd = io.HERAData(data_file)
+
         data, flags, nsamples = hd.read()
         antpairs = hd.get_antpairs()
 
@@ -1287,7 +1367,9 @@ class Test_AbsCal(object):
         tmppath = tmpdir.strpath
 
         hd = io.HERAData(data_file)
-        data, flags, nsamples = hd.read(freq_chans=include_chans)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Selected frequencies are not evenly spaced")
+            data, flags, nsamples = hd.read(freq_chans=include_chans)
         antpairs = hd.get_antpairs()
 
         hdm = io.HERAData(data_file)
@@ -1334,9 +1416,11 @@ class Test_AbsCal(object):
 
         precal_fname = os.path.join(tmppath, 'test_precal.calfits')
         uvc_precal = UVCal()
-        uvc_precal = uvc_precal.initialize_from_uvdata(uvdata=hd, gain_convention='divide', cal_style='sky',
-                                                       ref_antenna_name='Amadeus', sky_catalog='The Library of Congress.',
-                                                       metadata_only=False, sky_field='The Fields of Athenry', cal_type='gain')
+        uvc_precal = uvc_precal.initialize_from_uvdata(
+            uvdata=hd, gain_convention='divide', cal_style='sky',
+            ref_antenna_name='Amadeus', sky_catalog='The Library of Congress.',
+            metadata_only=False, cal_type='gain'
+        )
         uvc_precal.gain_array[:] = 1. + 0j
         uvc_precal.write_calfits(precal_fname)
 
@@ -1407,6 +1491,11 @@ class Test_AbsCal(object):
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
+@pytest.mark.filterwarnings("ignore:divide by zero encountered in reciprocal")
+@pytest.mark.filterwarnings("ignore:telescope_location is not set")
+@pytest.mark.filterwarnings("ignore:invalid value encountered in multiply")
+@pytest.mark.filterwarnings("ignore:antenna_positions are not set or are being overwritten")
+@pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
 class Test_Post_Redcal_Abscal_Run(object):
     def setup_method(self):
         self.data_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.uvh5_downselected')
@@ -1716,7 +1805,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, bls=model_bl_to_load)
         model_bls = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
         utils.lst_rephase(model, model_bls, model.freqs, data.lsts - model.lsts,
-                          lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
+                          lat=hdm.telescope.location.lat.deg, inplace=True)
         for k in flags.keys():
             if k in model_flags:
                 flags[k] += model_flags[k]
@@ -1750,6 +1839,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         for k in delta_gains:
             np.testing.assert_array_almost_equal(np.abs(delta_gains[k]), 1)
 
+    @pytest.mark.filterwarnings("ignore:not set or are being overwritten")
     def test_post_redcal_abscal_run_units_warning(self, tmpdir):
         tmp_path = tmpdir.strpath
         calfile_units = os.path.join(tmp_path, 'redcal_units.calfits')
@@ -1762,9 +1852,11 @@ class Test_Post_Redcal_Abscal_Run(object):
         hcr.read()
         hcr.gain_scale = 'k str'
         hcr.write_calfits(calfile_units)
-        with pytest.warns(RuntimeWarning):
-            hca = abscal.post_redcal_abscal_run(self.data_file, calfile_units, [model_units], phs_conv_crit=1e-4,
-                                                nInt_to_load=30, verbose=False, add_to_history='testing')
+        with pytest.warns(RuntimeWarning, match='Overwriting redcal gain_scale of k str with model gain_scale of Jy'):
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="All-NaN slice encountered")
+                hca = abscal.post_redcal_abscal_run(self.data_file, calfile_units, [model_units], phs_conv_crit=1e-4,
+                                                    nInt_to_load=30, verbose=False, add_to_history='testing')
         assert hca.gain_scale == 'Jy'
 
     def test_post_redcal_abscal_run(self, tmpdir):
@@ -1777,8 +1869,14 @@ class Test_Post_Redcal_Abscal_Run(object):
         hd = io.HERAData(self.model_files[0])
         hd.read(return_data=False)
         hd.lst_array += 1
+
         temp_outfile = os.path.join(DATA_PATH, 'test_output/temp.uvh5')
-        hd.write_uvh5(temp_outfile, clobber=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="The lst_array is not self-consistent with the time_array")
+            warnings.filterwarnings("ignore", message="The uvw_array does not match")
+
+            hd.write_uvh5(temp_outfile, clobber=True)
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, [temp_outfile], phs_conv_crit=1e-4,
@@ -1943,7 +2041,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         assert a.model_files[0] == 'c'
         assert a.model_files[1] == 'd'
         assert len(a.model_files) == 2
-        assert type(a.model_files) == list
+        assert isinstance(a.model_files, list)
         assert a.nInt_to_load == 6
         assert a.verbose is True
 

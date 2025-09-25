@@ -4,9 +4,11 @@
 
 import numpy as np
 from hera_filters import dspec
+from hera_cal.noise import predict_noise_variance_from_autos
 
 from . import utils
 from scipy.interpolate import interp1d
+from scipy import optimize
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
 from pyuvdata import UVData, UVFlag, UVBeam
@@ -14,7 +16,7 @@ import argparse
 from . import io
 from . import vis_clean
 import warnings
-from astropy.coordinates import SkyCoord, EarthLocation, AltAz, ITRS
+from astropy.coordinates import SkyCoord, AltAz, ITRS
 from astropy import units
 import astropy.constants as const
 from astropy_healpix import HEALPix
@@ -30,6 +32,7 @@ from .utils import echo
 import os
 import yaml
 import re
+import h5py
 
 SPEED_OF_LIGHT = const.c.si.value
 SDAY_SEC = units.sday.to("s")
@@ -285,8 +288,9 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
     """
     if keys is None:
         keys = uvd.get_antpairpols()
-    antpos, antnums = uvd.get_ENU_antpos()
-    sinlat = np.sin(np.abs(uvd.telescope_location_lat_lon_alt[0]))
+    antpos = uvd.telescope.get_enu_antpos()
+    antnums = uvd.telescope.antenna_numbers
+    sinlat = np.sin(np.abs(uvd.telescope.location.lat))
     frate_centers = {}
     frate_half_widths = {}
 
@@ -298,7 +302,8 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
         ind1 = np.where(antnums == k[0])[0][0]
         ind2 = np.where(antnums == k[1])[0][0]
         blvec = antpos[ind1] - antpos[ind2]
-        blcos = blvec[0] / np.linalg.norm(blvec[:2])
+        with np.errstate(divide='ignore', invalid='ignore'):
+            blcos = blvec[0] / np.linalg.norm(blvec[:2])
         if np.isfinite(blcos):
             frateamp_df = np.linalg.norm(blvec[:2]) / (SDAY_SEC * 1e-3) / SPEED_OF_LIGHT * 2 * np.pi
             # set autocorrs to have blcose of 0.0
@@ -325,6 +330,58 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
         frate_half_widths[utils.reverse_bl(k)] = frate_half_widths[k]
 
     return frate_centers, frate_half_widths
+
+
+def get_FR_buffer_from_spectra(auto_fr_spectrum_file, jds, freqs, gauss_fit_buffer_cut=1e-5):
+    '''This function computes an appropriate buffer to fringe-rate half-widths for a given antpair and times.
+    These are used to pad the widths given by hera_cal.frf.sky_frates() for the basic calculation, with a
+    Gaussian fit the the FR spectra of the autocorrelation at the highest frequency (and thus widest FR range)
+    in the (subset of) frequencies given.
+
+    Arguments:
+        auto_fr_spectrum_file: path to the HDF5 file containing the autocorrelation fringe-rate spectrum
+        jds: times in units of days
+        freqs: frequencies in Hz
+        gauss_fit_buffer_cut: where to cutoff the Gaussian fit to figure out the halfwidth buffer
+
+    Returns:
+        fr_buffer: FR buffer to add to FR half-widths (in mHz)
+    '''
+    with h5py.File(auto_fr_spectrum_file, "r") as h5f:
+        metadata = h5f["metadata"]
+        bl_to_index_map = {tuple(ap): int(index) for index, antpairs in metadata["baseline_groups"].items() for ap in antpairs}
+        spectrum_freqs = metadata["frequencies_MHz"][()] * 1e6
+        m_modes = metadata["erh_mode_integer_index"][()]
+        mmode_spectrum = h5f["erh_mode_power_spectrum"][:, :, bl_to_index_map[0, 0]]  # use autocorrelation
+
+    # convert to fringe rate, accouting for the fact that we have less than 24 hours of LST
+    def m2f(m_modes):
+        # Convert m-modes to fringe-rates in mHz.
+        return m_modes / units.sday.to(units.ks)
+    times_ks = (jds - jds[0] + np.median(np.diff(jds))) * units.day.to(units.ks)
+    m2f_phasors = np.exp(2j * np.pi * m2f(m_modes)[None, :] * times_ks[:, None])
+    m2f_mixer = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(m2f_phasors, axes=0), axis=0), axes=0)
+    # f is fringe rate, m is m-mode, n is nu (i.e. freqeuency)
+    fr_spectrum = np.abs(np.einsum('fm,mn,mf->fn', m2f_mixer, mmode_spectrum, m2f_mixer.T.conj()))
+
+    # create interpolator as a funciton of frequency
+    fr_spec_interpolator = interp1d(spectrum_freqs, fr_spectrum, kind='cubic', fill_value='extrapolate')
+    frates = np.fft.fftshift(np.fft.fftfreq(len(times_ks), d=np.median(np.diff(times_ks))))
+
+    # take top frequency (widest FR) per band
+    band_top_fr_spectrum = fr_spec_interpolator(freqs[-1])
+    band_top_fr_spectrum /= np.max(band_top_fr_spectrum)
+
+    # fit gaussian to get a decent estimate of the width without being too sensitive to the FT of the limited time range
+    def _gaussian(x, a, sigma):
+        return a * np.exp(-(x**2) / (2 * sigma**2))
+    initial_guess = [1.0, np.std(frates[band_top_fr_spectrum > 1e-2])]
+    if len(frates[band_top_fr_spectrum > 1e-2]) < 3:
+        initial_guess = [1.0, np.std(frates[np.argsort(np.abs(band_top_fr_spectrum))[-3:]])]
+    popt, _ = optimize.curve_fit(_gaussian, frates, band_top_fr_spectrum, p0=initial_guess)
+    fr_buffer = np.abs(2 * popt[1]**2 * np.log(gauss_fit_buffer_cut))**.5  # how far out in the gaussian fit should we go
+
+    return fr_buffer
 
 
 def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=True, nfr=None,
@@ -411,11 +468,10 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     if keys is None:
         keys = uvd.get_antpairpols()
 
-    antpos_trf = uvd.antenna_positions  # earth centered antenna positions
-    antnums = uvd.antenna_numbers  # antenna numbers.
+    antpos_trf = uvd.telescope.antenna_positions  # earth centered antenna positions
+    antnums = uvd.telescope.antenna_numbers  # antenna numbers.
 
-    lat, lon, alt = uvd.telescope_location_lat_lon_alt_degrees
-    location = EarthLocation(lon=lon * units.deg, lat=lat * units.deg, height=alt * units.m)
+    location = uvd.telescope.location
 
     # get topocentricl AzEl Beam coordinates.
     hp = HEALPix(nside=uvb.nside, order=uvb.ordering)
@@ -461,7 +517,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
     # for if we are going to sum over polarizations.
     # get redundancies (will only compute fr-profile once for each red group).
     if reds is None:
-        reds = _get_key_reds(dict(zip(*uvd.get_ENU_antpos()[::-1])), keys)
+        reds = _get_key_reds(utils.get_ENU_antpos(uvd, asdict=True), keys)
 
     for redgrp in reds:
         # only explicitly calculate fr profile for the first vis in each redgroup.
@@ -469,7 +525,7 @@ def build_fringe_rate_profiles(uvd, uvb, keys=None, normed=True, combine_pols=Tr
         echo(f"Generating FR-Profile of {bl} at {str(datetime.datetime.now())}", verbose=verbose)
         # sum beams from all frequencies
         # get polarization index
-        polindex = np.where(uvutils.polstr2num(bl[-1], x_orientation=uvb.x_orientation) == uvb.polarization_array)[0][0]
+        polindex = np.where(uvutils.polstr2num(bl[-1], x_orientation=uvb.get_x_orientation_from_feeds()) == uvb.polarization_array)[0][0]
         # get baseline vector in equitorial coordinates.
         blvec = antpos_trf[antnums == bl[1]] - antpos_trf[antnums == bl[0]]
         # initialize binned power.
@@ -609,7 +665,7 @@ def get_fringe_rate_limits(uvd, uvb=None, frate_profiles=None, percentile_low=5.
             dfr = 1. / (nfr * np.mean(np.diff(np.unique(uvd.time_array))) * 1e-3 * SDAY_SEC)
         fr_grid = np.arange(-nfr // 2, nfr // 2) * dfr
 
-    reds = _get_key_reds(dict(zip(*uvd.get_ENU_antpos()[::-1])), keys)
+    reds = _get_key_reds(utils.get_ENU_antpos(uvd, asdict=True), keys)
 
     for redgrp in reds:
         bl0 = redgrp[0]
@@ -801,7 +857,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
         if rephase:
             # get dlst and rephase
             dlst = mean_l - lst
-            d = utils.lst_rephase(d, bl_vec, freqs, dlst, lat=lat, inplace=False, array=True)
+            d = utils.lst_rephase(d[:, None], bl_vec, freqs, dlst, lat=lat, inplace=False)[:, 0]
 
         # form data weights
         if wgt_by_nsample:
@@ -1500,7 +1556,6 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
                 if flag_output is not None:
                     uv_avg = UVData()
                     uv_avg.read(output_data_name)
-                    uv_avg.use_future_array_shapes()
                     uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
                     uvf.to_waterfall(keep_pol=False, method='and')
                     uvf.write(os.path.join(os.path.dirname(flag_output),
@@ -1513,7 +1568,6 @@ def time_avg_data_and_write(input_data_list, output_data, t_avg, baseline_list=N
             if flag_output is not None:
                 uv_avg = UVData()
                 uv_avg.read(output_data)
-                uv_avg.use_future_array_shapes()
                 uvf = UVFlag(uv_avg, mode='flag', copy_flags=True)
                 uvf.to_waterfall(keep_pol=False, method='and')
                 uvf.write(flag_output, clobber=clobber)
@@ -1819,7 +1873,6 @@ def load_tophat_frfilter_and_write(
         if beamfitsfile is not None:
             uvb = UVBeam()
             uvb.read_beamfits(beamfitsfile)
-            uvb.use_future_array_shapes()
         else:
             uvb = None
 
@@ -2000,3 +2053,263 @@ def time_average_argparser():
     ap.add_argument("--equalize_interleave_ntimes", action="store_true", default=False, help=desc)
 
     return ap
+
+
+def get_frop_for_noise(times, filter_cent_use, filter_half_wid_use, freqs,
+                       t_avg=300., eigenval_cutoff=1e-9, weights=None,
+                       coherent_avg=True, wgt_tavg_by_nsample=True,
+                       nsamples=None, rephase=True, bl_vec=None,
+                       lat=-30.721526120689507, dlst=None):
+    """
+    Get FRF + coherent time average operator for the purposes of noise
+    covariance calculation. Composes time averaging and the main lobe FRF into
+    a single operation.
+
+    Parameters:
+        times (array):
+            (Interleaved) Julian Dates on hd, converted to seconds.
+        filter_cent_use (float):
+            Filter center for main lobe filter, in Hz.
+        filter_half_wid_use (float):
+            Filter half width for main lobe filter, in Hz.
+        freqs (array):
+            Frequencies in the data (in Hz).
+        t_avg (float):
+            Desired coherent averaging length, in seconds.
+        eigenval_cutoff (float):
+            Eigenvalue cutoff for DPSS modes.
+        weights (array):
+            Array of weights to use for main lobe filter.
+            None (default) uses uniform weights.
+        coherent_avg (bool):
+            Whether to coherently average on the t_avg cadence or not.
+        wgt_tavg_by_nsample (bool):
+            Whether to weight the time average by nsamples.
+            Otherwise do uniform weighting.
+        nsamples (array):
+            Array proportional to how many nights contributed to each sample.
+        rephase (bool):
+            Whether to rephase before averaging.
+        bl_vec (array):
+            Baseline vector in meters in ENU coordinate system
+        lat (float):
+            Array latitude in degrees North.
+        dlst (float or array_like):
+            Amount of LST to rephase by, in radians. If float, rephases all
+            times by the same amount.
+
+    Returns:
+        frop (array):
+            Filter operator. Shape (Ntimes_coarse, Ntimes_fine, Nfreqs).
+    """
+
+    # Time handling is a slightly modified port from hera_filters/hera_cal
+
+    Ntimes = len(times)
+    Nfreqs = len(freqs)
+
+    dmatr, _ = dspec.dpss_operator(times, np.array([filter_cent_use, ]),
+                                   np.array([filter_half_wid_use, ]),
+                                   eigenval_cutoff=np.array([eigenval_cutoff, ]))
+    Nmodes = dmatr.shape[-1]
+
+    if weights is None:
+        weights = np.ones([Ntimes, Nfreqs])
+    elif weights.shape != (Ntimes, Nfreqs):
+        raise ValueError(f"weights has wrong shape {weights.shape} "
+                         f"compared to (Ntimes, Nfreqs) = {(Ntimes, Nfreqs)}"
+                         " May need to be sliced along an axis.")
+
+    # Index Legend#####
+    # a = DPSS mode      #
+    # f = frequency      #
+    # t = fine time      #
+    # T = coarse time    #
+    # Index Legend#####
+
+    ddagW = dmatr.T.conj()[:, np.newaxis] * weights.T  # aft
+    ddagWd = ddagW @ dmatr  # afa
+    lsq = np.linalg.solve(ddagWd.swapaxes(0, 1), ddagW.swapaxes(0, 1))  # fat
+
+    if coherent_avg:
+        dtime = np.median(np.abs(np.diff(times)))
+        chunk_size = int(np.round((t_avg / dtime)))
+        Nchunk = int(np.ceil(Ntimes / chunk_size))
+        chunk_remainder = Ntimes % chunk_size
+
+        tavg_weights = nsamples if wgt_tavg_by_nsample else np.where(weights, np.ones([Ntimes, Nfreqs]), 0)
+        if tavg_weights.shape != (Ntimes, Nfreqs):
+            raise ValueError(f"nsamples has wrong shape {nsamples.shape} "
+                             f"compared to (Ntimes, Nfreqs) = {(Ntimes, Nfreqs)}"
+                             " May need to be sliced along an axis.")
+        if chunk_remainder > 0:  # Stack some 0s that get 0 weight so we can do the reshaping below without incident
+
+            dmatr_stack_shape = [chunk_size - chunk_remainder, Nmodes]
+            weights_stack_shape = [chunk_size - chunk_remainder, Nfreqs]
+            dmatr = np.vstack((dmatr, np.zeros(dmatr_stack_shape, dtype=complex)))
+            tavg_weights = np.vstack((tavg_weights, np.zeros(weights_stack_shape, dtype=complex)))
+            dlst = np.append(dlst, np.zeros(chunk_size - chunk_remainder, dtype=float))
+
+        dres = dmatr.reshape(Nchunk, chunk_size, Nmodes)
+        wres = tavg_weights.reshape(Nchunk, chunk_size, Nfreqs).astype(complex)
+        wnorm = wres.sum(axis=1)[:, np.newaxis]
+        # normalize for an average
+        wres = np.where(wnorm > 0, wres / wnorm, 0)
+
+        # Apply the rephase to the weights matrix since it's mathematically equivalent and convenient
+        if rephase:
+            wres = utils.lst_rephase(wres.reshape(Nchunk * chunk_size, 1, Nfreqs),
+                               bl_vec, freqs, dlst, lat=lat, inplace=False)
+            wres = wres.reshape(Nchunk, chunk_size, Nfreqs)
+
+        # does "Ttf,Tta->Tfa" much faster than einsum and fancy indexing
+        dchunk = np.zeros([Nchunk, Nfreqs, Nmodes], dtype=complex)
+        for coarse_time_ind in range(Nchunk):
+            dchunk[coarse_time_ind] = np.tensordot(wres[coarse_time_ind].T,
+                                                   dres[coarse_time_ind],
+                                                   axes=1)
+
+        # does "Tfa,fat->Ttf" faster than einsum and fancy indexing
+        frop = np.zeros([Nchunk, Ntimes, Nfreqs], dtype=complex)
+        for freq_ind in range(Nfreqs):
+            frop[:, :, freq_ind] = np.tensordot(dchunk[:, freq_ind],
+                                                lsq[freq_ind],
+                                                axes=1)
+    else:
+        # ta,fat->ttf
+        frop = np.tensordot(dmatr, lsq.transpose(1, 2, 0), axes=1)
+
+    return frop
+
+
+def prep_var_for_frop(data, nsamples, weights, cross_antpairpol, freq_slice,
+                      auto_ant=None, default_value=0., verbose=False):
+    """
+    Wrapper around hera_cal.noise.predict_noise_variance_from_autos that preps
+    the noise variance calculation for FRF + coherent average.
+
+    Parameters:
+        data: DataContainer
+            Must contain the cross_antpairpol in question as well as some
+            corresponding autos.
+        nsamples: DataContainer
+            Contains the nsamples associated with the cross_antpairpol in question.
+        weights: DataContainer
+            Contains the weights associated with the cross_antpairpol in question.
+        cross_antpairpol: tuple
+            Tuple whose first two entries are antennas and last entry is a
+            polarization.
+        freq_slice: slice
+            A slice into the frequency axis of the data that all gets filtered
+            identically (a PS analysis band).
+        auto_ant: int
+            If not None, should be a single integer specifying a single
+            antenna's autos (this is used because the redundantly averaged data
+            have a single auto file for all antennas).
+        default_value: (float)
+            The default variance to use in locations with 0 nsamples to avoid
+            nans.
+        verbose: (bool)
+            Whether to print that it had to replace from nonfinite variances.
+
+    Returns:
+        var: array
+            Noise variance (Ntimes, Nfreqs)
+    """
+    var = predict_noise_variance_from_autos(cross_antpairpol, data,
+                                            nsamples=nsamples, auto_ant=auto_ant)
+    var = var[:, freq_slice]
+
+    var_isnotfinite = ~np.isfinite(var)
+    if np.any(var_isnotfinite):
+        # Check all the infs/nans are weighted to zero and replace with default value
+        all_nonfinite_zero = np.all(weights[cross_antpairpol][:, freq_slice][var_isnotfinite]) == 0
+        if not all_nonfinite_zero:
+            warnings.warn("Not all nonfinite variance locations are of zero weight!")
+
+        if verbose:
+            print(f"Replacing nonfinite variances with default value: {default_value}")
+        var[var_isnotfinite] = default_value
+
+    return var
+
+
+def get_FRF_cov(frop, var):
+    """
+    Get noise covariance from noise variance and given FRF + coherent average operator.
+
+    Parameters:
+        frop: array
+            A linear operator that performs the FRF and coherent averaging
+            operations in one step.
+        var: array
+            Noise variance for a single antpairpol.
+
+    Returns:
+        cov: array
+            The desired covariance. Shape (Nfreqs, Ntimes, Ntimes)
+    """
+    Nfreqs = frop.shape[2]
+    Ncoarse = frop.shape[0]
+    cov = np.zeros([Nfreqs, Ncoarse, Ncoarse], dtype=complex)
+    for freq_ind in range(Nfreqs):
+        cov[freq_ind] = np.tensordot((frop[:, :, freq_ind] * var[:, freq_ind]),
+                                      frop[:, :, freq_ind].T.conj(), axes=1)
+
+    return cov
+
+
+def get_corr(cov):
+    """
+    Get correlation matrices from a sequence of covariance matrices.
+
+    Parameters:
+        cov: array
+            The covariance matrices.
+    Returns:
+        corr: array
+            The corresponding correlation matrices.
+    """
+    Ntimes = cov.shape[1]
+    diags = cov[:, np.arange(Ntimes), np.arange(Ntimes)]
+    corr = cov / np.sqrt(diags[:, None] * diags[:, :, None])
+
+    return corr
+
+
+def get_correction_factor_from_cov(cov, tslc=None):
+    """
+    Get a correction factor for PS noise variance prediction in the absence
+    of propagating the noise covariances all the way to delay space. This is
+    based on HERA memo #132, where it is shown that one may calculate an
+    effective number of degrees of freedom based on the variance of a
+    generalized chi-square random variable.
+
+    Parameters:
+        cov: array
+            The time-time covariance matrix at every frequency
+        tslc: slice
+            A time slice to use in case some times should be excluded from the
+            calculation of this factor. Can also be a boolean mask with the same
+            length as one of the dimensions of cov.
+
+    Returns:
+        correction_factor: array
+            The correction factor.
+    """
+    corr = get_corr(cov)
+
+    if tslc is None:
+        Ncotimes = corr.shape[1]
+        Neff = Ncotimes**2 / np.sum(np.abs(corr)**2, axis=(1, 2))
+    elif isinstance(tslc, slice):
+        Ncotimes = tslc.stop - tslc.start
+        Neff = Ncotimes**2 / np.sum(np.abs(corr[:, tslc, tslc])**2, axis=(1, 2))
+    elif isinstance(tslc, np.ndarray) and tslc.dtype == bool:
+        Ncotimes = np.sum(tslc)  # Count of True values in the boolean mask
+        Neff = Ncotimes**2 / np.sum(np.abs(corr[:, tslc][:, :, tslc])**2, axis=(1, 2))
+    else:
+        raise ValueError("tslc must be None, a slice, or a boolean numpy array.")
+    correction_factor = np.mean(Ncotimes / Neff)  # Average over frequency since they are independent.
+
+    return correction_factor

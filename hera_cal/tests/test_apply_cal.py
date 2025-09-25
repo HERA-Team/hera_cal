@@ -26,6 +26,10 @@ from hera_qm import metrics_io
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
+@pytest.mark.filterwarnings("ignore:telescope_location is not set")
+@pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
+@pytest.mark.filterwarnings("ignore:antenna_positions are not set")
+@pytest.mark.filterwarnings("ignore:Selected frequencies are not contiguous")
 class Test_Update_Cal(object):
     def test_check_polarization_consistency(self):
         gains = {(0, 'Jnn'): np.zeros((2, 2))}
@@ -125,11 +129,14 @@ class Test_Update_Cal(object):
             data = {(0, 1, 'nn'): np.ones((1, 3), dtype=complex),
                     (0, 2, 'nn'): np.ones((3, 3), dtype=complex)}
             ac.build_gains_by_cadences(data, {})
+
         with pytest.warns(UserWarning, match='cannot be calibrated with any of gain cadences'):
-            data = {(0, 1, 'nn'): np.ones((2, 3), dtype=complex),
-                    (0, 2, 'nn'): np.ones((3, 3), dtype=complex)}
-            gains = {(0, 'Jnn'): np.ones((2, 3), dtype=complex)}
-            ac.build_gains_by_cadences(data, gains)
+            with pytest.warns(UserWarning, match='is inconsistent with BDA by powers of 2'):
+
+                data = {(0, 1, 'nn'): np.ones((2, 3), dtype=complex),
+                        (0, 2, 'nn'): np.ones((3, 3), dtype=complex)}
+                gains = {(0, 'Jnn'): np.ones((2, 3), dtype=complex)}
+                ac.build_gains_by_cadences(data, gains)
 
     def test_calibrate_avg_gains_in_place(self):
         np.random.seed(20)
@@ -169,9 +176,10 @@ class Test_Update_Cal(object):
         outname_uvh5 = os.path.join(tmp_path, "red_out.uvh5")
         old_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+
         ac.apply_cal(miriad, outname_uvh5, new_cal, old_calibration=old_cal, filetype_in='miriad', filetype_out='uvh5',
-                     gain_convention='divide', redundant_solution=True, add_to_history='', clobber=True)
-        # checking if file is created
+                    gain_convention='divide', redundant_solution=True, add_to_history='', clobber=True)
+    # checking if file is created
         assert os.path.exists(outname_uvh5)
 
         # checking average
@@ -185,11 +193,11 @@ class Test_Update_Cal(object):
         # Now test with partial I/O
         uv = UVData()
         uv.read_miriad(miriad)
-        uv.use_future_array_shapes()
         inname_uvh5 = os.path.join(tmp_path, "red_in.uvh5")
         uv.write_uvh5(inname_uvh5)
+
         ac.apply_cal(inname_uvh5, outname_uvh5, new_cal, old_calibration=old_cal, filetype_in='uvh5', filetype_out='uvh5',
-                     gain_convention='divide', redundant_solution=True, nbl_per_load=1, add_to_history='', clobber=True)
+                    gain_convention='divide', redundant_solution=True, nbl_per_load=1, add_to_history='', clobber=True)
         os.remove(inname_uvh5)
         # checking if file is created
         assert os.path.exists(outname_uvh5)
@@ -277,15 +285,18 @@ class Test_Update_Cal(object):
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f), (0, 2, 'xx'): deepcopy(f[0:5, :])})
         g_here = {(0, 'Jxx'): g0_new[0:3, :], (1, 'Jxx'): g1_new[0:3, :]}
         with pytest.raises(ValueError, match='new_gains with'):
-            ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=None, old_gains=None)
+            with pytest.warns(UserWarning, match='integrations cannot be calibrated'):
+                ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=None, old_gains=None)
         g_here = {(0, 'Jxx'): g0_new[0:1, :], (1, 'Jxx'): g1_new[0:1, :]}
         cal_flags_here = {(0, 'Jxx'): cal_flags[(0, 'Jxx')][0:7, :], (1, 'Jxx'): cal_flags[(1, 'Jxx')][0:7, :]}
         with pytest.raises(ValueError, match='cal_flags with'):
             ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=cal_flags_here, old_gains=None)
         old_g_here = {(0, 'Jxx'): g0_old[0:8, :], (1, 'Jxx'): g1_old[0:8, :]}
         with pytest.raises(ValueError, match='old_gains with'):
-            ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=None, old_gains=old_g_here)
+            with pytest.warns(UserWarning, match="integrations cannot be calibrated"):
+                ac.calibrate_in_place(dc, g_here, data_flags=flags, cal_flags=None, old_gains=old_g_here)
 
+    @pytest.mark.filterwarnings("ignore:writing default values for restfreq")
     def test_apply_cal(self, tmpdir):
         tmp_path = tmpdir.strpath
         miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
@@ -303,6 +314,7 @@ class Test_Update_Cal(object):
         data, data_flags, _ = hd_old.build_datacontainers()
 
         new_gains, new_flags = io.load_cal(new_cal)
+
         uvc_old = UVCal()
         uvc_old.read_calfits(old_cal)
         uvc_old.gain_array *= (3.0 + 4.0j)
@@ -375,7 +387,6 @@ class Test_Update_Cal(object):
 
         uvd_with_units = UVData()
         uvd_with_units.read_uvh5(uvh5)
-        uvd_with_units.use_future_array_shapes()
         uvd_with_units.vis_units = 'k str'
         uvh5_units = os.path.join(tmp_path, 'test_input_kstr.uvh5')
         uvd_with_units.write_uvh5(uvh5_units)
@@ -446,8 +457,10 @@ class Test_Update_Cal(object):
         for grpnum in range(3):
             hdc = io.HERAData(output.replace('.uvh5', f'.{grpnum}.uvh5'))
             assert hdc.vis_units == 'Jy'
-        ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags,
-                     output, calfile, clobber=True, redundant_average=True, redundant_groups=3, vis_units='k str')
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Replacing original data vis_units of k str")
+            ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags,
+                         output, calfile, clobber=True, redundant_average=True, redundant_groups=3, vis_units='k str')
         for grpnum in range(3):
             hdc = io.HERAData(output.replace('.uvh5', f'.{grpnum}.uvh5'))
             assert hdc.vis_units == 'k str'
@@ -502,8 +515,11 @@ class Test_Update_Cal(object):
         assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
 
         # now do chunked redundant groups.
-        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
-                     gain_convention='divide', redundant_average=True, nbl_per_load=4, clobber=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="baseline group of length 7 encountered")
+
+            ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
+                         gain_convention='divide', redundant_average=True, nbl_per_load=4, clobber=True)
         hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
         hda_calibrated_with_apply_cal.read()
         # check that the data, flags, and nsamples arrays are close
@@ -588,6 +604,7 @@ class Test_Update_Cal(object):
             # check that data is not equal.
             assert not np.any(equal_data)
 
+    @pytest.mark.filterwarnings("ignore:Fixing phases using antenna positions")
     def test_apply_cal_bda(self):
         upsampled_oc = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.upsample_in_time.omni.calfits')
         downsampled_oc = os.path.join(DATA_PATH, 'zen.2459122.30030.sum.bda.downsampled.downsample_in_time.omni.calfits')

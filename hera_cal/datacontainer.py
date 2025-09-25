@@ -7,6 +7,7 @@ import numpy as np
 from collections import OrderedDict as odict
 import copy
 import warnings
+from functools import cache
 
 from typing import Sequence
 from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
@@ -125,7 +126,7 @@ class DataContainer:
         complex conjugate when appropriate) and polarization capitalization.'''
         try:  # just see if the key works first
             return self._data[key]
-        except(KeyError):
+        except (KeyError):
             if isinstance(key, str):  # asking for a pol
                 return dict(zip(self._antpairs, [self[make_bl(bl, key)] for bl in self._antpairs]))
             elif len(key) == 2:  # asking for a bl
@@ -134,7 +135,7 @@ class DataContainer:
                 bl = comply_bl(key)
                 try:
                     return self._data[bl]
-                except(KeyError):
+                except (KeyError):
                     try:
                         if np.iscomplexobj(self._data[reverse_bl(bl)]):
                             return np.conj(self._data[reverse_bl(bl)])
@@ -217,12 +218,15 @@ class DataContainer:
     def __add__(self, D):
         '''
         Addition operator overload.
+        returns a copy of this container.
 
         Add the values of this DataContainer with
         the value of D. If D is another DataContainer, add
         their values together and form a new container,
         otherwise add D to each ndarray in self.
         '''
+        # make output datacontainer
+        newD = copy.deepcopy(self)
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -232,17 +236,15 @@ class DataContainer:
                 raise ValueError("[1] axis of dictionary values don't match")
 
             # start new object
-            newD = odict()
 
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) + D[k]
 
-            return DataContainer(newD)
+            return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 newD[k] = newD[k] + D
 
@@ -253,10 +255,14 @@ class DataContainer:
         Subtraction operator overload.
 
         Subtract D with the values of this DataContainer.
+        returns a copy of this container.
+
         If D is another DataContainer, subtract
         their values and form a new container,
         otherwise subtract D from each ndarray in self.
         '''
+        # make output datacontainer
+        newD = copy.deepcopy(self)
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -265,15 +271,12 @@ class DataContainer:
             if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
-            # start new object
-            newD = odict()
-
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) - D[k]
 
-            return DataContainer(newD)
+            return newD
 
         else:
             newD = copy.deepcopy(self)
@@ -285,12 +288,15 @@ class DataContainer:
     def __mul__(self, D):
         '''
         Multiplication operator overload.
+        returns a copy of this container.
 
         Multiply D with the values of this DataContainer.
         If D is another DataContainer, multiply
         their values together and form a new container,
         otherwise multiply D with each ndarray in self.
         '''
+        # start a new output object
+        newD = copy.deepcopy(self)
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -299,18 +305,14 @@ class DataContainer:
             if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
-            # start new object
-            newD = odict()
-
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) * D[k]
 
-            return DataContainer(newD)
+            return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 newD[k] = newD[k] * D
 
@@ -319,12 +321,15 @@ class DataContainer:
     def __floordiv__(self, D):
         '''
         Floor division operator overload, i.e. //.
+        returns a copy of this container.
 
         Floor divide the values of this DataContainer by D.
         If D is another DataContainer, floor divide
         their values and form a new container,
         otherwise floor divide D from each ndarray in self.
         '''
+        # start a new output object
+        newD = copy.deepcopy(self)
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -345,10 +350,9 @@ class DataContainer:
                         div = self.__getitem__(k) / D[k]
                         newD[k] = np.real(div).astype(int) + 1j * np.imag(div).astype(int)
 
-            return DataContainer(newD)
+            return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 if not (np.iscomplexobj(newD[k]) or np.iscomplexobj(D)):
                     newD[k] = newD[k] // D
@@ -361,12 +365,15 @@ class DataContainer:
     def __truediv__(self, D):
         '''
         True division operator overload, i.e. /.
+        returns a copy of this container.
 
         True divide the values of this DataContainer by D.
         If D is another DataContainer, true divide
         their values and form a new container,
         otherwise true divide D from each ndarray in self.
         '''
+        # start a new output object
+        newD = copy.deepcopy(self)
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -375,18 +382,14 @@ class DataContainer:
             if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                 raise ValueError("[1] axis of dictionary values don't match")
 
-            # start new object
-            newD = odict()
-
             # iterate over D keys
             for i, k in enumerate(D.keys()):
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) / D[k]
 
-            return DataContainer(newD)
+            return newD
 
         else:
-            newD = copy.deepcopy(self)
             for k in newD.keys():
                 newD[k] = newD[k] / D
 
@@ -434,7 +437,7 @@ class DataContainer:
         try:
             bl = comply_bl(key)
             return (bl in self.keys() or reverse_bl(bl) in self.keys())
-        except(BaseException):  # if key is unparsable by comply_bl or reverse_bl, then it's not in self.keys()
+        except (BaseException):  # if key is unparsable by comply_bl or reverse_bl, then it's not in self.keys()
             return False
 
     def __iter__(self):
@@ -468,16 +471,32 @@ class DataContainer:
         '''Allows for getting values with fallback if not found. Default None.'''
         return (self[key] if key in self else val)
 
-    def select_or_expand_times(self, new_times, in_place=True, skip_bda_check=False):
+    def select_or_expand_times(self, new_times: Sequence[float] | None = None, in_place=True, skip_bda_check=False, *, indices: np.ndarray | None = None):
         '''Update self.times with new times, updating data and metadata to be consistent. Data and
         metadata will be deleted, rearranged, or duplicated as necessary using numpy's fancy indexing.
         Assumes that the 0th data axis is time. Does not support baseline-dependent averaging.
 
-        Arguments:
-            new_times: list or numpy array of times to use to index into this object. These must all be in
-                self.times, but they can be a subset in any order with any number of duplicates.
-            in_place: if True, this DataContainer is modified. Otherwise, a modified copy is returned.
+        Parameters
+        ----------
+        new_times : list or numpy array or None
+            Times to use to index into this object. If given, these must all be in
+            self.times, but they can be a subset in any order with any number of
+            duplicates. If not given, ``indices`` must be given.
+        in_place : bool
+            If True, this DataContainer is modified. Otherwise, a modified copy is returned.
+        skip_bda_check : bool
+            If True, do not check that the object is sensible for this operation.
+            This is useful for performance reasons when you know the object is sensible.
+        indices : integer array
+            If given, these are the indices to use to index the time axis.
+            If given, new_times must be None.
+
         '''
+        if new_times is None and indices is None:
+            raise ValueError('Either new_times or indices must be given.')
+        if new_times is not None and indices is not None:
+            raise ValueError('Cannot specify both new_times and indices.')
+
         if in_place:
             dc = self
         else:
@@ -485,8 +504,10 @@ class DataContainer:
 
         # make sure this is a sensible object for performing this operation
         assert dc.times is not None
-        if not np.all([nt in dc.times for nt in new_times]):
+
+        if new_times is not None and not np.all([nt in dc.times for nt in new_times]):
             raise ValueError('All new_times must be in self.times.')
+
         if not skip_bda_check:
             if dc.times_by_bl is not None:
                 for tbbl in dc.times_by_bl.values():
@@ -496,7 +517,12 @@ class DataContainer:
                     assert np.all(lbbl == np.asarray(dc.lsts)), 'select_or_expand_times does not support baseline dependent averaging.'
 
         # update data
-        nt_inds = np.searchsorted(np.array(dc.times), np.array(new_times))
+        if indices is not None:
+            nt_inds = indices
+            new_times = np.array(dc.times)[nt_inds]
+        else:
+            nt_inds = np.searchsorted(np.array(dc.times), np.array(new_times))
+
         for bl in dc:
             assert dc[bl].shape[0] == len(dc.times), 'select_or_expand_times assume that time is the 0th data dimension.'
             dc[bl] = dc[bl][nt_inds]
@@ -570,6 +596,41 @@ class DataContainer:
 
         return obj
 
+    def deinterleave(self, ninterleaves, tslice=slice(None)):
+        '''Breaks DataContainers into ninterleave separate containers and returns a list of DataContainers deinterleaved (i.e. alternating)
+        in time. Also updates .times and .lsts attributes. Integrations at the end that do not evenly divide are dropped.
+
+        Parameters
+        ----------
+        ninterleave : int
+            Number of deinterleaved DataContainers to split this datacontainer into.
+        tslice : slice
+            Slice of times to deinterleave. Default is all integrations.
+
+        Returns
+        -------
+        list of DataContainers
+            List of deinterleaved DataContainers.
+        '''
+
+        # check that times and lsts are set
+        if not hasattr(self, 'times') or self.times is None:
+            raise ValueError('Cannot deinterleave if self.times is not set.')
+        if not hasattr(self, 'lsts') or self.lsts is None:
+            raise ValueError('Cannot deinterleave if self.lsts is not set.')
+
+        # perfrom deinterleave
+        deint_dcs = []
+        for i in range(ninterleaves):
+            islice = slice(i, (len(self.times[tslice]) // ninterleaves) * ninterleaves, ninterleaves)  # ensures all slices have same shape
+            new_dc = copy.deepcopy(self)
+            new_dc.times = self.times[tslice][islice]
+            new_dc.lsts = self.lsts[tslice][islice]
+            for bl in new_dc:
+                new_dc[bl] = self[bl][tslice, :][islice, :]
+            deint_dcs.append(new_dc)
+        return deint_dcs
+
 
 class RedDataContainer(DataContainer):
     '''Structure for containing redundant visibilities that can be accessed by any
@@ -642,8 +703,6 @@ class RedDataContainer(DataContainer):
         else:
             self.reds = RedundantGroups(red_list=reds, antpos=getattr(self, 'antpos', None))
 
-        self._reds_keyed_on_data = self.reds.keyed_on_bls(bls=self.bls())
-
         # delete unused data to avoid leaking memory
         del self[[k for k in self._data if k not in self.reds]]
 
@@ -659,14 +718,23 @@ class RedDataContainer(DataContainer):
             else:
                 redkeys[ubl] = bl
 
-    def get_ubl_key(self, bl):
+    def get_ubl_key(self, bl: Baseline | AntPair):
         '''Returns the blkey used to internally denote the data stored.
 
         If this bl is in a redundant group present in the data, this will return the
         blkey that exists in the data. Otherwise, it will return the array-wide blkey
         representing this group.
         '''
-        return self._reds_keyed_on_data.get_ubl_key(bl)
+        # return self._reds_keyed_on_data.get_ubl_key(bl)
+        out = self.reds.get_reds_in_bl_set(bl, self.keys(), include_conj=False)
+        if len(out) == 1:
+            return next(iter(out))
+        elif len(out) == 0:
+            return self.reds.get_ubl_key(bl)
+        else:
+            raise ValueError(
+                f'Baseline {bl} corresponds to multiple baselines in the data: {out}.'
+            )
 
     def get_red(self, key):
         '''Returns the list of baselines in the array redundant with this key.
@@ -687,11 +755,6 @@ class RedDataContainer(DataContainer):
         else:
             # treat this as a new baseline not redundant with anything
             self.reds.append([key])
-
-            # Since this is a completely new key, the BaselineKeyChooser will
-            # automatically use the only key in the group as the ubl key, we just
-            # need to add it to the potential key list.
-            self._reds_keyed_on_data.append([key])
             ubl_key = key
 
         super().__setitem__(ubl_key, value)

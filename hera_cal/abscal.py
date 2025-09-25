@@ -99,7 +99,8 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True, return_gains=False, gai
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # abs of amplitude ratio is ydata independent variable
-    ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
+    with np.errstate(divide='ignore', invalid='ignore'):
+        ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -249,7 +250,10 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True, return_gains=False, gai
         sol0 = {k.replace('eta_', 'A_'): np.exp(sol) for k, sol in sol0.items()}
         # now solve by linearizing
         solver = linsolve.LinProductSolver(ls_data, sol0, wgts=ls_wgts, constants=ls_consts)
-        meta, fit = solver.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
+        with warnings.catch_warnings():
+            # The following warning should be suppressed properly in linsolve
+            warnings.filterwarnings("ignore", message="divide by zero encountered in reciprocal")
+            meta, fit = solver.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
     else:
         # in this case, the equations are already linear in A^2
         solver = linsolve.LinearSolver(ls_data, wgts=ls_wgts, constants=ls_consts)
@@ -357,7 +361,11 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True,
 
     # angle of phs ratio is ydata independent variable
     # angle after divide
-    ydata = {k: np.angle(data[k] / model[k]) for k in keys}
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        warnings.filterwarnings("ignore", message="divide by zero encountered in divide")
+
+        ydata = {k: np.angle(data[k] / model[k]) for k in keys}
 
     # make unit weights if None
     if wgts is None:
@@ -468,7 +476,10 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # difference of log-amplitudes is ydata independent variable
-    ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        warnings.filterwarnings("ignore", message="divide by zero encountered in divide")
+        ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -537,7 +548,10 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # angle of visibility ratio is ydata independent variable
-    ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        warnings.filterwarnings("ignore", message="divide by zero encountered in divide")
+        ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -644,7 +658,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solv
     ratio_offsets = []
     ratio_wgts = []
     for i, k in enumerate(keys):
-        ratio = data[k] / model[k]
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = data[k] / model[k]
 
         # replace nans
         nan_select = np.isnan(ratio)
@@ -1093,9 +1108,11 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     # median filter and FFT to get delays
     ydata = {}
     ywgts = {}
+    np.seterr(divide='ignore', invalid='ignore')
     for i, k in enumerate(keys):
-        ratio = data[k] / model[k]
-        ratio /= np.abs(ratio)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = data[k] / model[k]
+            ratio /= np.abs(ratio)
 
         # replace nans and infs
         wgts[k][~np.isfinite(ratio)] = 0.0
@@ -1250,6 +1267,85 @@ def RFI_delay_slope_cal(reds, antpos, red_data, freqs, rfi_chans, rfi_headings, 
         dlys = np.dot(ipos, [dly_slope_sol[f'T_{pol}_{dim}'] for dim in range(len(ipos))])
         gains[ant] = np.exp(2j * np.pi * np.outer(dlys, freqs))
     return gains
+
+
+def cross_pol_phase_cal(model, data, model_bls, data_bls, wgts={}, return_gains=False, gain_ants=[], refpol="Jee"):
+    """
+    Solve for the relative phase degeneracy between two polarizations of redundantly calibrated data.
+
+    Parameters:
+    -----------
+    model : DataContainer or RedDataContainer
+        Dictionary-like container mapping baselines to model visibilities
+    data : DataContainer or RedDataContainer
+        Dictionary-like container mapping baselines to data visibilities
+    model_bls : list of tuples
+        List of baseline tuples in model to use for calibration. Must correspond the same physical separations as data_bls.
+    data_bls : list of tuples
+        List of baseline tuples in data to use from calibration.
+    wgts : dict
+        Dictionary mapping baseline tuples to weights. Default is no weights.
+    return_gains : bool
+        If True, return gains instead of the relative phase difference between the two polarizations.
+        Default is False.
+    gain_ants : list of tuples
+        List of antenna-pol tuples to return gains for. Default is None.
+    refpol : str
+        Reference polarization to use for relative phase calibration. Gains in the refpol are not changed by relative
+        polarization calibration. Default is 'Jee'.
+
+    Returns:
+    --------
+    If return_gains is False:
+        delta : np.ndarray
+            Array of relative phase differences between the two polarizations in units of radians.
+    If return_gains is True:
+        delta_gains : dict
+            Dictionary mapping antenna keys like (0, 'Jee') to gains of the same shape of the data
+    """
+    # Create variable for the sum of the model and data product
+    summation = np.zeros_like(data[data_bls[0]])
+
+    unique_pols = list(set(sum([list(utils.split_pol(bl[-1])) for bl in data_bls], [])))
+
+    if refpol not in unique_pols:
+        raise ValueError(f"Reference polarization {refpol} not found in data.")
+    if len(unique_pols) != 2:
+        raise ValueError("Cross-polarization phase calibration only works for two polarizations.")
+
+    for model_bl, data_bl in zip(model_bls, data_bls):
+
+        # Skip if the polarizations are the same
+        model_pol1, model_pol2 = utils.split_pol(model_bl[-1])
+        if model_pol1 == model_pol2:
+            continue
+
+        # Skip if the polarizations are the same
+        data_pol1, data_pol2 = utils.split_pol(data_bl[-1])
+        if model_pol1 == model_pol2:
+            continue
+
+        if refpol == data_pol1:
+            summation += (
+                np.conj(data[data_bl]) * model[model_bl] * wgts.get(data_bl, 1.0)
+            )
+        else:
+            summation += (
+                data[data_bl] * np.conj(model[model_bl]) * wgts.get(data_bl, 1.0)
+            )
+
+    if return_gains:
+        delta_gains = {}
+        for (ant, pol) in gain_ants:
+            if pol == refpol:
+                delta_gains[(ant, pol)] = np.ones_like(summation)
+            else:
+                delta_gains[(ant, pol)] = np.exp(1j * np.angle(summation))
+
+        return delta_gains
+
+    else:
+        return np.angle(summation)
 
 
 def dft_phase_slope_solver(xs, ys, data, flags=None):
@@ -1837,7 +1933,7 @@ def _put_transformed_array_on_integer_grid(transformed_antpos, tol=1e-8, max_num
                 transformed_antpos[ap][dim] *= (numerator / denominator)
 
 
-def complex_phase_abscal(data, model, reds, data_bls, model_bls):
+def complex_phase_abscal(data, model, reds, data_bls, model_bls, transformed_antpos=None):
     """
     Calculates gains that would absolute calibrate the phase of already redundantly-calibrated data.
     Only operates one polarization at a time.
@@ -1849,11 +1945,14 @@ def complex_phase_abscal(data, model, reds, data_bls, model_bls):
     model : DataContainer or RedDataContainer
         Dictionary-like container mapping baselines to model visibilities
     reds : list of lists
-        List of lists of redundant baselines tuples like (0, 1, 'ee')
+        List of lists of redundant baselines tuples like (0, 1, 'ee'). Ignored if transformed_antpos is not None.
     data_bls : list of tuples
         List of baseline tuples in data to use.
     model_bls : list of tuples
         List of baseline tuples in model to use. Must correspond the same physical separations as data_bls.
+    transformed_antpos : dict
+        Dictionary of abstracted antenna positions that you'd normally get from redcal.reds_to_antpos().
+        If None, will be inferred from reds.
 
     Returns:
     -------
@@ -1870,7 +1969,8 @@ def complex_phase_abscal(data, model, reds, data_bls, model_bls):
     assert len(pols) == 1, 'complex_phase_abscal() can only solve for one polarization at a time.'
 
     # Get transformed antenna positions and baselines
-    transformed_antpos = redcal.reds_to_antpos(reds)
+    if transformed_antpos is None:
+        transformed_antpos = redcal.reds_to_antpos(reds)
     _put_transformed_array_on_integer_grid(transformed_antpos)
     transformed_b_vecs = np.rint([transformed_antpos[jj] - transformed_antpos[ii] for (ii, jj, pol) in data_bls]).astype(int)
 
@@ -1893,7 +1993,7 @@ def complex_phase_abscal(data, model, reds, data_bls, model_bls):
     # turn solution into per-antenna gains
     phase_angle = {a: np.sum(Lambda_sol * r, axis=-1) for a, r in transformed_antpos.items()}
     delta_gains = {(a, utils.split_pol(pols[0])[0]): np.exp(1j * (angle)) for a, angle in phase_angle.items()}
-    meta = {'Lambda_sol': Lambda_sol, 'Z_sol': Z_sol, 'newton_iterations': newton_iterations}
+    meta = {'Lambda_sol': Lambda_sol, 'Z_sol': Z_sol, 'newton_iterations': newton_iterations, 'transformed_antpos': transformed_antpos}
     return meta, delta_gains
 
 
@@ -2266,8 +2366,17 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
             f = np.zeros_like(real, bool)
 
         # interpolate
-        interp_real = interpolate.interp2d(model_freqs, model_lsts, real, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
-        interp_imag = interpolate.interp2d(model_freqs, model_lsts, imag, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
+        kw = dict(method=kind, bounds_error=False, fill_value=fill_value)
+        dfreqs, dlsts = np.meshgrid(data_freqs, data_lsts)
+        outgrid = np.array([dfreqs, dlsts]).T
+
+        interp_real = interpolate.RegularGridInterpolator(
+            (model_freqs, model_lsts), real.T, **kw
+        )(outgrid).reshape((len(data_lsts), len(data_freqs)))
+
+        interp_imag = interpolate.RegularGridInterpolator(
+            (model_freqs, model_lsts), imag.T, **kw
+        )(outgrid).reshape((len(data_lsts), len(data_freqs)))
 
         # flag extrapolation if desired
         if flag_extrapolate:
@@ -2547,7 +2656,7 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     Output: (red_data, red_wgts, red_keys)
     -------
     """
-    warnings.warn("Warning: This function will be deprecated in the next hera_cal release.")
+    warnings.warn("This function will be deprecated in the next hera_cal release.")
 
     # get data keys
     keys = list(data.keys())
@@ -2582,7 +2691,9 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     for i, bl_group in enumerate(stripped_reds):
         # average redundant baseline group
         d = np.nansum([data[k] * wgts[k] for k in bl_group], axis=0)
-        d /= np.nansum([wgts[k] for k in bl_group], axis=0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            d /= np.nansum([wgts[k] for k in bl_group], axis=0)
 
         # get wgts
         if broadcast_wgts:
@@ -2703,28 +2814,78 @@ def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
     Returns:
         matched_modelfiles : type=list, list of modelfiles that overlap w/ datafile in LST
     """
-    # get lst arrays
-    data_dlst, data_dtime, data_lsts, data_times = io.get_file_times(datafile, filetype=filetype)
-    model_dlsts, model_dtimes, model_lsts, model_times = io.get_file_times(modelfiles, filetype=filetype)
+    # get first modelfile time arrays
+    m0_dlst, m0_dtime, m0_lsts, m0_times = io.get_file_times(modelfiles[0], filetype=filetype)
 
-    # shift model files relative to first file & first index if needed
-    for ml in model_lsts:
-        ml[ml < model_lsts[0][0]] += 2 * np.pi
-        # also ensure that ml is increasing
-        ml[ml < ml[0]] += 2 * np.pi
-    # get model start and stop, buffering by dlst / 2
-    model_starts = np.asarray([ml[0] - md / 2.0 for ml, md in zip(model_lsts, model_dlsts)])
-    model_ends = np.asarray([ml[-1] + md / 2.0 for ml, md in zip(model_lsts, model_dlsts)])
+    # get data time arrays
+    data_dlst, _, data_lsts, _ = io.get_file_times(datafile, filetype=filetype)
 
-    # shift data relative to model if needed
-    data_lsts[data_lsts < model_starts[0]] += 2 * np.pi
-    # make sure monotonically increasing.
-    data_lsts = np.unwrap(data_lsts)
-    # select model files
-    match = np.asarray(modelfiles)[(model_starts < data_lsts[-1] + atol)
-                                   & (model_ends > data_lsts[0] - atol)]
+    def unwrap(lsts, branch_cut):
+        lsts[lsts < branch_cut] += 2 * np.pi
+        lsts[lsts < lsts[0]] += 2 * np.pi  # also ensure that it's increasing internally
+    unwrap(data_lsts, m0_lsts[0] - m0_dlst / 2)  # shift data relative to model
 
-    return match
+    # There is an edge-case in which the first data lst is just below the first model lst
+    # but after the last model lst, and the other data lsts are above the first model lst.
+    # In this case, we will keep thinking we are too low in LST, so we move up til we've
+    # exhausted all the model files, but we should have been moving down.
+    mlast_dlst, _, mlast_lsts, _ = io.get_file_times(modelfiles[0], filetype=filetype)
+    if (
+        data_lsts[0] > mlast_lsts[-1] + mlast_dlst / 2
+        and data_lsts[-1] - 2 * np.pi > m0_lsts[0] - m0_dlst / 2
+    ):
+        data_lsts -= 2 * np.pi
+
+    def lst_overlap(m_lsts, m_dlst):
+        def intervals_overlap(s1, e1, s2, e2):
+            return (s1 < e2) and (e1 > s2)
+        for shift in [0, -2 * np.pi, 2 * np.pi]:
+            if intervals_overlap(m_lsts[0] - m_dlst / 2 + shift, m_lsts[-1] + m_dlst / 2 + shift, data_lsts[0] - atol, data_lsts[-1] + atol):
+                return 'during'
+        if (m_lsts[-1] + m_dlst / 2) < (data_lsts[0] - atol):
+            return 'before'
+        else:
+            return 'after'
+
+    # binary search to find a matching file
+    idx = len(modelfiles) // 2
+    step_size = max([len(modelfiles) // 2, 1])
+    indicies_tried = set([])
+    while True:
+        # get lsts for model file at idx
+        if (idx >= len(modelfiles)) or (idx < 0) or (idx in indicies_tried):
+            return []  # no match found
+        m_dlst, _, m_lsts, _ = io.get_file_times(modelfiles[idx], filetype=filetype)
+        indicies_tried.add(idx)
+        unwrap(m_lsts, m0_lsts[0])
+
+        # figure out whether this model file overlaps with the data
+        overlap = lst_overlap(m_lsts, m_dlst)
+        if overlap == 'during':
+            break
+        else:
+            step_size = max([abs(step_size) // 2, 1]) * (1 if overlap == 'before' else -1)
+        idx += step_size
+
+    # now loop over neighboring files, going forward and backwards simultaneously, looking for additional overlaps
+    match = set([modelfiles[idx]])
+    for i in range(1, len(modelfiles)):
+        m1_dlst, _, m1_lsts, _ = io.get_file_times(modelfiles[(idx - i) % len(modelfiles)], filetype=filetype)
+        unwrap(m1_lsts, m0_lsts[0])
+        m2_dlst, _, m2_lsts, _ = io.get_file_times(modelfiles[(idx + i) % len(modelfiles)], filetype=filetype)
+        unwrap(m2_lsts, m0_lsts[0])
+        overlap1 = lst_overlap(m1_lsts, m1_dlst)
+        overlap2 = lst_overlap(m2_lsts, m2_dlst)
+        if overlap1 == 'during':
+            match.add(modelfiles[(idx - i) % len(modelfiles)])
+        if overlap2 == 'during':
+            match.add(modelfiles[(idx + i) % len(modelfiles)])
+        if (overlap1 != 'during') and (overlap2 != 'during'):
+            break
+
+    # return match in the same order as the files appeared in modelfiles
+    return sorted(match, key=modelfiles.index)
+
 
 def cut_bls(datacontainer, bls=None, min_bl_cut=None, max_bl_cut=None, inplace=False):
     """
@@ -2870,7 +3031,7 @@ class AbsCal(object):
                  #!/usr/bin/env python
                  uvd = pyuvdata.UVData()
                  uvd.read_miriad(<filename>)
-                 antenna_pos, ants = uvd.get_ENU_antpos()
+                 antenna_pos, ants = uvd.telescope.get_enu_antpos()
                  antpos = dict(zip(ants, antenna_pos))
                  ----
                  This is needed only for Tip Tilt, phase slope, and delay slope calibration.
@@ -3801,8 +3962,11 @@ def get_all_times_and_lsts(hd, solar_horizon=90.0, unwrap=True):
 
     # remove times when sun was too high
     if solar_horizon < 90.0:
-        lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
-        solar_alts = utils.get_sun_alt(all_times, latitude=lat, longitude=lon)
+        solar_alts = utils.get_sun_alt(
+            all_times,
+            latitude=hd.telescope.location.lat.deg,
+            longitude=hd.telescope.location.lon.deg
+        )
         solar_flagged = solar_alts > solar_horizon
         return all_times[~solar_flagged], all_lsts[~solar_flagged]
     else:  # skip this step for speed
@@ -4046,7 +4210,8 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
                         noise_vars.append(noise_var_here)
                     # estimate noise variance per baseline, assuming inverse variance weighting, but excluding flagged autos
                     noise_var = np.nansum(np.array(noise_vars)**-1, axis=0)**-1 * np.sum(~np.isnan(noise_vars), axis=0)
-            wgts[bl] *= noise_var**-1
+            with np.errstate(divide='ignore', invalid='ignore'):
+                wgts[bl] *= noise_var**-1
         wgts[bl][~np.isfinite(wgts[bl])] = 0.0
 
     return DataContainer(wgts)
@@ -4297,8 +4462,10 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
             warnings.warn(f"Warning: Overwriting redcal gain_scale of {hc.gain_scale} with model gain_scale of {hdm.vis_units}", RuntimeWarning)
         hc.gain_scale = hdm.vis_units  # set vis_units of hera_cal based on model files.
         hd_autos = io.HERAData(raw_auto_file)
-        assert hdm.x_orientation.lower() == hd.x_orientation.lower(), 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation.lower(), hdm.x_orientation.lower())
-        assert hc.x_orientation.lower() == hd.x_orientation.lower(), 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation.lower(), hc.x_orientation.lower())
+        assert hdm.telescope.get_x_orientation_from_feeds().lower() == hd.telescope.get_x_orientation_from_feeds().lower(), \
+            f'Data x_orientation, {hd.telescope.x_orientation.lower()}, does not match model x_orientation, {hdm.telescope.x_orientation.lower()}'
+        assert hc.telescope.get_x_orientation_from_feeds().lower() == hd.telescope.get_x_orientation_from_feeds().lower(), \
+            f'Data x_orientation, {hd.telescope.get_x_orientation_from_feeds().lower()}, does not match redcal x_orientation, {hc.telescope.get_x_orientation_from_feeds().lower()}'
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
 
         # get model bls and antpos to use later in baseline matching
@@ -4356,7 +4523,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                                 model_flags.select_or_expand_times(model_times_to_load)
                             model_blvecs = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
                             utils.lst_rephase(model, model_blvecs, model.freqs, data.lsts - model.lsts,
-                                              lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
+                                              lat=hdm.telescope.location.lat.deg, inplace=True)
 
                             # Flag frequencies and times in the data that are entirely flagged in the model
                             model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
@@ -4379,7 +4546,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
                             # run absolute calibration to get the gain updates
                             delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
-                                                             phs_max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose, use_abs_amp_lincal=not(skip_abs_amp_lincal))
+                                                             phs_max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose, use_abs_amp_lincal=(not skip_abs_amp_lincal))
 
                             # abscal autos, rebuild weights, and generate abscal Chi^2
                             calibrate_in_place(autocorrs, delta_gains)
@@ -4583,7 +4750,6 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
     data_ant_flags = synthesize_ant_flags(data_flags, threshold=ant_threshold)
     model_ant_flags = synthesize_ant_flags(model_flags, threshold=ant_threshold)
 
-    lst_center = hdd.lsts[hdd.Ntimes // 2] * 12 / np.pi
     field_str = 'LST={lst_center:%.2f} hrs'
 
     if refant is None:
@@ -4593,19 +4759,21 @@ def run_model_based_calibration(data_file, model_file, output_filename, auto_fil
         refant_init = str(refant)
     # initialize HERACal to store new cal solutions
     hc = UVCal()
-    hc = hc.initialize_from_uvdata(uvdata=hdd, gain_convention='divide', cal_style='sky',
-                                   ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
-                                   metadata_only=False, sky_field=field_str, cal_type='gain',
-                                   future_array_shapes=True)
+    hc = hc.initialize_from_uvdata(
+        uvdata=hdd, gain_convention='divide', cal_style='sky',
+        ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
+        metadata_only=False, cal_type='gain',
+    )
 
     hc = io.to_HERACal(hc)
     hc.update(flags=data_ant_flags)
     # generate cal object from model to hold model flags.
     hcm = UVCal()
-    hcm = hcm.initialize_from_uvdata(uvdata=hdm, gain_convention='divide', cal_style='sky',
-                                     ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
-                                     metadata_only=False, sky_field=field_str, cal_type='gain',
-                                     future_array_shapes=True)
+    hcm = hcm.initialize_from_uvdata(
+        uvdata=hdm, gain_convention='divide', cal_style='sky',
+        ref_antenna_name=refant_init, sky_catalog=f'{model_file}',
+        metadata_only=False, cal_type='gain',
+    )
     hcm = io.to_HERACal(hcm)
     hcm.update(flags=model_ant_flags)
     # init all gains to unity.

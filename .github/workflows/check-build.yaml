@@ -1,0 +1,33 @@
+name: Check Build
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Test the Build
+    runs-on: ubuntu-latest
+    env:
+      ENV_NAME: publish
+      PYTHON: 3.12
+    steps:
+      - uses: actions/checkout@main
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON }}
+
+      - name: Install build
+        run: pip install build twine
+
+      - name: Build a binary wheel and a source tarball
+        run: |
+          python -m build
+
+      - name: Twine Check
+        run: twine check dist/*

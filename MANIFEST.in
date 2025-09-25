@@ -1,4 +1,5 @@
 include *.md
+include scripts/*
 include hera_cal/VERSION
 include hera_cal/GIT_INFO
 recursive-include hera_cal/data *

@@ -24,6 +24,13 @@ import glob
 import copy
 
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:The uvw_array does not match the expected values given the antenna positions.",
+    "ignore:.*Using known values for HERA",
+    "ignore:Selected frequencies are not evenly spaced"
+)
+
+
 # test flagging utility funtions
 def test_truncate_flagged_edges():
     Nfreqs = 64
@@ -217,6 +224,8 @@ def test_flag_rows_with_contiguous_flags():
             assert np.all(np.isclose(wout[i], 0.0))
 
 
+@pytest.mark.filterwarnings("ignore:invalid value encountered in scalar divide")
+@pytest.mark.filterwarnings("ignore:Mean of empty slice")
 def test_get_max_contiguous_flag_from_filter_periods():
     Nfreqs = 64
     Ntimes = 60
@@ -277,7 +286,7 @@ def test_flag_model_rms():
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
-class Test_VisClean(object):
+class Test_VisClean:
 
     def test_init(self):
         # test basic init
@@ -979,12 +988,12 @@ class Test_VisClean(object):
         # dnu should have also been set here to be np.diff(np.median(freqs))
         # but it wasn't Because of this, the old version of vis_clean was cleaning with a
         # delay width = intended delay width x (manually set dnu / original dnu of the attached data)
-        np.random.seed(0)
+        rng = np.random.default_rng(seed=1)
         k = (23, 24, 'ee')
         beam_interp = Beam(HS_DATA_PATH / 'HERA_H1C_BEAM_POLY.npy')
         Op = beam_interp(V.freqs / 1e9)
         # V.data[k] += noise.sky_noise_jy(autovis=V.data[(23, 23, 'ee')], freqs=V.freqs / 1e9, lsts=V.lsts, omega_p=Op)
-        V.data[k] += noise.sky_noise_jy(V.lsts, V.freqs / 1e9, omega_p=Op, integration_time=50, autovis=V.data[(23, 23, 'ee')])
+        V.data[k] += noise.sky_noise_jy(V.lsts, V.freqs / 1e9, omega_p=Op, integration_time=50, autovis=V.data[(23, 23, 'ee')], rng=rng)
 
         # add lots of random flags
         f = np.zeros(V.Nfreqs, dtype=bool)[None, :]
@@ -1130,6 +1139,8 @@ class Test_VisClean(object):
         assert a.time_chunk_template == 'a'
         assert a.outfilename == 'a.out'
 
+    @pytest.mark.filterwarnings("ignore:Antenna 53 not present in calibration solution")
+    @pytest.mark.filterwarnings("ignore:Changing number of antennas")
     def test_time_chunk_from_baseline_chunks(self, tmp_path):
         # First, construct some cross-talk baseline files.
         datafiles = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
@@ -1145,9 +1156,14 @@ class Test_VisClean(object):
             baselines = io.baselines_from_filelist_position(file, datafiles)
             fname = 'temp.fragment.part.%d.h5' % filenum
             fragment_filename = tmp_path / fname
-            frf.load_tophat_frfilter_and_write(datafiles, baseline_list=baselines, calfile_list=cals,
-                                               spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
-                                               res_outfilename=fragment_filename, clobber=True, case='sky')
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Antenna 53 not present")
+                warnings.filterwarnings("ignore", message="Changing number of antennas, but preserving the total_quality_array")
+                frf.load_tophat_frfilter_and_write(
+                    datafiles, baseline_list=baselines, calfile_list=cals,
+                    spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
+                    res_outfilename=fragment_filename, clobber=True, case='sky'
+                )
             # load in fragment and make sure the number of baselines is equal to the length of the baseline list
             hd_fragment = io.HERAData(str(fragment_filename))
             assert len(hd_fragment.bls) == len(baselines)
@@ -1159,10 +1175,10 @@ class Test_VisClean(object):
         for filenum, file in enumerate(datafiles):
             # reconstitute
             fname = 'temp.reconstituted.part.%d.h5' % filenum
-            
+
             vis_clean.time_chunk_from_baseline_chunks(
                 time_chunk_template=file,
-                baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), 
+                baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')),
                 clobber=True,
                 outfilename=str(tmp_path / fname)
             )
@@ -1170,9 +1186,14 @@ class Test_VisClean(object):
         hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
         hd_reconstituted.read()
         # compare to xtalk filtering the whole file.
-        frf.load_tophat_frfilter_and_write(datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
-                                           calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
-                                           res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20], case='sky')
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Antenna 53 not present")
+            warnings.filterwarnings("ignore", message="Changing number of antennas")
+            frf.load_tophat_frfilter_and_write(
+                datafile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
+                calfile_list=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
+                res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20], case='sky'
+            )
         hd = io.HERAData(str(tmp_path / 'temp.h5'))
         hd.read()
         assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))
@@ -1182,12 +1203,12 @@ class Test_VisClean(object):
         for filenum, file in enumerate(datafiles):
             # reconstitute
             fname = 'temp.reconstituted.part.%d.h5' % filenum
-            
+
             vis_clean.time_chunk_from_baseline_chunks(
                 time_chunk_template=file,
-                baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), 
+                baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')),
                 clobber=True,
-                outfilename=str(tmp_path / fname), 
+                outfilename=str(tmp_path / fname),
                 time_bounds=True
             )
         # load in the reconstituted files.
@@ -1206,6 +1227,8 @@ class Test_VisClean(object):
         with pytest.warns(RuntimeWarning):
             vis_clean.time_chunk_from_baseline_chunks(datafiles[0], baseline_chunk_files=datafiles[1:], clobber=True, outfilename=str(tmp_path / fname), time_bounds=True)
 
+
+@pytest.mark.filterwarnings("ignore:Fixing auto-correlations to be be real-only")
 def test_discard_autocorr_imag():
     hd = io.HERAData(os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"))
     data = hd.read()[0]
@@ -1221,10 +1244,8 @@ def test_discard_autocorr_imag():
     # only first key modified.
     data1 = deepcopy(data)
     first_key = next(iter(data1.keys()))
-    vis_clean.discard_autocorr_imag(data1, keys = [first_key])
+    vis_clean.discard_autocorr_imag(data1, keys=[first_key])
 
     assert data1[first_key].dtype == np.complex64
     assert np.all(data1[first_key].imag == 0)
     assert np.all(data1[first_key] == data0[first_key])
-
-        

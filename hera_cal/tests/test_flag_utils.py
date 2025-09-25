@@ -18,8 +18,7 @@ def test_solar_flag():
     data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
     uvd = UVData()
     uvd.read_miriad(data_fname)
-    uvd.use_future_array_shapes()
-    data, flags, antp, ant, f, t, l, p = io.load_vis(uvd, return_meta=True)
+    data, flags, antp, ant, f, t, _, p = io.load_vis(uvd, return_meta=True)
     # get solar altitude
     a = utils.get_sun_alt(2458043)
     assert isinstance(a, (float, np.floating, np.float64))
@@ -94,3 +93,175 @@ def test_factorize_flags():
     # test exceptions
     pytest.raises(ValueError, flag_utils.factorize_flags, flags, spw_ranges=(0, 1))
     pytest.raises(ValueError, flag_utils.factorize_flags, 'hi')
+
+
+def test_get_minimal_slices_all_true_empty_freq_cuts():
+    # When flag_wf is all True and freq_cuts is empty,
+    # freqs is set automatically and the function
+    # should return [None] for time_slices and [None] for band_slices.
+    flag_wf = np.ones((5, 5), dtype=bool)
+    time_slices, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=None, freq_cuts=[])
+    assert time_slices == [None]
+    assert band_slices == [None]
+
+
+def test_get_minimal_slices_all_true_nonempty_freq_cuts():
+    # When flag_wf is all True and freq_cuts is non-empty,
+    # freqs must be provided; since no False pixels exist,
+    # the function returns [None, None] for both time_slices and band_slices.
+    flag_wf = np.ones((3, 4), dtype=bool)
+    freq_cuts = [2.5]
+    freqs = np.array([1, 2, 3, 4])
+    time_slices, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=freqs, freq_cuts=freq_cuts)
+    assert time_slices == [None, None]
+    assert band_slices == [None, None]
+
+
+def test_get_minimal_slices_not_all_flagged_empty_freq_cuts():
+    # Single-band case (freq_cuts=[]). One False pixel at row 1, col 1.
+    flag_wf = np.array([
+        [True, True, True, True, True],
+        [True, False, True, True, True],
+        [True, True, True, True, True],
+        [True, True, True, True, True]
+    ], dtype=bool)
+    time_slices, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=None, freq_cuts=[])
+    # Only one band, so inspect index 0
+    assert time_slices[0].start == 1 and time_slices[0].stop == 2
+    assert band_slices[0] is not None
+    assert band_slices[0].start == 1 and band_slices[0].stop == 2
+
+
+def test_get_minimal_slices_not_all_flagged_nonempty_freq_cuts():
+    # Two-band case (freq_cuts=[3.5]). False at (1,1) in band0 and (2,4) in band1.
+    flag_wf = np.ones((4, 6), dtype=bool)
+    flag_wf[1, 1] = False
+    flag_wf[2, 4] = False
+    freqs = np.array([1, 2, 3, 4, 5, 6])
+    freq_cuts = [3.5]
+    time_slices, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=freqs, freq_cuts=freq_cuts)
+
+    # Per‐band time slices
+    assert time_slices[0].start == 1 and time_slices[0].stop == 2
+    assert time_slices[1].start == 2 and time_slices[1].stop == 3
+
+    # Per‐band frequency slices
+    assert band_slices[0] is not None
+    assert band_slices[0].start == 1 and band_slices[0].stop == 2
+    assert band_slices[1] is not None
+    assert band_slices[1].start == 4 and band_slices[1].stop == 5
+
+
+def test_get_minimal_slices_missing_freqs_error():
+    # freq_cuts non-empty but freqs=None should still raise ValueError
+    flag_wf = np.array([[True, False],
+                        [True, True]])
+    freq_cuts = [1.5]
+    with pytest.raises(ValueError):
+        flag_utils.get_minimal_slices(flag_wf, freqs=None, freq_cuts=freq_cuts)
+
+
+def test_get_minimal_slices_wrong_shape_freqs_error():
+    # freq_cuts non-empty with mismatched freqs length should raise ValueError
+    flag_wf = np.array([[True, False, True],
+                        [True, True, True]])
+    freqs = np.array([1, 2])
+    freq_cuts = [1.5]
+    with pytest.raises(ValueError):
+        flag_utils.get_minimal_slices(flag_wf, freqs=freqs, freq_cuts=freq_cuts)
+
+
+def test_get_minimal_slices_band_without_false():
+    # Two-band case where band1 has no False pixels
+    flag_wf = np.ones((3, 6), dtype=bool)
+    flag_wf[1, 1] = False  # only in band0
+    freqs = np.array([1, 2, 3, 4, 5, 6])
+    freq_cuts = [3.5]
+    time_slices, band_slices = flag_utils.get_minimal_slices(flag_wf, freqs=freqs, freq_cuts=freq_cuts)
+
+    # band0 populated, band1 stays None
+    assert time_slices[0].start == 1 and time_slices[0].stop == 2
+    assert band_slices[0] is not None
+    assert band_slices[0].start == 1 and band_slices[0].stop == 2
+
+    assert time_slices[1] is None
+    assert band_slices[1] is None
+
+
+@pytest.mark.parametrize(
+    "arr, expected",
+    [
+        # 1-D – interior non-zeros
+        (
+            np.array([0, 0, 3, 0, 0, 5, 0]),
+            np.array([2, 1, 0, 1, 1, 0, 1], dtype=float),
+        ),
+        # 1-D – non-zero only at start
+        (
+            np.array([4, 0, 0, 0, 0]),
+            np.array([0, 1, 2, 3, 4], dtype=float),
+        ),
+        # 1-D – non-zero only at end
+        (
+            np.array([0, 0, 0, 0, 7]),
+            np.array([4, 3, 2, 1, 0], dtype=float),
+        ),
+        # 2-D – verify broadcasting across leading axes
+        (
+            np.array([[0, 1, 0],
+                      [2, 0, 0]]),
+            np.array([[1, 0, 1],
+                      [0, 1, 2]], dtype=float),
+        ),
+        # 3-D case
+        (
+            np.array([[[0, 1, 0],      # first row, first “plane”
+                       [0, 0, 2]],
+                      [[3, 0, 0],      # second “plane”
+                       [0, 0, 0]]]),
+            np.array([[[1, 0, 1],
+                       [2, 1, 0]],
+                      [[0, 1, 2],
+                       [np.inf, np.inf, np.inf]]], dtype=float),
+        ),
+    ],
+)
+def test_expected_values(arr, expected):
+    """Exact values for simple cases."""
+    result = flag_utils.distance_to_nearest_nonzero(arr)
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_all_zeros_returns_inf():
+    """If there are no non-zeros at all, the distance should be ∞ everywhere."""
+    arr = np.zeros((3, 4, 5))
+    out = flag_utils.distance_to_nearest_nonzero(arr)
+    assert out.shape == arr.shape
+    assert np.all(np.isinf(out))
+
+
+def test_random_nd_matches_bruteforce():
+    """
+    For a random 3-D array, compare against a slow but simple
+    brute-force implementation to ensure correctness on N-D input.
+    """
+    rng = np.random.default_rng(0)
+    arr = rng.integers(-1, 2, size=(4, 3, 7))  # -1, 0, or 1
+
+    def brute_force(a):
+        out = np.empty_like(a, dtype=float)
+        *lead_axes, L = a.shape
+        for index in np.ndindex(*lead_axes):
+            line = a[index]                      # shape (L,)
+            nz = np.flatnonzero(line)
+            if nz.size == 0:
+                out[index] = np.inf
+                continue
+            for i in range(L):
+                out[index + (i,)] = np.abs(i - nz).min()
+        return out
+
+    np.testing.assert_array_equal(
+        flag_utils.distance_to_nearest_nonzero(arr),
+        brute_force(arr),
+    )

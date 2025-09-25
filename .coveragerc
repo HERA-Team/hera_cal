@@ -1,11 +1,9 @@
 [run]
 omit =
      */tests/*
-     */calibrations/*
      */data/*
-
+     hera_cal/lstbin.py
 [report]
 omit =
      */tests/*
-     */calibrations/*
      */data/*

@@ -1,0 +1,950 @@
+from __future__ import annotations
+
+import h5py
+import numpy as np
+from .. import abscal, utils
+from hera_filters import dspec
+from .binning import LSTStack
+
+
+def _expand_degeneracies_to_ant_gains(
+    stack: LSTStack,
+    amplitude_parameters: dict,
+    phase_gains: dict,
+    inpaint_bands: tuple,
+    auto_stack: LSTStack = None,
+    smooth_gains: bool = True,
+    smoothing_scale: float = 10e6,
+    eigenval_cutoff: float = 1e-12,
+    use_inpainted_data: bool = True,
+):
+    """
+    This function expands the degenerate calibration parameters to per-antenna gains. The function
+    also smooths the gains using DPSS basis functions if smooth_gains is set to True.
+
+    Parameters:
+    ----------
+        stack : LSTStack
+            The LSTStack object to calibrate
+        amplitude_parameters : dict
+            A dictionary containing the amplitude calibration parameters.
+        phase_gains : dict
+            A dictionary containing the gains produced from tip-tilt calibration.
+        inpaint_bands : tuple of slices
+            Defines the frequency bands to use for smoothing. Each slice object in the tuple
+            defines a separate frequency band to use for smoothing.
+        auto_stack : LSTStack, default=None
+            An LSTStack object containing the stack of auto-correlations. If provided, the
+            auto-correlations will be calibrated using the same gains calculated from the
+            cross-correlations.
+        smooth_gains : bool, default=True
+            Boolean flag to smooth the gains.
+        smoothing_scale : float, default=10e6
+            The scale of the smoothing function used to smooth the gains. This is the width of the
+            smoothing function in Hz.
+        eigenval_cutoff : float, default=1e-12
+            The cutoff for the eigenvalues of the DPSS eigenvectors.
+        use_inpainted_data : bool, default=True
+            Boolean flag to use inpainted data for gain smoothing. If set to True, all channels that had
+            been inpainted over will be used to smooth the gains. If set to False, only the
+            unflagged channels will be used to smooth the gains.
+
+    Returns:
+    -------
+        gains : dict
+            A dictionary containing the calibrated gains for each baseline. The keys are tuples
+            containing the antenna numbers and polarization of the baseline.
+
+    """
+    # Get antpairs for the stack and auto_stack
+    antpairs = stack.antpairs[:]
+    if auto_stack:
+        antpairs.extend(auto_stack.antpairs)
+
+    # Get the unique antennas
+    gain_ants = set()
+    for ap in antpairs:
+        gain_ants.update(ap)
+    gain_ants = list(gain_ants)
+
+    # Get the unique antenna-polarizations
+    unique_pols = list(
+        set(sum(map(list, [utils.split_pol(pol) for pol in stack.pols]), []))
+    )
+
+    # Pre-compute matrices for smoothing fits
+    if smooth_gains:
+        smoothing_functions = []
+        for band in inpaint_bands:
+            smoothing_functions.append(
+                dspec.dpss_operator(
+                    x=stack.freq_array[band],
+                    filter_centers=[0],
+                    filter_half_widths=[1 / smoothing_scale],
+                    eigenval_cutoff=[eigenval_cutoff],
+                )[0]
+            )
+
+        # Get consensus flagging pattern
+        if use_inpainted_data:
+            flags_here = np.all(stack.flags, axis=1)
+        else:
+            flags_here = np.all(stack.flagged_or_inpainted(), axis=1)
+
+        # Compute matrices for linear least-squares fits
+        fmats = {pol: [] for pol in unique_pols}
+        for polidx, pol in enumerate(stack.pols):
+            split_pol1, split_pol2 = utils.split_pol(pol)
+            if split_pol1 != split_pol2:
+                continue
+            for bandidx, band in enumerate(inpaint_bands):
+                # Get weights and basis functions for the fit
+                wgts = np.logical_not(flags_here[:, band, polidx]).astype(float)
+                basis = smoothing_functions[bandidx]
+
+                # Compute matrices for linear least-squares fits
+                xtxinv = np.linalg.pinv([np.dot(basis.T * wi, basis) for wi in wgts])
+                fmat = np.array(
+                    [np.dot(_xtxinv, basis.T) * _w for _xtxinv, _w in zip(xtxinv, wgts)]
+                )
+                fmats[split_pol1].append(fmat)
+
+    # Dictionary for storing gains
+    gains = {}
+
+    # Get flags common to all baselines
+    if use_inpainted_data:
+        flags = np.all(stack.flags, axis=1)
+    else:
+        flags = np.all(stack.flagged_or_inpainted(), axis=1)
+
+    # Map antenna-polarizations to visibility indices
+    antpol_to_idx = {
+        utils.split_pol(pol)[0]: polidx
+        for polidx, pol in enumerate(stack.pols)
+        if utils.split_pol(pol)[0] == utils.split_pol(pol)[1]
+    }
+
+    for pol, polidx in antpol_to_idx.items():
+        for ant in gain_ants:
+            raw_ant_gain = amplitude_parameters[f"A_{pol}"] * (
+                phase_gains.get((ant, pol), 1)
+            )
+            gg = gains[(ant, pol)] = raw_ant_gain
+
+            if smooth_gains:
+                for bandidx, band in enumerate(inpaint_bands):
+
+                    # Rephase antenna gains
+                    tau, _ = utils.fft_dly(
+                        raw_ant_gain[:, band],
+                        np.diff(stack.freq_array[band])[0],
+                        wgts=np.logical_not(flags[:, band, polidx]),
+                    )
+                    rephasor = np.exp(-2.0j * np.pi * tau * stack.freq_array[band])
+                    raw_ant_gain[:, band] *= rephasor
+
+                    basis = smoothing_functions[bandidx]
+                    smooth_ant_gain = np.array(
+                        [
+                            np.dot(basis, _fmat.dot(_raw_gain))
+                            for _fmat, _raw_gain in zip(
+                                fmats[pol][bandidx], raw_ant_gain[:, band]
+                            )
+                        ]
+                    )
+
+                    # Get the shape of the flags array for the given band and polarization
+                    flag_shape = flags[:, band, polidx].shape
+
+                    # Determine the per-day flags for the given band and polarization
+                    per_day_flags = np.repeat(
+                        np.all(flags[:, band, polidx], axis=1)[:, np.newaxis],
+                        flag_shape[1],
+                        axis=1
+                    )
+
+                    # Rephase antenna gains
+                    gg[:, band] = np.where(
+                        per_day_flags, 1.0 + 0.0j, smooth_ant_gain * rephasor.conj()
+                    )
+
+    return gains
+
+
+def _lstbin_amplitude_calibration(
+    stack: LSTStack,
+    model: np.ndarray,
+    auto_stack: LSTStack = None,
+    auto_model: np.ndarray = None,
+    use_autos_for_abscal: bool = True,
+    use_inpainted_data: bool = True,
+):
+    """
+    This function performs amplitude calibration on LSTStack object by comparing each day to an input
+    reference model. Each day is calibrated independently using only the amplitude absolute calibration
+    degrees of freedom (per-antenna calibration is not currently supported).
+    """
+    # Dictionaries for storing data used in amplitude calibration function
+    data_here = {}
+    wgts_here = {}
+    abscal_model = {}
+
+    # Get flags for all nights
+    if use_inpainted_data:
+        flags = stack.flags
+    else:
+        flags = stack.flagged_or_inpainted()
+
+    # Loop through baselines and polarizations
+    for polidx, pol in enumerate(stack.pols):
+        pol1, pol2 = utils.split_pol(pol)
+
+        # Skip if baseline is cross-polarized
+        if pol1 != pol2:
+            continue
+
+        for apidx, (ant1, ant2) in enumerate(stack.antpairs):
+
+            blpol = (ant1, ant2, pol)
+
+            # Move to the next blpol if there is not a model for the data or the entire baseline is flagged
+            if np.all(flags[:, apidx, :, polidx]):
+                continue
+
+            # Get model, weights, and data for each baseline
+            abscal_model[blpol] = model[apidx, :, polidx] * np.ones(
+                (len(stack.nights), 1)
+            )
+            data_here[blpol] = stack.data[:, apidx, :, polidx]
+
+            # Compute the weights for the baseline from the number of samples and flags
+            # Here, we use the absolute value of the number of samples to ensure we have a positive weight
+            # when the data has been flagged and inpainted.
+            wgts_here[blpol] = np.abs(stack.nsamples[:, apidx, :, polidx]) * (
+                ~flags[:, apidx, :, polidx]
+            ).astype(float)
+
+    # If autos are provided and use_autos_for_abscal is True, use them for amplitude calibration
+    if use_autos_for_abscal and auto_stack is not None:
+
+        # Use inpainted data if specified
+        if use_inpainted_data:
+            auto_flags = auto_stack.flags
+        else:
+            # Use the flagged or inpainted data
+            auto_flags = auto_stack.flagged_or_inpainted()
+
+        for polidx, pol in enumerate(stack.pols):
+            pol1, pol2 = utils.split_pol(pol)
+
+            # Skip if baseline is cross-polarized
+            if pol1 != pol2:
+                continue
+
+            for apidx, (ant1, ant2) in enumerate(auto_stack.antpairs):
+
+                blpol = (ant1, ant2, pol)
+
+                # Move to the next blpol if there is not a model for the data or the entire baseline is flagged
+                if np.all(auto_flags[:, apidx, :, polidx]):
+                    continue
+
+                # Get model, weights, and data for each baseline
+                abscal_model[blpol] = auto_model[apidx, :, polidx] * np.ones(
+                    (len(auto_stack.nights), 1)
+                )
+                data_here[blpol] = auto_stack.data[:, apidx, :, polidx]
+
+                # Compute the weights for the baseline from the number of samples and flags
+                # Here, we use the absolute value of the number of samples to ensure we have a positive weight
+                # when the data has been flagged and inpainted.
+                wgts_here[blpol] = np.abs(auto_stack.nsamples[:, apidx, :, polidx]) * (
+                    ~auto_flags[:, apidx, :, polidx]
+                ).astype(float)
+
+    # Perform amplitude calibration
+    solution = abscal.abs_amp_lincal(
+        model=abscal_model, data=data_here, wgts=wgts_here, verbose=False
+    )
+
+    calibration_parameters = {}
+
+    # Get the unique antenna-polarizations
+    unique_pols = list(
+        set(sum(map(list, [utils.split_pol(pol) for pol in stack.pols]), []))
+    )
+
+    for pol in unique_pols:
+        # Calibration parameters store in an N_nights by N_freqs array
+        polidx = stack.pols.index(utils.join_pol(pol, pol))
+        amplitude_gain = np.where(
+            np.all(flags[..., polidx], axis=1),
+            1.0 + 0.0j,
+            solution[f"A_{pol}"]
+        )
+
+        calibration_parameters[f"A_{pol}"] = amplitude_gain
+
+    return calibration_parameters
+
+
+def _lstbin_phase_calibration(
+    stack: LSTStack,
+    model: np.ndarray,
+    all_reds: list[list[tuple]],
+    use_inpainted_data: bool = True,
+):
+    """
+    This function performs phase calibration on LSTStack object by comparing each day to an input
+    reference model. Each day is calibrated independently using only the tip-tilt degrees of freedom
+    (per-antenna calibration is not currently supported).
+    """
+
+    # Get antennas
+    gain_ants = set()
+    for ap in stack.antpairs:
+        gain_ants.update(ap)
+
+    gain_ants = list(gain_ants)
+
+    transformed_antpos = None
+
+    # Gains for the phase component
+    phase_gains = {
+        (ant, utils.split_pol(pol)[0]): [] for ant in gain_ants for pol in stack.pols
+    }
+
+    # Add tip-tilt gain parameters to calibration_parameters
+    unique_pols = list(
+        set(sum(map(list, [utils.split_pol(pol) for pol in stack.pols]), []))
+    )
+    calibration_parameters = {f"T_{pol}": [] for pol in unique_pols}
+
+    # Get flags for all nights
+    if use_inpainted_data:
+        flags = stack.flags
+    else:
+        flags = stack.flagged_or_inpainted()
+
+    for nightidx, _ in enumerate(stack.nights):
+        for polidx, pol in enumerate(stack.pols):
+            cal_bls = []
+
+            data_here = {}
+            model_here = {}
+
+            split_pol1, split_pol2 = utils.split_pol(pol)
+
+            if split_pol1 != split_pol2:
+                continue
+
+            if np.all(flags[nightidx, :, :, polidx]):
+                # Store phase gains
+                for ant in gain_ants:
+                    phase_gains[(ant, f"{split_pol1}")].append(
+                        np.ones(stack.freq_array.shape, dtype=complex)
+                    )
+
+                # Store placeholder for degenerate parameters
+                calibration_parameters[f"T_{split_pol1}"].append(None)
+                continue
+
+            for apidx, (ant1, ant2) in enumerate(stack.antpairs):
+                blpol = (ant1, ant2, pol)
+
+                if np.all(flags[nightidx, apidx, :, polidx]):
+                    continue
+
+                cal_bls.append(blpol)
+                data_here[blpol] = stack.data[nightidx, apidx, :, polidx][np.newaxis]
+                model_here[blpol] = model[apidx, :, polidx][np.newaxis]
+
+            # Compute phase calibration
+            metadata, delta_gains = abscal.complex_phase_abscal(
+                data=data_here,
+                model=model_here,
+                reds=all_reds,
+                model_bls=cal_bls,
+                data_bls=cal_bls,
+                transformed_antpos=transformed_antpos,
+            )
+            transformed_antpos = metadata["transformed_antpos"]
+
+            # Store degenerate parameters
+            calibration_parameters[f"T_{split_pol1}"].append(metadata["Lambda_sol"])
+
+            # Store phase gains
+            for ant in gain_ants:
+                gain_here = delta_gains.get(
+                    (ant, split_pol1),
+                    np.ones((1, stack.freq_array.shape[0]), dtype=complex),
+                )[0]
+                phase_gains[(ant, split_pol1)].append(
+                    np.where(
+                        np.all(flags[nightidx, :, :, polidx], axis=0),
+                        1.0 + 0.0j,
+                        gain_here,
+                    )
+                )
+
+    for key in phase_gains:
+        phase_gains[key] = np.array(phase_gains[key])
+
+    for pol in unique_pols:
+        for nightly_cal_params in calibration_parameters[f"T_{pol}"]:
+            if isinstance(nightly_cal_params, np.ndarray):
+                cal_params_shape = nightly_cal_params.shape
+                break
+
+        # Fill in tip-tilt gains with zeros if night was flagged
+        calibration_parameters[f"T_{pol}"] = np.array(
+            [
+                (
+                    nightly_cal_params
+                    if nightly_cal_params is not None
+                    else np.zeros(cal_params_shape)
+                )
+                for nightly_cal_params in calibration_parameters[f"T_{pol}"]
+            ]
+        )
+
+    return calibration_parameters, phase_gains
+
+
+def _lstbin_cross_pol_phase_calibration(
+    stack: LSTStack,
+    model: np.ndarray,
+    refpol="Jee",
+    use_inpainted_data: bool = True,
+):
+    """
+    This function performs cross-polarization phase calibration on LSTStack object by comparing each day to an input
+    reference model. Function returns the phase difference between the two polarizations in radians.
+    """
+    # Dictionaries for storing data used in calibration function
+    data = {}
+    abscal_model = {}
+    wgts = {}
+    baselines = []
+
+    # Get flags for all nights
+    if use_inpainted_data:
+        flags = stack.flags
+    else:
+        flags = stack.flagged_or_inpainted()
+
+    # Loop through baselines and polarizations
+    for polidx, pol in enumerate(stack.pols):
+        pol1, pol2 = utils.split_pol(pol)
+
+        if pol1 == pol2:
+            continue
+
+        for apidx, (ant1, ant2) in enumerate(stack.antpairs):
+
+            # Move to the next blpol if there is not a model for the data or the entire baseline is flagged
+            if np.all(flags[:, apidx, :, polidx]):
+                continue
+
+            # Compute the weights for the baseline from the number of samples and flags
+            # Here, we use the absolute value of the number of samples to ensure we have a positive weight
+            # when the data has been flagged and inpainted.
+            wgts[(ant1, ant2, pol)] = np.where(
+                np.isfinite(stack.data[:, apidx, :, polidx]),
+                np.abs(stack.nsamples[:, apidx, :, polidx]) * (
+                    ~flags[:, apidx, :, polidx]
+                ).astype(float),
+                0.0,
+            )
+            abscal_model[(ant1, ant2, pol)] = model[apidx, :, polidx] * np.ones(
+                (len(stack.nights), 1)
+            )
+            data[(ant1, ant2, pol)] = np.where(
+                np.isfinite(stack.data[:, apidx, :, polidx]), stack.data[:, apidx, :, polidx], 0
+            )
+            baselines.append((ant1, ant2, pol))
+
+    # Perform cross-polarization phase calibration
+    delta = abscal.cross_pol_phase_cal(
+        model=abscal_model, data=data, model_bls=baselines, data_bls=baselines, wgts=wgts, return_gains=False, refpol=refpol
+    )
+
+    return delta
+
+
+def lstbin_absolute_calibration(
+    stack: LSTStack,
+    model: np.ndarray,
+    all_reds: list[list[tuple]],
+    inpaint_bands: tuple = (slice(0, None, None),),
+    auto_stack: np.ndarray = None,
+    auto_model: np.ndarray = None,
+    run_amplitude_cal: bool = True,
+    run_phase_cal: bool = True,
+    run_cross_pol_phase_cal: bool = True,
+    smoothing_scale: float = 10e6,
+    eigenval_cutoff: float = 1e-12,
+    calibrate_inplace: bool = True,
+    smooth_gains: bool = True,
+    use_autos_for_abscal: bool = True,
+    use_inpainted_data: bool = True,
+    refpol: str = "Jee",
+):
+    """
+    This function performs calibration on LSTStack object by comparing each day to an input
+    reference model. Each day is calibrated independently using only the absolute calibration
+    degrees of freedom (per-antenna calibration is not currently supported). The calibration
+    is performed in two steps:
+
+        1. Amplitude calibration: The amplitude of the data is scaled to match the model using
+           hera_cal.abscal.abs_amp_lincal to perform gain fits.
+        2. Phase calibration: The phase of the data is adjusted to match the model by fitting
+           for the tip-tilt abscal degeneracy using hera_cal.abscal.complex_phase_abscal. Note
+           that while the tip-tilt degeneracy may be solved for in greater than 2 dimensions
+           in the general case, this function only solves for the 2D tip-tilt degeneracy.
+
+
+    Parameters:
+    ----------
+        stack : LSTStack
+            The LSTStack object to calibrate
+        model : np.ndarray
+            The reference model to calibrate the data to. The model should have the same
+            number of baselines, frequencies, and polarizations as the data in stack. The model
+            can simply be the mean of the data in the stack across nights (zeroth axis in LSTStack)
+            if data are already abscal'd.
+        all_reds : list of list of tuples
+            A list of lists of redundant baseline groups. Each element of the list is a list of tuples
+            containing the redundant baseline groups. Each tuple contains the antenna numbers
+            of the antennas in the redundant baseline group.
+        inpaint_bands : tuple of slices, default=(slice(0, None, None),)
+            Defines the frequency bands to use for smoothing. Each slice object in the tuple
+            defines a separate frequency band to use for smoothing. The default is to smooth over
+            all frequencies at once.
+        auto_stack : LSTStack, default=None
+            An LSTStack object containing the stack of auto-correlations. If provided, the
+            auto-correlations will be calibrated using the same gains calculated from the
+            cross-correlations. Note that the auto-correlations are used to calculate the gain
+            amplitude if use_autos_for_abscal is set to True.
+        auto_model : np.ndarray, default=None
+            The reference model to calibrate the auto-correlations to. The model should have the
+            same number of baselines, frequencies, and polarizations as the auto-correlations in
+            auto_stack.
+        run_amplitude_cal : bool, default=True
+            Boolean flag to run amplitude calibration.
+        run_phase_cal : bool, default=True
+            Boolean flag to run tip-tilt calibration.
+        run_cross_pol_phase_cal : bool, default=True
+            Boolean flag to run cross-polarization relative phase calibration. This is only used
+            if the data contains cross-polarization baselines.
+        smoothing_scale : float, default=10e6
+            The scale of the smoothing function used to smooth the gains. This is the width of the
+            smoothing function in Hz.
+        smooth_gains : bool, default=True
+            Boolean flag to smooth the gains.
+        eigenval_cutoff : float, default=1e-12
+            The cutoff for the eigenvalues of the DPSS eigenvectors.
+        calibrate_inplace : bool, default=True
+            Boolean flag to calibrate the data in place.
+        use_autos_for_abscal : bool, default=True
+            Boolean flag to use the auto-correlations for absolute calibration. If set to True,
+            the auto-correlations will be used to calculate the gain amplitude if they are provided.
+            Note that the auto_model must also be provided if this flag is set to True and autos are
+            provided. If set to False, the auto-correlations will not be used for calibration.
+        refpol : str, default='Jee'
+            The reference polarization to use for cross-polarization phase calibration. This is
+            the polarization that the other polarization is calibrated to. The default is 'Jee'.
+
+    Returns:
+    -------
+        calibration_parameters : dict
+            A dictionary containing the calibration parameters. The keys are as follows:
+                - 'A_J{pol}' : The amplitude calibration parameters for each polarization which has
+                               shape (N_nights, Nfreqs)
+                - 'T_J{pol}' : The tip-tilt calibration parameters for each polarization which has
+                               shape (N_nights, Nfreqs, Ndims) where Ndims in the number of tip-tilt
+                               degeneracies. For now, this is always 2.
+        gains : dict
+            A dictionary containing the calibrated gains for each baseline. The keys are tuples
+            containing the antenna numbers and polarization of the baseline. If return_gains is
+            set to False, this dictionary will be empty.
+    """
+    # Check to see if calibration modes are set
+    if not (run_amplitude_cal or run_phase_cal or run_cross_pol_phase_cal):
+        raise ValueError("At least one calibration mode must be used")
+
+    # Check to see if the model has the same shape as the stack
+    if not (stack.data.shape[1:] == model.shape):
+        raise ValueError(
+            "Model must have the same number of antpairs/freqs/pols as stack.data"
+        )
+
+    # Check to see if auto_model is provided if use_autos_for_abscal is True
+    if auto_stack is not None and use_autos_for_abscal and auto_model is None:
+        raise ValueError(
+            "auto_model must be provided if auto_stack is provided and use_autos_for_abscal is True"
+        )
+
+    # Dictionary for storing calibration parameters
+    calibration_parameters = {}
+
+    # Check to see if all nights are flagged
+    all_nights_flagged = np.all(stack.flagged_or_inpainted())
+
+    # Get the unique antenna-polarizations
+    unique_pols = list(
+        set(sum(map(list, [utils.split_pol(pol) for pol in stack.pols]), []))
+    )
+
+    # Perform amplitude calibration
+    if run_amplitude_cal and not all_nights_flagged:
+        # Store gain solutions in paramter dictionary
+        amp_cal_params = _lstbin_amplitude_calibration(
+            stack=stack,
+            model=model,
+            auto_stack=auto_stack,
+            auto_model=auto_model,
+            use_autos_for_abscal=use_autos_for_abscal,
+            use_inpainted_data=use_inpainted_data,
+        )
+        for key in amp_cal_params:
+            calibration_parameters[key] = amp_cal_params[key]
+
+    else:
+        # Fill in amplitude w/ ones if not running amplitude calibration
+        for pol in unique_pols:
+            calibration_parameters[f"A_{pol}"] = np.ones(
+                (len(stack.nights), stack.freq_array.size), dtype=complex
+            )
+
+    if run_phase_cal and not all_nights_flagged:
+        # Perform phase calibration
+        phs_cal_params, phase_gains = _lstbin_phase_calibration(
+            stack=stack,
+            model=model,
+            all_reds=all_reds,
+            use_inpainted_data=use_inpainted_data,
+        )
+        for key in phs_cal_params:
+            calibration_parameters[key] = phs_cal_params[key]
+
+    else:
+        # Fill in phase w/ ones if not running phase calibration
+        # Tip-tilt gains are zeros with dimensions (N_nights by N_freqs by Ndims)
+        phase_gains = {}
+
+        for pol in unique_pols:
+            calibration_parameters[f"T_{pol}"] = np.zeros(
+                (len(stack.nights), stack.freq_array.size, 2), dtype=complex
+            )
+
+    if run_cross_pol_phase_cal and not all_nights_flagged:
+        cross_pols_in_data = any(utils.split_pol(pol)[0] != utils.split_pol(pol)[1] for pol in stack.pols)
+
+        if cross_pols_in_data:
+            delta = _lstbin_cross_pol_phase_calibration(
+                stack=stack,
+                model=model,
+                refpol=refpol,
+                use_inpainted_data=use_inpainted_data
+            )
+            calibration_parameters["delta"] = delta
+
+            # Get antennas
+            gain_ants = set()
+            for ap in stack.antpairs:
+                gain_ants.update(ap)
+
+            gain_ants = list(gain_ants)
+
+            for ant in gain_ants:
+                for pol in unique_pols:
+                    if pol == refpol:
+                        phase_gains[(ant, pol)] = phase_gains.get(
+                            (ant, pol), np.ones_like(delta)
+                        )
+                    else:
+                        phase_gains[(ant, pol)] = phase_gains.get(
+                            (ant, pol), 1.0
+                        ) * np.exp(1j * delta)
+
+    # Compute antenna gains from calibration parameters and smooth
+    gains = _expand_degeneracies_to_ant_gains(
+        stack=stack,
+        amplitude_parameters=calibration_parameters,
+        phase_gains=phase_gains,
+        inpaint_bands=inpaint_bands,
+        auto_stack=auto_stack,
+        smooth_gains=smooth_gains,
+        smoothing_scale=smoothing_scale,
+        eigenval_cutoff=eigenval_cutoff,
+    )
+
+    # Iterate for each baseline in the stack and calibrate out gains
+    if calibrate_inplace:
+        for polidx, pol in enumerate(stack.pols):
+            for apidx, (ant1, ant2) in enumerate(stack.antpairs):
+                antpol1, antpol2 = utils.split_bl((ant1, ant2, pol))
+
+                # Compute gain and calibrate out
+                bl_gain = gains[antpol1] * gains[antpol2].conj()
+                stack.data[:, apidx, :, polidx] /= bl_gain
+
+            if auto_stack:
+                for apidx, (ant1, ant2) in enumerate(auto_stack.antpairs):
+                    antpol1, antpol2 = utils.split_bl((ant1, ant2, pol))
+
+                    # Compute gain and calibrate out
+                    auto_gain = gains[antpol1] * gains[antpol2].conj()
+                    auto_stack.data[:, apidx, :, polidx] /= auto_gain
+
+    return calibration_parameters, gains
+
+
+def write_single_baseline_lstcal_solutions(
+        filename: str,
+        all_calibration_parameters: dict,
+        flags: dict[str, np.ndarray],
+        transformed_antpos: dict,
+        antpos: dict,
+        times: np.ndarray,
+        freqs: np.ndarray,
+        pols: list,
+        compression=None,
+        compression_opts=None,
+        refpol: str = "Jee",
+    ):
+    """
+    Write single-baseline LST calibration solutions and metadata to an HDF5 file.
+
+    The file has two top-level groups:
+      - ``/data``: parameter datasets and flags
+      - ``/Header``: metadata
+
+    HDF5 layout
+    -----------
+    /data
+        /<param_name>           (array)   e.g. "A_Jee" (ntimes, nfreqs), "T_Jee" (ntimes, nfreqs, ndims), and "cross_pol" (ntimes, nfreqs)
+        /flag_array             (bool)    shape (ntimes, nfreqs, npol)
+    /Header
+        times                   (float64) shape (ntimes)
+        freqs                   (float64) shape (nfreqs)
+        antenna_numbers         (int32)   shape (Nant)
+        transformed_antpos      (float64) shape (Nant, ndims)
+        antpos                  (float64) shape (Nants, ndims), e.g. "ENU meters"
+        polarization_array      (str)     shape (Npol), variable-length UTF-8 strings
+
+    Parameters
+    ----------
+    filename: str
+        Path to the HDF5 file to create (overwritten if exists).
+    all_calibration_parameters: dict
+        Mapping from parameter name to array. The expected keys are:
+        - ``"A_J{pol}"``: gain amplitudes, shape (ntimes, nfreqs)
+        - ``"T_J{pol}"`` : phase-gradients per dimension, shape (ntimes, nfreqs, ndims)
+        - ``"cross_pol"``    : cross-pol phase term, shape (ntimes, nfreqs) (optional)
+        Add one dataset per parameter key.
+    flags: dict[str, np.ndarray]
+        Mapping from polarization string to boolean flag array of shape (ntimes, nfreqs).
+    transformed_antpos: dict
+        Dict mapping antenna_number to position after transformation.
+    antpos: dict
+        Dictionary mapping antenna_number to position (e.g., ENU meters).
+    times: np.ndarray
+        1D array of times corresponding to the zeroth axis.
+    freqs: np.ndarray
+        1D array of frequencies corresponding to the first axis.
+    pols: list
+        List of polarization strings (e.g., ``["ee", "nn", "en", "ne"]``) in the same order
+        as the first axis of ``flag_array``.
+    compression, compression_opts
+        Optional h5py compression settings (e.g., ``compression="gzip", compression_opts=4``).
+    refpol: str, default="Jee"
+        The reference polarization for cross-pol calibration (e.g., "Jee").
+    """
+    with h5py.File(filename, 'w') as file:
+        # /data group
+        dgrp = file.create_group("data")
+        for pname in all_calibration_parameters:
+            dgrp.create_dataset(
+                pname,
+                data=all_calibration_parameters[pname],
+                compression=compression,
+                compression_opts=compression_opts,
+            )
+
+        # Store flag array
+        flag_array = np.array([flags[pol] for pol in pols], dtype=bool)
+        dgrp.create_dataset(
+            "flag_array",
+            data=flag_array,
+            compression=compression,
+            compression_opts=compression_opts,
+        )
+
+        # Create header for metadata
+        header = file.create_group("Header")
+        header['times'] = times
+        header['freqs'] = freqs
+
+        # Extract antenna numbers and positions for transformed_antpos
+        ant_nums = np.array(sorted(transformed_antpos.keys()), dtype=np.int32)
+        transformed_antpos = np.vstack([np.asarray(transformed_antpos[a], dtype=float) for a in ant_nums])
+        header["transformed_antnums"] = ant_nums
+        header["transformed_antpos"] = transformed_antpos
+
+        # Extract antenna numbers and positions for antpos
+        ant_nums = np.array(sorted(antpos.keys()), dtype=np.int32)
+        antpos = np.vstack([np.asarray(antpos[a], dtype=float) for a in ant_nums])
+        header["antnums"] = ant_nums
+        header["antpos"] = antpos
+
+        # Store polarizations
+        pols_encoded = [p.encode('utf-8') for p in pols]
+        header["polarization_array"] = pols_encoded
+        header['refpol'] = refpol.encode('utf-8')
+
+
+def load_single_baseline_lstcal_solutions(filename: str):
+    """
+    Load single-baseline LST calibration solutions and metadata from an HDF5 file.
+
+    Parameters
+    ----------
+    filename
+        Path to the HDF5 file created by `write_single_baseline_lstcal_solutions`.
+
+    Returns
+    -------
+    all_calibration_parameters : dict[str, np.ndarray]
+        Dict of parameter name -> array, from the /data group (all except 'flag_array').
+    flags : dict[str, np.ndarray]
+        Dictionary that maps polarization string -> boolean flag array of shape (ntimes, nfreqs).
+    metadata : dict
+        Dict of metadata arrays from /Header:
+            antpos : dict[int, np.ndarray]
+                Dict mapping antenna number -> position vector
+            transformed_antpos : dict[int, np.ndarray]
+                Dict mapping antenna number -> position vector in transformed space
+            times : np.ndarray
+                /Header/times dataset.
+            freqs : np.ndarray
+                /Header/freqs dataset.
+            pols : list[str]
+                List of polarization strings from /Header/polarization_array.
+    """
+    metadata = {}
+
+    with h5py.File(filename, "r") as file:
+        # --- data ---
+        dgrp = file["data"]
+        flag_array = np.asarray(dgrp["flag_array"], dtype=bool)
+        all_calibration_parameters = {
+            name: np.asarray(ds) for name, ds in dgrp.items() if name != "flag_array"
+        }
+
+        # --- header ---
+        hdr = file["Header"]
+        metadata['times'] = np.asarray(hdr["times"])
+        metadata['freqs'] = np.asarray(hdr["freqs"])
+
+        transformed_antnums = np.asarray(hdr["transformed_antnums"], dtype=int)
+        transformed_positions = np.asarray(hdr["transformed_antpos"], dtype=float)
+        metadata['transformed_antpos'] = {
+            int(a): pos for a, pos in zip(transformed_antnums, transformed_positions)
+        }
+
+        antnums = np.asarray(hdr["antnums"], dtype=int)
+        positions = np.asarray(hdr["antpos"], dtype=float)
+        metadata['antpos'] = {
+            int(a): pos for a, pos in zip(antnums, positions)
+        }
+
+        metadata['pols'] = [p.decode("utf-8") for p in hdr["polarization_array"]]
+        metadata['refpol'] = hdr['refpol'][()].decode("utf-8")
+
+        flags = {
+            pol: flag_array[idx]
+            for idx, pol in enumerate(metadata['pols'])
+        }
+
+    return all_calibration_parameters, flags, metadata
+
+
+def load_single_baseline_lstcal_gains(filename, antpairs, polarizations):
+    """
+    Load single-baseline LST calibration solutions and construct per-antenna complex gains.
+
+    Expected parameter keys in the file (by convention):
+      - ``A_<Jpol>``: real-valued amplitudes, shape (ntimes, nfreqs)
+      - ``T_<Jpol>`` : real-valued phase gradients, shape (ntimes, nfreqs, ndims)
+      - ``cross_pol``       : (optional) phase offset to apply when ``Jpol != refpol``, shape (ntimes, nfreqs)
+
+    The ``polarizations`` argument may include visibility-pol strings (e.g., ``"ee"``, ``"nn"``, ``"en"``, ``"ne"``);
+    these are mapped to the set of Jones pols required to build gains (e.g., ``"en"`` -> ``{"Jee","Jnn"}``).
+
+    Parameters
+    ----------
+    filename
+        Path to the HDF5 file created by `write_single_baseline_lstcal_solutions`.
+    antpairs
+        List of antenna index pairs (i, j). Antenna IDs here determine which antennas receive gains.
+    polarizations
+        Visibility polarization strings to support (e.g., ``["ee", "nn"]`` or ``["en"]``).
+
+    Returns
+    -------
+    gains
+        Dict mapping ``(ant, Jpol) -> complex ndarray (ntimes, nfreqs)``.
+    cal_flags
+        Dict mapping ``(ant, Jpol) -> bool``; True if all samples for the corresponding
+        visibility-pol in the file were flagged.
+    """
+    # Load calibration solutions
+    (
+        all_calibration_parameters,
+        flags,
+        metadata
+    ) = load_single_baseline_lstcal_solutions(filename)
+
+    # Unpack metadata
+    pols = metadata['pols']
+    transformed_antpos = metadata['transformed_antpos']
+
+    # Get unique gain polarizations from input polarizations
+    gain_pols = list(set(sum([list(utils.split_pol(pol)) for pol in polarizations], [])))
+
+    # Check that requested polarizations are in the file
+    for pol in polarizations:
+        if pol not in pols:
+            raise ValueError(f"Polarization {pol} not in gain polarizations: {pols}")
+
+    # Sanity checks on required params
+    for pol in gain_pols:
+        for key in (f"A_{pol}", f"T_{pol}"):
+            if key not in all_calibration_parameters:
+                raise KeyError(f"Missing calibration parameter '{key}' in file.")
+
+    # Compute antenna gains from calibration parameters
+    gains = {}
+    cal_flags = {}
+    unique_ants = list(set(sum(map(list, antpairs), [])))
+
+    cal_flags = {
+        (ant, pol): np.all(flags[utils.join_pol(pol, pol)])
+        for ant in unique_ants
+        for pol in gain_pols
+    }
+
+    # Compute antenna gains from calibration parameters
+    for ant in unique_ants:
+        for pol in gain_pols:
+            gains[(ant, pol)] = all_calibration_parameters[f"A_{pol}"].astype(complex)
+            gains[(ant, pol)] *= np.exp(
+                -1j * np.einsum("tfc,c->tf", all_calibration_parameters[f"T_{pol}"], transformed_antpos[ant])
+            )
+            if pol != metadata['refpol'] and "cross_pol" in all_calibration_parameters:
+                gains[(ant, pol)] *= np.exp(1j * all_calibration_parameters[f"cross_pol"])
+
+    return gains, cal_flags

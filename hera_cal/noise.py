@@ -28,8 +28,8 @@ def interleaved_noise_variance_estimate(vis, kernel=[[1, -2, 1], [-2, 4, -2], [1
     Returns:
         variance: estimate of the noise variance on the input visibility with the same shape
     '''
-    assert(np.sum(kernel) == 0), 'The kernal must sum to zero for difference-based noise estimation.'
-    assert(np.array(kernel).ndim == 2), 'The kernel must be 2D.'
+    assert (np.sum(kernel) == 0), 'The kernal must sum to zero for difference-based noise estimation.'
+    assert (np.array(kernel).ndim == 2), 'The kernel must be 2D.'
     variance = np.abs(scipy.signal.convolve2d(vis, kernel, mode='same', boundary='wrap'))**2
     variance /= np.sum(np.array(kernel)**2)
     return variance
@@ -68,7 +68,8 @@ def infer_dt(times_by_bl, bl, default_dt=None):
         raise ValueError('Cannot infer dt when all len(times_by_bl) == 1 or fewer.')
 
 
-def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None):
+def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None,
+                                      auto_ant=None):
     '''Predict the noise variance on a baseline using autocorrelation data
     using the formla sigma^2 = Vii * Vjj / Delta t / Delta nu.
 
@@ -81,18 +82,27 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None)
             from the frequencies stored in the DataContainer
         nsamples: DataContainer mapping bl tuples to numpy arrays of the number
             integrations for that given baseline. Must include nsamples[bl].
+        auto_ant: int
+            For some cases, like redundant averaging, the auto corresponding
+            to the individual antennas is not available. In this case, the
+            user should use this keyword to specify a single auto antenna from
+            which to derive this statistic.
 
     Returns:
         Noise variance predicted on baseline bl in units of data squared.
     '''
     if dt is None:
-        dt = infer_dt(data.times_by_bl, bl) * units.si.day.in_units(units.si.s)
+        dt = infer_dt(data.times_by_bl, bl) * units.si.day.to(units.si.s)
     if df is None:
-        assert(len(data.freqs) > 1)  # cannot infer channel width if only one channel is present
+        assert (len(data.freqs) > 1)  # cannot infer channel width if only one channel is present
         df = np.median(np.ediff1d(data.freqs))
 
     ap1, ap2 = split_pol(bl[2])
-    auto_bl1, auto_bl2 = (bl[0], bl[0], join_pol(ap1, ap1)), (bl[1], bl[1], join_pol(ap2, ap2))
+    if auto_ant is None:
+        auto_bl1, auto_bl2 = (bl[0], bl[0], join_pol(ap1, ap1)), (bl[1], bl[1], join_pol(ap2, ap2))
+    else:
+        auto_bl1, auto_bl2 = (auto_ant, auto_ant, join_pol(ap1, ap1)), (auto_ant, auto_ant, join_pol(ap2, ap2))
+
     var = np.abs(data[auto_bl1] * data[auto_bl2] / dt / df)
     if nsamples is not None:
         return var / nsamples[bl]

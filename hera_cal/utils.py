@@ -15,7 +15,8 @@ from scipy import signal, interpolate
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
-from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT, _x_orientation_rep_dict
+from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT
+from pyuvdata.utils.pol import x_orientation_pol_map
 from pyuvdata.uvdata import FastUVH5Meta
 from typing import Sequence
 from pathlib import Path
@@ -42,7 +43,7 @@ HERA_TELESCOPE_LOCATION = np.array([5109325.855210627429187297821044921875,
                                     -3239928.424753960222005844116210937500])
 
 # Defines characters to look for to see if the polarization string is in east/north format. Nominally {'e', 'n'}.
-_KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').values()])
+_KEY_CARDINAL_CHARS = set([c.lower() for c in x_orientation_pol_map('north').values()])
 # Define characters that appear in all Jones polarization strings. Nominally {'j'}.
 _KEY_JONES_CHARS = set([c.lower() for val in JONES_NUM2STR_DICT.values() for c in val
                        if np.all([c in v for v in JONES_NUM2STR_DICT.values()])])
@@ -282,14 +283,16 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df + f0
     fSlice = slice(edge_cut, len(freqs) - edge_cut)
-    offset = np.angle(
-        np.sum(
-            wgts[:, fSlice] * data[:, fSlice] * np.exp(
-                -np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)
-            ),
-            axis=1, keepdims=True
-        ) / np.sum(wgts[:, fSlice], axis=1, keepdims=True)
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', 'invalid value encountered in divide')
+        offset = np.angle(
+            np.sum(
+                wgts[:, fSlice] * data[:, fSlice] * np.exp(
+                    -np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)
+                ),
+                axis=1, keepdims=True
+            ) / np.sum(wgts[:, fSlice], axis=1, keepdims=True)
+        )
 
     return dlys, offset
 
@@ -353,29 +356,31 @@ def interp_peak(data, method='quinn', reject_edges=False):
     k1 = data[range(N1), indices]
     k2 = data[range(N1), (indices + 1) % N2]
 
-    if method == 'quinn':
-        alpha1 = (k0 / k1).real
-        alpha2 = (k2 / k1).real
-        delta1 = alpha1 / (1 - alpha1)
-        delta2 = -alpha2 / (1 - alpha2)
-        d = (delta1 + delta2) / 2 + quinn_tau(delta1 ** 2) - quinn_tau(delta2 ** 2)
-        d[~np.isfinite(d)] = 0.
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', r'invalid value encountered in divide')
+        if method == 'quinn':
+            alpha1 = (k0 / k1).real
+            alpha2 = (k2 / k1).real
+            delta1 = alpha1 / (1 - alpha1)
+            delta2 = -alpha2 / (1 - alpha2)
+            d = (delta1 + delta2) / 2 + quinn_tau(delta1 ** 2) - quinn_tau(delta2 ** 2)
+            d[~np.isfinite(d)] = 0.
 
-        numerator_ck = np.exp(2.0j * np.pi * d) - 1
-        ck = np.array([np.true_divide(numerator_ck, 2.0j * np.pi * (d - k),
-                                      where=~(d == 0)) for k in [-1, 0, 1]])
-        rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck ** 2))
-        rho[d == 0] = np.abs(k1[d == 0])
-        return indices, d, np.abs(peaks), rho
+            numerator_ck = np.exp(2.0j * np.pi * d) - 1
+            ck = np.array([np.true_divide(numerator_ck, 2.0j * np.pi * (d - k),
+                                        where=~(d == 0)) for k in [-1, 0, 1]])
+            rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck ** 2))
+            rho[d == 0] = np.abs(k1[d == 0])
+            return indices, d, np.abs(peaks), rho
 
-    elif method == 'quadratic':
-        denom = (k0 - 2 * k1 + k2)
-        bin_shifts = 0.5 * np.true_divide((k0 - k2), denom, where=~np.isclose(denom, 0.0))
-        new_peaks = k1 - 0.25 * (k0 - k2) * bin_shifts
-        return indices, bin_shifts, peaks, new_peaks
+        elif method == 'quadratic':
+            denom = (k0 - 2 * k1 + k2)
+            bin_shifts = 0.5 * np.true_divide((k0 - k2), denom, where=~np.isclose(denom, 0.0))
+            new_peaks = k1 - 0.25 * (k0 - k2) * bin_shifts
+            return indices, bin_shifts, peaks, new_peaks
 
 
-def echo(message, type=0, verbose=True):
+def echo(message, type=0, verbose=True):  # noqa: A002
     if verbose:
         if type == 0:
             print(message)
@@ -460,14 +465,14 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     '''
     assert AIPY, "you need aipy to run this function"
     # center of array values from file
-    cofa_lat, cofa_lon, cofa_alt = uvd.telescope_location_lat_lon_alt
+    cofa_lat, cofa_lon, cofa_alt = uvd.telescope._location.lat_lon_alt()
     location = (cofa_lat, cofa_lon, cofa_alt)
 
     # get antenna positions from file
     antpos = {}
-    for i, antnum in enumerate(uvd.antenna_numbers):
+    for i, antnum in enumerate(uvd.telescope.antenna_numbers):
         # we need to add the CofA location to the relative coordinates
-        pos = uvd.antenna_positions[i, :] + uvd.telescope_location
+        pos = uvd.telescope.antenna_positions[i, :] + uvd.telescope._location.xyz()
         # convert from meters to nanoseconds
         c_ns = const.c.to('m/ns').value
         pos = pos / c_ns
@@ -822,7 +827,7 @@ def lst_rephase(
         if True edit arrays in data in memory, else make a copy and return
     array
         Deprecated parameter that specifies that the input data is an array
-        with shape (ntimes, nfreqs, [npols]). Don't write code with this
+        with shape (ntimes, nbls, nfreqs, [npols]). Don't write code with this
         parameter -- instead just set the baseline axis of data to be length-1.
 
     Notes:
@@ -1021,7 +1026,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     if reds is not None:
         model = copy.deepcopy(model)
         for red in reds:
-            if np.any([bl in data for bl in red]):
+            if any(bl in data for bl in red):
                 for bl in red:
                     model[bl] = model[red[0]]
 
@@ -1368,7 +1373,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     if fed_container:
         pols = sorted(data.pols())
     else:
-        pols = [polnum2str(pol, x_orientation=data.x_orientation) for pol in data.polarization_array]
+        pols = [polnum2str(pol, x_orientation=data.telescope.get_x_orientation_from_feeds()) for pol in data.polarization_array]
 
     # get redundant groups
     if reds is None:
@@ -1378,8 +1383,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 raise ValueError("DataContainer must have antpos dictionary to calculate reds")
             antposd = data.antpos
         else:
-            antpos, ants = data.get_ENU_antpos()
-            antposd = dict(zip(ants, antpos))
+            antposd = get_ENU_antpos(data, asdict=True)
         reds = redcal.get_pos_reds(antposd, bl_error_tol=bl_tol)
 
     # eliminate baselines not in data
@@ -1410,9 +1414,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 n = np.asarray([data.get_nsamples(bl + (pol,)) for bl in blg])
                 tint = []
                 for bl in blg:
-                    blinds = data.antpair2ind(bl + (pol,))
-                    if len(blinds) == 0:
-                        blinds = data.antpair2ind(reverse_bl(bl + (pol,)))
+                    blinds = data.antpair2ind(bl + (pol,), ordered=False)
                     tint.append(data.integration_time[blinds])
                 tint = np.asarray(tint)[:, :, None]
                 w = np.asarray([wgts[bl + (pol,)] for bl in blg]) * tint
@@ -1445,7 +1447,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             else:
                 blinds = data.antpair2ind(blk)
                 polind = pols.index(pol)
-                if len(blinds) == 0:
+                if blinds is None or (hasattr(blinds, "__len__") and len(blinds) == 0):
                     blinds = data.antpair2ind(reverse_bl(blk))
                     davg = np.conj(davg)
                 data.data_array[blinds, :, polind] = davg
@@ -1560,7 +1562,7 @@ def match_files_to_lst_bins(
     lst_edges = np.array([(lst - lst0) % (2 * np.pi) + lst0 for lst in lst_edges])
     # We can have the case that an edges is at lst0 + 2pi exactly, which would
     # get wrapped around to lst0, but it should stay at lst0+2pi.
-    lst_edges[1:][lst_edges[1:] == lst_edges[0]] += 2 * np.pi
+    lst_edges[1:][np.isclose(lst_edges[1:], lst_edges[0], atol=1e-10)] += 2 * np.pi
 
     if np.any(np.diff(lst_edges) < 0):
         raise ValueError("lst_edges must not extend beyond 2pi total radians from start to finish.")
@@ -1603,7 +1605,10 @@ def match_files_to_lst_bins(
 
         @cache
         def get_first_time(path: Path) -> float:
-            return float(jd_regex.findall(path.name)[0])
+            # Note that the time listed in the file name is the middle of the first
+            # integration, so we need to subtract tint/2 to get the start of the first
+            # bin.
+            return float(jd_regex.findall(path.name)[0]) - tint / 2
     else:
 
         @cache
@@ -1765,7 +1770,7 @@ def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
         if len(grp) > max_chunk_size:
             # if red group is larger then the chunk size.
             # then give a warning and treate the red group as a chunk anyways.
-            warnings.warn("Warning: baseline group of length %d encountered with number"
+            warnings.warn("baseline group of length %d encountered with number"
                           " of baselines exceeding max_chunk_size=%d."
                           " First baseline is %s"
                           " Loading group anyways." % (len(reds[group_index]), max_chunk_size, str(reds[group_index][0])))
@@ -1835,3 +1840,41 @@ def select_spw_ranges_argparser():
                                                                                 "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     ap.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return ap
+
+
+def get_ENU_antpos(uvd: UVData, *, center=False, pick_data_ants=False, asdict: bool = False):
+    """
+    Get antenna positions in East, North, Up coordinates in units of meters.
+
+    Parameters
+    ----------
+    center : bool
+        If True, subtract median of antenna positions before returning the
+        positions. Note that this will make it so that the antenna positions
+        cannot be reliably converted back to ECEF positions because they will
+        not be only referenced to the telescope location.
+    pick_data_ants : bool
+        If True, return only antennas found in data
+
+    Returns
+    -------
+    antpos : ndarray
+        Antenna positions in East, North, Up coordinates in units of
+        meters, shape=(Nants, 3)
+    ants : ndarray
+        Antenna numbers matching ordering of antpos, shape=(Nants,)
+
+    """
+    if pick_data_ants:
+        antpos, ants = uvd.get_enu_data_ants()
+    else:
+        antpos = uvd.telescope.get_enu_antpos()
+        ants = uvd.telescope.antenna_numbers
+
+    if center:
+        antpos -= np.median(antpos, axis=0)
+
+    if asdict:
+        return {ant: pos for ant, pos in zip(ants, antpos)}
+    else:
+        return antpos, ants

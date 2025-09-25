@@ -6,3 +6,167 @@ build-backend = "setuptools.build_meta"
 write_to = "hera_cal/_version.py"
 parentdir_prefix_version = "hera_cal-"
 fallback_version  = "0.0.0"
+
+[project]
+name = "hera-calibration"
+description = "A collection of calibration routines to run on the HERA instrument."
+readme = "README.md"
+authors = [
+  {name="HERA Team"},
+]
+license = {text="BSD"}
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved",
+  "License :: OSI Approved :: MIT License",
+  "Natural Language :: English",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering :: Astronomy",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+dynamic=["version"]
+requires-python = ">=3.9"
+dependencies = [
+    'numpy>=1.10',
+    "scipy>=1.9.0",
+    "h5py",
+    "hdf5plugin",
+    "astropy",
+    "astropy-healpix",
+    "pyuvdata>=3.2",
+    "linsolve",
+    "hera_qm>=2.2.0",
+    "scikit-learn",
+    "hera-filters",
+    "line_profiler",
+    "aipy",
+    "rich",
+    "jax",
+    "jaxlib",
+    "optax",
+    "attrs",
+    "frozendict",
+    "toml",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pre-commit",
+    "pytest-cov",
+    "hera_sim>=4.3.0",
+    "pytest-xdist",
+    "hypothesis",
+    "ruff",
+]
+
+[tool.setuptools]
+script-files = [
+    "scripts/apply_cal.py",
+    "scripts/auto_reflection_run.py",
+    "scripts/baseline_chunker.py",
+    "scripts/chunk_files.py",
+    "scripts/delay_filter_run.py",
+    "scripts/extract_autos.py",
+    "scripts/extract_hh.py",
+    "scripts/flag_all.py",
+    "scripts/lstbin_run.py",
+    "scripts/lstbin_simple.py",
+    "scripts/model_calibration_run.py",
+    "scripts/multiply_gains.py",
+    "scripts/noise_from_autos.py",
+    "scripts/post_redcal_abscal_run.py",
+    "scripts/query_ex_ants.py",
+    "scripts/red_average.py",
+    "scripts/redcal_run.py",
+    "scripts/select_spw_ranges.py",
+    "scripts/smooth_cal_run.py",
+    "scripts/subselect.py",
+    "scripts/throw_away_flagged_antennas.py",
+    "scripts/time_average.py",
+    "scripts/time_chunk_from_baseline_chunks_run.py",
+    "scripts/tophat_frfilter_run.py",
+    "scripts/transfer_flags.py"
+]
+
+[tool.pytest]
+addopts = "--ignore=scripts --cov=hera_cal --cov-config=.coveragerc"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:Fixing auto-correlations to be be real-only:UserWarning",
+    'ignore:telescope_location is not set\. Using known values for HERA\.:UserWarning',
+    "ignore:invalid value encountered in divide:RuntimeWarning",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "A",    # builtins
+    # "ARG",  # unused arguments
+    # "B",    # bugbear
+    # "C4",   # comprehensions
+    # "C90",  # mccabe complexity
+    # "COM",  # commas
+    # "D",    # docstyle
+    # "DTZ",  # datetime
+    # "F",    # pyflakes
+    # "FA",   # future annotations
+    # "FURB", # refurb
+    # "I",    # isort
+    # "ISC",  # implicit string concat
+    # "LOG",  # logging
+    # "N",    # pep8-naming
+    # "NPY",  # numpy-specific rules
+    # "PERF", # performance
+    # "UP",   # pyupgrade
+    # "PIE",  # flake8-pie
+    # "PLC",  # pylint
+    # "PLE",  # pylint
+    # "PLR",  # pylint
+    # "PLW",  # pylint
+    # "PT",   # pytest-style
+    # "PTH",  # use pathlib
+    # "Q",    # quotes
+    # "RSE",  # flake8-raise
+    # "RUF",  # ruff-specific rules
+    # "SIM",  # flake8-simplify
+    # "TRY",  # tryceratops
+    # "UP",   # pyupgrade
+]
+
+exclude = [
+    "scripts/notebooks/*.ipynb",  # For now, ignore notebooks when linting.
+]
+
+ignore = [
+    "E402",
+    "E501",
+    "W291",
+    "W293",
+    "A005",   # module io shadows python stdlib
+    # Following Rulesets we really don't want
+    "AIR",    # airflow - unused library
+    "ASYNC",  # async  -- unused library
+    "DJ",     # django -- unused library
+    "EXE",    # executable -- unused features
+    "G",      # logging-format -- this linter gives bad advice a lot
+    "INT",    # gettext -- unknown why we would use this
+    "PD",     # unused library
+    "PGH",    # pygrep hooks?
+    "PYI",    # typing stuff
+    "S",      # flake8-bandit -- security stuff that isn't really applicable
+    "SLOT",   # slots stuff that isn't applicable atm
+    "TCH",    # type-checking
+    "TD",     # todo's
+    "TID",    # tidy imports (should be done with isort)
+    "TRIO",   # trio unused package
+    "YTT",    # py2to3 stuff
+]

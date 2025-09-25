@@ -2,24 +2,27 @@
 from __future__ import annotations
 
 from pyuvdata import UVData, UVCal, UVFlag
-from pyuvdata.uvdata import FastUVH5Meta
-from pyuvdata.telescopes import get_telescope
 
 from hera_cal import utils
 from hera_cal import io
 from hera_cal import noise
-from hera_cal.lstbin import make_lst_grid
+from hera_cal.lst_stack.config import make_lst_grid
 import numpy as np
-from astropy.coordinates import EarthLocation
 import yaml
 from hera_cal.data import DATA_PATH
 from pathlib import Path
 from hera_cal.red_groups import RedundantGroups
 from astropy import units
 
-HERA_LOC = EarthLocation.from_geocentric(
-    *get_telescope("HERA").telescope_location, unit="m"
-)
+try:
+    from pyuvdata.telescopes import known_telescope_location, Telescope
+    HERA_LOC = known_telescope_location("HERA")
+except ImportError:
+    # this can go away when we require pyuvdata >= 3.0
+    from pyuvdata import get_telescope
+    from astropy.coordinates import EarthLocation
+    hera_tel = get_telescope("HERA")
+    HERA_LOC = hera_tel.location
 
 with open(f"{DATA_PATH}/hera_antpos.yaml", "r") as fl:
     HERA_ANTPOS = yaml.safe_load(fl)
@@ -42,7 +45,7 @@ def create_mock_hera_obs(
     empty: bool = False,
     time_axis_faster_than_bls: bool = True,
     redundantly_averaged: bool = False,
-    x_orientation: str = "n",
+    x_orientation: str = "north",
 ) -> UVData:
     tint = integration_time / (24 * 3600)
     dlst = tint * 2 * np.pi
@@ -57,10 +60,14 @@ def create_mock_hera_obs(
             jd_start += jdint
         times = np.arange(jd_start, ntimes * tint + jd_start, tint)[:ntimes]
 
-    if ants is None:
-        ants = list(HERA_ANTPOS.keys())
+    hera = Telescope.from_known_telescopes('HERA')
+    hera.instrument = 'hera'
+    hera.set_feeds_from_x_orientation(x_orientation, feeds=['x', 'y'])  # this assumes linear polarization
 
-    antpos = {k: v for k, v in HERA_ANTPOS.items() if k in ants}
+    if ants is None:
+        ants = hera.antenna_numbers
+    antpos = hera.get_enu_antpos()
+    antpos = {k: v for k, v in enumerate(antpos) if k in ants}
 
     reds = RedundantGroups.from_antpos(antpos)
 
@@ -78,17 +85,17 @@ def create_mock_hera_obs(
     uvd = UVData.new(
         freq_array=freqs,
         polarization_array=pols,
-        antenna_positions=antpos,
         antpairs=np.array(antpairs),
-        telescope_location=HERA_LOC,
-        telescope_name="HERA",
+        telescope=hera,
         times=times,
-        x_orientation=x_orientation,
         empty=empty,
         time_axis_faster_than_bls=time_axis_faster_than_bls,
         do_blt_outer=True,
+        channel_width=np.diff(freqs)[0] if len(freqs) > 1 else np.diff(PHASEII_FREQS)[0],
     )
     uvd.polarization_array = np.array(uvd.polarization_array)
+    uvd.blts_are_rectangular = True
+    uvd.time_axis_faster_than_bls = time_axis_faster_than_bls
     return uvd
 
 
@@ -136,6 +143,7 @@ def create_uvd_identifiable(
     with_noise: bool = False,
     autos_noise: bool = False,
     flag_frac: float = 0.0,
+    time_axis_faster_than_bls: bool = True,
     **kwargs,
 ) -> UVData:
     """Make a UVData object with identifiable data.
@@ -145,8 +153,13 @@ def create_uvd_identifiable(
 
         data = pol* lst * [np.cos(freq*a) + I * np.sin(freq*b)]
     """
-    uvd = create_mock_hera_obs(empty=True, **kwargs)
+    uvd = create_mock_hera_obs(empty=True, time_axis_faster_than_bls=time_axis_faster_than_bls, **kwargs)
     uvd.data_array = identifiable_data_from_uvd(uvd)
+
+    if not time_axis_faster_than_bls:
+        uvd.data_array.shape = (uvd.Nbls, uvd.Ntimes, uvd.Nfreqs, uvd.Npols)
+        uvd.data_array = np.transpose(uvd.data_array, (1, 0, 2, 3))
+        uvd.data_array = uvd.data_array.reshape((uvd.Nbls * uvd.Ntimes, uvd.Nfreqs, uvd.Npols))
 
     if with_noise:
         add_noise_to_uvd(uvd, autos=autos_noise)
@@ -160,7 +173,7 @@ def add_noise_to_uvd(uvd, autos: bool = False):
     hd = io.to_HERAData(uvd)
 
     data, flags, nsamples = hd.read()
-    dt = (data.times[1] - data.times[0]) * units.si.day.in_units(units.si.s)
+    dt = (data.times[1] - data.times[0]) * units.si.day.to(units.si.s)
     df = data.freqs[1] - data.freqs[0]
 
     for bl in data.bls():
@@ -173,6 +186,7 @@ def add_noise_to_uvd(uvd, autos: bool = False):
         data[bl] += np.random.normal(
             scale=np.sqrt(variance / 2)
         ) + 1j * np.random.normal(scale=np.sqrt(variance / 2))
+
     hd.update(data=data)
 
 
@@ -214,7 +228,7 @@ def write_files_in_hera_format(
 
         _fls = []
         for obj in uvdlist:
-            fl = daydir / fmt.format(jd=obj.time_array.min())
+            fl = daydir / fmt.format(jd=np.mean(obj.time_array))
             if obj.metadata_only:
                 obj.initialize_uvh5_file(fl, clobber=True)
             else:
@@ -222,7 +236,9 @@ def write_files_in_hera_format(
 
             if add_where_inpainted_files:
                 flg = UVFlag()
-                flg.from_uvdata(obj, copy_flags=True, waterfall=False)
+                flg.from_uvdata(
+                    obj, copy_flags=True, waterfall=False, mode="flag",
+                )
                 flg.flag_array[:] = True  # Everything inpainted.
                 flgfile = fl.with_suffix(".where_inpainted.h5")
                 flg.write(flgfile, clobber=True)
@@ -368,7 +384,7 @@ def write_cals_in_hera_format(
 
         _fls = []
         for obj in uvdlist:
-            fl = daydir / fmt.format(jd=obj.time_array.min())
+            fl = daydir / fmt.format(jd=np.mean(obj.time_array))
             obj.write_calfits(fl, clobber=True)
             _fls.append(str(fl))
         fls.append(_fls)

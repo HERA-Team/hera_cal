@@ -236,8 +236,12 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     if min_bl_cut is not None or max_bl_cut is not None:
         assert antpos is not None, 'antpos must be passed in if min_bl_cut or max_bl_cut is specified.'
         lengths = [np.mean([np.linalg.norm(antpos[bl[1]] - antpos[bl[0]]) for bl in gp]) for gp in reds]
-        reds = [gp for gp, l in zip(reds, lengths) if ((min_bl_cut is None or l > min_bl_cut)
-                                                       and (max_bl_cut is None or l < max_bl_cut))]
+        reds = [
+            gp for gp, ln in zip(reds, lengths) if (
+                (min_bl_cut is None or ln > min_bl_cut) and
+                (max_bl_cut is None or ln < max_bl_cut)
+            )
+        ]
 
     if max_dims is not None:
         while True:
@@ -659,7 +663,7 @@ class RedSol():
             None
         '''
         if reds_to_solve is None:
-            unsolved_reds = [gp for gp in self.reds if not gp[0] in self.vis]
+            unsolved_reds = [gp for gp in self.reds if gp[0] not in self.vis]
             reds_to_solve = filter_reds(unsolved_reds, ants=self.gains.keys())
         self.update_vis_from_data(data, wgts=wgts, reds_to_update=reds_to_solve)
 
@@ -683,7 +687,7 @@ class RedSol():
         for grp in extended_reds:
             try:
                 u = self.vis[grp[0]]  # RedDataContainer will take care of mapping.
-            except(KeyError):
+            except (KeyError):
                 # no redundant visibility solution for this group, so skip
                 continue
             # loop through baselines and select ones that have one solved antenna
@@ -752,7 +756,7 @@ class RedSol():
                 mix) and this is a numpy array.
             chisq_per_ant: dictionary mapping ant-pol tuples like (1,'Jnn') to the sum of all chisqs for
                 visibilities that an antenna participates in, DoF normalized using predict_chisq_per_ant
-    '''
+        '''
         chisq, chisq_per_ant = normalized_chisq(data, data_wgts, self.reds, self.vis, self.gains)
         return chisq, chisq_per_ant
 
@@ -882,6 +886,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
         abs2_u = {k: np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys}
         chisq = sum([(v if wgt_func is None else v * wgt_func(v)) for v in abs2_u.values()])
         update = np.where(chisq > 0)
+
         for k, v in abs2_u.items():
             abs2_u[k] = v[update]
         # variables with '_u' are flattened and only include pixels that need updating
@@ -897,7 +902,9 @@ class OmnicalSolver(linsolve.LinProductSolver):
         sol_u = {k: v[update].flatten() for k, v in sol.items()}
         iters = np.zeros(chisq.shape, dtype=int)
         conv = np.ones_like(chisq)
+
         for i in range(1, maxiter + 1):
+
             if verbose:
                 print('Beginning iteration %d/%d' % (i, maxiter))
             if (i % check_every) == 1:
@@ -912,6 +919,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                     sol_wgt_u[gj] += dwgts_u
                     sol_wgt_u[uij] += dwgts_u
                     dw_u[k] = self.data[k][update] * dwgts_u
+
             sol_sum_u = {k: 0 for k in sol_u.keys()}
             for k, (gi, gj, uij) in zip(self.keys, terms):
                 # compute sum(wgts * V_meas / V_mdl)
@@ -919,6 +927,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 sol_sum_u[gi] += numerator
                 sol_sum_u[gj] += numerator.conj()
                 sol_sum_u[uij] += numerator
+
             new_sol_u = {k: v * ((1 - self.gain) + self.gain * sol_sum_u[k] / sol_wgt_u[k])
                          for k, v in sol_u.items()}
             self._get_ans0(new_sol_u, to_update_inplace=dmdl_u)
@@ -937,6 +946,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 update_where = tuple(u[where_gotbetter_u] for u in update)
                 chisq[update_where] = new_chisq_u[where_gotbetter_u]
                 iters[update_where] = i
+
                 for k, v in new_sol_u.items():
                     new_sol_u[k] = np.where(gotbetter_u, v, sol_u[k])
                 deltas_u = [v - sol_u[k] for k, v in new_sol_u.items()]
@@ -1234,7 +1244,7 @@ class RedundantCalibrator:
         for ant in flipped:
             offs[ant] = _wrap_phs(offs[ant] + np.pi)
 
-        dtype = np.find_common_type([d.dtype for d in data.values()], [])
+        dtype = np.result_type(*list(data.values()))
         meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()},
                 'offs': {ant: off.flatten() for ant, off in offs.items()},
                 'polarity_flips': {ant: np.ones(Ntimes, dtype=bool) * bool(ant in flipped) for ant in ants}}
@@ -1277,6 +1287,7 @@ class RedundantCalibrator:
             # put back in sol0 gains that were divided out
             for ant in sol.gains:
                 sol.gains[ant] *= sol0.gains.get(ant, 1.0)
+
         return {}, sol
 
     def lincal(self, data, sol0, wgts={}, sparse=False, mode='default', conv_crit=1e-10, maxiter=50, verbose=False):
@@ -1337,6 +1348,7 @@ class RedundantCalibrator:
         sol0pack = {self.pack_sol_key(ant): sol0.gains[ant] for ant in self._ants_in_reds}
         for ubl in self._ubl_to_reds_index.keys():
             sol0pack[self.pack_sol_key(ubl)] = sol0[ubl]
+
         ls = self._solver(OmnicalSolver, data, sol0=sol0pack, wgts=wgts, gain=gain)
         meta, prms = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after, wgt_func=wgt_func)
         prms = {self.unpack_sol_key(k): v for k, v in prms.items()}
@@ -1521,6 +1533,7 @@ def normalized_chisq(data, data_wgts, reds, vis_sols, gains):
             visibilities that an antenna participates in, DoF normalized using predict_chisq_per_ant
     '''
     pol_mode = parse_pol_mode(reds)
+
     chisq, _, chisq_per_ant, _ = utils.chisq(data, vis_sols, data_wgts=data_wgts, gains=gains,
                                              reds=reds, split_by_antpol=(pol_mode in ['1pol', '2pol']))
     predicted_chisq_per_ant = predict_chisq_per_ant(reds)
@@ -1661,7 +1674,7 @@ def expand_omni_vis(sol, expanded_reds, data, nsamples=None, chisq=None, chisq_p
     # figure out which reds are solvable using the baselines for which we have gains for both antennas
     solved_ants = set(sol.gains.keys())
     good_ants_reds = filter_reds(expanded_reds, ants=solved_ants)
-    reds_to_solve = [red for red in good_ants_reds if not np.any([bl in sol.vis for bl in red])]
+    reds_to_solve = [red for red in good_ants_reds if not any(bl in sol.vis for bl in red)]
     data_bls_to_use = [bl for red in reds_to_solve for bl in red
                        if (split_bl(bl)[0] in solved_ants) and (split_bl(bl)[1] in solved_ants)]
 
@@ -1697,7 +1710,7 @@ def expand_omni_gains(sol, expanded_reds, data, nsamples=None, chisq_per_ant=Non
             See normalized_chisq() for more info.
     '''
     while True:
-        bls_to_use = set([bl for red in expanded_reds for bl in red if (np.any([bl in sol.vis for bl in red])
+        bls_to_use = set([bl for red in expanded_reds for bl in red if (any(bl in sol.vis for bl in red)
                           and ((split_bl(bl)[0] not in sol.gains) ^ (split_bl(bl)[1] not in sol.gains)))])
         if len(bls_to_use) == 0:
             break  # iterate to also solve for ants only found in bls with other ex_ants
@@ -1850,7 +1863,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     redcal_meta = _init_redcal_meta_dict(nTimes, nFreqs, ants, pol_load_list)
 
     # solar flagging
-    lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
+    lat, lon, alt = hd.telescope._location.lat_lon_alt_degrees()
     solar_alts = utils.get_sun_alt(hd.times, latitude=lat, longitude=lon)
     solar_flagged = solar_alts > solar_horizon
     if verbose and np.any(solar_flagged):

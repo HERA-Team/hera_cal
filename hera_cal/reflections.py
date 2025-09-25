@@ -475,14 +475,25 @@ class ReflectionFitter(FRFilter):
                 time_array = cal.time_array
             if cal.Nfreqs > Nfreqs:
                 freq_array = cal.freq_array
-            kwargs = dict([(k, getattr(cal, k)) for k in ['gain_convention', 'x_orientation',
-                                                          'telescope_name', 'cal_style']])
+            kwargs = {
+                'x_orientation': cal.telescope.get_x_orientation_from_feeds(),
+                'telescope_name': cal.telescope.name,
+                'cal_style': cal.cal_style,
+                'gain_convention': cal.gain_convention,
+                "integration_time": cal.integration_time,
+            }
             add_to_history += "\nMerged-in calibration {}".format(input_calfits)
         else:
-            kwargs = {'x_orientation': self.hd.x_orientation}
+            kwargs = {'x_orientation': self.hd.telescope.get_x_orientation_from_feeds()}
+
+            if self.hd.integration_time is not None:
+                unique_intg = np.unique(self.hd.integration_time)
+                if len(unique_intg) == 1:
+
+                    kwargs['integration_time'] = unique_intg[0]
 
         # write calfits
-        antnums2antnames = dict(zip(self.hd.antenna_numbers, self.hd.antenna_names))
+        antnums2antnames = dict(zip(self.hd.telescope.antenna_numbers, self.hd.telescope.antenna_names))
         echo("...writing {}".format(output_calfits), verbose=verbose)
         uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=rflags,
                            quality=quals, total_qual=tquals, zero_check=False,

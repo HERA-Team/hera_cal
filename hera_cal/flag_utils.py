@@ -63,7 +63,7 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
     elif isinstance(flags, UVData):
         if verbose:
             print("Note: using latitude and longitude in given UVData object")
-        latitude, longitude, altitude = flags.telescope_location_lat_lon_alt_degrees
+        latitude, longitude, altitude = flags.telescope._location.lat_lon_alt_degrees()
         times = np.unique(flags.time_array)
         dtype = 'uvd'
     if dtype in ['ndarr', 'DC']:
@@ -253,3 +253,81 @@ def factorize_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
 
     else:
         raise ValueError("Didn't recognize data structure of flags")
+
+
+def get_minimal_slices(flag_wf, freqs=None, freq_cuts=[]):
+    '''Gets the minimal boxes that contain all False pixels in flag_wf, potentially in multiple bands in frequency.
+
+    Arguments:
+        flag_wf: 2D ndarray of flags, shape (Ntimes, Nfreqs)
+        freqs: 1D ndarray of frequencies (required if freq_cuts is not empty)
+        freq_cuts: list of frequencies that separate bands, in the same units as freqs.
+            If empty, flag_wf is treated as a single band.
+
+    Returns:
+        time_slices: list of slice objects for the time dimension in time indices. Each one will corespond to a band_slice.
+            If that particular band of flag_wf is all True, returns None for that band.
+        band_slices: list of slice objects for the frequency dimension in channel numbers. If any band is all True
+            in flag_wf, returns None for that band.
+    '''
+    time_slices = [None for i in range(len(freq_cuts) + 1)]  # initialize with None
+    band_slices = [None for i in range(len(freq_cuts) + 1)]
+    # check that freqs is appropriately fed in
+    if len(freq_cuts) > 0:
+        if freqs is None or len(freqs) != flag_wf.shape[1]:
+            raise ValueError("freqs must be fed if freq_cuts is not empty")
+    else:
+        freqs = np.arange(flag_wf.shape[1])  # won't matter, since it'll be between -inf and inf
+
+    if not np.all(flag_wf):
+        # get band slices
+        cuts = [-np.inf] + sorted(list(freq_cuts)) + [np.inf]
+        not_all_flagged = ~np.all(flag_wf, axis=0)
+        for i in range(len(cuts) - 1):
+            in_band_and_not_all_flagged = (freqs > cuts[i]) & (freqs < cuts[i + 1]) & not_all_flagged
+            if np.any(in_band_and_not_all_flagged):
+                band_slices[i] = (slice(np.min(np.argwhere(in_band_and_not_all_flagged)),
+                                        np.max(np.argwhere(in_band_and_not_all_flagged)) + 1))
+
+        # get time slice
+        for i in range(len(cuts) - 1):
+            if band_slices[i] is not None:
+                not_always_flagged_tinds = np.arange(flag_wf.shape[0])[~np.all(flag_wf[:, band_slices[i]], axis=1)]
+                time_slices[i] = slice(np.min(not_always_flagged_tinds), np.max(not_always_flagged_tinds) + 1)
+
+    return time_slices, band_slices
+
+
+def distance_to_nearest_nonzero(arr: np.ndarray) -> np.ndarray:
+    """
+    For each index in `arr`, return the distance (number of indices)
+    to the nearest nonzero entry along the last axis.
+
+    Parameters
+    ----------
+    arr : ndarray
+        Input array.
+
+    Returns
+    -------
+    dist : ndarray
+        Array of the same shape as `arr`, where each entry contains the distance
+        to the nearest nonzero entry in `arr` along the last axis.
+    """
+    L = arr.shape[-1]  # length of the last axis
+    # Use a floating-point index array to support comparisons with -np.inf and np.inf.
+    idx = np.arange(L, dtype=float)  # shape (L,)
+    # Broadcast `idx` so it has one trailing axis of length L
+    idx = idx.reshape((1,) * (arr.ndim - 1) + (L,))
+
+    # Nearest non-zero on the left
+    left_pos = np.where(arr != 0, idx, -np.inf)
+    left_pos = np.maximum.accumulate(left_pos, axis=-1)
+    dist_left = np.where(~np.isfinite(left_pos), np.inf, idx - left_pos)
+
+    # Nearest non-zero on the right
+    right_pos = np.where(arr != 0, idx, np.inf)
+    right_pos = np.minimum.accumulate(right_pos[..., ::-1], axis=-1)[..., ::-1]
+    dist_right = np.where(~np.isfinite(right_pos), np.inf, right_pos - idx)
+
+    return np.minimum(dist_left, dist_right)
