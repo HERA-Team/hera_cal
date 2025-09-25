@@ -742,6 +742,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solv
 
     return fit
 
+
 @jax.jit
 def _stefcal_optimizer(data_matrix, model_matrix, weights, tol=1e-10, maxiter=1000, stepsize=0.5):
     """
@@ -750,13 +751,13 @@ def _stefcal_optimizer(data_matrix, model_matrix, weights, tol=1e-10, maxiter=10
     Parameters:
     ----------
     data_matrix: np.ndarray
-        Data matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that 
+        Data matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that
         are not flagged. Tsecond two axes are the time and frequency axes.
     model_matrix: np.ndarray
-        Model matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that 
+        Model matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that
         are not flagged. Tsecond two axes are the time and frequency axes.
     weights: np.ndarray
-        Weights matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that 
+        Weights matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that
         are not flagged. Tsecond two axes are the time and frequency axes.
     tol: float, optional, default=1e-10
         Tolerance for convergence criterea of subsequent iterations of stefcal
@@ -798,22 +799,23 @@ def _stefcal_optimizer(data_matrix, model_matrix, weights, tol=1e-10, maxiter=10
         # Average gains on even iterations and take a full step on odd iterations (ensures convergence)
         step = ((i + 1) % 2) * stepsize
         gains = gains * (1 - step) + g_old * step
-        
+
         # Compute convergence criterea
         tau = jnp.sqrt(jnp.sum(jnp.abs(gains - g_old) ** 2)) / jnp.sqrt(jnp.sum(jnp.abs(gains)**2))
         return gains, i + 1, tau
-    
+
     def conditional_function(args):
         """
         Conditional function to check to convergence criterea
         """
         _, i, tau = args
         return (tau > tol) & (i < maxiter)
-    
+
     nants = data_matrix.shape[0]
     gains = jnp.ones(nants, dtype=complex)
-    
+
     return jax.lax.while_loop(conditional_function, inner_function, (gains, 0, jnp.inf))
+
 
 def _build_model_matrices(data, model, weights, data_bls, data_to_model_bls_map, ant_flags={}):
     """
@@ -837,11 +839,11 @@ def _build_model_matrices(data, model, weights, data_bls, data_to_model_bls_map,
     ant_flags: dict, optional, default={}
         Dictionary of antenna flags. Keys are antenna + pol tuples, values are boolean. If an antenna is flagged
         in this dictionary, it will not be included in the model matrices.
-    
+
     Returns:
     -------
     data_matrix: np.ndarray
-        Data matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that 
+        Data matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that
         are not flagged. Tsecond two axes are the time and frequency axes.
     model_matrix: np.ndarray
         Model matrix of shape (nants, nants, ntimes, nfreqs). The first two axes are the antenna indices of antennas that
@@ -862,39 +864,40 @@ def _build_model_matrices(data, model, weights, data_bls, data_to_model_bls_map,
 
     # Map antennas to indices in the data, model, and wgts matrices
     map_ants_to_index = {ant: ki for ki, ant in enumerate(ants)}
-    
+
     # Number of times and frequencies
     ntimes, nfreqs = data[data_bls[0]].shape
-    
+
     # Populate matrices
     data_matrix = np.zeros((nants, nants, ntimes, nfreqs), dtype='complex')
     wgts_matrix = np.zeros((nants, nants, ntimes, nfreqs), dtype='float')
     model_matrix = np.zeros((nants, nants, ntimes, nfreqs), dtype='complex')
-    
+
     for bl in data_bls:
         if bl[0] in map_ants_to_index and bl[1] in map_ants_to_index:
             m, n = map_ants_to_index[bl[0]], map_ants_to_index[bl[1]]
-            
+
             # Data matrix
             data_matrix[m, n] = data[bl]
             data_matrix[n, m] = data[bl].conj()
-            
+
             # Weights matrix
             wgts_matrix[m, n] = weights[bl]
             wgts_matrix[n, m] = wgts_matrix[m, n]
-            
+
             # Model Matrix
             model_matrix[m, n] = model[data_to_model_bls_map[bl]]
             model_matrix[n, m] = model[data_to_model_bls_map[bl]].conj()
 
     return data_matrix, model_matrix, wgts_matrix, map_ants_to_index
 
+
 def sky_calibration(
-        data, model, weights, data_antpos=None, ant_flags={}, tol=1e-10, maxiter=1000, stepsize=0.5, 
+        data, model, weights, data_antpos=None, ant_flags={}, tol=1e-10, maxiter=1000, stepsize=0.5,
         min_bl_cut=None, max_bl_cut=None, model_antpos=None, model_is_redundant=False, include_autos=False
     ):
     """
-    Solve for per-antenna gains using the Stefcal algorithm (Salvini et al. 2014). 
+    Solve for per-antenna gains using the Stefcal algorithm (Salvini et al. 2014).
 
     Parameters:
     ----------
@@ -958,15 +961,15 @@ def sky_calibration(
 
     # get keys from model and data dictionary
     data_bls, _, data_to_model_bl_map = match_baselines(
-        list(data.keys()), list(model.keys()), data_antpos, model_is_redundant=model_is_redundant, 
+        list(data.keys()), list(model.keys()), data_antpos, model_is_redundant=model_is_redundant,
         min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, include_autos=include_autos, model_antpos=model_antpos
     )
-        
+
     # Store gains and metadata
     gains = {}
     niters = {}
     conv_crits = {}
-    
+
     for pol in pols:
         # Initialize arrays for gains, niters, and convergence criterea
         gain_array = []
@@ -984,12 +987,12 @@ def sky_calibration(
         for ti in range(ntimes):
             _gains = []
             _niters = []
-            _conv_crits= []
+            _conv_crits = []
             for fi in range(nfreqs):
                 # If the weights are non-zero, run the optimizer. Otherwise, set the gains to 1.
                 if wgts[..., ti, fi].sum() > 0:
                     gain, niter, conv_crit = _stefcal_optimizer(
-                        data_matrix[..., ti, fi], model_matrix[..., ti, fi], wgts[..., ti, fi], 
+                        data_matrix[..., ti, fi], model_matrix[..., ti, fi], wgts[..., ti, fi],
                         tol=tol, maxiter=maxiter, stepsize=stepsize
                     )
                     _niters.append(niter)
@@ -1000,13 +1003,13 @@ def sky_calibration(
                     _niters.append(0)
                     _conv_crits.append(np.nan)
                     _gains.append(gain)
-                    
+
             gain_array.append(_gains)
             niter_array.append(_niters)
             conv_crit_array.append(_conv_crits)
-        
+
         gain_array = np.array(gain_array)
-    
+
         for k in ants:
             if k in map_ants_to_index:
                 gains[(k, "J" + pol)] = gain_array[..., map_ants_to_index[k]]
@@ -1015,9 +1018,9 @@ def sky_calibration(
 
         niters[pol] = np.array(niter_array)
         conv_crits[pol] = np.array(conv_crit_array)
-                
+
     return gains, niters, conv_crits
-                
+
 
 def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, f0=0.0, medfilt=True,
                        kernel=(1, 5), assume_2D=True, four_pol=False, edge_cut=0, time_avg=False,

@@ -810,7 +810,7 @@ class Test_Abscal_Solvers:
         # Test the function flagging a frequency and time
         for k in weights:
             weights[k][0, 0] = 0.0
-    
+
         gains, niter, conv_crit = abscal.sky_calibration(
             data_vis, model_vis, weights, antpos, maxiter=1000, tol=1e-10, stepsize=0.5
         )
@@ -853,6 +853,7 @@ class Test_Abscal_Solvers:
             # Check that the gains are correct
             if k[-1] == 'Jnn':
                 np.testing.assert_array_almost_equal(gains[k], 1.0 + 0.0j, decimal=5)
+
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
