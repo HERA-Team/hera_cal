@@ -91,10 +91,8 @@ script-files = [
     "scripts/transfer_flags.py"
 ]
 
-[tool.pytest]
-addopts = "--ignore=scripts --cov=hera_cal --cov-config=.coveragerc"
-
 [tool.pytest.ini_options]
+addopts = "--ignore=scripts --cov=hera_cal --cov-config=.coveragerc"
 filterwarnings = [
     "ignore:Fixing auto-correlations to be be real-only:UserWarning",
     'ignore:telescope_location is not set\. Using known values for HERA\.:UserWarning',
