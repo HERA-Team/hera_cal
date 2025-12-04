@@ -778,10 +778,10 @@ class LSTBinConfiguratorSingleBaseline():
 
         for _, input_files in self.bl_to_file_map.items():
             for visfile in input_files:
-                matches = re.findall(r"\d{7}", visfile)[0]  # find the JD in the filename
-                if len(matches) < 1:
-                    raise ValueError(f"Could not find a unique night in {visfile}.")
-                cal_file_path = cal_file_template.format(night=matches)
+                matched_night = next((n for n in self.nights if n in visfile), None)
+                if matched_night is None:
+                    raise ValueError(f"Could not find a known night in {visfile}.")
+                cal_file_path = cal_file_template.format(night=matched_night)
                 self.visfile_to_calfile_map[visfile] = cal_file_path
 
         return self.visfile_to_calfile_map
