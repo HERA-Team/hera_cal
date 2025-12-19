@@ -1958,7 +1958,7 @@ def compute_dtau(baseline, lat, dt):
     enu_to_eci = top2eq_m(np.zeros_like(dt), lat)
 
     # Figure out how much the Earth has rotated for each rephasing.
-    dphi = 2 * np.pi * np.atleast_1d(dt) / units.sday.to(units.s)
+    dphi = 2 * np.pi * np.atleast_1d(dt) / unt.sday.to(unt.s)
     eci_to_enu = eq2top_m(-dphi, lat)  # dt = t_new - t_old
 
     # Now get the full rotation for the phase center.
