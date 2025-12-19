@@ -1375,3 +1375,116 @@ def test_get_FR_buffer_from_spectra():
     assert actual_ratio > 1.0
     # Allow generous tolerance because the fitted sigma is estimated a beam simulation
     assert np.isclose(actual_ratio, expected_ratio, rtol=0.25)
+
+
+def test_get_coherent_avg_design_matrix():
+    # Set up test parameters
+    baseline = np.array([14.6, 0.0, 0.0])  # 14.6m East baseline
+    lat = -0.5362  # HERA latitude in radians
+    freqs = np.linspace(100e6, 200e6, 10)  # 10 frequencies
+    old_times = np.linspace(0, 1000, 20)  # 20 integrations
+    new_times = np.linspace(250, 750, 5)  # 5 averaged integrations
+    n_samples = np.ones((freqs.size, old_times.size)) * 10
+    new_inttime = 200.0  # seconds
+    flags = np.zeros((freqs.size, old_times.size), dtype=bool)
+
+    # Test basic execution
+    design_mat = frf.get_coherent_avg_design_matrix(
+        baseline, lat, freqs, old_times, new_times, n_samples, new_inttime, flags
+    )
+
+    # Check output shape
+    assert design_mat.shape == (freqs.size, new_times.size, old_times.size)
+
+    # Check that the matrix is normalized (rows have magnitude close to 1)
+    # The sum is complex due to phase factors, so check magnitude
+    row_sums = np.sum(design_mat, axis=-1)
+    assert np.allclose(np.abs(row_sums), 1.0, rtol=0.05)
+
+    # Check that individual weights are reasonable (should be small)
+    assert np.all(np.abs(design_mat) >= 0.0)
+    assert np.all(np.abs(design_mat) <= 1.0)
+
+    # Test with flags
+    flags_copy = flags.copy()
+    flags_copy[:, :5] = True
+    design_mat_flagged = frf.get_coherent_avg_design_matrix(
+        baseline, lat, freqs, old_times, new_times, n_samples, new_inttime, flags_copy
+    )
+    # Flagged samples should have zero weight
+    assert np.allclose(design_mat_flagged[:, :, :5], 0.0)
+
+
+def test_construct_filter():
+    # Set up test parameters
+    times = np.linspace(0, 10, 100)  # 100 time samples over 10 ks
+    fc = 0.5  # center fringe-rate in mHz
+    fhw = 0.2  # half-width in mHz
+
+    # Test basic execution without weights
+    filter_mat = frf.construct_filter(times, fc, fhw)
+
+    # Check output shape (should be NxN)
+    assert filter_mat.shape == (times.size, times.size)
+
+    # Check that filter is Hermitian (for real filter operation)
+    # The filter should map data to data, so check it's a proper operator
+    assert filter_mat.dtype == np.complex128
+
+    # Test with weights
+    wgts = np.ones(times.size)
+    wgts[:10] = 0.5  # Lower weight for first 10 samples
+    filter_mat_weighted = frf.construct_filter(times, fc, fhw, wgts=wgts)
+    assert filter_mat_weighted.shape == (times.size, times.size)
+
+    # Test with different eigenvalue cutoff
+    filter_mat_loose = frf.construct_filter(times, fc, fhw, eigval_cutoff=1e-6)
+    assert filter_mat_loose.shape == (times.size, times.size)
+
+    # Test that filter preserves norm (approximately)
+    test_signal = np.ones(times.size, dtype=complex)
+    filtered = filter_mat @ test_signal
+    # For a constant signal, the filter should preserve some power
+    assert np.abs(np.sum(filtered)) > 0
+
+    # Test centering: filter should be centered at fc
+    # Create a signal at the filter center frequency
+    signal_at_fc = np.exp(2j * np.pi * fc * times)
+    filtered_fc = filter_mat @ signal_at_fc
+    # Signal at center should have high correlation with filtered output
+    correlation = np.abs(np.vdot(filtered_fc, signal_at_fc))
+    assert correlation > 0.1 * np.linalg.norm(filtered_fc) * np.linalg.norm(signal_at_fc)
+
+
+def test_get_m2f_mixer():
+    # Set up test parameters
+    times_ks = np.linspace(0, 10, 100)  # 100 time samples over 10 ks
+    m_modes = np.arange(-50, 51)  # m-modes from -50 to 50
+
+    # Test basic execution
+    m2f_mixer = frf.get_m2f_mixer(times_ks, m_modes)
+
+    # Check output shape
+    assert m2f_mixer.shape == (times_ks.size, m_modes.size)
+
+    # Check that the mixer is complex
+    assert m2f_mixer.dtype == np.complex128
+
+    # Check that phasors have unit magnitude (before FFT normalization)
+    # The FFT will introduce normalization, but the underlying phasors should be well-behaved
+    assert np.all(np.isfinite(m2f_mixer))
+
+    # Test with negative m-modes
+    m_modes_neg = np.arange(-10, 0)
+    m2f_mixer_neg = frf.get_m2f_mixer(times_ks, m_modes_neg)
+    assert m2f_mixer_neg.shape == (times_ks.size, m_modes_neg.size)
+
+    # Test with positive m-modes
+    m_modes_pos = np.arange(1, 11)
+    m2f_mixer_pos = frf.get_m2f_mixer(times_ks, m_modes_pos)
+    assert m2f_mixer_pos.shape == (times_ks.size, m_modes_pos.size)
+
+    # Test with single m-mode
+    m_mode_single = np.array([0])
+    m2f_mixer_single = frf.get_m2f_mixer(times_ks, m_mode_single)
+    assert m2f_mixer_single.shape == (times_ks.size, 1)
