@@ -9,6 +9,7 @@ from hera_cal.noise import predict_noise_variance_from_autos
 from . import utils
 from scipy.interpolate import interp1d
 from scipy import optimize
+from scipy.signal.windows import dpss
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
 from pyuvdata import UVData, UVFlag, UVBeam
