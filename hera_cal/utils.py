@@ -1930,3 +1930,76 @@ def get_ENU_antpos(uvd: UVData, *, center=False, pick_data_ants=False, asdict: b
 def m2f(m_modes):
     """Convert m-modes to fringe-rates in mHz."""
     return m_modes / unt.sday.to(unt.ks)
+
+
+def compute_dtau(baseline, lat, dt):
+    """
+    Compute the delay associated with how much the phase center has drifted over time dt.
+    Based on Equations 21 and 22 from Zhang, Liu, & Parsons (2018).
+
+    Parameters
+    ----------
+    baseline
+        Baseline vector in ENU coordinates, in meters.
+    lat
+        Latitude of the array, in radians.
+    dt
+        Time difference for each integration being shifted to a common phase
+        center, in seconds.
+
+    Returns
+    -------
+    delta_tau
+        "Delay shift" due to drifting of the phase center, in seconds. When
+        multiplied by a frequency, this gives the number of cycles the
+        visibility phase has advanced for the given amount of Earth rotation.
+    """
+    # First, compute the ENU->ECEF rotation matrix.
+    enu_to_eci = top2eq_m(np.zeros_like(dt), lat)
+
+    # Figure out how much the Earth has rotated for each rephasing.
+    dphi = 2 * np.pi * np.atleast_1d(dt) / units.sday.to(units.s)
+    eci_to_enu = eq2top_m(-dphi, lat)  # dt = t_new - t_old
+
+    # Now get the full rotation for the phase center.
+    new_axes = (None,) * dphi.ndim
+    sl = new_axes + (slice(None),)*2
+    phase_rot = eci_to_enu @ enu_to_eci  # \Gamma in Equation 22
+
+    # Compute \Gamma \hat{s} - \hat{s} in Equation 22.
+    delta_nhat = phase_rot @ np.array([0,0,1]) - np.array([0,0,1])[new_axes]
+
+    # Rotate zenith and then compute the change in "delay".
+    return delta_nhat @ baseline / const.c.si.value
+
+
+def get_phase_factor(baseline, lat, freqs, dt):
+    """
+    Compute the difference in the visibility phase due to Earth rotation.
+
+    Parameters
+    ----------
+    baseline
+        Baseline vector in ENU coordinates, in meters.
+    lat
+        Latitude of the array, in radians.
+    freqs
+        Observed frequencies, in Hz.
+    dt
+        Time difference for each integration being shifted to a common phase
+        center, in seconds.
+
+    Returns
+    -------
+    phasor
+        Complex phasor characterizing the drift in the visibility phase due to
+        Earth rotation over the provided timescales `dt` at the observed
+        frequencies `freqs`.
+    """
+    # Phasing matrix will be shape (Nfreq, Ntimes_new, Ntimes_old)
+    freqs = np.atleast_1d(freqs)[:,None,None]
+    dtau = compute_dtau(baseline, lat, dt)[None,...]
+
+    # The accumulated phase is just the relative delay between the two zenith pointings,
+    # multiplied by the observing frequency and converted to radians.
+    return np.exp(2j * np.pi * dtau * freqs)
