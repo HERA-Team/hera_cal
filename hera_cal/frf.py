@@ -2313,3 +2313,62 @@ def get_correction_factor_from_cov(cov, tslc=None):
     correction_factor = np.mean(Ncotimes / Neff)  # Average over frequency since they are independent.
 
     return correction_factor
+
+
+def get_coherent_avg_design_matrix(
+    baseline, lat, freqs, old_times, new_times, n_samples, new_inttime, flags
+):
+    """
+    Compute the time-time matrix that encodes the coherent averaging operation.
+
+    Parameters
+    ----------
+
+    baseline
+        Baseline vector in ENU coordinates, in meters.
+    lat
+        Latitude of the array, in radians.
+    freqs
+        Observed frequencies, in Hz.
+    old_times
+        Time array prior to coherent averaging, in seconds.
+    new_times
+        Time array after coherent averaging, in seconds.
+    n_samples
+        Number of samples per-integration and per-frequency. Should have shape
+        `(freqs.size, old_times.size)`.
+    new_inttime
+        Integration time after the coherent average, in seconds.
+    flags
+        Boolean array of flags for each integration and frequency, with the
+        same shape as `n_samples`.
+
+    Returns
+    -------
+    design_mat
+        Design matrix encoding the coherent time average operator, accounting for
+        weighting by number of samples and rephasing from phase center drift. Has
+        shape `(freqs.size, new_times.size, old_times.size)`.
+    """
+    # Compute the amount of time between the original times and new times.
+    dt_mat = new_times[:,None] - old_times[None,:]
+
+    # Figure out how to phase to the new phase centers.
+    phasor = utils.get_phase_factor(baseline, lat, freqs, dt_mat)
+
+    # Convert flags to weights
+    flagw = (~flags).astype(float)
+
+    # Figure out how many samples go into the average and correctly inverse-variance weight.
+    if n_samples.ndim == 1:
+        n_samples = (flagw*n_samples)[None,:]
+    else:
+        # Assuming n_samples has shape (Nfreq, Ntimes_old)
+        n_samples = (flagw*n_samples)[:,None,:]
+
+    # Uniform per-integration noise => inverse variance weighting ~ weighting by nsamples
+    weights = np.where(np.abs(dt_mat) <= 0.5*new_inttime, n_samples, 0)
+    weights /= np.sum(weights, axis=-1, keepdims=True)
+
+    # The design matrix is just the weight multiplied by the phase factor.
+    return weights * phasor
