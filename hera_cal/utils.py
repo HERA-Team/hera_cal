@@ -1703,40 +1703,87 @@ def match_files_to_lst_bins(
 
 
 def eq2top_m(ha, dec):
-    """Return the 3x3 matrix converting equatorial coordinates to topocentric
-    at the given hour angle (ha) and declination (dec).
+    """
+    Vectorized equatorial-to-topocentric rotation matrix calculation.
 
-    Returned array has the number of ha's or dec's in the first dimension, so is
-    shape ``(Nha, 3, 3)``.
+    Adapted from pyuvdata, which borrowed from aipy.
 
-    Borrowed from pyuvdata which borrowed from aipy"""
+    Parameters
+    ----------
+    ha
+        Hour angle of position(s) on sky to compute the matrix, in radians.
+        May be provided as either an array or a float.
+    dec
+        Declination of position on sky to compute the matrix, in radians.
+        Assumed to be the same for all hour angles.
+
+    Returns
+    -------
+    eci_to_enu
+        Rotation matrix from equatorial coordinates to topocentric coordinates
+        for every provided hour angle. If ha is a float, then the output matrix
+        is a 3x3 array; if ha is an array, then the output is an array with shape
+        ha.shape + (3,3).
+    """
     sin_H, cos_H = np.sin(ha), np.cos(ha)
     sin_d, cos_d = np.sin(dec), np.cos(dec)
-    mat = np.array([[sin_H, cos_H, np.zeros_like(ha)],
-                    [-sin_d * cos_H, sin_d * sin_H, cos_d],
-                    [cos_d * cos_H, -cos_d * sin_H, sin_d]])
-    if len(mat.shape) == 3:
-        mat = mat.transpose([2, 0, 1])
-    return mat
+    if not isinstance(ha, np.ndarray):
+        out = np.array([[sin_H, cos_H, 0],
+                        [-sin_d * cos_H, sin_d * sin_H, cos_d],
+                        [cos_d * cos_H, -cos_d * sin_H, sin_d]])
+    else:
+        out = np.zeros(ha.shape + (3,3), dtype=float)
+        out[...,0,0] = sin_H
+        out[...,0,1] = cos_H
+        out[...,1,0] = -sin_d * cos_H
+        out[...,1,1] = sin_d * sin_H
+        out[...,1,2] = cos_d
+        out[...,2,0] = cos_d * cos_H
+        out[...,2,1] = -cos_d * sin_H
+        out[...,2,2] = sin_d
+    return out
 
 
 def top2eq_m(ha, dec):
-    """Return the 3x3 matrix converting topocentric coordinates to equatorial
-    at the given hour angle (ha) and declination (dec).
+    """
+    Vectorized topocentric-to-equatorial rotation matrix calculation.
 
-    Returned array has the number of ha's or dec's in the first dimension, so is
-    shape ``(Nha, 3, 3)``.
+    Adapted from pyuvdata, which borrowed from aipy.
 
-    Slightly changed from aipy to simply write the matrix instead of inverting.
-    Borrowed from pyuvdata."""
+    Parameters
+    ----------
+    ha
+        Hour angle of position(s) on sky to compute the matrix, in radians.
+        May be provided as either an array or a float.
+    dec
+        Declination of position on sky to compute the matrix, in radians.
+        Assumed to be the same for all hour angles.
+
+    Returns
+    -------
+    enu_to_eci
+        Rotation matrix from topocentric coordinates to equatorial coordinates
+        for every provided hour angle. If ha is a float, then the output matrix
+        is a 3x3 array; if ha is an array, then the output is an array with shape
+        ha.shape + (3,3).
+    """
     sin_H, cos_H = np.sin(ha), np.cos(ha)
     sin_d, cos_d = np.sin(dec), np.cos(dec)
-    mat = np.array([[sin_H, -cos_H * sin_d, cos_d * cos_H],
-                    [cos_H, sin_d * sin_H, -cos_d * sin_H],
-                    [np.zeros_like(ha), cos_d, sin_d]])
-    if len(mat.shape) == 3:
-        mat = mat.transpose([2, 0, 1])
-    return mat
+    if not isinstance(ha, np.ndarray):
+        out = np.array([[sin_H, -cos_H * sin_d, cos_d * cos_H],
+                        [cos_H, sin_d * sin_H, -cos_d * sin_H],
+                        [0, cos_d, sin_d]])
+    else:
+        out = np.zeros(ha.shape + (3,3), dtype=float)
+        out[...,0,0] = sin_H
+        out[...,0,1] = -cos_H * sin_d
+        out[...,0,2] = cos_d * cos_H
+        out[...,1,0] = cos_H
+        out[...,1,1] = sin_d * sin_H
+        out[...,1,2] = -cos_d * sin_H
+        out[...,2,1] = cos_d
+        out[...,2,2] = sin_d
+    return out
 
 
 def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
@@ -1878,3 +1925,8 @@ def get_ENU_antpos(uvd: UVData, *, center=False, pick_data_ants=False, asdict: b
         return {ant: pos for ant, pos in zip(ants, antpos)}
     else:
         return antpos, ants
+
+
+def m2f(m_modes):
+    """Convert m-modes to fringe-rates in mHz."""
+    return m_modes / unt.sday.to(unt.ks)
