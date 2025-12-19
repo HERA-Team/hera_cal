@@ -1732,15 +1732,15 @@ def eq2top_m(ha, dec):
                         [-sin_d * cos_H, sin_d * sin_H, cos_d],
                         [cos_d * cos_H, -cos_d * sin_H, sin_d]])
     else:
-        out = np.zeros(ha.shape + (3,3), dtype=float)
-        out[...,0,0] = sin_H
-        out[...,0,1] = cos_H
-        out[...,1,0] = -sin_d * cos_H
-        out[...,1,1] = sin_d * sin_H
-        out[...,1,2] = cos_d
-        out[...,2,0] = cos_d * cos_H
-        out[...,2,1] = -cos_d * sin_H
-        out[...,2,2] = sin_d
+        out = np.zeros(ha.shape + (3, 3), dtype=float)
+        out[..., 0, 0] = sin_H
+        out[..., 0, 1] = cos_H
+        out[..., 1, 0] = -sin_d * cos_H
+        out[..., 1, 1] = sin_d * sin_H
+        out[..., 1, 2] = cos_d
+        out[..., 2, 0] = cos_d * cos_H
+        out[..., 2, 1] = -cos_d * sin_H
+        out[..., 2, 2] = sin_d
     return out
 
 
@@ -1774,15 +1774,15 @@ def top2eq_m(ha, dec):
                         [cos_H, sin_d * sin_H, -cos_d * sin_H],
                         [0, cos_d, sin_d]])
     else:
-        out = np.zeros(ha.shape + (3,3), dtype=float)
-        out[...,0,0] = sin_H
-        out[...,0,1] = -cos_H * sin_d
-        out[...,0,2] = cos_d * cos_H
-        out[...,1,0] = cos_H
-        out[...,1,1] = sin_d * sin_H
-        out[...,1,2] = -cos_d * sin_H
-        out[...,2,1] = cos_d
-        out[...,2,2] = sin_d
+        out = np.zeros(ha.shape + (3, 3), dtype=float)
+        out[..., 0, 0] = sin_H
+        out[..., 0, 1] = -cos_H * sin_d
+        out[..., 0, 2] = cos_d * cos_H
+        out[..., 1, 0] = cos_H
+        out[..., 1, 1] = sin_d * sin_H
+        out[..., 1, 2] = -cos_d * sin_H
+        out[..., 2, 1] = cos_d
+        out[..., 2, 2] = sin_d
     return out
 
 
@@ -1963,11 +1963,11 @@ def compute_dtau(baseline, lat, dt):
 
     # Now get the full rotation for the phase center.
     new_axes = (None,) * dphi.ndim
-    sl = new_axes + (slice(None),)*2
+    sl = new_axes + (slice(None),) * 2
     phase_rot = eci_to_enu @ enu_to_eci  # \Gamma in Equation 22
 
     # Compute \Gamma \hat{s} - \hat{s} in Equation 22.
-    delta_nhat = phase_rot @ np.array([0,0,1]) - np.array([0,0,1])[new_axes]
+    delta_nhat = phase_rot @ np.array([0, 0, 1]) - np.array([0, 0, 1])[new_axes]
 
     # Rotate zenith and then compute the change in "delay".
     return delta_nhat @ baseline / const.c.si.value
@@ -1997,8 +1997,8 @@ def get_phase_factor(baseline, lat, freqs, dt):
         frequencies `freqs`.
     """
     # Phasing matrix will be shape (Nfreq, Ntimes_new, Ntimes_old)
-    freqs = np.atleast_1d(freqs)[:,None,None]
-    dtau = compute_dtau(baseline, lat, dt)[None,...]
+    freqs = np.atleast_1d(freqs)[:, None, None]
+    dtau = compute_dtau(baseline, lat, dt)[None, ...]
 
     # The accumulated phase is just the relative delay between the two zenith pointings,
     # multiplied by the observing frequency and converted to radians.

@@ -2012,9 +2012,9 @@ def read_m_mode_spectra_file(infile, antpair):
         all_spectra = h5f["erh_mode_power_spectrum"][()]
 
     if antpair in bl_to_index_map:
-        spectra = all_spectra[:,:,bl_to_index_map[antpair]]
+        spectra = all_spectra[:, :, bl_to_index_map[antpair]]
     elif antpair[::-1] in bl_to_index_map:
-        spectra = all_spectra[::-1,:,bl_to_index_map[antpair[::-1]]]
+        spectra = all_spectra[::-1, :, bl_to_index_map[antpair[::-1]]]
     else:
         raise ValueError("Requested antenna pair not found in spectra file.")
 
