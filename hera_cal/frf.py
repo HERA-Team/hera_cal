@@ -2372,3 +2372,69 @@ def get_coherent_avg_design_matrix(
 
     # The design matrix is just the weight multiplied by the phase factor.
     return weights * phasor
+
+
+def construct_filter(times, fc, fhw, eigval_cutoff=1e-12, wgts=None):
+    """Compute the time-domain DPSS filter matrix.
+
+    This function essentially computes a generalization of Eq. 3.17 from Pascua+ 2024
+    to allow for non-uniform weighting in time. If the DPSS filter design matrix is A,
+    and the weights are W, then the filter matrix T is
+
+            T = A @ (A^\dag @ W @ A)^{-1} @ (W @ A)^\dag.
+
+    The design matrix A is Eq. 3.14 from Pascua+ 2024.
+
+    Parameters
+    ----------
+    times
+        Array of observing times, in conjugate units to ``fc`` and ``fhw`` so
+        that the products ``times*fc`` and ``times*fhw`` are dimensionless.
+        For example, if ``fhw`` and ``fc`` are provided in mHz, then ``times``
+        must be provided in ks.
+    fc
+        Central fringe-rate of the desired top-hat filter, in conjugate units
+        to ``times``.
+    fhw
+        Half-width of the desired top-hat fringe-rate filter, in conjugate
+        units to ``times``.
+    eigval_cutoff
+        Minimum eigenvalue of the DPSS modes to use for filtering. Any DPSS
+        modes with a corresponding eigenvalue below this cutoff will be
+        excluded from the filter.
+    wgts
+        Array of weights for each of the provided times.
+
+    Returns
+    -------
+    filter_design_matrix
+        Time-time fringe-rate filter design matrix.
+    """
+    if wgts is None:
+        wgts = np.ones(times.size)
+
+    # Compute the phasor for shifting the DPSS modes to the filter center.
+    frf_phasor = np.exp(-2j * np.pi * fc * (times-times.mean()))
+
+    # Compute the B*W parameter for defining the DPSS modes.
+    half_bandwidth = (times[-1] - times[0]) * fhw
+
+    # Approximation for the extra number of modes to compute beyond 2*B*W
+    n_extra_modes = int(
+        4 * np.log(4*times.size) * np.log(4/eigval_cutoff) / np.pi**2
+    )
+
+    # Generate the DPSS modes used for filtering.
+    n_modes = int(2 * half_bandwidth) + n_extra_modes
+    modes, eigvals = dpss(
+        times.size, half_bandwidth, Kmax=n_modes, return_ratios=True
+    )
+
+    # Apply the eigenvalue cutoff and rephase to the filter center.
+    cut = np.argwhere(eigvals >= eigval_cutoff).flatten()[-1]
+    modes = modes[:cut].T * frf_phasor[:,None]  # Shape (n_times, n_dpss)
+
+    # Compute the filter matrix according to a weighted least-squares fit.
+    ATW = modes.T.conj() * wgts
+
+    return modes @ np.linalg.solve(ATW @ modes, ATW)
