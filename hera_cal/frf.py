@@ -2438,3 +2438,24 @@ def construct_filter(times, fc, fhw, eigval_cutoff=1e-12, wgts=None):
     ATW = modes.T.conj() * wgts
 
     return modes @ np.linalg.solve(ATW @ modes, ATW)
+
+
+def get_m2f_mixer(times_ks, m_modes):
+    """Compute the transformation matrix from m-modes to fringe-rates.
+
+    Parameters
+    ----------
+    times_ks
+        Observation times, in ks.
+    m_modes
+        m-modes for the spectrum to be transformed into a fringe-rate covariance.
+
+    Returns
+    -------
+    m2f_mixer
+        (Nfrates, Nmodes) transformation matrix.
+    """
+    m2f_phasors = np.exp(2j * np.pi * utils.m2f(m_modes)[None,:] * times_ks[:,None])
+    return np.fft.fftshift(
+        np.fft.fft(np.fft.ifftshift(m2f_phasors, axes=0), axis=0), axes=0
+    )
