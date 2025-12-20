@@ -629,20 +629,31 @@ def flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5,
             flags[ant] |= np.ones_like(flags[ant])  # flag the whole antenna
 
 
-def pick_reference_antenna(gains, flags, freqs, per_pol=True):
+def pick_reference_antenna(gains, flags, freqs, per_pol=True, acceptable_candidate_frac=0.0, antpos=None):
     '''Pick a refrence antenna that has the minimum number of per-antenna flags and produces
     the least noisy phases on other antennas when used as a reference antenna.
 
     Arguments:
         gains: Dictionary mapping antenna keys to gain waterfalls.
-        flags: dictionary mapping antenna keys to flag waterfall where True means flagged
+        flags: Dictionary mapping antenna keys to flag waterfall where True means flagged
         freqs: ndarray of frequency channels in Hz
+        per_pol: If True, pick a reference antenna for each polarization. If False, pick a single
+            reference antenna to serve for both polarizations.
+        acceptable_candidate_frac: Float between 0 and 1. If > 0 and antpos is provided, select the reference
+            antenna from the top acceptable_candidate_frac of least variable antennas based on proximity to
+            the array center. Default 0.0 picks the least variable antenna.
+        antpos: Optional dictionary mapping antenna numbers to antenna positions (e.g., ENU coordinates).
+            If provided along with acceptable_candidate_frac > 0, the reference antenna will be selected from
+            the top acceptable_candidate_frac of least variable antennas based on proximity to the array center.
 
     Returns:
         refant: key(s) of the antenna(s) with the minimum number of flags and the least noisy phases
             if per_pol: dictionary mapping gain polarizations string to ant-pol tuples
             else: ant-pol tuple e.g. (0, 'Jxx')
     '''
+    if antpos is None and acceptable_candidate_frac > 0.0:
+        raise ValueError("antpos must be provided if acceptable_candidate_frac > 0.0")
+
     # compute delay for all gains to flatten them as well as possible. Average over times.
     rephasors = {}
     for ant in gains.keys():
@@ -661,6 +672,16 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
             median_angle_noise_as_refant[ref] = np.median(angle_noise)
         return sorted(median_angle_noise_as_refant, key=median_angle_noise_as_refant.__getitem__)[0]
 
+    def select_closest_to_center(candidates, antpos, flags):
+        '''Helper function to select the antenna closest to the center of unflagged antennas.'''
+        # Calculate center from unflagged antenna positions
+        unflagged_ants = [ant for ant in gains.keys() if not np.all(flags[ant])]
+        unflagged_ant_nums = [ant[0] for ant in unflagged_ants if ant[0] in antpos]
+        center = np.mean([antpos[ant_num] for ant_num in unflagged_ant_nums], axis=0)
+
+        # Return candidate closest to center
+        return sorted(candidates, key=lambda ant: np.linalg.norm(antpos[ant[0]] - center))[0]
+
     # loop over pols (if per_pol)
     refant = {}
     pols = set([ant[1] for ant in gains])
@@ -669,14 +690,27 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
         flags_per_ant = {ant: np.sum(f) for ant, f in flags.items() if ant[1] in pol}
         refant_candidates = sorted([ant for ant, nflags in flags_per_ant.items()
                                     if nflags == np.min(list(flags_per_ant.values()))])
-        while len(refant_candidates) > 1:  # loop over groups of 3 (the smallest, non-trivial size)
+
+        # Determine the original number of candidates for threshold calculation
+        original_num_candidates = len(refant_candidates)
+        threshold_num = max(1, int(np.ceil(acceptable_candidate_frac * original_num_candidates)))
+
+        # Narrow down candidates using noise-based selection until threshold is reached
+        while len(refant_candidates) > threshold_num:
             # compare phase noise imparted by reference antenna candidates on two other reference antenna candidates
             refant_candidates = [narrow_refant_candidates(candidates) for candidates in [refant_candidates[i:i + 3]
                                  for i in range(0, len(refant_candidates), 3)]]
-        if not per_pol:
-            return refant_candidates[0]
+
+        # If antpos is provided and acceptable_candidate_frac > 0, select the antenna closest to the array center
+        if antpos is not None and acceptable_candidate_frac > 0.0 and len(refant_candidates) > 1:
+            selected_refant = select_closest_to_center(refant_candidates, antpos, flags)
         else:
-            refant[pol] = refant_candidates[0]
+            selected_refant = refant_candidates[0]
+
+        if not per_pol:
+            return selected_refant
+        else:
+            refant[pol] = selected_refant
 
     return refant
 
