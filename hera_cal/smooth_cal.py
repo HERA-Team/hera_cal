@@ -867,6 +867,7 @@ class CalibrationSmoother():
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
                  waterfall_blacklist={}, blacklist_wgt=0.0, pick_refant=False, propagate_refant_flags=False, per_pol_refant=True,
+                 acceptable_candidate_frac=0.0, antpos=None,
                  freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, ignore_calflags=False, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
@@ -920,6 +921,13 @@ class CalibrationSmoother():
                 is not flagged, a ValueError will be raised. Ignored if pick_refant is False.
             per_pol_refant: if True (default), pick a reference antenna for each polarization. If False, pick a single
                 reference antenna to serve for both polarization.
+            acceptable_candidate_frac: Float between 0 and 1. If > 0 and antpos is provided, select the reference
+                antenna from the top acceptable_candidate_frac of least variable antennas based on proximity to
+                the array center. Default 0.0 picks the least variable antenna. Only used if pick_refant is True.
+            antpos: Optional dictionary mapping antenna numbers to antenna positions (e.g., ENU coordinates).
+                If provided along with acceptable_candidate_frac > 0, the reference antenna will be selected from
+                the top acceptable_candidate_frac of least variable antennas based on proximity to the center of
+                unflagged antennas. Only used if pick_refant is True.
             freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
                 for all channels. If the ratio of of such times for a given channel compared to all times that are not
                 completely flagged is greater than freq_threshold, flag the entire channel for all antennas.
@@ -1016,7 +1024,8 @@ class CalibrationSmoother():
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
             utils.echo('Now picking reference antenna(s)...', verbose=self.verbose)
-            self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=per_pol_refant)
+            self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=per_pol_refant,
+                                                 acceptable_candidate_frac=acceptable_candidate_frac, antpos=antpos)
             if per_pol_refant:
                 utils.echo('\n'.join([f'Reference Antenna {self.refant[pol][0]} selected for {pol}.'
                                       for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
