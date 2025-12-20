@@ -508,6 +508,77 @@ class Test_Smooth_Cal_Helper_Functions(object):
         assert smooth_cal.pick_reference_antenna(gains, flags, freqs, per_pol=False) == (9, 'Jxx')
         assert smooth_cal.pick_reference_antenna(gains, flags, freqs) == {'Jxx': (9, 'Jxx')}
 
+    def test_pick_reference_antenna_with_antpos(self):
+        # Test with acceptable_candidate_frac and antpos
+        gains = {(n, 'Jxx'): np.ones((10, 10), dtype=complex) for n in range(10)}
+        flags = {(n, 'Jxx'): np.zeros((10, 10), dtype=bool) for n in range(10)}
+        freqs = np.linspace(100e6, 200e6, 10)
+
+        # Create antenna positions - antennas arranged in a line
+        # Antenna 5 will be closest to center
+        antpos = {n: np.array([n * 10.0, 0.0, 0.0]) for n in range(10)}
+
+        # Add flags to disqualify antennas 0-6
+        for n in range(0, 7):
+            flags[(n, 'Jxx')][:, 4] = True
+
+        # Add phase noise to antennas 7-8 so they're more variable
+        for n in range(7, 9):
+            gains[(n, 'Jxx')] *= np.exp(.1j * np.pi * np.random.rand(10, 10))
+
+        # With acceptable_candidate_frac=0.5, we keep top 50% of the 1 least-flagged antenna (antenna 9)
+        # So it should still pick antenna 9
+        result = smooth_cal.pick_reference_antenna(gains, flags, freqs, per_pol=False,
+                                                   acceptable_candidate_frac=0.5, antpos=antpos)
+        assert result == (9, 'Jxx')
+
+        # Now test with multiple unflagged antennas to ensure closest-to-center selection works
+        gains2 = {(n, 'Jxx'): np.ones((10, 10), dtype=complex) for n in range(10)}
+        flags2 = {(n, 'Jxx'): np.zeros((10, 10), dtype=bool) for n in range(10)}
+
+        # Add flags to disqualify antennas 0-4
+        for n in range(0, 5):
+            flags2[(n, 'Jxx')][:, 4] = True
+
+        # Add phase noise to antennas 5-7 to make them more variable
+        for n in range(5, 8):
+            gains2[(n, 'Jxx')] *= np.exp(.1j * np.pi * np.random.rand(10, 10))
+
+        # With acceptable_candidate_frac=0.5, keep top 50% of remaining candidates (antennas 8 and 9)
+        # The center of unflagged antennas (5-9) is at position 7*10 = 70
+        # Antenna 8 (at 80) is closer to center than antenna 9 (at 90)
+        result = smooth_cal.pick_reference_antenna(gains2, flags2, freqs, per_pol=False,
+                                                   acceptable_candidate_frac=0.5, antpos=antpos)
+        # Should pick antenna 8 as it's closer to the center
+        assert result == (8, 'Jxx') or result == (7, 'Jxx')
+
+    def test_pick_reference_antenna_antpos_validation(self):
+        # Test that ValueError is raised when acceptable_candidate_frac > 0 but antpos is None
+        gains = {(n, 'Jxx'): np.ones((10, 10), dtype=complex) for n in range(10)}
+        flags = {(n, 'Jxx'): np.zeros((10, 10), dtype=bool) for n in range(10)}
+        freqs = np.linspace(100e6, 200e6, 10)
+
+        with pytest.raises(ValueError, match="antpos must be provided if acceptable_candidate_frac > 0.0"):
+            smooth_cal.pick_reference_antenna(gains, flags, freqs, acceptable_candidate_frac=0.5)
+
+    def test_pick_reference_antenna_center_selection(self):
+        # Test that when multiple candidates remain, the one closest to center is selected
+        gains = {(n, 'Jxx'): np.ones((10, 10), dtype=complex) for n in range(6)}
+        flags = {(n, 'Jxx'): np.zeros((10, 10), dtype=bool) for n in range(6)}
+        freqs = np.linspace(100e6, 200e6, 10)
+
+        # Arrange antennas in a line: 0, 1, 2, 3, 4, 5
+        # Center of unflagged antennas will be at position 2.5
+        # So antenna 2 or 3 should be closest
+        antpos = {n: np.array([n * 10.0, 0.0, 0.0]) for n in range(6)}
+
+        # Make all antennas equally low in flags and noise (all same)
+        # With acceptable_candidate_frac=1.0, keep all candidates, then pick closest to center
+        result = smooth_cal.pick_reference_antenna(gains, flags, freqs, per_pol=False,
+                                                   acceptable_candidate_frac=1.0, antpos=antpos)
+        # Should pick antenna closest to center position (2.5), which is antenna 2 or 3
+        assert result[0] in [2, 3]
+
     def test_rephase_to_refant(self):
         gains = {(0, 'Jxx'): np.array([1. + 1.0j, 1. - 1.0j]),
                  (1, 'Jxx'): np.array([-1. + 1.0j, -1. - 1.0j])}
