@@ -1988,6 +1988,38 @@ def read_redcal_meta(meta_filename):
     return fc_meta, omni_meta, freqs, times, lsts, antpos, history
 
 
+def read_m_mode_spectra_file(infile, antpair):
+    '''Read in the m-mode spectra for the provided antenna pair.
+
+    Arguments:
+        infile: Path to spectra file.
+        antpair: Which antenna pair to retrieve the spectra for.
+
+    Returns:
+        spectra: m-mode spectra with shape (Nmodes, Nfreqs)
+        freqs: Frequency for each m-mode spectrum, in Hz.
+        m_modes: m-modes for each spectrum.
+    '''
+    with h5py.File(infile, "r") as h5f:
+        metadata = h5f["metadata"]
+        bl_to_index_map = {
+            (int(ai), int(aj)): int(index)
+            for index, antpairs in metadata["baseline_groups"].items()
+            for ai, aj in antpairs
+        }
+        m_modes = metadata["erh_mode_integer_index"][()]
+        freqs = metadata["frequencies_MHz"][()] * 1e6
+        all_spectra = h5f["erh_mode_power_spectrum"][()]
+
+    if antpair in bl_to_index_map:
+        spectra = all_spectra[:, :, bl_to_index_map[antpair]]
+    elif antpair[::-1] in bl_to_index_map:
+        spectra = all_spectra[::-1, :, bl_to_index_map[antpair[::-1]]]
+    else:
+        raise ValueError("Requested antenna pair not found in spectra file.")
+
+    return spectra, freqs, m_modes
+
 #######################################################################
 #                             LEGACY CODE
 #######################################################################

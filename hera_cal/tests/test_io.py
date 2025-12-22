@@ -1907,3 +1907,63 @@ def test_pol2str():
     assert io._pol2str(np.array([-7])[0], x_orientation=None) == "xy"
     assert io._pol2str(np.array([-7])[0], x_orientation=None, jpol=True) == "Jxy"
     assert io._pol2str(np.array(["-7,-8"])[0], x_orientation=None, jpol=False) == "xy,yx"
+
+
+def test_read_m_mode_spectra_file(tmp_path):
+    import h5py
+
+    # Create a temporary HDF5 file with mock m-mode spectra
+    test_file = tmp_path / "test_m_mode_spectra.h5"
+
+    # Set up test data
+    n_modes = 21
+    n_freqs = 10
+    n_baselines = 3
+    m_modes = np.arange(-10, 11)
+    freqs_MHz = np.linspace(100, 200, n_freqs)
+    baseline_groups = {
+        '0': [(0, 1), (2, 3)],
+        '1': [(4, 5)],
+        '2': [(6, 7)]
+    }
+    spectra = np.random.randn(n_modes, n_freqs, n_baselines) + 1j * np.random.randn(n_modes, n_freqs, n_baselines)
+
+    # Create the HDF5 file
+    with h5py.File(test_file, 'w') as h5f:
+        metadata = h5f.create_group('metadata')
+        metadata.create_dataset('erh_mode_integer_index', data=m_modes)
+        metadata.create_dataset('frequencies_MHz', data=freqs_MHz)
+
+        # Create baseline_groups as a nested structure
+        bl_grp = metadata.create_group('baseline_groups')
+        for index, antpairs in baseline_groups.items():
+            bl_grp.create_dataset(index, data=np.array(antpairs))
+
+        h5f.create_dataset('erh_mode_power_spectrum', data=spectra)
+
+    # Test reading antenna pair (0, 1) which is in group 0, index 0
+    antpair = (0, 1)
+    spectra_out, freqs_out, m_modes_out = io.read_m_mode_spectra_file(str(test_file), antpair)
+
+    assert spectra_out.shape == (n_modes, n_freqs)
+    assert freqs_out.shape == (n_freqs,)
+    assert m_modes_out.shape == (n_modes,)
+    np.testing.assert_array_equal(m_modes_out, m_modes)
+    np.testing.assert_allclose(freqs_out, freqs_MHz * 1e6)
+    np.testing.assert_array_equal(spectra_out, spectra[:, :, 0])
+
+    # Test reading antenna pair (4, 5) which is in group 1, index 0
+    antpair = (4, 5)
+    spectra_out, freqs_out, m_modes_out = io.read_m_mode_spectra_file(str(test_file), antpair)
+    np.testing.assert_array_equal(spectra_out, spectra[:, :, 1])
+
+    # Test reading conjugated antenna pair
+    antpair = (1, 0)  # Conjugate of (0, 1)
+    spectra_out, freqs_out, m_modes_out = io.read_m_mode_spectra_file(str(test_file), antpair)
+    # Should reverse m-modes for conjugated baseline
+    np.testing.assert_array_equal(spectra_out, spectra[::-1, :, 0])
+
+    # Test reading non-existent antenna pair
+    antpair = (99, 100)
+    with pytest.raises(ValueError, match="Requested antenna pair not found"):
+        io.read_m_mode_spectra_file(str(test_file), antpair)

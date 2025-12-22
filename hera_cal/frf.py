@@ -9,6 +9,7 @@ from hera_cal.noise import predict_noise_variance_from_autos
 from . import utils
 from scipy.interpolate import interp1d
 from scipy import optimize
+from scipy.signal.windows import dpss
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
 from pyuvdata import UVData, UVFlag, UVBeam
@@ -2313,3 +2314,149 @@ def get_correction_factor_from_cov(cov, tslc=None):
     correction_factor = np.mean(Ncotimes / Neff)  # Average over frequency since they are independent.
 
     return correction_factor
+
+
+def get_coherent_avg_design_matrix(
+    baseline, lat, freqs, old_times, new_times, n_samples, new_inttime, flags
+):
+    """
+    Compute the time-time matrix that encodes the coherent averaging operation.
+
+    Parameters
+    ----------
+
+    baseline
+        Baseline vector in ENU coordinates, in meters.
+    lat
+        Latitude of the array, in radians.
+    freqs
+        Observed frequencies, in Hz.
+    old_times
+        Time array prior to coherent averaging, in seconds.
+    new_times
+        Time array after coherent averaging, in seconds.
+    n_samples
+        Number of samples per-integration and per-frequency. Should have shape
+        `(freqs.size, old_times.size)`.
+    new_inttime
+        Integration time after the coherent average, in seconds.
+    flags
+        Boolean array of flags for each integration and frequency, with the
+        same shape as `n_samples`.
+
+    Returns
+    -------
+    design_mat
+        Design matrix encoding the coherent time average operator, accounting for
+        weighting by number of samples and rephasing from phase center drift. Has
+        shape `(freqs.size, new_times.size, old_times.size)`.
+    """
+    # Compute the amount of time between the original times and new times.
+    dt_mat = new_times[:, None] - old_times[None, :]
+
+    # Figure out how to phase to the new phase centers.
+    phasor = utils.get_phase_factor(baseline, lat, freqs, dt_mat)
+
+    # Convert flags to weights
+    flagw = (~flags).astype(float)
+
+    # Figure out how many samples go into the average and correctly inverse-variance weight.
+    if n_samples.ndim == 1:
+        n_samples = (flagw * n_samples)[None, :]
+    else:
+        # Assuming n_samples has shape (Nfreq, Ntimes_old)
+        n_samples = (flagw * n_samples)[:, None, :]
+
+    # Uniform per-integration noise => inverse variance weighting ~ weighting by nsamples
+    weights = np.where(np.abs(dt_mat) <= 0.5 * new_inttime, n_samples, 0)
+    weights /= np.sum(weights, axis=-1, keepdims=True)
+
+    # The design matrix is just the weight multiplied by the phase factor.
+    return weights * phasor
+
+
+def construct_filter(times, fc, fhw, eigval_cutoff=1e-12, wgts=None):
+    r"""Compute the time-domain DPSS filter matrix.
+
+    This function essentially computes a generalization of Eq. 3.17 from Pascua+ 2024
+    to allow for non-uniform weighting in time. If the DPSS filter design matrix is A,
+    and the weights are W, then the filter matrix T is
+
+            T = A @ (A^\dag @ W @ A)^{-1} @ (W @ A)^\dag.
+
+    The design matrix A is Eq. 3.14 from Pascua+ 2024.
+
+    Parameters
+    ----------
+    times
+        Array of observing times, in conjugate units to ``fc`` and ``fhw`` so
+        that the products ``times*fc`` and ``times*fhw`` are dimensionless.
+        For example, if ``fhw`` and ``fc`` are provided in mHz, then ``times``
+        must be provided in ks.
+    fc
+        Central fringe-rate of the desired top-hat filter, in conjugate units
+        to ``times``.
+    fhw
+        Half-width of the desired top-hat fringe-rate filter, in conjugate
+        units to ``times``.
+    eigval_cutoff
+        Minimum eigenvalue of the DPSS modes to use for filtering. Any DPSS
+        modes with a corresponding eigenvalue below this cutoff will be
+        excluded from the filter.
+    wgts
+        Array of weights for each of the provided times.
+
+    Returns
+    -------
+    filter_design_matrix
+        Time-time fringe-rate filter design matrix.
+    """
+    if wgts is None:
+        wgts = np.ones(times.size)
+
+    # Compute the phasor for shifting the DPSS modes to the filter center.
+    frf_phasor = np.exp(-2j * np.pi * fc * (times - times.mean()))
+
+    # Compute the B*W parameter for defining the DPSS modes.
+    half_bandwidth = (times[-1] - times[0]) * fhw
+
+    # Approximation for the extra number of modes to compute beyond 2*B*W
+    n_extra_modes = int(
+        4 * np.log(4 * times.size) * np.log(4 / eigval_cutoff) / np.pi**2
+    )
+
+    # Generate the DPSS modes used for filtering.
+    n_modes = int(2 * half_bandwidth) + n_extra_modes
+    modes, eigvals = dpss(
+        times.size, half_bandwidth, Kmax=n_modes, return_ratios=True
+    )
+
+    # Apply the eigenvalue cutoff and rephase to the filter center.
+    cut = np.argwhere(eigvals >= eigval_cutoff).flatten()[-1]
+    modes = modes[:cut].T * frf_phasor[:, None]  # Shape (n_times, n_dpss)
+
+    # Compute the filter matrix according to a weighted least-squares fit.
+    ATW = modes.T.conj() * wgts
+
+    return modes @ np.linalg.solve(ATW @ modes, ATW)
+
+
+def get_m2f_mixer(times_ks, m_modes):
+    """Compute the transformation matrix from m-modes to fringe-rates.
+
+    Parameters
+    ----------
+    times_ks
+        Observation times, in ks.
+    m_modes
+        m-modes for the spectrum to be transformed into a fringe-rate covariance.
+
+    Returns
+    -------
+    m2f_mixer
+        (Nfrates, Nmodes) transformation matrix.
+    """
+    m2f_phasors = np.exp(2j * np.pi * utils.m2f(m_modes)[None, :] * times_ks[:, None])
+    return np.fft.fftshift(
+        np.fft.fft(np.fft.ifftshift(m2f_phasors, axes=0), axis=0), axes=0
+    )
