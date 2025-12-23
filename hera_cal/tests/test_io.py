@@ -1926,7 +1926,7 @@ def test_read_m_mode_spectra_file(tmp_path):
         '1': [(4, 5)],
         '2': [(6, 7)]
     }
-    spectra = np.random.randn(n_modes, n_freqs, n_baselines) + 1j * np.random.randn(n_modes, n_freqs, n_baselines)
+    spectra = np.random.randn(n_modes, n_freqs, n_baselines) ** 2
 
     # Create the HDF5 file
     with h5py.File(test_file, 'w') as h5f:
