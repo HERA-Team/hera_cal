@@ -1428,8 +1428,7 @@ def test_construct_filter():
     assert filter_mat.shape == (times.size, times.size)
 
     # Check that filter is Hermitian (for real filter operation)
-    # The filter should map data to data, so check it's a proper operator
-    assert filter_mat.dtype == np.complex128
+    assert np.allclose(filter_mat, filter_mat.T.conj())
 
     # Test with weights
     wgts = np.ones(times.size)
@@ -1437,23 +1436,36 @@ def test_construct_filter():
     filter_mat_weighted = frf.construct_filter(times, fc, fhw, wgts=wgts)
     assert filter_mat_weighted.shape == (times.size, times.size)
 
-    # Test with different eigenvalue cutoff
-    filter_mat_loose = frf.construct_filter(times, fc, fhw, eigval_cutoff=1e-6)
-    assert filter_mat_loose.shape == (times.size, times.size)
+    # Test that filtered power is less than input power.
+    test_signal = np.random.normal(
+        size=times.size
+    ) + 1j*np.random.normal(size=times.size)
+    filtered_signal = filter_mat @ test_signal
+    filtered_power = filtered_signal @ filtered_signal.conj()
+    input_power = test_signal @ test_signal.conj()
+    assert filtered_power < input_power
+    assert filtered_power > 0
 
-    # Test that filter preserves norm (approximately)
-    test_signal = np.ones(times.size, dtype=complex)
-    filtered = filter_mat @ test_signal
-    # For a constant signal, the filter should preserve some power
-    assert np.abs(np.sum(filtered)) > 0
+    # Test that smaller cutoff leads to more power retained.
+    cutoffs = [0.9, 1e-4, 1e-8]
+    filtered_powers = []
+    for cutoff in cutoffs:
+        _filter_mat = frf.construct_filter(times, fc, fhw, eigval_cutoff=cutoff)
+        filtered_signal = _filter_mat @ test_signal
+        filtered_powers.append(filtered_signal @ filtered_signal.conj())
+    assert all(filtered_power < input_power for filtered_power in filtered_powers)
 
     # Test centering: filter should be centered at fc
     # Create a signal at the filter center frequency
-    signal_at_fc = np.exp(2j * np.pi * fc * times)
-    filtered_fc = filter_mat @ signal_at_fc
-    # Signal at center should have high correlation with filtered output
-    correlation = np.abs(np.vdot(filtered_fc, signal_at_fc))
-    assert correlation > 0.1 * np.linalg.norm(filtered_fc) * np.linalg.norm(signal_at_fc)
+    signal_at_fc = np.exp(-2j * np.pi * fc * times)
+    filtered_signal = filter_mat @ signal_at_fc
+    assert np.allclose(signal_at_fc, filtered_signal)
+
+    out_of_band_signal = np.exp(2j * np.pi * fc * times)
+    filtered_signal = filter_mat @ out_of_band_signal
+    filtered_power = filtered_signal @ filtered_signal.conj()
+    input_power = out_of_band_signal @ out_of_band_signal.conj()
+    assert (filtered_power / input_power) < 0.1
 
 
 def test_get_m2f_mixer():
@@ -1467,24 +1479,13 @@ def test_get_m2f_mixer():
     # Check output shape
     assert m2f_mixer.shape == (times_ks.size, m_modes.size)
 
-    # Check that the mixer is complex
-    assert m2f_mixer.dtype == np.complex128
+    # Check matrix normalization makes sense.
+    assert np.allclose(np.diag(m2f_mixer.T.conj() @ m2f_mixer), times_ks.size**2)
 
-    # Check that phasors have unit magnitude (before FFT normalization)
-    # The FFT will introduce normalization, but the underlying phasors should be well-behaved
-    assert np.all(np.isfinite(m2f_mixer))
-
-    # Test with negative m-modes
-    m_modes_neg = np.arange(-10, 0)
-    m2f_mixer_neg = frf.get_m2f_mixer(times_ks, m_modes_neg)
-    assert m2f_mixer_neg.shape == (times_ks.size, m_modes_neg.size)
-
-    # Test with positive m-modes
-    m_modes_pos = np.arange(1, 11)
-    m2f_mixer_pos = frf.get_m2f_mixer(times_ks, m_modes_pos)
-    assert m2f_mixer_pos.shape == (times_ks.size, m_modes_pos.size)
-
-    # Test with single m-mode
-    m_mode_single = np.array([0])
-    m2f_mixer_single = frf.get_m2f_mixer(times_ks, m_mode_single)
-    assert m2f_mixer_single.shape == (times_ks.size, 1)
+    # Check that the mixing matrix converges to the identity when expected.
+    # (Up to an overall normalization factor.)
+    dt = u.sday.to(u.ks) / m_modes.size
+    times_ks = np.arange(m_modes.size) * dt
+    m2f_mixer = frf.get_m2f_mixer(times_ks, m_modes)
+    scale = np.abs(np.diag(m2f_mixer)).mean()
+    assert np.allclose(np.abs(m2f_mixer), scale*np.eye(m_modes.size))
