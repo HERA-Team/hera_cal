@@ -1439,7 +1439,7 @@ def test_construct_filter():
     # Test that filtered power is less than input power.
     test_signal = np.random.normal(
         size=times.size
-    ) + 1j*np.random.normal(size=times.size)
+    ) + 1j * np.random.normal(size=times.size)
     filtered_signal = filter_mat @ test_signal
     filtered_power = filtered_signal @ filtered_signal.conj()
     input_power = test_signal @ test_signal.conj()
@@ -1488,4 +1488,4 @@ def test_get_m2f_mixer():
     times_ks = np.arange(m_modes.size) * dt
     m2f_mixer = frf.get_m2f_mixer(times_ks, m_modes)
     scale = np.abs(np.diag(m2f_mixer)).mean()
-    assert np.allclose(np.abs(m2f_mixer), scale*np.eye(m_modes.size))
+    assert np.allclose(np.abs(m2f_mixer), scale * np.eye(m_modes.size))
