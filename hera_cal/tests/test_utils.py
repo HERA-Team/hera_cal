@@ -1264,6 +1264,12 @@ def test_compute_dtau():
     dtau_2d = utils.compute_dtau(baseline, lat, dt_2d)
     assert dtau_2d.shape == dt_2d.shape
 
+    # Test that delay is ~zero for NS baseline at equator
+    baseline = np.array([0.0, 10.0, 0.0])
+    lat = 0
+    dt = np.array([30.0, 50.0])
+    dtau = utils.compute_dtau(baseline, lat, dt)
+    assert np.all(dtau == 0)
 
 def test_get_phase_factor():
     # Test with simple parameters
