@@ -1271,6 +1271,7 @@ def test_compute_dtau():
     dtau = utils.compute_dtau(baseline, lat, dt)
     assert np.all(dtau == 0)
 
+
 def test_get_phase_factor():
     # Test with simple parameters
     baseline = np.array([10.0, 0.0, 0.0])
