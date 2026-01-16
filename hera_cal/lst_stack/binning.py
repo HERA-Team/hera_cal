@@ -432,8 +432,8 @@ def lst_bin_files_for_baselines(
             cal_file_loader_kwargs['lst_bin_edges'] = lst_bin_edges
 
         # Add telescope location if not already present
-        if 'telescope_location' not in cal_file_loader_kwargs:
-            cal_file_loader_kwargs['telescope_location'] = metas[0].telescope_location
+        if 'telescope_location_lat_lon_alt_degrees' not in cal_file_loader_kwargs:
+            cal_file_loader_kwargs['telescope_location_lat_lon_alt_degrees'] = metas[0].telescope_location_lat_lon_alt_degrees
 
     if time_idx is None:
         adjust_lst_bin_edges(lst_bin_edges)

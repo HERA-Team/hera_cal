@@ -877,7 +877,7 @@ def load_single_baseline_lstcal_gains(
     antpairs,
     polarizations,
     lst_bin_edges=None,
-    telescope_location=None
+    telescope_location_lat_lon_alt_degrees=None
 ):
     """
     Load single-baseline LST calibration solutions and construct per-antenna complex gains.
@@ -899,11 +899,11 @@ def load_single_baseline_lstcal_gains(
     polarizations
         Visibility polarization strings to support (e.g., ``["ee", "nn"]`` or ``["en"]``).
     lst_bin_edges : np.ndarray, optional
-        Array of LST bin edges in radians. If provided along with telescope_location,
+        Array of LST bin edges in radians. If provided along with telescope_location_lat_lon_alt_degrees,
         only calibration times falling within this LST range will be loaded (partial I/O).
         If not provided, all times in the calibration file are loaded.
-    telescope_location : np.ndarray, optional
-        Array of telescope location [longitude, latitude, altitude] in radians and meters.
+    telescope_location_lat_lon_alt_degrees : tuple or array-like, optional
+        Telescope location as (latitude, longitude, altitude) in degrees and meters.
         Required for LST filtering if lst_bin_edges is provided. If not provided,
         no LST filtering is performed.
 
@@ -923,16 +923,11 @@ def load_single_baseline_lstcal_gains(
     ) = load_single_baseline_lstcal_solutions(filename)
 
     # If LST filtering info is provided, select only times within LST range
-    if lst_bin_edges is not None and telescope_location is not None:
+    if lst_bin_edges is not None and telescope_location_lat_lon_alt_degrees is not None:
         from .binning import get_lst_bins, adjust_lst_bin_edges
 
         # Compute LSTs from times using telescope location
-        cal_lsts = utils.JD2LST(
-            metadata['times'],
-            latitude=telescope_location[1],
-            longitude=telescope_location[0],
-            altitude=telescope_location[2]
-        )
+        cal_lsts = utils.JD2LST(metadata['times'], *telescope_location_lat_lon_alt_degrees)
 
         # Adjust LST bin edges to handle wrapping (must copy to avoid modifying input)
         lst_edges_copy = np.array(lst_bin_edges).copy()

@@ -577,7 +577,7 @@ def test_lst_filtering_basic(sample_file, tmp_path):
     latitude = -30.72152  # degrees
     longitude = 21.42830  # degrees
     altitude = 1051.69  # meters
-    telescope_location = np.array([longitude, latitude, altitude])
+    telescope_location = np.array([latitude, longitude, altitude])
 
     # Compute LSTs for all times
     from ... import utils
@@ -617,7 +617,7 @@ def test_lst_filtering_basic(sample_file, tmp_path):
         antpairs=[(0, 1)],
         polarizations=["ee"],
         lst_bin_edges=lst_bin_edges,
-        telescope_location=telescope_location,
+        telescope_location_lat_lon_alt_degrees=telescope_location,
     )
 
     # Check that only the expected subset of times were loaded
@@ -639,7 +639,7 @@ def test_lst_filtering_wrapping(tmp_path):
     latitude = -30.72152
     longitude = 21.42830
     altitude = 1051.69
-    telescope_location = np.array([longitude, latitude, altitude])
+    telescope_location = np.array([latitude, longitude, altitude])
 
     from ... import utils
     all_lsts = utils.JD2LST(times, latitude=latitude, longitude=longitude, altitude=altitude)
@@ -674,7 +674,7 @@ def test_lst_filtering_wrapping(tmp_path):
         antpairs=[(0, 0)],
         polarizations=["ee"],
         lst_bin_edges=lst_bin_edges,
-        telescope_location=telescope_location,
+        telescope_location_lat_lon_alt_degrees=telescope_location,
     )
 
     # Should load some times (wrapping logic should work)
@@ -691,7 +691,7 @@ def test_lst_filtering_no_match_raises(sample_file):
     latitude = -30.72152
     longitude = 21.42830
     altitude = 1051.69
-    telescope_location = np.array([longitude, latitude, altitude])
+    telescope_location = np.array([latitude, longitude, altitude])
 
     with pytest.raises(ValueError, match="No times in calibration file.*fall within"):
         calibration.load_single_baseline_lstcal_gains(
@@ -699,7 +699,7 @@ def test_lst_filtering_no_match_raises(sample_file):
             antpairs=[(0, 1)],
             polarizations=["ee"],
             lst_bin_edges=lst_bin_edges,
-            telescope_location=telescope_location,
+            telescope_location_lat_lon_alt_degrees=telescope_location,
         )
 
 
@@ -714,7 +714,7 @@ def test_lst_filtering_without_telescope_location(sample_file):
         antpairs=[(0, 1)],
         polarizations=["ee"],
         lst_bin_edges=lst_bin_edges,
-        telescope_location=None,
+        telescope_location_lat_lon_alt_degrees=None,
     )
 
     # Should have loaded all times from sample_file
@@ -732,7 +732,7 @@ def test_lst_filtering_preserves_data_consistency(tmp_path):
     latitude = -30.72152
     longitude = 21.42830
     altitude = 1051.69
-    telescope_location = np.array([longitude, latitude, altitude])
+    telescope_location = np.array([latitude, longitude, altitude])
 
     from ... import utils
     all_lsts = utils.JD2LST(times, latitude=latitude, longitude=longitude, altitude=altitude)
@@ -777,7 +777,7 @@ def test_lst_filtering_preserves_data_consistency(tmp_path):
         antpairs=[(0, 0)],
         polarizations=["ee"],
         lst_bin_edges=lst_bin_edges,
-        telescope_location=telescope_location,
+        telescope_location_lat_lon_alt_degrees=telescope_location,
     )
 
     # Filtered gains should be a subset of full gains
