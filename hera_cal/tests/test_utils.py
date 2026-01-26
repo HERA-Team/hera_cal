@@ -1111,3 +1111,193 @@ def test_get_enu_antpos():
     antpos, ants = utils.get_ENU_antpos(uvd)
     antpos_dict = utils.get_ENU_antpos(uvd, asdict=True)
     assert all(k in ants for k in antpos_dict)
+
+
+def test_eq2top_m():
+    # Test with scalar inputs
+    ha = 0.5
+    dec = 0.3
+    mat_scalar = utils.eq2top_m(ha, dec)
+    assert mat_scalar.shape == (3, 3)
+    assert isinstance(mat_scalar, np.ndarray)
+
+    # Test with array inputs
+    ha_array = np.array([0.0, 0.5, 1.0])
+    mat_array = utils.eq2top_m(ha_array, dec)
+    assert mat_array.shape == (3, 3, 3)
+
+    # Verify the scalar case matches the first element of the array case
+    mat_scalar_from_array = utils.eq2top_m(np.array([ha]), dec)
+    assert np.allclose(mat_scalar, mat_scalar_from_array[0])
+
+    # Test that the matrix is a proper rotation matrix (orthogonal)
+    for i in range(len(ha_array)):
+        mat = mat_array[i]
+        assert np.allclose(np.dot(mat, mat.T), np.eye(3))
+        assert np.allclose(np.linalg.det(mat), 1.0)
+
+    # Test broadcasting with multiple dimensions
+    ha_2d = np.array([[0.0, 0.5], [1.0, 1.5]])
+    mat_2d = utils.eq2top_m(ha_2d, dec)
+    assert mat_2d.shape == (2, 2, 3, 3)
+
+    # Test known values: at ha=0, dec=0
+    mat_zero = utils.eq2top_m(0.0, 0.0)
+    # Verify it's orthogonal with determinant 1
+    assert np.allclose(np.dot(mat_zero, mat_zero.T), np.eye(3))
+    assert np.allclose(np.linalg.det(mat_zero), 1.0)
+
+    # Verify consistency: applying the same transformation multiple times
+    # with different input forms should give the same result
+    test_vec = np.array([1.0, 2.0, 3.0])
+    result_scalar = utils.eq2top_m(0.5, 0.3) @ test_vec
+    result_array = utils.eq2top_m(np.array([0.5]), 0.3)[0] @ test_vec
+    assert np.allclose(result_scalar, result_array)
+
+
+def test_top2eq_m():
+    # Test with scalar inputs
+    ha = 0.5
+    dec = 0.3
+    mat_scalar = utils.top2eq_m(ha, dec)
+    assert mat_scalar.shape == (3, 3)
+    assert isinstance(mat_scalar, np.ndarray)
+
+    # Test with array inputs
+    ha_array = np.array([0.0, 0.5, 1.0])
+    mat_array = utils.top2eq_m(ha_array, dec)
+    assert mat_array.shape == (3, 3, 3)
+
+    # Verify the scalar case matches the first element of the array case
+    mat_scalar_from_array = utils.top2eq_m(np.array([ha]), dec)
+    assert np.allclose(mat_scalar, mat_scalar_from_array[0])
+
+    # Test that the matrix is a proper rotation matrix (orthogonal)
+    for i in range(len(ha_array)):
+        mat = mat_array[i]
+        assert np.allclose(np.dot(mat, mat.T), np.eye(3))
+        assert np.allclose(np.linalg.det(mat), 1.0)
+
+    # Test that top2eq_m and eq2top_m are inverses
+    eq2top = utils.eq2top_m(ha_array, dec)
+    top2eq = utils.top2eq_m(ha_array, dec)
+    for i in range(len(ha_array)):
+        assert np.allclose(np.dot(eq2top[i], top2eq[i]), np.eye(3))
+        assert np.allclose(np.dot(top2eq[i], eq2top[i]), np.eye(3))
+
+    # Test broadcasting with multiple dimensions
+    ha_2d = np.array([[0.0, 0.5], [1.0, 1.5]])
+    mat_2d = utils.top2eq_m(ha_2d, dec)
+    assert mat_2d.shape == (2, 2, 3, 3)
+
+    # Test known values: at ha=0, dec=0
+    mat_zero = utils.top2eq_m(0.0, 0.0)
+    # Verify it's orthogonal with determinant 1
+    assert np.allclose(np.dot(mat_zero, mat_zero.T), np.eye(3))
+    assert np.allclose(np.linalg.det(mat_zero), 1.0)
+
+    # Test that top2eq_m is the transpose of eq2top_m (for rotation matrices)
+    for ha_val in [0.0, 0.5, 1.0, -0.5]:
+        for dec_val in [0.0, 0.3, -0.3, np.pi / 4]:
+            eq2top = utils.eq2top_m(ha_val, dec_val)
+            top2eq = utils.top2eq_m(ha_val, dec_val)
+            assert np.allclose(top2eq, eq2top.T)
+
+    # Test with array: verify transpose relationship holds
+    top2eq_arr = utils.top2eq_m(ha_array, dec)
+    eq2top_arr = utils.eq2top_m(ha_array, dec)
+    for i in range(len(ha_array)):
+        assert np.allclose(top2eq_arr[i], eq2top_arr[i].T)
+
+    # Verify consistency: applying the same transformation multiple times
+    # with different input forms should give the same result
+    test_vec = np.array([1.0, 2.0, 3.0])
+    result_scalar = utils.top2eq_m(0.5, 0.3) @ test_vec
+    result_array = utils.top2eq_m(np.array([0.5]), 0.3)[0] @ test_vec
+    assert np.allclose(result_scalar, result_array)
+
+
+def test_m2f():
+    from astropy import units as unt
+
+    # Test with scalar input
+    m_mode = 10
+    frf = utils.m2f(m_mode)
+    assert isinstance(frf, np.ndarray) or isinstance(frf, (int, float))
+
+    # Test with array input
+    m_modes = np.array([0, 10, 20, 30])
+    frfs = utils.m2f(m_modes)
+    assert frfs.shape == m_modes.shape
+
+    # Verify the conversion is correct (m-mode / sidereal day in ks)
+    expected = m_modes / unt.sday.to(unt.ks)
+    assert np.allclose(frfs, expected)
+
+    # Test that m-mode 0 gives fringe-rate 0
+    assert np.isclose(utils.m2f(0), 0.0)
+
+
+def test_compute_dtau():
+    # Test with simple baseline and parameters
+    baseline = np.array([10.0, 0.0, 0.0])  # 10m East baseline
+    lat = -0.5  # latitude in radians
+    dt = 0.0  # no time difference
+
+    dtau = utils.compute_dtau(baseline, lat, dt)
+    # At dt=0, there should be no delay shift
+    assert np.isclose(dtau, 0.0)
+
+    # Test with non-zero dt (scalar)
+    dt = 100.0  # 100 seconds
+    dtau = utils.compute_dtau(baseline, lat, dt)
+    assert isinstance(dtau, np.ndarray)
+
+    # Test with array of dt values
+    dt_array = np.array([0.0, 100.0, 200.0])
+    dtau_array = utils.compute_dtau(baseline, lat, dt_array)
+    assert dtau_array.shape == dt_array.shape
+    assert np.isclose(dtau_array[0], 0.0)
+
+    # Test with 2D dt array
+    dt_2d = np.array([[0.0, 100.0], [200.0, 300.0]])
+    dtau_2d = utils.compute_dtau(baseline, lat, dt_2d)
+    assert dtau_2d.shape == dt_2d.shape
+
+    # Test that delay is ~zero for NS baseline at equator
+    baseline = np.array([0.0, 10.0, 0.0])
+    lat = 0
+    dt = np.array([30.0, 50.0])
+    dtau = utils.compute_dtau(baseline, lat, dt)
+    assert np.all(dtau == 0)
+
+
+def test_get_phase_factor():
+    # Test with simple parameters
+    baseline = np.array([10.0, 0.0, 0.0])
+    lat = -0.5
+    freqs = np.array([100e6, 150e6])  # 100 and 150 MHz
+    dt = 0.0
+
+    phasor = utils.get_phase_factor(baseline, lat, freqs, dt)
+    # At dt=0, phasor should be unity
+    assert np.allclose(np.abs(phasor), 1.0)
+    assert np.allclose(phasor, 1.0 + 0.0j)
+
+    # Test with scalar dt
+    dt = 100.0
+    phasor = utils.get_phase_factor(baseline, lat, freqs, dt)
+    assert phasor.shape == (2, 1, 1)
+    assert np.allclose(np.abs(phasor), 1.0)
+
+    # Test with array of dt values
+    dt_array = np.array([0.0, 100.0, 200.0])
+    phasor = utils.get_phase_factor(baseline, lat, freqs, dt_array)
+    assert phasor.shape == (2, 1, 3)
+    assert np.allclose(np.abs(phasor), 1.0)
+
+    # Test with 2D dt array (e.g., new_times x old_times)
+    dt_2d = np.array([[0.0, 100.0], [200.0, 300.0]])
+    phasor_2d = utils.get_phase_factor(baseline, lat, freqs, dt_2d)
+    assert phasor_2d.shape == (2, 2, 2)
+    assert np.allclose(np.abs(phasor_2d), 1.0)
