@@ -13,10 +13,11 @@ import glob
 from pyuvdata import UVCal, UVData
 import warnings
 from hera_sim.antpos import hex_array, linear_array
+from hera_sim import vis
 
 from .. import io, abscal, redcal, utils, apply_cal
 from ..data import DATA_PATH
-from ..datacontainer import DataContainer
+from ..datacontainer import DataContainer, RedDataContainer
 from ..utils import split_pol, reverse_bl, split_bl
 from ..apply_cal import calibrate_in_place
 from ..flag_utils import synthesize_ant_flags
@@ -759,6 +760,61 @@ class Test_Abscal_Solvers:
 
         with pytest.raises(AssertionError):
             meta, delta_gains = abscal.complex_phase_abscal(data, model, reds, data_bls, model_bls)
+
+    def test_sky_calibration(self):
+        """
+        """
+        nfreqs = 10
+        antpos = hex_array(3, split_core=True, outriggers=0)
+        reds = redcal.get_reds(antpos)
+        gains, model_vis, data_vis = vis.sim_red_data(reds, shape=(1, nfreqs))
+        model_vis = RedDataContainer(model_vis, reds=reds)
+        data_vis = DataContainer(data_vis)
+        data_vis.data_antpos = antpos
+        weights = DataContainer({k: np.ones(data_vis[k].shape, dtype=bool) for k in data_vis})
+
+        # Test that the function runs
+        gains, niter, conv_crit = abscal.sky_calibration(
+            data_vis, model_vis, weights, maxiter=1000, tol=1e-10, stepsize=0.5
+        )
+        assert niter['nn'].shape == conv_crit['nn'].shape == (1, nfreqs)
+
+        # Apply calibration with solved gains
+        data_vis_copy = copy.deepcopy(data_vis)
+        apply_cal.calibrate_in_place(data_vis_copy, gains)
+
+        # Test that the data is calibrated properly
+        for k in data_vis:
+            np.testing.assert_array_almost_equal(data_vis_copy[k], model_vis[k])
+
+        # Test the function with antenna flags
+        ant_flags = {(0, 'Jnn'): True}
+        gains, niter, conv_crit = abscal.sky_calibration(
+            data_vis, model_vis, weights, antpos, ant_flags=ant_flags, maxiter=1000, tol=1e-10, stepsize=0.5
+        )
+
+        # Check that the flagged antenna has unity gain
+        np.testing.assert_allclose(gains[(0, 'Jnn')], np.ones_like(gains[(0, 'Jnn')]))
+
+        # Test the function with DataContainer
+        model_vis_copy = DataContainer(copy.deepcopy(model_vis))
+        for k in data_vis:
+            model_vis_copy[k] = model_vis[k]
+        # Run calibration
+        gains, niter, conv_crit = abscal.sky_calibration(
+            data_vis, model_vis_copy, weights, antpos, maxiter=1000, tol=1e-10, stepsize=0.5
+        )
+        for k in data_vis:
+            np.testing.assert_array_almost_equal(data_vis_copy[k], model_vis[k])
+
+        # Test the function flagging a frequency and time
+        for k in weights:
+            weights[k][0, 0] = 0.0
+
+        gains, niter, conv_crit = abscal.sky_calibration(
+            data_vis, model_vis, weights, antpos, maxiter=1000, tol=1e-10, stepsize=0.5
+        )
+        assert np.isclose(gains[(0, 'Jnn')][0, 0], 1.0 + 0.0j)
 
     def test_cross_pol_phase_cal(self):
         rng = np.random.default_rng(42)
