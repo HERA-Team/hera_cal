@@ -422,6 +422,19 @@ def lst_bin_files_for_baselines(
         )
         antpos = dict(zip(metas[0].antenna_numbers, metas[0].antpos_enu))
 
+    # Add LST filtering info to cal_file_loader_kwargs if using custom loader
+    if cal_file_loader is not None:
+        if cal_file_loader_kwargs is None:
+            cal_file_loader_kwargs = {}
+
+        # Add LST bin edges if not already present
+        if 'lst_bin_edges' not in cal_file_loader_kwargs:
+            cal_file_loader_kwargs['lst_bin_edges'] = lst_bin_edges
+
+        # Add telescope location if not already present
+        if 'telescope_location_lat_lon_alt_degrees' not in cal_file_loader_kwargs:
+            cal_file_loader_kwargs['telescope_location_lat_lon_alt_degrees'] = metas[0].telescope_location_lat_lon_alt_degrees
+
     if time_idx is None:
         adjust_lst_bin_edges(lst_bin_edges)
         lst_bin_edges %= 2 * np.pi

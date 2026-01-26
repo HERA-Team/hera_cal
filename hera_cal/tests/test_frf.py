@@ -1375,3 +1375,117 @@ def test_get_FR_buffer_from_spectra():
     assert actual_ratio > 1.0
     # Allow generous tolerance because the fitted sigma is estimated a beam simulation
     assert np.isclose(actual_ratio, expected_ratio, rtol=0.25)
+
+
+def test_get_coherent_avg_design_matrix():
+    # Set up test parameters
+    baseline = np.array([14.6, 0.0, 0.0])  # 14.6m East baseline
+    lat = -0.5362  # HERA latitude in radians
+    freqs = np.linspace(100e6, 200e6, 10)  # 10 frequencies
+    old_times = np.linspace(0, 1000, 20)  # 20 integrations
+    new_times = np.linspace(250, 750, 5)  # 5 averaged integrations
+    n_samples = np.ones((freqs.size, old_times.size)) * 10
+    new_inttime = 200.0  # seconds
+    flags = np.zeros((freqs.size, old_times.size), dtype=bool)
+
+    # Test basic execution
+    design_mat = frf.get_coherent_avg_design_matrix(
+        baseline, lat, freqs, old_times, new_times, n_samples, new_inttime, flags
+    )
+
+    # Check output shape
+    assert design_mat.shape == (freqs.size, new_times.size, old_times.size)
+
+    # Check that the matrix is normalized (rows have magnitude close to 1)
+    # The sum is complex due to phase factors, so check magnitude
+    row_sums = np.sum(design_mat, axis=-1)
+    assert np.allclose(np.abs(row_sums), 1.0, rtol=0.05)
+
+    # Check that individual weights are reasonable (should be small)
+    assert np.all(np.abs(design_mat) >= 0.0)
+    assert np.all(np.abs(design_mat) <= 1.0)
+
+    # Test with flags
+    flags_copy = flags.copy()
+    flags_copy[:, :5] = True
+    design_mat_flagged = frf.get_coherent_avg_design_matrix(
+        baseline, lat, freqs, old_times, new_times, n_samples, new_inttime, flags_copy
+    )
+    # Flagged samples should have zero weight
+    assert np.allclose(design_mat_flagged[:, :, :5], 0.0)
+
+
+def test_construct_filter():
+    # Set up test parameters
+    times = np.linspace(0, 10, 100)  # 100 time samples over 10 ks
+    fc = 0.5  # center fringe-rate in mHz
+    fhw = 0.2  # half-width in mHz
+
+    # Test basic execution without weights
+    filter_mat = frf.construct_filter(times, fc, fhw)
+
+    # Check output shape (should be NxN)
+    assert filter_mat.shape == (times.size, times.size)
+
+    # Check that filter is Hermitian (for real filter operation)
+    assert np.allclose(filter_mat, filter_mat.T.conj())
+
+    # Test with weights
+    wgts = np.ones(times.size)
+    wgts[:10] = 0.5  # Lower weight for first 10 samples
+    filter_mat_weighted = frf.construct_filter(times, fc, fhw, wgts=wgts)
+    assert filter_mat_weighted.shape == (times.size, times.size)
+
+    # Test that filtered power is less than input power.
+    test_signal = np.random.normal(
+        size=times.size
+    ) + 1j * np.random.normal(size=times.size)
+    filtered_signal = filter_mat @ test_signal
+    filtered_power = filtered_signal @ filtered_signal.conj()
+    input_power = test_signal @ test_signal.conj()
+    assert filtered_power < input_power
+    assert filtered_power > 0
+
+    # Test that smaller cutoff leads to more power retained.
+    cutoffs = [0.9, 1e-4, 1e-8]
+    filtered_powers = []
+    for cutoff in cutoffs:
+        _filter_mat = frf.construct_filter(times, fc, fhw, eigval_cutoff=cutoff)
+        filtered_signal = _filter_mat @ test_signal
+        filtered_powers.append(filtered_signal @ filtered_signal.conj())
+    assert all(filtered_power < input_power for filtered_power in filtered_powers)
+
+    # Test centering: filter should be centered at fc
+    # Create a signal at the filter center frequency
+    signal_at_fc = np.exp(-2j * np.pi * fc * times)
+    filtered_signal = filter_mat @ signal_at_fc
+    assert np.allclose(signal_at_fc, filtered_signal)
+
+    out_of_band_signal = np.exp(2j * np.pi * fc * times)
+    filtered_signal = filter_mat @ out_of_band_signal
+    filtered_power = filtered_signal @ filtered_signal.conj()
+    input_power = out_of_band_signal @ out_of_band_signal.conj()
+    assert (filtered_power / input_power) < 0.1
+
+
+def test_get_m2f_mixer():
+    # Set up test parameters
+    times_ks = np.linspace(0, 10, 100)  # 100 time samples over 10 ks
+    m_modes = np.arange(-50, 51)  # m-modes from -50 to 50
+
+    # Test basic execution
+    m2f_mixer = frf.get_m2f_mixer(times_ks, m_modes)
+
+    # Check output shape
+    assert m2f_mixer.shape == (times_ks.size, m_modes.size)
+
+    # Check matrix normalization makes sense.
+    assert np.allclose(np.diag(m2f_mixer.T.conj() @ m2f_mixer), times_ks.size**2)
+
+    # Check that the mixing matrix converges to the identity when expected.
+    # (Up to an overall normalization factor.)
+    dt = u.sday.to(u.ks) / m_modes.size
+    times_ks = np.arange(m_modes.size) * dt
+    m2f_mixer = frf.get_m2f_mixer(times_ks, m_modes)
+    scale = np.abs(np.diag(m2f_mixer)).mean()
+    assert np.allclose(np.abs(m2f_mixer), scale * np.eye(m_modes.size))
