@@ -924,6 +924,8 @@ class Test_FRFilter:
             max_frate = np.max(c_per_freq + hw_per_freq)
             expected_center = (max_frate + min_frate) / 2.
             np.testing.assert_allclose(cfrates[k], expected_center, atol=1e-10)
+            expected_hw = max((max_frate - min_frate) / 2., 0.025)
+            np.testing.assert_allclose(wfrates[k], expected_hw, atol=1e-10)
 
         # Test single frequency
         centers_1, hw_1 = frf.sky_frates_single(np.array([freqs[0]]), blvec, latitude)
