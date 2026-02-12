@@ -889,6 +889,47 @@ class Test_FRFilter:
             for k in cfrates:
                 assert wfrates[k] == 1000.
 
+    def test_sky_frates_single(self):
+        V = frf.FRFilter(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
+        V.read()
+        freqs = V.hd.freq_array
+        latitude = V.hd.telescope.location.lat.rad
+        antpos = V.hd.telescope.get_enu_antpos()
+        antnums = V.hd.telescope.antenna_numbers
+
+        # Test basic output shape
+        key = list(V.data.keys())[0]
+        ind1 = np.where(antnums == key[0])[0][0]
+        ind2 = np.where(antnums == key[1])[0][0]
+        blvec = antpos[ind1] - antpos[ind2]
+        centers, half_widths = frf.sky_frates_single(freqs, blvec, latitude)
+        assert centers.shape == freqs.shape
+        assert half_widths.shape == freqs.shape
+
+        # Test zero baseline returns zeros
+        centers_zero, hw_zero = frf.sky_frates_single(freqs, [0, 0, 0], latitude)
+        np.testing.assert_array_equal(centers_zero, 0.0)
+        np.testing.assert_array_equal(hw_zero, 0.0)
+
+        # Test consistency with sky_frates: the envelope of sky_frates_single
+        # should match the scalar values from sky_frates
+        keys = list(V.data.keys())[:2]
+        cfrates, wfrates = frf.sky_frates(uvd=V.hd, keys=keys)
+        for k in keys:
+            ind1 = np.where(antnums == k[0])[0][0]
+            ind2 = np.where(antnums == k[1])[0][0]
+            blvec = antpos[ind1] - antpos[ind2]
+            c_per_freq, hw_per_freq = frf.sky_frates_single(freqs, blvec, latitude)
+            min_frate = np.min(c_per_freq - hw_per_freq)
+            max_frate = np.max(c_per_freq + hw_per_freq)
+            expected_center = (max_frate + min_frate) / 2.
+            np.testing.assert_allclose(cfrates[k], expected_center, atol=1e-10)
+
+        # Test single frequency
+        centers_1, hw_1 = frf.sky_frates_single(np.array([freqs[0]]), blvec, latitude)
+        assert centers_1.shape == (1,)
+        assert hw_1.shape == (1,)
+
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
