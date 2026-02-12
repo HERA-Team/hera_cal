@@ -253,9 +253,64 @@ def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, 
     return frate_centers, frate_half_widths
 
 
+def sky_frates_single(freqs, blvec, latitude):
+    """Compute sky fringe-rate centers and half-widths as a function of frequency for a single baseline.
+
+    Uses analytic expressions from Parsons et al. 2016 to compute the expected range of
+    fringe-rates for sky emission given a baseline vector, telescope latitude, and frequencies.
+    See derivation in https://www.overleaf.com/read/chgpxydbhfhk
+
+    Parameters
+    ----------
+    freqs: array-like
+        1D array of frequencies in Hz.
+    blvec: array-like
+        Length-3 ENU baseline vector in meters.
+    latitude: float
+        Telescope latitude in radians.
+
+    Returns
+    -------
+    frate_centers: ndarray
+        1D array of fringe-rate centers in mHz, one per frequency.
+    frate_half_widths: ndarray
+        1D array of fringe-rate half-widths in mHz, one per frequency.
+    """
+    freqs = np.asarray(freqs)
+    blvec = np.asarray(blvec, dtype=float)
+    sinlat = np.sin(np.abs(latitude))
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        blcos = blvec[0] / np.linalg.norm(blvec[:2])
+
+    if np.isfinite(blcos):
+        frateamp_df = np.linalg.norm(blvec[:2]) / (SDAY_SEC * 1e-3) / SPEED_OF_LIGHT * 2 * np.pi
+
+        if blcos >= 0:
+            max_frate_df = frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
+            min_frate_df = -frateamp_df * sinlat
+        else:
+            min_frate_df = -frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
+            max_frate_df = frateamp_df * sinlat
+
+        min_frates = freqs * min_frate_df
+        max_frates = freqs * max_frate_df
+    else:
+        min_frates = np.zeros_like(freqs, dtype=float)
+        max_frates = np.zeros_like(freqs, dtype=float)
+
+    frate_centers = (max_frates + min_frates) / 2.
+    frate_half_widths = np.abs(max_frates - min_frates) / 2.
+
+    return frate_centers, frate_half_widths
+
+
 def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
                min_frate_half_width=0.025, max_frate_half_width=np.inf):
     """Compute sky fringe-rate ranges based on baselines, telescope location, and frequencies in uvdata.
+
+    Wraps sky_frates_single, computing a single scalar center and half-width per baseline
+    by taking the envelope (min/max) across all frequencies.
 
     Parameters
     ----------
@@ -291,43 +346,30 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
         keys = uvd.get_antpairpols()
     antpos = uvd.telescope.get_enu_antpos()
     antnums = uvd.telescope.antenna_numbers
-    sinlat = np.sin(np.abs(uvd.telescope.location.lat))
+    latitude = uvd.telescope.location.lat.rad
     frate_centers = {}
     frate_half_widths = {}
 
-    # compute maximum fringe rate dict based on baseline lengths.
-    # see derivation in https://www.overleaf.com/read/chgpxydbhfhk
-    # which starts with expressions in
-    # https://ui.adsabs.harvard.edu/abs/2016ApJ...820...51P/exportcitation
     for k in keys:
         ind1 = np.where(antnums == k[0])[0][0]
         ind2 = np.where(antnums == k[1])[0][0]
         blvec = antpos[ind1] - antpos[ind2]
-        with np.errstate(divide='ignore', invalid='ignore'):
-            blcos = blvec[0] / np.linalg.norm(blvec[:2])
-        if np.isfinite(blcos):
-            frateamp_df = np.linalg.norm(blvec[:2]) / (SDAY_SEC * 1e-3) / SPEED_OF_LIGHT * 2 * np.pi
-            # set autocorrs to have blcose of 0.0
 
-            if blcos >= 0:
-                max_frate_df = frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
-                min_frate_df = -frateamp_df * sinlat
-            else:
-                min_frate_df = -frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
-                max_frate_df = frateamp_df * sinlat
+        # Get per-frequency centers and half-widths without adjustments
+        centers_per_freq, hw_per_freq = sky_frates_single(
+            uvd.freq_array, blvec, latitude,
+        )
 
-            min_frate = np.min([f0 * min_frate_df for f0 in uvd.freq_array])
-            max_frate = np.max([f0 * max_frate_df for f0 in uvd.freq_array])
-        else:
-            max_frate = 0.0
-            min_frate = 0.0
+        # Collapse to scalar by taking the min/max frate across frequencies
+        min_frate = np.min(centers_per_freq - hw_per_freq)
+        max_frate = np.max(centers_per_freq + hw_per_freq)
 
         frate_centers[k] = (max_frate + min_frate) / 2.
         frate_centers[utils.reverse_bl(k)] = -frate_centers[k]
 
         frate_half_widths[k] = np.abs(max_frate - min_frate) / 2. * frate_width_multiplier + frate_standoff
-        frate_half_widths[k] = np.max([frate_half_widths[k], min_frate_half_width])  # Don't allow frates smaller then min_frate
-        frate_half_widths[k] = np.min([frate_half_widths[k], max_frate_half_width])  # Don't allow frates larger then max_frate
+        frate_half_widths[k] = np.max([frate_half_widths[k], min_frate_half_width])
+        frate_half_widths[k] = np.min([frate_half_widths[k], max_frate_half_width])
         frate_half_widths[utils.reverse_bl(k)] = frate_half_widths[k]
 
     return frate_centers, frate_half_widths
