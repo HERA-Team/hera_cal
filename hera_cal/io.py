@@ -1537,10 +1537,16 @@ class HERADataFastReader():
                             check=check, dtype=dtype, verbose=verbose)
         self._adapt_metadata(rv['info'], skip_lsts=skip_lsts)
 
-        # make autocorrleations real by taking the real part. Using fix_autos_func = np.abs matches UVData._fix_autos()
+        # make autocorrelations real by taking the real part. Using fix_autos_func = np.abs matches UVData._fix_autos()
+        # pseudo-Stokes pI and pQ autos are also real (sums/differences of xx and yy autos)
+        _real_auto_pols = {POL_STR2NUM_DICT['pI'], POL_STR2NUM_DICT['pQ']}
         if 'data' in rv:
             for bl in rv['data']:
-                if split_bl(bl)[0] == split_bl(bl)[1]:
+                try:
+                    is_auto = split_bl(bl)[0] == split_bl(bl)[1]
+                except KeyError:
+                    is_auto = bl[0] == bl[1] and polstr2num(bl[2]) in _real_auto_pols
+                if is_auto:
                     rv['data'][bl] = fix_autos_func(rv['data'][bl])
 
         # construct datacontainers from result

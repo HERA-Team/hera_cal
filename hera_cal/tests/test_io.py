@@ -1038,6 +1038,34 @@ class Test_HERADataFastReader:
             f"FastReader x_orientation '{fr_x_orient}' != original '{orig_x_orient}'"
         )
 
+    @pytest.mark.parametrize('pol_name,pol_num,autos_real', [('pI', 1, True), ('pQ', 2, True), ('pU', 3, False), ('pV', 4, False)])
+    def test_read_pseudo_stokes(self, tmp_path, pol_name, pol_num, autos_real):
+        """Test that HERADataFastReader can read files with pseudo-Stokes polarizations."""
+        import h5py
+        from .mock_uvdata import create_uvd_ones
+
+        # Create a mock observation with a single standard pol, write to disk,
+        # then change the polarization to a pseudo-Stokes pol using h5py
+        uvd = create_uvd_ones(pols=['xx'], ants=[0, 1], antpairs=[(0, 0), (0, 1), (1, 1)], ntimes=2, freqs=np.linspace(1e8, 2e8, 10))
+        uvd.data_array += 1.0j  # make data complex (1+1j) so fix_autos has something to do
+        ps_file = str(tmp_path / f"{pol_name}_test.uvh5")
+        uvd.write_uvh5(ps_file, clobber=True, run_check=False)
+
+        # Rewrite the polarization array using h5py
+        with h5py.File(ps_file, 'r+') as f:
+            f['Header']['polarization_array'][:] = np.array([pol_num])
+
+        # This should not raise a KeyError
+        hd = io.HERADataFastReader(ps_file)
+        d, f, n = hd.read()
+
+        for bl in d:
+            if bl[0] == bl[1]:
+                if autos_real:
+                    assert np.all(np.isreal(d[bl])), f"Auto {bl} with {pol_name} should be real after fix_autos"
+                else:
+                    assert not np.all(np.isreal(d[bl])), f"Auto {bl} with {pol_name} should not be forced real"
+
     def test_errors(self):
         hd = io.HERADataFastReader([self.uvh5_1, self.uvh5_2])
         with pytest.raises(NotImplementedError):
