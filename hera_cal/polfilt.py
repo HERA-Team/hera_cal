@@ -174,6 +174,7 @@ def fit_polarized_source_model_single_bl(
     band_slices: list[slice],
     disable: bool = False,
     use_nsample_wgts: bool = False,
+    elevation_threshold: float = 0.75,
     foreground_delay_buffer_sec: float = 500e-9,
     polarized_temporal_hw_mHz: float = 0.1,
     polarized_spectral_hw_sec: float = 50e-9,
@@ -219,9 +220,6 @@ def fit_polarized_source_model_single_bl(
         Sub-band slices into the frequency axis.
     disable : bool, optional
         Suppress the tqdm progress bar when ``True`` (default ``False``).
-    model : dict or None, optional
-        Pre-existing model to subtract before filtering, keyed by source name.
-        Pass ``None`` (default) to skip subtraction.
     foreground_delay_buffer_sec : float, optional
         Buffer time to add to the foreground delay (default 0.0).
     polarized_temporal_hw_mHz : float, optional
@@ -283,10 +281,7 @@ def fit_polarized_source_model_single_bl(
         # convert the source RA from degrees to hours for comparison with LSTs
         elevation = lmns[si][2]  # sin(alt) at each time
         peak_index = int(np.argmax(elevation))
-        print("peak index", peak_index)
-        # Adaptive window: all times where source is above some fraction of peak elevation
-        threshold = 0.75  # tune this
-        in_window = elevation >= (threshold * elevation[peak_index])
+        in_window = elevation >= (elevation_threshold * elevation[peak_index])
         rng = np.arange(0, in_window.size)
         time_slice = slice(rng[in_window].min(), rng[in_window].max())
         time_slices.append(time_slice)
