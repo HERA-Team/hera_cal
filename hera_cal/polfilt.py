@@ -4,6 +4,7 @@ Radio astronomy signal processing utilities.
 Provides coordinate transforms, polarized-source delay estimation, and
 visibility model computation for calibration pipelines.
 """
+from copy import deepcopy
 
 from astropy import constants
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord
@@ -12,36 +13,11 @@ import astropy.units as u
 import numpy as np
 from tqdm import tqdm
 from hera_filters import dspec
+from hera_cal.smooth_cal import _linear_fit
 
-# ---------------------------------------------------------------------------
-# Physical constants
-# ---------------------------------------------------------------------------
-
+# Constants
 SIDEREAL_DAY_SECONDS = 86164.0905  # Sidereal day in seconds
 SPEED_OF_LIGHT = constants.c.value  # m/s
-
-# ---------------------------------------------------------------------------
-# Default solver / filter hyper-parameters
-# (centralised here so callers can override without touching call sites)
-# ---------------------------------------------------------------------------
-
-# Foreground filter: extra buffer beyond the geometric baseline delay (seconds)
-# FOREGROUND_DELAY_BUFFER_SEC = 500e-9
-
-# Spectral DPSS half-bandwidth used when fitting the polarized model (seconds)
-# POLARIZED_SPECTRAL_HW_SEC = 50e-9
-
-# LSQR convergence tolerances for sparse_linear_fit_2D
-# LSQR_ATOL = 1e-10
-# LSQR_BTOL = 1e-10
-
-# Eigenvalue cutoff for DPSS operators
-# DPSS_EIGENVAL_CUTOFF = 1e-12
-
-
-# ---------------------------------------------------------------------------
-# Coordinate utilities
-# ---------------------------------------------------------------------------
 
 def radec_to_azalt(
     ra: float,
@@ -84,10 +60,6 @@ def radec_to_azalt(
 
     return np.array([l, m, n])
 
-
-# ---------------------------------------------------------------------------
-# Polarized-source delay utilities
-# ---------------------------------------------------------------------------
 
 def estimate_polarized_source_delay(
     freqs: float | np.ndarray,
@@ -187,25 +159,21 @@ def _compute_source_weights(
     return weights
 
 
-# ---------------------------------------------------------------------------
-# Model computation
-# ---------------------------------------------------------------------------
-
-def fit_polarized_source_models(
+def fit_polarized_source_model_single_bl(
     data,
     flags,
     nsamples,
     sources: dict,
     pol: str,
-    blvec: np.ndarray,
     key: tuple,
     freqs: np.ndarray,
     times: np.ndarray,
+    location: EarthLocation,
     band_slices: list[slice],
-    ntimes: int = 1000,
     disable: bool = False,
-    model: dict | None = None,
-    foreground_delay_buffer_sec: float = 0.0,
+    elevation_threshold: float = 0.5,
+    use_nsample_wgts: bool = False,
+    foreground_delay_buffer_sec: float = 500e-9,
     polarized_temporal_hw_mHz: float = 0.1,
     polarized_spectral_hw_sec: float = 50e-9,
     eigenval_cutoff: float = 1e-12,
@@ -238,18 +206,16 @@ def fit_polarized_source_models(
         ``"ra"`` (degrees), ``"rotation_measure"`` (rad m⁻²).
     pol : str
         Polarisation product key (e.g. ``"ee"`` or ``"nn"``).
-    blvec : np.ndarray
-        Baseline vector in metres, shape ``(3,)``.
     key : tuple
         Baseline key used to index into ``data`` and ``nsamples``.
     freqs : np.ndarray
         Frequency array in Hz, shape ``(nfreqs,)``.
     times : np.ndarray
         Time array in Julian days, shape ``(ntimes_total,)``.
+    location : `~astropy.coordinates.EarthLocation`
+        Observer location on Earth.
     band_slices : list of slice
         Sub-band slices into the frequency axis.
-    ntimes : int, optional
-        Number of time samples to include in the fitting window (default 1000).
     disable : bool, optional
         Suppress the tqdm progress bar when ``True`` (default ``False``).
     model : dict or None, optional
@@ -277,20 +243,13 @@ def fit_polarized_source_models(
     time_slices : list of slice
         Time slices used for each source, in the same order as ``sources``.
     """
+    # Baseline vector in metres
+    blvec = data.antpos[key[1]] - data.antpos[key[0]]
     baseline_length_m = np.linalg.norm(blvec)
     foreground_hw = baseline_length_m / SPEED_OF_LIGHT + foreground_delay_buffer_sec
 
-    # Convert LSTs from radians to hours for easy comparison with RA
-    lsts_hours = np.copy(data.lsts) * 12.0 / np.pi
-
-    # Unwrap LSTs so that any wrap-around near midnight is handled correctly
-    lst_midpoint = (lsts_hours[-1] + lsts_hours[0]) / 2.0
-    if lsts_hours[-1] <= lsts_hours[0]:
-        lst_midpoint = lsts_hours[-1] + np.median(np.diff(lsts_hours))
-    lsts_hours[lst_midpoint < lsts_hours] -= 24.0
-
     # Time axis relative to first sample, in seconds
-    times_sec = np.copy(times) * 24.0 * 3600.0
+    times_sec = np.copy(times) * 24.0 * 3600.0 / 1e3
     times_sec -= times_sec[0]
 
     # Precompute per-source frequency weights
@@ -305,11 +264,13 @@ def fit_polarized_source_models(
         for src in sources
     ]
 
+    # Compute the source direction cosines at each time; this is used for both geometric de-phasing and to identify the time window around transit.
     lmns = [
         radec_to_azalt(
             sources[src]["ra"],
             sources[src]["dec"],
             times,
+            location,
         )
         for src in sources
     ]
@@ -319,17 +280,29 @@ def fit_polarized_source_models(
     time_slices: list = []
 
     for si, source in enumerate(tqdm(sources, disable=disable)):
-        ra_hours = sources[source]["ra"] / 15.0
-        peak_index = int(np.argmin(np.abs(ra_hours - lsts_hours)))
-        time_slice = slice(peak_index - ntimes // 2, peak_index + ntimes // 2)
+        # convert the source RA from degrees to hours for comparison with LSTs
+        elevation = lmns[si][2]  # sin(alt) at each time
+        peak_index = int(np.argmax(elevation))
+        
+        # Adaptive window: all times where source is above some fraction of peak elevation
+        in_window = elevation >= (elevation_threshold * elevation[peak_index])
+        rng = np.arange(0, in_window.size)
+        time_slice = slice(rng[in_window].min(), rng[in_window].max())
         time_slices.append(time_slice)
 
+        # Extract the relevant visibility and nsample data for this baseline, polarization, and time window
         vis = data[key + (pol,)]
         nsamp = nsamples[key + (pol,)]
 
         # Weights: zero where the visibility is identically zero or flagged
         auto_weight = (nsamp >= 0.0).astype(float)
-        wgts = np.where(np.isclose(vis[time_slice], 0.0), 0.0, 1.0) * auto_weight[time_slice]
+        if use_nsample_wgts:
+            auto_weight = nsamp
+        else:
+            auto_weight = (nsamp >= 0.0).astype(float)
+        
+        weights = np.where(np.isclose(vis[time_slice], 0.0), 0.0, 1.0) * auto_weight[time_slice]
+        # weights *= elevation[time_slice][:, None]
 
         # Geometric phase toward this source
         phasor = np.exp(
@@ -339,25 +312,43 @@ def fit_polarized_source_models(
             / SPEED_OF_LIGHT
         )
 
+        # RM phasor for Faraday rotation, applied during fitting to isolate polarized components
         rm = sources[source]["rotation_measure"]
         rm_phasor = np.exp(-2j * (freqs / SPEED_OF_LIGHT) ** -2 * rm)
 
+        # Initialize output arrays for this source
         source_models[source] = np.zeros_like(vis[time_slice])
         all_filtered_data[source] = np.zeros_like(vis[time_slice])
 
-        for band_slice in band_slices:
-            prior_model = model[source][:, band_slice] if model else 0.0
+        # Build the DPSS basis in time for the foreground filtering; this is shared across all bands for this source since the temporal filter is the same.
+        time_basis, _ = dspec.dpss_operator(
+            times_sec[time_slice],
+            [0],
+            [polarized_temporal_hw_mHz],
+            eigenval_cutoff=[eigenval_cutoff],
+        )
 
+        for band_slice in band_slices:
+            # Build the raw data array for filtering, treating flagged or zeroed data as zero
             raw = np.where(
                 np.isfinite(vis[time_slice][:, band_slice]),
-                vis[time_slice][:, band_slice] - prior_model,
+                vis[time_slice][:, band_slice],
                 0.0,
             )
 
+            # Build the weights array for filtering, zeroing out flagged or zeroed data to exclude it from the fit
+            wgts = np.where(
+                np.isfinite(vis[time_slice][:, band_slice]),
+                weights[:, band_slice],
+                0.0,
+            )
+
+            # TODO: Should probably move this out of the loop
+            # Apply the foreground filter to isolate the polarized signal
             _, filtered, _ = dspec.fourier_filter(
                 freqs[band_slice],
                 raw,
-                wgts[:, band_slice],
+                wgts,
                 filter_centers=[0],
                 filter_half_widths=[foreground_hw],
                 mode="dpss_solve",
@@ -372,12 +363,7 @@ def fit_polarized_source_models(
                 all_filtered_data[source][:, band_slice] = filtered
                 continue
 
-            time_basis, _ = dspec.dpss_operator(
-                times_sec[time_slice],
-                [0],
-                [polarized_temporal_hw_mHz],
-                eigenval_cutoff=[eigenval_cutoff],
-            )
+            # Build DPSS bases in frequency for the polarized model fitting
             freq_basis = dspec.dpss_operator(
                 freqs[band_slice],
                 [0],
@@ -385,21 +371,37 @@ def fit_polarized_source_models(
                 eigenval_cutoff=[eigenval_cutoff],
             )[0].real
 
-            band_wgts = wgts[:, band_slice] * source_weights[si][band_slice][None]
+            # Apply the source weights to the fitting; this suppresses bands where the polarized signal is expected to be unmeasurable, 
+            # improving stability.
+            band_wgts = wgts * source_weights[si][band_slice][None]
             rm_phasor_band = rm_phasor[band_slice]
 
             def _fit(data_2d):
-                return time_basis.dot(
-                    dspec.sparse_linear_fit_2D(
-                        data_2d,
-                        band_wgts,
-                        time_basis,
-                        freq_basis,
-                        atol=LSQR_ATOL,
-                        btol=LSQR_BTOL,
-                        precondition_solver=True,
-                    )[0]
-                ).dot(freq_basis.T)
+                XTX = np.einsum(
+                    "ti,fj,tf,tm,fn->ijmn", time_basis.conj(), freq_basis.conj(), 
+                    band_wgts, time_basis, freq_basis, optimize=True
+                )
+                ncomps = time_basis.shape[-1] * freq_basis.shape[-1]
+                XTX = np.reshape(XTX, (ncomps, ncomps))
+                
+                # Calculate X^T W y using the property (A \otimes B) vec(y) = (A Y B)
+                XTWy = np.ravel(np.dot(np.dot(np.transpose(time_basis.conj()), (data_2d * band_wgts)), freq_basis.conj()))
+                
+                # Compute beta and reshape into a 2D array
+                beta, _ = _linear_fit(XTX, XTWy, solver="pinv")
+                beta = np.reshape(beta, (time_basis.shape[-1], freq_basis.shape[-1]))
+                #return time_basis.dot(
+                #    dspec.sparse_linear_fit_2D(
+                #        data_2d,
+                #        band_wgts,
+                #        time_basis,
+                #        freq_basis,
+                #        atol=LSQR_ATOL,
+                #        btol=LSQR_BTOL,
+                #        precondition_solver=True,
+                #    )[0]
+                #).dot(freq_basis.T)
+                return time_basis.dot(beta).dot(freq_basis.T)
 
             p_model_left  = _fit(filtered * rm_phasor_band)
             p_model_right = _fit(filtered * rm_phasor_band.conj())
@@ -411,3 +413,69 @@ def fit_polarized_source_models(
             ) * phasor[:, band_slice]
 
     return source_models, all_filtered_data, time_slices
+
+def deproject_polarized_source(
+    data,
+    nsamples,
+    data_filtered,
+    sources,
+    times,
+    location: EarthLocation,
+):
+    """
+    De-project the fitted polarized source model from the original data.
+    This function takes the original data, the fitted polarized model (after foreground filtering and de-phasing), 
+    and the source direction cosines, and computes the contribution of the polarized source to the original data. 
+    It then subtracts this contribution from the original data to yield a "de-projected" dataset where the polarized source has been removed.
+    """
+    lmns = [
+        radec_to_azalt(
+            sources[src]["ra"],
+            sources[src]["dec"],
+            times,
+            location,
+        )
+        for src in sources
+    ]
+
+    data_proj = deepcopy(data)
+
+    for ti in tqdm(range(data.shape[0])):
+        steering_vec = []
+        data_stack = []
+        nsamples_stack = []
+        keys = []
+        unfilt_data_stack = []
+        for key in data:
+            ai, aj, _ = key
+            
+            if ai == aj:
+                continue
+            if np.sum(nsamples[key][ti]) == 0:
+                continue
+                
+            blvec = data.antpos[aj] - data.antpos[ai]
+            steering_vec.append(np.exp(2j * np.pi * (blvec[0] * l[ti] + blvec[1] * m[ti] + blvec[2] * (1 - n[ti])) * data.freqs / constants.c.value))
+            data_stack.append(data_filtered[key][ti])
+            nsamples_stack.append(np.sqrt(nsamples[key][ti]))
+            keys.append(key)
+            unfilt_data_stack.append(data[key][ti])
+
+        nsamples_stack = np.array(nsamples_stack)
+        data_stack = np.array(data_stack) * np.median(nsamples_stack, axis=1, keepdims=True)
+        unfilt_data_stack = np.array(unfilt_data_stack) * np.median(nsamples_stack, axis=1, keepdims=True)
+        steering_vec = np.array(steering_vec) # / nsamples_stack
+        inv_nsamples_stack = 1 / np.median(nsamples_stack, axis=1, keepdims=True)
+
+        # Inner product s^† v  → (Nfreq,)
+        alpha = np.einsum("a...,a...->...", steering_vec.conj() * inv_nsamples_stack, data_stack)
+        
+        # Norm s^† s → (Nfreq,)
+        norm = np.einsum("a...,a...->...", steering_vec.conj() * inv_nsamples_stack, steering_vec)
+        
+        # Projected data
+        proj_data = (unfilt_data_stack - steering_vec * (alpha / norm))
+        proj_data *= inv_nsamples_stack
+        
+        for ki, key in enumerate(keys):
+            data_proj[key][ti] = proj_data[ki]
