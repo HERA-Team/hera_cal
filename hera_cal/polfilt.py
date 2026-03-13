@@ -169,16 +169,14 @@ def fit_polarized_source_model_single_bl(
     freqs: np.ndarray,
     times: np.ndarray,
     location: EarthLocation,
+    bands: list[slice],
     band_slices: list[slice],
     disable: bool = False,
-    elevation_threshold: float = 0.5,
     use_nsample_wgts: bool = False,
     foreground_delay_buffer_sec: float = 500e-9,
     polarized_temporal_hw_mHz: float = 0.1,
     polarized_spectral_hw_sec: float = 50e-9,
     eigenval_cutoff: float = 1e-12,
-    LSQR_ATOL: float = 1e-10,
-    LSQR_BTOL: float = 1e-10,
 ) -> tuple[dict, dict, list]:
     """
     Fit a polarized visibility model for each source in ``sources``.
@@ -214,6 +212,8 @@ def fit_polarized_source_model_single_bl(
         Time array in Julian days, shape ``(ntimes_total,)``.
     location : `~astropy.coordinates.EarthLocation`
         Observer location on Earth.
+    bands : list of slice
+        List of frequency-axis slices defining the sub-bands to filter and fit.
     band_slices : list of slice
         Sub-band slices into the frequency axis.
     disable : bool, optional
@@ -264,7 +264,6 @@ def fit_polarized_source_model_single_bl(
         for src in sources
     ]
 
-    # Compute the source direction cosines at each time; this is used for both geometric de-phasing and to identify the time window around transit.
     lmns = [
         radec_to_azalt(
             sources[src]["ra"],
@@ -283,14 +282,14 @@ def fit_polarized_source_model_single_bl(
         # convert the source RA from degrees to hours for comparison with LSTs
         elevation = lmns[si][2]  # sin(alt) at each time
         peak_index = int(np.argmax(elevation))
-        
+        print ("peak index", peak_index)
         # Adaptive window: all times where source is above some fraction of peak elevation
-        in_window = elevation >= (elevation_threshold * elevation[peak_index])
+        threshold = 0.75  # tune this
+        in_window = elevation >= (threshold * elevation[peak_index])
         rng = np.arange(0, in_window.size)
         time_slice = slice(rng[in_window].min(), rng[in_window].max())
         time_slices.append(time_slice)
 
-        # Extract the relevant visibility and nsample data for this baseline, polarization, and time window
         vis = data[key + (pol,)]
         nsamp = nsamples[key + (pol,)]
 
@@ -328,7 +327,7 @@ def fit_polarized_source_model_single_bl(
             eigenval_cutoff=[eigenval_cutoff],
         )
 
-        for band_slice in band_slices:
+        for band_slice in bands:
             # Build the raw data array for filtering, treating flagged or zeroed data as zero
             raw = np.where(
                 np.isfinite(vis[time_slice][:, band_slice]),
@@ -343,7 +342,6 @@ def fit_polarized_source_model_single_bl(
                 0.0,
             )
 
-            # TODO: Should probably move this out of the loop
             # Apply the foreground filter to isolate the polarized signal
             _, filtered, _ = dspec.fourier_filter(
                 freqs[band_slice],
