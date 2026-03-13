@@ -19,6 +19,7 @@ from hera_cal.smooth_cal import _linear_fit
 SIDEREAL_DAY_SECONDS = 86164.0905  # Sidereal day in seconds
 SPEED_OF_LIGHT = constants.c.value  # m/s
 
+
 def radec_to_azalt(
     ra: float,
     dec: float,
@@ -282,7 +283,7 @@ def fit_polarized_source_model_single_bl(
         # convert the source RA from degrees to hours for comparison with LSTs
         elevation = lmns[si][2]  # sin(alt) at each time
         peak_index = int(np.argmax(elevation))
-        print ("peak index", peak_index)
+        print("peak index", peak_index)
         # Adaptive window: all times where source is above some fraction of peak elevation
         threshold = 0.75  # tune this
         in_window = elevation >= (threshold * elevation[peak_index])
@@ -299,7 +300,7 @@ def fit_polarized_source_model_single_bl(
             auto_weight = nsamp
         else:
             auto_weight = (nsamp >= 0.0).astype(float)
-        
+
         weights = np.where(np.isclose(vis[time_slice], 0.0), 0.0, 1.0) * auto_weight[time_slice]
         # weights *= elevation[time_slice][:, None]
 
@@ -369,26 +370,26 @@ def fit_polarized_source_model_single_bl(
                 eigenval_cutoff=[eigenval_cutoff],
             )[0].real
 
-            # Apply the source weights to the fitting; this suppresses bands where the polarized signal is expected to be unmeasurable, 
+            # Apply the source weights to the fitting; this suppresses bands where the polarized signal is expected to be unmeasurable,
             # improving stability.
             band_wgts = wgts * source_weights[si][band_slice][None]
             rm_phasor_band = rm_phasor[band_slice]
 
             def _fit(data_2d):
                 XTX = np.einsum(
-                    "ti,fj,tf,tm,fn->ijmn", time_basis.conj(), freq_basis.conj(), 
+                    "ti,fj,tf,tm,fn->ijmn", time_basis.conj(), freq_basis.conj(),
                     band_wgts, time_basis, freq_basis, optimize=True
                 )
                 ncomps = time_basis.shape[-1] * freq_basis.shape[-1]
                 XTX = np.reshape(XTX, (ncomps, ncomps))
-                
+
                 # Calculate X^T W y using the property (A \otimes B) vec(y) = (A Y B)
                 XTWy = np.ravel(np.dot(np.dot(np.transpose(time_basis.conj()), (data_2d * band_wgts)), freq_basis.conj()))
-                
+
                 # Compute beta and reshape into a 2D array
                 beta, _ = _linear_fit(XTX, XTWy, solver="pinv")
                 beta = np.reshape(beta, (time_basis.shape[-1], freq_basis.shape[-1]))
-                #return time_basis.dot(
+                # return time_basis.dot(
                 #    dspec.sparse_linear_fit_2D(
                 #        data_2d,
                 #        band_wgts,
@@ -398,10 +399,10 @@ def fit_polarized_source_model_single_bl(
                 #        btol=LSQR_BTOL,
                 #        precondition_solver=True,
                 #    )[0]
-                #).dot(freq_basis.T)
+                # ).dot(freq_basis.T)
                 return time_basis.dot(beta).dot(freq_basis.T)
 
-            p_model_left  = _fit(filtered * rm_phasor_band)
+            p_model_left = _fit(filtered * rm_phasor_band)
             p_model_right = _fit(filtered * rm_phasor_band.conj())
 
             all_filtered_data[source][:, band_slice] = filtered
@@ -411,6 +412,7 @@ def fit_polarized_source_model_single_bl(
             ) * phasor[:, band_slice]
 
     return source_models, all_filtered_data, time_slices
+
 
 def deproject_polarized_source(
     data,
@@ -422,8 +424,8 @@ def deproject_polarized_source(
 ):
     """
     De-project the fitted polarized source model from the original data.
-    This function takes the original data, the fitted polarized model (after foreground filtering and de-phasing), 
-    and the source direction cosines, and computes the contribution of the polarized source to the original data. 
+    This function takes the original data, the fitted polarized model (after foreground filtering and de-phasing),
+    and the source direction cosines, and computes the contribution of the polarized source to the original data.
     It then subtracts this contribution from the original data to yield a "de-projected" dataset where the polarized source has been removed.
     """
     lmns = [
@@ -446,12 +448,12 @@ def deproject_polarized_source(
         unfilt_data_stack = []
         for key in data:
             ai, aj, _ = key
-            
+
             if ai == aj:
                 continue
             if np.sum(nsamples[key][ti]) == 0:
                 continue
-                
+
             blvec = data.antpos[aj] - data.antpos[ai]
             steering_vec.append(np.exp(2j * np.pi * (blvec[0] * l[ti] + blvec[1] * m[ti] + blvec[2] * (1 - n[ti])) * data.freqs / constants.c.value))
             data_stack.append(data_filtered[key][ti])
@@ -462,18 +464,18 @@ def deproject_polarized_source(
         nsamples_stack = np.array(nsamples_stack)
         data_stack = np.array(data_stack) * np.median(nsamples_stack, axis=1, keepdims=True)
         unfilt_data_stack = np.array(unfilt_data_stack) * np.median(nsamples_stack, axis=1, keepdims=True)
-        steering_vec = np.array(steering_vec) # / nsamples_stack
+        steering_vec = np.array(steering_vec)  # / nsamples_stack
         inv_nsamples_stack = 1 / np.median(nsamples_stack, axis=1, keepdims=True)
 
         # Inner product s^† v  → (Nfreq,)
         alpha = np.einsum("a...,a...->...", steering_vec.conj() * inv_nsamples_stack, data_stack)
-        
+
         # Norm s^† s → (Nfreq,)
         norm = np.einsum("a...,a...->...", steering_vec.conj() * inv_nsamples_stack, steering_vec)
-        
+
         # Projected data
         proj_data = (unfilt_data_stack - steering_vec * (alpha / norm))
         proj_data *= inv_nsamples_stack
-        
+
         for ki, key in enumerate(keys):
             data_proj[key][ti] = proj_data[ki]
