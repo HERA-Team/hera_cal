@@ -300,9 +300,11 @@ def fit_polarized_source_model_single_bl(
         # weights *= elevation[time_slice][:, None]
 
         # Geometric phase toward this source
+        lmn = lmns[si][:, time_slice]
+        lmn_phaseref = np.array([lmn[0], lmn[1], lmn[2] - 1.0])
         phasor = np.exp(
             2j * np.pi
-            * np.dot(blvec, lmns[si][:, time_slice])[:, None]
+            * np.dot(blvec, lmn_phaseref)[:, None]
             * freqs[None]
             / SPEED_OF_LIGHT
         )
