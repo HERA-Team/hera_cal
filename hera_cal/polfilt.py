@@ -294,7 +294,7 @@ def fit_polarized_source_model_single_bl(
             auto_weight = nsamp
         else:
             auto_weight = (nsamp >= 0.0).astype(float)
-            
+
         filter_weight = (nsamp >= 0.0).astype(float)
 
         weights = np.where(np.isclose(vis[time_slice], 0.0), 0.0, 1.0) * auto_weight[time_slice]
