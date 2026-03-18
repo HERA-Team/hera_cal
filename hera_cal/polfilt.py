@@ -291,12 +291,13 @@ def fit_polarized_source_model_single_bl(
 
         # Weights: zero where the visibility is identically zero or flagged
         auto_weight = (nsamp >= 0.0).astype(float)
-        if use_nsample_wgts:
-            auto_weight = nsamp
-        else:
-            auto_weight = (nsamp >= 0.0).astype(float)
+        # if use_nsample_wgts:
+        auto_weight = nsamp
+        # else:
+        filter_weight = (nsamp >= 0.0).astype(float)
 
         weights = np.where(np.isclose(vis[time_slice], 0.0), 0.0, 1.0) * auto_weight[time_slice]
+        fweights = np.where(np.isclose(vis[time_slice], 0.0), 0.0, 1.0) * filter_weight[time_slice]
         # weights *= elevation[time_slice][:, None]
 
         # Geometric phase toward this source
@@ -334,6 +335,12 @@ def fit_polarized_source_model_single_bl(
             )
 
             # Build the weights array for filtering, zeroing out flagged or zeroed data to exclude it from the fit
+            fwgts = np.where(
+                np.isfinite(vis[time_slice][:, band_slice]),
+                fweights[:, band_slice],
+                0.0,
+            )
+
             wgts = np.where(
                 np.isfinite(vis[time_slice][:, band_slice]),
                 weights[:, band_slice],
@@ -344,7 +351,7 @@ def fit_polarized_source_model_single_bl(
             _, filtered, _ = dspec.fourier_filter(
                 freqs[band_slice],
                 raw,
-                wgts,
+                fwgts,
                 filter_centers=[0],
                 filter_half_widths=[foreground_hw],
                 mode="dpss_solve",
@@ -408,7 +415,7 @@ def fit_polarized_source_model_single_bl(
                 + p_model_right * rm_phasor_band
             ) * phasor[:, band_slice]
 
-    return source_models, all_filtered_data, time_slices
+    return source_models, all_filtered_data, time_slices, weights
 
 
 def deproject_polarized_source(
