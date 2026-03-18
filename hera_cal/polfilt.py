@@ -290,10 +290,11 @@ def fit_polarized_source_model_single_bl(
         nsamp = nsamples[key + (pol,)]
 
         # Weights: zero where the visibility is identically zero or flagged
-        auto_weight = (nsamp >= 0.0).astype(float)
-        # if use_nsample_wgts:
-        auto_weight = nsamp
-        # else:
+        if use_nsample_wgts:
+            auto_weight = nsamp
+        else:
+            auto_weight = (nsamp >= 0.0).astype(float)
+            
         filter_weight = (nsamp >= 0.0).astype(float)
 
         weights = np.where(np.isclose(vis[time_slice], 0.0), 0.0, 1.0) * auto_weight[time_slice]
