@@ -179,6 +179,7 @@ def fit_polarized_source_model_single_bl(
     polarized_temporal_hw_mHz: float = 0.1,
     polarized_spectral_hw_sec: float = 50e-9,
     eigenval_cutoff: float = 1e-12,
+    sign: float = 1.0
 ) -> tuple[dict, dict, list]:
     """
     Fit a polarized visibility model for each source in ``sources``.
@@ -304,7 +305,7 @@ def fit_polarized_source_model_single_bl(
         # Geometric phase toward this source
         lmn = lmns[si][:, time_slice]
         phasor = np.exp(
-            2j * np.pi
+            2j * np.pi * sign
             * np.dot(blvec, lmn)[:, None]
             * freqs[None]
             / SPEED_OF_LIGHT
