@@ -20,6 +20,7 @@ from hera_cal import datacontainer, utils
 SIDEREAL_DAY_SECONDS = 86164.0905  # Sidereal day in seconds
 SPEED_OF_LIGHT = constants.c.value  # m/s
 
+
 def unpack_data_containers(
     data: datacontainer.DataContainer,
     flags: datacontainer.DataContainer,
@@ -258,7 +259,7 @@ def _fit_rotation_measure(
     dtest: int = 500,
     method='scipy'
 ) -> float:
-    """    
+    """
     Fit the Faraday rotation measure (RM) via a coherent grid search.
 
     Phases the visibilities to the supplied sky position, collapses over
@@ -321,38 +322,38 @@ def _fit_rotation_measure(
     best_idx = np.argmax(faraday_response)
 
     if method == 'grid_search':
-    
+
         # Fall back to grid value if peak is at an edge (can't interpolate)
         if best_idx == 0 or best_idx == len(faraday_response) - 1:
             return test_rm[best_idx]
-    
+
         # Parabolic interpolation using the three points around the peak
-        y_left  = faraday_response[best_idx - 1]
-        y_peak  = faraday_response[best_idx]
+        y_left = faraday_response[best_idx - 1]
+        y_peak = faraday_response[best_idx]
         y_right = faraday_response[best_idx + 1]
-    
+
         # Analytic vertex of the parabola through these three points
         # offset is in units of grid spacing, between -0.5 and +0.5
         denom = 2 * (2 * y_peak - y_left - y_right)
         if denom == 0:
             return test_rm[best_idx]
         offset = (y_right - y_left) / denom
-    
+
         grid_spacing = test_rm[1] - test_rm[0]
         return test_rm[best_idx] + offset * grid_spacing
 
     elif method == "max":
         return test_rm[best_idx]
-        
+
     elif method == "scipy":
         from scipy.optimize import minimize_scalar
 
         best_idx = np.argmax(faraday_response)
         grid_spacing = test_rm[1] - test_rm[0]
-        
+
         def neg_faraday_response(rm):
             return -np.abs(np.nanmean(spectrum * np.exp(2j * lambda_sq * rm)))
-        
+
         result = minimize_scalar(
             neg_faraday_response,
             bounds=(test_rm[best_idx] - 2 * grid_spacing,
@@ -360,7 +361,7 @@ def _fit_rotation_measure(
             method='bounded'
         )
         return result.x
-        
+
     else:
         raise ValueError("Blah")
 
@@ -452,21 +453,22 @@ def iteratively_fit_polarized_source_params(
             method=method,
             dtest=dtest,
         )
-        
-        ra_tol  = abs(fit_ra  - right_ascension)
+
+        ra_tol = abs(fit_ra - right_ascension)
         dec_tol = abs(fit_dec - declination)
-        rm_tol  = abs(fit_rm  - rotation_measure)
-        
+        rm_tol = abs(fit_rm - rotation_measure)
+
         if ra_tol < 1e-4 and dec_tol < 1e-4 and rm_tol < 1e-3:
             print(f"Converged at {fi} iterations")
             break
-        
+
         # Update running estimates for the next iteration
         right_ascension = fit_ra
         declination = fit_dec
         rotation_measure = fit_rm
 
     return fit_ra, fit_dec, fit_rm
+
 
 def radec_to_azalt(
     ra: float,
