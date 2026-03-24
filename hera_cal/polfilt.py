@@ -14,11 +14,459 @@ import numpy as np
 from tqdm import tqdm
 from hera_filters import dspec
 from hera_cal.smooth_cal import _linear_fit
+from hera_cal import datacontainer, utils
 
 # Constants
 SIDEREAL_DAY_SECONDS = 86164.0905  # Sidereal day in seconds
 SPEED_OF_LIGHT = constants.c.value  # m/s
 
+def unpack_data_containers(
+    data: datacontainer.DataContainer,
+    flags: datacontainer.DataContainer,
+    nsamples: datacontainer.DataContainer,
+    pol: str = "ee",
+    antpos: dict = None,
+    freqs: np.ndarray = None,
+    time_slice: slice = slice(0, None),
+    freq_slice: slice = slice(0, None),
+    antpairs: list = None,
+    weight_by_nsamples: bool = True,
+):
+    """
+    Unpack HERA data containers into arrays suitable for vectorized operations.
+
+    Extracts visibility data, flags, and metadata from HERA DataContainer
+    objects and formats them for use with the imaging and fitting algorithms.
+    Both each baseline and its conjugate are included to enforce Hermitian
+    symmetry in the visibility data.
+
+    Parameters
+    ----------
+    data : datacontainer.DataContainer
+        Visibility data to be unpacked.
+    flags : datacontainer.DataContainer
+        Boolean flags corresponding to the visibility data. Flagged samples
+        are zeroed out in the returned weights array.
+    nsamples : datacontainer.DataContainer
+        Number of samples contributing to each visibility measurement. Used
+        as weights when ``weight_by_nsamples`` is True.
+    pol : str, optional
+        Polarization string to extract (e.g. ``"ee"``, ``"nn"``).
+        Default is ``"ee"``.
+    antpos : dict, optional
+        Antenna positions in metres, keyed by antenna number. If None, falls
+        back to ``data.antpos``.
+    freqs : np.ndarray, optional
+        Frequency array in Hz. If None, falls back to ``data.freqs``.
+    time_slice : slice, optional
+        Slice applied along the time axis. Default selects all times.
+    freq_slice : slice, optional
+        Slice applied along the frequency axis. Default selects all channels.
+    antpairs : list of tuple, optional
+        Antenna pairs ``(ant1, ant2)`` to include. If None, all pairs in
+        ``data`` are used.
+    weight_by_nsamples : bool, optional
+        If True, weights are ``nsamples * ~flags``; otherwise weights are
+        ``~flags`` (i.e. binary unflagged mask). Default is True.
+
+    Returns
+    -------
+    vis : np.ndarray, shape (2 * n_antpairs, n_times, n_freqs)
+        Complex visibility data. The factor of two arises from including each
+        baseline and its conjugate.
+    weights : np.ndarray, shape (2 * n_antpairs, n_times, n_freqs)
+        Non-negative real weights for each visibility sample.
+    uvw : np.ndarray, shape (2 * n_antpairs, 3, n_freqs)
+        UVW coordinates in units of wavelengths, computed per frequency
+        channel.
+    times : np.ndarray, shape (n_times,)
+        Julian dates for each time sample after applying ``time_slice``.
+    freqs : np.ndarray, shape (n_freqs,)
+        Frequencies in Hz after applying ``freq_slice``.
+    """
+    if antpairs is None:
+        antpairs = data.antpairs()
+
+    if freqs is None:
+        freqs = data.freqs
+
+    if antpos is None:
+        antpos = data.antpos
+
+    vis_list = []
+    weights_list = []
+    uvw_list = []
+
+    for ap in antpairs:
+        blpol = ap + (pol,)
+        blvec = antpos[ap[1]] - antpos[ap[0]]
+
+        # Weights: optionally scale by nsamples, then zero flagged samples.
+        if weight_by_nsamples:
+            weight = nsamples[blpol][time_slice, freq_slice] * (
+                ~flags[blpol][time_slice, freq_slice]
+            ).astype(float)
+        else:
+            weight = (~flags[blpol][time_slice, freq_slice]).astype(float)
+
+        vis_list.extend(
+            [
+                data[blpol][time_slice, freq_slice],
+                data[utils.reverse_bl(blpol)][time_slice, freq_slice],
+            ]
+        )
+        weights_list.extend([weight, weight])
+
+        # UVW in wavelengths: shape (3, n_freqs).
+        uvw_baseline = (
+            blvec[:, None] * freqs[freq_slice][None] / constants.c.value
+        )
+        uvw_list.extend([uvw_baseline, -uvw_baseline])
+
+    # Final shapes:
+    #   vis, weights : (n_bls, n_times, n_freqs)
+    #   uvw          : (n_bls, 3, n_freqs)
+    vis = np.array(vis_list)
+    weights = np.array(weights_list)
+    uvw = np.array(uvw_list)
+    times = data.times[time_slice]
+    freqs_out = freqs[freq_slice]  # Bug fix: was returning the un-sliced `freqs`
+
+    return vis, weights, uvw, times, freqs_out
+
+
+def _fit_polarized_source_position(
+    vis: np.ndarray,
+    weights: np.ndarray,
+    uvw: np.ndarray,
+    ra: float,
+    dec: float,
+    rotation_measure: float,
+    times: np.ndarray,
+    freqs: np.ndarray,
+    location,
+) -> tuple[float, float]:
+    """
+    Fit the sky position of a polarized point source near an initial guess.
+
+    Phases the visibilities to the current best-guess position, removes the
+    Faraday rotation, and solves a weighted linear system for the small
+    positional offsets (delta_l, delta_m) in direction-cosine space. The
+    offsets are projected back to RA/Dec.
+
+    Parameters
+    ----------
+    vis : np.ndarray, shape (n_bls, n_times, n_freqs)
+        Complex visibilities.
+    weights : np.ndarray, shape (n_bls, n_times, n_freqs)
+        Non-negative real weights.
+    uvw : np.ndarray, shape (n_bls, 3, n_freqs)
+        UVW coordinates in wavelengths.
+    ra : float
+        Current best-guess right ascension in degrees.
+    dec : float
+        Current best-guess declination in degrees.
+    rotation_measure : float
+        Current best-guess rotation measure in rad/m².
+    times : np.ndarray, shape (n_times,)
+        Julian dates.
+    freqs : np.ndarray, shape (n_freqs,)
+        Frequencies in Hz.
+    location : astropy.coordinates.EarthLocation
+        Observatory location used for coordinate transforms.
+
+    Returns
+    -------
+    ra_fit : float
+        Refined right ascension in degrees.
+    dec_fit : float
+        Refined declination in degrees.
+    """
+    # Faraday de-rotation phasor, shape (n_freqs,).
+    lambda_sq = (constants.c.value / freqs) ** 2
+    rm_phasor = np.exp(2j * lambda_sq * rotation_measure)
+
+    # Design matrix M is time-independent: columns are [1, 2πiu, 2πiv].
+    # Shape: (n_bls * n_freqs, 3).
+    u_flat = uvw[:, 0, :].ravel()
+    v_flat = uvw[:, 1, :].ravel()
+    M = np.stack(
+        [
+            np.ones(len(u_flat)),
+            2j * np.pi * u_flat,
+            2j * np.pi * v_flat,
+        ],
+        axis=1,
+    )
+
+    # Accumulate weighted normal equations over time.
+    XTX = np.zeros((3, 3), dtype=complex)
+    XTy = np.zeros(3, dtype=complex)
+
+    for ti in range(vis.shape[1]):
+        # Phase-shift visibilities to the current sky position.
+        l0, m0, n0 = radec_to_azalt(ra, dec, times[ti : ti + 1], location)
+        lmn0 = np.stack([l0, m0, n0])  # shape (3, 1)
+        phase0 = np.einsum("bcf,ct->btf", uvw, lmn0)  # (n_bls, 1, n_freqs)
+
+        vis_t = (
+            vis[:, ti, :]
+            * np.exp(-2j * np.pi * phase0[:, 0, :])
+            * rm_phasor[None, :]
+        )  # (n_bls, n_freqs)
+        w_t = weights[:, ti, :]  # (n_bls, n_freqs)
+
+        vis_flat_t = vis_t.ravel()
+        w_flat_t = w_t.ravel()
+
+        WM = w_flat_t[:, None] * M  # (n_vis, 3)
+        XTX += WM.conj().T @ M
+        XTy += WM.conj().T @ vis_flat_t
+
+    # Solve normal equations for [amplitude, delta_l, delta_m].
+    x = np.linalg.solve(XTX, XTy)
+
+    delta_l = (x[1] / x[0]).real
+    delta_m = (x[2] / x[0]).real
+    n = np.sqrt(1 - delta_l**2 - delta_m**2)
+
+    dec_rad = np.radians(dec)
+    ra_fit = ra + np.degrees(
+        np.arctan2(
+            delta_l,
+            n * np.cos(dec_rad) - delta_m * np.sin(dec_rad),
+        )
+    )
+    dec_fit = np.degrees(
+        np.arcsin(delta_m * np.cos(dec_rad) + n * np.sin(dec_rad))
+    )
+
+    return ra_fit, dec_fit
+
+
+def _fit_rotation_measure(
+    vis: np.ndarray,
+    weights: np.ndarray,
+    uvw: np.ndarray,
+    times: np.ndarray,
+    freqs: np.ndarray,
+    ra: float,
+    dec: float,
+    start_rm: float,
+    location,
+    drm: float = 5.0,
+    dtest: int = 500,
+    method='scipy'
+) -> float:
+    """    
+    Fit the Faraday rotation measure (RM) via a coherent grid search.
+
+    Phases the visibilities to the supplied sky position, collapses over
+    baselines and times into a Stokes-Q/U spectrum, then evaluates the
+    coherent sum over a grid of trial RM values. The RM that maximises the
+    amplitude of the de-rotated spectrum is returned.
+
+    Parameters
+    ----------
+    vis : np.ndarray, shape (n_bls, n_times, n_freqs)
+        Complex visibilities.
+    weights : np.ndarray, shape (n_bls, n_times, n_freqs)
+        Non-negative real weights.
+    uvw : np.ndarray, shape (n_bls, 3, n_freqs)
+        UVW coordinates in wavelengths.
+    times : np.ndarray, shape (n_times,)
+        Julian dates.
+    freqs : np.ndarray, shape (n_freqs,)
+        Frequencies in Hz.
+    ra : float
+        Right ascension of the source in degrees.
+    dec : float
+        Declination of the source in degrees.
+    start_rm : float
+        Central value of the RM search grid in rad/m².
+    location : astropy.coordinates.EarthLocation
+        Observatory location used for coordinate transforms.
+    drm : float, optional
+        Half-width of the RM search window in rad/m². Default is 5.
+    dtest : int, optional
+        Number of RM trial values. Default is 500.
+
+    Returns
+    -------
+    float
+        Best-fit rotation measure in rad/m².
+    """
+    # Phase-rotate to source position and compute a weighted-average spectrum.
+    l, m, n = radec_to_azalt(ra, dec, times, location)
+    lmn = np.array([l, m, n])  # shape (3, n_times)
+    phasor = np.exp(-2j * np.pi * np.einsum("bcf,ct->btf", uvw, lmn))
+
+    vis_phased = vis * phasor  # (n_bls, n_times, n_freqs)
+    weight_sum = np.sum(weights, axis=(0, 1))  # (n_freqs,)
+    # Avoid division by zero for fully-flagged channels.
+    safe_weight_sum = np.where(weight_sum > 0, weight_sum, 1.0)
+    spectrum = (
+        np.sum(vis_phased * weights, axis=(0, 1)) / safe_weight_sum
+    )  # (n_freqs,)
+
+    # Grid search: find the RM that maximises the coherent de-rotated sum.
+    lambda_sq = (constants.c.value / freqs) ** 2
+    test_rm = np.linspace(start_rm - drm, start_rm + drm, dtest)
+    faraday_response = np.array(
+        [
+            np.abs(np.nanmean(spectrum * np.exp(2j * lambda_sq * rm)))
+            for rm in test_rm
+        ]
+    )
+    best_idx = np.argmax(faraday_response)
+
+    if method == 'grid_search':
+    
+        # Fall back to grid value if peak is at an edge (can't interpolate)
+        if best_idx == 0 or best_idx == len(faraday_response) - 1:
+            return test_rm[best_idx]
+    
+        # Parabolic interpolation using the three points around the peak
+        y_left  = faraday_response[best_idx - 1]
+        y_peak  = faraday_response[best_idx]
+        y_right = faraday_response[best_idx + 1]
+    
+        # Analytic vertex of the parabola through these three points
+        # offset is in units of grid spacing, between -0.5 and +0.5
+        denom = 2 * (2 * y_peak - y_left - y_right)
+        if denom == 0:
+            return test_rm[best_idx]
+        offset = (y_right - y_left) / denom
+    
+        grid_spacing = test_rm[1] - test_rm[0]
+        return test_rm[best_idx] + offset * grid_spacing
+
+    elif method == "max":
+        return test_rm[best_idx]
+        
+    elif method == "scipy":
+        from scipy.optimize import minimize_scalar
+
+        best_idx = np.argmax(faraday_response)
+        grid_spacing = test_rm[1] - test_rm[0]
+        
+        def neg_faraday_response(rm):
+            return -np.abs(np.nanmean(spectrum * np.exp(2j * lambda_sq * rm)))
+        
+        result = minimize_scalar(
+            neg_faraday_response,
+            bounds=(test_rm[best_idx] - 2 * grid_spacing,
+                    test_rm[best_idx] + 2 * grid_spacing),
+            method='bounded'
+        )
+        return result.x
+        
+    else:
+        raise ValueError("Blah")
+
+
+def iteratively_fit_polarized_source_params(
+    data: datacontainer.DataContainer,
+    flags: datacontainer.DataContainer,
+    nsamples: datacontainer.DataContainer,
+    right_ascension,
+    declination,
+    rotation_measure,
+    location,
+    maxiter: int = 10,
+    drm=5.0,
+    dtest=5000,
+    method='grid_search'
+):
+    """
+    Iteratively fit RA, Dec, and rotation measure for a set of polarized sources.
+
+    For each source, alternates between refining the sky position (via
+    ``_fit_polarized_source_position``) and the rotation measure (via
+    ``_fit_rotation_measure``) until convergence or ``maxiter`` iterations.
+
+    Parameters
+    ----------
+    data_list : list of datacontainer.DataContainer
+        One visibility DataContainer per source.
+    flags_list : list of datacontainer.DataContainer
+        One flags DataContainer per source, matching ``data_list``.
+    nsamples_list : list of datacontainer.DataContainer
+        One nsamples DataContainer per source, matching ``data_list``.
+    sources : dict
+        Dictionary keyed by source name. Each value must be a dict with keys:
+
+        - ``"ra"`` : float — initial right ascension in degrees
+        - ``"dec"`` : float — initial declination in degrees
+        - ``"rotation_measure"`` : float — initial RM in rad/m²
+
+    location : astropy.coordinates.EarthLocation
+        Observatory location used for coordinate transforms.
+    maxiter : int, optional
+        Maximum number of RA/Dec ↔ RM alternation iterations. Default is 10.
+
+    Returns
+    -------
+    dict
+        Keyed by source name. Each value is a dict with keys ``"ra"``,
+        ``"dec"``, and ``"rotation_measure"`` holding the best-fit values.
+    """
+    # Unpack datacontainers in numpy arrays
+    vis, weights, uvw, times, freqs = unpack_data_containers(
+        data,
+        flags,
+        nsamples,
+        pol='pQ'
+    )
+    weights = np.where(np.isfinite(vis), weights, 0.0)
+    vis = np.where(np.isfinite(vis), vis, 0.0)
+
+    # If all of the data are flagged, return original source values
+    if np.sum(weights) == 0.0:
+        return right_ascension, declination, rotation_measure
+
+    for fi in range(maxiter):
+        fit_ra, fit_dec = _fit_polarized_source_position(
+            vis,
+            weights,
+            uvw,
+            right_ascension,
+            declination,
+            rotation_measure,
+            times,
+            freqs,
+            location,
+        )
+
+        fit_rm = _fit_rotation_measure(
+            vis,
+            weights,
+            uvw,
+            times,
+            freqs,
+            fit_ra,
+            fit_dec,
+            rotation_measure,
+            location,
+            drm=drm,
+            method=method,
+            dtest=dtest,
+        )
+        
+        ra_tol  = abs(fit_ra  - right_ascension)
+        dec_tol = abs(fit_dec - declination)
+        rm_tol  = abs(fit_rm  - rotation_measure)
+        
+        if ra_tol < 1e-4 and dec_tol < 1e-4 and rm_tol < 1e-3:
+            print(f"Converged at {fi} iterations")
+            break
+        
+        # Update running estimates for the next iteration
+        right_ascension = fit_ra
+        declination = fit_dec
+        rotation_measure = fit_rm
+
+    return fit_ra, fit_dec, fit_rm
 
 def radec_to_azalt(
     ra: float,
