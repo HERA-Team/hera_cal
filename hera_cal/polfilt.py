@@ -377,7 +377,8 @@ def iteratively_fit_polarized_source_params(
     maxiter: int = 10,
     drm=5.0,
     dtest=5000,
-    method='grid_search'
+    method='grid_search',
+    verbose=False,
 ):
     """
     Iteratively fit RA, Dec, and rotation measure for a set of polarized sources.
@@ -457,6 +458,9 @@ def iteratively_fit_polarized_source_params(
         ra_tol = abs(fit_ra - right_ascension)
         dec_tol = abs(fit_dec - declination)
         rm_tol = abs(fit_rm - rotation_measure)
+
+        if verbose:
+            print ("RA:", fit_ra, "DEC:", fit_dec, "RM:", fit_rm)
 
         if ra_tol < 1e-4 and dec_tol < 1e-4 and rm_tol < 1e-3:
             print(f"Converged at {fi} iterations")
