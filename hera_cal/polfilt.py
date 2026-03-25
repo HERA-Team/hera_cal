@@ -460,7 +460,7 @@ def iteratively_fit_polarized_source_params(
         rm_tol = abs(fit_rm - rotation_measure)
 
         if verbose:
-            print ("RA:", fit_ra, "DEC:", fit_dec, "RM:", fit_rm)
+            print("RA:", fit_ra, "DEC:", fit_dec, "RM:", fit_rm)
 
         if ra_tol < 1e-4 and dec_tol < 1e-4 and rm_tol < 1e-3:
             print(f"Converged at {fi} iterations")
