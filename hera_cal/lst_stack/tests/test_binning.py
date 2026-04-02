@@ -353,6 +353,42 @@ class TestLSTBinFilesForBaselines:
             uvd_redavg.Npols,
         )
 
+    def test_multiprocessed_load(self, uvd_redavg, uvd_redavg_file):
+        # Test that we can load the same file in multiple processes without error.
+        data = binning.lst_bin_files_for_baselines(
+            data_files=[uvd_redavg_file],
+            lst_bin_edges=[
+                uvd_redavg.lst_array.min() - 0.1,
+                uvd_redavg.lst_array.max() + 0.1,
+            ],
+            redundantly_averaged=True,
+            rephase=False,
+            antpairs=uvd_redavg.get_antpairs(),
+            reds=RedundantGroups.from_antpos(
+                dict(zip(uvd_redavg.telescope.antenna_numbers, uvd_redavg.telescope.antenna_positions)),
+            ),
+        )[1]
+
+        data_mp = binning.lst_bin_files_for_baselines(
+            data_files=[uvd_redavg_file],
+            lst_bin_edges=[
+                uvd_redavg.lst_array.min() - 0.1,
+                uvd_redavg.lst_array.max() + 0.1,
+            ],
+            redundantly_averaged=True,
+            rephase=False,
+            antpairs=uvd_redavg.get_antpairs(),
+            reds=RedundantGroups.from_antpos(
+                dict(zip(uvd_redavg.telescope.antenna_numbers, uvd_redavg.telescope.antenna_positions)),
+            ),
+            n_workers=2,
+        )[1]
+
+        # The data should be the same regardless of multiprocessing.
+        for d, _d in zip(data, data_mp):
+            np.testing.assert_allclose(d, _d)
+
+
 
 class TestLSTBinFilesFromConfig:
     def get_config(self, season, request, outfile_index=0):
