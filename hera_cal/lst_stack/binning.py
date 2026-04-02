@@ -497,7 +497,7 @@ def lst_bin_files_for_baselines(
         positive integer (``>= 1``); passing ``0`` or a negative value is invalid and
         will result in a ``ValueError``. Values greater than 1 submit each file read
         to a thread pool so that multiple nights can be read concurrently.
-        
+
         A sensible effective upper bound is ``min(n_workers, len(data_files))``,
         which is applied internally.
 

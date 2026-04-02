@@ -389,7 +389,6 @@ class TestLSTBinFilesForBaselines:
             np.testing.assert_allclose(d, _d)
 
 
-
 class TestLSTBinFilesFromConfig:
     def get_config(self, season, request, outfile_index=0):
         cfg = LSTBinConfigurator(
