@@ -25,7 +25,6 @@ from hera_qm.time_series_metrics import true_stretches
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-
 def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
     """
     Adjust the LST bin edges so that they start in the range [0, 2pi) and increase.
@@ -494,7 +493,7 @@ def lst_bin_files_for_baselines(
     n_workers : int, optional
         Number of parallel workers to use when reading files.  ``1`` (the default)
         reproduces the original serial behaviour exactly.  Values greater than 1
-        submit each file read to a thread pool so that multiple nights
+        submit each file read to a thread pool so that multiple nights 
         can be read concurrently.
 
         A sensible upper bound is ``min(n_workers, len(data_files))``.
@@ -615,37 +614,16 @@ def lst_bin_files_for_baselines(
         )
     ]
 
-    # ── dispatch: serial (n_workers==1) or parallel ───────────────────────────
-    if n_workers == 1:
-        # call worker directly, no executor overhead.
-        results = [_read_one_file(*args) for args in file_args]
-    else:
-        n_workers = min(n_workers, len(metas))   # never spin up more than needed
-        results = [None] * len(metas)
-        with ThreadPoolExecutor(max_workers=n_workers) as pool:
-            future_to_idx = {
-                pool.submit(_read_one_file, *args): i
-                for i, args in enumerate(file_args)
-            }
-            for fut in as_completed(future_to_idx):
-                i = future_to_idx[fut]
-                results[i] = fut.result()   # re-raises exceptions from workers
-
-    # ── fill master arrays from results ───────────────────────────────────────
-    ntimes_so_far = 0
-    for res in results:
-        ntimes = res["ntimes"]
-        slc = slice(ntimes_so_far, ntimes_so_far + ntimes)
-        ntimes_so_far += ntimes
-
+    # ── helper: write one file's result into the master arrays ───────────────
+    def _fill_master_arrays(res: dict, slc: slice) -> None:
         if res["skip"]:
             data[slc] = np.nan
             flags[slc] = True
             nsamples[slc] = 0
-            continue
+            return
 
-        _data = res["data"]
-        _flags = res["flags"]
+        _data     = res["data"]
+        _flags    = res["flags"]
         _nsamples = res["nsamples"]
         inpainted = res["inpainted"]
 
@@ -665,8 +643,8 @@ def lst_bin_files_for_baselines(
                 blpol = _bl + (pol,)
 
                 if blpol in _data:
-                    data[slc, i, :, j] = _data[blpol]
-                    flags[slc, i, :, j] = _flags[blpol]
+                    data[slc, i, :, j]     = _data[blpol]
+                    flags[slc, i, :, j]    = _flags[blpol]
                     nsamples[slc, i, :, j] = _nsamples[blpol]
 
                     if inpainted is not None and where_inpainted is not None:
@@ -683,9 +661,35 @@ def lst_bin_files_for_baselines(
                                 )
                         where_inpainted[slc, i, :, j] = inpainted[inpblpol]
                 else:
-                    data[slc, i, :, j] = np.nan
-                    flags[slc, i, :, j] = True
+                    data[slc, i, :, j]     = np.nan
+                    flags[slc, i, :, j]    = True
                     nsamples[slc, i, :, j] = 0
+
+    # Precompute each file's time slice so results can be filled in any order.
+    ntimes_offsets = np.cumsum([0] + [len(t) for t in time_idx])
+    file_slices = [
+        slice(int(ntimes_offsets[i]), int(ntimes_offsets[i + 1]))
+        for i in range(len(file_args))
+    ]
+
+    # ── dispatch: serial (n_workers==1) or parallel ───────────────────────────
+    if n_workers == 1:
+        # Call worker directly and fill immediately -- no results list needed.
+        for i, args in enumerate(file_args):
+            _fill_master_arrays(_read_one_file(*args), file_slices[i])
+    else:
+        n_workers = min(n_workers, len(metas))   # never spin up more than needed
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            future_to_idx = {
+                pool.submit(_read_one_file, *args): i
+                for i, args in enumerate(file_args)
+            }
+            for fut in as_completed(future_to_idx):
+                i = future_to_idx[fut]
+                # Fill immediately and let res go out of scope so the GC can
+                # reclaim each file's DataContainers as soon as they are consumed,
+                # rather than holding all results in memory until the loop ends.
+                _fill_master_arrays(fut.result(), file_slices[i])
 
     logger.info("About to run LST binning...")
     bin_lst, data, flags, nsamples, where_inpainted = lst_align(
