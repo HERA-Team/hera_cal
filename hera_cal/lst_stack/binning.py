@@ -492,12 +492,14 @@ def lst_bin_files_for_baselines(
     cal_file_loader_kwargs
         A dictionary of keyword arguments to pass to ``cal_file_loader``.
     n_workers : int, optional
-        Number of parallel workers to use when reading files.  ``1`` (the default)
-        reproduces the original serial behaviour exactly.  Values greater than 1
-        submit each file read to a thread pool so that multiple nights
-        can be read concurrently.
-
-        A sensible upper bound is ``min(n_workers, len(data_files))``.
+        Number of parallel workers to use when reading files. ``1`` (the default)
+        reproduces the original serial behaviour exactly. ``n_workers`` must be a
+        positive integer (``>= 1``); passing ``0`` or a negative value is invalid and
+        will result in a ``ValueError``. Values greater than 1 submit each file read
+        to a thread pool so that multiple nights can be read concurrently.
+        
+        A sensible effective upper bound is ``min(n_workers, len(data_files))``,
+        which is applied internally.
 
     Returns
     -------
@@ -525,6 +527,9 @@ def lst_bin_files_for_baselines(
         )
         for fl in data_files
     ]
+
+    if n_workers < 1 or not isinstance(n_workers, int):
+        raise ValueError(f"n_workers must be a positive integer, got {n_workers}")
 
     lst_bin_edges = np.array(lst_bin_edges)
 
