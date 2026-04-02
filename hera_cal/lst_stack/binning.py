@@ -25,6 +25,7 @@ from hera_qm.time_series_metrics import true_stretches
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
 def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
     """
     Adjust the LST bin edges so that they start in the range [0, 2pi) and increase.
@@ -493,7 +494,7 @@ def lst_bin_files_for_baselines(
     n_workers : int, optional
         Number of parallel workers to use when reading files.  ``1`` (the default)
         reproduces the original serial behaviour exactly.  Values greater than 1
-        submit each file read to a thread pool so that multiple nights 
+        submit each file read to a thread pool so that multiple nights
         can be read concurrently.
 
         A sensible upper bound is ``min(n_workers, len(data_files))``.
@@ -622,8 +623,8 @@ def lst_bin_files_for_baselines(
             nsamples[slc] = 0
             return
 
-        _data     = res["data"]
-        _flags    = res["flags"]
+        _data = res["data"]
+        _flags = res["flags"]
         _nsamples = res["nsamples"]
         inpainted = res["inpainted"]
 
@@ -643,8 +644,8 @@ def lst_bin_files_for_baselines(
                 blpol = _bl + (pol,)
 
                 if blpol in _data:
-                    data[slc, i, :, j]     = _data[blpol]
-                    flags[slc, i, :, j]    = _flags[blpol]
+                    data[slc, i, :, j] = _data[blpol]
+                    flags[slc, i, :, j] = _flags[blpol]
                     nsamples[slc, i, :, j] = _nsamples[blpol]
 
                     if inpainted is not None and where_inpainted is not None:
@@ -661,8 +662,8 @@ def lst_bin_files_for_baselines(
                                 )
                         where_inpainted[slc, i, :, j] = inpainted[inpblpol]
                 else:
-                    data[slc, i, :, j]     = np.nan
-                    flags[slc, i, :, j]    = True
+                    data[slc, i, :, j] = np.nan
+                    flags[slc, i, :, j] = True
                     nsamples[slc, i, :, j] = 0
 
     # Precompute each file's time slice so results can be filled in any order.
