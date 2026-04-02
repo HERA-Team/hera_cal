@@ -826,6 +826,10 @@ class SingleBaselineStacker:
             format than HERACal files.
         cal_file_loader_kwargs : dict | None
             A dictionary of keyword arguments to pass to ``cal_file_loader``.
+        n_workers : int
+            Number of parallel workers to use when reading files. ``1`` (the default) reproduces the original serial behaviour exactly. ``n_workers`` must be a
+            positive integer (``>= 1``); passing ``0`` or a negative value is invalid and will result in a ``ValueError``. Values greater than 1 submit each file read to a thread pool so
+            that multiple nights can be read concurrently.
         """
         # Load the data
         files_here = configurator.bl_to_file_map[bl_str]
