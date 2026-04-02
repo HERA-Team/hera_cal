@@ -388,6 +388,19 @@ class TestLSTBinFilesForBaselines:
         for d, _d in zip(data, data_mp):
             np.testing.assert_allclose(d, _d)
 
+    def test_bad_nworkers(self, uvd, uvd_file, uvc_file):
+        """Test that providing freq_range works."""
+        with pytest.raises(ValueError, match="n_workers must be a positive integer"):
+            _ = binning.lst_bin_files_for_baselines(
+                data_files=[uvd_file],
+                lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
+                cal_files=[uvc_file],
+                freq_min=153e6,
+                freq_max=158e6,
+                antpairs=uvd.get_antpairs(),
+                n_workers=0,
+            )
+
 
 class TestLSTBinFilesFromConfig:
     def get_config(self, season, request, outfile_index=0):
