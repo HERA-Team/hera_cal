@@ -782,6 +782,7 @@ class SingleBaselineStacker:
             to_keep_slice: slice | None = None,
             cal_file_loader: callable | None = None,
             cal_file_loader_kwargs: dict | None = None,
+            n_workers: int = 1,
         ) -> SingleBaselineStacker:
         """Creates a SingleBaselineStacker object that loads data for a single baseline, optionally rolls to start after a branch cut,
         and removes any times at the beginning or end of the data set that have no data.
@@ -858,6 +859,7 @@ class SingleBaselineStacker:
             cal_files=cal_files,
             cal_file_loader=cal_file_loader,
             cal_file_loader_kwargs=cal_file_loader_kwargs,
+            n_workers=n_workers,
          )
 
         # Cut out baseline dimension
