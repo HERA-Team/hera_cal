@@ -613,7 +613,8 @@ def lst_bin_files_for_baselines(
             redundantly_averaged,
             reds,
             cal_file_loader,
-            cal_file_loader_kwargs,
+            # make per-task copy so worker threads don't share mutable kwargs
+            dict(cal_file_loader_kwargs) if cal_file_loader_kwargs is not None else None,
         )
         for meta, calfl, tind, inpfile in zip(
             metas, cal_files, time_idx, where_inpainted_files
