@@ -332,6 +332,8 @@ def _read_one_file(
         ]
 
     if not bls_to_load or ntimes == 0:
+        # If none of the requested baselines are in this file, then just
+        # set stuff as nan and go to next file.
         logger.warning(
             f"None of the baseline-times are in {meta_path}. Skipping."
         )
@@ -341,6 +343,7 @@ def _read_one_file(
 
     logger.info(f"Reading {meta_path}")
 
+    # TODO: use Fast readers here instead, and select times directly on read.
     _data, _flags, _nsamples = io.HERAData(meta_path).read(
         bls=bls_to_load,
         freq_chans=freq_chans,
@@ -351,16 +354,20 @@ def _read_one_file(
     _flags.select_or_expand_times(indices=tind, skip_bda_check=True)
     _nsamples.select_or_expand_times(indices=tind, skip_bda_check=True)
 
-    # ── inpaint flags ────────────────────────────────────────────────────────
     inpainted = None
     if inpfile is not None:
+        # This returns a DataContainer (unless something went wrong) since it should
+        # always be a 'baseline' type of UVFlag.
         inpainted = io.load_flags(inpfile)
         if not isinstance(inpainted, DataContainer):
             raise ValueError(f"Expected {inpfile} to be a DataContainer")
+        
+        # We need to down-selecton times/freqs (bls and pols will be sub-selected
+        # based on those in the data through the next loop)
         inpainted.select_or_expand_times(indices=tind, skip_bda_check=True)
         inpainted.select_freqs(channels=freq_chans)
 
-    # ── calibration ──────────────────────────────────────────────────────────
+    # load calibration
     if calfl is not None:
         logger.info(f"Opening and applying {calfl}")
         if cal_file_loader is not None:
@@ -528,6 +535,7 @@ def lst_bin_files_for_baselines(
         for fl in data_files
     ]
 
+    # Make sure n_workers is a positive integer
     if n_workers < 1 or not isinstance(n_workers, int):
         raise ValueError(f"n_workers must be a positive integer, got {n_workers}")
 
@@ -555,9 +563,11 @@ def lst_bin_files_for_baselines(
         if cal_file_loader_kwargs is None:
             cal_file_loader_kwargs = {}
 
+        # Add LST bin edges if not already present
         if 'lst_bin_edges' not in cal_file_loader_kwargs:
             cal_file_loader_kwargs['lst_bin_edges'] = lst_bin_edges
 
+        # Add telescope location if not already present
         if 'telescope_location_lat_lon_alt_degrees' not in cal_file_loader_kwargs:
             cal_file_loader_kwargs['telescope_location_lat_lon_alt_degrees'] = metas[0].telescope_location_lat_lon_alt_degrees
 
@@ -644,7 +654,9 @@ def lst_bin_files_for_baselines(
                         f"Expected only one baseline in group for {bl}, got {bls}"
                     )
                 if bls:
-                    _bl = next(iter(bls))
+                    # if there are no bls, just keep bl the same, and it won't be found,
+                    # triggering the data to be filled with nans anyway
+                    _bl = next(iter(bls)) # use next(iter) since bls is a set
 
             for j, pol in enumerate(pols):
                 blpol = _bl + (pol,)
@@ -655,6 +667,8 @@ def lst_bin_files_for_baselines(
                     nsamples[slc, i, :, j] = _nsamples[blpol]
 
                     if inpainted is not None and where_inpainted is not None:
+                        # Get the representative baseline key from this bl group that
+                        # exists in the where_inpainted data.
                         inpblpol = blpol
                         if redundantly_averaged:
                             for inpbl in reds[bl]:
@@ -668,6 +682,8 @@ def lst_bin_files_for_baselines(
                                 )
                         where_inpainted[slc, i, :, j] = inpainted[inpblpol]
                 else:
+                    # This baseline+pol doesn't exist in this file. That's
+                    # OK, we don't assume all baselines are in every file.
                     data[slc, i, :, j] = np.nan
                     flags[slc, i, :, j] = True
                     nsamples[slc, i, :, j] = 0
@@ -699,6 +715,9 @@ def lst_bin_files_for_baselines(
                 _fill_master_arrays(fut.result(), file_slices[i])
 
     logger.info("About to run LST binning...")
+    # LST bin edges are the actual edges of the bins, so should have length
+    # +1 of the LST centres. We use +dlst instead of +dlst/2 on the top edge
+    # so that np.arange definitely gets the last edge.
     bin_lst, data, flags, nsamples, where_inpainted = lst_align(
         data=data,
         flags=None if ignore_flags else flags,
