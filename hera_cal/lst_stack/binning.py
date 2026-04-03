@@ -361,7 +361,7 @@ def _read_one_file(
         inpainted = io.load_flags(inpfile)
         if not isinstance(inpainted, DataContainer):
             raise ValueError(f"Expected {inpfile} to be a DataContainer")
-        
+
         # We need to down-selecton times/freqs (bls and pols will be sub-selected
         # based on those in the data through the next loop)
         inpainted.select_or_expand_times(indices=tind, skip_bda_check=True)
@@ -664,7 +664,7 @@ def lst_bin_files_for_baselines(
                 if bls:
                     # if there are no bls, just keep bl the same, and it won't be found,
                     # triggering the data to be filled with nans anyway
-                    _bl = next(iter(bls)) # use next(iter) since bls is a set
+                    _bl = next(iter(bls))  # use next(iter) since bls is a set
 
             for j, pol in enumerate(pols):
                 blpol = _bl + (pol,)
