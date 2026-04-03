@@ -297,6 +297,7 @@ def _read_one_file(
     reds: RedundantGroups | None,
     cal_file_loader: callable | None,
     cal_file_loader_kwargs: dict | None,
+    blts_are_rectangular: bool = True,
 ) -> dict:
     """Read visibility data from a single file and return it as a plain dict.
 
@@ -315,7 +316,7 @@ def _read_one_file(
         inpainted   DataContainer or None
         bls_loaded  list of antpairs that were actually loaded
     """
-    meta = FastUVH5Meta(meta_path, blts_are_rectangular=True)
+    meta = FastUVH5Meta(meta_path, blts_are_rectangular=blts_are_rectangular)
     data_antpairs = meta.get_transactional("antpairs")
     ntimes = len(tind)
 
@@ -350,6 +351,7 @@ def _read_one_file(
         polarizations=pols,
     )
 
+    # Now select the relevant times from the data.
     _data.select_or_expand_times(indices=tind, skip_bda_check=True)
     _flags.select_or_expand_times(indices=tind, skip_bda_check=True)
     _nsamples.select_or_expand_times(indices=tind, skip_bda_check=True)
@@ -367,10 +369,13 @@ def _read_one_file(
         inpainted.select_or_expand_times(indices=tind, skip_bda_check=True)
         inpainted.select_freqs(channels=freq_chans)
 
-    # load calibration
+    # load calibration files if given, and apply calibration
     if calfl is not None:
         logger.info(f"Opening and applying {calfl}")
         if cal_file_loader is not None:
+            # Use the custom loader to read the calibration solutions. This is useful if the
+            # calibration files are in a different format than HERACal files, or if the user wants
+            # to apply some custom pre-processing to the calibration solutions as they are read in.
             gains, cal_flags = cal_file_loader(
                 calfl,
                 antpairs=bls_to_load,
@@ -424,6 +429,7 @@ def lst_bin_files_for_baselines(
     where_inpainted_files: list[list[str | Path | None]] | None = None,
     cal_file_loader: callable | None = None,
     cal_file_loader_kwargs: dict | None = None,
+    blts_are_rectangular: bool = True,
     n_workers: int = 1,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[np.ndarray]]:
     """Produce a set of LST-binned (but not averaged) data for a set of baselines.
@@ -507,6 +513,9 @@ def lst_bin_files_for_baselines(
         format than HERACal files.
     cal_file_loader_kwargs
         A dictionary of keyword arguments to pass to ``cal_file_loader``.
+    blts_are_rectangular: bool
+        Whether to assume that the blt axis of the input files is rectangular (i.e. that
+        all baselines have the same time samples).
     n_workers : int, optional
         Number of parallel workers to use when reading files. ``1`` (the default)
         reproduces the original serial behaviour exactly. ``n_workers`` must be a
@@ -539,7 +548,7 @@ def lst_bin_files_for_baselines(
         (
             fl
             if isinstance(fl, FastUVH5Meta)
-            else FastUVH5Meta(fl, blts_are_rectangular=True)
+            else FastUVH5Meta(fl, blts_are_rectangular=blts_are_rectangular)
         )
         for fl in data_files
     ]
@@ -636,6 +645,7 @@ def lst_bin_files_for_baselines(
                 cal_file_loader,
                 # make per-task copy so worker threads don't share mutable kwargs
                 dict(cal_file_loader_kwargs) if cal_file_loader_kwargs is not None else None,
+                blts_are_rectangular,
             )
         )
 
