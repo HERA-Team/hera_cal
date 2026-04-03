@@ -316,10 +316,14 @@ def _read_one_file(
         inpainted   DataContainer or None
         bls_loaded  list of antpairs that were actually loaded
     """
+    # Inspect file metadata (cheap; no I/O on the data arrays)
     meta = FastUVH5Meta(meta_path, blts_are_rectangular=blts_are_rectangular)
     data_antpairs = meta.get_transactional("antpairs")
     ntimes = len(tind)
 
+    # Determine which baselines to actually read
+    # For redundantly-averaged files we must map the requested unique-baseline
+    # keys back to whichever physical baseline is stored in this file.
     if redundantly_averaged:
         bls_to_load = [
             bl for bl in data_antpairs
@@ -342,6 +346,7 @@ def _read_one_file(
                 "data": None, "flags": None, "nsamples": None,
                 "inpainted": None, "bls_loaded": []}
 
+    # Read visibility data
     logger.info(f"Reading {meta_path}")
 
     # TODO: use Fast readers here instead, and select times directly on read.
@@ -351,11 +356,12 @@ def _read_one_file(
         polarizations=pols,
     )
 
-    # Now select the relevant times from the data.
+    # Trim to only the time indices that fall within an LST bin.
     _data.select_or_expand_times(indices=tind, skip_bda_check=True)
     _flags.select_or_expand_times(indices=tind, skip_bda_check=True)
     _nsamples.select_or_expand_times(indices=tind, skip_bda_check=True)
 
+    # Load inpainting flags (optional)
     inpainted = None
     if inpfile is not None:
         # This returns a DataContainer (unless something went wrong) since it should
@@ -364,12 +370,12 @@ def _read_one_file(
         if not isinstance(inpainted, DataContainer):
             raise ValueError(f"Expected {inpfile} to be a DataContainer")
 
-        # We need to down-selecton times/freqs (bls and pols will be sub-selected
+        # We need to down-select on times/freqs (bls and pols will be sub-selected
         # based on those in the data through the next loop)
         inpainted.select_or_expand_times(indices=tind, skip_bda_check=True)
         inpainted.select_freqs(channels=freq_chans)
 
-    # load calibration files if given, and apply calibration
+    # Load and apply calibration (optional)
     if calfl is not None:
         logger.info(f"Opening and applying {calfl}")
         if cal_file_loader is not None:
@@ -651,7 +657,23 @@ def lst_bin_files_for_baselines(
 
     # ── helper: write one file's result into the master arrays ───────────────
     def _fill_master_arrays(res: dict, slc: slice) -> None:
+        """Copy a single file's result dict into the pre-allocated master arrays.
+
+        ``slc`` is the row slice in the time axis of the master arrays that
+        corresponds to this file.  Results can therefore be written in any
+        order, which is what allows the parallel path to fill as each future
+        completes rather than waiting for all files to finish first.
+
+        Parameters
+        ----------
+        res
+            The dict returned by :func:`_read_one_file`.
+        slc
+            The slice into the time axis of the master arrays for this file,
+            pre-computed from each file's ``time_idx`` length.
+        """
         if res["skip"]:
+            # File had no usable data; fill its time rows with flagged nans.
             data[slc] = np.nan
             flags[slc] = True
             nsamples[slc] = 0
@@ -665,6 +687,8 @@ def lst_bin_files_for_baselines(
         for i, bl in enumerate(antpairs):
             _bl = bl  # may be remapped below for redundantly_averaged
 
+            # For redundantly-averaged data, find which stored physical baseline
+            # represents this unique-baseline group in the current file.
             if redundantly_averaged:
                 bls = reds.get_reds_in_bl_set(bl, _data.antpairs(), include_conj=True)
                 if len(bls) > 1:
@@ -680,6 +704,7 @@ def lst_bin_files_for_baselines(
                 blpol = _bl + (pol,)
 
                 if blpol in _data:
+                    # Baseline found: copy data, flags, nsamples into master arrays.
                     data[slc, i, :, j] = _data[blpol]
                     flags[slc, i, :, j] = _flags[blpol]
                     nsamples[slc, i, :, j] = _nsamples[blpol]
@@ -713,7 +738,7 @@ def lst_bin_files_for_baselines(
         for i in range(len(file_args))
     ]
 
-    # ── dispatch: serial (n_workers==1) or parallel ───────────────────────────
+    # dispatch: serial (n_workers==1) or parallel
     if n_workers == 1:
         # Call worker directly and fill immediately -- no results list needed.
         for i, args in enumerate(file_args):
