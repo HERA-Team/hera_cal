@@ -305,6 +305,48 @@ def _read_one_file(
     arguments must therefore be picklable (paths as strings, arrays as numpy,
     etc.) when used with ProcessPoolExecutor.
 
+    Parameters
+    ----------
+    meta_path
+        Path to the UVH5 file to read, as a plain string (not a Path object,
+        for picklability with ProcessPoolExecutor).
+    calfl
+        Path to a calibration file to apply to the data, or ``None`` to skip
+        calibration.
+    tind
+        Indices into the time axis of the file that fall within at least one
+        LST bin.  Only these rows are read into memory.
+    inpfile
+        Path to a UVFlag file recording where the data have
+        been inpainted, or ``None`` if no inpainting information is available.
+    antpairs
+        The antenna pairs (baselines) to load.  Pairs absent from this file
+        are silently skipped; conjugate pairs are handled automatically.
+    pols
+        Polarization strings to read.
+    freq_chans
+        Channel indices to read, or ``None`` to read all channels.
+    redundantly_averaged
+        If ``True``, the file stores one row per unique-baseline group rather
+        than one row per physical baseline.  The ``antpairs`` argument is then
+        interpreted as unique-baseline keys, and ``reds`` is used to map them
+        to whatever physical baseline is stored in the file.
+    reds
+        Redundant-baseline group information.  Required when
+        ``redundantly_averaged`` is ``True``; ignored otherwise.
+    cal_file_loader
+        Optional callable for reading calibration solutions in a non-standard
+        format.  Must accept ``(calfl, antpairs=..., polarizations=..., **kwargs)``
+        and return ``(gains, cal_flags)``.  If ``None``, the default
+        HERAData/HERACal readers are used.
+    cal_file_loader_kwargs
+        Extra keyword arguments forwarded to ``cal_file_loader``.  Pass
+        ``None`` (or omit) when using the default loader.
+    blts_are_rectangular
+        Passed through to :class:`~pyuvdata.uvdata.FastUVH5Meta`; set to
+        ``False`` only for files where baselines and times are not on a
+        regular grid.
+
     Returns
     -------
     dict with keys:
