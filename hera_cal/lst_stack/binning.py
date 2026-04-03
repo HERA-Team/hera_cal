@@ -611,25 +611,24 @@ def lst_bin_files_for_baselines(
         raise ValueError("Cannot apply calibration if redundantly_averaged is True")
 
     # ── build per-file argument tuples (shared by serial and parallel paths) ─
-    file_args = [
-        (
-            str(meta.path),
-            calfl,
-            tind,
-            inpfile,
-            list(antpairs),       # plain list for picklability
-            list(pols),
-            freq_chans,
-            redundantly_averaged,
-            reds,
-            cal_file_loader,
-            # make per-task copy so worker threads don't share mutable kwargs
-            dict(cal_file_loader_kwargs) if cal_file_loader_kwargs is not None else None,
+    file_args = []
+    for meta, calfl, tind, inpfile in zip(metas, cal_files, time_idx, where_inpainted_files):
+        file_args.append(
+            (
+                str(meta.path),
+                calfl,
+                tind,
+                inpfile,
+                list(antpairs),       # plain list for picklability
+                list(pols),
+                freq_chans,
+                redundantly_averaged,
+                reds,
+                cal_file_loader,
+                # make per-task copy so worker threads don't share mutable kwargs
+                dict(cal_file_loader_kwargs) if cal_file_loader_kwargs is not None else None,
+            )
         )
-        for meta, calfl, tind, inpfile in zip(
-            metas, cal_files, time_idx, where_inpainted_files
-        )
-    ]
 
     # ── helper: write one file's result into the master arrays ───────────────
     def _fill_master_arrays(res: dict, slc: slice) -> None:
