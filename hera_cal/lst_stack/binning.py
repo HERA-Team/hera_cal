@@ -287,12 +287,12 @@ def _get_freqs_chans(freqs, freq_min: float | None = None, freq_max: float | Non
 
 def _read_one_file(
     meta_path: str,
-    calfl,
+    calfl: str | None,
     tind: np.ndarray,
-    inpfile,
+    inpfile: str | None,
     antpairs: list[tuple],
     pols: list[str],
-    freq_chans,
+    freq_chans: np.ndarray | None,
     redundantly_averaged: bool,
     reds: RedundantGroups | None,
     cal_file_loader: callable | None,
@@ -483,6 +483,15 @@ def lst_bin_files_for_baselines(
     lsts
         A list of LST arrays for each file. If not provided, will be read from the
         files. If provided, must be the same length as ``data_files``.
+    redundantly_averaged
+        If True, the data files are assumed to have already been averaged in time and
+        redundant baseline groups, so that each row in the data corresponds to a unique
+        redundant baseline group, rather than a unique baseline. In this case, the
+        ``antpairs`` argument is interpreted as a list of redundant baseline groups to
+        read, rather than a list of actual antenna pairs. If True, the ``reds`` argument
+        must be provided, and the function will automatically map the redundant baseline
+        groups in ``antpairs`` to the actual baselines in the data files using the
+        redundant groups information in ``reds``.
     freq_min, freq_max
         Minimum and maximum frequencies to include in the data. If not provided,
         all frequencies will be included.
