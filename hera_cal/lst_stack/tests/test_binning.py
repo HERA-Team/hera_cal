@@ -353,6 +353,54 @@ class TestLSTBinFilesForBaselines:
             uvd_redavg.Npols,
         )
 
+    def test_multiprocessed_load(self, uvd_redavg, uvd_redavg_file):
+        # Test that we can load the same file in multiple processes without error.
+        data = binning.lst_bin_files_for_baselines(
+            data_files=[uvd_redavg_file],
+            lst_bin_edges=[
+                uvd_redavg.lst_array.min() - 0.1,
+                uvd_redavg.lst_array.max() + 0.1,
+            ],
+            redundantly_averaged=True,
+            rephase=False,
+            antpairs=uvd_redavg.get_antpairs(),
+            reds=RedundantGroups.from_antpos(
+                dict(zip(uvd_redavg.telescope.antenna_numbers, uvd_redavg.telescope.antenna_positions)),
+            ),
+        )[1]
+
+        data_mp = binning.lst_bin_files_for_baselines(
+            data_files=[uvd_redavg_file],
+            lst_bin_edges=[
+                uvd_redavg.lst_array.min() - 0.1,
+                uvd_redavg.lst_array.max() + 0.1,
+            ],
+            redundantly_averaged=True,
+            rephase=False,
+            antpairs=uvd_redavg.get_antpairs(),
+            reds=RedundantGroups.from_antpos(
+                dict(zip(uvd_redavg.telescope.antenna_numbers, uvd_redavg.telescope.antenna_positions)),
+            ),
+            n_workers=2,
+        )[1]
+
+        # The data should be the same regardless of multiprocessing.
+        for d, _d in zip(data, data_mp):
+            np.testing.assert_allclose(d, _d)
+
+    def test_bad_nworkers(self, uvd, uvd_file, uvc_file):
+        """Test that providing freq_range works."""
+        with pytest.raises(ValueError, match="n_workers must be a positive integer"):
+            _ = binning.lst_bin_files_for_baselines(
+                data_files=[uvd_file],
+                lst_bin_edges=[uvd.lst_array.min(), uvd.lst_array.max()],
+                cal_files=[uvc_file],
+                freq_min=153e6,
+                freq_max=158e6,
+                antpairs=uvd.get_antpairs(),
+                n_workers=0,
+            )
+
 
 class TestLSTBinFilesFromConfig:
     def get_config(self, season, request, outfile_index=0):
