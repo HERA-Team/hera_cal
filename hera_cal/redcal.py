@@ -812,6 +812,82 @@ def parse_pol_mode(reds):
         return 'unrecognized_pol_mode'
 
 
+class _OmnicalAndersonAccelerator:
+    """Anderson acceleration helper for Omnical's per-pixel fixed-point updates.
+
+    History is stored as concatenated vectors over all solved variables for the
+    currently active pixels. Because Omnical solves each active time/frequency
+    pixel independently, when the active set shrinks we can simply down-select
+    the stored history to the surviving active pixels rather than clearing it.
+    """
+
+    def __init__(self, history=0, start=2, damping=0.5, ridge=1e-8, max_weight=10.0):
+        self.history = int(history)
+        self.start = int(start)
+        self.damping = float(damping)
+        self.ridge = float(ridge)
+        self.max_weight = float(max_weight)
+        self._hist_g = []
+        self._hist_f = []
+        self._step = 0
+        self._nvars = None
+
+    @staticmethod
+    def _solve_coeffs(F, ridge=1e-8):
+        n = F.shape[0]
+        gram = F @ F.T
+        scale = float(np.trace(gram) / max(n, 1)) if n > 0 else 1.0
+        gram = gram + ridge * max(scale, 1.0) * np.eye(n, dtype=gram.dtype)
+        kkt = np.block([
+            [gram, np.ones((n, 1), dtype=gram.dtype)],
+            [np.ones((1, n), dtype=gram.dtype), np.zeros((1, 1), dtype=gram.dtype)],
+        ])
+        rhs = np.zeros(n + 1, dtype=gram.dtype)
+        rhs[-1] = 1.0
+        sol = np.linalg.lstsq(kkt, rhs, rcond=None)[0]
+        return sol[:n]
+
+    def push(self, x_flat, g_flat, nvars):
+        if self.history == 0:
+            return None
+        if self._nvars is None:
+            self._nvars = int(nvars)
+        elif self._nvars != int(nvars):
+            self.clear()
+            self._nvars = int(nvars)
+
+        f_flat = g_flat - x_flat
+        self._hist_g.append(g_flat.copy())
+        self._hist_f.append(f_flat.copy())
+        if len(self._hist_g) > self.history:
+            self._hist_g.pop(0)
+            self._hist_f.pop(0)
+
+        candidate = None
+        if self._step >= self.start and len(self._hist_f) >= 2:
+            F = np.stack(self._hist_f, axis=0)
+            beta = self._solve_coeffs(F, ridge=self.ridge)
+            if np.all(np.isfinite(beta)) and float(np.max(np.abs(beta))) <= self.max_weight:
+                g_aa = np.tensordot(beta, np.stack(self._hist_g, axis=0), axes=1)
+                candidate = (1.0 - self.damping) * g_flat + self.damping * g_aa
+        self._step += 1
+        return candidate
+
+    def downselect(self, active_mask):
+        """Keep only history entries for surviving active pixels."""
+        if self.history == 0 or self._nvars is None:
+            return
+        mask = np.asarray(active_mask)
+        self._hist_g = [g.reshape(self._nvars, -1)[:, mask].reshape(-1).copy() for g in self._hist_g]
+        self._hist_f = [f.reshape(self._nvars, -1)[:, mask].reshape(-1).copy() for f in self._hist_f]
+
+    def clear(self):
+        self._hist_g.clear()
+        self._hist_f.clear()
+        self._step = 0
+        self._nvars = None
+
+
 class OmnicalSolver(linsolve.LinProductSolver):
     def __init__(self, data, sol0, wgts={}, gain=.3, **kwargs):
         """Set up a nonlinear system of equations of the form g_i * g_j.conj() * V_mdl = V_ij
@@ -855,10 +931,26 @@ class OmnicalSolver(linsolve.LinProductSolver):
             for k in keys:
                 to_update_inplace[k] = eval(k, _sol)
 
+    @staticmethod
+    def _flatten_sol_dict(sol_u, var_keys):
+        return np.concatenate([np.asarray(sol_u[k]).reshape(-1) for k in var_keys]).astype(np.complex64, copy=False)
+
+    @staticmethod
+    def _unflatten_sol_dict(vec, var_keys, npix):
+        out = {}
+        offset = 0
+        for k in var_keys:
+            out[k] = np.asarray(vec[offset:offset + npix], dtype=np.complex64)
+            offset += npix
+        return out
+
     def solve_iteratively(self, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1,
-                          wgt_func=None, verbose=False):
+                          wgt_func=None, verbose=False, anderson_history=0,
+                          anderson_start=2, anderson_damping=0.5, anderson_ridge=1e-8,
+                          anderson_max_weight=10.0):
         """Repeatedly solves and updates solution until convergence or maxiter is reached.
         Returns a meta-data about the solution and the solution itself.
+        Anderson acceleration is applied if anderson_history > 0.
 
         Args:
             conv_crit: A convergence criterion (default 1e-10) below which to stop iterating.
@@ -871,6 +963,23 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 data and model that returns an additional data weighting to apply to when calculating
                 chisq and updating parameters. Example: lambda x: np.where(x>0, 5*np.tanh(x/5)/x, 1)
                 clamps deviations to 5 sigma. Default None is no additional weighting.
+            anderson_history: Maximum number of past fixed-point iterates to retain for Anderson
+                acceleration. ``0`` disables Anderson acceleration. Default 0.
+            anderson_start: Number of plain fixed-point iterations to take before Anderson proposals
+                are enabled. Because the internal Anderson step counter increments after each push,
+                ``anderson_start=2`` activates Anderson from the third stored iteration onward.
+                Default 2.
+            anderson_damping: Mixing factor for Anderson proposals. The accelerated proposal is
+                formed as ``(1 - anderson_damping) * x_plain + anderson_damping * x_AA``.
+                Smaller values are more conservative; larger values can accelerate convergence
+                but may reduce stability. Default 0.5.
+            anderson_ridge: Tikhonov regularization coefficient for the small least-squares system
+                used to compute Anderson mixing weights. Applied relative to the Gram-matrix trace
+                to improve numerical stability when recent residuals are nearly linearly dependent.
+                Default 1e-8.
+            anderson_max_weight: Reject Anderson proposals whose mixing coefficients have absolute
+                value larger than this threshold. This prevents unstable extrapolations from poorly
+                conditioned Anderson systems. Default 10.0.
 
         Returns: meta, sol
             meta: a dictionary with metadata about the solution, including
@@ -893,6 +1002,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
         for k, v in dmdl_u.items():
             dmdl_u[k] = v[update].flatten()
         # wgts_u hold the wgts the user provides
+
         wgts_u = {k: (v * np.ones(chisq.shape, dtype=np.float32))[update].flatten()
                   for k, v in self.wgts.items()}
         # clamp_wgts_u adds additional sigma clamping done by wgt_func.
@@ -900,17 +1010,25 @@ class OmnicalSolver(linsolve.LinProductSolver):
         # passed to wgt_func to determine any additional weighting (to, e.g., clamp outliers).
         clamp_wgts_u = (wgts_u if wgt_func is None else {k: v * wgt_func(abs2_u[k]) for k, v in wgts_u.items()})
         sol_u = {k: v[update].flatten() for k, v in sol.items()}
+        var_keys = list(sol_u.keys())
         iters = np.zeros(chisq.shape, dtype=int)
         conv = np.ones_like(chisq)
+        aa = _OmnicalAndersonAccelerator(
+            history=anderson_history,
+            start=anderson_start,
+            damping=anderson_damping,
+            ridge=anderson_ridge,
+            max_weight=anderson_max_weight,
+        )
 
         for i in range(1, maxiter + 1):
-
             if verbose:
                 print('Beginning iteration %d/%d' % (i, maxiter))
             if (i % check_every) == 1:
                 # compute data wgts: dwgts = sum(V_mdl^2 / n^2) = sum(V_mdl^2 * wgts)
                 # don't need to update data weighting with every iteration
                 # clamped weighting is passed to dwgts_u, which is used to update parameters
+
                 sol_wgt_u = {k: 0 for k in sol.keys()}
                 dw_u = {}
                 for k, (gi, gj, uij) in zip(self.keys, terms):
@@ -930,6 +1048,16 @@ class OmnicalSolver(linsolve.LinProductSolver):
 
             new_sol_u = {k: v * ((1 - self.gain) + self.gain * sol_sum_u[k] / sol_wgt_u[k])
                          for k, v in sol_u.items()}
+
+
+            npix = len(next(iter(sol_u.values()))) if len(sol_u) > 0 else 0
+            if aa.history > 0 and npix > 0:
+                x_flat = self._flatten_sol_dict(sol_u, var_keys)
+                g_flat = self._flatten_sol_dict(new_sol_u, var_keys)
+                cand_flat = aa.push(x_flat, g_flat, nvars=len(var_keys))
+                if cand_flat is not None:
+                    new_sol_u = self._unflatten_sol_dict(cand_flat, var_keys, npix)
+
             self._get_ans0(new_sol_u, to_update_inplace=dmdl_u)
             # check if i % check_every is 0, which is purposely one less than the '1' up at the top of the loop
             if i < maxiter and (i < check_after or (i % check_every) != 0):
@@ -970,9 +1098,10 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 for k, v in wgts_u.items():
                     clamp_wgts_u[k] = (v if wgt_func is None else v * wgt_func(abs2_u[k]))
                 update = tuple(u[update_u] for u in update)
+                if aa.history > 0:
+                    aa.downselect(update_u[0])
             if verbose:
-                print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
-
+                print('    <CHISQ> = %f, <CONV> = %f, CNT = %d' % (np.mean(chisq), np.mean(conv), update[0].size))
 
 def _wrap_phs(phs, wrap_pnt=(np.pi / 2)):
     '''Adjust phase wrap point to be [-wrap_pnt, 2pi-wrap_pnt)'''
