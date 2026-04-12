@@ -1049,7 +1049,6 @@ class OmnicalSolver(linsolve.LinProductSolver):
             new_sol_u = {k: v * ((1 - self.gain) + self.gain * sol_sum_u[k] / sol_wgt_u[k])
                          for k, v in sol_u.items()}
 
-
             npix = len(next(iter(sol_u.values()))) if len(sol_u) > 0 else 0
             if aa.history > 0 and npix > 0:
                 x_flat = self._flatten_sol_dict(sol_u, var_keys)
@@ -1102,6 +1101,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                     aa.downselect(update_u[0])
             if verbose:
                 print('    <CHISQ> = %f, <CONV> = %f, CNT = %d' % (np.mean(chisq), np.mean(conv), update[0].size))
+
 
 def _wrap_phs(phs, wrap_pnt=(np.pi / 2)):
     '''Adjust phase wrap point to be [-wrap_pnt, 2pi-wrap_pnt)'''
