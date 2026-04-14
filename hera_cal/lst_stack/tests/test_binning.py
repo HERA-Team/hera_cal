@@ -679,6 +679,76 @@ def test_flags_and_nsamples_match_data(sbs_default):
             assert np.isfinite(np.asarray(n)[~np.isnan(np.real(d)) | ~np.isnan(np.imag(d))]).all()
 
 
+@pytest.fixture(scope="module")
+def multipol_files_and_grid():
+    """Multi-pol fixture so pol-subset tests actually exercise a real 4-pol file.
+    Uses zen.2458098.43124.downsample.uvh5 (4 pols: ee, nn, en, ne) repeated as
+    three "nights" so the stacker has enough to run."""
+    fname = os.path.join(DATA_PATH, "zen.2458098.43124.downsample.uvh5")
+    if not os.path.exists(fname):
+        pytest.skip(f"Missing multi-pol test input: {fname}")
+    files = [fname, fname, fname]
+    configurator = _FakeConfiguratorSingle({"0_1": files})
+    hd = HERAData(files[-1])
+    dlst = np.median(np.diff(hd.lsts))
+    lst_grid = config.make_lst_grid(dlst, begin_lst=0.0, lst_width=2 * np.pi)
+    lst_bin_edges = np.concatenate([lst_grid - dlst / 2, [lst_grid[-1] + dlst / 2]])
+    return {
+        "baseline_string": "0_1",
+        "configurator": configurator,
+        "lst_bin_edges": lst_bin_edges,
+        "hd": hd,
+    }
+
+
+@pytest.mark.parametrize("pol_subset_selector", [
+    lambda all_pols: [all_pols[0]],              # one pol
+    lambda all_pols: [all_pols[0], all_pols[2]],  # two non-adjacent pols (e.g. ee + en)
+])
+def test_pols_kwarg_loads_subset(multipol_files_and_grid, pol_subset_selector):
+    """Passing a pols subset to from_configurator loads only those pols and matches the
+    corresponding slice of the all-pols load. Parametrized over a 1-pol and a 2-pol subset
+    to exercise both the trivial and non-trivial re-indexing paths."""
+    p = multipol_files_and_grid
+
+    sbs_all = binning.SingleBaselineStacker.from_configurator(
+        p["configurator"], p["baseline_string"], p["lst_bin_edges"],
+    )
+    all_pols = sbs_all.hd.pols
+    assert len(all_pols) > 1, "test file should have multiple pols"
+    subset = pol_subset_selector(all_pols)
+
+    sbs_sub = binning.SingleBaselineStacker.from_configurator(
+        p["configurator"], p["baseline_string"], p["lst_bin_edges"],
+        pols=subset,
+    )
+
+    # hd reflects the pol subset, and the hera_cal-specific cached attrs (pols) are refreshed,
+    # not just the UVData-level polarization_array.
+    assert sbs_sub.hd.pols == subset
+    expected_polarization_array = [sbs_all.hd.polarization_array[all_pols.index(p_)] for p_ in subset]
+    assert list(sbs_sub.hd.polarization_array) == expected_polarization_array
+    assert sbs_sub.hd.Npols == len(subset)
+
+    # same number of LST bins kept
+    assert len(sbs_sub.data) == len(sbs_all.data)
+
+    # Per-bin shapes have Npol == len(subset) and match the corresponding slice of the all-pols load
+    sub_pidxs = [all_pols.index(p_) for p_ in subset]
+    for d_sub, f_sub, n_sub, d_all, f_all, n_all in zip(
+        sbs_sub.data, sbs_sub.flags, sbs_sub.nsamples,
+        sbs_all.data, sbs_all.flags, sbs_all.nsamples,
+    ):
+        assert d_sub.shape[-1] == len(subset)
+        assert d_sub.shape[:-1] == d_all.shape[:-1]
+        for sub_i, all_i in enumerate(sub_pidxs):
+            np.testing.assert_array_equal(
+                np.nan_to_num(d_sub[..., sub_i]), np.nan_to_num(d_all[..., all_i])
+            )
+            np.testing.assert_array_equal(f_sub[..., sub_i], f_all[..., all_i])
+            np.testing.assert_array_equal(n_sub[..., sub_i], n_all[..., all_i])
+
+
 def test_calc_with_lstcal(sbs_with_lstcal):
     uncal_crosses, cal_crosses = sbs_with_lstcal
     lst_avg_uncal, _, _ = uncal_crosses.average_over_nights()
