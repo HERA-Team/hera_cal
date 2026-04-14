@@ -887,6 +887,7 @@ class SingleBaselineStacker:
             cal_file_loader: callable | None = None,
             cal_file_loader_kwargs: dict | None = None,
             n_workers: int = 1,
+            pols: list[str] | None = None,
         ) -> SingleBaselineStacker:
         """Creates a SingleBaselineStacker object that loads data for a single baseline, optionally rolls to start after a branch cut,
         and removes any times at the beginning or end of the data set that have no data.
@@ -934,6 +935,10 @@ class SingleBaselineStacker:
             Number of parallel workers to use when reading files. ``1`` (the default) reproduces the original serial behaviour exactly. ``n_workers`` must be a
             positive integer (``>= 1``); passing ``0`` or a negative value is invalid and will result in a ``ValueError``. Values greater than 1 submit each file read to a thread pool so
             that multiple nights can be read concurrently.
+        pols : list[str] | None
+            If provided, only these polarizations will be loaded (e.g., ``['ee']`` to load a single pol).
+            If ``None`` (default), all polarizations present in the files are loaded. The returned
+            ``self.hd`` will have its polarization metadata modified as well.
         """
         # Load the data
         files_here = configurator.bl_to_file_map[bl_str]
@@ -950,6 +955,9 @@ class SingleBaselineStacker:
         where_inpainted_files = ([reduce(lambda txt, pair: txt.replace(*pair), where_inpainted_file_rules, df) for df in files_here]
                                  if where_inpainted_file_rules is not None else None)
         hd = io.HERAData(files_here[-1])
+        if pols is not None:
+            hd.select(polarizations=pols)  # keep hd metadata consistent with loaded subset
+            hd._attach_metadata()  # refresh HERAData-specific metadata, inlcuding hd.pols
         (bin_lst,
          data,
          flags,
