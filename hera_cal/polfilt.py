@@ -378,6 +378,7 @@ def iteratively_fit_polarized_source_params(
     drm=5.0,
     dtest=5000,
     method='grid_search',
+    pol="pQ",
     verbose=False,
 ):
     """
@@ -418,7 +419,7 @@ def iteratively_fit_polarized_source_params(
         data,
         flags,
         nsamples,
-        pol='pQ'
+        pol=pol
     )
     weights = np.where(np.isfinite(vis), weights, 0.0)
     vis = np.where(np.isfinite(vis), vis, 0.0)
