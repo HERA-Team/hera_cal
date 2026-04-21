@@ -8,7 +8,7 @@ Covers:
     - unpack_data_containers
     - _fit_rotation_measure
     - _fit_polarized_source_position
-    - iteratively_fit_polarized_source_params (all-flagged guard)
+    - iteratively_fit_polarized_source_params
 """
 
 import numpy as np
@@ -265,25 +265,6 @@ class TestFitRotationMeasure:
 
 
 # ---------------------------------------------------------------------------
-# iteratively_fit_polarized_source_params — all-flagged guard
-# ---------------------------------------------------------------------------
-
-class TestIterativelyFitAllFlagged:
-
-    def test_all_flagged_returns_original_params(self):
-        dc_d, dc_f, dc_n, *_ = _make_mock_dc(
-            4, 8, antpairs=[(0, 1)], pol="pQ", all_flagged=True
-        )
-        ra0, dec0, rm0 = 10.0, -30.0, 5.0
-        ra, dec, rm = pf.iteratively_fit_polarized_source_params(
-            dc_d, dc_f, dc_n,
-            right_ascension=ra0, declination=dec0, rotation_measure=rm0,
-            location=HERA_LOCATION,
-        )
-        assert ra == ra0 and dec == dec0 and rm == rm0
-
-
-# ---------------------------------------------------------------------------
 # _fit_polarized_source_position
 # ---------------------------------------------------------------------------
 
@@ -366,7 +347,6 @@ class TestFitPolarizedSourcePosition:
         np.testing.assert_allclose(ra_fit, ra_true, atol=1e-3)
         np.testing.assert_allclose(dec_fit, dec_true, atol=1e-3)
 
-    # --- weighting invariances ---
 
     def test_uniform_weight_scaling_invariant(self):
         vis, w, uvw, t = self._make_vis(self.RA0, self.DEC0, self.RM0)
@@ -404,3 +384,249 @@ class TestFitPolarizedSourcePosition:
         if n_times == 1:
             np.testing.assert_allclose(ra_fit, self.RA0, atol=1e-8)
             np.testing.assert_allclose(dec_fit, self.DEC0, atol=1e-8)
+
+
+# ---------------------------------------------------------------------------
+# iteratively_fit_polarized_source_params
+# ---------------------------------------------------------------------------
+
+class TestIterativelyFitAllFlagged:
+
+    def test_all_flagged_returns_original_params(self):
+        dc_d, dc_f, dc_n, *_ = _make_mock_dc(
+            4, 8, antpairs=[(0, 1)], pol="pQ", all_flagged=True
+        )
+        ra0, dec0, rm0 = 10.0, -30.0, 5.0
+        ra, dec, rm = pf.iteratively_fit_polarized_source_params(
+            dc_d, dc_f, dc_n,
+            right_ascension=ra0, declination=dec0, rotation_measure=rm0,
+            location=HERA_LOCATION,
+        )
+        assert ra == ra0 and dec == dec0 and rm == rm0
+
+
+class TestIterativelyFitPolarizedSourceParams:
+    """
+    End-to-end tests for ``iteratively_fit_polarized_source_params``.
+
+    Synthetic-data strategy
+    -----------------------
+    Visibilities are constructed directly from the point-source model::
+
+        V[(a1,a2,pol)][t,f] = exp(2πi · uvw·lmn(t)) · exp(−2i·λ²·rm)
+
+    where ``lmn(t)`` is computed with :func:`radec_to_lmn` at the *true*
+    source position.  Because the forward model matches the fitter's assumed
+    signal model exactly, the true parameter values are the unique global
+    maximum of the likelihood.  This lets us verify convergence without
+    resorting to per-test tolerance tuning.
+
+    Array geometry
+    --------------
+    Six baselines with good spread in East–West and North–South, chosen to
+    give the position fitter a well-conditioned normal matrix.  The source is
+    at Dec ≈ HERA's latitude so it transits nearly overhead and remains above
+    the horizon throughout the 10-minute observing window.
+    """
+
+    # True source parameters used across tests
+    RA_TRUE  = 45.0   # degrees
+    DEC_TRUE = -30.0  # degrees — near HERA latitude, always above horizon
+    RM_TRUE  = 15.0   # rad/m²
+
+    FREQS    = np.linspace(120e6, 180e6, 64)
+    ANTPOS   = {
+        0: np.array([  0.0,   0.0, 0.0]),
+        1: np.array([ 14.6,   0.0, 0.0]),
+        2: np.array([  0.0,  14.6, 0.0]),
+        3: np.array([ 29.2,   0.0, 0.0]),
+        4: np.array([  0.0,  29.2, 0.0]),
+        5: np.array([ 14.6,  14.6, 0.0]),
+    }
+    ANTPAIRS = [(0, 1), (0, 2), (0, 3), (0, 4), (1, 2), (2, 5)]
+    # 12 integrations spanning 10 minutes — enough time diversity for the
+    # position fitter without heavy cost.
+    TIMES = np.linspace(2459000.0, 2459000.0 + 10 / 1440.0, 12)
+
+    def _make_dc(
+        self,
+        ra=None, dec=None, rm=None,
+        pol="pQ",
+        noise_level=0.0,
+        seed=0,
+    ):
+        """
+        Build mock DataContainers whose visibilities follow the exact
+        point-source model for the given (ra, dec, rm).
+
+        Conjugate baselines (a2, a1) are stored as the complex conjugate of
+        (a1, a2), consistent with the Hermitian symmetry expected by
+        ``unpack_data_containers``.
+        """
+        ra  = self.RA_TRUE  if ra  is None else ra
+        dec = self.DEC_TRUE if dec is None else dec
+        rm  = self.RM_TRUE  if rm  is None else rm
+
+        rng = np.random.default_rng(seed)
+        freqs   = self.FREQS
+        times   = self.TIMES
+        antpos  = self.ANTPOS
+        antpairs = self.ANTPAIRS
+        n_times = len(times)
+        n_freqs = len(freqs)
+
+        lambda_sq = (C / freqs) ** 2
+        lmn       = pf.radec_to_lmn(ra, dec, times, HERA_LOCATION)  # (3, n_times)
+        rm_phasor = np.exp(-2j * lambda_sq * rm)                      # (n_freqs,)
+
+        data, flags, nsamples = {}, {}, {}
+        for ap in antpairs:
+            blvec  = antpos[ap[1]] - antpos[ap[0]]
+            uvw_bl = blvec[:, None] * freqs[None, :] / C   # (3, n_freqs)
+
+            # phase[t,f] = u·l(t) + v·m(t) + w·n(t)
+            phase = np.einsum("cf,ct->tf", uvw_bl, lmn)    # (n_times, n_freqs)
+            vis   = np.exp(2j * np.pi * phase) * rm_phasor[None, :]
+
+            if noise_level > 0.0:
+                vis += noise_level * (
+                    rng.standard_normal((n_times, n_freqs))
+                    + 1j * rng.standard_normal((n_times, n_freqs))
+                )
+
+            key     = ap + (pol,)
+            rev_key = (ap[1], ap[0], pol)
+            data[key]      = vis
+            data[rev_key]  = vis.conj()
+            flag_arr = np.zeros((n_times, n_freqs), dtype=bool)
+            flags[key]     = flag_arr
+            flags[rev_key] = flag_arr.copy()
+            nsamples[key]     = np.ones((n_times, n_freqs))
+            nsamples[rev_key] = np.ones((n_times, n_freqs))
+
+        def _mock(d):
+            dc = MagicMock(spec=datacontainer.DataContainer)
+            dc.__getitem__ = lambda self, k: d[k]
+            dc.antpairs = MagicMock(return_value=antpairs)
+            dc.freqs = freqs
+            dc.times = times
+            dc.antpos = antpos
+            return dc
+
+        return _mock(data), _mock(flags), _mock(nsamples)
+
+    def _fit(self, dc_d, dc_f, dc_n, ra=None, dec=None, rm=None, **kwargs):
+        """Thin wrapper that supplies defaults for the initial guess."""
+        return pf.iteratively_fit_polarized_source_params(
+            dc_d, dc_f, dc_n,
+            right_ascension = self.RA_TRUE  if ra  is None else ra,
+            declination     = self.DEC_TRUE if dec is None else dec,
+            rotation_measure= self.RM_TRUE  if rm  is None else rm,
+            location        = HERA_LOCATION,
+            **kwargs,
+        )
+
+    # ------------------------------------------------------------------
+    # Initialised at truth — should stay there
+    # ------------------------------------------------------------------
+
+    def test_initialized_at_truth_stays_near_truth(self):
+        """
+        When the initial guess equals the true position and RM, every
+        iteration is a no-op and all three outputs must remain within the
+        fitter's convergence tolerances of the truth.
+        """
+        dc_d, dc_f, dc_n = self._make_dc()
+        ra, dec, rm = self._fit(dc_d, dc_f, dc_n, drm=2.0, dtest=500)
+        np.testing.assert_allclose(ra,  self.RA_TRUE,  atol=1e-3)
+        np.testing.assert_allclose(dec, self.DEC_TRUE, atol=1e-3)
+        np.testing.assert_allclose(rm,  self.RM_TRUE,  atol=0.1)
+
+    # ------------------------------------------------------------------
+    # Each parameter corrected independently
+    # ------------------------------------------------------------------
+
+    def test_corrects_ra_offset(self):
+        """An incorrect initial RA is pulled toward truth."""
+        dra = 0.02
+        dc_d, dc_f, dc_n = self._make_dc()
+        ra, dec, rm = self._fit(dc_d, dc_f, dc_n, ra=self.RA_TRUE + dra,
+                                drm=2.0, dtest=500)
+        assert abs(ra - self.RA_TRUE) < dra, (
+            f"RA should improve: initial error {dra:.4f} deg, "
+            f"final error {abs(ra - self.RA_TRUE):.4f} deg"
+        )
+
+    def test_corrects_dec_offset(self):
+        """An incorrect initial Dec is pulled toward truth."""
+        ddec = 0.02
+        dc_d, dc_f, dc_n = self._make_dc()
+        ra, dec, rm = self._fit(dc_d, dc_f, dc_n, dec=self.DEC_TRUE + ddec,
+                                drm=2.0, dtest=500)
+        assert abs(dec - self.DEC_TRUE) < ddec, (
+            f"Dec should improve: initial error {ddec:.4f} deg, "
+            f"final error {abs(dec - self.DEC_TRUE):.4f} deg"
+        )
+
+    def test_corrects_rm_offset(self):
+        """An incorrect initial RM is pulled toward truth."""
+        drm_offset = 3.0
+        dc_d, dc_f, dc_n = self._make_dc()
+        ra, dec, rm = self._fit(
+            dc_d, dc_f, dc_n, rm=self.RM_TRUE + drm_offset,
+            drm=drm_offset + 1.0,   # search window must contain the truth
+            dtest=500,
+        )
+        assert abs(rm - self.RM_TRUE) < drm_offset, (
+            f"RM should improve: initial error {drm_offset:.2f} rad/m², "
+            f"final error {abs(rm - self.RM_TRUE):.2f} rad/m²"
+        )
+
+    # ------------------------------------------------------------------
+    # Joint end-to-end recovery
+    # ------------------------------------------------------------------
+
+    def test_end_to_end_joint_recovery(self):
+        """
+        Starting with small offsets in all three parameters simultaneously,
+        the fitter must converge to the truth within tight tolerances.
+        """
+        dc_d, dc_f, dc_n = self._make_dc()
+        ra, dec, rm = self._fit(
+            dc_d, dc_f, dc_n,
+            ra  = self.RA_TRUE  + 0.01,
+            dec = self.DEC_TRUE + 0.01,
+            rm  = self.RM_TRUE  + 1.0,
+            drm = 3.0, dtest=500,
+        )
+        np.testing.assert_allclose(ra,  self.RA_TRUE,  atol=1e-3,
+                                   err_msg="RA did not converge to truth")
+        np.testing.assert_allclose(dec, self.DEC_TRUE, atol=1e-3,
+                                   err_msg="Dec did not converge to truth")
+        np.testing.assert_allclose(rm,  self.RM_TRUE,  atol=0.1,
+                                   err_msg="RM did not converge to truth")
+
+    def test_noiseless_converges_before_maxiter(self):
+        """
+        With noiseless data initialised close to the truth the algorithm
+        should reach the convergence criterion well before maxiter=10.
+        Convergence is detected indirectly: maxiter=3 and maxiter=10 must
+        return identical results (to floating-point tolerance), which is only
+        possible if the loop broke early on the same iteration in both calls.
+        """
+        kwargs = dict(
+            ra  = self.RA_TRUE  + 0.005,
+            dec = self.DEC_TRUE + 0.005,
+            rm  = self.RM_TRUE  + 0.5,
+            drm = 2.0, dtest=500,
+        )
+        dc_d, dc_f, dc_n = self._make_dc()
+        ra3,  dec3,  rm3  = self._fit(dc_d, dc_f, dc_n, maxiter=3,  **kwargs)
+        ra10, dec10, rm10 = self._fit(dc_d, dc_f, dc_n, maxiter=10, **kwargs)
+
+        np.testing.assert_allclose(ra3,  ra10,  atol=1e-8,
+                                   err_msg="RA differs between maxiter=3 and maxiter=10")
+        np.testing.assert_allclose(dec3, dec10, atol=1e-8,
+                                   err_msg="Dec differs between maxiter=3 and maxiter=10")
+        np.testing.assert_allclose(rm3,  rm10,  atol=1e-6,
+                                   err_msg="RM differs between maxiter=3 and maxiter=10")
