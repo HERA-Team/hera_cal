@@ -347,7 +347,6 @@ class TestFitPolarizedSourcePosition:
         np.testing.assert_allclose(ra_fit, ra_true, atol=1e-3)
         np.testing.assert_allclose(dec_fit, dec_true, atol=1e-3)
 
-
     def test_uniform_weight_scaling_invariant(self):
         vis, w, uvw, t = self._make_vis(self.RA0, self.DEC0, self.RM0)
         ra1, dec1 = self._fit(vis, w, uvw, t)
@@ -430,18 +429,18 @@ class TestIterativelyFitPolarizedSourceParams:
     """
 
     # True source parameters used across tests
-    RA_TRUE  = 45.0   # degrees
+    RA_TRUE = 45.0   # degrees
     DEC_TRUE = -30.0  # degrees — near HERA latitude, always above horizon
-    RM_TRUE  = 15.0   # rad/m²
+    RM_TRUE = 15.0   # rad/m²
 
-    FREQS    = np.linspace(120e6, 180e6, 64)
-    ANTPOS   = {
-        0: np.array([  0.0,   0.0, 0.0]),
-        1: np.array([ 14.6,   0.0, 0.0]),
-        2: np.array([  0.0,  14.6, 0.0]),
-        3: np.array([ 29.2,   0.0, 0.0]),
-        4: np.array([  0.0,  29.2, 0.0]),
-        5: np.array([ 14.6,  14.6, 0.0]),
+    FREQS = np.linspace(120e6, 180e6, 64)
+    ANTPOS = {
+        0: np.array([0.0, 0.0, 0.0]),
+        1: np.array([14.6, 0.0, 0.0]),
+        2: np.array([0.0, 14.6, 0.0]),
+        3: np.array([29.2, 0.0, 0.0]),
+        4: np.array([0.0, 29.2, 0.0]),
+        5: np.array([14.6, 14.6, 0.0]),
     }
     ANTPAIRS = [(0, 1), (0, 2), (0, 3), (0, 4), (1, 2), (2, 5)]
     # 12 integrations spanning 10 minutes — enough time diversity for the
@@ -463,30 +462,30 @@ class TestIterativelyFitPolarizedSourceParams:
         (a1, a2), consistent with the Hermitian symmetry expected by
         ``unpack_data_containers``.
         """
-        ra  = self.RA_TRUE  if ra  is None else ra
+        ra = self.RA_TRUE if ra is None else ra
         dec = self.DEC_TRUE if dec is None else dec
-        rm  = self.RM_TRUE  if rm  is None else rm
+        rm = self.RM_TRUE if rm is None else rm
 
         rng = np.random.default_rng(seed)
-        freqs   = self.FREQS
-        times   = self.TIMES
-        antpos  = self.ANTPOS
+        freqs = self.FREQS
+        times = self.TIMES
+        antpos = self.ANTPOS
         antpairs = self.ANTPAIRS
         n_times = len(times)
         n_freqs = len(freqs)
 
         lambda_sq = (C / freqs) ** 2
-        lmn       = pf.radec_to_lmn(ra, dec, times, HERA_LOCATION)  # (3, n_times)
+        lmn = pf.radec_to_lmn(ra, dec, times, HERA_LOCATION)  # (3, n_times)
         rm_phasor = np.exp(-2j * lambda_sq * rm)                      # (n_freqs,)
 
         data, flags, nsamples = {}, {}, {}
         for ap in antpairs:
-            blvec  = antpos[ap[1]] - antpos[ap[0]]
+            blvec = antpos[ap[1]] - antpos[ap[0]]
             uvw_bl = blvec[:, None] * freqs[None, :] / C   # (3, n_freqs)
 
             # phase[t,f] = u·l(t) + v·m(t) + w·n(t)
             phase = np.einsum("cf,ct->tf", uvw_bl, lmn)    # (n_times, n_freqs)
-            vis   = np.exp(2j * np.pi * phase) * rm_phasor[None, :]
+            vis = np.exp(2j * np.pi * phase) * rm_phasor[None, :]
 
             if noise_level > 0.0:
                 vis += noise_level * (
@@ -494,14 +493,14 @@ class TestIterativelyFitPolarizedSourceParams:
                     + 1j * rng.standard_normal((n_times, n_freqs))
                 )
 
-            key     = ap + (pol,)
+            key = ap + (pol,)
             rev_key = (ap[1], ap[0], pol)
-            data[key]      = vis
-            data[rev_key]  = vis.conj()
+            data[key] = vis
+            data[rev_key] = vis.conj()
             flag_arr = np.zeros((n_times, n_freqs), dtype=bool)
-            flags[key]     = flag_arr
+            flags[key] = flag_arr
             flags[rev_key] = flag_arr.copy()
-            nsamples[key]     = np.ones((n_times, n_freqs))
+            nsamples[key] = np.ones((n_times, n_freqs))
             nsamples[rev_key] = np.ones((n_times, n_freqs))
 
         def _mock(d):
@@ -519,10 +518,10 @@ class TestIterativelyFitPolarizedSourceParams:
         """Thin wrapper that supplies defaults for the initial guess."""
         return pf.iteratively_fit_polarized_source_params(
             dc_d, dc_f, dc_n,
-            right_ascension = self.RA_TRUE  if ra  is None else ra,
-            declination     = self.DEC_TRUE if dec is None else dec,
-            rotation_measure= self.RM_TRUE  if rm  is None else rm,
-            location        = HERA_LOCATION,
+            right_ascension=self.RA_TRUE if ra is None else ra,
+            declination=self.DEC_TRUE if dec is None else dec,
+            rotation_measure=self.RM_TRUE if rm is None else rm,
+            location=HERA_LOCATION,
             **kwargs,
         )
 
@@ -538,9 +537,9 @@ class TestIterativelyFitPolarizedSourceParams:
         """
         dc_d, dc_f, dc_n = self._make_dc()
         ra, dec, rm = self._fit(dc_d, dc_f, dc_n, drm=2.0, dtest=500)
-        np.testing.assert_allclose(ra,  self.RA_TRUE,  atol=1e-3)
+        np.testing.assert_allclose(ra, self.RA_TRUE, atol=1e-3)
         np.testing.assert_allclose(dec, self.DEC_TRUE, atol=1e-3)
-        np.testing.assert_allclose(rm,  self.RM_TRUE,  atol=0.1)
+        np.testing.assert_allclose(rm, self.RM_TRUE, atol=0.1)
 
     # ------------------------------------------------------------------
     # Each parameter corrected independently
@@ -594,16 +593,16 @@ class TestIterativelyFitPolarizedSourceParams:
         dc_d, dc_f, dc_n = self._make_dc()
         ra, dec, rm = self._fit(
             dc_d, dc_f, dc_n,
-            ra  = self.RA_TRUE  + 0.01,
-            dec = self.DEC_TRUE + 0.01,
-            rm  = self.RM_TRUE  + 1.0,
-            drm = 3.0, dtest=500,
+            ra=self.RA_TRUE + 0.01,
+            dec=self.DEC_TRUE + 0.01,
+            rm=self.RM_TRUE + 1.0,
+            drm=3.0, dtest=500,
         )
-        np.testing.assert_allclose(ra,  self.RA_TRUE,  atol=1e-3,
+        np.testing.assert_allclose(ra, self.RA_TRUE, atol=1e-3,
                                    err_msg="RA did not converge to truth")
         np.testing.assert_allclose(dec, self.DEC_TRUE, atol=1e-3,
                                    err_msg="Dec did not converge to truth")
-        np.testing.assert_allclose(rm,  self.RM_TRUE,  atol=0.1,
+        np.testing.assert_allclose(rm, self.RM_TRUE, atol=0.1,
                                    err_msg="RM did not converge to truth")
 
     def test_noiseless_converges_before_maxiter(self):
@@ -615,18 +614,18 @@ class TestIterativelyFitPolarizedSourceParams:
         possible if the loop broke early on the same iteration in both calls.
         """
         kwargs = dict(
-            ra  = self.RA_TRUE  + 0.005,
-            dec = self.DEC_TRUE + 0.005,
-            rm  = self.RM_TRUE  + 0.5,
-            drm = 2.0, dtest=500,
+            ra=self.RA_TRUE + 0.005,
+            dec=self.DEC_TRUE + 0.005,
+            rm=self.RM_TRUE + 0.5,
+            drm=2.0, dtest=500,
         )
         dc_d, dc_f, dc_n = self._make_dc()
-        ra3,  dec3,  rm3  = self._fit(dc_d, dc_f, dc_n, maxiter=3,  **kwargs)
+        ra3, dec3, rm3 = self._fit(dc_d, dc_f, dc_n, maxiter=3, **kwargs)
         ra10, dec10, rm10 = self._fit(dc_d, dc_f, dc_n, maxiter=10, **kwargs)
 
-        np.testing.assert_allclose(ra3,  ra10,  atol=1e-8,
+        np.testing.assert_allclose(ra3, ra10, atol=1e-8,
                                    err_msg="RA differs between maxiter=3 and maxiter=10")
         np.testing.assert_allclose(dec3, dec10, atol=1e-8,
                                    err_msg="Dec differs between maxiter=3 and maxiter=10")
-        np.testing.assert_allclose(rm3,  rm10,  atol=1e-6,
+        np.testing.assert_allclose(rm3, rm10, atol=1e-6,
                                    err_msg="RM differs between maxiter=3 and maxiter=10")
