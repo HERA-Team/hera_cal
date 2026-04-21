@@ -60,24 +60,24 @@ def _make_mock_dc(n_times=8, n_freqs=16, antpairs=None, pol="ee", seed=42,
 
     data, flags, nsamples = {}, {}, {}
     for ap in antpairs:
-        key     = ap + (pol,)
+        key = ap + (pol,)
         rev_key = (ap[1], ap[0], pol)
         vis = (rng.standard_normal((n_times, n_freqs))
                + 1j * rng.standard_normal((n_times, n_freqs)))
-        data[key]     = vis
+        data[key] = vis
         data[rev_key] = vis.conj()
-        flags[key]     = np.ones((n_times, n_freqs), dtype=bool) if all_flagged \
+        flags[key] = np.ones((n_times, n_freqs), dtype=bool) if all_flagged \
                          else np.zeros((n_times, n_freqs), dtype=bool)
         flags[rev_key] = flags[key].copy()
-        nsamples[key]     = np.ones((n_times, n_freqs))
+        nsamples[key] = np.ones((n_times, n_freqs))
         nsamples[rev_key] = np.ones((n_times, n_freqs))
 
     def _mock(d):
         dc = MagicMock(spec=datacontainer.DataContainer)
         dc.__getitem__ = lambda self, k: d[k]
         dc.antpairs = MagicMock(return_value=antpairs)
-        dc.freqs  = freqs
-        dc.times  = times
+        dc.freqs = freqs
+        dc.times = times
         dc.antpos = antpos
         return dc
 
@@ -130,10 +130,10 @@ class TestEstimatePolarizedSourceDelay:
         """Delay increases with |RM|, decreases with freq, zero/negative RM."""
         f = 150e6
         assert pf.estimate_polarized_source_delay(f, 100.0) > \
-               pf.estimate_polarized_source_delay(f, 1.0),   "should increase with RM"
+               pf.estimate_polarized_source_delay(f, 1.0), "should increase with RM"
         assert pf.estimate_polarized_source_delay(100e6, 10.0) > \
                pf.estimate_polarized_source_delay(200e6, 10.0), "should decrease with freq"
-        assert pf.estimate_polarized_source_delay(f, 0.0)  == 0.0
+        assert pf.estimate_polarized_source_delay(f, 0.0) == 0.0
         assert pf.estimate_polarized_source_delay(f, -10.0) < 0.0
 
     def test_array_broadcast(self):
@@ -154,7 +154,7 @@ class TestEstimatePolarizedSourceDelay:
 class TestEstimateFreqFromDelay:
 
     @pytest.mark.parametrize("freqs,rm", [
-        (150e6,                       10.0),
+        (150e6, 10.0),
         (np.linspace(100e6, 200e6, 20), 25.0),
     ])
     def test_round_trip(self, freqs, rm):
@@ -185,15 +185,15 @@ class TestUnpackDataContainers:
         vis, weights, uvw, t_out, f_out = pf.unpack_data_containers(
             dc_d, dc_f, dc_n, antpos=antpos, freqs=freqs
         )
-        assert vis.shape     == (2 * n_bl, n_times, n_freqs)
+        assert vis.shape == (2 * n_bl, n_times, n_freqs)
         assert weights.shape == (2 * n_bl, n_times, n_freqs)
-        assert uvw.shape     == (2 * n_bl, 3, n_freqs)
-        assert t_out.shape   == (n_times,)
-        assert f_out.shape   == (n_freqs,)
+        assert uvw.shape == (2 * n_bl, 3, n_freqs)
+        assert t_out.shape == (n_times,)
+        assert f_out.shape == (n_freqs,)
 
     @pytest.mark.parametrize("axis,slc,axis_idx", [
         ("freq", slice(4, 12), -1),
-        ("time", slice(2, 6),   1),
+        ("time", slice(2, 6), 1),
     ])
     def test_slices_applied(self, axis, slc, axis_idx):
         dc_d, dc_f, dc_n, freqs, times, antpos, _ = _make_mock_dc(8, 16)
@@ -233,16 +233,16 @@ class TestFitRotationMeasure:
 
     def _make_synthetic_data(self, rm_true=10.0, n_bls=4, n_times=6, n_freqs=32):
         """Noiseless RM signal with zero UVW (position phase = 0)."""
-        rng   = np.random.default_rng(0)
+        rng = np.random.default_rng(0)
         freqs = np.linspace(120e6, 180e6, n_freqs)
-        lsq   = (C / freqs) ** 2
-        spec  = np.exp(-2j * lsq * rm_true)
-        vis   = np.broadcast_to(spec[None, None, :], (n_bls, n_times, n_freqs)).copy()
-        vis  += 0.01 * (rng.standard_normal((n_bls, n_times, n_freqs))
+        lsq = (C / freqs) ** 2
+        spec = np.exp(-2j * lsq * rm_true)
+        vis = np.broadcast_to(spec[None, None, :], (n_bls, n_times, n_freqs)).copy()
+        vis += 0.01 * (rng.standard_normal((n_bls, n_times, n_freqs))
                         + 1j * rng.standard_normal((n_bls, n_times, n_freqs)))
         weights = np.ones_like(vis, dtype=float)
-        uvw     = np.zeros((n_bls, 3, n_freqs))
-        times   = np.linspace(2459000.0, 2459000.01, n_times)
+        uvw = np.zeros((n_bls, 3, n_freqs))
+        times = np.linspace(2459000.0, 2459000.01, n_times)
         return vis, weights, uvw, times, freqs
 
     @pytest.mark.parametrize("rm_true", [15.0, -20.0])
@@ -304,27 +304,27 @@ class TestFitPolarizedSourcePosition:
     RA0, DEC0, RM0 = 45.0, -30.0, 10.0
 
     def _make_uvw(self, n_bls=6, seed=7):
-        rng    = np.random.default_rng(seed)
+        rng = np.random.default_rng(seed)
         blvecs = rng.standard_normal((n_bls, 3)) * 100.0
         blvecs[:, 2] = 0.0
         return blvecs[:, :, None] * self.FREQS[None, None, :] / C
 
     def _make_vis(self, ra, dec, rm, n_times=1, n_bls=6, amplitude=1.0):
-        times   = np.linspace(2459000.0, 2459000.0 + 5e-4 * n_times, n_times)
-        uvw     = self._make_uvw(n_bls=n_bls)
-        lmn     = pf.radec_to_lmn(ra, dec, times, HERA_LOCATION)
-        lsq     = (C / self.FREQS) ** 2
-        phase   = np.einsum("bcf,ct->btf", uvw, lmn)
-        vis     = amplitude * (np.exp(2j * np.pi * phase)
+        times = np.linspace(2459000.0, 2459000.0 + 5e-4 * n_times, n_times)
+        uvw = self._make_uvw(n_bls=n_bls)
+        lmn = pf.radec_to_lmn(ra, dec, times, HERA_LOCATION)
+        lsq = (C / self.FREQS) ** 2
+        phase = np.einsum("bcf,ct->btf", uvw, lmn)
+        vis = amplitude * (np.exp(2j * np.pi * phase)
                                * np.exp(-2j * lsq[None, None, :] * rm))
         return vis, np.ones_like(vis, dtype=float), uvw, times
 
     def _fit(self, vis, weights, uvw, times, ra=None, dec=None, rm=None):
         return pf._fit_polarized_source_position(
             vis, weights, uvw,
-            ra  if ra  is not None else self.RA0,
+            ra if ra is not None else self.RA0,
             dec if dec is not None else self.DEC0,
-            rm  if rm  is not None else self.RM0,
+            rm if rm is not None else self.RM0,
             times, self.FREQS, HERA_LOCATION,
         )
 
@@ -342,35 +342,35 @@ class TestFitPolarizedSourcePosition:
     def test_exact_position_zero_offset(self, rm):
         vis, w, uvw, t = self._make_vis(self.RA0, self.DEC0, rm)
         ra_fit, dec_fit = self._fit(vis, w, uvw, t, rm=rm)
-        np.testing.assert_allclose(ra_fit,  self.RA0,  atol=1e-8)
+        np.testing.assert_allclose(ra_fit, self.RA0, atol=1e-8)
         np.testing.assert_allclose(dec_fit, self.DEC0, atol=1e-8)
 
     # --- offset recovery ---
 
     @pytest.mark.parametrize("dra, ddec", [
         (0.01, 0.0),
-        (0.0,  0.01),
+        (0.0, 0.01),
         (0.008, 0.006),
     ])
     def test_small_offset_recovered(self, dra, ddec):
         ra_true, dec_true = self.RA0 + dra, self.DEC0 + ddec
         vis, w, uvw, t = self._make_vis(ra_true, dec_true, self.RM0)
         ra_fit, dec_fit = self.RA0, self.DEC0
-        
+
         # Iterate the fitter a few times to allow the linear approximation to improve as we get closer.
         for _ in range(5):
             ra_fit, dec_fit = self._fit(vis, w, uvw, t, ra=ra_fit, dec=dec_fit)
 
-        assert abs(ra_fit  - ra_true) < abs(self.RA0  - ra_true) or dra  == 0.0
+        assert abs(ra_fit - ra_true) < abs(self.RA0 - ra_true) or dra == 0.0
         assert abs(dec_fit - dec_true) < abs(self.DEC0 - dec_true) or ddec == 0.0
-        np.testing.assert_allclose(ra_fit,  ra_true,  atol=1e-3)
+        np.testing.assert_allclose(ra_fit, ra_true, atol=1e-3)
         np.testing.assert_allclose(dec_fit, dec_true, atol=1e-3)
 
     # --- weighting invariances ---
 
     def test_uniform_weight_scaling_invariant(self):
         vis, w, uvw, t = self._make_vis(self.RA0, self.DEC0, self.RM0)
-        ra1, dec1 = self._fit(vis, w,         uvw, t)
+        ra1, dec1 = self._fit(vis, w, uvw, t)
         ra2, dec2 = self._fit(vis, w * 100.0, uvw, t)
         np.testing.assert_allclose(ra1, ra2, atol=1e-10)
         np.testing.assert_allclose(dec1, dec2, atol=1e-10)
@@ -382,7 +382,7 @@ class TestFitPolarizedSourcePosition:
         w_partial = w.copy()
         w_partial[:2] = 0.0
         ra_fit, dec_fit = self._fit(vis, w_partial, uvw, t)
-        np.testing.assert_allclose(ra_fit,  ra_ref,  atol=1e-6)
+        np.testing.assert_allclose(ra_fit, ra_ref, atol=1e-6)
         np.testing.assert_allclose(dec_fit, dec_ref, atol=1e-6)
 
     # --- RM de-rotation is load-bearing ---
@@ -391,7 +391,7 @@ class TestFitPolarizedSourcePosition:
         ra_true, rm_true = self.RA0 + 0.01, 50.0
         vis, w, uvw, t = self._make_vis(ra_true, self.DEC0, rm=rm_true)
         ra_correct, _ = self._fit(vis, w, uvw, t, rm=rm_true)
-        ra_wrong,   _ = self._fit(vis, w, uvw, t, rm=0.0)
+        ra_wrong, _ = self._fit(vis, w, uvw, t, rm=0.0)
         assert abs(ra_correct - ra_true) < abs(ra_wrong - ra_true)
 
     # --- multi-time-step handling ---
@@ -402,5 +402,5 @@ class TestFitPolarizedSourcePosition:
         ra_fit, dec_fit = self._fit(vis, w, uvw, t)
         assert np.isfinite(ra_fit) and np.isfinite(dec_fit)
         if n_times == 1:
-            np.testing.assert_allclose(ra_fit,  self.RA0,  atol=1e-8)
+            np.testing.assert_allclose(ra_fit, self.RA0, atol=1e-8)
             np.testing.assert_allclose(dec_fit, self.DEC0, atol=1e-8)
