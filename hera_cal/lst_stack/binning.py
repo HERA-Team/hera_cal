@@ -70,11 +70,22 @@ def lst_align(
     represent the start, end, or centre of each integration -- either choice will
     incur similar errors.
 
+    .. warning::
+        When ``rephase=True``, the input ``data`` array is modified **in place** to
+        save memory. Rows whose LSTs fall inside the LST range are
+        overwritten with their rephased values; rows outside the LST range are left
+        unchanged (their rephase shift is forced to 0). If the caller still needs
+        the original unrephased data afterward, it must pass in a ``data.copy()``.
+        The per-bin arrays returned in the output list are fancy-index copies of
+        this (now rephased) master, so they are independent of it.
+        ``flags``, ``nsamples``, and ``where_inpainted`` are **not** mutated.
+
     Parameters
     ----------
     data
         The complex visibility data. Must be shape ``(ntimes, nbls, nfreqs, npols)``,
-        where the times may be sourced from multiple days.
+        where the times may be sourced from multiple days. **Modified in place when
+        ``rephase=True``** — see warning above.
     data_lsts
         The LSTs corresponding to each of the time stamps in the data. Must have
         length ``data.shape[0]``. As noted above, these may be the start, end, or
@@ -167,26 +178,21 @@ def lst_align(
     if rephase:
         logger.info("Rephasing data")
 
-        # lst_mask is a boolean mask that masks out LSTs that are not in any bin
-        # we don't want to spend time rephasing data outside our LST range completely,
-        # so we just mask them out here. Indexing by a boolean mask makes a *copy*
-        # of the data, so we can rephase in-place without worrying about overwriting
-        # the original input data.
-        data = data[lst_mask]
-        flags = flags[lst_mask]
-        nsamples = nsamples[lst_mask]
-        data_lsts = data_lsts[lst_mask]
-        grid_indices = grid_indices[lst_mask]
-
         if freq_array is None or antpos is None:
             raise ValueError("freq_array and antpos is needed for rephase")
 
         bls = np.array([antpos[k[0]] - antpos[k[1]] for k in antpairs])
 
-        # get appropriate lst_shift for each integration, then rephase
-        lst_shift = lst_bin_centres[grid_indices] - data_lsts
-
-        # this makes a copy of the data in d
+        # Rephase in-place on the full data array. This is slightly more CPU-intensive
+        # than using data[lst_mask], but far less memory intensitive. Instead,
+        # compute a full-length lst_shift with 0 for out-of-range rows so they're
+        # untouched, and rephase the master in place. grid_indices from
+        # get_lst_bins can be -1 or Nbins for out-of-range rows, so clip before
+        # indexing lst_bin_centres (the shift value for those rows is overwritten
+        # to 0 below, so the clipped lookup value is discarded).
+        _clipped = np.clip(grid_indices, 0, len(lst_bin_centres) - 1)  # avoid index errors
+        lst_shift = lst_bin_centres[_clipped] - data_lsts
+        lst_shift[~lst_mask] = 0.0  # doesn't do any rephasing
         utils.lst_rephase(data, bls, freq_array, lst_shift, lat=lat, inplace=True)
 
     # In case we don't rephase, the data/flags/nsamples arrays are still the original
@@ -197,16 +203,11 @@ def lst_align(
     # We anyway end up with a ~full copy of the data in the output arrays, because
     # we do a fancy-index of the input arrays to get the relevant data for each bin.
 
-    # TODO: we should think a little more carefully about how we might reduce the
-    #       number of copies made in this function. When rephasing, we essentially
-    #       get three full copies while inside the function (though one is only local
-    #       in scope, and is therefore removed when the function returns).
-
     # shortcut -- just return all the data, re-organized.
     _data, _flags, _nsamples, _where_inpainted = [], [], [], []
     empty_shape = (0, len(antpairs), len(freq_array), npols)
     for lstbin in range(len(lst_bin_centres)):
-        mask = grid_indices == lstbin
+        mask = (grid_indices == lstbin)
         if np.any(mask):
             _data.append(data[mask])
             _flags.append(flags[mask])
@@ -223,6 +224,9 @@ def lst_align(
                 _where_inpainted.append(np.zeros(empty_shape, bool))
             else:
                 _where_inpainted.append(None)
+
+    # Drop our references to the original arrays so they can be freed before we return.
+    del data, flags, nsamples, where_inpainted
 
     return lst_bin_centres, _data, _flags, _nsamples, _where_inpainted
 
@@ -803,7 +807,13 @@ def lst_bin_files_for_baselines(
     # LST bin edges are the actual edges of the bins, so should have length
     # +1 of the LST centres. We use +dlst instead of +dlst/2 on the top edge
     # so that np.arange definitely gets the last edge.
-    bin_lst, data, flags, nsamples, where_inpainted = lst_align(
+    #
+    # Build the kwargs dict first, then drop our local names for the master
+    # arrays so lst_align's parameters are the sole owners. Together with the
+    # matching `del` at the end of lst_align, this lets Python free the masters
+    # before lst_align returns — otherwise both master and per-bin output lists
+    # are alive simultaneously, roughly doubling peak RSS.
+    _align_kwargs = dict(
         data=data,
         flags=None if ignore_flags else flags,
         nsamples=nsamples,
@@ -815,6 +825,9 @@ def lst_bin_files_for_baselines(
         rephase=rephase,
         antpos=antpos,
     )
+    del data, flags, nsamples, where_inpainted
+    bin_lst, data, flags, nsamples, where_inpainted = lst_align(**_align_kwargs)
+    del _align_kwargs
 
     bins = get_lst_bins(lsts, lst_bin_edges)[0]
     times = np.concatenate([
