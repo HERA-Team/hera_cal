@@ -225,9 +225,6 @@ def lst_align(
             else:
                 _where_inpainted.append(None)
 
-    # Drop our references to the original arrays so they can be freed before we return.
-    del data, flags, nsamples, where_inpainted
-
     return lst_bin_centres, _data, _flags, _nsamples, _where_inpainted
 
 
@@ -807,13 +804,7 @@ def lst_bin_files_for_baselines(
     # LST bin edges are the actual edges of the bins, so should have length
     # +1 of the LST centres. We use +dlst instead of +dlst/2 on the top edge
     # so that np.arange definitely gets the last edge.
-    #
-    # Build the kwargs dict first, then drop our local names for the master
-    # arrays so lst_align's parameters are the sole owners. Together with the
-    # matching `del` at the end of lst_align, this lets Python free the masters
-    # before lst_align returns — otherwise both master and per-bin output lists
-    # are alive simultaneously, roughly doubling peak RSS.
-    _align_kwargs = dict(
+    bin_lst, data, flags, nsamples, where_inpainted = lst_align(
         data=data,
         flags=None if ignore_flags else flags,
         nsamples=nsamples,
@@ -825,9 +816,6 @@ def lst_bin_files_for_baselines(
         rephase=rephase,
         antpos=antpos,
     )
-    del data, flags, nsamples, where_inpainted
-    bin_lst, data, flags, nsamples, where_inpainted = lst_align(**_align_kwargs)
-    del _align_kwargs
 
     bins = get_lst_bins(lsts, lst_bin_edges)[0]
     times = np.concatenate([
