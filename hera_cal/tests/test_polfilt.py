@@ -444,8 +444,8 @@ class TestIterativelyFitPolarizedSourceParams:
         for i in range(10)
     }
     ANTPAIRS = [
-        (i, j) 
-        for i in range(10) 
+        (i, j)
+        for i in range(10)
         for j in range(i + 1, 10)
     ]
     # 12 integrations spanning 10 minutes — enough time diversity for the
@@ -601,7 +601,7 @@ class TestIterativelyFitPolarizedSourceParams:
             ra=self.RA_TRUE + 0.01,
             dec=self.DEC_TRUE + 0.01,
             rm=self.RM_TRUE + 1.0,
-            drm=3.0, 
+            drm=3.0,
             dtest=500,
             maxiter=20,
         )
