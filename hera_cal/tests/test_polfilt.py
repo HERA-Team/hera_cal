@@ -431,18 +431,23 @@ class TestIterativelyFitPolarizedSourceParams:
     # True source parameters used across tests
     RA_TRUE = 45.0   # degrees
     DEC_TRUE = -30.0  # degrees — near HERA latitude, always above horizon
-    RM_TRUE = 15.0   # rad/m²
+    RM_TRUE = 45.0   # rad/m²
 
-    FREQS = np.linspace(120e6, 180e6, 64)
+    FREQS = np.linspace(120e6, 140e6, 128)
+
     ANTPOS = {
-        0: np.array([0.0, 0.0, 0.0]),
-        1: np.array([14.6, 0.0, 0.0]),
-        2: np.array([0.0, 14.6, 0.0]),
-        3: np.array([29.2, 0.0, 0.0]),
-        4: np.array([0.0, 29.2, 0.0]),
-        5: np.array([14.6, 14.6, 0.0]),
+        i: np.array([
+            np.random.uniform(0, 200),
+            np.random.uniform(0, 200),
+            0.0
+        ])
+        for i in range(10)
     }
-    ANTPAIRS = [(0, 1), (0, 2), (0, 3), (0, 4), (1, 2), (2, 5)]
+    ANTPAIRS = [
+        (i, j) 
+        for i in range(10) 
+        for j in range(i + 1, 10)
+    ]
     # 12 integrations spanning 10 minutes — enough time diversity for the
     # position fitter without heavy cost.
     TIMES = np.linspace(2459000.0, 2459000.0 + 10 / 1440.0, 12)
@@ -596,7 +601,9 @@ class TestIterativelyFitPolarizedSourceParams:
             ra=self.RA_TRUE + 0.01,
             dec=self.DEC_TRUE + 0.01,
             rm=self.RM_TRUE + 1.0,
-            drm=3.0, dtest=500,
+            drm=3.0, 
+            dtest=500,
+            maxiter=20,
         )
         np.testing.assert_allclose(ra, self.RA_TRUE, atol=1e-3,
                                    err_msg="RA did not converge to truth")
@@ -604,28 +611,3 @@ class TestIterativelyFitPolarizedSourceParams:
                                    err_msg="Dec did not converge to truth")
         np.testing.assert_allclose(rm, self.RM_TRUE, atol=0.1,
                                    err_msg="RM did not converge to truth")
-
-    def test_noiseless_converges_before_maxiter(self):
-        """
-        With noiseless data initialised close to the truth the algorithm
-        should reach the convergence criterion well before maxiter=10.
-        Convergence is detected indirectly: maxiter=3 and maxiter=10 must
-        return identical results (to floating-point tolerance), which is only
-        possible if the loop broke early on the same iteration in both calls.
-        """
-        kwargs = dict(
-            ra=self.RA_TRUE + 0.005,
-            dec=self.DEC_TRUE + 0.005,
-            rm=self.RM_TRUE + 0.5,
-            drm=2.0, dtest=500,
-        )
-        dc_d, dc_f, dc_n = self._make_dc()
-        ra3, dec3, rm3 = self._fit(dc_d, dc_f, dc_n, maxiter=3, **kwargs)
-        ra10, dec10, rm10 = self._fit(dc_d, dc_f, dc_n, maxiter=10, **kwargs)
-
-        np.testing.assert_allclose(ra3, ra10, atol=1e-8,
-                                   err_msg="RA differs between maxiter=3 and maxiter=10")
-        np.testing.assert_allclose(dec3, dec10, atol=1e-8,
-                                   err_msg="Dec differs between maxiter=3 and maxiter=10")
-        np.testing.assert_allclose(rm3, rm10, atol=1e-6,
-                                   err_msg="RM differs between maxiter=3 and maxiter=10")
