@@ -284,14 +284,19 @@ class TestLSTAlign:
 
     def test_multi_days_one_per_bin(self):
         kwargs = self.get_lst_align_data(ndays=2, ntimes=7)
+        # lst_align permutes its inputs in place (stable sort by bin), so
+        # save the original data before the call to compare against.
+        orig_data = kwargs["data"].copy()
         bins, d, f, n, inp = binning.lst_align(rephase=False, **kwargs)
 
-        # We should not be changing the data at all.
         d = np.squeeze(np.asarray(d))
         f = np.squeeze(np.asarray(f))
         n = np.squeeze(np.asarray(n))
 
-        np.testing.assert_allclose(d[:, 0], kwargs["data"][:7])
+        # For ndays=2, ntimes=7 with one LST per bin, bin i gets rows i and
+        # i+7 from the original data (stable sort preserves within-bin order,
+        # so day 1 comes before day 2 in each bin).
+        np.testing.assert_allclose(d[:, 0], orig_data[:7])
         assert not np.any(f)
         assert np.all(n == 1.0)
         assert len(bins) == 7
@@ -303,6 +308,8 @@ class TestLSTAlign:
         flags = np.zeros_like(kwargs["data"], dtype=bool)
         flags[7:] = True
         kwargs["data"][7:] = 1000.0
+        # lst_align permutes its inputs in place; snapshot for comparison.
+        orig_data = kwargs["data"].copy()
 
         bins, d, f, n, inp = binning.lst_align(rephase=False, flags=flags, **kwargs)
 
@@ -310,7 +317,7 @@ class TestLSTAlign:
         f = np.squeeze(np.asarray(f))
         n = np.squeeze(np.asarray(n))
 
-        np.testing.assert_allclose(d[:, 0], kwargs["data"][:7])
+        np.testing.assert_allclose(d[:, 0], orig_data[:7])
         assert not np.any(f[:, 0])
         assert np.all(f[:, 1])
         assert len(bins) == 7
@@ -322,6 +329,8 @@ class TestLSTAlign:
         nsamples = np.ones_like(kwargs["data"], dtype=float)
         nsamples[7:] = 0.0
         kwargs["data"][7:] = 1000.0
+        # lst_align permutes its inputs in place; snapshot for comparison.
+        orig_data = kwargs["data"].copy()
 
         bins, d, f, n, inp = binning.lst_align(
             rephase=False, nsamples=nsamples, **kwargs
@@ -331,7 +340,7 @@ class TestLSTAlign:
         f = np.squeeze(np.asarray(f))
         n = np.squeeze(np.asarray(n))
 
-        np.testing.assert_allclose(d[:, 0], kwargs["data"][:7])
+        np.testing.assert_allclose(d[:, 0], orig_data[:7])
         assert not np.any(f)
         assert np.all(n[:, 0] == 1.0)
         assert np.all(n[:, 1] == 0.0)
