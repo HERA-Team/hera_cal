@@ -57,9 +57,9 @@ def _permute_rows_inplace(
     O(one row per array + n bools for the visited mask), independent of the
     dtype or trailing shape of each array.
 
-    This is the natural primitive for reordering a master array alongside its
+    This is the natural primitive for reordering a data array alongside its
     parallel siblings (flags, nsamples, where_inpainted, ...) by a single
-    permutation without allocating a full-master-sized temporary, as
+    permutation without allocating a full-data-sized temporary, as
     ``arrs[:] = arrs[perm]`` or ``np.take(arrs, perm, axis=0)`` would.
 
     Parameters
@@ -137,14 +137,15 @@ def lst_align(
     incur similar errors.
 
     .. warning::
-        When ``rephase=True``, the input ``data`` array is modified **in place** to
-        save memory. Rows whose LSTs fall inside the LST range are
-        overwritten with their rephased values; rows outside the LST range are left
-        unchanged (their rephase shift is forced to 0). If the caller still needs
-        the original unrephased data afterward, it must pass in a ``data.copy()``.
-        The per-bin arrays returned in the output list are fancy-index copies of
-        this (now rephased) master, so they are independent of it.
-        ``flags``, ``nsamples``, and ``where_inpainted`` are **not** mutated.
+        This function **modifies its input arrays in place** to save memory.
+        The 0th axis of ``data``, ``flags``, ``nsamples``, and ``where_inpainted``
+        is **permuted in place** (stable-sorted by LST bin index). The per-bin
+        arrays returned in the output lists are **views** into the permuted master
+        arrays and share memory with them. If the caller needs the original row order,
+        unrephased data, or independent copies of the per-bin arrays, it must pass
+        in copies. When ``rephase=True``, rows of ``data`` whose LSTs fall inside
+        the LST range are overwritten with their rephased values (rows outside the
+        LST range are left unchanged, with a rephase shift of 0).
 
     Parameters
     ----------
@@ -261,35 +262,39 @@ def lst_align(
         lst_shift[~lst_mask] = 0.0  # doesn't do any rephasing
         utils.lst_rephase(data, bls, freq_array, lst_shift, lat=lat, inplace=True)
 
-    # In case we don't rephase, the data/flags/nsamples arrays are still the original
-    # input arrays. We don't mask out the data outside the LST range, because we're
-    # just going to omit it from our bins naturally anyway. We also don't care if its
-    # not a copy here, because we're not going to modify it, and this saves memory.
+    # Permute the master arrays in place so that rows belonging to the same
+    # LST bin are contiguous. Each per-bin output is then a *view* into the
+    # permuted master (no row-data copy), which prevents the memory duplication
+    # of fancy indexing.
+    #
+    # We use a stable argsort so that, within each bin, rows retain their original
+    # input order, keeping any caller's parallel arrays (e.g. times, lsts) in sync.
+    #
+    # Rows outside the LST range have grid_indices == -1 or == Nbins (from
+    # get_lst_bins) and are naturally excluded from every bin's slice by the
+    # searchsorted edges below.
+    Nbins = len(lst_bin_centres)
+    order = np.argsort(grid_indices, kind='stable')
+    wip_to_add = ([where_inpainted] if where_inpainted is not None else [])
+    _permute_rows_inplace([data, flags, nsamples] + wip_to_add, order)
+    grid_indices_sorted = grid_indices[order]
+    bin_edges_idx = np.searchsorted(grid_indices_sorted, np.arange(Nbins + 1))
 
-    # We anyway end up with a ~full copy of the data in the output arrays, because
-    # we do a fancy-index of the input arrays to get the relevant data for each bin.
-
-    # shortcut -- just return all the data, re-organized.
+    # For each bin, take a contiguous slice of the now bin-sorted masters. This
+    # is equivalent to ``data[grid_indices == lstbin]`` fancy-index, but returns
+    # a *view* into the master instead of a copy. An empty bin naturally yields
+    # a zero-length view with the correct trailing shape and dtype.
     _data, _flags, _nsamples, _where_inpainted = [], [], [], []
-    empty_shape = (0, len(antpairs), len(freq_array), npols)
-    for lstbin in range(len(lst_bin_centres)):
-        mask = (grid_indices == lstbin)
-        if np.any(mask):
-            _data.append(data[mask])
-            _flags.append(flags[mask])
-            _nsamples.append(nsamples[mask])
-            if where_inpainted is not None:
-                _where_inpainted.append(where_inpainted[mask])
-            else:
-                _where_inpainted.append(None)
+    for lstbin in range(Nbins):
+        lo = int(bin_edges_idx[lstbin])
+        hi = int(bin_edges_idx[lstbin + 1])
+        _data.append(data[lo:hi])
+        _flags.append(flags[lo:hi])
+        _nsamples.append(nsamples[lo:hi])
+        if where_inpainted is not None:
+            _where_inpainted.append(where_inpainted[lo:hi])
         else:
-            _data.append(np.zeros(empty_shape, complex))
-            _flags.append(np.zeros(empty_shape, bool))
-            _nsamples.append(np.zeros(empty_shape, int))
-            if where_inpainted is not None:
-                _where_inpainted.append(np.zeros(empty_shape, bool))
-            else:
-                _where_inpainted.append(None)
+            _where_inpainted.append(None)
 
     return lst_bin_centres, _data, _flags, _nsamples, _where_inpainted
 
