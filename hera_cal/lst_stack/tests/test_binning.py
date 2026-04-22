@@ -38,6 +38,149 @@ class TestAdjustLSTBinEdges:
             binning.adjust_lst_bin_edges(x)
 
 
+class TestPermuteRowsInplace:
+    """Unit tests for ``binning._permute_rows_inplace``.
+
+    The helper applies a single permutation to axis 0 of every array in a
+    list, in place, using a cycle-decomposition walk. These tests pin down
+    correctness (matches ``arr[perm]``), the multi-array lockstep contract,
+    error paths, and the memory-efficiency promise (no full-size temporary
+    allocated).
+    """
+
+    @pytest.mark.parametrize("seed", [0, 1, 42])
+    def test_matches_fancy_index_single_array_1d(self, seed):
+        rng = np.random.default_rng(seed)
+        n = 50
+        arr = rng.standard_normal(n)
+        perm = rng.permutation(n)
+        expected = arr[perm].copy()
+        binning._permute_rows_inplace([arr], perm)
+        np.testing.assert_array_equal(arr, expected)
+
+    @pytest.mark.parametrize("seed", [0, 1, 7])
+    def test_matches_fancy_index_single_array_multidim(self, seed):
+        rng = np.random.default_rng(seed)
+        arr = rng.standard_normal((30, 4, 5))
+        perm = rng.permutation(30)
+        expected = arr[perm].copy()
+        binning._permute_rows_inplace([arr], perm)
+        np.testing.assert_array_equal(arr, expected)
+
+    def test_multiple_arrays_heterogeneous_dtypes_and_shapes(self):
+        rng = np.random.default_rng(123)
+        n = 40
+        a = rng.standard_normal((n, 3)).astype(np.complex128)
+        b = rng.integers(0, 2, size=n).astype(bool)
+        c = rng.standard_normal((n, 2, 2)).astype(np.float64)
+        d = rng.integers(-5, 5, size=(n, 1)).astype(np.int32)
+        perm = rng.permutation(n)
+
+        ea, eb, ec, ed = a[perm].copy(), b[perm].copy(), c[perm].copy(), d[perm].copy()
+        binning._permute_rows_inplace([a, b, c, d], perm)
+        np.testing.assert_array_equal(a, ea)
+        np.testing.assert_array_equal(b, eb)
+        np.testing.assert_array_equal(c, ec)
+        np.testing.assert_array_equal(d, ed)
+
+    def test_identity_permutation_is_noop(self):
+        rng = np.random.default_rng(0)
+        arr = rng.standard_normal((10, 3)).copy()
+        original = arr.copy()
+        perm = np.arange(10)
+        binning._permute_rows_inplace([arr], perm)
+        np.testing.assert_array_equal(arr, original)
+
+    def test_reverse_permutation(self):
+        arr = np.arange(20).reshape(10, 2).copy()
+        perm = np.arange(10)[::-1].copy()  # reverse
+        expected = arr[perm].copy()
+        binning._permute_rows_inplace([arr], perm)
+        np.testing.assert_array_equal(arr, expected)
+
+    def test_single_giant_cycle(self):
+        # perm = [1, 2, 3, ..., n-1, 0] is a single n-cycle; exercises the
+        # longest possible cycle walk with one scratch-row allocation.
+        n = 12
+        arr = np.arange(n * 4).reshape(n, 4).astype(float)
+        perm = np.concatenate([np.arange(1, n), [0]])
+        expected = arr[perm].copy()
+        binning._permute_rows_inplace([arr], perm)
+        np.testing.assert_array_equal(arr, expected)
+
+    def test_many_fixed_points(self):
+        # Only two rows swap; everything else is a fixed point. The helper's
+        # `perm[start] == start` fast-path handles these without a scratch copy.
+        arr = np.arange(50 * 3).reshape(50, 3).astype(float)
+        perm = np.arange(50)
+        perm[10], perm[40] = 40, 10
+        expected = arr[perm].copy()
+        binning._permute_rows_inplace([arr], perm)
+        np.testing.assert_array_equal(arr, expected)
+
+    def test_empty_arrs_list_is_noop(self):
+        # No arrays -> nothing to do, nothing to raise. The passed perm is
+        # irrelevant here.
+        binning._permute_rows_inplace([], np.array([0]))
+
+    def test_zero_length_arrays(self):
+        a = np.empty((0, 3), dtype=float)
+        b = np.empty((0,), dtype=bool)
+        binning._permute_rows_inplace([a, b], np.array([], dtype=int))
+        assert a.shape == (0, 3)
+        assert b.shape == (0,)
+
+    def test_mismatched_axis0_lengths_raises(self):
+        a = np.zeros((5, 2))
+        b = np.zeros((6, 2))
+        with pytest.raises(ValueError, match="axis-0 length"):
+            binning._permute_rows_inplace([a, b], np.arange(5))
+
+    def test_in_place_object_identity_preserved(self):
+        # The patched lst_align relies on `_permute_rows_inplace` leaving the
+        # passed arrays as the *same* underlying ndarray (so downstream views
+        # into them share memory). Verify we never rebind.
+        rng = np.random.default_rng(3)
+        arr = rng.standard_normal((15, 2))
+        arr_id = id(arr)
+        data_ptr = arr.__array_interface__["data"][0]
+        perm = rng.permutation(15)
+        binning._permute_rows_inplace([arr], perm)
+        assert id(arr) == arr_id
+        assert arr.__array_interface__["data"][0] == data_ptr
+
+    def test_no_bulk_temporary_allocation(self):
+        # The whole point of the helper: peak resident size during the call
+        # should not require a full extra copy of the array. We proxy this
+        # by tracking numpy allocations via tracemalloc and asserting that
+        # the single largest new block is much smaller than arr.nbytes.
+        # (Scratch = one row; arr.nbytes/n_rows is the expected ceiling.)
+        import tracemalloc
+
+        rng = np.random.default_rng(5)
+        n, width = 200, 64
+        arr = rng.standard_normal((n, width)).astype(np.complex128)  # 200 * 64 * 16 B
+        perm = rng.permutation(n)
+        row_bytes = arr.strides[0]
+
+        tracemalloc.start()
+        snap_before = tracemalloc.take_snapshot()
+        binning._permute_rows_inplace([arr], perm)
+        snap_after = tracemalloc.take_snapshot()
+        tracemalloc.stop()
+
+        stats = snap_after.compare_to(snap_before, "filename")
+        biggest = max((s.size_diff for s in stats), default=0)
+        # Generous slack for the bool visited mask (n bytes) and the single
+        # scratch row. A full-master temporary would be n * row_bytes, which
+        # is ~200x larger than our budget here.
+        budget = row_bytes + n + 4096  # row + visited + small overhead
+        assert biggest <= budget, (
+            f"_permute_rows_inplace allocated {biggest} bytes; "
+            f"expected <= {budget} (row={row_bytes}, visited={n})"
+        )
+
+
 class TestLSTAlign:
     @classmethod
     def get_lst_align_data(
