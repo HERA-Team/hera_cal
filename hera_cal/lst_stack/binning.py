@@ -1054,7 +1054,7 @@ class SingleBaselineStacker:
         for list_obj in (data, flags, nsamples, where_inpainted):
             for j, arr in enumerate(list_obj):
                 if arr is not None and arr.ndim == 4:
-                    list_obj[j] = arr[:, 0, :, :].copy()
+                    list_obj[j] = arr[:, 0, :, :]
 
         # Roll the lists to the branch cut
         if lst_branch_cut is not None:
