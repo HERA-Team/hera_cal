@@ -44,6 +44,72 @@ def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
         lst_bin_edges -= 2 * np.pi
 
 
+def _permute_rows_inplace(
+    arrs: Sequence[np.ndarray], perm: np.ndarray
+) -> None:
+    """Apply ``perm`` to the 0th axis of every array in ``arrs`` in place.
+
+    After the call, for each ``arr`` in ``arrs``, ``arr_new[i] = arr_old[perm[i]]``.
+
+    Uses a cycle-decomposition walk, so each cycle in ``perm`` is traversed
+    **once** regardless of how many arrays are being permuted -- all arrays
+    are advanced in lockstep at each step of the cycle. Auxiliary memory is
+    O(one row per array + n bools for the visited mask), independent of the
+    dtype or trailing shape of each array.
+
+    This is the natural primitive for reordering a master array alongside its
+    parallel siblings (flags, nsamples, where_inpainted, ...) by a single
+    permutation without allocating a full-master-sized temporary, as
+    ``arrs[:] = arrs[perm]`` or ``np.take(arrs, perm, axis=0)`` would.
+
+    Parameters
+    ----------
+    arrs
+        Sequence of arrays to permute. Each is modified in place. All arrays
+        must share ``arrs[k].shape[0] == len(perm)``; trailing shapes and
+        dtypes may differ.
+    perm
+        Integer permutation of ``range(n)``. ``perm[i]`` gives the source row
+        index whose data should end up at output position ``i``.
+    """
+    if len(arrs) == 0:
+        return
+    n = arrs[0].shape[0]
+    for a in arrs:
+        if a.shape[0] != n:
+            raise ValueError(
+                f"all arrays in arrs must share axis-0 length {n}, "
+                f"got {a.shape[0]}"
+            )
+    if n == 0:
+        return
+
+    visited = np.zeros(n, dtype=bool)
+    for start in range(n):
+        if visited[start]:
+            continue
+        if perm[start] == start:
+            visited[start] = True
+            continue
+        # Save the rows that will be overwritten at the start of this cycle,
+        # one scratch copy per array. Allocated here (not outside the loop)
+        # so we work uniformly for 1D arrays, where ``arr[start]`` is a
+        # scalar rather than a view supporting ``[...] = `` assignment. The
+        # previous cycle's scratch rows are released as we rebind.
+        tmps = [a[start].copy() for a in arrs]
+        i = start
+        while True:
+            visited[i] = True
+            src = perm[i]
+            if src == start:
+                for a, tmp in zip(arrs, tmps):
+                    a[i] = tmp  # close the cycle
+                break
+            for a in arrs:
+                a[i] = a[src]
+            i = src
+
+
 def lst_align(
     data: np.ndarray,
     data_lsts: np.ndarray,
