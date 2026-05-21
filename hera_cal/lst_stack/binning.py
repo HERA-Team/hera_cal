@@ -44,6 +44,72 @@ def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
         lst_bin_edges -= 2 * np.pi
 
 
+def _permute_rows_inplace(
+    arrs: Sequence[np.ndarray], perm: np.ndarray
+) -> None:
+    """Apply ``perm`` to the 0th axis of every array in ``arrs`` in place.
+
+    After the call, for each ``arr`` in ``arrs``, ``arr_new[i] = arr_old[perm[i]]``.
+
+    Uses a cycle-decomposition walk, so each cycle in ``perm`` is traversed
+    **once** regardless of how many arrays are being permuted -- all arrays
+    are advanced in lockstep at each step of the cycle. Auxiliary memory is
+    O(one row per array + n bools for the visited mask), independent of the
+    dtype or trailing shape of each array.
+
+    This is the natural primitive for reordering a data array alongside its
+    parallel siblings (flags, nsamples, where_inpainted, ...) by a single
+    permutation without allocating a full-data-sized temporary, as
+    ``arrs[:] = arrs[perm]`` or ``np.take(arrs, perm, axis=0)`` would.
+
+    Parameters
+    ----------
+    arrs
+        Sequence of arrays to permute. Each is modified in place. All arrays
+        must share ``arrs[k].shape[0] == len(perm)``; trailing shapes and
+        dtypes may differ.
+    perm
+        Integer permutation of ``range(n)``. ``perm[i]`` gives the source row
+        index whose data should end up at output position ``i``.
+    """
+    if len(arrs) == 0:
+        return
+    n = arrs[0].shape[0]
+    for a in arrs:
+        if a.shape[0] != n:
+            raise ValueError(
+                f"all arrays in arrs must share axis-0 length {n}, "
+                f"got {a.shape[0]}"
+            )
+    if n == 0:
+        return
+
+    visited = np.zeros(n, dtype=bool)
+    for start in range(n):
+        if visited[start]:
+            continue
+        if perm[start] == start:
+            visited[start] = True
+            continue
+        # Save the rows that will be overwritten at the start of this cycle,
+        # one scratch copy per array. Allocated here (not outside the loop)
+        # so we work uniformly for 1D arrays, where ``arr[start]`` is a
+        # scalar rather than a view supporting ``[...] = `` assignment. The
+        # previous cycle's scratch rows are released as we rebind.
+        tmps = [a[start].copy() for a in arrs]
+        i = start
+        while True:
+            visited[i] = True
+            src = perm[i]
+            if src == start:
+                for a, tmp in zip(arrs, tmps):
+                    a[i] = tmp  # close the cycle
+                break
+            for a in arrs:
+                a[i] = a[src]
+            i = src
+
+
 def lst_align(
     data: np.ndarray,
     data_lsts: np.ndarray,
@@ -70,11 +136,23 @@ def lst_align(
     represent the start, end, or centre of each integration -- either choice will
     incur similar errors.
 
+    .. warning::
+        This function **modifies its input arrays in place** to save memory.
+        The 0th axis of ``data``, ``flags``, ``nsamples``, and ``where_inpainted``
+        is **permuted in place** (stable-sorted by LST bin index). The per-bin
+        arrays returned in the output lists are **views** into the permuted master
+        arrays and share memory with them. If the caller needs the original row order,
+        unrephased data, or independent copies of the per-bin arrays, it must pass
+        in copies. When ``rephase=True``, rows of ``data`` whose LSTs fall inside
+        the LST range are overwritten with their rephased values (rows outside the
+        LST range are left unchanged, with a rephase shift of 0).
+
     Parameters
     ----------
     data
         The complex visibility data. Must be shape ``(ntimes, nbls, nfreqs, npols)``,
-        where the times may be sourced from multiple days.
+        where the times may be sourced from multiple days. **Modified in place when
+        ``rephase=True``** — see warning above.
     data_lsts
         The LSTs corresponding to each of the time stamps in the data. Must have
         length ``data.shape[0]``. As noted above, these may be the start, end, or
@@ -167,62 +245,56 @@ def lst_align(
     if rephase:
         logger.info("Rephasing data")
 
-        # lst_mask is a boolean mask that masks out LSTs that are not in any bin
-        # we don't want to spend time rephasing data outside our LST range completely,
-        # so we just mask them out here. Indexing by a boolean mask makes a *copy*
-        # of the data, so we can rephase in-place without worrying about overwriting
-        # the original input data.
-        data = data[lst_mask]
-        flags = flags[lst_mask]
-        nsamples = nsamples[lst_mask]
-        data_lsts = data_lsts[lst_mask]
-        grid_indices = grid_indices[lst_mask]
-
         if freq_array is None or antpos is None:
             raise ValueError("freq_array and antpos is needed for rephase")
 
         bls = np.array([antpos[k[0]] - antpos[k[1]] for k in antpairs])
 
-        # get appropriate lst_shift for each integration, then rephase
-        lst_shift = lst_bin_centres[grid_indices] - data_lsts
-
-        # this makes a copy of the data in d
+        # Rephase in-place on the full data array. This is slightly more CPU-intensive
+        # than using data[lst_mask], but far less memory intensitive. Instead,
+        # compute a full-length lst_shift with 0 for out-of-range rows so they're
+        # untouched, and rephase the master in place. grid_indices from
+        # get_lst_bins can be -1 or Nbins for out-of-range rows, so clip before
+        # indexing lst_bin_centres (the shift value for those rows is overwritten
+        # to 0 below, so the clipped lookup value is discarded).
+        _clipped = np.clip(grid_indices, 0, len(lst_bin_centres) - 1)  # avoid index errors
+        lst_shift = lst_bin_centres[_clipped] - data_lsts
+        lst_shift[~lst_mask] = 0.0  # doesn't do any rephasing
         utils.lst_rephase(data, bls, freq_array, lst_shift, lat=lat, inplace=True)
 
-    # In case we don't rephase, the data/flags/nsamples arrays are still the original
-    # input arrays. We don't mask out the data outside the LST range, because we're
-    # just going to omit it from our bins naturally anyway. We also don't care if its
-    # not a copy here, because we're not going to modify it, and this saves memory.
+    # Permute the master arrays in place so that rows belonging to the same
+    # LST bin are contiguous. Each per-bin output is then a *view* into the
+    # permuted master (no row-data copy), which prevents the memory duplication
+    # of fancy indexing.
+    #
+    # We use a stable argsort so that, within each bin, rows retain their original
+    # input order, keeping any caller's parallel arrays (e.g. times, lsts) in sync.
+    #
+    # Rows outside the LST range have grid_indices == -1 or == Nbins (from
+    # get_lst_bins) and are naturally excluded from every bin's slice by the
+    # searchsorted edges below.
+    Nbins = len(lst_bin_centres)
+    order = np.argsort(grid_indices, kind='stable')
+    wip_to_add = ([where_inpainted] if where_inpainted is not None else [])
+    _permute_rows_inplace([data, flags, nsamples] + wip_to_add, order)
+    grid_indices_sorted = grid_indices[order]
+    bin_edges_idx = np.searchsorted(grid_indices_sorted, np.arange(Nbins + 1))
 
-    # We anyway end up with a ~full copy of the data in the output arrays, because
-    # we do a fancy-index of the input arrays to get the relevant data for each bin.
-
-    # TODO: we should think a little more carefully about how we might reduce the
-    #       number of copies made in this function. When rephasing, we essentially
-    #       get three full copies while inside the function (though one is only local
-    #       in scope, and is therefore removed when the function returns).
-
-    # shortcut -- just return all the data, re-organized.
+    # For each bin, take a contiguous slice of the now bin-sorted masters. This
+    # is equivalent to ``data[grid_indices == lstbin]`` fancy-index, but returns
+    # a *view* into the master instead of a copy. An empty bin naturally yields
+    # a zero-length view with the correct trailing shape and dtype.
     _data, _flags, _nsamples, _where_inpainted = [], [], [], []
-    empty_shape = (0, len(antpairs), len(freq_array), npols)
-    for lstbin in range(len(lst_bin_centres)):
-        mask = grid_indices == lstbin
-        if np.any(mask):
-            _data.append(data[mask])
-            _flags.append(flags[mask])
-            _nsamples.append(nsamples[mask])
-            if where_inpainted is not None:
-                _where_inpainted.append(where_inpainted[mask])
-            else:
-                _where_inpainted.append(None)
+    for lstbin in range(Nbins):
+        lo = int(bin_edges_idx[lstbin])
+        hi = int(bin_edges_idx[lstbin + 1])
+        _data.append(data[lo:hi])
+        _flags.append(flags[lo:hi])
+        _nsamples.append(nsamples[lo:hi])
+        if where_inpainted is not None:
+            _where_inpainted.append(where_inpainted[lo:hi])
         else:
-            _data.append(np.zeros(empty_shape, complex))
-            _flags.append(np.zeros(empty_shape, bool))
-            _nsamples.append(np.zeros(empty_shape, int))
-            if where_inpainted is not None:
-                _where_inpainted.append(np.zeros(empty_shape, bool))
-            else:
-                _where_inpainted.append(None)
+            _where_inpainted.append(None)
 
     return lst_bin_centres, _data, _flags, _nsamples, _where_inpainted
 
@@ -887,6 +959,7 @@ class SingleBaselineStacker:
             cal_file_loader: callable | None = None,
             cal_file_loader_kwargs: dict | None = None,
             n_workers: int = 1,
+            pols: list[str] | None = None,
         ) -> SingleBaselineStacker:
         """Creates a SingleBaselineStacker object that loads data for a single baseline, optionally rolls to start after a branch cut,
         and removes any times at the beginning or end of the data set that have no data.
@@ -934,6 +1007,10 @@ class SingleBaselineStacker:
             Number of parallel workers to use when reading files. ``1`` (the default) reproduces the original serial behaviour exactly. ``n_workers`` must be a
             positive integer (``>= 1``); passing ``0`` or a negative value is invalid and will result in a ``ValueError``. Values greater than 1 submit each file read to a thread pool so
             that multiple nights can be read concurrently.
+        pols : list[str] | None
+            If provided, only these polarizations will be loaded (e.g., ``['ee']`` to load a single pol).
+            If ``None`` (default), all polarizations present in the files are loaded. The returned
+            ``self.hd`` will have its polarization metadata modified as well.
         """
         # Load the data
         files_here = configurator.bl_to_file_map[bl_str]
@@ -950,6 +1027,9 @@ class SingleBaselineStacker:
         where_inpainted_files = ([reduce(lambda txt, pair: txt.replace(*pair), where_inpainted_file_rules, df) for df in files_here]
                                  if where_inpainted_file_rules is not None else None)
         hd = io.HERAData(files_here[-1])
+        if pols is not None:
+            hd.select(polarizations=pols)  # keep hd metadata consistent with loaded subset
+            hd._attach_metadata()  # refresh HERAData-specific metadata, inlcuding hd.pols
         (bin_lst,
          data,
          flags,
@@ -974,7 +1054,7 @@ class SingleBaselineStacker:
         for list_obj in (data, flags, nsamples, where_inpainted):
             for j, arr in enumerate(list_obj):
                 if arr is not None and arr.ndim == 4:
-                    list_obj[j] = arr[:, 0, :, :].copy()
+                    list_obj[j] = arr[:, 0, :, :]
 
         # Roll the lists to the branch cut
         if lst_branch_cut is not None:
