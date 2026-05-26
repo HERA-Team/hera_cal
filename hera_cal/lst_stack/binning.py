@@ -23,6 +23,8 @@ from astropy.coordinates import EarthLocation
 from ..utils import _comply_vispol
 from hera_qm.time_series_metrics import true_stretches
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
     """
@@ -40,6 +42,72 @@ def adjust_lst_bin_edges(lst_bin_edges: np.ndarray) -> np.ndarray:
         lst_bin_edges += 2 * np.pi
     while lst_bin_edges[0] >= 2 * np.pi:
         lst_bin_edges -= 2 * np.pi
+
+
+def _permute_rows_inplace(
+    arrs: Sequence[np.ndarray], perm: np.ndarray
+) -> None:
+    """Apply ``perm`` to the 0th axis of every array in ``arrs`` in place.
+
+    After the call, for each ``arr`` in ``arrs``, ``arr_new[i] = arr_old[perm[i]]``.
+
+    Uses a cycle-decomposition walk, so each cycle in ``perm`` is traversed
+    **once** regardless of how many arrays are being permuted -- all arrays
+    are advanced in lockstep at each step of the cycle. Auxiliary memory is
+    O(one row per array + n bools for the visited mask), independent of the
+    dtype or trailing shape of each array.
+
+    This is the natural primitive for reordering a data array alongside its
+    parallel siblings (flags, nsamples, where_inpainted, ...) by a single
+    permutation without allocating a full-data-sized temporary, as
+    ``arrs[:] = arrs[perm]`` or ``np.take(arrs, perm, axis=0)`` would.
+
+    Parameters
+    ----------
+    arrs
+        Sequence of arrays to permute. Each is modified in place. All arrays
+        must share ``arrs[k].shape[0] == len(perm)``; trailing shapes and
+        dtypes may differ.
+    perm
+        Integer permutation of ``range(n)``. ``perm[i]`` gives the source row
+        index whose data should end up at output position ``i``.
+    """
+    if len(arrs) == 0:
+        return
+    n = arrs[0].shape[0]
+    for a in arrs:
+        if a.shape[0] != n:
+            raise ValueError(
+                f"all arrays in arrs must share axis-0 length {n}, "
+                f"got {a.shape[0]}"
+            )
+    if n == 0:
+        return
+
+    visited = np.zeros(n, dtype=bool)
+    for start in range(n):
+        if visited[start]:
+            continue
+        if perm[start] == start:
+            visited[start] = True
+            continue
+        # Save the rows that will be overwritten at the start of this cycle,
+        # one scratch copy per array. Allocated here (not outside the loop)
+        # so we work uniformly for 1D arrays, where ``arr[start]`` is a
+        # scalar rather than a view supporting ``[...] = `` assignment. The
+        # previous cycle's scratch rows are released as we rebind.
+        tmps = [a[start].copy() for a in arrs]
+        i = start
+        while True:
+            visited[i] = True
+            src = perm[i]
+            if src == start:
+                for a, tmp in zip(arrs, tmps):
+                    a[i] = tmp  # close the cycle
+                break
+            for a in arrs:
+                a[i] = a[src]
+            i = src
 
 
 def lst_align(
@@ -68,11 +136,23 @@ def lst_align(
     represent the start, end, or centre of each integration -- either choice will
     incur similar errors.
 
+    .. warning::
+        This function **modifies its input arrays in place** to save memory.
+        The 0th axis of ``data``, ``flags``, ``nsamples``, and ``where_inpainted``
+        is **permuted in place** (stable-sorted by LST bin index). The per-bin
+        arrays returned in the output lists are **views** into the permuted master
+        arrays and share memory with them. If the caller needs the original row order,
+        unrephased data, or independent copies of the per-bin arrays, it must pass
+        in copies. When ``rephase=True``, rows of ``data`` whose LSTs fall inside
+        the LST range are overwritten with their rephased values (rows outside the
+        LST range are left unchanged, with a rephase shift of 0).
+
     Parameters
     ----------
     data
         The complex visibility data. Must be shape ``(ntimes, nbls, nfreqs, npols)``,
-        where the times may be sourced from multiple days.
+        where the times may be sourced from multiple days. **Modified in place when
+        ``rephase=True``** — see warning above.
     data_lsts
         The LSTs corresponding to each of the time stamps in the data. Must have
         length ``data.shape[0]``. As noted above, these may be the start, end, or
@@ -165,62 +245,56 @@ def lst_align(
     if rephase:
         logger.info("Rephasing data")
 
-        # lst_mask is a boolean mask that masks out LSTs that are not in any bin
-        # we don't want to spend time rephasing data outside our LST range completely,
-        # so we just mask them out here. Indexing by a boolean mask makes a *copy*
-        # of the data, so we can rephase in-place without worrying about overwriting
-        # the original input data.
-        data = data[lst_mask]
-        flags = flags[lst_mask]
-        nsamples = nsamples[lst_mask]
-        data_lsts = data_lsts[lst_mask]
-        grid_indices = grid_indices[lst_mask]
-
         if freq_array is None or antpos is None:
             raise ValueError("freq_array and antpos is needed for rephase")
 
         bls = np.array([antpos[k[0]] - antpos[k[1]] for k in antpairs])
 
-        # get appropriate lst_shift for each integration, then rephase
-        lst_shift = lst_bin_centres[grid_indices] - data_lsts
-
-        # this makes a copy of the data in d
+        # Rephase in-place on the full data array. This is slightly more CPU-intensive
+        # than using data[lst_mask], but far less memory intensitive. Instead,
+        # compute a full-length lst_shift with 0 for out-of-range rows so they're
+        # untouched, and rephase the master in place. grid_indices from
+        # get_lst_bins can be -1 or Nbins for out-of-range rows, so clip before
+        # indexing lst_bin_centres (the shift value for those rows is overwritten
+        # to 0 below, so the clipped lookup value is discarded).
+        _clipped = np.clip(grid_indices, 0, len(lst_bin_centres) - 1)  # avoid index errors
+        lst_shift = lst_bin_centres[_clipped] - data_lsts
+        lst_shift[~lst_mask] = 0.0  # doesn't do any rephasing
         utils.lst_rephase(data, bls, freq_array, lst_shift, lat=lat, inplace=True)
 
-    # In case we don't rephase, the data/flags/nsamples arrays are still the original
-    # input arrays. We don't mask out the data outside the LST range, because we're
-    # just going to omit it from our bins naturally anyway. We also don't care if its
-    # not a copy here, because we're not going to modify it, and this saves memory.
+    # Permute the master arrays in place so that rows belonging to the same
+    # LST bin are contiguous. Each per-bin output is then a *view* into the
+    # permuted master (no row-data copy), which prevents the memory duplication
+    # of fancy indexing.
+    #
+    # We use a stable argsort so that, within each bin, rows retain their original
+    # input order, keeping any caller's parallel arrays (e.g. times, lsts) in sync.
+    #
+    # Rows outside the LST range have grid_indices == -1 or == Nbins (from
+    # get_lst_bins) and are naturally excluded from every bin's slice by the
+    # searchsorted edges below.
+    Nbins = len(lst_bin_centres)
+    order = np.argsort(grid_indices, kind='stable')
+    wip_to_add = ([where_inpainted] if where_inpainted is not None else [])
+    _permute_rows_inplace([data, flags, nsamples] + wip_to_add, order)
+    grid_indices_sorted = grid_indices[order]
+    bin_edges_idx = np.searchsorted(grid_indices_sorted, np.arange(Nbins + 1))
 
-    # We anyway end up with a ~full copy of the data in the output arrays, because
-    # we do a fancy-index of the input arrays to get the relevant data for each bin.
-
-    # TODO: we should think a little more carefully about how we might reduce the
-    #       number of copies made in this function. When rephasing, we essentially
-    #       get three full copies while inside the function (though one is only local
-    #       in scope, and is therefore removed when the function returns).
-
-    # shortcut -- just return all the data, re-organized.
+    # For each bin, take a contiguous slice of the now bin-sorted masters. This
+    # is equivalent to ``data[grid_indices == lstbin]`` fancy-index, but returns
+    # a *view* into the master instead of a copy. An empty bin naturally yields
+    # a zero-length view with the correct trailing shape and dtype.
     _data, _flags, _nsamples, _where_inpainted = [], [], [], []
-    empty_shape = (0, len(antpairs), len(freq_array), npols)
-    for lstbin in range(len(lst_bin_centres)):
-        mask = grid_indices == lstbin
-        if np.any(mask):
-            _data.append(data[mask])
-            _flags.append(flags[mask])
-            _nsamples.append(nsamples[mask])
-            if where_inpainted is not None:
-                _where_inpainted.append(where_inpainted[mask])
-            else:
-                _where_inpainted.append(None)
+    for lstbin in range(Nbins):
+        lo = int(bin_edges_idx[lstbin])
+        hi = int(bin_edges_idx[lstbin + 1])
+        _data.append(data[lo:hi])
+        _flags.append(flags[lo:hi])
+        _nsamples.append(nsamples[lo:hi])
+        if where_inpainted is not None:
+            _where_inpainted.append(where_inpainted[lo:hi])
         else:
-            _data.append(np.zeros(empty_shape, complex))
-            _flags.append(np.zeros(empty_shape, bool))
-            _nsamples.append(np.zeros(empty_shape, int))
-            if where_inpainted is not None:
-                _where_inpainted.append(np.zeros(empty_shape, bool))
-            else:
-                _where_inpainted.append(None)
+            _where_inpainted.append(None)
 
     return lst_bin_centres, _data, _flags, _nsamples, _where_inpainted
 
@@ -283,6 +357,179 @@ def _get_freqs_chans(freqs, freq_min: float | None = None, freq_max: float | Non
     return freqs, freq_chans
 
 
+def _read_one_file(
+    meta_path: str,
+    calfl: str | None,
+    tind: np.ndarray,
+    inpfile: str | None,
+    antpairs: list[tuple],
+    pols: list[str],
+    freq_chans: np.ndarray | None,
+    redundantly_averaged: bool,
+    reds: RedundantGroups | None,
+    cal_file_loader: callable | None,
+    cal_file_loader_kwargs: dict | None,
+    blts_are_rectangular: bool = True,
+) -> dict:
+    """Read visibility data from a single file and return it as a plain dict.
+
+    Designed to be called from either a thread or a process pool.  All
+    arguments must therefore be picklable (paths as strings, arrays as numpy,
+    etc.) when used with ProcessPoolExecutor.
+
+    Parameters
+    ----------
+    meta_path
+        Path to the UVH5 file to read, as a plain string (not a Path object,
+        for picklability with ProcessPoolExecutor).
+    calfl
+        Path to a calibration file to apply to the data, or ``None`` to skip
+        calibration.
+    tind
+        Indices into the time axis of the file that fall within at least one
+        LST bin.  Only these rows are read into memory.
+    inpfile
+        Path to a UVFlag file recording where the data have
+        been inpainted, or ``None`` if no inpainting information is available.
+    antpairs
+        The antenna pairs (baselines) to load.  Pairs absent from this file
+        are silently skipped; conjugate pairs are handled automatically.
+    pols
+        Polarization strings to read.
+    freq_chans
+        Channel indices to read, or ``None`` to read all channels.
+    redundantly_averaged
+        If ``True``, the file stores one row per unique-baseline group rather
+        than one row per physical baseline.  The ``antpairs`` argument is then
+        interpreted as unique-baseline keys, and ``reds`` is used to map them
+        to whatever physical baseline is stored in the file.
+    reds
+        Redundant-baseline group information.  Required when
+        ``redundantly_averaged`` is ``True``; ignored otherwise.
+    cal_file_loader
+        Optional callable for reading calibration solutions in a non-standard
+        format.  Must accept ``(calfl, antpairs=..., polarizations=..., **kwargs)``
+        and return ``(gains, cal_flags)``.  If ``None``, the default
+        HERAData/HERACal readers are used.
+    cal_file_loader_kwargs
+        Extra keyword arguments forwarded to ``cal_file_loader``.  Pass
+        ``None`` (or omit) when using the default loader.
+    blts_are_rectangular
+        Passed through to :class:`~pyuvdata.uvdata.FastUVH5Meta`; set to
+        ``False`` only for files where baselines and times are not on a
+        regular grid.
+
+    Returns
+    -------
+    dict with keys:
+        skip        bool: True when there is nothing useful in this file
+        ntimes      int: number of time integrations in tind
+        data        DataContainer or None
+        flags       DataContainer or None
+        nsamples    DataContainer or None
+        inpainted   DataContainer or None
+        bls_loaded  list of antpairs that were actually loaded
+    """
+    # Inspect file metadata (cheap; no I/O on the data arrays)
+    meta = FastUVH5Meta(meta_path, blts_are_rectangular=blts_are_rectangular)
+    data_antpairs = meta.get_transactional("antpairs")
+    ntimes = len(tind)
+
+    # Determine which baselines to actually read
+    # For redundantly-averaged files we must map the requested unique-baseline
+    # keys back to whichever physical baseline is stored in this file.
+    if redundantly_averaged:
+        bls_to_load = [
+            bl for bl in data_antpairs
+            if reds.get_ubl_key(bl) in antpairs
+            or reds.get_ubl_key(bl[::-1]) in antpairs
+        ]
+    else:
+        bls_to_load = [
+            bl for bl in antpairs
+            if bl in data_antpairs or bl[::-1] in data_antpairs
+        ]
+
+    if not bls_to_load or ntimes == 0:
+        # If none of the requested baselines are in this file, then just
+        # set stuff as nan and go to next file.
+        logger.warning(
+            f"None of the baseline-times are in {meta_path}. Skipping."
+        )
+        return {"skip": True, "ntimes": ntimes,
+                "data": None, "flags": None, "nsamples": None,
+                "inpainted": None, "bls_loaded": []}
+
+    # Read visibility data
+    logger.info(f"Reading {meta_path}")
+
+    # TODO: use Fast readers here instead, and select times directly on read.
+    _data, _flags, _nsamples = io.HERAData(meta_path).read(
+        bls=bls_to_load,
+        freq_chans=freq_chans,
+        polarizations=pols,
+    )
+
+    # Trim to only the time indices that fall within an LST bin.
+    _data.select_or_expand_times(indices=tind, skip_bda_check=True)
+    _flags.select_or_expand_times(indices=tind, skip_bda_check=True)
+    _nsamples.select_or_expand_times(indices=tind, skip_bda_check=True)
+
+    # Load inpainting flags (optional)
+    inpainted = None
+    if inpfile is not None:
+        # This returns a DataContainer (unless something went wrong) since it should
+        # always be a 'baseline' type of UVFlag.
+        inpainted = io.load_flags(inpfile)
+        if not isinstance(inpainted, DataContainer):
+            raise ValueError(f"Expected {inpfile} to be a DataContainer")
+
+        # We need to down-select on times/freqs (bls and pols will be sub-selected
+        # based on those in the data through the next loop)
+        inpainted.select_or_expand_times(indices=tind, skip_bda_check=True)
+        inpainted.select_freqs(channels=freq_chans)
+
+    # Load and apply calibration (optional)
+    if calfl is not None:
+        logger.info(f"Opening and applying {calfl}")
+        if cal_file_loader is not None:
+            # Use the custom loader to read the calibration solutions. This is useful if the
+            # calibration files are in a different format than HERACal files, or if the user wants
+            # to apply some custom pre-processing to the calibration solutions as they are read in.
+            gains, cal_flags = cal_file_loader(
+                calfl,
+                antpairs=bls_to_load,
+                polarizations=pols,
+                **(cal_file_loader_kwargs or {}),
+            )
+            gain_convention = "divide"
+        else:
+            uvc = io.to_HERACal(calfl)
+            gains, cal_flags, _, _ = uvc.read(freq_chans=freq_chans)
+            if len(tind) < uvc.Ntimes and uvc.Ntimes > 1:
+                uvc.select(times=uvc.time_array[tind])
+                gains, cal_flags, _, _ = uvc.build_calcontainers()
+            gain_convention = uvc.gain_convention
+
+        apply_cal.calibrate_in_place(
+            _data,
+            gains,
+            data_flags=_flags,
+            cal_flags=cal_flags,
+            gain_convention=gain_convention,
+        )
+
+    return {
+        "skip": False,
+        "ntimes": ntimes,
+        "data": _data,
+        "flags": _flags,
+        "nsamples": _nsamples,
+        "inpainted": inpainted,
+        "bls_loaded": bls_to_load,
+    }
+
+
 def lst_bin_files_for_baselines(
     data_files: list[Path | FastUVH5Meta],
     lst_bin_edges: np.ndarray,
@@ -302,6 +549,8 @@ def lst_bin_files_for_baselines(
     where_inpainted_files: list[list[str | Path | None]] | None = None,
     cal_file_loader: callable | None = None,
     cal_file_loader_kwargs: dict | None = None,
+    blts_are_rectangular: bool = True,
+    n_workers: int = 1,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[np.ndarray]]:
     """Produce a set of LST-binned (but not averaged) data for a set of baselines.
 
@@ -360,6 +609,15 @@ def lst_bin_files_for_baselines(
     lsts
         A list of LST arrays for each file. If not provided, will be read from the
         files. If provided, must be the same length as ``data_files``.
+    redundantly_averaged
+        If True, the data files are assumed to have already been averaged in time and
+        redundant baseline groups, so that each row in the data corresponds to a unique
+        redundant baseline group, rather than a unique baseline. In this case, the
+        ``antpairs`` argument is interpreted as a list of redundant baseline groups to
+        read, rather than a list of actual antenna pairs. If True, the ``reds`` argument
+        must be provided, and the function will automatically map the redundant baseline
+        groups in ``antpairs`` to the actual baselines in the data files using the
+        redundant groups information in ``reds``.
     freq_min, freq_max
         Minimum and maximum frequencies to include in the data. If not provided,
         all frequencies will be included.
@@ -375,6 +633,18 @@ def lst_bin_files_for_baselines(
         format than HERACal files.
     cal_file_loader_kwargs
         A dictionary of keyword arguments to pass to ``cal_file_loader``.
+    blts_are_rectangular: bool
+        Whether to assume that the blt axis of the input files is rectangular (i.e. that
+        all baselines have the same time samples).
+    n_workers : int, optional
+        Number of parallel workers to use when reading files. ``1`` (the default)
+        reproduces the original serial behaviour exactly. ``n_workers`` must be a
+        positive integer (``>= 1``); passing ``0`` or a negative value is invalid and
+        will result in a ``ValueError``. Values greater than 1 submit each file read
+        to a thread pool so that multiple nights can be read concurrently.
+
+        A sensible effective upper bound is ``min(n_workers, len(data_files))``,
+        which is applied internally.
 
     Returns
     -------
@@ -398,10 +668,14 @@ def lst_bin_files_for_baselines(
         (
             fl
             if isinstance(fl, FastUVH5Meta)
-            else FastUVH5Meta(fl, blts_are_rectangular=True)
+            else FastUVH5Meta(fl, blts_are_rectangular=blts_are_rectangular)
         )
         for fl in data_files
     ]
+
+    # Make sure n_workers is a positive integer
+    if n_workers < 1 or not isinstance(n_workers, int):
+        raise ValueError(f"n_workers must be a positive integer, got {n_workers}")
 
     lst_bin_edges = np.array(lst_bin_edges)
 
@@ -474,96 +748,61 @@ def lst_bin_files_for_baselines(
     if redundantly_averaged and any(c is not None for c in cal_files):
         raise ValueError("Cannot apply calibration if redundantly_averaged is True")
 
-    # This loop actually reads the associated data in this LST bin.
-    ntimes_so_far = 0
-    for meta, calfl, tind, inpfile in zip(
-        metas, cal_files, time_idx, where_inpainted_files
-    ):
-        logger.info(f"Reading {meta.path}")
-        slc = slice(ntimes_so_far, ntimes_so_far + len(tind))
-        ntimes_so_far += len(tind)
+    # ── build per-file argument tuples (shared by serial and parallel paths) ─
+    file_args = []
+    for meta, calfl, tind, inpfile in zip(metas, cal_files, time_idx, where_inpainted_files):
+        file_args.append(
+            (
+                str(meta.path),
+                calfl,
+                tind,
+                inpfile,
+                list(antpairs),       # plain list for picklability
+                list(pols),
+                freq_chans,
+                redundantly_averaged,
+                reds,
+                cal_file_loader,
+                # make per-task copy so worker threads don't share mutable kwargs
+                dict(cal_file_loader_kwargs) if cal_file_loader_kwargs is not None else None,
+                blts_are_rectangular,
+            )
+        )
 
-        # hd = io.HERAData(str(fl.path), filetype='uvh5')
-        data_antpairs = meta.get_transactional("antpairs")
+    # ── helper: write one file's result into the master arrays ───────────────
+    def _fill_master_arrays(res: dict, slc: slice) -> None:
+        """Copy a single file's result dict into the pre-allocated master arrays.
 
-        if redundantly_averaged:
-            bls_to_load = [
-                bl
-                for bl in data_antpairs
-                if reds.get_ubl_key(bl) in antpairs
-                or reds.get_ubl_key(bl[::-1]) in antpairs
-            ]
-        else:
-            bls_to_load = [
-                bl
-                for bl in antpairs
-                if bl in data_antpairs or bl[::-1] in data_antpairs
-            ]
+        ``slc`` is the row slice in the time axis of the master arrays that
+        corresponds to this file.  Results can therefore be written in any
+        order, which is what allows the parallel path to fill as each future
+        completes rather than waiting for all files to finish first.
 
-        if not bls_to_load or len(tind) == 0:
-            # If none of the requested baselines are in this file, then just
-            # set stuff as nan and go to next file.
-            logger.warning(f"None of the baseline-times are in {meta.path}. Skipping.")
+        Parameters
+        ----------
+        res
+            The dict returned by :func:`_read_one_file`.
+        slc
+            The slice into the time axis of the master arrays for this file,
+            pre-computed from each file's ``time_idx`` length.
+        """
+        if res["skip"]:
+            # File had no usable data; fill its time rows with flagged nans.
             data[slc] = np.nan
             flags[slc] = True
             nsamples[slc] = 0
-            continue
+            return
 
-        # TODO: use Fast readers here instead, and select times directly on read.
-        _data, _flags, _nsamples = io.HERAData(meta.path).read(
-            bls=bls_to_load,
-            freq_chans=freq_chans,
-            polarizations=pols,
-        )
-
-        _data.select_or_expand_times(indices=tind, skip_bda_check=True)
-        _flags.select_or_expand_times(indices=tind, skip_bda_check=True)
-        _nsamples.select_or_expand_times(indices=tind, skip_bda_check=True)
-
-        if inpfile is not None:
-            # This returns a DataContainer (unless something went wrong) since it should
-            # always be a 'baseline' type of UVFlag.
-            inpainted = io.load_flags(inpfile)
-            if not isinstance(inpainted, DataContainer):
-                raise ValueError(f"Expected {inpfile} to be a DataContainer")
-
-            # We need to down-selecton times/freqs (bls and pols will be sub-selected
-            # based on those in the data through the next loop)
-            inpainted.select_or_expand_times(indices=tind, skip_bda_check=True)
-            inpainted.select_freqs(channels=freq_chans)
-        else:
-            inpainted = None
-
-        # load calibration
-        if calfl is not None:
-            logger.info(f"Opening and applying {calfl}")
-            if cal_file_loader is not None:
-                gains, cal_flags = cal_file_loader(
-                    calfl,
-                    antpairs=bls_to_load,
-                    polarizations=pols,
-                    **(cal_file_loader_kwargs or {})
-                )
-                gain_convention = "divide"
-            else:
-                uvc = io.to_HERACal(calfl)
-                gains, cal_flags, _, _ = uvc.read(freq_chans=freq_chans)
-                # down select times if necessary
-                if len(tind) < uvc.Ntimes and uvc.Ntimes > 1:
-                    # If uvc has Ntimes == 1, then broadcast across time will work automatically
-                    uvc.select(times=uvc.time_array[tind])
-                    gains, cal_flags, _, _ = uvc.build_calcontainers()
-                gain_convention = uvc.gain_convention
-
-            apply_cal.calibrate_in_place(
-                _data,
-                gains,
-                data_flags=_flags,
-                cal_flags=cal_flags,
-                gain_convention=gain_convention,
-            )
+        _data = res["data"]
+        _flags = res["flags"]
+        _nsamples = res["nsamples"]
+        inpainted = res["inpainted"]
 
         for i, bl in enumerate(antpairs):
+            _bl = bl  # may be remapped below for redundantly_averaged
+
+            # For redundantly-averaged data, find which stored physical baseline
+            # represents this unique-baseline group in the current file.
             if redundantly_averaged:
                 bls = reds.get_reds_in_bl_set(bl, _data.antpairs(), include_conj=True)
                 if len(bls) > 1:
@@ -572,38 +811,65 @@ def lst_bin_files_for_baselines(
                     )
                 if bls:
                     # if there are no bls, just keep bl the same, and it won't be found,
-                    # triggering the data to be filled with nans anyway.
-                    bl = next(iter(bls))  # use next(iter) since bls is a set
+                    # triggering the data to be filled with nans anyway
+                    _bl = next(iter(bls))  # use next(iter) since bls is a set
 
             for j, pol in enumerate(pols):
-                blpol = bl + (pol,)
+                blpol = _bl + (pol,)
 
-                if blpol in _data:  # DataContainer takes care of conjugates.
+                if blpol in _data:
+                    # Baseline found: copy data, flags, nsamples into master arrays.
                     data[slc, i, :, j] = _data[blpol]
                     flags[slc, i, :, j] = _flags[blpol]
                     nsamples[slc, i, :, j] = _nsamples[blpol]
 
-                    if inpainted is not None:
+                    if inpainted is not None and where_inpainted is not None:
                         # Get the representative baseline key from this bl group that
                         # exists in the where_inpainted data.
+                        inpblpol = blpol
                         if redundantly_averaged:
                             for inpbl in reds[bl]:
                                 if inpbl + (pol,) in inpainted:
-                                    blpol = inpbl + (pol,)
+                                    inpblpol = inpbl + (pol,)
                                     break
                             else:
                                 raise ValueError(
-                                    f"Could not find any baseline from group {bl} in "
-                                    "inpainted file"
+                                    f"Could not find any baseline from group {bl} "
+                                    "in inpainted file"
                                 )
-
-                        where_inpainted[slc, i, :, j] = inpainted[blpol]
+                        where_inpainted[slc, i, :, j] = inpainted[inpblpol]
                 else:
                     # This baseline+pol doesn't exist in this file. That's
                     # OK, we don't assume all baselines are in every file.
                     data[slc, i, :, j] = np.nan
                     flags[slc, i, :, j] = True
                     nsamples[slc, i, :, j] = 0
+
+    # Precompute each file's time slice so results can be filled in any order.
+    ntimes_offsets = np.cumsum([0] + [len(t) for t in time_idx])
+    file_slices = [
+        slice(int(ntimes_offsets[i]), int(ntimes_offsets[i + 1]))
+        for i in range(len(file_args))
+    ]
+
+    # dispatch: serial (n_workers==1) or parallel
+    if n_workers == 1:
+        # Call worker directly and fill immediately -- no results list needed.
+        for i, args in enumerate(file_args):
+            _fill_master_arrays(_read_one_file(*args), file_slices[i])
+    else:
+        n_workers = min(n_workers, len(metas))   # never spin up more than needed
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            future_to_idx = {
+                pool.submit(_read_one_file, *args): i
+                for i, args in enumerate(file_args)
+            }
+            for fut in as_completed(future_to_idx):
+                i = future_to_idx[fut]
+                # Fill immediately and let res go out of scope so the GC can
+                # reclaim each file's DataContainers as soon as they are consumed,
+                # rather than holding all results in memory until the loop ends.
+                _fill_master_arrays(fut.result(), file_slices[i])
 
     logger.info("About to run LST binning...")
     # LST bin edges are the actual edges of the bins, so should have length
@@ -692,6 +958,8 @@ class SingleBaselineStacker:
             to_keep_slice: slice | None = None,
             cal_file_loader: callable | None = None,
             cal_file_loader_kwargs: dict | None = None,
+            n_workers: int = 1,
+            pols: list[str] | None = None,
         ) -> SingleBaselineStacker:
         """Creates a SingleBaselineStacker object that loads data for a single baseline, optionally rolls to start after a branch cut,
         and removes any times at the beginning or end of the data set that have no data.
@@ -735,6 +1003,14 @@ class SingleBaselineStacker:
             format than HERACal files.
         cal_file_loader_kwargs : dict | None
             A dictionary of keyword arguments to pass to ``cal_file_loader``.
+        n_workers : int
+            Number of parallel workers to use when reading files. ``1`` (the default) reproduces the original serial behaviour exactly. ``n_workers`` must be a
+            positive integer (``>= 1``); passing ``0`` or a negative value is invalid and will result in a ``ValueError``. Values greater than 1 submit each file read to a thread pool so
+            that multiple nights can be read concurrently.
+        pols : list[str] | None
+            If provided, only these polarizations will be loaded (e.g., ``['ee']`` to load a single pol).
+            If ``None`` (default), all polarizations present in the files are loaded. The returned
+            ``self.hd`` will have its polarization metadata modified as well.
         """
         # Load the data
         files_here = configurator.bl_to_file_map[bl_str]
@@ -751,6 +1027,9 @@ class SingleBaselineStacker:
         where_inpainted_files = ([reduce(lambda txt, pair: txt.replace(*pair), where_inpainted_file_rules, df) for df in files_here]
                                  if where_inpainted_file_rules is not None else None)
         hd = io.HERAData(files_here[-1])
+        if pols is not None:
+            hd.select(polarizations=pols)  # keep hd metadata consistent with loaded subset
+            hd._attach_metadata()  # refresh HERAData-specific metadata, inlcuding hd.pols
         (bin_lst,
          data,
          flags,
@@ -768,13 +1047,14 @@ class SingleBaselineStacker:
             cal_files=cal_files,
             cal_file_loader=cal_file_loader,
             cal_file_loader_kwargs=cal_file_loader_kwargs,
+            n_workers=n_workers,
          )
 
         # Cut out baseline dimension
         for list_obj in (data, flags, nsamples, where_inpainted):
             for j, arr in enumerate(list_obj):
                 if arr is not None and arr.ndim == 4:
-                    list_obj[j] = arr[:, 0, :, :].copy()
+                    list_obj[j] = arr[:, 0, :, :]
 
         # Roll the lists to the branch cut
         if lst_branch_cut is not None:
@@ -990,6 +1270,7 @@ def lst_bin_files_from_config(
     rephase: bool = True,
     freq_min: float | None = None,
     freq_max: float | None = None,
+    n_workers: int = 1,
 ) -> list[LSTStack | None] | None:
     """Read and LST-bin data from a configuration object.
 
@@ -1014,6 +1295,9 @@ def lst_bin_files_from_config(
         The minimum frequency to include in the data (Hz). Default is all frequencies.
     freq_max : float, optional
         The maximum frequency to include in the data (Hz). Default is all frequencies.
+    n_workers : int, optional
+        Number of parallel workers for concurrent file reads. Default is 1 (serial).
+        Passed through to :func:`lst_bin_files_for_baselines`.
 
     Returns
     -------
@@ -1064,7 +1348,8 @@ def lst_bin_files_from_config(
         reds=config.config.reds,
         freq_min=freq_min,
         freq_max=freq_max,
-        where_inpainted_files=config.inpaint_files
+        where_inpainted_files=config.inpaint_files,
+        n_workers=n_workers,
     )
 
     freqs, _ = _get_freqs_chans(meta.freq_array, freq_min, freq_max)
