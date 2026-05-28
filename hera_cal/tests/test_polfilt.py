@@ -433,12 +433,12 @@ class TestIterativelyFitPolarizedSourceParams:
     DEC_TRUE = -30.0  # degrees — near HERA latitude, always above horizon
     RM_TRUE = 45.0   # rad/m²
 
-    FREQS = np.linspace(120e6, 140e6, 128)
+    FREQS = np.linspace(180e6, 200e6, 128)
 
     ANTPOS = {
         i: np.array([
-            np.random.uniform(0, 200),
-            np.random.uniform(0, 200),
+            np.random.uniform(0, 300),
+            np.random.uniform(0, 300),
             0.0
         ])
         for i in range(10)
