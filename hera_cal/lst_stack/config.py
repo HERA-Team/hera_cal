@@ -79,8 +79,8 @@ def _fix_dlst(dlst: float) -> float:
             f"dlst must be less than {np.max(dlsts):1.5e}, the largest possible value."
         )
 
-    # get dlsts closest to dlst, but also greater than dlst
-    return dlsts[dlsts >= dlst - 1e-12][0]
+    # get dlsts closest to dlst, but also greater than dlst.
+    return dlsts[dlsts >= dlst * (1 - 1e-8)][0]
 
 
 def make_lst_grid(
