@@ -562,3 +562,230 @@ def test_shapes_and_types_are_consistent(sample_file):
     assert params["A_Jee"].shape == (ntimes, nfreqs)
     assert params["T_Jee"].shape[-1] == 3
     assert isinstance(pols[0], str)
+
+
+def test_lst_filtering_basic(sample_file, tmp_path):
+    """Test LST filtering selects correct subset of times."""
+    # Create a test file with more times spanning different LSTs
+    ntimes = 100
+    nfreqs = 10
+    times = np.linspace(2459844.0, 2459844.5, ntimes)
+    freqs = np.linspace(100e6, 200e6, nfreqs)
+    pols = ["ee", "nn"]
+
+    # HERA latitude/longitude/altitude
+    latitude = -30.72152  # degrees
+    longitude = 21.42830  # degrees
+    altitude = 1051.69  # meters
+    telescope_location = np.array([latitude, longitude, altitude])
+
+    # Compute LSTs for all times
+    from ... import utils
+    all_lsts = utils.JD2LST(times, latitude=latitude, longitude=longitude, altitude=altitude)
+
+    # Create LST bin edges that select middle third of times
+    lst_min = all_lsts[ntimes // 3]
+    lst_max = all_lsts[2 * ntimes // 3]
+    lst_bin_edges = np.array([lst_min, lst_max])
+
+    # Create calibration file
+    path = tmp_path / "lstcal_with_filtering.h5"
+    flags = {pol: np.zeros((ntimes, nfreqs), dtype=bool) for pol in pols}
+    antpos = {0: np.array([0.0, 0.0, 0.0]), 1: np.array([1.0, 0.0, 0.0])}
+
+    params = {
+        "A_Jee": np.ones((ntimes, nfreqs), dtype=float),
+        "T_Jee": np.zeros((ntimes, nfreqs, 3), dtype=float),
+        "A_Jnn": np.ones((ntimes, nfreqs), dtype=float),
+        "T_Jnn": np.zeros((ntimes, nfreqs, 3), dtype=float),
+    }
+
+    calibration.write_single_baseline_lstcal_solutions(
+        filename=str(path),
+        all_calibration_parameters=params,
+        flags=flags,
+        transformed_antpos=antpos,
+        antpos=antpos,
+        times=times,
+        freqs=freqs,
+        pols=pols,
+    )
+
+    # Load with LST filtering
+    gains, cal_flags = calibration.load_single_baseline_lstcal_gains(
+        str(path),
+        antpairs=[(0, 1)],
+        polarizations=["ee"],
+        lst_bin_edges=lst_bin_edges,
+        telescope_location_lat_lon_alt_degrees=telescope_location,
+    )
+
+    # Check that only the expected subset of times were loaded
+    # The gains should have fewer times than the original file
+    assert gains[(0, "Jee")].shape[0] < ntimes
+    # Should be approximately ntimes // 3 times
+    assert 20 < gains[(0, "Jee")].shape[0] < 45
+
+
+def test_lst_filtering_wrapping(tmp_path):
+    """Test LST filtering handles wrap-around at 2π correctly."""
+    ntimes = 100
+    nfreqs = 10
+    # Create times that span LST wrap-around
+    times = np.linspace(2459844.0, 2459845.0, ntimes)
+    freqs = np.linspace(100e6, 200e6, nfreqs)
+    pols = ["ee"]
+
+    latitude = -30.72152
+    longitude = 21.42830
+    altitude = 1051.69
+    telescope_location = np.array([latitude, longitude, altitude])
+
+    from ... import utils
+    all_lsts = utils.JD2LST(times, latitude=latitude, longitude=longitude, altitude=altitude)
+
+    # Create LST bin edges that wrap around 2π
+    # Select times near 0 and near 2π
+    lst_bin_edges = np.array([5.5, 6.5])  # Wraps from near 2π to past 0
+
+    path = tmp_path / "lstcal_wrapping.h5"
+    flags = {pol: np.zeros((ntimes, nfreqs), dtype=bool) for pol in pols}
+    antpos = {0: np.array([0.0, 0.0, 0.0])}
+
+    params = {
+        "A_Jee": np.ones((ntimes, nfreqs), dtype=float),
+        "T_Jee": np.zeros((ntimes, nfreqs, 3), dtype=float),
+    }
+
+    calibration.write_single_baseline_lstcal_solutions(
+        filename=str(path),
+        all_calibration_parameters=params,
+        flags=flags,
+        transformed_antpos=antpos,
+        antpos=antpos,
+        times=times,
+        freqs=freqs,
+        pols=pols,
+    )
+
+    # Load with LST filtering that wraps
+    gains, cal_flags = calibration.load_single_baseline_lstcal_gains(
+        str(path),
+        antpairs=[(0, 0)],
+        polarizations=["ee"],
+        lst_bin_edges=lst_bin_edges,
+        telescope_location_lat_lon_alt_degrees=telescope_location,
+    )
+
+    # Should load some times (wrapping logic should work)
+    assert gains[(0, "Jee")].shape[0] > 0
+    assert gains[(0, "Jee")].shape[0] < ntimes
+
+
+def test_lst_filtering_no_match_raises(sample_file):
+    """Test that ValueError is raised when no times match LST range."""
+    # Create LST bin edges that don't overlap with any data
+    # Sample file has times [2450000.0, 2450000.5]
+    lst_bin_edges = np.array([0.0, 0.1])  # Very small range unlikely to match
+
+    latitude = -30.72152
+    longitude = 21.42830
+    altitude = 1051.69
+    telescope_location = np.array([latitude, longitude, altitude])
+
+    with pytest.raises(ValueError, match="No times in calibration file.*fall within"):
+        calibration.load_single_baseline_lstcal_gains(
+            str(sample_file["path"]),
+            antpairs=[(0, 1)],
+            polarizations=["ee"],
+            lst_bin_edges=lst_bin_edges,
+            telescope_location_lat_lon_alt_degrees=telescope_location,
+        )
+
+
+def test_lst_filtering_without_telescope_location(sample_file):
+    """Test that LST filtering is skipped when telescope_location is not provided."""
+    # Provide lst_bin_edges but not telescope_location
+    lst_bin_edges = np.array([0.0, 0.1])
+
+    # Should load all times without filtering (no error)
+    gains, cal_flags = calibration.load_single_baseline_lstcal_gains(
+        str(sample_file["path"]),
+        antpairs=[(0, 1)],
+        polarizations=["ee"],
+        lst_bin_edges=lst_bin_edges,
+        telescope_location_lat_lon_alt_degrees=None,
+    )
+
+    # Should have loaded all times from sample_file
+    assert gains[(0, "Jee")].shape[0] == sample_file["ntimes"]
+
+
+def test_lst_filtering_preserves_data_consistency(tmp_path):
+    """Test that LST filtering preserves data values for selected times."""
+    ntimes = 50
+    nfreqs = 10
+    times = np.linspace(2459844.0, 2459844.5, ntimes)
+    freqs = np.linspace(100e6, 200e6, nfreqs)
+    pols = ["ee"]
+
+    latitude = -30.72152
+    longitude = 21.42830
+    altitude = 1051.69
+    telescope_location = np.array([latitude, longitude, altitude])
+
+    from ... import utils
+    all_lsts = utils.JD2LST(times, latitude=latitude, longitude=longitude, altitude=altitude)
+
+    # Select middle portion
+    lst_bin_edges = np.array([all_lsts[20], all_lsts[30]])
+
+    # Create calibration file with non-uniform amplitude values
+    path = tmp_path / "lstcal_data_check.h5"
+    flags = {pol: np.zeros((ntimes, nfreqs), dtype=bool) for pol in pols}
+    antpos = {0: np.array([0.0, 0.0, 0.0])}
+
+    # Create amplitude that varies with time index
+    amplitude = np.arange(ntimes)[:, None] * np.ones((1, nfreqs))
+
+    params = {
+        "A_Jee": amplitude,
+        "T_Jee": np.zeros((ntimes, nfreqs, 3), dtype=float),
+    }
+
+    calibration.write_single_baseline_lstcal_solutions(
+        filename=str(path),
+        all_calibration_parameters=params,
+        flags=flags,
+        transformed_antpos=antpos,
+        antpos=antpos,
+        times=times,
+        freqs=freqs,
+        pols=pols,
+    )
+
+    # Load without filtering to get expected values
+    gains_full, _ = calibration.load_single_baseline_lstcal_gains(
+        str(path),
+        antpairs=[(0, 0)],
+        polarizations=["ee"],
+    )
+
+    # Load with filtering
+    gains_filtered, _ = calibration.load_single_baseline_lstcal_gains(
+        str(path),
+        antpairs=[(0, 0)],
+        polarizations=["ee"],
+        lst_bin_edges=lst_bin_edges,
+        telescope_location_lat_lon_alt_degrees=telescope_location,
+    )
+
+    # Filtered gains should be a subset of full gains
+    assert gains_filtered[(0, "Jee")].shape[0] < gains_full[(0, "Jee")].shape[0]
+
+    # The amplitude values should be preserved (checking first frequency channel)
+    # The filtered data should contain consecutive time indices from the middle
+    filtered_amps = np.real(gains_filtered[(0, "Jee")][:, 0])
+    # Should be roughly indices 20-29 (amplitude values 20-29)
+    assert np.min(filtered_amps) >= 19
+    assert np.max(filtered_amps) <= 31

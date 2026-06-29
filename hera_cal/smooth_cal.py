@@ -382,8 +382,8 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', method='CLEAN',
                         dpss_vectors=None, fit_method="pinv", cached_input={}, eigenval_cutoff=1e-9,
-                        skip_flagged_edges=True, freq_cuts=[], fix_phase_flips=False, use_sparse_solver=False,
-                        precondition_solver=True, **win_kwargs):
+                        skip_flagged_edges=True, freq_cuts=[], fix_phase_flips=False, phase_flip_time_scale=None,
+                        use_sparse_solver=False, precondition_solver=True, **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -438,6 +438,9 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         fix_phase_flips : bool, optional
             If True, will try to find integrations whose phases appear to be 180 degrees rotated from the first unflagged
             integration. These will be flipped before smoothing and then flipped back after smoothing. Default is False.
+        phase_flip_time_scale : float, optional
+            The timescale in seconds over which to smooth the phases to determine if a phase flip has occurred.
+            If None, will use the time_scale. Only used if fix_phase_flips is True.
         use_sparse_solver : bool, optional
             If True and method='DPSS, use the sparse linear least squares solver in hera_filters.dspec.sparse_linear_fit_2D.
             Default is False.
@@ -466,7 +469,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         # average delay-rephased gain, compute phase of average, and then find phase flips
         avg_rephased_gain = np.ma.average(gains * rephasor, weights=wgts, axis=1, keepdims=True)
         phases = np.where(avg_rephased_gain.mask, np.nan, np.angle(avg_rephased_gain))
-        time_smoothed_phases = flip_agnostic_phase_smoothing(phases, times, time_scale, eigenval_cutoff=eigenval_cutoff)
+        time_scale_here = (phase_flip_time_scale if phase_flip_time_scale is not None else time_scale)
+        time_smoothed_phases = flip_agnostic_phase_smoothing(phases, times, time_scale_here, eigenval_cutoff=eigenval_cutoff)
         phase_flips = np.where(detect_phase_flips(phases - time_smoothed_phases), -1, 1)
         if np.any(phase_flips == -1):
             # recompute single dly
@@ -625,20 +629,31 @@ def flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5,
             flags[ant] |= np.ones_like(flags[ant])  # flag the whole antenna
 
 
-def pick_reference_antenna(gains, flags, freqs, per_pol=True):
+def pick_reference_antenna(gains, flags, freqs, per_pol=True, acceptable_candidate_frac=0.0, antpos=None):
     '''Pick a refrence antenna that has the minimum number of per-antenna flags and produces
     the least noisy phases on other antennas when used as a reference antenna.
 
     Arguments:
         gains: Dictionary mapping antenna keys to gain waterfalls.
-        flags: dictionary mapping antenna keys to flag waterfall where True means flagged
+        flags: Dictionary mapping antenna keys to flag waterfall where True means flagged
         freqs: ndarray of frequency channels in Hz
+        per_pol: If True, pick a reference antenna for each polarization. If False, pick a single
+            reference antenna to serve for both polarizations.
+        acceptable_candidate_frac: Float between 0 and 1. If > 0 and antpos is provided, select the reference
+            antenna from the top acceptable_candidate_frac of least variable antennas based on proximity to
+            the array center. Default 0.0 picks the least variable antenna.
+        antpos: Optional dictionary mapping antenna numbers to antenna positions (e.g., ENU coordinates).
+            If provided along with acceptable_candidate_frac > 0, the reference antenna will be selected from
+            the top acceptable_candidate_frac of least variable antennas based on proximity to the array center.
 
     Returns:
         refant: key(s) of the antenna(s) with the minimum number of flags and the least noisy phases
             if per_pol: dictionary mapping gain polarizations string to ant-pol tuples
             else: ant-pol tuple e.g. (0, 'Jxx')
     '''
+    if antpos is None and acceptable_candidate_frac > 0.0:
+        raise ValueError("antpos must be provided if acceptable_candidate_frac > 0.0")
+
     # compute delay for all gains to flatten them as well as possible. Average over times.
     rephasors = {}
     for ant in gains.keys():
@@ -657,6 +672,16 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
             median_angle_noise_as_refant[ref] = np.median(angle_noise)
         return sorted(median_angle_noise_as_refant, key=median_angle_noise_as_refant.__getitem__)[0]
 
+    def select_closest_to_center(candidates, antpos, flags):
+        '''Helper function to select the antenna closest to the center of unflagged antennas.'''
+        # Calculate center from unflagged antenna positions
+        unflagged_ants = [ant for ant in gains.keys() if not np.all(flags[ant])]
+        unflagged_ant_nums = [ant[0] for ant in unflagged_ants if ant[0] in antpos]
+        center = np.mean([antpos[ant_num] for ant_num in unflagged_ant_nums], axis=0)
+
+        # Return candidate closest to center
+        return sorted(candidates, key=lambda ant: np.linalg.norm(antpos[ant[0]] - center))[0]
+
     # loop over pols (if per_pol)
     refant = {}
     pols = set([ant[1] for ant in gains])
@@ -665,14 +690,27 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
         flags_per_ant = {ant: np.sum(f) for ant, f in flags.items() if ant[1] in pol}
         refant_candidates = sorted([ant for ant, nflags in flags_per_ant.items()
                                     if nflags == np.min(list(flags_per_ant.values()))])
-        while len(refant_candidates) > 1:  # loop over groups of 3 (the smallest, non-trivial size)
+
+        # Determine the original number of candidates for threshold calculation
+        original_num_candidates = len(refant_candidates)
+        threshold_num = max(1, int(np.ceil(acceptable_candidate_frac * original_num_candidates)))
+
+        # Narrow down candidates using noise-based selection until threshold is reached
+        while len(refant_candidates) > threshold_num:
             # compare phase noise imparted by reference antenna candidates on two other reference antenna candidates
             refant_candidates = [narrow_refant_candidates(candidates) for candidates in [refant_candidates[i:i + 3]
                                  for i in range(0, len(refant_candidates), 3)]]
-        if not per_pol:
-            return refant_candidates[0]
+
+        # If antpos is provided and acceptable_candidate_frac > 0, select the antenna closest to the array center
+        if antpos is not None and acceptable_candidate_frac > 0.0 and len(refant_candidates) > 1:
+            selected_refant = select_closest_to_center(refant_candidates, antpos, flags)
         else:
-            refant[pol] = refant_candidates[0]
+            selected_refant = refant_candidates[0]
+
+        if not per_pol:
+            return selected_refant
+        else:
+            refant[pol] = selected_refant
 
     return refant
 
@@ -829,6 +867,7 @@ class CalibrationSmoother():
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
                  waterfall_blacklist={}, blacklist_wgt=0.0, pick_refant=False, propagate_refant_flags=False, per_pol_refant=True,
+                 acceptable_candidate_frac=0.0, antpos=None,
                  freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, ignore_calflags=False, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
@@ -882,6 +921,13 @@ class CalibrationSmoother():
                 is not flagged, a ValueError will be raised. Ignored if pick_refant is False.
             per_pol_refant: if True (default), pick a reference antenna for each polarization. If False, pick a single
                 reference antenna to serve for both polarization.
+            acceptable_candidate_frac: Float between 0 and 1. If > 0 and antpos is provided, select the reference
+                antenna from the top acceptable_candidate_frac of least variable antennas based on proximity to
+                the array center. Default 0.0 picks the least variable antenna. Only used if pick_refant is True.
+            antpos: Optional dictionary mapping antenna numbers to antenna positions (e.g., ENU coordinates).
+                If provided along with acceptable_candidate_frac > 0, the reference antenna will be selected from
+                the top acceptable_candidate_frac of least variable antennas based on proximity to the center of
+                unflagged antennas. Only used if pick_refant is True.
             freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
                 for all channels. If the ratio of of such times for a given channel compared to all times that are not
                 completely flagged is greater than freq_threshold, flag the entire channel for all antennas.
@@ -978,7 +1024,8 @@ class CalibrationSmoother():
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
             utils.echo('Now picking reference antenna(s)...', verbose=self.verbose)
-            self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=per_pol_refant)
+            self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=per_pol_refant,
+                                                 acceptable_candidate_frac=acceptable_candidate_frac, antpos=antpos)
             if per_pol_refant:
                 utils.echo('\n'.join([f'Reference Antenna {self.refant[pol][0]} selected for {pol}.'
                                       for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
@@ -1100,7 +1147,8 @@ class CalibrationSmoother():
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, filter_mode='rect', window='tukey',
                             maxiter=100, method="CLEAN", fit_method='pinv', eigenval_cutoff=1e-9,
                             skip_flagged_edges=True, freq_cuts=[],
-                            fix_phase_flips=False, flag_phase_flip_ints=False, flag_phase_flip_ants=False,
+                            fix_phase_flips=False, phase_flip_time_scale=None,
+                            flag_phase_flip_ints=False, flag_phase_flip_ants=False,
                             use_sparse_solver=False, precondition_solver=True, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
@@ -1133,6 +1181,8 @@ class CalibrationSmoother():
             fix_phase_flips: Optional bool. If True, will try to find integrations whose phases appear to be 180 degrees
                 rotated from the first unflagged  integration. These will be flipped before smoothing and then flipped back
                 after smoothing. Will also print info about phase-flips found. Default is False.
+            phase_flip_time_scale: Optional float in seconds. If fix_phase_flips is True, this is the time scale over which
+                to smooth the phases to determine if a phase flip has occured. If None, will use time_scale.
             flag_phase_flip_ints: Optional bool. If True and fix_phase_flips is also True, will flag antennas on the integrations
                 just before and just after a phase flip, since the phase flip could have occured mid-integration. Default is False.
             flag_phase_flip_ants: Optional bool. If True and fix_phase_flips is also True, will flag antennas that have a phase flip
@@ -1192,7 +1242,8 @@ class CalibrationSmoother():
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, dpss_vectors=dpss_vectors, eigenval_cutoff=eigenval_cutoff,
                                                      method=method, fit_method=fit_method, cached_input=cached_input,
-                                                     skip_flagged_edges=skip_flagged_edges, freq_cuts=freq_cuts, fix_phase_flips=fix_phase_flips,
+                                                     skip_flagged_edges=skip_flagged_edges, freq_cuts=freq_cuts,
+                                                     fix_phase_flips=fix_phase_flips, phase_flip_time_scale=phase_flip_time_scale,
                                                      use_sparse_solver=use_sparse_solver, precondition_solver=precondition_solver, **win_kwargs)
                 flipped = (info['phase_flips'] == -1)
                 if np.any(flipped):

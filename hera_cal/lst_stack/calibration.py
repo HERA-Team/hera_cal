@@ -872,7 +872,13 @@ def load_single_baseline_lstcal_solutions(filename: str):
     return all_calibration_parameters, flags, metadata
 
 
-def load_single_baseline_lstcal_gains(filename, antpairs, polarizations):
+def load_single_baseline_lstcal_gains(
+    filename,
+    antpairs,
+    polarizations,
+    lst_bin_edges=None,
+    telescope_location_lat_lon_alt_degrees=None
+):
     """
     Load single-baseline LST calibration solutions and construct per-antenna complex gains.
 
@@ -892,6 +898,14 @@ def load_single_baseline_lstcal_gains(filename, antpairs, polarizations):
         List of antenna index pairs (i, j). Antenna IDs here determine which antennas receive gains.
     polarizations
         Visibility polarization strings to support (e.g., ``["ee", "nn"]`` or ``["en"]``).
+    lst_bin_edges : np.ndarray, optional
+        Array of LST bin edges in radians. If provided along with telescope_location_lat_lon_alt_degrees,
+        only calibration times falling within this LST range will be loaded (partial I/O).
+        If not provided, all times in the calibration file are loaded.
+    telescope_location_lat_lon_alt_degrees : tuple or array-like, optional
+        Telescope location as (latitude, longitude, altitude) in degrees and meters.
+        Required for LST filtering if lst_bin_edges is provided. If not provided,
+        no LST filtering is performed.
 
     Returns
     -------
@@ -907,6 +921,36 @@ def load_single_baseline_lstcal_gains(filename, antpairs, polarizations):
         flags,
         metadata
     ) = load_single_baseline_lstcal_solutions(filename)
+
+    # If LST filtering info is provided, select only times within LST range
+    if lst_bin_edges is not None and telescope_location_lat_lon_alt_degrees is not None:
+        from .binning import get_lst_bins, adjust_lst_bin_edges
+
+        # Compute LSTs from times using telescope location
+        cal_lsts = utils.JD2LST(metadata['times'], *telescope_location_lat_lon_alt_degrees)
+
+        # Adjust LST bin edges to handle wrapping (must copy to avoid modifying input)
+        lst_edges_copy = np.array(lst_bin_edges).copy()
+        adjust_lst_bin_edges(lst_edges_copy)
+
+        # Find which times fall within LST bins (using same logic as visibility data)
+        bins, _, mask = get_lst_bins(cal_lsts, lst_edges_copy)
+
+        # Check if any times were selected
+        if not np.any(mask):
+            raise ValueError(
+                f"No times in calibration file {filename} fall within the specified "
+                f"LST range [{lst_edges_copy[0]:.4f}, {lst_edges_copy[-1]:.4f}] rad. "
+                f"Calibration LST range: [{cal_lsts.min():.4f}, {cal_lsts.max():.4f}] rad."
+            )
+
+        # Filter all calibration data to only include times in LST range
+        if not np.all(mask):
+            metadata['times'] = metadata['times'][mask]
+            for param_name in all_calibration_parameters:
+                all_calibration_parameters[param_name] = all_calibration_parameters[param_name][mask]
+            for pol in flags:
+                flags[pol] = flags[pol][mask]
 
     # Unpack metadata
     pols = metadata['pols']

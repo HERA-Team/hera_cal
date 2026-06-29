@@ -1537,10 +1537,16 @@ class HERADataFastReader():
                             check=check, dtype=dtype, verbose=verbose)
         self._adapt_metadata(rv['info'], skip_lsts=skip_lsts)
 
-        # make autocorrleations real by taking the real part. Using fix_autos_func = np.abs matches UVData._fix_autos()
+        # make autocorrelations real by taking the real part. Using fix_autos_func = np.abs matches UVData._fix_autos()
+        # pseudo-Stokes pI and pQ autos are also real (sums/differences of xx and yy autos)
+        _real_auto_pols = {POL_STR2NUM_DICT['pI'], POL_STR2NUM_DICT['pQ']}
         if 'data' in rv:
             for bl in rv['data']:
-                if split_bl(bl)[0] == split_bl(bl)[1]:
+                try:
+                    is_auto = split_bl(bl)[0] == split_bl(bl)[1]
+                except KeyError:
+                    is_auto = bl[0] == bl[1] and polstr2num(bl[2]) in _real_auto_pols
+                if is_auto:
                     rv['data'][bl] = fix_autos_func(rv['data'][bl])
 
         # construct datacontainers from result
@@ -1987,6 +1993,38 @@ def read_redcal_meta(meta_filename):
 
     return fc_meta, omni_meta, freqs, times, lsts, antpos, history
 
+
+def read_m_mode_spectra_file(infile, antpair):
+    '''Read in the m-mode spectra for the provided antenna pair.
+
+    Arguments:
+        infile: Path to spectra file.
+        antpair: Which antenna pair to retrieve the spectra for.
+
+    Returns:
+        spectra: m-mode spectra with shape (Nmodes, Nfreqs)
+        freqs: Frequency for each m-mode spectrum, in Hz.
+        m_modes: m-modes for each spectrum.
+    '''
+    with h5py.File(infile, "r") as h5f:
+        metadata = h5f["metadata"]
+        bl_to_index_map = {
+            (int(ai), int(aj)): int(index)
+            for index, antpairs in metadata["baseline_groups"].items()
+            for ai, aj in antpairs
+        }
+        m_modes = metadata["erh_mode_integer_index"][()]
+        freqs = metadata["frequencies_MHz"][()] * 1e6
+        all_spectra = h5f["erh_mode_power_spectrum"][()]
+
+    if antpair in bl_to_index_map:
+        spectra = all_spectra[:, :, bl_to_index_map[antpair]]
+    elif antpair[::-1] in bl_to_index_map:
+        spectra = all_spectra[::-1, :, bl_to_index_map[antpair[::-1]]]
+    else:
+        raise ValueError("Requested antenna pair not found in spectra file.")
+
+    return spectra, freqs, m_modes
 
 #######################################################################
 #                             LEGACY CODE

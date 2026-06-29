@@ -9,6 +9,7 @@ from hera_cal.noise import predict_noise_variance_from_autos
 from . import utils
 from scipy.interpolate import interp1d
 from scipy import optimize
+from scipy.signal.windows import dpss
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
 from pyuvdata import UVData, UVFlag, UVBeam
@@ -252,9 +253,64 @@ def select_tophat_frates(blvecs, case, uvd=None, keys=None, frate_standoff=0.0, 
     return frate_centers, frate_half_widths
 
 
+def sky_frates_single(freqs, blvec, latitude):
+    """Compute sky fringe-rate centers and half-widths as a function of frequency for a single baseline.
+
+    Uses analytic expressions from Parsons et al. 2016 to compute the expected range of
+    fringe-rates for sky emission given a baseline vector, telescope latitude, and frequencies.
+    See derivation in https://www.overleaf.com/read/chgpxydbhfhk
+
+    Parameters
+    ----------
+    freqs: array-like
+        1D array of frequencies in Hz.
+    blvec: array-like
+        Length-3 ENU baseline vector in meters.
+    latitude: float
+        Telescope latitude in radians.
+
+    Returns
+    -------
+    frate_centers: ndarray
+        1D array of fringe-rate centers in mHz, one per frequency.
+    frate_half_widths: ndarray
+        1D array of fringe-rate half-widths in mHz, one per frequency.
+    """
+    freqs = np.asarray(freqs)
+    blvec = np.asarray(blvec, dtype=float)
+    sinlat = np.sin(np.abs(latitude))
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        blcos = blvec[0] / np.linalg.norm(blvec[:2])
+
+    if np.isfinite(blcos):
+        frateamp_df = np.linalg.norm(blvec[:2]) / (SDAY_SEC * 1e-3) / SPEED_OF_LIGHT * 2 * np.pi
+
+        if blcos >= 0:
+            max_frate_df = frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
+            min_frate_df = -frateamp_df * sinlat
+        else:
+            min_frate_df = -frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
+            max_frate_df = frateamp_df * sinlat
+
+        min_frates = freqs * min_frate_df
+        max_frates = freqs * max_frate_df
+    else:
+        min_frates = np.zeros_like(freqs, dtype=float)
+        max_frates = np.zeros_like(freqs, dtype=float)
+
+    frate_centers = (max_frates + min_frates) / 2.
+    frate_half_widths = np.abs(max_frates - min_frates) / 2.
+
+    return frate_centers, frate_half_widths
+
+
 def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
                min_frate_half_width=0.025, max_frate_half_width=np.inf):
     """Compute sky fringe-rate ranges based on baselines, telescope location, and frequencies in uvdata.
+
+    Wraps sky_frates_single, computing a single scalar center and half-width per baseline
+    by taking the envelope (min/max) across all frequencies.
 
     Parameters
     ----------
@@ -290,43 +346,30 @@ def sky_frates(uvd, keys=None, frate_standoff=0.0, frate_width_multiplier=1.0,
         keys = uvd.get_antpairpols()
     antpos = uvd.telescope.get_enu_antpos()
     antnums = uvd.telescope.antenna_numbers
-    sinlat = np.sin(np.abs(uvd.telescope.location.lat))
+    latitude = uvd.telescope.location.lat.rad
     frate_centers = {}
     frate_half_widths = {}
 
-    # compute maximum fringe rate dict based on baseline lengths.
-    # see derivation in https://www.overleaf.com/read/chgpxydbhfhk
-    # which starts with expressions in
-    # https://ui.adsabs.harvard.edu/abs/2016ApJ...820...51P/exportcitation
     for k in keys:
         ind1 = np.where(antnums == k[0])[0][0]
         ind2 = np.where(antnums == k[1])[0][0]
         blvec = antpos[ind1] - antpos[ind2]
-        with np.errstate(divide='ignore', invalid='ignore'):
-            blcos = blvec[0] / np.linalg.norm(blvec[:2])
-        if np.isfinite(blcos):
-            frateamp_df = np.linalg.norm(blvec[:2]) / (SDAY_SEC * 1e-3) / SPEED_OF_LIGHT * 2 * np.pi
-            # set autocorrs to have blcose of 0.0
 
-            if blcos >= 0:
-                max_frate_df = frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
-                min_frate_df = -frateamp_df * sinlat
-            else:
-                min_frate_df = -frateamp_df * np.sqrt(sinlat ** 2. + blcos ** 2. * (1 - sinlat ** 2.))
-                max_frate_df = frateamp_df * sinlat
+        # Get per-frequency centers and half-widths without adjustments
+        centers_per_freq, hw_per_freq = sky_frates_single(
+            uvd.freq_array, blvec, latitude,
+        )
 
-            min_frate = np.min([f0 * min_frate_df for f0 in uvd.freq_array])
-            max_frate = np.max([f0 * max_frate_df for f0 in uvd.freq_array])
-        else:
-            max_frate = 0.0
-            min_frate = 0.0
+        # Collapse to scalar by taking the min/max frate across frequencies
+        min_frate = np.min(centers_per_freq - hw_per_freq)
+        max_frate = np.max(centers_per_freq + hw_per_freq)
 
         frate_centers[k] = (max_frate + min_frate) / 2.
         frate_centers[utils.reverse_bl(k)] = -frate_centers[k]
 
         frate_half_widths[k] = np.abs(max_frate - min_frate) / 2. * frate_width_multiplier + frate_standoff
-        frate_half_widths[k] = np.max([frate_half_widths[k], min_frate_half_width])  # Don't allow frates smaller then min_frate
-        frate_half_widths[k] = np.min([frate_half_widths[k], max_frate_half_width])  # Don't allow frates larger then max_frate
+        frate_half_widths[k] = np.max([frate_half_widths[k], min_frate_half_width])
+        frate_half_widths[k] = np.min([frate_half_widths[k], max_frate_half_width])
         frate_half_widths[utils.reverse_bl(k)] = frate_half_widths[k]
 
     return frate_centers, frate_half_widths
@@ -2313,3 +2356,149 @@ def get_correction_factor_from_cov(cov, tslc=None):
     correction_factor = np.mean(Ncotimes / Neff)  # Average over frequency since they are independent.
 
     return correction_factor
+
+
+def get_coherent_avg_design_matrix(
+    baseline, lat, freqs, old_times, new_times, n_samples, new_inttime, flags
+):
+    """
+    Compute the time-time matrix that encodes the coherent averaging operation.
+
+    Parameters
+    ----------
+
+    baseline
+        Baseline vector in ENU coordinates, in meters.
+    lat
+        Latitude of the array, in radians.
+    freqs
+        Observed frequencies, in Hz.
+    old_times
+        Time array prior to coherent averaging, in seconds.
+    new_times
+        Time array after coherent averaging, in seconds.
+    n_samples
+        Number of samples per-integration and per-frequency. Should have shape
+        `(freqs.size, old_times.size)`.
+    new_inttime
+        Integration time after the coherent average, in seconds.
+    flags
+        Boolean array of flags for each integration and frequency, with the
+        same shape as `n_samples`.
+
+    Returns
+    -------
+    design_mat
+        Design matrix encoding the coherent time average operator, accounting for
+        weighting by number of samples and rephasing from phase center drift. Has
+        shape `(freqs.size, new_times.size, old_times.size)`.
+    """
+    # Compute the amount of time between the original times and new times.
+    dt_mat = new_times[:, None] - old_times[None, :]
+
+    # Figure out how to phase to the new phase centers.
+    phasor = utils.get_phase_factor(baseline, lat, freqs, dt_mat)
+
+    # Convert flags to weights
+    flagw = (~flags).astype(float)
+
+    # Figure out how many samples go into the average and correctly inverse-variance weight.
+    if n_samples.ndim == 1:
+        n_samples = (flagw * n_samples)[None, :]
+    else:
+        # Assuming n_samples has shape (Nfreq, Ntimes_old)
+        n_samples = (flagw * n_samples)[:, None, :]
+
+    # Uniform per-integration noise => inverse variance weighting ~ weighting by nsamples
+    weights = np.where(np.abs(dt_mat) <= 0.5 * new_inttime, n_samples, 0)
+    weights /= np.sum(weights, axis=-1, keepdims=True)
+
+    # The design matrix is just the weight multiplied by the phase factor.
+    return weights * phasor
+
+
+def construct_filter(times, fc, fhw, eigval_cutoff=1e-12, wgts=None):
+    r"""Compute the time-domain DPSS filter matrix.
+
+    This function essentially computes a generalization of Eq. 3.17 from Pascua+ 2024
+    to allow for non-uniform weighting in time. If the DPSS filter design matrix is A,
+    and the weights are W, then the filter matrix T is
+
+            T = A @ (A^\dag @ W @ A)^{-1} @ (W @ A)^\dag.
+
+    The design matrix A is Eq. 3.14 from Pascua+ 2024.
+
+    Parameters
+    ----------
+    times
+        Array of observing times, in conjugate units to ``fc`` and ``fhw`` so
+        that the products ``times*fc`` and ``times*fhw`` are dimensionless.
+        For example, if ``fhw`` and ``fc`` are provided in mHz, then ``times``
+        must be provided in ks.
+    fc
+        Central fringe-rate of the desired top-hat filter, in conjugate units
+        to ``times``.
+    fhw
+        Half-width of the desired top-hat fringe-rate filter, in conjugate
+        units to ``times``.
+    eigval_cutoff
+        Minimum eigenvalue of the DPSS modes to use for filtering. Any DPSS
+        modes with a corresponding eigenvalue below this cutoff will be
+        excluded from the filter.
+    wgts
+        Array of weights for each of the provided times.
+
+    Returns
+    -------
+    filter_design_matrix
+        Time-time fringe-rate filter design matrix.
+    """
+    if wgts is None:
+        wgts = np.ones(times.size)
+
+    # Compute the phasor for shifting the DPSS modes to the filter center.
+    frf_phasor = np.exp(-2j * np.pi * fc * (times - times.mean()))
+
+    # Compute the B*W parameter for defining the DPSS modes.
+    half_bandwidth = (times[-1] - times[0]) * fhw
+
+    # Approximation for the extra number of modes to compute beyond 2*B*W
+    n_extra_modes = int(
+        4 * np.log(4 * times.size) * np.log(4 / eigval_cutoff) / np.pi**2
+    )
+
+    # Generate the DPSS modes used for filtering.
+    n_modes = int(2 * half_bandwidth) + n_extra_modes
+    modes, eigvals = dpss(
+        times.size, half_bandwidth, Kmax=n_modes, return_ratios=True
+    )
+
+    # Apply the eigenvalue cutoff and rephase to the filter center.
+    cut = np.argwhere(eigvals >= eigval_cutoff).flatten()[-1]
+    modes = modes[:cut].T * frf_phasor[:, None]  # Shape (n_times, n_dpss)
+
+    # Compute the filter matrix according to a weighted least-squares fit.
+    ATW = modes.T.conj() * wgts
+
+    return modes @ np.linalg.solve(ATW @ modes, ATW)
+
+
+def get_m2f_mixer(times_ks, m_modes):
+    """Compute the transformation matrix from m-modes to fringe-rates.
+
+    Parameters
+    ----------
+    times_ks
+        Observation times, in ks.
+    m_modes
+        m-modes for the spectrum to be transformed into a fringe-rate covariance.
+
+    Returns
+    -------
+    m2f_mixer
+        (Nfrates, Nmodes) transformation matrix.
+    """
+    m2f_phasors = np.exp(2j * np.pi * utils.m2f(m_modes)[None, :] * times_ks[:, None])
+    return np.fft.fftshift(
+        np.fft.fft(np.fft.ifftshift(m2f_phasors, axes=0), axis=0), axes=0
+    )
