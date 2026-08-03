@@ -1,0 +1,516 @@
+# -*- coding: utf-8 -*-
+# Copyright 2026 the HERA Project
+# Licensed under the MIT License
+
+import pytest
+import numpy as np
+from scipy.optimize import least_squares
+import linsolve
+
+from .. import skycal
+from ..datacontainer import DataContainer
+from ..apply_cal import calibrate_in_place
+from .. import utils
+
+
+def build_sim(nants=7, nfreqs=128, ntimes=2, pol='ee', seed=21, dlys=None,
+              offsets=None, amp_ripple=0.1, phs_ripple=0.05, noise=0.0,
+              snap_suppression=None, ant_to_SNAP_dict=None, dt=10.0, df=122e3):
+    '''Build a synthetic dataset with known gains: V_ij = g_i g_j^* M_ij and
+    autos_i = |g_i|^2 * A_sky. Returns a dict of everything needed for tests.
+    If snap_suppression is given (dict mapping SNAP ID to loss fraction p),
+    inter-SNAP cross visibilities are multiplied by (1 - p_i)(1 - p_j) while
+    autos and intra-SNAP baselines are left untouched (mimicking correlator
+    decoherence).'''
+    rng = np.random.default_rng(seed)
+    freqs = 100e6 + np.arange(nfreqs) * df
+    ants = list(range(nants))
+    if dlys is None:
+        dlys = {ant: 0.0 for ant in ants}
+    if offsets is None:
+        offsets = {ant: 0.0 for ant in ants}
+
+    # smooth true gains: few-mode ripples on top of delay/offset phases
+    def smooth_ripple(scale):
+        modes = rng.normal(size=3) * scale
+        x = np.linspace(0, 1, nfreqs)
+        return sum(m * np.cos((k + 1) * np.pi * x + rng.uniform(0, np.pi))
+                   for k, m in enumerate(modes))
+
+    true_gains = {}
+    for ant in ants:
+        amp = 1.0 + smooth_ripple(amp_ripple)
+        phs = (2 * np.pi * freqs * dlys[ant] + offsets[ant]
+               + smooth_ripple(phs_ripple))
+        g = (amp * np.exp(1j * phs))[None, :] * np.ones((ntimes, 1))
+        true_gains[(ant, utils.split_pol(pol)[0])] = g
+
+    # random smooth-ish model visibilities and a common sky auto spectrum
+    sky_auto = 200.0 * (1.0 + 0.3 * np.cos(np.linspace(0, 3, nfreqs)))
+    data, model = {}, {}
+    for i in ants:
+        gi = true_gains[(i, utils.split_pol(pol)[0])]
+        data[(i, i, pol)] = (np.abs(gi)**2 * sky_auto[None, :]
+                             * np.ones((ntimes, 1))).astype(complex)
+    for i in ants:
+        gi = true_gains[(i, utils.split_pol(pol)[0])]
+        for j in ants:
+            if j <= i:
+                continue
+            gj = true_gains[(j, utils.split_pol(pol)[0])]
+            amp = 10.0 * (0.5 + rng.uniform(size=nfreqs))
+            phs = rng.uniform(0, 2 * np.pi) + np.linspace(
+                0, rng.uniform(-3, 3), nfreqs)
+            mvis = (amp * np.exp(1j * phs))[None, :] * np.ones((ntimes, 1))
+            model[(i, j, pol)] = mvis
+            vis = gi * np.conj(gj) * mvis
+            if snap_suppression is not None:
+                si, sj = ant_to_SNAP_dict[i], ant_to_SNAP_dict[j]
+                if si != sj:
+                    pi_, pj_ = snap_suppression.get(si, 0), \
+                        snap_suppression.get(sj, 0)
+                    vis = vis * (1 - pi_) * (1 - pj_)
+            if noise > 0:
+                sigma = np.sqrt(np.abs(data[(i, i, pol)] * data[(j, j, pol)])
+                                / dt / df)
+                vis = vis + noise * sigma * (rng.normal(size=vis.shape)
+                                             + 1j * rng.normal(size=vis.shape)
+                                             ) / np.sqrt(2)
+            data[(i, j, pol)] = vis
+    return {'data': DataContainer(data), 'model': DataContainer(model),
+            'true_gains': true_gains, 'freqs': freqs, 'ants': ants,
+            'pol': pol, 'dt': dt, 'df': df, 'ntimes': ntimes}
+
+
+class TestSolvePerAntennaWeightedLeastSquares:
+    def setup_method(self):
+        self.rng = np.random.default_rng(21)
+
+    def test_recovery_and_gauge(self):
+        nants = 6
+        x = self.rng.normal(size=nants)
+        x -= x.mean()
+        bls = [(i, j) for i in range(nants) for j in range(i + 1, nants)]
+        ant_i = np.array([bl[0] for bl in bls])
+        ant_j = np.array([bl[1] for bl in bls])
+        vals = x[ant_i] - x[ant_j]
+        wgts = self.rng.uniform(0.5, 2.0, size=len(bls))
+        sol = skycal._solve_per_antenna_weighted_least_squares(vals, wgts, ant_i, ant_j, nants)
+        np.testing.assert_allclose(sol, x, atol=1e-8)
+        assert np.abs(np.mean(sol)) < 1e-10
+
+    def test_unsolvable_antenna_is_nan(self):
+        # antenna 3 appears in no baselines
+        bls = [(0, 1), (0, 2), (1, 2)]
+        ant_i = np.array([bl[0] for bl in bls])
+        ant_j = np.array([bl[1] for bl in bls])
+        vals = np.array([1.0, 2.0, 1.0])
+        wgts = np.ones(3)
+        sol = skycal._solve_per_antenna_weighted_least_squares(vals, wgts, ant_i, ant_j, 4)
+        assert np.isnan(sol[3])
+        assert np.all(np.isfinite(sol[:3]))
+
+
+class TestBuildDataModelRatio:
+    def setup_method(self):
+        self.sim = build_sim(nants=5, nfreqs=32, ntimes=2, seed=1)
+
+    def test_perfect_data_gives_unity_ratio(self):
+        # unity gains: data equals model on crosses
+        sim = build_sim(nants=5, nfreqs=32, ntimes=2, seed=2, amp_ripple=0,
+                        phs_ripple=0)
+        ratio, wgts = skycal.build_data_model_ratio(
+            sim['data'], sim['model'], dt=sim['dt'], df=sim['df'])
+        for bl in ratio:
+            np.testing.assert_allclose(ratio[bl], 1.0, atol=1e-10)
+            sigma2 = np.abs(sim['data'][(bl[0], bl[0], bl[2])]
+                            * sim['data'][(bl[1], bl[1], bl[2])]
+                            ) / sim['dt'] / sim['df']
+            np.testing.assert_allclose(
+                wgts[bl], np.abs(sim['model'][bl])**2 / sigma2, rtol=1e-10)
+
+    def test_flag_propagation(self):
+        sim = self.sim
+        pol = sim['pol']
+        bl = (0, 1, pol)
+        data_flags = DataContainer({k: np.zeros_like(sim['data'][k], dtype=bool)
+                                    for k in sim['data'] if k[0] != k[1]})
+        data_flags[bl][0, 5] = True
+        antpol = utils.split_pol(pol)[0]
+        ant_flags = {(2, antpol): np.zeros((sim['ntimes'], 32), dtype=bool)}
+        ant_flags[(2, antpol)][1, 7] = True
+        ratio, wgts = skycal.build_data_model_ratio(
+            sim['data'], sim['model'], data_flags=data_flags,
+            ant_flags=ant_flags, dt=sim['dt'], df=sim['df'])
+        assert np.isnan(ratio[bl][0, 5])
+        assert wgts[bl][0, 5] == 0
+        for other in ratio:
+            if 2 in other[:2]:
+                assert np.isnan(ratio[other][1, 7])
+                assert wgts[other][1, 7] == 0
+
+
+class TestModelBasedFirstcal:
+    def test_signed_delay_and_offset_recovery(self):
+        # includes a delay that wraps many times across the band
+        nants = 6
+        dlys_true = {0: 0.0, 1: 30e-9, 2: -55e-9, 3: 500e-9, 4: -100e-9,
+                     5: 10e-9}
+        mean_dly = np.mean(list(dlys_true.values()))
+        dlys_true = {ant: d - mean_dly for ant, d in dlys_true.items()}
+        offsets_true = {0: 0.1, 1: -0.4, 2: 0.3, 3: 0.0, 4: -0.2, 5: 0.2}
+        mean_off = np.mean(list(offsets_true.values()))
+        offsets_true = {ant: o - mean_off for ant, o in offsets_true.items()}
+        sim = build_sim(nants=nants, nfreqs=256, ntimes=2, seed=3,
+                        dlys=dlys_true, offsets=offsets_true,
+                        amp_ripple=0, phs_ripple=0)
+        ratio, wgts = skycal.build_data_model_ratio(
+            sim['data'], sim['model'], dt=sim['dt'], df=sim['df'])
+        dlys, offsets = skycal.model_based_firstcal(ratio, wgts, sim['freqs'])
+        antpol = utils.split_pol(sim['pol'])[0]
+        for ant in sim['ants']:
+            # per-integration solves: (Ntimes, 1) arrays
+            assert dlys[(ant, antpol)].shape == (sim['ntimes'], 1)
+            # ~ns-level accuracy: Quinn interpolation is slightly biased by
+            # the frequency structure of the weights, but this is already
+            # better than a pad-8 FFT grid and far tighter than needed (the
+            # per-channel refinement solves phases exactly and its phase-sync
+            # initialization is wrap-immune). The signed comparison locks the
+            # delay sign convention.
+            assert np.max(np.abs(dlys[(ant, antpol)]
+                                 - dlys_true[ant])) < 2e-9
+            # delays and offsets covary through the absolute-frequency lever
+            # arm (a delay error dtau shifts the fitted offset by ~2 pi f0
+            # dtau), so only the total phase model over the band is
+            # meaningful — and it's what firstcal_gains actually uses
+            phase_err = (2 * np.pi * sim['freqs']
+                         * (dlys[(ant, antpol)] - dlys_true[ant])
+                         + offsets[(ant, antpol)] - offsets_true[ant])
+            # bound: far inside wrap-safety (pi), small enough that the
+            # per-channel refinement takes over from an excellent start
+            assert np.max(np.abs(np.angle(np.exp(1j * phase_err)))) < 0.3
+
+    def test_firstcal_gains_expression(self):
+        freqs = 100e6 + np.arange(16) * 1e5
+        dlys = {(0, 'Jee'): np.full((3, 1), 25e-9)}
+        offsets = {(0, 'Jee'): np.full((3, 1), 0.3)}
+        gains = skycal.firstcal_gains(dlys, offsets, freqs)
+        expected = np.exp(2j * np.pi * 25e-9 * freqs + 1j * 0.3)
+        assert gains[(0, 'Jee')].shape == (3, 16)
+        np.testing.assert_allclose(gains[(0, 'Jee')][2], expected, rtol=1e-12)
+
+
+class TestCalibrateAbsAmpFromAutos:
+    def test_amplitude_recovery(self):
+        sim = build_sim(nants=6, nfreqs=32, ntimes=2, seed=4, amp_ripple=0.2,
+                        phs_ripple=0)
+        gains = skycal.calibrate_abs_amp_from_autos(sim['data'])
+        antpol = utils.split_pol(sim['pol'])[0]
+        # recovered amps should equal true amps up to a per-channel rescaling
+        # (the median reference) that is COMMON to all antennas
+        ratios = np.asarray([np.abs(gains[(ant, antpol)])
+                             / np.abs(sim['true_gains'][(ant, antpol)])
+                             for ant in sim['ants']])
+        np.testing.assert_allclose(
+            ratios, np.broadcast_to(ratios[0:1], ratios.shape), rtol=1e-10)
+
+    def test_flagged_cells_excluded_from_reference(self):
+        sim = build_sim(nants=6, nfreqs=32, ntimes=2, seed=5)
+        pol = sim['pol']
+        auto_flags = {(0, 0, pol): np.zeros((sim['ntimes'], 32), dtype=bool)}
+        auto_flags[(0, 0, pol)][0, 3] = True
+        # with the cell flagged, corrupting it must not change anyone's gains
+        gains_before = skycal.calibrate_abs_amp_from_autos(
+            sim['data'], auto_flags=auto_flags)
+        sim['data'][(0, 0, pol)][0, 3] *= 100
+        gains_after = skycal.calibrate_abs_amp_from_autos(
+            sim['data'], auto_flags=auto_flags)
+        antpol = utils.split_pol(pol)[0]
+        for ant in sim['ants'][1:]:
+            np.testing.assert_allclose(gains_after[(ant, antpol)],
+                                       gains_before[(ant, antpol)], rtol=1e-8)
+
+
+class TestRefineGainsCore:
+    def setup_method(self):
+        self.rng = np.random.default_rng(21)
+
+    def _setup_arrays(self, nants=5, nfreqs=8, phase_scale=0.3, amp_scale=0.2,
+                      noise=0.0):
+        true_h = ((1.0 + amp_scale * self.rng.uniform(-1, 1, (nants, nfreqs)))
+                  * np.exp(1j * phase_scale
+                           * self.rng.uniform(-1, 1, (nants, nfreqs))))
+        # gauge the truth: mean phase 0 per channel
+        true_h *= np.exp(-1j * np.angle(true_h /
+                                        np.abs(true_h)).mean(axis=0))[None, :]
+        bls = [(i, j) for i in range(nants) for j in range(i + 1, nants)]
+        ant_i = np.array([bl[0] for bl in bls])
+        ant_j = np.array([bl[1] for bl in bls])
+        vis_ratio = true_h[ant_i] * np.conj(true_h[ant_j])
+        if noise > 0:
+            vis_ratio = vis_ratio + noise * (
+                self.rng.normal(size=vis_ratio.shape)
+                + 1j * self.rng.normal(size=vis_ratio.shape)) / np.sqrt(2)
+        wgts = self.rng.uniform(0.5, 2.0, size=vis_ratio.shape)
+        return true_h, vis_ratio, wgts, ant_i, ant_j, nants
+
+    def test_known_gain_recovery(self):
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays()
+        gains, meta = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants)
+        np.testing.assert_allclose(gains, true_h, atol=1e-7)
+        assert meta['conv_crit'] < 1e-7
+
+    def test_wrap_immunity(self):
+        # phases uniform on (-pi, pi]: a linearized phase solve would fail
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays(
+            phase_scale=np.pi, amp_scale=0.1)
+        gains, meta = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants)
+        # compare baseline-level products (immune to any residual gauge)
+        np.testing.assert_allclose(gains[ant_i] * np.conj(gains[ant_j]),
+                                   vis_ratio, atol=1e-7)
+
+    def test_brute_force_cross_check(self):
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays(
+            nants=5, nfreqs=3, noise=0.05)
+        gains, meta = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants)
+
+        # independent solve: scipy least_squares per channel with ant 0's
+        # phase pinned, then re-gauged to mean phase = 0
+        for chan in range(3):
+            z, w = vis_ratio[:, chan], wgts[:, chan]
+
+            def resid(x):
+                amps = x[:nants]
+                phases = np.concatenate([[0], x[nants:]])
+                h = amps * np.exp(1j * phases)
+                r = np.sqrt(w) * (z - h[ant_i] * np.conj(h[ant_j]))
+                return np.concatenate([r.real, r.imag])
+
+            x0 = np.concatenate([np.ones(nants), np.zeros(nants - 1)])
+            sol = least_squares(resid, x0, xtol=1e-15, ftol=1e-15, gtol=1e-15)
+            h_bf = sol.x[:nants] * np.exp(
+                1j * np.concatenate([[0], sol.x[nants:]]))
+            h_bf = h_bf * np.exp(-1j * np.angle(h_bf / np.abs(h_bf)).mean())
+            np.testing.assert_allclose(gains[:, chan], h_bf, atol=1e-6)
+
+    def test_uniform_flag_structure_accepted(self):
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays()
+        # the two supported flag types: a whole antenna out (all its
+        # baselines) and a channel flagged for ALL baselines
+        wgts[(ant_i == 2) | (ant_j == 2), :] = 0
+        wgts[:, 4] = 0
+        gains, meta = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants)
+        assert np.all(np.isnan(gains[2]))
+        assert np.all(np.isnan(gains[:, 4]))
+        solved_ants = np.ones(nants, dtype=bool)
+        solved_ants[2] = False
+        good = np.ones(gains.shape[1], dtype=bool)
+        good[4] = False
+        # remaining antennas/channels still recovered (gauge over the
+        # surviving antennas differs from the truth's, so compare
+        # baseline-level products, which are gauge-invariant)
+        for i in np.where(solved_ants)[0]:
+            for j in np.where(solved_ants)[0]:
+                np.testing.assert_allclose(
+                    (gains[i] * np.conj(gains[j]))[good],
+                    (true_h[i] * np.conj(true_h[j]))[good], atol=1e-6)
+
+    def test_nonuniform_flags_raise(self):
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays()
+        # a channel flagged for only SOME baselines is not a supported
+        # pattern: it must be fixed upstream, not silently repaired
+        wgts[(ant_i == 2) | (ant_j == 2), 4] = 0
+        with pytest.raises(ValueError):
+            skycal._refine_gains_single_pol_time(
+                vis_ratio, wgts, ant_i, ant_j, nants)
+
+    def test_whole_baseline_flag_raises(self):
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays()
+        # a fully-flagged baseline between two otherwise-unflagged antennas
+        # is also unsupported: baselines are excluded by omission, and only
+        # whole ANTENNAS may be flagged
+        wgts[0, :] = 0
+        with pytest.raises(ValueError):
+            skycal._refine_gains_single_pol_time(
+                vis_ratio, wgts, ant_i, ant_j, nants)
+
+    def test_convergence_failure_raises(self):
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays(
+            noise=0.3)
+        with pytest.raises(RuntimeError):
+            skycal._refine_gains_single_pol_time(
+                vis_ratio, wgts, ant_i, ant_j, nants, refine_maxiter=0)
+
+    def test_mean_phase_gauge(self):
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays(
+            noise=0.02)
+        gains, meta = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants)
+        # the solver zeroes the arithmetic mean of the accumulated phase
+        # updates (same convention as redcal.remove_degen_gains)
+        mean_phase = np.angle(gains).mean(axis=0)
+        np.testing.assert_allclose(mean_phase, 0, atol=1e-7)
+
+    def test_amp_updates_match_linsolve(self):
+        # the scatter-built batched normal matrices are a pure speed
+        # optimization (linsolve on the same equations is ~20x slower at
+        # production scale); this cross-check keeps linsolve as the
+        # independent referee for the custom machinery
+        nsel, nchan = 8, 4
+        bls = [(i, j) for i in range(nsel) for j in range(i + 1, nsel)]
+        nbl = len(bls)
+        wgts2d = self.rng.uniform(0.5, 2.0, (nbl, nchan))
+        resids2d = self.rng.normal(size=(nbl, nchan))
+        bl_inds, chan_inds = np.divmod(np.arange(nbl * nchan), nchan)
+        ei = np.array([bls[k][0] for k in bl_inds])
+        ej = np.array([bls[k][1] for k in bl_inds])
+        w = wgts2d[bl_inds, chan_inds]
+        r = resids2d[bl_inds, chan_inds]
+        amp_mats, _ = skycal._build_normal_matrices(
+            nchan, nsel, chan_inds, ei, ej, w)
+        ours = skycal._solve_logamp_updates(
+            amp_mats, chan_inds, ei, ej, w, r, nchan, nsel)
+        ls_data = {f'e_{i} + e_{j}': resids2d[k]
+                   for k, (i, j) in enumerate(bls)}
+        ls_wgts = {f'e_{i} + e_{j}': wgts2d[k]
+                   for k, (i, j) in enumerate(bls)}
+        sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts).solve()
+        theirs = np.array([sol[f'e_{i}'] for i in range(nsel)]).T
+        np.testing.assert_allclose(ours, theirs, atol=1e-8)
+
+    def test_low_snr_amplitude_unbiased(self):
+        # the converged solution is the stationary point of the complex
+        # least-squares objective, NOT the log-space optimum, so it should
+        # not show the low-SNR amplitude bias of logcal (Liu et al. 2010);
+        # at this noise level a log-space estimator's bias benchmark is
+        # ~sigma^2/2 = 0.045, which the bound below excludes
+        nants, nfreqs, sigma = 6, 2, 0.3
+        bls = [(i, j) for i in range(nants) for j in range(i + 1, nants)]
+        ant_i = np.array([bl[0] for bl in bls])
+        ant_j = np.array([bl[1] for bl in bls])
+        wgts = np.full((len(bls), nfreqs), 1 / sigma**2)
+        biases = []
+        for trial in range(200):
+            true_g = ((1.0 + 0.1 * self.rng.uniform(-1, 1, (nants, nfreqs)))
+                      * np.exp(0.3j * self.rng.uniform(-1, 1,
+                                                       (nants, nfreqs))))
+            vis_ratio = (true_g[ant_i] * np.conj(true_g[ant_j])
+                         + sigma * (self.rng.normal(size=wgts.shape)
+                                    + 1j * self.rng.normal(size=wgts.shape))
+                         / np.sqrt(2))
+            gains, _ = skycal._refine_gains_single_pol_time(
+                vis_ratio, wgts, ant_i, ant_j, nants, refine_maxiter=500)
+            biases.append(np.mean(np.abs(gains) - np.abs(true_g)))
+        assert np.abs(np.mean(biases)) < 0.015
+
+    def test_hess_cadence_invariance(self):
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays(
+            noise=0.05)
+        gains1, _ = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants, hess_cadence=1)
+        gains3, _ = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants, hess_cadence=3)
+        np.testing.assert_allclose(gains1, gains3, atol=1e-7)
+
+
+class TestRefineGains:
+    def setup_method(self):
+        self.ant_to_SNAP_dict = {0: 'A', 1: 'A', 2: 'A', 3: 'B', 4: 'B',
+                                 5: 'B', 6: 'C'}
+
+    def test_missing_snap_raises(self):
+        sim = build_sim(nants=7, nfreqs=16, ntimes=1, seed=6)
+        ratio, wgts = skycal.build_data_model_ratio(
+            sim['data'], sim['model'], dt=sim['dt'], df=sim['df'])
+        antpol = utils.split_pol(sim['pol'])[0]
+        g0 = {(ant, antpol): np.ones((1, 16), dtype=complex)
+              for ant in sim['ants']}
+        incomplete = {ant: 'A' for ant in sim['ants'][:-1]}
+        with pytest.raises(ValueError):
+            skycal.refine_gains(ratio, wgts, g0,
+                                ant_to_SNAP_dict=incomplete)
+
+    def test_intra_snap_corruption_invariance(self):
+        sim = build_sim(nants=7, nfreqs=16, ntimes=1, seed=7)
+        antpol = utils.split_pol(sim['pol'])[0]
+        g0 = {(ant, antpol): np.ones((1, 16), dtype=complex)
+              for ant in sim['ants']}
+        ratio, wgts = skycal.build_data_model_ratio(
+            sim['data'], sim['model'], dt=sim['dt'], df=sim['df'])
+        clean, _ = skycal.refine_gains(
+            ratio, wgts, g0, ant_to_SNAP_dict=self.ant_to_SNAP_dict)
+        # corrupt every intra-SNAP visibility: solution must not change
+        for bl in sim['data']:
+            if (bl[0] != bl[1] and self.ant_to_SNAP_dict[bl[0]]
+                    == self.ant_to_SNAP_dict[bl[1]]):
+                sim['data'][bl] *= 17.0
+        ratio2, wgts2 = skycal.build_data_model_ratio(
+            sim['data'], sim['model'], dt=sim['dt'], df=sim['df'])
+        corrupted, _ = skycal.refine_gains(
+            ratio2, wgts2, g0, ant_to_SNAP_dict=self.ant_to_SNAP_dict)
+        for key in clean:
+            np.testing.assert_allclose(corrupted[key], clean[key], atol=1e-9)
+
+    def test_amplitude_exemption_property(self):
+        # the physics headline: per-SNAP suppression applied to inter-SNAP
+        # crosses only (autos untouched) must land entirely in the refined
+        # gains, not in the auto-derived amplitudes
+        suppression = {'A': 0.05, 'B': 0.0, 'C': 0.02}
+        sim = build_sim(nants=7, nfreqs=16, ntimes=1, seed=8, amp_ripple=0,
+                        phs_ripple=0, snap_suppression=suppression,
+                        ant_to_SNAP_dict=self.ant_to_SNAP_dict)
+        antpol = utils.split_pol(sim['pol'])[0]
+        amp_gains = skycal.calibrate_abs_amp_from_autos(sim['data'])
+        for ant in sim['ants']:
+            np.testing.assert_allclose(np.abs(amp_gains[(ant, antpol)]), 1.0,
+                                       atol=1e-10)
+        ratio, wgts = skycal.build_data_model_ratio(
+            sim['data'], sim['model'], dt=sim['dt'], df=sim['df'])
+        refined, _ = skycal.refine_gains(
+            ratio, wgts, amp_gains, ant_to_SNAP_dict=self.ant_to_SNAP_dict)
+        for ant in sim['ants']:
+            expected = 1 - suppression[self.ant_to_SNAP_dict[ant]]
+            np.testing.assert_allclose(np.abs(refined[(ant, antpol)]),
+                                       expected, atol=1e-8)
+
+
+class TestSkyCalibrate:
+    def test_end_to_end_recovery(self):
+        dlys_true = {ant: d for ant, d in enumerate(
+            [0.0, 20e-9, -30e-9, 45e-9, -35e-9, 10e-9, -10e-9])}
+        sim = build_sim(nants=7, nfreqs=128, ntimes=2, seed=9, dlys=dlys_true,
+                        amp_ripple=0.1, phs_ripple=0.05, noise=0.1)
+        gains, meta = skycal.sky_calibrate(
+            sim['data'], sim['model'], freqs=sim['freqs'], dt=sim['dt'],
+            df=sim['df'])
+        # calibrating the data with the returned gains should recover the
+        # model on all cross baselines (baseline products are invariant to
+        # the per-channel mean-phase gauge)
+        data = DataContainer({bl: np.array(sim['data'][bl])
+                              for bl in sim['data'] if bl[0] != bl[1]})
+        calibrate_in_place(data, gains)
+        for bl in data:
+            np.testing.assert_allclose(data[bl], sim['model'][bl],
+                                       rtol=2e-2, atol=0)
+        # amplitudes are recovered absolutely; phases up to the gauge
+        antpol = utils.split_pol(sim['pol'])[0]
+        for ant in sim['ants']:
+            np.testing.assert_allclose(
+                np.abs(gains[(ant, antpol)]),
+                np.abs(sim['true_gains'][(ant, antpol)]), rtol=2e-2)
+
+    def test_meta_completeness(self):
+        sim = build_sim(nants=5, nfreqs=32, ntimes=1, seed=10)
+        gains, meta = skycal.sky_calibrate(
+            sim['data'], sim['model'], freqs=sim['freqs'], dt=sim['dt'],
+            df=sim['df'])
+        for key in ['data_model_ratio', 'wgts', 'dlys', 'offsets',
+                    'abs_amp_gains', 'g0', 'refined_gains', 'iter',
+                    'conv_crit']:
+            assert key in meta
+        assert (0, sim['pol']) in meta['iter']
+        assert meta['conv_crit'][(0, sim['pol'])] < 1e-6
