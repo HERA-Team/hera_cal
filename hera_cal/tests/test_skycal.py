@@ -115,6 +115,16 @@ class TestBuildDataModelRatio:
     def setup_method(self):
         self.sim = build_sim(nants=5, nfreqs=32, ntimes=2, seed=1)
 
+    def test_missing_autos_raise(self):
+        # a clear error, rather than a KeyError deep inside noise.py
+        sim = self.sim
+        autos = DataContainer({bl: sim['data'][bl] for bl in sim['data']
+                               if bl[0] == bl[1] and bl[0] != 0})
+        with pytest.raises(ValueError, match='Autocorrelations'):
+            skycal.build_data_model_ratio(sim['data'], sim['model'],
+                                          autos=autos, dt=sim['dt'],
+                                          df=sim['df'])
+
     def test_perfect_data_gives_unity_ratio(self):
         # unity gains: data equals model on crosses
         sim = build_sim(nants=5, nfreqs=32, ntimes=2, seed=2, amp_ripple=0,
@@ -253,6 +263,15 @@ class TestRefineGainsCore:
                 + 1j * self.rng.normal(size=vis_ratio.shape)) / np.sqrt(2)
         wgts = self.rng.uniform(0.5, 2.0, size=vis_ratio.shape)
         return true_h, vis_ratio, wgts, ant_i, ant_j, nants
+
+    def test_zero_on_unflagged_cell_raises(self):
+        # bad data stored as 0 without flags must fail loudly: log-amplitude
+        # and unit-phasor initialization are both undefined at zero
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays()
+        vis_ratio[3, 2] = 0.0
+        with pytest.raises(ValueError, match='zero or non-finite'):
+            skycal._refine_gains_single_pol_time(vis_ratio, wgts, ant_i,
+                                                 ant_j, nants)
 
     def test_known_gain_recovery(self):
         true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays()
@@ -492,6 +511,17 @@ class TestRefineGains:
 
 
 class TestSkyCalibrate:
+    def test_unrefinable_antennas_raise(self):
+        # all antennas on one SNAP -> every baseline is intra-SNAP -> nothing
+        # to refine; must error rather than silently drop antennas at the
+        # final merge (whole antennas are only ever excluded by omission)
+        sim = build_sim(nants=5, nfreqs=32, ntimes=1, seed=11)
+        with pytest.raises(ValueError, match='refinement solve'):
+            skycal.sky_calibrate(
+                sim['data'], sim['model'], freqs=sim['freqs'],
+                dt=sim['dt'], df=sim['df'],
+                ant_to_SNAP_dict={ant: 'A' for ant in sim['ants']})
+
     def test_end_to_end_recovery(self):
         dlys_true = {ant: d for ant, d in enumerate(
             [0.0, 20e-9, -30e-9, 45e-9, -35e-9, 10e-9, -10e-9])}
