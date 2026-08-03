@@ -551,15 +551,18 @@ def _solve_phase_updates(phase_mats, chan_pos, ei, ej, round_wgts, resids,
 
 def _stationarity_residual(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
                            ant_j_idx):
-    '''Compute the convergence certificate: the MAXIMUM fixed-point residual
-    over all solved (antenna, channel) cells. At the exact weighted
+    '''Compute the convergence certificate: the per-channel MAXIMUM
+    fixed-point residual over all solved antennas. At the exact weighted
     least-squares optimum, every gain equals the weighted projection of the
     data onto the other antennas' gains,
     g_i = sum_j(w_ij * z_ij * g_j) / sum_j(w_ij * |g_j|^2) = U / D, so
     max |U/D - g| / |g| measures how far each cell is from stationarity,
-    independently of the solver's own update sizes. Using the max (never a
-    median or percentile) is deliberate: a median criterion can declare
-    victory while an entire contiguous band remains unconverged.'''
+    independently of the solver's own update sizes. Certifying on maxima
+    (never a median or percentile) is deliberate: a median criterion can
+    declare victory while an entire contiguous band remains unconverged.
+
+    Returns: (Nfreqs,) ndarray of the max residual over solved antennas in
+        each channel; np.nan for channels with no solved cells.'''
     wgtd_ratio = np.nan_to_num(vis_ratio) * ratio_wgts
     numerator = np.zeros(full_gains.shape, dtype=complex)
     denominator = np.zeros(full_gains.shape)
@@ -575,12 +578,16 @@ def _stationarity_residual(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
         resid = np.abs(numerator / np.maximum(denominator, 1e-30)
                        - full_gains) / np.abs(full_gains)
     solved_cells = np.isfinite(full_gains) & (denominator > 0)
-    return float(np.nanmax(resid[solved_cells]))
+    per_chan = np.full(full_gains.shape[1], np.nan)
+    solved_chans = solved_cells.any(axis=0)
+    per_chan[solved_chans] = np.where(solved_cells, resid,
+                                      -np.inf).max(axis=0)[solved_chans]
+    return per_chan
 
 
 def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
                                   nants, hess_cadence=1, refine_tol=1e-8,
-                                  refine_maxiter=50, sync_tol=1e-3,
+                                  refine_maxiter=100, sync_tol=1e-3,
                                   sync_maxiter=200, verbose=False):
     '''Solve for per-antenna, per-channel complex gains g such that
     vis_ratio ~ g_i * conj(g_j) on each baseline, for a single
@@ -645,8 +652,15 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             for vis_ratio; 0 excludes a cell
         ant_i_idx / ant_j_idx: int ndarrays of length Nbls indexing antennas
         nants: total number of antennas indexed
-        hess_cadence: rebuild the normal matrices every this many rounds (a
-            speed knob only; the converged solution is cadence-invariant)
+        hess_cadence: rebuild the normal matrices at most every this many
+            rounds; between rebuilds the cached matrices AND the weights
+            frozen into them are reused with fresh residuals (frozen-Hessian
+            Gauss-Newton). Reuse only begins once updates fall below ~3%
+            (steps against a stale Hessian can diverge far from the
+            optimum), and channels may only exit as converged on rounds with
+            a freshly rebuilt Hessian, so convergence is always judged
+            against the exact linearization. A speed knob only; the
+            converged solution is cadence-invariant.
         refine_tol: convergence threshold on the largest per-(antenna,
             channel) update
         refine_maxiter: maximum number of Gauss-Newton rounds
@@ -657,8 +671,11 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
 
     Returns:
         gains: complex ndarray (nants, Nfreqs); np.nan where unsolved
-        meta: dict with 'iter' (rounds used) and 'conv_crit' (max fixed-point
-            residual over all solved cells)
+        meta: dict of per-channel (Nfreqs,) arrays, following redcal's
+            solve_iteratively convention: 'iter' (int rounds each channel
+            used before its early exit; 0 where flagged) and 'conv_crit'
+            (max fixed-point residual over antennas in each channel;
+            np.nan where flagged)
 
     Raises:
         ValueError: if the flagging pattern is not uniform (see
@@ -694,7 +711,8 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
 
     gains = np.ones((nsel, nchans), dtype=complex)
     active_chans = np.ones(nchans, dtype=bool)   # channels still iterating
-    amp_mats = phase_mats = cached_chans = None
+    chan_iters = np.zeros(nfreqs, dtype=int)     # rounds each channel used
+    amp_mats = phase_mats = cached_chans = cached_wgts = None
     niter = 0
     while niter <= refine_maxiter and active_chans.any():
         # restrict the flattened entries to channels still iterating,
@@ -715,11 +733,20 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         gi, gj = gains[ei, echan], gains[ej, echan]
         with np.errstate(invalid='ignore', divide='ignore'):
             resid_ratio = entry_ratio[in_active] / (gi * np.conj(gj))
-        assert np.isfinite(resid_ratio).all(), \
-            'non-finite ratio under enforced flags'
+        if not np.isfinite(resid_ratio).all():
+            if niter == 0:
+                raise ValueError('Non-finite data/model ratio on unflagged '
+                                 'cells: the flags do not cover all bad '
+                                 'data.')
+            raise RuntimeError('Per-channel gain refinement diverged: '
+                               f'non-finite gains in round {niter}.')
 
         if niter == 0:
             # ---- initialization round ----
+            # (these raw-weight matrices are never reused: forcing
+            # rounds_since_rebuild to the cadence makes round 1 rebuild)
+            fresh_hessian = True
+            rounds_since_rebuild = hess_cadence
             round_wgts = wgts_here
             amp_mats, phase_mats = _build_normal_matrices(
                 nactive, nsel, chan_pos, ei, ej, round_wgts)
@@ -735,18 +762,40 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
                 sync_maxiter=sync_maxiter)
         else:
             # ---- Gauss-Newton round ----
-            # propagating the data weights through the division by the
-            # current gains multiplies each weight by (|g_i| |g_j|)^2
-            round_wgts = wgts_here * (np.abs(gi) * np.abs(gj))**2
-            if (niter - 1) % hess_cadence == 0:
+            # rebuild on the hess_cadence schedule, but NEVER reuse while
+            # updates are still large: far from the optimum the curvature
+            # and the (|g_i| |g_j|)^2 weight factors change substantially
+            # between rounds, and steps against a stale Hessian can
+            # overshoot and diverge. Updates below 0.03 in (log-amplitude,
+            # phase) units — gains within ~3% of their fixed point — mark
+            # the asymptotic regime where reuse is safe.
+            fresh_hessian = (rounds_since_rebuild >= hess_cadence
+                             or prev_max_update > 0.03)
+            if fresh_hessian:
+                # propagating the data weights through the division by the
+                # current gains multiplies each weight by (|g_i| |g_j|)^2
+                round_wgts = wgts_here * (np.abs(gi) * np.abs(gj))**2
                 amp_mats, phase_mats = _build_normal_matrices(
                     nactive, nsel, chan_pos, ei, ej, round_wgts)
                 cached_chans = active_idx
+                # freeze the per-entry weights alongside the matrices (on
+                # the full entry grid, so shrinking active sets can subset)
+                cached_wgts = np.zeros(len(entry_wgts))
+                cached_wgts[in_active] = round_wgts
                 amp_here, phase_here = amp_mats, phase_mats
+                rounds_since_rebuild = 1
             else:
-                # reuse cached matrices, selecting this round's channels
+                # reuse cached matrices, selecting this round's channels.
+                # The right-hand sides must be built with the SAME frozen
+                # weights as the cached matrices (frozen-Hessian Gauss-
+                # Newton, with only the residuals updated): mixing fresh
+                # weights with stale matrices solves an inconsistent system
+                # that can amplify updates and diverge as the gains drift
+                # from where the matrices were built
                 rows = np.searchsorted(cached_chans, active_idx)
                 amp_here, phase_here = amp_mats[rows], phase_mats[rows]
+                round_wgts = cached_wgts[in_active]
+                rounds_since_rebuild += 1
             # linearize: Im(resid_ratio) ~ phi_i - phi_j and
             # Re(resid_ratio) - 1 ~ eta_i + eta_j
             delta_phase = _solve_phase_updates(
@@ -765,11 +814,18 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         gains[:, active_idx] = gains[:, active_idx] \
             * np.exp(delta_logamp.T + 1j * delta_phase.T)
 
-        # channels whose largest update is below tolerance are converged
-        # and drop out of subsequent rounds
-        if niter > 0:
-            max_update = np.hypot(delta_logamp, delta_phase).max(axis=1)
-            active_chans[active_idx[max_update < refine_tol]] = False
+        # track the largest update: it gates Hessian reuse (above), and on
+        # rounds with a freshly rebuilt Hessian it retires converged
+        # channels. Reuse rounds may NOT retire channels, so convergence is
+        # always judged against the exact linearization rather than the
+        # frozen-weight one. Record the rounds each channel used (redcal's
+        # solve_iteratively likewise reports per-channel counts)
+        max_update = np.hypot(delta_logamp, delta_phase).max(axis=1)
+        prev_max_update = max_update.max()
+        if niter > 0 and fresh_hessian:
+            dropped = active_idx[max_update < refine_tol]
+            active_chans[dropped] = False
+            chan_iters[good_chan_idx[dropped]] = niter + 1
         niter += 1
     converged = not active_chans.any()
 
@@ -784,13 +840,13 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             f'Per-channel gain refinement did not converge: '
             f'{int(active_chans.sum())} channels remain above '
             f'refine_tol={refine_tol} after {refine_maxiter} rounds '
-            f'(max fixed-point residual {conv_crit:.2e}). Do not proceed '
-            'with unconverged gains.')
-    return full_gains, {'iter': niter, 'conv_crit': conv_crit}
+            f'(max fixed-point residual {np.nanmax(conv_crit):.2e}). '
+            'Do not proceed with unconverged gains.')
+    return full_gains, {'iter': chan_iters, 'conv_crit': conv_crit}
 
 
 def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
-                 hess_cadence=1, refine_tol=1e-8, refine_maxiter=50,
+                 hess_cadence=1, refine_tol=1e-8, refine_maxiter=100,
                  sync_tol=1e-3, sync_maxiter=200, verbose=False):
     '''Solve for per-antenna, per-channel refined gains on cross baselines,
     given starting gains g0. The data/model ratio divided by g0_i g0_j^* should
@@ -817,7 +873,8 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
         refined_gains: dict mapping (ant, antpol) to complex (Ntimes, Nfreqs)
             gain waterfalls; np.nan where unsolved
         meta: dict with 'iter' and 'conv_crit', each a dict keyed by
-            (time index, pol)
+            (time index, pol) of per-channel (Nfreqs,) arrays (see
+            _refine_gains_single_pol_time)
 
     Raises:
         ValueError: if ant_to_SNAP_dict is given but missing antennas, or if
@@ -872,8 +929,9 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                 hess_cadence=hess_cadence, refine_tol=refine_tol,
                 refine_maxiter=refine_maxiter, sync_tol=sync_tol,
                 sync_maxiter=sync_maxiter, verbose=verbose)
-            utils.echo(f't{tind} {pol}: {meta_here["iter"]} rounds, max '
-                       f'stationarity residual {meta_here["conv_crit"]:.2e}',
+            utils.echo(f't{tind} {pol}: {int(meta_here["iter"].max())} '
+                       'rounds, max stationarity residual '
+                       f'{np.nanmax(meta_here["conv_crit"]):.2e}',
                        verbose=verbose)
             for i, ant in enumerate(ants):
                 refined_gains[(ant, antpol)][tind] = gains_here[i]
@@ -890,7 +948,7 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
 def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
                   ant_flags=None, auto_flags=None, ant_to_SNAP_dict=None,
                   freqs=None, bls=None, dt=None, df=None, hess_cadence=1,
-                  refine_tol=1e-8, refine_maxiter=50, sync_tol=1e-3,
+                  refine_tol=1e-8, refine_maxiter=100, sync_tol=1e-3,
                   sync_maxiter=200, verbose=False):
     '''Run the full staged sky-model-based calibration: data/model ratio →
     firstcal delays and offsets → autocorrelation-based amplitudes → per-channel
@@ -927,7 +985,7 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
         meta: dict of stage products and diagnostics: 'data_model_ratio',
             'wgts', 'dlys', 'offsets', 'abs_amp_gains', 'g0', 'refined_gains',
             and the refinement's 'iter' and 'conv_crit' dicts keyed by
-            (time index, pol)
+            (time index, pol) of per-channel (Nfreqs,) arrays
     '''
     if freqs is None:
         freqs = data.freqs
