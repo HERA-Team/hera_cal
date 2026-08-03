@@ -86,7 +86,7 @@ class TestSolvePerAntennaWeightedLeastSquares:
     def setup_method(self):
         self.rng = np.random.default_rng(21)
 
-    def test_recovery_and_gauge(self):
+    def test_recovery_and_degeneracy_fixing(self):
         nants = 6
         x = self.rng.normal(size=nants)
         x -= x.mean()
@@ -240,7 +240,7 @@ class TestRefineGainsCore:
         true_h = ((1.0 + amp_scale * self.rng.uniform(-1, 1, (nants, nfreqs)))
                   * np.exp(1j * phase_scale
                            * self.rng.uniform(-1, 1, (nants, nfreqs))))
-        # gauge the truth: mean phase 0 per channel
+        # remove the truth's degeneracy: mean phase 0 per channel
         true_h *= np.exp(-1j * np.angle(true_h /
                                         np.abs(true_h)).mean(axis=0))[None, :]
         bls = [(i, j) for i in range(nants) for j in range(i + 1, nants)]
@@ -267,7 +267,7 @@ class TestRefineGainsCore:
             phase_scale=np.pi, amp_scale=0.1)
         gains, meta = skycal._refine_gains_single_pol_time(
             vis_ratio, wgts, ant_i, ant_j, nants)
-        # compare baseline-level products (immune to any residual gauge)
+        # compare baseline-level products (immune to the phase degeneracy)
         np.testing.assert_allclose(gains[ant_i] * np.conj(gains[ant_j]),
                                    vis_ratio, atol=1e-7)
 
@@ -278,7 +278,7 @@ class TestRefineGainsCore:
             vis_ratio, wgts, ant_i, ant_j, nants)
 
         # independent solve: scipy least_squares per channel with ant 0's
-        # phase pinned, then re-gauged to mean phase = 0
+        # phase pinned, then degeneracy re-fixed to mean phase = 0
         for chan in range(3):
             z, w = vis_ratio[:, chan], wgts[:, chan]
 
@@ -310,9 +310,9 @@ class TestRefineGainsCore:
         solved_ants[2] = False
         good = np.ones(gains.shape[1], dtype=bool)
         good[4] = False
-        # remaining antennas/channels still recovered (gauge over the
-        # surviving antennas differs from the truth's, so compare
-        # baseline-level products, which are gauge-invariant)
+        # remaining antennas/channels still recovered (the degeneracy is
+        # fixed over the surviving antennas, so it differs from the truth's;
+        # compare baseline-level products, which are degeneracy-invariant)
         for i in np.where(solved_ants)[0]:
             for j in np.where(solved_ants)[0]:
                 np.testing.assert_allclose(
@@ -345,7 +345,7 @@ class TestRefineGainsCore:
             skycal._refine_gains_single_pol_time(
                 vis_ratio, wgts, ant_i, ant_j, nants, refine_maxiter=0)
 
-    def test_mean_phase_gauge(self):
+    def test_mean_phase_degeneracy_fixing(self):
         true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays(
             noise=0.02)
         gains, meta = skycal._refine_gains_single_pol_time(
@@ -489,14 +489,14 @@ class TestSkyCalibrate:
             df=sim['df'])
         # calibrating the data with the returned gains should recover the
         # model on all cross baselines (baseline products are invariant to
-        # the per-channel mean-phase gauge)
+        # how the per-channel mean-phase degeneracy is fixed)
         data = DataContainer({bl: np.array(sim['data'][bl])
                               for bl in sim['data'] if bl[0] != bl[1]})
         calibrate_in_place(data, gains)
         for bl in data:
             np.testing.assert_allclose(data[bl], sim['model'][bl],
                                        rtol=2e-2, atol=0)
-        # amplitudes are recovered absolutely; phases up to the gauge
+        # amplitudes are recovered absolutely; phases up to the degeneracy
         antpol = utils.split_pol(sim['pol'])[0]
         for ant in sim['ants']:
             np.testing.assert_allclose(

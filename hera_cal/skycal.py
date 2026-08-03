@@ -181,7 +181,8 @@ def _solve_per_antenna_weighted_least_squares(vals, wgts, ant_i_idx,
     x = np.full(nants, np.nan)
     if len(ls_data) > 0:
         # pinv gives the minimum-norm solution of the (singular) difference
-        # system; the explicit mean subtraction then fixes the mean=0 gauge
+        # system; the explicit mean subtraction then removes the degeneracy
+        # by fixing the mean to 0
         sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts).solve(mode='pinv')
         for i in range(nants):
             if f'x_{i}' in sol:
@@ -238,8 +239,9 @@ def model_based_firstcal(data_model_ratio, wgts, freqs, verbose=False):
                                              df)[0].ravel()
         bl_dlys = bl_dlys.reshape(nbls, ntimes)
 
-        # per-antenna delays (mean-delay gauge = 0), then per-antenna offsets
-        # from delay-corrected mean phases, independently per integration
+        # per-antenna delays (degeneracy fixed: mean delay = 0), then
+        # per-antenna offsets from delay-corrected mean phases,
+        # independently per integration
         ant_dlys = np.full((ntimes, nants), np.nan)
         ant_offsets = np.full((ntimes, nants), np.nan)
         for tind in range(ntimes):
@@ -410,7 +412,8 @@ def _build_normal_matrices(nchan_active, nsel, chan_pos, ei, ej, round_wgts):
     from the conjugation of antenna j's gain — giving graph-Laplacian
     matrices whose one exact null direction (a constant added to every
     phase) is removed by pinning the first participating antenna to 0; the
-    caller re-gauges the resulting update to mean phase = 0 afterward.
+    caller then removes the degeneracy of the resulting update by setting
+    its mean phase to 0.
 
     Arguments:
         nchan_active: number of channels in the batch
@@ -528,7 +531,8 @@ def _solve_phase_updates(phase_mats, chan_pos, ei, ej, round_wgts, resids,
     resid ~ phi_i - phi_j (the sign flip comes from the conjugation of
     antenna j's gain). The systems are the reduced ones with the first
     participating antenna pinned to 0 (see _build_normal_matrices); the
-    caller re-gauges the full update to mean phase = 0.
+    caller removes the degeneracy of the full update by setting its mean
+    phase to 0.
 
     Returns: (nchan_active, nsel) ndarray of phase updates phi, with the
         pinned antenna's entry equal to 0.'''
@@ -625,10 +629,10 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     whole antennas flagged plus channels flagged for all baselines at once —
     which is validated and reduced to a single shared flag waterfall
     (_shared_channel_flags); this makes every system exactly nonsingular
-    with no regularization. The phase gauge is fixed by pinning one antenna
-    inside the solves and then re-gauging each update to mean phase = 0 over
-    participating antennas — the same convention as
-    redcal.remove_degen_gains. Convergence is certified by the maximum
+    with no regularization. The overall phase degeneracy is fixed by pinning
+    one antenna inside the solves and then removing the degeneracy from each
+    update by setting its mean phase to 0 over participating antennas — the
+    same convention as redcal.remove_degen_gains. Convergence is certified by the maximum
     fixed-point residual over ALL solved cells (_stationarity_residual) and
     enforced with a RuntimeError.
 
@@ -753,9 +757,10 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             amp_here, chan_pos, ei, ej, round_wgts, amp_resids, nactive,
             nsel)
 
-        # re-gauge the phase update to mean 0 over participating antennas
-        # (same convention as redcal.remove_degen_gains), then apply both
-        # updates multiplicatively
+        # remove the phase degeneracy by setting the update's mean over
+        # participating antennas to 0 (same convention as
+        # redcal.remove_degen_gains), then apply both updates
+        # multiplicatively
         delta_phase -= delta_phase.mean(axis=1, keepdims=True)
         gains[:, active_idx] = gains[:, active_idx] \
             * np.exp(delta_logamp.T + 1j * delta_phase.T)
