@@ -586,7 +586,7 @@ def _stationarity_residual(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
 
 
 def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
-                                  nants, hess_cadence=1, refine_tol=1e-8,
+                                  nants, refine_tol=1e-8,
                                   refine_maxiter=100, sync_tol=1e-3,
                                   sync_maxiter=200, verbose=False):
     '''Solve for per-antenna, per-channel complex gains g such that
@@ -652,15 +652,6 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             for vis_ratio; 0 excludes a cell
         ant_i_idx / ant_j_idx: int ndarrays of length Nbls indexing antennas
         nants: total number of antennas indexed
-        hess_cadence: rebuild the normal matrices at most every this many
-            rounds; between rebuilds the cached matrices AND the weights
-            frozen into them are reused with fresh residuals (frozen-Hessian
-            Gauss-Newton). Reuse only begins once updates fall below ~3%
-            (steps against a stale Hessian can diverge far from the
-            optimum), and channels may only exit as converged on rounds with
-            a freshly rebuilt Hessian, so convergence is always judged
-            against the exact linearization. A speed knob only; the
-            converged solution is cadence-invariant.
         refine_tol: convergence threshold on the largest per-(antenna,
             channel) update
         refine_maxiter: maximum number of Gauss-Newton rounds
@@ -712,7 +703,6 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     gains = np.ones((nsel, nchans), dtype=complex)
     active_chans = np.ones(nchans, dtype=bool)   # channels still iterating
     chan_iters = np.zeros(nfreqs, dtype=int)     # rounds each channel used
-    amp_mats = phase_mats = cached_chans = cached_wgts = None
     niter = 0
     while niter <= refine_maxiter and active_chans.any():
         # restrict the flattened entries to channels still iterating,
@@ -743,15 +733,9 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
 
         if niter == 0:
             # ---- initialization round ----
-            # (these raw-weight matrices are never reused: forcing
-            # rounds_since_rebuild to the cadence makes round 1 rebuild)
-            fresh_hessian = True
-            rounds_since_rebuild = hess_cadence
             round_wgts = wgts_here
             amp_mats, phase_mats = _build_normal_matrices(
                 nactive, nsel, chan_pos, ei, ej, round_wgts)
-            cached_chans = active_idx
-            amp_here, phase_here = amp_mats, phase_mats
             # log-amplitudes: log|resid_ratio| = eta_i + eta_j is exactly
             # linear in the log-amplitudes — no approximation needed
             amp_resids = np.log(np.abs(resid_ratio))
@@ -762,48 +746,19 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
                 sync_maxiter=sync_maxiter)
         else:
             # ---- Gauss-Newton round ----
-            # rebuild on the hess_cadence schedule, but NEVER reuse while
-            # updates are still large: far from the optimum the curvature
-            # and the (|g_i| |g_j|)^2 weight factors change substantially
-            # between rounds, and steps against a stale Hessian can
-            # overshoot and diverge. Updates below 0.03 in (log-amplitude,
-            # phase) units — gains within ~3% of their fixed point — mark
-            # the asymptotic regime where reuse is safe.
-            fresh_hessian = (rounds_since_rebuild >= hess_cadence
-                             or prev_max_update > 0.03)
-            if fresh_hessian:
-                # propagating the data weights through the division by the
-                # current gains multiplies each weight by (|g_i| |g_j|)^2
-                round_wgts = wgts_here * (np.abs(gi) * np.abs(gj))**2
-                amp_mats, phase_mats = _build_normal_matrices(
-                    nactive, nsel, chan_pos, ei, ej, round_wgts)
-                cached_chans = active_idx
-                # freeze the per-entry weights alongside the matrices (on
-                # the full entry grid, so shrinking active sets can subset)
-                cached_wgts = np.zeros(len(entry_wgts))
-                cached_wgts[in_active] = round_wgts
-                amp_here, phase_here = amp_mats, phase_mats
-                rounds_since_rebuild = 1
-            else:
-                # reuse cached matrices, selecting this round's channels.
-                # The right-hand sides must be built with the SAME frozen
-                # weights as the cached matrices (frozen-Hessian Gauss-
-                # Newton, with only the residuals updated): mixing fresh
-                # weights with stale matrices solves an inconsistent system
-                # that can amplify updates and diverge as the gains drift
-                # from where the matrices were built
-                rows = np.searchsorted(cached_chans, active_idx)
-                amp_here, phase_here = amp_mats[rows], phase_mats[rows]
-                round_wgts = cached_wgts[in_active]
-                rounds_since_rebuild += 1
+            # propagating the data weights through the division by the
+            # current gains multiplies each weight by (|g_i| |g_j|)^2
+            round_wgts = wgts_here * (np.abs(gi) * np.abs(gj))**2
+            amp_mats, phase_mats = _build_normal_matrices(
+                nactive, nsel, chan_pos, ei, ej, round_wgts)
             # linearize: Im(resid_ratio) ~ phi_i - phi_j and
             # Re(resid_ratio) - 1 ~ eta_i + eta_j
             delta_phase = _solve_phase_updates(
-                phase_here, chan_pos, ei, ej, round_wgts,
+                phase_mats, chan_pos, ei, ej, round_wgts,
                 np.imag(resid_ratio), nactive, nsel)
             amp_resids = np.real(resid_ratio) - 1.0
         delta_logamp = _solve_logamp_updates(
-            amp_here, chan_pos, ei, ej, round_wgts, amp_resids, nactive,
+            amp_mats, chan_pos, ei, ej, round_wgts, amp_resids, nactive,
             nsel)
 
         # remove the phase degeneracy by setting the update's mean over
@@ -814,15 +769,11 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         gains[:, active_idx] = gains[:, active_idx] \
             * np.exp(delta_logamp.T + 1j * delta_phase.T)
 
-        # track the largest update: it gates Hessian reuse (above), and on
-        # rounds with a freshly rebuilt Hessian it retires converged
-        # channels. Reuse rounds may NOT retire channels, so convergence is
-        # always judged against the exact linearization rather than the
-        # frozen-weight one. Record the rounds each channel used (redcal's
-        # solve_iteratively likewise reports per-channel counts)
-        max_update = np.hypot(delta_logamp, delta_phase).max(axis=1)
-        prev_max_update = max_update.max()
-        if niter > 0 and fresh_hessian:
+        # channels whose largest update is below tolerance are converged
+        # and drop out of subsequent rounds; record the rounds each used
+        # (redcal's solve_iteratively likewise reports per-channel counts)
+        if niter > 0:
+            max_update = np.hypot(delta_logamp, delta_phase).max(axis=1)
             dropped = active_idx[max_update < refine_tol]
             active_chans[dropped] = False
             chan_iters[good_chan_idx[dropped]] = niter + 1
@@ -846,7 +797,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
 
 
 def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
-                 hess_cadence=1, refine_tol=1e-8, refine_maxiter=100,
+                 refine_tol=1e-8, refine_maxiter=100,
                  sync_tol=1e-3, sync_maxiter=200, verbose=False):
     '''Solve for per-antenna, per-channel refined gains on cross baselines,
     given starting gains g0. The data/model ratio divided by g0_i g0_j^* should
@@ -865,7 +816,7 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
             (any hashable). If given, EVERY antenna appearing in the solve must
             be present (raises ValueError otherwise); if None, all cross
             baselines participate.
-        hess_cadence, refine_tol, refine_maxiter, sync_tol, sync_maxiter:
+        refine_tol, refine_maxiter, sync_tol, sync_maxiter:
             see _refine_gains_single_pol_time
         verbose: print statements if True
 
@@ -926,7 +877,7 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                                   wgt_arr[:, tind] * np.abs(gain_ij)**2, 0)
             gains_here, meta_here = _refine_gains_single_pol_time(
                 vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx, nants,
-                hess_cadence=hess_cadence, refine_tol=refine_tol,
+                refine_tol=refine_tol,
                 refine_maxiter=refine_maxiter, sync_tol=sync_tol,
                 sync_maxiter=sync_maxiter, verbose=verbose)
             utils.echo(f't{tind} {pol}: {int(meta_here["iter"].max())} '
@@ -947,7 +898,7 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
 
 def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
                   ant_flags=None, auto_flags=None, ant_to_SNAP_dict=None,
-                  freqs=None, bls=None, dt=None, df=None, hess_cadence=1,
+                  freqs=None, bls=None, dt=None, df=None,
                   refine_tol=1e-8, refine_maxiter=100, sync_tol=1e-3,
                   sync_maxiter=200, verbose=False):
     '''Run the full staged sky-model-based calibration: data/model ratio →
@@ -975,7 +926,7 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
         bls: optional list of baselines to calibrate with
         dt: integration time in seconds (default: inferred from autos)
         df: channel width in Hz (default: inferred from autos)
-        hess_cadence, refine_tol, refine_maxiter, sync_tol, sync_maxiter:
+        refine_tol, refine_maxiter, sync_tol, sync_maxiter:
             see _refine_gains_single_pol_time
         verbose: print statements if True
 
@@ -1013,7 +964,7 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
                verbose=verbose)
     refined_gains, refine_meta = refine_gains(
         data_model_ratio, wgts, g0, ant_to_SNAP_dict=ant_to_SNAP_dict,
-        hess_cadence=hess_cadence, refine_tol=refine_tol,
+        refine_tol=refine_tol,
         refine_maxiter=refine_maxiter, sync_tol=sync_tol,
         sync_maxiter=sync_maxiter, verbose=verbose)
 
