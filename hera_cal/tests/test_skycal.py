@@ -259,7 +259,7 @@ class TestRefineGainsCore:
         gains, meta = skycal._refine_gains_single_pol_time(
             vis_ratio, wgts, ant_i, ant_j, nants)
         np.testing.assert_allclose(gains, true_h, atol=1e-7)
-        assert meta['conv_crit'] < 1e-7
+        assert np.nanmax(meta['conv_crit']) < 1e-7
 
     def test_wrap_immunity(self):
         # phases uniform on (-pi, pi]: a linearized phase solve would fail
@@ -416,6 +416,46 @@ class TestRefineGainsCore:
             vis_ratio, wgts, ant_i, ant_j, nants, hess_cadence=3)
         np.testing.assert_allclose(gains1, gains3, atol=1e-7)
 
+        # high amplitude dynamic range makes the (|g_i| |g_j|)^2 weight
+        # factor drift strongly between Hessian rebuilds — reuse must stay
+        # stable and still land on the cadence=1 solution
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays(
+            amp_scale=0.9, phase_scale=np.pi, noise=0.05)
+        gains1, _ = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants, hess_cadence=1)
+        gains4, _ = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants, hess_cadence=4)
+        np.testing.assert_allclose(gains1, gains4, atol=1e-7)
+
+    def test_hess_cadence_regression_wide_weights(self):
+        # regression test (2026-08-03, first seen on real data): with
+        # weights spanning decades and gains far from unity, hess_cadence>1
+        # used to mix freshly computed weights into the right-hand sides
+        # against stale cached normal matrices — an inconsistent system
+        # whose steps amplified until the gains overflowed to non-finite.
+        # This seeded draw diverges under that scheme, and also under
+        # frozen weights WITHOUT the no-reuse-until-updates-are-small
+        # guard, so it protects both halves of the fix.
+        rng = np.random.default_rng(5)
+        nants, nfreqs = 20, 16
+        true_g = ((1.0 + 0.9 * rng.uniform(-1, 1, (nants, nfreqs)))
+                  * np.exp(1j * np.pi
+                           * rng.uniform(-1, 1, (nants, nfreqs))))
+        bls = [(i, j) for i in range(nants) for j in range(i + 1, nants)]
+        ant_i = np.array([bl[0] for bl in bls])
+        ant_j = np.array([bl[1] for bl in bls])
+        vis_ratio = true_g[ant_i] * np.conj(true_g[ant_j])
+        vis_ratio = vis_ratio + 0.3 * (
+            rng.normal(size=vis_ratio.shape)
+            + 1j * rng.normal(size=vis_ratio.shape)) / np.sqrt(2)
+        wgts = 10.0 ** rng.uniform(0, 3, size=vis_ratio.shape)
+        gains1, _ = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants, hess_cadence=1)
+        gains2, _ = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants, hess_cadence=2)
+        assert np.isfinite(gains2).all()
+        np.testing.assert_allclose(gains1, gains2, atol=1e-7)
+
 
 class TestRefineGains:
     def setup_method(self):
@@ -513,4 +553,4 @@ class TestSkyCalibrate:
                     'conv_crit']:
             assert key in meta
         assert (0, sim['pol']) in meta['iter']
-        assert meta['conv_crit'][(0, sim['pol'])] < 1e-6
+        assert np.nanmax(meta['conv_crit'][(0, sim['pol'])]) < 1e-6
