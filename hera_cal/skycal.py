@@ -118,6 +118,14 @@ def build_data_model_ratio(data, model, autos=None, data_flags=None,
         autos = data
     if bls is None:
         bls = [bl for bl in data if bl[0] != bl[1] and bl in model]
+    # fail early and legibly if any noise-weight autocorrelation is missing
+    # (otherwise this surfaces as an opaque KeyError inside noise.py)
+    missing_autos = sorted({utils.join_bl(ant, ant) for bl in bls
+                            for ant in utils.split_bl(bl)
+                            if utils.join_bl(ant, ant) not in autos})
+    if len(missing_autos) > 0:
+        raise ValueError('Autocorrelations needed for noise weights are '
+                         f'missing from autos: {missing_autos}.')
 
     ratio_here, wgts_here = {}, {}
     for bl in bls:
@@ -670,7 +678,9 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
 
     Raises:
         ValueError: if the flagging pattern is not uniform (see
-            _shared_channel_flags)
+            _shared_channel_flags), or if any unflagged cell has zero or
+            non-finite data/model ratio (flags or zero weights must cover
+            all bad data)
         RuntimeError: if any channel has not converged after refine_maxiter
             rounds. Do not proceed with unconverged gains: partially
             converged channels retain memory of the initialization and can
@@ -700,6 +710,16 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     entry_wgts = ratio_wgts[:, good_chan_idx][bl_inds, chan_inds]
     entry_ratio = vis_ratio[:, good_chan_idx][bl_inds, chan_inds]
 
+    # exact zeros are as fatal as NaNs here (log-amplitudes and unit phasors
+    # are both undefined) and typically mean bad data stored as 0 without
+    # accompanying flags, so fail loudly rather than diverge confusingly
+    bad_entries = ~np.isfinite(entry_ratio) | (entry_ratio == 0)
+    if bad_entries.any():
+        raise ValueError(
+            f'{int(bad_entries.sum())} unflagged (baseline, channel) cells '
+            'have zero or non-finite data/model ratio. Flags or zero '
+            'weights must cover all bad data.')
+
     gains = np.ones((nsel, nchans), dtype=complex)
     active_chans = np.ones(nchans, dtype=bool)   # channels still iterating
     chan_iters = np.zeros(nfreqs, dtype=int)     # rounds each channel used
@@ -724,10 +744,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         with np.errstate(invalid='ignore', divide='ignore'):
             resid_ratio = entry_ratio[in_active] / (gi * np.conj(gj))
         if not np.isfinite(resid_ratio).all():
-            if niter == 0:
-                raise ValueError('Non-finite data/model ratio on unflagged '
-                                 'cells: the flags do not cover all bad '
-                                 'data.')
+            # inputs were validated above, so this can only be divergence
             raise RuntimeError('Per-channel gain refinement diverged: '
                                f'non-finite gains in round {niter}.')
 
@@ -813,9 +830,10 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
         g0: dict mapping (ant, antpol) to starting gain waterfalls (e.g. the
             product of firstcal_gains and calibrate_abs_amp_from_autos gains)
         ant_to_SNAP_dict: optional dict mapping antenna numbers to SNAP IDs
-            (any hashable). If given, EVERY antenna appearing in the solve must
-            be present (raises ValueError otherwise); if None, all cross
-            baselines participate.
+            (any hashable). If given, EVERY antenna appearing in any cross
+            baseline of data_model_ratio must be present, whether or not it
+            ends up in the solve (raises ValueError otherwise); if None, all
+            cross baselines participate.
         refine_tol, refine_maxiter, sync_tol, sync_maxiter:
             see _refine_gains_single_pol_time
         verbose: print statements if True
@@ -828,8 +846,9 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
             _refine_gains_single_pol_time)
 
     Raises:
-        ValueError: if ant_to_SNAP_dict is given but missing antennas, or if
-            the flagging pattern is not uniform (see _shared_channel_flags)
+        ValueError: if ant_to_SNAP_dict is given but missing antennas, if
+            the flagging pattern is not uniform (see _shared_channel_flags),
+            or if any unflagged cell has zero or non-finite data/model ratio
         RuntimeError: if the solve fails to converge for any (time, pol)
     '''
     bls = [bl for bl in data_model_ratio if bl[0] != bl[1]]
@@ -968,6 +987,16 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
         refine_maxiter=refine_maxiter, sync_tol=sync_tol,
         sync_maxiter=sync_maxiter, verbose=verbose)
 
+    # every antenna with starting gains must come through refinement — a gap
+    # would otherwise be silently dropped by the key intersection in
+    # merge_gains. Whole antennas should only ever be excluded by omission
+    # from bls, so a gap here is an error, not a fallback.
+    unrefined = sorted(set(g0) - set(refined_gains))
+    if len(unrefined) > 0:
+        raise ValueError('No baselines in the refinement solve for '
+                         f'{unrefined} (e.g. all their partners are on the '
+                         'same SNAP). Exclude these antennas from bls '
+                         'instead.')
     gains = merge_gains([g0, refined_gains])
     meta = {'data_model_ratio': data_model_ratio, 'wgts': wgts, 'dlys': dlys,
             'offsets': offsets, 'abs_amp_gains': abs_amp_gains, 'g0': g0,
