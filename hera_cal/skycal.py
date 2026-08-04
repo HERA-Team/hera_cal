@@ -1090,3 +1090,76 @@ def _project_out_smooth(vals, wgts, band_slices, dpss_bases):
         coeffs, *_ = np.linalg.lstsq(gram, proj, rcond=None)
         resid[band] = vals2[band] - basis @ coeffs
     return resid.reshape(vals.shape)
+
+
+def _mcp_penalized_nnls(normal_mat, rhs, zero_below, unbiased_above,
+                        mask=None, start=None, tol=1e-10, maxiter=20000):
+    '''Penalized nonnegative least squares solved by coordinate descent.
+
+    Nonnegative least squares ("NNLS") is least squares with every fitted
+    coefficient constrained to be >= 0
+    (https://en.wikipedia.org/wiki/Non-negative_least_squares) —
+    appropriate here because packet loss can only suppress gains. It is
+    solved by cyclic coordinate descent: each coordinate in turn gets its
+    closed-form single-coordinate optimum with all others held fixed,
+    repeated until no coordinate moves.
+
+    On top of the nonnegativity, each coordinate's update is mapped through
+    a FIRM THRESHOLD: set to 0 below zero_below[b], linearly and partially
+    shrunk between zero_below[b] and unbiased_above[b], and left exactly
+    unpenalized above unbiased_above[b]. This is the coordinate-wise form
+    of the minimax concave penalty ("MCP"; Zhang 2010, Annals of
+    Statistics 38, 894, https://doi.org/10.1214/09-AOS729). Compared to
+    the more familiar soft threshold (LASSO), which subtracts the full
+    threshold from EVERY surviving coefficient and so biases large ones
+    low, the firm threshold's penalty flattens out: coefficients well
+    above the noise are recovered without shrinkage ("nearly unbiased"
+    sparse estimation), while coefficients without significant evidence
+    are still set exactly to 0. With zero_below = 0 and
+    unbiased_above = inf this reduces to plain NNLS restricted to the
+    coordinates in mask.
+
+    Sign convention: the staircase enters the spectral model as -p (a
+    suppression), so the coordinate update carries a leading minus; see
+    estimate_SNAP_decoherence.
+
+    Arguments:
+        normal_mat: (Nblocks, Nblocks) normal matrix of the block system
+        rhs: (Nblocks,) right-hand side
+        zero_below: (Nblocks,) firm-threshold lower corners (>= 0)
+        unbiased_above: (Nblocks,) upper corners; np.inf disables shrinkage
+        mask: optional boolean array restricting which coordinates update
+        start: optional starting point (updated coordinates only)
+        tol: convergence threshold on the largest coordinate change
+        maxiter: iteration cap
+
+    Returns: (Nblocks,) nonnegative solution.
+
+    Raises: RuntimeError if coordinate descent does not converge.'''
+    fit = np.zeros(len(rhs)) if start is None else start.copy()
+    updatable = np.diag(normal_mat) > 0
+    if mask is not None:
+        updatable &= mask
+    upd_idx = np.where(updatable)[0]
+    for _ in range(maxiter):
+        dmax = 0.0
+        for b in upd_idx:
+            diag_b = normal_mat[b, b]
+            # unconstrained single-coordinate optimum given all others
+            pu = -(rhs[b] + normal_mat[b] @ fit - diag_b * fit[b]) / diag_b
+            if pu <= zero_below[b]:
+                new = 0.0
+            elif np.isinf(unbiased_above[b]):
+                new = pu - zero_below[b]
+            elif (unbiased_above[b] <= zero_below[b]
+                    or pu >= unbiased_above[b]):
+                new = pu
+            else:
+                new = ((pu - zero_below[b]) * unbiased_above[b]
+                       / (unbiased_above[b] - zero_below[b]))
+            dmax = max(dmax, abs(new - fit[b]))
+            fit[b] = new
+        if dmax < tol:
+            return fit
+    raise RuntimeError('MCP coordinate descent did not converge in '
+                       f'{maxiter} iterations (last max change {dmax:.2e}).')
