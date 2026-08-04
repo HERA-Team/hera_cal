@@ -173,7 +173,7 @@ def build_data_model_ratio(data, model, autos=None, data_flags=None,
 
 
 def _solve_per_antenna_weighted_least_squares(vals, wgts, ant_i_idx,
-                                              ant_j_idx, nants):
+                                              ant_j_idx, nants, mode='pinv'):
     '''Weighted least-squares solve of per-baseline differences for per-antenna
     values, i.e. vals[bl] ~ x[i] - x[j], with the mean over solved antennas
     fixed to 0 (an overall offset is unobservable in differences).
@@ -183,6 +183,8 @@ def _solve_per_antenna_weighted_least_squares(vals, wgts, ant_i_idx,
         wgts: ndarray of per-baseline weights (non-positive weights are ignored)
         ant_i_idx / ant_j_idx: int ndarrays indexing each baseline's antennas
         nants: total number of antennas indexed
+        mode: linsolve.LinearSolver solve mode (default 'pinv', which gives
+            the minimum-norm solution of the singular difference system)
 
     Returns:
         x: ndarray of length nants with per-antenna solutions; antennas with no
@@ -203,10 +205,9 @@ def _solve_per_antenna_weighted_least_squares(vals, wgts, ant_i_idx,
             ls_wgts[eqn] = wgts[bi]
     x = np.full(nants, np.nan)
     if len(ls_data) > 0:
-        # pinv gives the minimum-norm solution of the (singular) difference
-        # system; the explicit mean subtraction then removes the degeneracy
-        # by fixing the mean to 0
-        sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts).solve(mode='pinv')
+        # the explicit mean subtraction after the solve removes the
+        # degeneracy by fixing the mean to 0
+        sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts).solve(mode=mode)
         for i in range(nants):
             if f'x_{i}' in sol:
                 x[i] = float(sol[f'x_{i}'])
@@ -215,7 +216,8 @@ def _solve_per_antenna_weighted_least_squares(vals, wgts, ant_i_idx,
     return x
 
 
-def model_based_firstcal(data_model_ratio, wgts, freqs, verbose=False):
+def model_based_firstcal(data_model_ratio, wgts, freqs, mode='pinv',
+                         verbose=False):
     '''Solve for per-antenna delays and phase offsets from the phases of the
     data/model ratio (phases only; amplitudes are untouched), independently
     for each integration. Per baseline and integration, the weighted FFT of
@@ -228,6 +230,8 @@ def model_based_firstcal(data_model_ratio, wgts, freqs, verbose=False):
         data_model_ratio: DataContainer from build_data_model_ratio
         wgts: DataContainer of weights from build_data_model_ratio
         freqs: ndarray of frequencies in Hz
+        mode: linsolve.LinearSolver solve mode for the per-antenna solves
+            (default 'pinv'; see _solve_per_antenna_weighted_least_squares)
         verbose: print statements if True
 
     Returns:
@@ -270,7 +274,7 @@ def model_based_firstcal(data_model_ratio, wgts, freqs, verbose=False):
         for tind in range(ntimes):
             ant_dlys[tind] = _solve_per_antenna_weighted_least_squares(
                 bl_dlys[:, tind], solve_wgts[:, tind], ant_i_idx, ant_j_idx,
-                nants)
+                nants, mode=mode)
             with np.errstate(invalid='ignore'):
                 dly_phasor = np.exp(
                     -2j * np.pi * freqs[None, :]
@@ -280,7 +284,7 @@ def model_based_firstcal(data_model_ratio, wgts, freqs, verbose=False):
                 (wgtd_ratio[:, tind] * dly_phasor).sum(axis=1))
             ant_offsets[tind] = _solve_per_antenna_weighted_least_squares(
                 resid_phases, solve_wgts[:, tind], ant_i_idx, ant_j_idx,
-                nants)
+                nants, mode=mode)
 
         n_unsolved = int(np.sum(~np.isfinite(ant_dlys).any(axis=0)))
         if n_unsolved > 0:
@@ -572,17 +576,27 @@ def _solve_phase_updates(phase_mats, chan_pos, ei, ej, round_wgts, resids,
     return delta_phase
 
 
-def _stationarity_residual(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
-                           ant_j_idx):
-    '''Compute the convergence certificate: the per-channel MAXIMUM
-    fixed-point residual over all solved antennas. At the exact weighted
-    least-squares optimum, every gain equals the weighted projection of the
-    data onto the other antennas' gains,
-    g_i = sum_j(w_ij * z_ij * g_j) / sum_j(w_ij * |g_j|^2) = U / D, so
-    max |U/D - g| / |g| measures how far each cell is from stationarity,
-    independently of the solver's own update sizes. Certifying on maxima
+def _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
+                            ant_j_idx):
+    '''Compute the convergence criterion: the per-channel MAXIMUM of the
+    relative gradient of chi^2 over all solved antennas. At the exact
+    weighted least-squares optimum the gradient of chi^2 with respect to
+    every gain vanishes — equivalently, every gain equals the weighted
+    projection of the data onto the other antennas' gains,
+    g_i = sum_j(w_ij * z_ij * g_j) / sum_j(w_ij * |g_j|^2) = U / D — so
+    max |U/D - g| / |g|, the chi^2 gradient normalized by the local
+    curvature D and gain scale, measures how far each cell is from the
+    optimum, independently of the solver's own update sizes. Taking maxima
     (never a median or percentile) is deliberate: a median criterion can
     declare victory while an entire contiguous band remains unconverged.
+
+    NOTE: this deliberately differs from redcal's conv_crit, which is the
+    relative step between iterations. A step-size rule shows that the
+    solver stopped moving (true distance ~ step / (1 - contraction rate)),
+    not that the solution is near the optimum; the chi^2 gradient measures
+    distance from the optimum directly and works for gains from any
+    solver. The 'iter'/'conv_crit' meta keys are shared with redcal, but
+    conv_crit's semantics differ as described here.
 
     Returns: (Nfreqs,) ndarray of the max residual over solved antennas in
         each channel; np.nan for channels with no solved cells.'''
@@ -645,7 +659,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     complex objective chi^2 = sum_ij w_ij |vis_ratio_ij - g_i * conj(g_j)|^2
     (the (|g_i| |g_j|)^2 weight factor is that objective's Jacobian), so the
     converged solution is the stationary point of the complex chi^2 —
-    exactly what _stationarity_residual certifies — independent of the
+    exactly what _relative_chi2_gradient checks — independent of the
     starting point. The low-signal-to-noise bias of logcal identified by
     Liu et al. (2010, MNRAS 408, 1029) afflicts estimators whose FINAL
     answer is the log-space optimum; here the log-space solve only starts
@@ -662,9 +676,9 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     with no regularization. The overall phase degeneracy is fixed by pinning
     one antenna inside the solves and then removing the degeneracy from each
     update by setting its mean phase to 0 over participating antennas — the
-    same convention as redcal.remove_degen_gains. Convergence is certified by the maximum
-    fixed-point residual over ALL solved cells (_stationarity_residual) and
-    enforced with a RuntimeError.
+    same convention as redcal.remove_degen_gains. Convergence is verified
+    via the maximum relative chi^2 gradient over ALL solved cells
+    (_relative_chi2_gradient) and enforced with a RuntimeError.
 
     Arguments:
         vis_ratio: complex ndarray (Nbls, Nfreqs) of data/model ratios
@@ -688,7 +702,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         meta: dict of per-channel (Nfreqs,) arrays, following redcal's
             solve_iteratively convention: 'iter' (int rounds each channel
             used before its early exit; 0 where flagged) and 'conv_crit'
-            (max fixed-point residual over antennas in each channel;
+            (max relative chi^2 gradient over antennas in each channel;
             np.nan where flagged)
 
     Raises:
@@ -816,14 +830,14 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     full_gains = np.full((nants, nfreqs), np.nan, dtype=complex)
     full_gains[np.ix_(sel_ants, good_chan_idx)] = gains
 
-    conv_crit = _stationarity_residual(vis_ratio, ratio_wgts, full_gains,
-                                       ant_i_idx, ant_j_idx)
+    conv_crit = _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains,
+                                        ant_i_idx, ant_j_idx)
     if not converged:
         raise RuntimeError(
             f'Per-channel gain refinement did not converge: '
             f'{int(active_chans.sum())} channels remain above '
             f'refine_tol={refine_tol} after {refine_maxiter} rounds '
-            f'(max fixed-point residual {np.nanmax(conv_crit):.2e}). '
+            f'(max relative chi^2 gradient {np.nanmax(conv_crit):.2e}). '
             'Do not proceed with unconverged gains.')
     return full_gains, {'iter': chan_iters, 'conv_crit': conv_crit}
 
@@ -915,7 +929,7 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                 refine_maxiter=refine_maxiter, sync_tol=sync_tol,
                 sync_maxiter=sync_maxiter, verbose=verbose)
             utils.echo(f't{tind} {pol}: {int(meta_here["iter"].max())} '
-                       'rounds, max stationarity residual '
+                       'rounds, max relative chi^2 gradient '
                        f'{np.nanmax(meta_here["conv_crit"]):.2e}',
                        verbose=verbose)
             for i, ant in enumerate(ants):

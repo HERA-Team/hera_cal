@@ -100,6 +100,25 @@ class TestSolvePerAntennaWeightedLeastSquares:
         np.testing.assert_allclose(sol, x, atol=1e-8)
         assert np.abs(np.mean(sol)) < 1e-10
 
+    def test_solve_mode_kwarg(self):
+        # the linsolve mode is plumbed through, and alternate modes solve
+        # the same (singular) difference system: 'lsqr' and 'pinv' agree
+        # once the mean-zero degeneracy fixing is applied
+        nants = 6
+        x = self.rng.normal(size=nants)
+        x -= x.mean()
+        bls = [(i, j) for i in range(nants) for j in range(i + 1, nants)]
+        ant_i = np.array([bl[0] for bl in bls])
+        ant_j = np.array([bl[1] for bl in bls])
+        vals = x[ant_i] - x[ant_j]
+        wgts = self.rng.uniform(0.5, 2.0, size=len(bls))
+        sol_pinv = skycal._solve_per_antenna_weighted_least_squares(
+            vals, wgts, ant_i, ant_j, nants, mode='pinv')
+        sol_lsqr = skycal._solve_per_antenna_weighted_least_squares(
+            vals, wgts, ant_i, ant_j, nants, mode='lsqr')
+        np.testing.assert_allclose(sol_pinv, sol_lsqr, atol=1e-6)
+        np.testing.assert_allclose(sol_lsqr, x, atol=1e-6)
+
     def test_unsolvable_antenna_is_nan(self):
         # antenna 3 appears in no baselines
         bls = [(0, 1), (0, 2), (1, 2)]
