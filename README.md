@@ -23,7 +23,7 @@ This package only officially supports python 3, though most functionality will s
 * `hera_cal.redcal`: redundant calibration module, with `firstcal`, `logcal`, `lincal`, and `omnical` and helper functions for finding and manipulating sets of redundant baselines.
 
 * `hera_cal.abscal`: absolute calibration module, largely used to calibrate out redcal degeneraices post-redundant calibration using an externally calibrated data set.
-* `hera_cal.skycal`: staged sky-model-based calibration (firstcal-style delays and offsets, autocorrelation-based amplitudes, and per-channel complex gain refinement on inter-SNAP cross baselines), designed so that per-SNAP cross-correlation-only signal loss lands only in the refined gains.
+* `hera_cal.skycal`: staged sky-model-based calibration (firstcal-style delays and offsets, autocorrelation-based amplitudes, and per-channel complex gain refinement on inter-SNAP cross baselines), designed so that per-SNAP cross-correlation-only signal loss lands only in the refined gains — plus `estimate_SNAP_decoherence`, which measures that loss per SNAP and per X-engine block from the refined gains' spectral structure.
 
 * `hera_cal.apply_cal`: functions to apply calibration solutions (and flags) to data in memory or on disk
 
