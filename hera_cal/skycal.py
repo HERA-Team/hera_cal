@@ -1587,3 +1587,92 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
             'edge_blocks': sorted(edge_blocks),
             'chan_to_block': chan_to_block}
     return decoherence, meta
+
+
+def log_gain_inverse_variance(wgts, g0, refined_gains, ant_to_SNAP_dict):
+    '''Per-antenna inverse variance of ln|gain| implied by this module's
+    refinement solve — the thermal Fisher information the solve actually
+    delivered about each antenna's log-amplitude, per (time, channel).
+    For antenna a it evaluates to
+        2 |refined_a|^2 * sum over partners j of
+            wgts_aj |g0_a g0_j|^2 |refined_j|^2,
+    summed over inter-SNAP baselines only.
+
+    Derivation, term by term:
+    1. The refinement fit vis_ratio ~ g_i * conj(g_j), where vis_ratio is
+       the data/model ratio DIVIDED by g0_i * conj(g0_j). The ratio itself
+       has inverse variance wgts (from build_data_model_ratio); dividing a
+       measurement by a known constant divides its standard deviation by
+       that constant's magnitude, so the divided quantity's inverse
+       variance is wgts_ij |g0_i g0_j|^2 — the same effective weights the
+       refinement applies internally.
+    2. Perturbing g_i -> g_i * exp(eta_i) and linearizing,
+       vis_ratio / (g_i conj(g_j)) ~ 1 + (eta_i + eta_j)
+                                       + 1j * (phi_i - phi_j),
+       so the REAL part carries the log-amplitude equation. The complex
+       noise splits its variance evenly between real and imaginary parts,
+       and the division by g_i * conj(g_j) scales it by 1/|g_i g_j|^2, so
+       each baseline contributes information
+       2 * wgts_ij |g0_i g0_j|^2 * |refined_i|^2 |refined_j|^2 about
+       eta_i + eta_j (|refined| appears because the g0 division already
+       happened). The explicit factor of 2 is the real-part-only factor:
+       it is why this is TWICE the diagonal of the refinement's
+       log-amplitude normal matrix — inside the solver a uniform factor
+       cancels in the normal equations, but it does not cancel in
+       variances.
+    3. Summing over every baseline containing antenna a gives the DIAGONAL
+       Fisher information: partners' gains are treated as known, which
+       neglects the O(1/Nants) anti-correlations between antennas (the
+       standard per-antenna approximation). This biases the predicted
+       scatter slightly LOW (an ensemble test measures ~13% in sigma at 10
+       antennas); the deficit is harmless downstream because the HAC noise
+       model measures the total residual variance and subtracts only the
+       thermal part claimed here, so anything missed re-enters sigma_b as
+       measured excess.
+    4. The exclusions mirror the solve: intra-SNAP baselines are skipped
+       because the refinement excluded them — these weights must not claim
+       information the solve never used. Antennas absent from
+       refined_gains, non-finite g0 products, and NaN refined gains all
+       contribute nothing.
+
+    Note this is deliberately THERMAL-ONLY: correlated bandpass
+    systematics are absent by design, because estimate_SNAP_decoherence
+    measures that excess covariance empirically (the HAC noise model) and
+    adds it on top. These weights need only set the thermal floor of
+    sigma_b and the relative inverse-variance weighting of spectra within
+    the staircase fit.
+
+    This is the companion to estimate_SNAP_decoherence for gains produced
+    by sky_calibrate: pass the result as its logamp_wgts argument. Gains
+    from any other algorithm need their own ln|gain| inverse variances.
+
+    Arguments:
+        wgts: DataContainer of data/model-ratio weights (build_data_model_
+            ratio convention), keyed by cross baselines, e.g. from
+            sky_calibrate meta['wgts']
+        g0: dict of starting gains keyed (ant, antpol), e.g. from
+            sky_calibrate meta['g0']
+        refined_gains: dict of refined gains keyed (ant, antpol), e.g. from
+            sky_calibrate meta['refined_gains']
+        ant_to_SNAP_dict: dict mapping antenna numbers to SNAP IDs
+
+    Returns: dict mapping (ant, antpol) to (Ntimes, Nfreqs) inverse-variance
+        waterfalls (0 where an antenna has no usable inter-SNAP data).'''
+    inv_var = {key: np.zeros(np.asarray(refined_gains[key]).shape)
+               for key in refined_gains}
+    for bl in wgts:
+        if bl[0] == bl[1]:
+            continue
+        if ant_to_SNAP_dict[bl[0]] == ant_to_SNAP_dict[bl[1]]:
+            continue
+        key_i, key_j = utils.split_bl(bl)
+        if key_i not in refined_gains or key_j not in refined_gains:
+            continue
+        g0_ij = g0[key_i] * np.conj(g0[key_j])
+        ref_i2 = np.abs(np.nan_to_num(refined_gains[key_i]))**2
+        ref_j2 = np.abs(np.nan_to_num(refined_gains[key_j]))**2
+        wgt_bl = np.where(np.isfinite(g0_ij),
+                          np.asarray(wgts[bl]) * np.abs(g0_ij)**2, 0)
+        inv_var[key_i] += 2 * wgt_bl * ref_j2 * ref_i2
+        inv_var[key_j] += 2 * wgt_bl * ref_i2 * ref_j2
+    return inv_var
