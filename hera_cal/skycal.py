@@ -40,6 +40,7 @@ all the caller's responsibility (hera_mc is deliberately not imported).
 """
 import numpy as np
 import linsolve
+from hera_filters import dspec
 
 from . import utils
 from .noise import predict_noise_variance_from_autos
@@ -1002,3 +1003,80 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
             'offsets': offsets, 'abs_amp_gains': abs_amp_gains, 'g0': g0,
             'refined_gains': refined_gains, **refine_meta}
     return gains, meta
+
+
+########################################################################
+# Per-SNAP, per-X-engine-block decoherence estimation
+########################################################################
+
+
+def _block_design_matrix(nfreqs, nchans_per_block):
+    '''Map channels to X-engine blocks. Returns (chan_to_block, design):
+    chan_to_block[c] = c // nchans_per_block, and design is the
+    (Nfreqs, Nblocks) 0/1 matrix with design[c, b] = 1 where
+    chan_to_block[c] == b.'''
+    chan_to_block = np.arange(nfreqs) // nchans_per_block
+    nblocks = int(chan_to_block[-1]) + 1
+    design = np.zeros((nfreqs, nblocks))
+    design[np.arange(nfreqs), chan_to_block] = 1.0
+    return chan_to_block, design
+
+
+def _dpss_bases(freqs, band_slices, gain_smoothing_scale, eigenval_cutoff,
+                verbose=False):
+    '''One real DPSS basis per band (None for empty bands). Same convention
+    as nucal.compute_spectral_filters, calling hera_filters.dspec directly
+    so that this module does not inherit nucal's jax dependency chain. At
+    the default eigenval_cutoff the retained transition modes make the
+    effective smoothing scale exceed the nominal one; verbose prints it.'''
+    bases = []
+    for bi, band in enumerate(band_slices):
+        if freqs[band].size == 0:
+            bases.append(None)
+            continue
+        basis = np.asarray(dspec.dpss_operator(
+            freqs[band], [0.0], [gain_smoothing_scale],
+            eigenval_cutoff=[eigenval_cutoff])[0]).real
+        bases.append(basis)
+        bw = freqs[band].max() - freqs[band].min()
+        utils.echo(f'band {bi}: {basis.shape[1]} DPSS modes '
+                   f'(2BT = {2 * bw * gain_smoothing_scale:.1f}, effective '
+                   f'scale ~{basis.shape[1] / (2 * bw) * 1e9:.0f} ns at '
+                   f'eigenval_cutoff {eigenval_cutoff:g})', verbose=verbose)
+    return bases
+
+
+def _project_out_smooth(vals, wgts, band_slices, dpss_bases):
+    '''Return the residual of vals after a weighted least-squares fit of the
+    per-band DPSS bases — i.e. vals with everything spectrally smooth
+    projected out, independently in each band.
+
+    On unflagged channels this is identical to hera_filters'
+    dspec.fourier_filter with mode='dpss_leastsq' (pinned by a unit test);
+    it is inlined because each call here projects the spectrum AND all of
+    the block-design columns through one shared factorization, inside the
+    estimator's per-(SNAP, integration, FGLS-round) hot loop, and because
+    the error propagation requires the data, normal matrices, and estimator
+    kernel to be images of the exact same linear operator.
+
+    Arguments:
+        vals: (Nfreqs,) or (Nfreqs, k) ndarray to project
+        wgts: (Nfreqs,) weights for the fit (0 excludes a channel)
+        band_slices: list of slices into the frequency axis (bands are
+            contiguous by definition)
+        dpss_bases: list of per-band bases from _dpss_bases
+
+    Returns: ndarray like vals; bands with no unflagged channels are
+        set to 0.'''
+    vals2 = vals.reshape(len(wgts), -1)
+    resid = vals2.astype(float).copy()
+    for band, basis in zip(band_slices, dpss_bases):
+        if basis is None or not (wgts[band] > 0).any():
+            resid[band] = 0
+            continue
+        sqrt_wgts = np.sqrt(wgts[band])
+        coeffs, *_ = np.linalg.lstsq(basis * sqrt_wgts[:, None],
+                                     vals2[band] * sqrt_wgts[:, None],
+                                     rcond=None)
+        resid[band] = vals2[band] - basis @ coeffs
+    return resid.reshape(vals.shape)
