@@ -158,7 +158,7 @@ def build_data_model_ratio(data, model, autos=None, data_flags=None,
 
 
 def _solve_per_antenna_weighted_least_squares(vals, wgts, ant_i_idx,
-                                              ant_j_idx, nants):
+                                              ant_j_idx, nants, mode='pinv'):
     '''Weighted least-squares solve of per-baseline differences for per-antenna
     values, i.e. vals[bl] ~ x[i] - x[j], with the mean over solved antennas
     fixed to 0 (an overall offset is unobservable in differences).
@@ -168,6 +168,8 @@ def _solve_per_antenna_weighted_least_squares(vals, wgts, ant_i_idx,
         wgts: ndarray of per-baseline weights (non-positive weights are ignored)
         ant_i_idx / ant_j_idx: int ndarrays indexing each baseline's antennas
         nants: total number of antennas indexed
+        mode: linsolve.LinearSolver solve mode (default 'pinv', which gives
+            the minimum-norm solution of the singular difference system)
 
     Returns:
         x: ndarray of length nants with per-antenna solutions; antennas with no
@@ -188,10 +190,9 @@ def _solve_per_antenna_weighted_least_squares(vals, wgts, ant_i_idx,
             ls_wgts[eqn] = wgts[bi]
     x = np.full(nants, np.nan)
     if len(ls_data) > 0:
-        # pinv gives the minimum-norm solution of the (singular) difference
-        # system; the explicit mean subtraction then removes the degeneracy
-        # by fixing the mean to 0
-        sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts).solve(mode='pinv')
+        # the explicit mean subtraction after the solve removes the
+        # degeneracy by fixing the mean to 0
+        sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts).solve(mode=mode)
         for i in range(nants):
             if f'x_{i}' in sol:
                 x[i] = float(sol[f'x_{i}'])
@@ -200,7 +201,8 @@ def _solve_per_antenna_weighted_least_squares(vals, wgts, ant_i_idx,
     return x
 
 
-def model_based_firstcal(data_model_ratio, wgts, freqs, verbose=False):
+def model_based_firstcal(data_model_ratio, wgts, freqs, mode='pinv',
+                         verbose=False):
     '''Solve for per-antenna delays and phase offsets from the phases of the
     data/model ratio (phases only; amplitudes are untouched), independently
     for each integration. Per baseline and integration, the weighted FFT of
@@ -213,6 +215,8 @@ def model_based_firstcal(data_model_ratio, wgts, freqs, verbose=False):
         data_model_ratio: DataContainer from build_data_model_ratio
         wgts: DataContainer of weights from build_data_model_ratio
         freqs: ndarray of frequencies in Hz
+        mode: linsolve.LinearSolver solve mode for the per-antenna solves
+            (default 'pinv'; see _solve_per_antenna_weighted_least_squares)
         verbose: print statements if True
 
     Returns:
@@ -255,7 +259,7 @@ def model_based_firstcal(data_model_ratio, wgts, freqs, verbose=False):
         for tind in range(ntimes):
             ant_dlys[tind] = _solve_per_antenna_weighted_least_squares(
                 bl_dlys[:, tind], solve_wgts[:, tind], ant_i_idx, ant_j_idx,
-                nants)
+                nants, mode=mode)
             with np.errstate(invalid='ignore'):
                 dly_phasor = np.exp(
                     -2j * np.pi * freqs[None, :]
@@ -265,7 +269,7 @@ def model_based_firstcal(data_model_ratio, wgts, freqs, verbose=False):
                 (wgtd_ratio[:, tind] * dly_phasor).sum(axis=1))
             ant_offsets[tind] = _solve_per_antenna_weighted_least_squares(
                 resid_phases, solve_wgts[:, tind], ant_i_idx, ant_j_idx,
-                nants)
+                nants, mode=mode)
 
         n_unsolved = int(np.sum(~np.isfinite(ant_dlys).any(axis=0)))
         if n_unsolved > 0:
