@@ -6,6 +6,7 @@ import pytest
 import numpy as np
 from scipy.optimize import least_squares
 import linsolve
+from hera_filters import dspec
 
 from .. import skycal
 from ..datacontainer import DataContainer
@@ -557,3 +558,285 @@ class TestSkyCalibrate:
             assert key in meta
         assert (0, sim['pol']) in meta['iter']
         assert np.nanmax(meta['conv_crit'][(0, sim['pol'])]) < 1e-6
+
+
+def build_decoherence_sim(ptil_by_snap, nants_per_snap=3, nfreqs=256,
+                          nchans_per_block=32, ntimes=1, noise_ln=0.005,
+                          seed=11):
+    '''Build synthetic (gains, logamp_wgts, ant_to_SNAP_dict, freqs) for
+    decoherence-estimator tests. ptil_by_snap maps SNAP ID to an (Nblocks,)
+    array of true log-suppressions -ln(1-p); the corresponding staircase is
+    imprinted on |gains| of every antenna on that SNAP, on top of a smooth
+    per-antenna bandpass, with per-channel ln|g| scatter noise_ln matching
+    the (flat) reported inverse variances. Frequencies are chosen so the
+    default-test band split (107.9 MHz, between chans 95 and 96) falls on a
+    block boundary.'''
+    rng = np.random.default_rng(seed)
+    freqs = 60e6 + np.arange(nfreqs) * 0.5e6
+    snaps = sorted(ptil_by_snap)
+    ants, ant_to_SNAP_dict = [], {}
+    for si, snap in enumerate(snaps):
+        for k in range(nants_per_snap):
+            ant = 10 * si + k
+            ants.append(ant)
+            ant_to_SNAP_dict[ant] = snap
+    chan_to_block = np.arange(nfreqs) // nchans_per_block
+    x = np.linspace(0, 1, nfreqs)
+
+    gains, logamp_wgts = {}, {}
+    for ant in ants:
+        smooth_amp = 1.0 + 0.05 * np.cos(2 * np.pi * x + rng.uniform(0, 6))
+        stair = ptil_by_snap[ant_to_SNAP_dict[ant]][chan_to_block]
+        log_amp = (np.log(smooth_amp)[None, :] - stair
+                   + noise_ln * rng.normal(size=(ntimes, nfreqs)))
+        phase = 2 * np.pi * rng.uniform(size=1)
+        gains[(ant, 'Jee')] = np.exp(log_amp + 1j * phase)
+        logamp_wgts[(ant, 'Jee')] = np.full((ntimes, nfreqs),
+                                            1 / noise_ln**2)
+    return dict(gains=gains, logamp_wgts=logamp_wgts,
+                ant_to_SNAP_dict=ant_to_SNAP_dict, freqs=freqs,
+                nchans_per_block=nchans_per_block,
+                nblocks=nfreqs // nchans_per_block)
+
+
+# split between channels 95 (107.5 MHz) and 96 (108 MHz), on the 32-channel
+# test block boundary (get_minimal_slices assigns a channel exactly at the
+# cut to neither band, so the split is placed between channels)
+DECO_KWARGS = dict(band_split_freq=107.9e6)
+
+
+class TestDecoherenceHelpers:
+    def test_block_design_matrix(self):
+        chan_to_block, design = skycal._block_design_matrix(96, 32)
+        assert design.shape == (96, 3)
+        np.testing.assert_array_equal(chan_to_block, np.arange(96) // 32)
+        np.testing.assert_allclose(design.sum(axis=1), 1.0)
+        assert design[0, 0] == 1 and design[95, 2] == 1
+
+    def test_mcp_firm_threshold_zones(self):
+        # diagonal system: the unconstrained update equals -rhs, so targets
+        # map straight through the firm threshold
+        targets = np.array([0.5, 1.5, 3.0, -1.0])
+        normal_mat = np.eye(4)
+        rhs = -targets
+        zero_below = np.ones(4)
+        unbiased_above = np.full(4, 2.0)
+        fit = skycal._mcp_penalized_nnls(normal_mat, rhs, zero_below,
+                                         unbiased_above)
+        # below the corner -> exactly 0; in the shrinkage zone ->
+        # (pu - T1) * T2 / (T2 - T1); beyond -> unbiased; negative -> 0
+        np.testing.assert_allclose(fit, [0.0, 1.0, 3.0, 0.0], atol=1e-9)
+        # with no thresholds this is plain NNLS
+        fit = skycal._mcp_penalized_nnls(normal_mat, rhs, np.zeros(4),
+                                         np.full(4, np.inf))
+        np.testing.assert_allclose(fit, np.maximum(targets, 0), atol=1e-9)
+
+    def test_project_out_smooth_removes_smooth_keeps_steps(self):
+        freqs = 60e6 + np.arange(256) * 0.5e6
+        band_slices = [slice(0, 96), slice(96, 256)]   # split at 108 MHz
+        bases = skycal._dpss_bases(freqs, band_slices, 100e-9, 1e-12)
+        wgts = np.ones(256)
+        x = np.linspace(0, 1, 256)
+        smooth = 0.3 * np.cos(2 * np.pi * x) + 0.1 * x
+        resid = skycal._project_out_smooth(smooth, wgts, band_slices, bases)
+        assert np.abs(resid).max() < 1e-6
+        step = np.where(np.arange(256) // 32 == 5, 0.1, 0.0)
+        resid = skycal._project_out_smooth(step, wgts, band_slices, bases)
+        assert np.abs(resid).max() > 0.01
+
+    def test_project_out_smooth_matches_fourier_filter(self):
+        # referee: on unflagged channels the bespoke projection must match
+        # hera_filters' canonical DPSS least-squares filter. Flagged
+        # channels may differ (both extrapolate the smooth model into gaps
+        # with different conditioning choices), but the estimator multiplies
+        # those channels by weight zero everywhere, so they never matter.
+        rng = np.random.default_rng(3)
+        freqs = 60e6 + np.arange(256) * 0.5e6
+        band_slices = [slice(0, 96), slice(96, 256)]
+        bases = skycal._dpss_bases(freqs, band_slices, 100e-9, 1e-12)
+        vals = (0.2 * np.cos(2 * np.pi * np.linspace(0, 3, 256))
+                + rng.normal(size=256) * 0.05)
+        wgts = rng.uniform(0.5, 2.0, size=256)
+        wgts[40:60] = 0   # a flag gap inside the low band
+        mine = skycal._project_out_smooth(vals, wgts, band_slices, bases)
+        for band in band_slices:
+            _, resid, _ = dspec.fourier_filter(
+                freqs[band], vals[band].astype(complex), wgts[band],
+                filter_centers=[0.0], filter_half_widths=[100e-9],
+                mode='dpss_leastsq', eigenval_cutoff=[1e-12])
+            unflagged = wgts[band] > 0
+            np.testing.assert_allclose(mine[band][unflagged],
+                                       resid.real[unflagged], atol=1e-8)
+
+    def test_log_gain_inverse_variance_ensemble_calibration(self):
+        # statistical referee for the formula itself: the scatter of
+        # ln|refined| across noise realizations of the ACTUAL solver must
+        # match 1/sqrt(inv_var). The diagonal-Fisher approximation biases
+        # the prediction slightly low (measured ~13% in sigma at 10
+        # antennas, worse where few partners dominate; the HAC noise model
+        # downstream absorbs that deficit as measured excess), so the
+        # bounds allow it — but a missing factor of 2 (mean ratio ~1.6) or
+        # a missing |g0|^2 propagation (per-cell spread ~16x) would fail.
+        rng = np.random.default_rng(42)
+        nants, nfreqs, nreal = 10, 4, 150
+        ants = list(range(nants))
+        bls = [(i, j, 'ee') for i in ants for j in ants if j > i]
+        ant_i = np.array([bl[0] for bl in bls])
+        ant_j = np.array([bl[1] for bl in bls])
+        g0_arr = (rng.uniform(0.5, 2.0, (nants, nfreqs))
+                  * np.exp(2j * np.pi * rng.uniform(size=(nants, nfreqs))))
+        wgts_arr = 10.0 ** rng.uniform(2, 4, size=(len(bls), nfreqs))
+        g0_ij = g0_arr[ant_i] * np.conj(g0_arr[ant_j])
+        ratio_wgts = wgts_arr * np.abs(g0_ij)**2
+        log_refined = np.zeros((nreal, nants, nfreqs))
+        for r in range(nreal):
+            noise = (rng.normal(size=(len(bls), nfreqs))
+                     + 1j * rng.normal(size=(len(bls), nfreqs))
+                     ) / np.sqrt(2)
+            vis_ratio = 1.0 + noise / np.sqrt(wgts_arr) / g0_ij
+            gains, _ = skycal._refine_gains_single_pol_time(
+                vis_ratio, ratio_wgts, ant_i, ant_j, nants)
+            log_refined[r] = np.log(np.abs(gains))
+        measured_sigma = log_refined.std(axis=0)
+        wgts_dc = DataContainer({bl: wgts_arr[k][None, :]
+                                 for k, bl in enumerate(bls)})
+        g0_dict = {(a, 'Jee'): g0_arr[a][None, :] for a in ants}
+        ones = {(a, 'Jee'): np.ones((1, nfreqs), dtype=complex)
+                for a in ants}
+        inv_var = skycal.log_gain_inverse_variance(
+            wgts_dc, g0_dict, ones, {a: f'S{a}' for a in ants})
+        predicted_sigma = np.array([1 / np.sqrt(inv_var[(a, 'Jee')][0])
+                                    for a in ants])
+        ratio = measured_sigma / predicted_sigma
+        assert 1.0 < ratio.mean() < 1.35
+        assert ratio.min() > 0.8 and ratio.max() < 1.7
+
+    def test_log_gain_inverse_variance(self):
+        # 3 antennas, ants 0 and 2 share SNAP A: the intra-SNAP baseline
+        # (0, 2) must NOT contribute; each inter-SNAP entry contributes
+        # 2 |H_a|^2 * w * |g0_a g0_b|^2 * |H_b|^2
+        shape = (1, 4)
+        g0 = {(0, 'Jee'): np.full(shape, 2.0 * np.exp(0.3j)),
+              (1, 'Jee'): np.full(shape, 1.0 + 0j),
+              (2, 'Jee'): np.full(shape, 0.5 * np.exp(-1.1j))}
+        refined = {(0, 'Jee'): np.full(shape, 0.9 + 0j),
+                   (1, 'Jee'): np.full(shape, 1.1 + 0j),
+                   (2, 'Jee'): np.full(shape, 1.0 + 0j)}
+        wgts = DataContainer({(0, 1, 'ee'): np.full(shape, 3.0),
+                              (0, 2, 'ee'): np.full(shape, 7.0),
+                              (1, 2, 'ee'): np.full(shape, 5.0)})
+        ant_to_SNAP_dict = {0: 'A', 1: 'B', 2: 'A'}
+        inv_var = skycal.log_gain_inverse_variance(wgts, g0, refined,
+                                                   ant_to_SNAP_dict)
+        w01 = 3.0 * np.abs(2.0 * 1.0)**2
+        w12 = 5.0 * np.abs(1.0 * 0.5)**2
+        np.testing.assert_allclose(inv_var[(0, 'Jee')],
+                                   2 * 0.9**2 * w01 * 1.1**2)
+        np.testing.assert_allclose(inv_var[(1, 'Jee')],
+                                   2 * 1.1**2 * (w01 * 0.9**2 + w12 * 1.0))
+        np.testing.assert_allclose(inv_var[(2, 'Jee')],
+                                   2 * 1.0 * w12 * 1.1**2)
+
+
+class TestEstimateSNAPDecoherence:
+    def test_staircase_recovery(self):
+        nblocks = 8
+        ptil_a = np.zeros(nblocks)
+        ptil_a[1], ptil_a[5] = 0.06, 0.12
+        sim = build_decoherence_sim({'A': ptil_a, 'B': np.zeros(nblocks)})
+        deco, meta = skycal.estimate_SNAP_decoherence(
+            sim['gains'], sim['logamp_wgts'],
+            sim['ant_to_SNAP_dict'], sim['freqs'],
+            nchans_per_block=sim['nchans_per_block'], **DECO_KWARGS)
+        log_supp = meta['log_suppression']
+        # suppressed blocks recovered absolutely (each band retains an
+        # unsuppressed floor block), clean blocks exactly zero
+        assert abs(log_supp['A'][0, 1] - 0.06) < 0.01
+        assert abs(log_supp['A'][0, 5] - 0.12) < 0.01
+        clean = [b for b in range(nblocks) if b not in (1, 5)]
+        np.testing.assert_allclose(log_supp['A'][0, clean], 0, atol=1e-10)
+        np.testing.assert_allclose(log_supp['B'][0], 0, atol=1e-10)
+        # decoherence is 1 - exp(-log_suppression)
+        np.testing.assert_allclose(deco['A'][0],
+                                   1 - np.exp(-log_supp['A'][0]), atol=1e-12)
+        # sigma is reported on active blocks and plausibly sized
+        assert np.isfinite(meta['log_suppression_sigma']['A'][0, 1])
+        assert 0 < meta['log_suppression_sigma']['A'][0, 1] < 0.05
+        # refit agrees with the fit well above threshold
+        assert abs(meta['log_suppression_refit']['A'][0, 5]
+                   - log_supp['A'][0, 5]) < 0.01
+
+    def test_floor_degeneracy(self):
+        # a suppression common to ALL covered blocks of a band is
+        # degenerate with smooth structure: the estimator must report the
+        # floor-relative value, i.e. ~0
+        nblocks = 8
+        ptil = np.zeros(nblocks)
+        ptil[3:] = 0.05   # every block of the high band (blocks 3-7)
+        sim = build_decoherence_sim({'A': ptil, 'B': np.zeros(nblocks)},
+                                    seed=12)
+        _, meta = skycal.estimate_SNAP_decoherence(
+            sim['gains'], sim['logamp_wgts'],
+            sim['ant_to_SNAP_dict'], sim['freqs'],
+            nchans_per_block=sim['nchans_per_block'], **DECO_KWARGS)
+        assert np.nanmax(meta['log_suppression']['A'][0, 3:]) < 0.01
+
+    def test_flagged_band_edges_and_fully_flagged_band(self):
+        # exterior flagged channels must be trimmed from the band slices
+        # (get_minimal_slices) and a fully-flagged band skipped entirely
+        nblocks = 8
+        ptil = np.zeros(nblocks)
+        ptil[5] = 0.1
+        sim = build_decoherence_sim({'A': ptil, 'B': np.zeros(nblocks)},
+                                    seed=13)
+        for key in sim['logamp_wgts']:
+            sim['logamp_wgts'][key][:, :96] = 0     # whole low band
+            sim['logamp_wgts'][key][:, 96:100] = 0  # high-band leading edge
+            sim['logamp_wgts'][key][:, -5:] = 0     # high-band trailing edge
+        _, meta = skycal.estimate_SNAP_decoherence(
+            sim['gains'], sim['logamp_wgts'],
+            sim['ant_to_SNAP_dict'], sim['freqs'],
+            nchans_per_block=sim['nchans_per_block'], **DECO_KWARGS)
+        # low-band blocks have no data at all -> NaN, not zero
+        assert np.all(np.isnan(meta['log_suppression']['A'][0, :3]))
+        # the suppressed high-band block is still recovered
+        assert abs(meta['log_suppression']['A'][0, 5] - 0.1) < 0.01
+
+    def test_missing_snap_or_wgts_raises(self):
+        sim = build_decoherence_sim({'A': np.zeros(8), 'B': np.zeros(8)})
+        incomplete = dict(sim['ant_to_SNAP_dict'])
+        del incomplete[0]
+        with pytest.raises(ValueError, match='missing antennas'):
+            skycal.estimate_SNAP_decoherence(
+                sim['gains'], sim['logamp_wgts'], incomplete,
+                sim['freqs'], nchans_per_block=sim['nchans_per_block'],
+                **DECO_KWARGS)
+        partial_wgts = dict(sim['logamp_wgts'])
+        del partial_wgts[(0, 'Jee')]
+        with pytest.raises(ValueError, match='missing keys'):
+            skycal.estimate_SNAP_decoherence(
+                sim['gains'], partial_wgts, sim['ant_to_SNAP_dict'],
+                sim['freqs'], nchans_per_block=sim['nchans_per_block'],
+                **DECO_KWARGS)
+
+    def test_meta_completeness(self):
+        sim = build_decoherence_sim({'A': np.zeros(8), 'B': np.zeros(8)})
+        deco, meta = skycal.estimate_SNAP_decoherence(
+            sim['gains'], sim['logamp_wgts'],
+            sim['ant_to_SNAP_dict'], sim['freqs'],
+            nchans_per_block=sim['nchans_per_block'], **DECO_KWARGS)
+        for key in ['log_suppression', 'log_suppression_refit',
+                    'log_suppression_sigma',
+                    'fgls_iterations', 'n_spectra_per_snap',
+                    'sigma_over_thermal', 'covered_blocks', 'edge_blocks',
+                    'chan_to_block']:
+            assert key in meta
+        for snap in ['A', 'B']:
+            assert meta['log_suppression'][snap].shape == (1, sim['nblocks'])
+            assert deco[snap].shape == (1, sim['nblocks'])
+            assert meta['fgls_iterations'][snap].shape == (1,)
+            assert meta['n_spectra_per_snap'][snap][0] == 3
+            assert meta['sigma_over_thermal'][snap].shape == (1, 2)
+        assert meta['covered_blocks'].all()
+        np.testing.assert_array_equal(meta['chan_to_block'],
+                                      np.arange(256) // 32)
