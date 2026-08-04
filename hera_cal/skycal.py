@@ -1163,3 +1163,414 @@ def _mcp_penalized_nnls(normal_mat, rhs, zero_below, unbiased_above,
             return fit
     raise RuntimeError('MCP coordinate descent did not converge in '
                        f'{maxiter} iterations (last max change {dmax:.2e}).')
+
+
+def _snap_log_gain_spectra(ant_keys, tind, gains, logamp_wgts):
+    '''ln|gain| spectra and weights for one SNAP at one integration: one
+    (log_amp, wgts) pair per antenna-pol on the SNAP with any usable
+    channels. NaN/zero-weight channels carry zero weight.'''
+    spectra = []
+    for key in ant_keys:
+        gain = np.asarray(gains[key])[tind]
+        with np.errstate(invalid='ignore', divide='ignore'):
+            log_amp = np.log(np.abs(gain))
+        wgt = np.where(np.isfinite(log_amp) & (logamp_wgts[key][tind] > 0),
+                       logamp_wgts[key][tind], 0)
+        if (wgt > 0).any():
+            spectra.append((np.nan_to_num(log_amp), wgt))
+    return spectra
+
+
+def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
+                              freqs, nchans_per_block=96,
+                              gain_smoothing_scale=100e-9,
+                              eigenval_cutoff=1e-12, detection_sigma=2.0,
+                              full_sigma=3.0, band_split_freq=100e6,
+                              min_block_coverage=0.05,
+                              full_block_coverage=0.9, verbose=False):
+    '''Estimate per-SNAP, per-X-engine-block signal loss ("decoherence")
+    from the spectral structure of the refined gains.
+
+    Model, per (SNAP, integration): the SNAP's antenna-pol log-gain spectra
+    share
+        ln|g_ap(nu)| = smooth_ap(nu) - log_suppression_b + n_ap(nu) + r(nu)
+    where b indexes X-engine blocks (nchans_per_block channels each),
+    log_suppression = -ln(1 - p) >= 0 for loss fraction p, n_ap is thermal
+    noise with known variance 1 / logamp_wgts, and r is a stationary
+    residual bandpass-error field (see Noise model below). The smooth
+    per-antenna component (a DPSS basis per band) absorbs bandpass and
+    calibration structure; the fitted staircase absorbs the
+    block-discontinuous suppression that per-SNAP packet loss imprints on
+    inter-SNAP cross-correlations.
+
+    Fitting: nonnegative least squares on the smooth-projected block system
+    (coefficients constrained >= 0, since packet loss can only suppress)
+    with a firm-threshold minimax concave ("MCP") penalty INSIDE the fit —
+    blocks with evidence below detection_sigma * sigma_b are set exactly
+    to 0, partially shrunk up to full_sigma * sigma_b, and unbiased beyond.
+    See _mcp_penalized_nnls for an explanation of both concepts and
+    references.
+
+    The smooth components and the staircase are fit SIMULTANEOUSLY, not
+    alternately: for any given staircase the optimal smooth coefficients
+    are a closed-form weighted projection, so they are profiled out
+    analytically by building the block system from smooth-projected data
+    and design columns. By the Frisch-Waugh-Lovell theorem
+    (https://en.wikipedia.org/wiki/Frisch%E2%80%93Waugh%E2%80%93Lovell_theorem)
+    this yields exactly the joint least-squares solution over (smooth,
+    staircase) — and because the penalty acts only on the staircase
+    coefficients, the equivalence carries over to the penalized fit. The
+    only alternation in the algorithm is the feasible-GLS iteration
+    between this joint fit and re-estimating the noise autocovariance
+    (see Errors below).
+
+    Noise model (estimated from the same data, alternating with the joint
+    fit above): beyond the two deterministic components, each ln|gain|
+    spectrum carries thermal noise with exactly known per-channel variance
+    1 / logamp_wgts, PLUS a residual bandpass-error field that neither
+    component captures (e.g. cable reflections, sky-model error). That
+    residual field is modeled as a zero-mean, wide-sense stationary
+    process within each band — the single statistical assumption — and is
+    parameterized NONPARAMETRICALLY: its free parameters are the values of
+    its autocovariance C(lag) at lags 0 through L = 2 * nchans_per_block
+    channels (a window long enough to span correlations on the block scale
+    itself); no functional form is assumed. Per band, C is measured from
+    the empirical autocovariance of the weighted-mean residual of the
+    current fit, with the known thermal variance subtracted at lag 0 so
+    that only the EXCESS covariance remains, then tapered by the
+    triangular Bartlett window, 1 - lag / (L + 1), whose implied
+    covariance is positive semi-definite (no negative variance estimates).
+
+    Errors: feasible generalized least squares, i.e. generalized least
+    squares with the noise covariance estimated from the data themselves
+    (https://en.wikipedia.org/wiki/Generalized_least_squares): sigma_b^2
+    is the exact thermal part (from the normal-matrix diagonal) plus C
+    propagated through the estimator's linear kernel — the
+    heteroskedasticity-and-autocorrelation-consistent ("HAC") error
+    construction of econometrics (Newey & West 1987,
+    https://en.wikipedia.org/wiki/Newey%E2%80%93West_estimator), which
+    keeps error bars honest when residuals are correlated from channel to
+    channel. Each round re-measures C from the current (smooth, staircase)
+    residual and refits the staircase with the updated thresholds,
+    iterating until the detected support is stable.
+
+    DEGENERACY (important): within each band, a suppression common to ALL
+    covered blocks is indistinguishable from smooth structure, so the
+    least-suppressed covered block is pinned to 0 — estimates are RELATIVE
+    to each band's cleanest block, unlike diff-based estimates.
+
+    Arguments:
+        gains: dict mapping (ant, antpol) to complex (Ntimes, Nfreqs)
+            waterfalls of TOTAL instrument gains, from any calibration
+            algorithm — e.g. the gains returned by sky_calibrate, but
+            nothing here assumes that provenance. The staircase is measured
+            on ln|gains|, so the gains must retain the decoherence
+            signature: gains derived only from autocorrelations or
+            intra-SNAP baselines cannot show it.
+        logamp_wgts: dict mapping (ant, antpol) to (Ntimes, Nfreqs)
+            inverse-variance weights of ln|gains| (0 excludes a channel).
+            EVERY key in gains must be present (ValueError otherwise).
+            These calibrate sigma_b and therefore the detection thresholds,
+            so they should reflect the actual error model of whatever
+            algorithm produced the gains; for sky_calibrate gains, build
+            them with log_gain_inverse_variance.
+        ant_to_SNAP_dict: dict mapping antenna numbers to SNAP IDs. EVERY
+            antenna appearing in gains must be present (ValueError
+            otherwise).
+        freqs: ndarray of frequencies in Hz
+        nchans_per_block: channels per X-engine block; the block map is
+            channel_index // nchans_per_block
+        gain_smoothing_scale: DPSS half-width in seconds for the smooth
+            component (same convention as nucal.compute_spectral_filters)
+        eigenval_cutoff: DPSS eigenvalue cutoff (HERA's conventional 1e-12;
+            note the effective smoothing scale then exceeds the nominal one)
+        detection_sigma: firm-threshold lower corner in units of sigma_b;
+            blocks below this evidence level are set exactly to 0
+        full_sigma: firm-threshold upper corner; estimates are unbiased
+            beyond this evidence level
+        band_split_freq: frequency in Hz splitting the spectrum into the
+            independently-fit low_band and high_band (default 100 MHz,
+            inside the flagged FM band). Each band is trimmed to the
+            minimal slice containing its not-always-flagged channels
+            (flag_utils.get_minimal_slices), keeping exterior flagged
+            channels from destabilizing the DPSS fits; a fully-flagged
+            band is skipped.
+        min_block_coverage: minimum unflagged fraction for a block to be fit
+        full_block_coverage: blocks below this unflagged fraction (or at a
+            band edge) are excluded from the noise-inflation diagnostic
+        verbose: print statements if True
+
+    Returns:
+        decoherence: dict mapping SNAP ID to (Ntimes, Nblocks) ndarrays of
+            the loss fraction p = 1 - exp(-log_suppression), np.nan where
+            unfit — the physical product downstream corrections and
+            flagging consume
+        meta: dict of fit-domain products and diagnostics, all keyed by
+            SNAP ID:
+            'log_suppression': the fitted -ln(1 - p) >= 0 dicts themselves
+                — the fit's native domain, where the MCP thresholds, the
+                floor degeneracy, and the reported errors all live
+            'log_suppression_refit': unpenalized refit on the detected
+                active set (unbiased values for mapping/comparison)
+            'log_suppression_sigma': HAC 1-sigma errors on active blocks
+            'fgls_iterations': (Ntimes,) iterations to stable support
+            'n_spectra_per_snap': (Ntimes,) contributing antenna-pol spectra
+            'sigma_over_thermal': (Ntimes, Nbands) median noise inflation
+                from the residual ACF over interior blocks
+            plus 'covered_blocks' (Nblocks bool), 'edge_blocks' (sorted
+            list), and 'chan_to_block' (Nfreqs int), shared across SNAPs
+
+    Raises:
+        ValueError: if ant_to_SNAP_dict is missing antennas in gains, or if
+            logamp_wgts is missing keys in gains
+    '''
+    ants = sorted({key[0] for key in gains})
+    missing = [ant for ant in ants if ant not in ant_to_SNAP_dict]
+    if len(missing) > 0:
+        raise ValueError('ant_to_SNAP_dict is missing antennas that appear '
+                         f'in gains: {missing}. All antennas must be '
+                         'mapped to SNAPs.')
+    missing_wgts = sorted(set(gains) - set(logamp_wgts))
+    if len(missing_wgts) > 0:
+        raise ValueError('logamp_wgts is missing keys that appear in '
+                         f'gains: {missing_wgts}.')
+    freqs = np.asarray(freqs)
+    nfreqs = len(freqs)
+    ntimes = np.asarray(next(iter(gains.values()))).shape[0]
+    # bands are contiguous by definition, so they are carried as slices.
+    # Each band is trimmed to the minimal slice containing its
+    # not-always-flagged channels (flags here = zero weight for every
+    # antenna), so that exterior flagged channels do not destabilize the
+    # DPSS fits — same practice as elsewhere in the pipeline. A fully
+    # flagged band comes back as None and is skipped throughout.
+    flag_wf = np.ones((ntimes, nfreqs), dtype=bool)
+    for key in gains:
+        flag_wf &= ~(np.asarray(logamp_wgts[key]) > 0)
+    _, band_slices = flag_utils.get_minimal_slices(
+        flag_wf, freqs=freqs, freq_cuts=[band_split_freq])
+    nbands = len(band_slices)
+    chan_to_block, block_design = _block_design_matrix(nfreqs,
+                                                       nchans_per_block)
+    nblocks = block_design.shape[1]
+    dpss_bases = _dpss_bases(freqs, band_slices, gain_smoothing_scale,
+                             eigenval_cutoff, verbose=verbose)
+
+    # block coverage: which blocks have enough unflagged channels to fit,
+    # and which sit at band edges or are partially covered (excluded
+    # from the noise-inflation diagnostic, where edge effects dominate)
+    chan_ok = np.zeros(nfreqs, dtype=bool)
+    for key in gains:
+        chan_ok |= (np.asarray(logamp_wgts[key]) > 0).any(axis=0)
+    coverage = np.array([(chan_ok & (chan_to_block == b)).sum()
+                         / nchans_per_block for b in range(nblocks)])
+    covered_blocks = coverage > min_block_coverage
+    edge_blocks = set()
+    band_blocks = []
+    for band in band_slices:
+        if band is None:
+            band_blocks.append([])
+            continue
+        in_band = [b for b in range(nblocks) if covered_blocks[b]
+                   and np.any(chan_to_block[band] == b)]
+        band_blocks.append(in_band)
+        if in_band:
+            edge_blocks |= {in_band[0], in_band[-1]}
+        edge_blocks |= {b for b in in_band
+                        if coverage[b] < full_block_coverage}
+
+    # HAC ("heteroskedasticity and autocorrelation consistent", the
+    # Newey-West error construction — see the docstring) settings:
+    # residual autocovariances out to a two-block lag window enter
+    # sigma_b, tapered by the triangular Bartlett window 1 - lag/(L + 1),
+    # which keeps the implied covariance positive semi-definite
+    hac_nlags = 2 * nchans_per_block
+    bartlett = 1 - np.arange(hac_nlags + 1) / (hac_nlags + 1)
+    no_upper = np.full(nblocks, np.inf)
+
+    snaps = sorted({ant_to_SNAP_dict[ant] for ant in ants})
+    snap_keys = {snap: [key for key in sorted(gains)
+                        if ant_to_SNAP_dict[key[0]] == snap]
+                 for snap in snaps}
+    log_suppression = {s: np.full((ntimes, nblocks), np.nan) for s in snaps}
+    refit_out = {s: np.full((ntimes, nblocks), np.nan) for s in snaps}
+    sigma_out = {s: np.full((ntimes, nblocks), np.nan) for s in snaps}
+    iters_out = {s: np.zeros(ntimes, dtype=int) for s in snaps}
+    nspectra_out = {s: np.zeros(ntimes, dtype=int) for s in snaps}
+    inflation_out = {s: np.full((ntimes, nbands), np.nan) for s in snaps}
+
+    def _lag_covariances(a, b, nlags):
+        '''Unnormalized lag cross-covariances sum_n a[n] * b[n + lag] for
+        lag = 0..nlags — the ingredients of the HAC sums below. Returns an
+        (nlags + 1,) ndarray.'''
+        return np.array([(a[:len(a) - lag] * b[lag:]).sum()
+                        for lag in range(nlags + 1)])
+
+    for snap in snaps:
+        utils.echo(f'Fitting SNAP {snap}...', verbose=verbose)
+        for tind in range(ntimes):
+            spectra = _snap_log_gain_spectra(snap_keys[snap], tind,
+                                             gains, logamp_wgts)
+            nspectra_out[snap][tind] = len(spectra)
+            if len(spectra) == 0:
+                continue
+
+            # accumulate the block normal system on the smooth-projected
+            # design: columns [log_amp, block_design] projected together so
+            # each spectrum's own weights shape its projection
+            normal_mat = np.zeros((nblocks, nblocks))
+            rhs = np.zeros(nblocks)
+            total_wgts = np.zeros(nfreqs)
+            for log_amp, wgt in spectra:
+                resid = _project_out_smooth(
+                    np.column_stack([log_amp, block_design]), wgt,
+                    band_slices, dpss_bases)
+                normal_mat += resid[:, 1:].T @ (wgt[:, None] * resid[:, 1:])
+                rhs += resid[:, 1:].T @ (wgt * resid[:, 0])
+                total_wgts += wgt
+            normal_diag = np.diag(normal_mat).copy()
+            ok_blocks = normal_diag > 0
+            if not ok_blocks.any():
+                continue
+            # estimator kernel: the weighted, smooth-projected block design
+            # (residual ACF propagates through this into sigma_b)
+            kernel = _project_out_smooth(block_design, total_wgts,
+                                         band_slices, dpss_bases
+                                         ) * total_wgts[:, None]
+
+            # feasible-GLS loop: fit -> residual ACF -> sigma_b ->
+            # thresholds -> refit, iterated until the detected support of
+            # the staircase is stable
+            fit = np.zeros(nblocks)
+            prev_support = None
+            acf_by_band = {}
+            with np.errstate(invalid='ignore', divide='ignore'):
+                variances = np.where(ok_blocks,
+                                     1 / np.maximum(normal_diag, 1e-300),
+                                     np.nan)
+            for fgls_iter in range(8):
+                staircase = block_design @ (-fit)
+                resid_field = np.zeros(nfreqs)
+                for log_amp, wgt in spectra:
+                    smooth = (log_amp - staircase
+                              - _project_out_smooth(log_amp - staircase,
+                                                    wgt, band_slices,
+                                                    dpss_bases))
+                    resid_field += wgt * (log_amp - smooth - staircase)
+                with np.errstate(invalid='ignore', divide='ignore'):
+                    mean_resid = np.where(
+                        total_wgts > 0,
+                        resid_field / np.maximum(total_wgts, 1e-300), 0.0)
+                for bi, band in enumerate(band_slices):
+                    if band is None or not band_blocks[bi]:
+                        continue
+                    band_wgts = total_wgts[band]
+                    band_ok = band_wgts > 0
+                    if not band_ok.any():
+                        continue
+                    vals = np.where(band_ok, mean_resid[band], 0.0)
+                    band_mask = band_ok.astype(float)
+                    npairs = np.maximum(
+                        _lag_covariances(band_mask, band_mask, hac_nlags), 1)
+                    acf = _lag_covariances(vals, vals, hac_nlags) / npairs
+                    tapered = bartlett * acf
+                    # subtract the (exactly known) thermal part at lag 0 so
+                    # only the excess bandpass-error covariance propagates
+                    tapered[0] = max(0.0, acf[0]
+                                     - (1 / band_wgts[band_ok]).mean())
+                    acf_by_band[bi] = tapered
+                    for b in band_blocks[bi]:
+                        if not ok_blocks[b]:
+                            continue
+                        kern_b = (kernel[:, b] / normal_diag[b])[band]
+                        auto = _lag_covariances(kern_b, kern_b, hac_nlags)
+                        ripple = (tapered[0] * auto[0]
+                                  + 2 * (tapered[1:] * auto[1:]).sum())
+                        variances[b] = (1 / normal_diag[b]
+                                        + max(0.0, ripple))
+                sigmas = np.sqrt(variances)
+                zero_below = np.where(ok_blocks, detection_sigma * sigmas,
+                                      0.0)
+                unbiased_above = np.where(ok_blocks, full_sigma * sigmas,
+                                          0.0)
+                fit = _mcp_penalized_nnls(normal_mat, rhs, zero_below,
+                                          unbiased_above, start=fit)
+                support = fit > 0
+                # per-band floor degeneracy: a suppression common to all
+                # covered blocks in a band is indistinguishable from
+                # smooth structure, so pin the least-suppressed block to 0
+                for in_band in band_blocks:
+                    if in_band and np.all(fit[in_band] > 0):
+                        fit[in_band] -= fit[in_band].min()
+                if (prev_support is not None
+                        and np.array_equal(support, prev_support)):
+                    break
+                prev_support = support
+            iters_out[snap][tind] = fgls_iter + 1
+            for bi in range(nbands):
+                interior = [b for b in band_blocks[bi]
+                            if ok_blocks[b] and b not in edge_blocks]
+                if interior:
+                    inflation_out[snap][tind, bi] = np.median(
+                        np.sqrt(variances[interior]
+                                * normal_diag[interior]))
+
+            # unpenalized refit on the detected support (unbiased values),
+            # with the same per-band floor degeneracy fixing
+            refit = _mcp_penalized_nnls(normal_mat, rhs, np.zeros(nblocks),
+                                        no_upper, mask=support, start=fit)
+            for in_band in band_blocks:
+                if in_band and np.all(refit[in_band] > 0):
+                    refit[in_band] -= refit[in_band].min()
+
+            # HAC covariance of the refit on the active set: thermal
+            # (inverse normal matrix) plus the residual ACF propagated
+            # through pairs of estimator-kernel columns
+            sigma_fit = np.full(nblocks, np.nan)
+            active_idx = np.where(support)[0]
+            if len(active_idx) > 0:
+                inv_active = np.linalg.pinv(
+                    normal_mat[np.ix_(active_idx, active_idx)])
+                ripple_mat = np.zeros((len(active_idx), len(active_idx)))
+                for bi, band in enumerate(band_slices):
+                    tapered = acf_by_band.get(bi)
+                    in_band_pos = [i for i, b in enumerate(active_idx)
+                                   if b in set(band_blocks[bi])]
+                    if tapered is None or not in_band_pos:
+                        continue
+                    for ai in in_band_pos:
+                        for aj in in_band_pos:
+                            if aj < ai:
+                                continue
+                            kern_a = kernel[:, active_idx[ai]][band]
+                            kern_b = kernel[:, active_idx[aj]][band]
+                            cov_ab = _lag_covariances(kern_a, kern_b,
+                                                      hac_nlags)
+                            cov_ba = _lag_covariances(kern_b, kern_a,
+                                                      hac_nlags)
+                            val = (tapered[0] * cov_ab[0]
+                                   + (tapered[1:] * (cov_ab[1:]
+                                                     + cov_ba[1:])).sum())
+                            ripple_mat[ai, aj] = ripple_mat[aj, ai] = val
+                full_cov = (inv_active
+                            + inv_active @ ripple_mat @ inv_active)
+                sigma_fit[active_idx] = np.sqrt(
+                    np.maximum(np.diag(full_cov), 0))
+
+            # blocks with no constraining data are unmeasured, not zero
+            log_suppression[snap][tind] = np.where(ok_blocks, fit, np.nan)
+            refit_out[snap][tind] = np.where(ok_blocks, refit, np.nan)
+            sigma_out[snap][tind] = sigma_fit
+
+    with np.errstate(invalid='ignore'):
+        decoherence = {snap: 1 - np.exp(-log_suppression[snap])
+                       for snap in snaps}
+    meta = {'log_suppression': log_suppression,
+            'log_suppression_refit': refit_out,
+            'log_suppression_sigma': sigma_out,
+            'fgls_iterations': iters_out,
+            'n_spectra_per_snap': nspectra_out,
+            'sigma_over_thermal': inflation_out,
+            'covered_blocks': covered_blocks,
+            'edge_blocks': sorted(edge_blocks),
+            'chan_to_block': chan_to_block}
+    return decoherence, meta
