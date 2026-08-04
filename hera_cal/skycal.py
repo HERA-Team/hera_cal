@@ -561,17 +561,27 @@ def _solve_phase_updates(phase_mats, chan_pos, ei, ej, round_wgts, resids,
     return delta_phase
 
 
-def _stationarity_residual(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
-                           ant_j_idx):
-    '''Compute the convergence certificate: the per-channel MAXIMUM
-    fixed-point residual over all solved antennas. At the exact weighted
-    least-squares optimum, every gain equals the weighted projection of the
-    data onto the other antennas' gains,
-    g_i = sum_j(w_ij * z_ij * g_j) / sum_j(w_ij * |g_j|^2) = U / D, so
-    max |U/D - g| / |g| measures how far each cell is from stationarity,
-    independently of the solver's own update sizes. Certifying on maxima
+def _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
+                            ant_j_idx):
+    '''Compute the convergence criterion: the per-channel MAXIMUM of the
+    relative gradient of chi^2 over all solved antennas. At the exact
+    weighted least-squares optimum the gradient of chi^2 with respect to
+    every gain vanishes — equivalently, every gain equals the weighted
+    projection of the data onto the other antennas' gains,
+    g_i = sum_j(w_ij * z_ij * g_j) / sum_j(w_ij * |g_j|^2) = U / D — so
+    max |U/D - g| / |g|, the chi^2 gradient normalized by the local
+    curvature D and gain scale, measures how far each cell is from the
+    optimum, independently of the solver's own update sizes. Taking maxima
     (never a median or percentile) is deliberate: a median criterion can
     declare victory while an entire contiguous band remains unconverged.
+
+    NOTE: this deliberately differs from redcal's conv_crit, which is the
+    relative step between iterations. A step-size rule shows that the
+    solver stopped moving (true distance ~ step / (1 - contraction rate)),
+    not that the solution is near the optimum; the chi^2 gradient measures
+    distance from the optimum directly and works for gains from any
+    solver. The 'iter'/'conv_crit' meta keys are shared with redcal, but
+    conv_crit's semantics differ as described here.
 
     Returns: (Nfreqs,) ndarray of the max residual over solved antennas in
         each channel; np.nan for channels with no solved cells.'''
@@ -634,7 +644,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     complex objective chi^2 = sum_ij w_ij |vis_ratio_ij - g_i * conj(g_j)|^2
     (the (|g_i| |g_j|)^2 weight factor is that objective's Jacobian), so the
     converged solution is the stationary point of the complex chi^2 —
-    exactly what _stationarity_residual certifies — independent of the
+    exactly what _relative_chi2_gradient checks — independent of the
     starting point. The low-signal-to-noise bias of logcal identified by
     Liu et al. (2010, MNRAS 408, 1029) afflicts estimators whose FINAL
     answer is the log-space optimum; here the log-space solve only starts
@@ -651,9 +661,9 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     with no regularization. The overall phase degeneracy is fixed by pinning
     one antenna inside the solves and then removing the degeneracy from each
     update by setting its mean phase to 0 over participating antennas — the
-    same convention as redcal.remove_degen_gains. Convergence is certified by the maximum
-    fixed-point residual over ALL solved cells (_stationarity_residual) and
-    enforced with a RuntimeError.
+    same convention as redcal.remove_degen_gains. Convergence is verified
+    via the maximum relative chi^2 gradient over ALL solved cells
+    (_relative_chi2_gradient) and enforced with a RuntimeError.
 
     Arguments:
         vis_ratio: complex ndarray (Nbls, Nfreqs) of data/model ratios
@@ -677,7 +687,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         meta: dict of per-channel (Nfreqs,) arrays, following redcal's
             solve_iteratively convention: 'iter' (int rounds each channel
             used before its early exit; 0 where flagged) and 'conv_crit'
-            (max fixed-point residual over antennas in each channel;
+            (max relative chi^2 gradient over antennas in each channel;
             np.nan where flagged)
 
     Raises:
@@ -805,14 +815,14 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     full_gains = np.full((nants, nfreqs), np.nan, dtype=complex)
     full_gains[np.ix_(sel_ants, good_chan_idx)] = gains
 
-    conv_crit = _stationarity_residual(vis_ratio, ratio_wgts, full_gains,
-                                       ant_i_idx, ant_j_idx)
+    conv_crit = _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains,
+                                        ant_i_idx, ant_j_idx)
     if not converged:
         raise RuntimeError(
             f'Per-channel gain refinement did not converge: '
             f'{int(active_chans.sum())} channels remain above '
             f'refine_tol={refine_tol} after {refine_maxiter} rounds '
-            f'(max fixed-point residual {np.nanmax(conv_crit):.2e}). '
+            f'(max relative chi^2 gradient {np.nanmax(conv_crit):.2e}). '
             'Do not proceed with unconverged gains.')
     return full_gains, {'iter': chan_iters, 'conv_crit': conv_crit}
 
@@ -904,7 +914,7 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                 refine_maxiter=refine_maxiter, sync_tol=sync_tol,
                 sync_maxiter=sync_maxiter, verbose=verbose)
             utils.echo(f't{tind} {pol}: {int(meta_here["iter"].max())} '
-                       'rounds, max stationarity residual '
+                       'rounds, max relative chi^2 gradient '
                        f'{np.nanmax(meta_here["conv_crit"]):.2e}',
                        verbose=verbose)
             for i, ant in enumerate(ants):
