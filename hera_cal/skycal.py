@@ -2,13 +2,13 @@
 # Copyright 2026 the HERA Project
 # Licensed under the MIT License
 
-"""Staged sky-model-based calibration.
+"""Staged sky-model-based calibration and per-SNAP decoherence estimation.
 
 This module calibrates raw visibilities against a sky model in stages designed
 so that any per-antenna, non-smooth amplitude effect that only appears on cross
 correlations (e.g. per-SNAP signal loss in the correlator, a.k.a. "decoherence")
-lands in exactly one place — the final per-channel refinement gains — where it
-can be measured and corrected downstream:
+lands in exactly one place — the final per-channel refinement gains — where the
+second half of the module then measures it:
 
     1. Firstcal-style delay calibration: per-antenna delays and phase offsets
        from the phases of the data/model ratio on cross baselines. Phases only,
@@ -25,6 +25,19 @@ can be measured and corrected downstream:
 
 The final gain is the product of the stage 1-2 gains (g0) and the stage 3
 refined gains.
+
+Because of that staging, estimate_SNAP_decoherence can measure per-SNAP,
+per-X-engine-block signal loss from the calibrated gains (from this
+pipeline or any other algorithm whose gains retain the decoherence
+signature, with matching ln|gain| inverse variances): each SNAP's
+log-gain spectra are fit as a smooth per-antenna component plus a shared
+nonnegative staircase on X-engine blocks, using a firm-threshold (MCP)
+penalty so that blocks without significant evidence are exactly zero, with
+errors derived from the residuals' own autocovariance (Newey-West-style
+"HAC" errors; see estimate_SNAP_decoherence). One degeneracy to
+keep in mind: within each band a suppression common to EVERY block is
+indistinguishable from smooth structure, so estimates are relative to each
+band's least-suppressed block (see the function docstring).
 
 The primary use case for the "model" is LST-stacked, redundantly-averaged, and
 delay/fringe-rate-filtered visibilities from prior nights (e.g. the corner-
