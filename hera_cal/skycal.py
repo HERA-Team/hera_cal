@@ -43,6 +43,7 @@ import linsolve
 from hera_filters import dspec
 
 from . import utils
+from . import flag_utils
 from .noise import predict_noise_variance_from_autos
 from .datacontainer import DataContainer
 from .abscal import merge_gains
@@ -1031,7 +1032,7 @@ def _dpss_bases(freqs, band_slices, gain_smoothing_scale, eigenval_cutoff,
     effective smoothing scale exceed the nominal one; verbose prints it.'''
     bases = []
     for bi, band in enumerate(band_slices):
-        if freqs[band].size == 0:
+        if band is None or freqs[band].size == 0:
             bases.append(None)
             continue
         basis = np.asarray(dspec.dpss_operator(
@@ -1069,14 +1070,23 @@ def _project_out_smooth(vals, wgts, band_slices, dpss_bases):
     Returns: ndarray like vals; bands with no unflagged channels are
         set to 0.'''
     vals2 = vals.reshape(len(wgts), -1)
-    resid = vals2.astype(float).copy()
+    # channels outside every band slice (exterior flagged channels trimmed
+    # by get_minimal_slices, or fully-flagged None bands) come back 0;
+    # they carry zero weight in every downstream sum
+    resid = np.zeros_like(vals2, dtype=float)
     for band, basis in zip(band_slices, dpss_bases):
-        if basis is None or not (wgts[band] > 0).any():
-            resid[band] = 0
+        if band is None or basis is None or not (wgts[band] > 0).any():
             continue
-        sqrt_wgts = np.sqrt(wgts[band])
-        coeffs, *_ = np.linalg.lstsq(basis * sqrt_wgts[:, None],
-                                     vals2[band] * sqrt_wgts[:, None],
-                                     rcond=None)
+        # weighted least squares via the (Nmodes, Nmodes) normal equations
+        # rather than an SVD of the full (Nchans, Nmodes) design — the same
+        # strategy as hera_filters' 'dpss_solve'/'dpss_matrix' modes, ~5x
+        # faster at these shapes. The tiny lstsq on the Gram matrix keeps
+        # bands with fewer unflagged channels than modes graceful
+        # (minimum-norm coefficients; the residual on weighted channels is
+        # unaffected by the null space).
+        wgt_band = wgts[band]
+        gram = basis.T @ (basis * wgt_band[:, None])
+        proj = basis.T @ (wgt_band[:, None] * vals2[band])
+        coeffs, *_ = np.linalg.lstsq(gram, proj, rcond=None)
         resid[band] = vals2[band] - basis @ coeffs
     return resid.reshape(vals.shape)
