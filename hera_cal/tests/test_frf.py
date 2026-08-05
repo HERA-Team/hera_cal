@@ -1218,6 +1218,7 @@ def test_get_frop_for_noise():
     assert np.array_equal(frop, frop_none)
 
 
+@pytest.mark.filterwarnings("ignore:divide by zero encountered in divide:RuntimeWarning")
 def test_prep_var_for_frop():
     uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
     hd = io.HERAData([uvh5])
