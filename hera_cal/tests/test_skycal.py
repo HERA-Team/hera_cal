@@ -859,3 +859,192 @@ class TestEstimateSNAPDecoherence:
         assert meta['covered_blocks'].all()
         np.testing.assert_array_equal(meta['chan_to_block'],
                                       np.arange(256) // 32)
+
+
+class TestCoverageGaps:
+    '''Targeted tests for previously-untested branches.'''
+
+    def test_model_flags_propagation(self):
+        sim = build_sim(nants=4, nfreqs=32, ntimes=2, seed=3)
+        bl = (0, 1, sim['pol'])
+        model_flags = DataContainer(
+            {k: np.zeros((2, 32), dtype=bool) for k in sim['model']})
+        model_flags[bl][1, 3] = True
+        ratio, wgts = skycal.build_data_model_ratio(
+            sim['data'], sim['model'], model_flags=model_flags,
+            dt=sim['dt'], df=sim['df'])
+        assert np.isnan(ratio[bl][1, 3])
+        assert wgts[bl][1, 3] == 0
+
+    def test_duplicate_baseline_equations_weighted_average(self):
+        # repeated (i, j) measurements must be merged by weighted average
+        ant_i = np.array([0, 0, 1])
+        ant_j = np.array([1, 1, 2])
+        vals = np.array([1.0, 1.2, 2.0])
+        wgts = np.array([1.0, 3.0, 1.0])
+        sol = skycal._solve_per_antenna_weighted_least_squares(
+            vals, wgts, ant_i, ant_j, 3)
+        merged = skycal._solve_per_antenna_weighted_least_squares(
+            np.array([1.15, 2.0]), np.array([4.0, 1.0]),
+            np.array([0, 1]), np.array([1, 2]), 3)
+        np.testing.assert_allclose(sol, merged, atol=1e-10)
+
+    def test_firstcal_unsolvable_antenna_gets_zero(self):
+        sim = build_sim(nants=4, nfreqs=32, ntimes=2, seed=4,
+                        dlys={0: 0.0, 1: 20e-9, 2: -20e-9, 3: 5e-9})
+        ratio, wgts = skycal.build_data_model_ratio(
+            sim['data'], sim['model'], dt=sim['dt'], df=sim['df'])
+        for bl in wgts:
+            if 0 in bl[:2]:
+                wgts[bl] *= 0
+        dlys, offsets = skycal.model_based_firstcal(ratio, wgts,
+                                                    sim['freqs'])
+        antpol = utils.split_pol(sim['pol'])[0]
+        np.testing.assert_array_equal(dlys[(0, antpol)], 0.0)
+        np.testing.assert_array_equal(offsets[(0, antpol)], 0.0)
+        assert np.all(np.isfinite(dlys[(1, antpol)]))
+
+    def test_all_baselines_flagged_shared_channel_flags(self):
+        flagged_ants, chan_flags = skycal._shared_channel_flags(
+            np.zeros((3, 4)), np.array([0, 0, 1]), np.array([1, 2, 2]), 3)
+        assert flagged_ants.all()
+        assert chan_flags.all()
+
+    def test_refinement_divergence_raises(self):
+        # pathological inputs (weights spanning 4 decades, gains 0.1-1.9x,
+        # heavy noise) drive undamped Gauss-Newton to non-finite gains,
+        # which must raise rather than return garbage
+        rng = np.random.default_rng(0)
+        nants, nfreqs = 20, 8
+        tg = ((1.0 + 0.9 * rng.uniform(-1, 1, (nants, nfreqs)))
+              * np.exp(1j * np.pi * rng.uniform(-1, 1, (nants, nfreqs))))
+        bls = [(i, j) for i in range(nants) for j in range(i + 1, nants)]
+        ant_i = np.array([b[0] for b in bls])
+        ant_j = np.array([b[1] for b in bls])
+        vis = tg[ant_i] * np.conj(tg[ant_j])
+        vis = vis + 0.5 * (rng.normal(size=vis.shape)
+                           + 1j * rng.normal(size=vis.shape)) / np.sqrt(2)
+        wgts = 10.0 ** rng.uniform(0, 4, size=vis.shape)
+        with pytest.raises(RuntimeError, match='diverged'):
+            skycal._refine_gains_single_pol_time(vis, wgts, ant_i, ant_j,
+                                                 nants)
+
+    def test_sky_calibrate_infers_freqs(self):
+        sim = build_sim(nants=5, nfreqs=32, ntimes=1, seed=5)
+        sim['data'].freqs = sim['freqs']
+        gains, meta = skycal.sky_calibrate(sim['data'], sim['model'],
+                                           dt=sim['dt'], df=sim['df'])
+        antpol = utils.split_pol(sim['pol'])[0]
+        assert (0, antpol) in gains
+
+    def test_mcp_nonconvergence_raises(self):
+        normal_mat = np.array([[2.0, 1.0], [1.0, 2.0]])
+        rhs = -np.array([1.0, 1.0])
+        with pytest.raises(RuntimeError, match='did not converge'):
+            skycal._mcp_penalized_nnls(normal_mat, rhs, np.zeros(2),
+                                       np.full(2, np.inf), maxiter=1)
+
+    def test_relative_staircase_and_multiblock_sigma(self):
+        # an all-suppressed band: the fitter reports the pattern RELATIVE
+        # to the least-suppressed block (which lands at exactly 0), and
+        # the HAC covariance covers multiple active blocks in one band
+        nblocks = 8
+        ptil = np.zeros(nblocks)
+        ptil[3:] = [0.30, 0.35, 0.40, 0.45, 0.50]
+        sim = build_decoherence_sim({'A': ptil, 'B': np.zeros(nblocks)},
+                                    seed=21, noise_ln=0.003)
+        deco, meta = skycal.estimate_SNAP_decoherence(
+            sim['gains'], sim['logamp_wgts'], sim['ant_to_SNAP_dict'],
+            sim['freqs'], nchans_per_block=sim['nchans_per_block'],
+            **DECO_KWARGS)
+        log_supp = meta['log_suppression']['A'][0]
+        np.testing.assert_allclose(log_supp[3:], ptil[3:] - 0.30, atol=0.02)
+        assert np.isclose(log_supp[3:].min(), 0)
+        # >= 2 active blocks in one band: covariance cross-terms exercised
+        assert np.isfinite(meta['log_suppression_sigma']['A'][0, 4:]).all()
+
+    def test_heterogeneous_snap_flags(self):
+        # SNAP B: dead low band and one dead block; SNAP C: fully dead;
+        # SNAP D: a single live channel (its smooth fit absorbs everything,
+        # leaving no block information)
+        nblocks = 8
+        ptil = np.zeros(nblocks)
+        ptil[5] = 0.1
+        sim = build_decoherence_sim(
+            {'A': ptil, 'B': np.zeros(nblocks), 'C': np.zeros(nblocks),
+             'D': np.zeros(nblocks)}, seed=6)
+        for key in sim['logamp_wgts']:
+            ant = key[0]
+            snap = sim['ant_to_SNAP_dict'][ant]
+            if snap == 'B':
+                sim['logamp_wgts'][key][:, :96] = 0     # low band dead
+                sim['logamp_wgts'][key][:, 192:224] = 0  # block 6 dead
+            elif snap == 'C':
+                sim['logamp_wgts'][key][:] = 0
+            elif snap == 'D':
+                wgt_val = sim['logamp_wgts'][key][0, 0]
+                sim['logamp_wgts'][key][:] = 0
+                sim['logamp_wgts'][key][:, 130] = wgt_val
+        deco, meta = skycal.estimate_SNAP_decoherence(
+            sim['gains'], sim['logamp_wgts'], sim['ant_to_SNAP_dict'],
+            sim['freqs'], nchans_per_block=sim['nchans_per_block'],
+            **DECO_KWARGS)
+        log_supp = meta['log_suppression']
+        assert abs(log_supp['A'][0, 5] - 0.1) < 0.01
+        assert np.all(np.isnan(log_supp['B'][0, :3]))   # dead band
+        assert np.isnan(log_supp['B'][0, 6])            # dead block
+        assert np.all(np.isnan(log_supp['C'][0]))       # no spectra
+        assert meta['n_spectra_per_snap']['C'][0] == 0
+        assert np.all(np.isnan(log_supp['D'][0]))       # no block info
+        assert meta['n_spectra_per_snap']['D'][0] == 3
+
+    def test_sparse_block_not_fit(self):
+        # a block below min_block_coverage must come back NaN, not fit
+        # with under-inflated errors
+        nblocks = 8
+        sim = build_decoherence_sim({'A': np.zeros(nblocks),
+                                     'B': np.zeros(nblocks)}, seed=7)
+        keys = sorted(sim['logamp_wgts'])
+        for key in keys:
+            sim['logamp_wgts'][key][:, 64:96] = 0   # block 2 dead...
+        # ...except one channel on one antenna: coverage 1/32 < 0.05
+        sim['logamp_wgts'][keys[0]][:, 64] = 1.0
+        deco, meta = skycal.estimate_SNAP_decoherence(
+            sim['gains'], sim['logamp_wgts'], sim['ant_to_SNAP_dict'],
+            sim['freqs'], nchans_per_block=sim['nchans_per_block'],
+            **DECO_KWARGS)
+        for snap in ['A', 'B']:
+            assert np.isnan(meta['log_suppression'][snap][0, 2])
+
+    def test_log_gain_inverse_variance_skips(self):
+        # autos in wgts and baselines with antennas missing from
+        # refined_gains must contribute nothing
+        shape = (1, 4)
+        g0 = {(a, 'Jee'): np.ones(shape, dtype=complex) for a in range(4)}
+        refined = {(a, 'Jee'): np.ones(shape, dtype=complex)
+                   for a in range(3)}
+        base = DataContainer({(0, 1, 'ee'): np.full(shape, 3.0)})
+        extra = DataContainer({(0, 1, 'ee'): np.full(shape, 3.0),
+                               (1, 1, 'ee'): np.full(shape, 9.0),
+                               (0, 3, 'ee'): np.full(shape, 9.0)})
+        snap_map = {0: 'A', 1: 'B', 2: 'A', 3: 'B'}
+        out_base = skycal.log_gain_inverse_variance(base, g0, refined,
+                                                    snap_map)
+        out_extra = skycal.log_gain_inverse_variance(extra, g0, refined,
+                                                     snap_map)
+        for key in out_base:
+            np.testing.assert_allclose(out_base[key], out_extra[key])
+
+    def test_fix_band_floors(self):
+        # the floor safety net, tested directly since the MCP solve's
+        # nonnegativity boundary makes it unreachable through the driver:
+        # an all-positive band is shifted so its minimum is exactly 0; a
+        # band already containing a zero is untouched
+        vals = np.array([0.0, 0.2, 0.1, 0.3, 0.45, 0.35, 0.0, 0.0])
+        band_blocks = [[0, 1, 2], [3, 4, 5]]
+        skycal._fix_band_floors(vals, band_blocks)
+        np.testing.assert_allclose(vals[:3], [0.0, 0.2, 0.1])   # untouched
+        np.testing.assert_allclose(vals[3:6], [0.0, 0.15, 0.05])  # pinned
+        # empty bands are a no-op
+        skycal._fix_band_floors(vals, [[]])
+        np.testing.assert_allclose(vals[3:6], [0.0, 0.15, 0.05])

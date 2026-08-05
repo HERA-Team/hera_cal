@@ -1208,6 +1208,16 @@ def _snap_log_gain_spectra(ant_keys, tind, gains, logamp_wgts):
     return spectra
 
 
+def _fix_band_floors(block_vals, band_blocks):
+    """If every covered block in a band is strictly positive, subtract the
+    band's minimum (in place) so its least-suppressed block is exactly 0.
+    Usually a no-op: the MCP solve's nonnegativity boundary already pins
+    each band's minimum block to 0."""
+    for in_band in band_blocks:
+        if in_band and np.all(block_vals[in_band] > 0):
+            block_vals[in_band] -= block_vals[in_band].min()
+
+
 def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
                               freqs, nchans_per_block=96,
                               gain_smoothing_scale=100e-9,
@@ -1455,7 +1465,11 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
                 rhs += resid[:, 1:].T @ (wgt * resid[:, 0])
                 total_wgts += wgt
             normal_diag = np.diag(normal_mat).copy()
-            ok_blocks = normal_diag > 0
+            # a block is fit only if it has data AND meets the coverage
+            # threshold (matching the min_block_coverage documentation);
+            # sparse blocks would otherwise get under-inflated errors,
+            # since their HAC sigma cannot be measured reliably
+            ok_blocks = (normal_diag > 0) & covered_blocks
             if not ok_blocks.any():
                 continue
             # estimator kernel: the weighted, smooth-projected block design
@@ -1520,14 +1534,12 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
                 unbiased_above = np.where(ok_blocks, full_sigma * sigmas,
                                           0.0)
                 fit = _mcp_penalized_nnls(normal_mat, rhs, zero_below,
-                                          unbiased_above, start=fit)
+                                          unbiased_above, mask=ok_blocks,
+                                          start=fit)
+                # support is deliberately pre-floor: the floor is a
+                # reporting convention, not a model constraint
                 support = fit > 0
-                # per-band floor degeneracy: a suppression common to all
-                # covered blocks in a band is indistinguishable from
-                # smooth structure, so pin the least-suppressed block to 0
-                for in_band in band_blocks:
-                    if in_band and np.all(fit[in_band] > 0):
-                        fit[in_band] -= fit[in_band].min()
+                _fix_band_floors(fit, band_blocks)
                 if (prev_support is not None
                         and np.array_equal(support, prev_support)):
                     break
@@ -1545,9 +1557,7 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
             # with the same per-band floor degeneracy fixing
             refit = _mcp_penalized_nnls(normal_mat, rhs, np.zeros(nblocks),
                                         no_upper, mask=support, start=fit)
-            for in_band in band_blocks:
-                if in_band and np.all(refit[in_band] > 0):
-                    refit[in_band] -= refit[in_band].min()
+            _fix_band_floors(refit, band_blocks)
 
             # HAC covariance of the refit on the active set: thermal
             # (inverse normal matrix) plus the residual ACF propagated
