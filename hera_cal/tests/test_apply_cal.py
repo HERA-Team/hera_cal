@@ -657,3 +657,123 @@ class Test_Update_Cal(object):
         assert args.infilename == 'a'
         assert args.outfilename == 'b'
         assert args.new_cal == ['d']
+
+
+class TestCorrectSNAPDecoherence:
+    '''Tests for ac.correct_SNAP_decoherence_in_place.'''
+
+    def setup_method(self):
+        np.random.seed(21)
+        self.ntimes, self.nfreqs, self.ncpb = 3, 64, 16
+        self.nblocks = 4
+        self.snap_map = {0: 'A', 1: 'A', 2: 'B', 3: 'B'}
+        self.pA = np.random.uniform(0.01, 0.1, (self.ntimes, self.nblocks))
+        self.pB = np.random.uniform(0.01, 0.1, (self.ntimes, self.nblocks))
+        self.deco = {'A': self.pA.copy(), 'B': self.pB.copy()}
+        self.c2b = np.arange(self.nfreqs) // self.ncpb
+
+    def _build_data(self):
+        '''Synthetic data with the exact (1-p_i)(1-p_j) suppression injected
+        on inter-SNAP crosses only; autos, cross-pol autos, and intra-SNAP
+        baselines unsuppressed.'''
+        bls = [(0, 0, 'ee'), (0, 0, 'en'), (0, 1, 'ee'),
+               (0, 2, 'ee'), (1, 3, 'ee'), (0, 2, 'nn')]
+        shape = (self.ntimes, self.nfreqs)
+        true_vis = {bl: np.random.randn(*shape) + 1j * np.random.randn(*shape)
+                    for bl in bls}
+        coherence_factor = {s: 1 - self.deco[s][:, self.c2b] for s in self.deco}
+        data = {}
+        for bl in bls:
+            i, j, pol = bl
+            vis = true_vis[bl].copy()
+            if self.snap_map[i] != self.snap_map[j]:
+                vis *= (coherence_factor[self.snap_map[i]]
+                        * coherence_factor[self.snap_map[j]])
+            data[bl] = vis
+        return DataContainer(data), true_vis
+
+    def test_round_trip_and_exemptions(self):
+        data, true_vis = self._build_data()
+        untouched = {bl: data[bl].copy()
+                     for bl in [(0, 0, 'ee'), (0, 0, 'en'), (0, 1, 'ee')]}
+        ac.correct_SNAP_decoherence_in_place(data, self.deco, self.snap_map,
+                                             nchans_per_block=self.ncpb)
+        # inter-SNAP crosses recovered exactly, both pols
+        for bl in [(0, 2, 'ee'), (1, 3, 'ee'), (0, 2, 'nn')]:
+            np.testing.assert_allclose(data[bl], true_vis[bl], rtol=1e-12)
+        # autos, cross-pol autos, and intra-SNAP baselines bit-identical
+        for bl, vis in untouched.items():
+            np.testing.assert_array_equal(data[bl], vis)
+
+    def test_exact_product_form(self):
+        # correction must be exp(+(ls_i + ls_j)), not 1/(1 - p_i - p_j)
+        ls_A = np.random.uniform(0.02, 0.2, (self.ntimes, self.nblocks))
+        ls_B = np.random.uniform(0.02, 0.2, (self.ntimes, self.nblocks))
+        deco = {'A': 1 - np.exp(-ls_A), 'B': 1 - np.exp(-ls_B)}
+        data = DataContainer({(0, 2, 'ee'): np.ones(
+            (self.ntimes, self.nfreqs), dtype=complex)})
+        ac.correct_SNAP_decoherence_in_place(data, deco, self.snap_map,
+                                             nchans_per_block=self.ncpb)
+        expected = np.exp((ls_A + ls_B)[:, self.c2b])
+        np.testing.assert_allclose(data[(0, 2, 'ee')], expected, rtol=1e-12)
+
+    def test_nan_over_flagged_ok(self):
+        data, true_vis = self._build_data()
+        suppressed = data[(0, 2, 'ee')].copy()
+        self.deco['A'][1, 2] = np.nan
+        flags = DataContainer({bl: np.zeros_like(data[bl], dtype=bool)
+                               for bl in data})
+        nan_chans = slice(2 * self.ncpb, 3 * self.ncpb)
+        for bl in data:
+            if self.snap_map[bl[0]] != self.snap_map[bl[1]]:
+                flags[bl][1, nan_chans] = True
+        flags_before = {bl: flags[bl].copy() for bl in flags}
+        ac.correct_SNAP_decoherence_in_place(data, self.deco, self.snap_map,
+                                             data_flags=flags,
+                                             nchans_per_block=self.ncpb)
+        # at unmeasured-A cells the A side contributes no correction but
+        # the measured B side still applies (those cells are flagged)
+        rB = (1 - self.pB[:, self.c2b])[1, nan_chans]
+        np.testing.assert_allclose(data[(0, 2, 'ee')][1, nan_chans],
+                                   suppressed[1, nan_chans] / rB, rtol=1e-12)
+        np.testing.assert_allclose(data[(0, 2, 'ee')][0], true_vis[(0, 2, 'ee')][0],
+                                   rtol=1e-12)
+        # flags are never modified
+        for bl in flags:
+            np.testing.assert_array_equal(flags[bl], flags_before[bl])
+
+    def test_nan_over_unflagged_raises(self):
+        data, _ = self._build_data()
+        self.deco['B'][0, 1] = np.nan
+        # no flags at all: strictest reading, must raise
+        with pytest.raises(ValueError, match='Unmeasured'):
+            ac.correct_SNAP_decoherence_in_place(
+                data, self.deco, self.snap_map, nchans_per_block=self.ncpb)
+        # flags present but not covering the NaN cells: still raises
+        flags = DataContainer({bl: np.zeros_like(data[bl], dtype=bool)
+                               for bl in data})
+        with pytest.raises(ValueError, match='Unmeasured'):
+            ac.correct_SNAP_decoherence_in_place(
+                data, self.deco, self.snap_map, data_flags=flags,
+                nchans_per_block=self.ncpb)
+
+    def test_validation_errors(self):
+        data, _ = self._build_data()
+        incomplete = {antnum: s for antnum, s in self.snap_map.items()
+                      if antnum != 3}
+        with pytest.raises(ValueError, match='missing antennas'):
+            ac.correct_SNAP_decoherence_in_place(
+                data, self.deco, incomplete, nchans_per_block=self.ncpb)
+        snap_map = {**self.snap_map, 4: 'C'}
+        data_with_c = DataContainer(
+            {**{bl: data[bl] for bl in data.keys()},
+             (0, 4, 'ee'): np.ones((self.ntimes, self.nfreqs), complex)})
+        with pytest.raises(ValueError, match='missing SNAPs'):
+            ac.correct_SNAP_decoherence_in_place(
+                data_with_c, self.deco, snap_map,
+                nchans_per_block=self.ncpb)
+        bad_shape = {'A': np.zeros((self.ntimes, self.nblocks + 1)),
+                     'B': np.zeros((self.ntimes, self.nblocks + 1))}
+        with pytest.raises(ValueError, match='shape'):
+            ac.correct_SNAP_decoherence_in_place(
+                data, bad_shape, self.snap_map, nchans_per_block=self.ncpb)
