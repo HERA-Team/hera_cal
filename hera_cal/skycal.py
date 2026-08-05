@@ -78,16 +78,16 @@ def _pack_baseline_arrays(container, bls):
     Returns:
         stacked: (Nbls, Ntimes, Nfreqs) ndarray of the waterfalls, in the
             order given by bls
-        ant_i_idx: int ndarray of first-antenna indices into ants, per baseline
-        ant_j_idx: int ndarray of second-antenna indices into ants, per baseline
-        ants: sorted list of antenna numbers appearing in bls
+        ant_i_idx: int ndarray of first-antenna indices into antnums, per baseline
+        ant_j_idx: int ndarray of second-antenna indices into antnums, per baseline
+        antnums: sorted list of antenna numbers appearing in bls
     '''
-    ants = sorted({ant for bl in bls for ant in bl[:2]})
-    idx = {ant: i for i, ant in enumerate(ants)}
+    antnums = sorted({antnum for bl in bls for antnum in bl[:2]})
+    idx = {antnum: i for i, antnum in enumerate(antnums)}
     stacked = np.asarray([container[bl] for bl in bls])
     ant_i_idx = np.array([idx[bl[0]] for bl in bls], dtype=int)
     ant_j_idx = np.array([idx[bl[1]] for bl in bls], dtype=int)
-    return stacked, ant_i_idx, ant_j_idx, ants
+    return stacked, ant_i_idx, ant_j_idx, antnums
 
 
 ########################################################################
@@ -248,10 +248,10 @@ def model_based_firstcal(data_model_ratio, wgts, freqs, mode='pinv',
     for pol in sorted({bl[2] for bl in data_model_ratio}):
         bls_here = [bl for bl in data_model_ratio
                     if bl[2] == pol and bl[0] != bl[1]]
-        ratio, ant_i_idx, ant_j_idx, ants = _pack_baseline_arrays(
+        ratio, ant_i_idx, ant_j_idx, antnums = _pack_baseline_arrays(
             data_model_ratio, bls_here)
         wgt_arr = np.asarray([wgts[bl] for bl in bls_here])
-        nants = len(ants)
+        nants = len(antnums)
         nbls, ntimes = ratio.shape[0], ratio.shape[1]
         wgtd_ratio = np.nan_to_num(ratio) * wgt_arr
         solve_wgts = wgt_arr.sum(axis=2)
@@ -292,9 +292,9 @@ def model_based_firstcal(data_model_ratio, wgts, freqs, mode='pinv',
                        'cross-baseline data; setting delays/offsets to 0.',
                        verbose=verbose)
         antpol = utils.split_pol(pol)[0]
-        for i, ant in enumerate(ants):
-            dlys[(ant, antpol)] = np.nan_to_num(ant_dlys[:, i])[:, None]
-            offsets[(ant, antpol)] = np.nan_to_num(ant_offsets[:, i])[:, None]
+        for i, antnum in enumerate(antnums):
+            dlys[(antnum, antpol)] = np.nan_to_num(ant_dlys[:, i])[:, None]
+            offsets[(antnum, antpol)] = np.nan_to_num(ant_offsets[:, i])[:, None]
     return dlys, offsets
 
 
@@ -881,9 +881,10 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
         RuntimeError: if the solve fails to converge for any (time, pol)
     '''
     bls = [bl for bl in data_model_ratio if bl[0] != bl[1]]
-    all_ants = sorted({ant for bl in bls for ant in bl[:2]})
+    all_antnums = sorted({antnum for bl in bls for antnum in bl[:2]})
     if ant_to_SNAP_dict is not None:
-        missing = [ant for ant in all_ants if ant not in ant_to_SNAP_dict]
+        missing = [antnum for antnum in all_antnums
+                   if antnum not in ant_to_SNAP_dict]
         if len(missing) > 0:
             raise ValueError('ant_to_SNAP_dict is missing antennas that '
                              f'appear in the data: {missing}. All antennas '
@@ -905,15 +906,15 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                        'inter-SNAP and enter the solve', verbose=verbose)
         if len(bls_here) == 0:
             continue
-        ratio, ant_i_idx, ant_j_idx, ants = _pack_baseline_arrays(
+        ratio, ant_i_idx, ant_j_idx, antnums = _pack_baseline_arrays(
             data_model_ratio, bls_here)
         wgt_arr = np.asarray([wgts[bl] for bl in bls_here])
-        g0_arr = np.asarray([g0[(ant, antpol)] for ant in ants])
-        nants = len(ants)
+        g0_arr = np.asarray([g0[(antnum, antpol)] for antnum in antnums])
+        nants = len(antnums)
         ntimes, nfreqs = ratio.shape[1], ratio.shape[2]
 
-        for ant in ants:
-            refined_gains[(ant, antpol)] = np.full((ntimes, nfreqs), np.nan,
+        for antnum in antnums:
+            refined_gains[(antnum, antpol)] = np.full((ntimes, nfreqs), np.nan,
                                                    dtype=complex)
         for tind in range(ntimes):
             gain_ij = g0_arr[ant_i_idx, tind] * np.conj(g0_arr[ant_j_idx, tind])
@@ -932,8 +933,8 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                        'rounds, max relative chi^2 gradient '
                        f'{np.nanmax(meta_here["conv_crit"]):.2e}',
                        verbose=verbose)
-            for i, ant in enumerate(ants):
-                refined_gains[(ant, antpol)][tind] = gains_here[i]
+            for i, antnum in enumerate(antnums):
+                refined_gains[(antnum, antpol)][tind] = gains_here[i]
             for key in meta:
                 meta[key][(tind, pol)] = meta_here[key]
     return refined_gains, meta
@@ -1361,8 +1362,9 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
         ValueError: if ant_to_SNAP_dict is missing antennas in gains, or if
             logamp_wgts is missing keys in gains
     '''
-    ants = sorted({key[0] for key in gains})
-    missing = [ant for ant in ants if ant not in ant_to_SNAP_dict]
+    antnums = sorted({key[0] for key in gains})
+    missing = [antnum for antnum in antnums
+               if antnum not in ant_to_SNAP_dict]
     if len(missing) > 0:
         raise ValueError('ant_to_SNAP_dict is missing antennas that appear '
                          f'in gains: {missing}. All antennas must be '
@@ -1424,7 +1426,7 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
     bartlett = 1 - np.arange(hac_nlags + 1) / (hac_nlags + 1)
     no_upper = np.full(nblocks, np.inf)
 
-    snaps = sorted({ant_to_SNAP_dict[ant] for ant in ants})
+    snaps = sorted({ant_to_SNAP_dict[antnum] for antnum in antnums})
     snap_keys = {snap: [key for key in sorted(gains)
                         if ant_to_SNAP_dict[key[0]] == snap]
                  for snap in snaps}
