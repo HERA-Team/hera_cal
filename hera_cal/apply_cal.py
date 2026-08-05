@@ -107,6 +107,124 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
                 data[bl] *= avg_gains**exponent
 
 
+def correct_SNAP_decoherence_in_place(data, decoherence, ant_to_SNAP_dict,
+                                      data_flags=None, nchans_per_block=96):
+    '''Correct visibilities in place for measured per-SNAP, per-X-engine-block
+    signal loss ("decoherence"). The correction is baseline-CLASS dependent,
+    which is why it cannot be folded into per-antenna gains:
+
+        * cross-correlations between antennas on DIFFERENT SNAPs are divided
+          by (1 - p_i) * (1 - p_j) — under the stale-packet model only
+          current-times-current products correlate, so the observed
+          visibility is suppressed by exactly that product of
+          coherence factors;
+        * baselines within a single SNAP — including all autocorrelations
+          and cross-polarized "autos" — are EXEMPT (both antennas ride the
+          same packet stream, so stale-times-stale is still coherent) and
+          are left untouched. Folding the correction into gains would
+          over-correct these by roughly 2p.
+
+    The decoherence is per-SNAP and therefore polarization-common: the same
+    correction applies to all visibility polarizations of a baseline.
+
+    CAVEAT inherited from estimate_SNAP_decoherence: within each band the
+    measured p is RELATIVE to that band's least-suppressed covered block, so
+    this correction removes the spectral structure decoherence imprints but
+    not any band-common suppression shared by every block.
+
+    NaN contract: np.nan in decoherence means "unmeasured". Unmeasured
+    decoherence overlapping UNFLAGGED inter-SNAP data is an error — it
+    would silently leave uncorrected suppression in data marked good.
+    Unmeasured decoherence over flagged data is fine: the unmeasured SNAP
+    contributes no correction there (coherence factor treated as 1), though
+    a measured partner SNAP's correction still applies; flags are never
+    modified by this function. With
+    data_flags=None, nothing is treated as flagged, making this check its
+    strictest.
+
+    Arguments:
+        data: DataContainer of visibilities, modified in place
+        decoherence: dict mapping SNAP ID to (Ntimes, Nblocks) ndarrays of
+            loss fraction p (np.nan where unmeasured), as returned by
+            skycal.estimate_SNAP_decoherence. Ntimes must match the data
+            (no BDA up/downsampling support).
+        ant_to_SNAP_dict: dict mapping antenna numbers to SNAP IDs. EVERY
+            antenna appearing in data must be present, and every SNAP with
+            an antenna in the data must appear in decoherence (ValueError
+            otherwise).
+        data_flags: optional DataContainer of boolean flag waterfalls, used
+            ONLY to evaluate the NaN contract (never modified). Default
+            None treats all data as unflagged.
+        nchans_per_block: channels per X-engine block; the block map is
+            channel_index // nchans_per_block, matching
+            estimate_SNAP_decoherence. Nfreqs / nchans_per_block (rounded
+            up) must match the decoherence arrays\' Nblocks.
+
+    Raises:
+        ValueError: if ant_to_SNAP_dict is missing antennas in data; if a
+            SNAP in the data is missing from decoherence; if decoherence
+            shapes
+            do not match the data; or if unmeasured (NaN) decoherence
+            overlaps unflagged inter-SNAP data.
+    '''
+    antnums_in_data = sorted({antnum for bl in data.keys()
+                              for antnum in bl[:2]})
+    missing = [antnum for antnum in antnums_in_data
+               if antnum not in ant_to_SNAP_dict]
+    if len(missing) > 0:
+        raise ValueError('ant_to_SNAP_dict is missing antennas that appear '
+                         f'in the data: {missing}. All antennas must be '
+                         'mapped to SNAPs.')
+
+    # expand each needed SNAP\'s (Ntimes, Nblocks) p into an
+    # (Ntimes, Nfreqs) coherence-factor waterfall 1 - p via the block map
+    ntimes, nfreqs = data[next(iter(data.keys()))].shape
+    chan_to_block = np.arange(nfreqs) // nchans_per_block
+    nblocks = int(chan_to_block[-1]) + 1
+    snaps_in_data = sorted({ant_to_SNAP_dict[antnum]
+                            for antnum in antnums_in_data})
+    missing_snaps = [snap for snap in snaps_in_data
+                     if snap not in decoherence]
+    if len(missing_snaps) > 0:
+        raise ValueError('decoherence is missing SNAPs that appear in the '
+                         f'data: {missing_snaps}.')
+    coherence_factor, unmeasured = {}, {}
+    for snap in snaps_in_data:
+        p = np.asarray(decoherence[snap])
+        if p.shape != (ntimes, nblocks):
+            raise ValueError(f'decoherence[{snap!r}] has shape {p.shape} '
+                             f'but the data implies ({ntimes}, {nblocks}) '
+                             f'with nchans_per_block={nchans_per_block}.')
+        coherence_factor[snap] = 1 - np.nan_to_num(p)[:, chan_to_block]
+        unmeasured[snap] = np.isnan(p)[:, chan_to_block]
+
+    # NaN contract: unmeasured decoherence must not overlap unflagged
+    # inter-SNAP data
+    for bl in data.keys():
+        i, j, pol = bl
+        if ant_to_SNAP_dict[i] == ant_to_SNAP_dict[j]:
+            continue
+        unm = (unmeasured[ant_to_SNAP_dict[i]]
+               | unmeasured[ant_to_SNAP_dict[j]])
+        if data_flags is not None:
+            unm = unm & ~data_flags[bl]
+        if unm.any():
+            tinds, chans = np.nonzero(unm)
+            raise ValueError('Unmeasured (NaN) decoherence overlaps '
+                             f'unflagged data, e.g. on {bl} at time index '
+                             f'{tinds[0]}, block {chan_to_block[chans[0]]}. '
+                             'Flag that data or restrict to measured '
+                             'blocks before correcting.')
+
+    # apply the correction to inter-SNAP cross-correlations only
+    for bl in data.keys():
+        i, j, pol = bl
+        if ant_to_SNAP_dict[i] == ant_to_SNAP_dict[j]:
+            continue
+        data[bl] /= (coherence_factor[ant_to_SNAP_dict[i]]
+                     * coherence_factor[ant_to_SNAP_dict[j]])
+
+
 def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
     ''' Builds dictionaries that map gains to the various cadences in potentially BDA data.
         As necessary, will upsample gains/flags by duplication and downsample gains/flags by
