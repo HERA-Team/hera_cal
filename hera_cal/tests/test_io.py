@@ -439,6 +439,7 @@ class Test_HERAData(object):
             os.remove(file)
 
     @pytest.mark.filterwarnings("ignore:miriad does not support partial loading")
+    @pytest.mark.filterwarnings("ignore:Polarization xy is not present")
     def test_read(self):
         # uvh5
         hd = HERAData(self.uvh5_1)
