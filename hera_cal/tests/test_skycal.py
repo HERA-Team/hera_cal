@@ -848,7 +848,7 @@ class TestEstimateSNAPDecoherence:
                     'log_suppression_sigma',
                     'fgls_iterations', 'n_spectra_per_snap',
                     'sigma_over_thermal', 'covered_blocks', 'edge_blocks',
-                    'chan_to_block']:
+                    'chan_to_block', 'band_slices']:
             assert key in meta
         for snap in ['A', 'B']:
             assert meta['log_suppression'][snap].shape == (1, sim['nblocks'])
@@ -859,6 +859,9 @@ class TestEstimateSNAPDecoherence:
         assert meta['covered_blocks'].all()
         np.testing.assert_array_equal(meta['chan_to_block'],
                                       np.arange(256) // 32)
+        # no flagging in this sim, so the two bands tile the full axis,
+        # splitting at band_split_freq
+        assert meta['band_slices'] == [slice(0, 96), slice(96, 256)]
 
 
 class TestCoverageGaps:

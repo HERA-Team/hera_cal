@@ -1372,7 +1372,9 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
             'sigma_over_thermal': (Ntimes, Nbands) median noise inflation
                 from the residual ACF over interior blocks
             plus 'covered_blocks' (Nblocks bool), 'edge_blocks' (sorted
-            list), and 'chan_to_block' (Nfreqs int), shared across SNAPs
+            list), 'chan_to_block' (Nfreqs int), and 'band_slices' (list
+            of slices into the frequency axis giving each band's trimmed
+            extent, None for a fully-flagged band), shared across SNAPs
 
     Raises:
         ValueError: if ant_to_SNAP_dict is missing antennas in gains, or if
@@ -1627,7 +1629,8 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
             'sigma_over_thermal': inflation_out,
             'covered_blocks': covered_blocks,
             'edge_blocks': sorted(edge_blocks),
-            'chan_to_block': chan_to_block}
+            'chan_to_block': chan_to_block,
+            'band_slices': band_slices}
     return decoherence, meta
 
 
