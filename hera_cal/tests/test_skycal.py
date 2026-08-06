@@ -964,15 +964,13 @@ class TestCoverageGaps:
         assert np.isfinite(meta['log_suppression_sigma']['A'][0, 4:]).all()
 
     def test_heterogeneous_snap_flags(self):
-        # SNAP B: dead low band and one dead block; SNAP C: fully dead;
-        # SNAP D: a single live channel (its smooth fit absorbs everything,
-        # leaving no block information)
+        # SNAP B: dead low band and one dead block; SNAP C: fully dead
         nblocks = 8
         ptil = np.zeros(nblocks)
         ptil[5] = 0.1
         sim = build_decoherence_sim(
-            {'A': ptil, 'B': np.zeros(nblocks), 'C': np.zeros(nblocks),
-             'D': np.zeros(nblocks)}, seed=6)
+            {'A': ptil, 'B': np.zeros(nblocks), 'C': np.zeros(nblocks)},
+            seed=6)
         for key in sim['logamp_wgts']:
             antnum = key[0]
             snap = sim['ant_to_SNAP_dict'][antnum]
@@ -981,10 +979,6 @@ class TestCoverageGaps:
                 sim['logamp_wgts'][key][:, 192:224] = 0  # block 6 dead
             elif snap == 'C':
                 sim['logamp_wgts'][key][:] = 0
-            elif snap == 'D':
-                wgt_val = sim['logamp_wgts'][key][0, 0]
-                sim['logamp_wgts'][key][:] = 0
-                sim['logamp_wgts'][key][:, 130] = wgt_val
         deco, meta = skycal.estimate_SNAP_decoherence(
             sim['gains'], sim['logamp_wgts'], sim['ant_to_SNAP_dict'],
             sim['freqs'], nchans_per_block=sim['nchans_per_block'],
@@ -995,8 +989,46 @@ class TestCoverageGaps:
         assert np.isnan(log_supp['B'][0, 6])            # dead block
         assert np.all(np.isnan(log_supp['C'][0]))       # no spectra
         assert meta['n_spectra_per_snap']['C'][0] == 0
-        assert np.all(np.isnan(log_supp['D'][0]))       # no block info
-        assert meta['n_spectra_per_snap']['D'][0] == 3
+
+    def test_snap_with_no_fittable_blocks(self):
+        # B alive only in 20 chans of block 2, everyone else dead there:
+        # block 2 falls below min_block_coverage -> B has spectra but no
+        # fittable blocks (all NaN); A just loses block 2
+        nblocks = 8
+        sim = build_decoherence_sim({'A': np.zeros(nblocks),
+                                     'B': np.zeros(nblocks)}, seed=8)
+        for key in sorted(sim['logamp_wgts']):
+            if sim['ant_to_SNAP_dict'][key[0]] == 'A':
+                sim['logamp_wgts'][key][:, 64:96] = 0    # block 2 dead
+            else:
+                wgt_val = sim['logamp_wgts'][key][0, 0]
+                sim['logamp_wgts'][key][:] = 0
+                sim['logamp_wgts'][key][:, 64:84] = wgt_val
+        deco, meta = skycal.estimate_SNAP_decoherence(
+            sim['gains'], sim['logamp_wgts'], sim['ant_to_SNAP_dict'],
+            sim['freqs'], nchans_per_block=sim['nchans_per_block'],
+            min_block_coverage=0.7, **DECO_KWARGS)
+        log_supp = meta['log_suppression']
+        assert np.all(np.isnan(log_supp['B'][0]))
+        assert meta['n_spectra_per_snap']['B'][0] == 3
+        assert np.isnan(log_supp['A'][0, 2])
+        assert np.isfinite(log_supp['A'][0, [0, 1, 3, 4, 5, 6, 7]]).all()
+
+    def test_underdetermined_band_raises(self):
+        # fewer unflagged channels in a band than DPSS modes ->
+        # interpolatory fit, no information: must raise
+        nblocks = 8
+        sim = build_decoherence_sim({'A': np.zeros(nblocks),
+                                     'B': np.zeros(nblocks)}, seed=6)
+        key = sorted(sim['logamp_wgts'])[0]
+        wgt_val = sim['logamp_wgts'][key][0, 0]
+        sim['logamp_wgts'][key][:] = 0
+        sim['logamp_wgts'][key][:, 130] = wgt_val   # a single live channel
+        with pytest.raises(ValueError, match='interpolatory'):
+            skycal.estimate_SNAP_decoherence(
+                sim['gains'], sim['logamp_wgts'], sim['ant_to_SNAP_dict'],
+                sim['freqs'], nchans_per_block=sim['nchans_per_block'],
+                **DECO_KWARGS)
 
     def test_sparse_block_not_fit(self):
         # a block below min_block_coverage must come back NaN, not fit

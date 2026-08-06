@@ -1096,15 +1096,31 @@ def _project_out_smooth(vals, wgts, band_slices, dpss_bases):
         dpss_bases: list of per-band bases from _dpss_bases
 
     Returns: ndarray like vals; bands with no unflagged channels are
-        set to 0.'''
+        set to 0.
+
+    Raises: ValueError if a band has more than zero but no more unflagged
+        channels than basis modes (an interpolatory fit with exactly zero
+        residual — no information; such spectra must be flagged entirely
+        or excluded upstream).'''
     vals2 = vals.reshape(len(wgts), -1)
     # channels outside every band slice (exterior flagged channels trimmed
     # by get_minimal_slices, or fully-flagged None bands) come back 0;
     # they carry zero weight in every downstream sum
     resid = np.zeros_like(vals2, dtype=float)
     for band, basis in zip(band_slices, dpss_bases):
-        if band is None or basis is None or not (wgts[band] > 0).any():
+        if band is None or basis is None:
             continue
+        nunflagged = int((wgts[band] > 0).sum())
+        if nunflagged == 0:
+            continue
+        # <= modes unflagged makes the fit interpolatory (zero residual,
+        # no information): refuse rather than contribute silently
+        if nunflagged <= basis.shape[1]:
+            raise ValueError(
+                f'A band has only {nunflagged} unflagged channels for '
+                f'{basis.shape[1]} DPSS modes: the smooth fit would be '
+                'interpolatory, leaving no residual information. Flag '
+                'such spectra entirely or exclude them upstream.')
         # weighted least squares via the (Nmodes, Nmodes) normal equations
         # rather than an SVD of the full (Nchans, Nmodes) design — the same
         # strategy as hera_filters' 'dpss_solve'/'dpss_matrix' modes, ~5x
