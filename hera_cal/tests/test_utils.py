@@ -669,6 +669,7 @@ def test_gp_interp1d():
     rstd = np.std(yint_1thin - yint_2thin, axis=0)  # error flucturations between 1 and 2 thin models
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', 'divide by zero encountered in divide')
+        warnings.filterwarnings('ignore', 'invalid value encountered in divide')
         assert np.nanmedian(nstd / rstd) > 2.0  # assert model error is on average less then half noise
 
 

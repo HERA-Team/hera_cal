@@ -836,6 +836,9 @@ class HERAData(UVData):
                 if self.filetype in ['uvh5', 'uvfits']:
                     with warnings.catch_warnings():
                         warnings.filterwarnings('ignore', 'Fixing phases using antenna positions')
+                        # hera_cal routinely feeds mixed lists of antpairpol 3-tuples;
+                        # pyuvdata's inclusive select of all matching antpairs and pols is the intended behavior
+                        warnings.filterwarnings('ignore', 'Selected bls contain a mixture of different baselines')
                         super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
                                     times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
                                     freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
@@ -901,7 +904,11 @@ class HERAData(UVData):
             kwargs : pyuvdata.UVData select keyword arguments.
         """
         # select
-        output = super(HERAData, self).select(inplace=inplace, **kwargs)
+        with warnings.catch_warnings():
+            # hera_cal routinely feeds mixed lists of antpairpol 3-tuples;
+            # pyuvdata's inclusive select of all matching antpairs and pols is the intended behavior
+            warnings.filterwarnings('ignore', 'Selected bls contain a mixture of different baselines')
+            output = super(HERAData, self).select(inplace=inplace, **kwargs)
         if inplace:
             output = self
 
@@ -1884,9 +1891,13 @@ def partial_time_io(hd, times=None, time_range=None, lsts=None, lst_range=None, 
 
         # attempt to read this file's data
         try:
-            hd_here.read(times=times_here, time_range=time_range,
-                         lsts=lsts_here, lst_range=lst_range,
-                         return_data=False, **kwargs)
+            with warnings.catch_warnings():
+                # before raising the ValueErrors caught below, pyuvdata warns about empty selections
+                warnings.filterwarnings('ignore', 'No elements in time_array between ')
+                warnings.filterwarnings('ignore', 'No elements in lst_array between ')
+                hd_here.read(times=times_here, time_range=time_range,
+                             lsts=lsts_here, lst_range=lst_range,
+                             return_data=False, **kwargs)
         except ValueError as err:
             # check to see if the read failed because of the time range or lst range
             if 'No elements in time range between ' in str(err) or 'No elements in time_array between ' in str(err) or 'No data matching this time selection present in object' in str(err):
