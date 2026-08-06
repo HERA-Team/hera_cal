@@ -1209,7 +1209,7 @@ def _mcp_penalized_nnls(normal_mat, rhs, zero_below, unbiased_above,
                        f'{maxiter} iterations (last max change {dmax:.2e}).')
 
 
-def _snap_log_gain_spectra(ant_keys, tind, gains, logamp_wgts):
+def _SNAP_log_gain_spectra(ant_keys, tind, gains, logamp_wgts):
     '''ln|gain| spectra and weights for one SNAP at one integration: one
     (log_amp, wgts) pair per antenna-pol on the SNAP with any usable
     channels. NaN/zero-weight channels carry zero weight.'''
@@ -1368,7 +1368,7 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
                 active set (unbiased values for mapping/comparison)
             'log_suppression_sigma': HAC 1-sigma errors on active blocks
             'fgls_iterations': (Ntimes,) iterations to stable support
-            'n_spectra_per_snap': (Ntimes,) contributing antenna-pol spectra
+            'n_spectra_per_SNAP': (Ntimes,) contributing antenna-pol spectra
             'sigma_over_thermal': (Ntimes, Nbands) median noise inflation
                 from the residual ACF over interior blocks
             plus 'covered_blocks' (Nblocks bool), 'edge_blocks' (sorted
@@ -1444,16 +1444,16 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
     bartlett = 1 - np.arange(hac_nlags + 1) / (hac_nlags + 1)
     no_upper = np.full(nblocks, np.inf)
 
-    snaps = sorted({ant_to_SNAP_dict[antnum] for antnum in antnums})
-    snap_keys = {snap: [key for key in sorted(gains)
-                        if ant_to_SNAP_dict[key[0]] == snap]
-                 for snap in snaps}
-    log_suppression = {s: np.full((ntimes, nblocks), np.nan) for s in snaps}
-    refit_out = {s: np.full((ntimes, nblocks), np.nan) for s in snaps}
-    sigma_out = {s: np.full((ntimes, nblocks), np.nan) for s in snaps}
-    iters_out = {s: np.zeros(ntimes, dtype=int) for s in snaps}
-    nspectra_out = {s: np.zeros(ntimes, dtype=int) for s in snaps}
-    inflation_out = {s: np.full((ntimes, nbands), np.nan) for s in snaps}
+    SNAPs = sorted({ant_to_SNAP_dict[antnum] for antnum in antnums})
+    SNAP_keys = {SNAP: [key for key in sorted(gains)
+                        if ant_to_SNAP_dict[key[0]] == SNAP]
+                 for SNAP in SNAPs}
+    log_suppression = {s: np.full((ntimes, nblocks), np.nan) for s in SNAPs}
+    refit_out = {s: np.full((ntimes, nblocks), np.nan) for s in SNAPs}
+    sigma_out = {s: np.full((ntimes, nblocks), np.nan) for s in SNAPs}
+    iters_out = {s: np.zeros(ntimes, dtype=int) for s in SNAPs}
+    nspectra_out = {s: np.zeros(ntimes, dtype=int) for s in SNAPs}
+    inflation_out = {s: np.full((ntimes, nbands), np.nan) for s in SNAPs}
 
     def _lag_covariances(a, b, nlags):
         '''Unnormalized lag cross-covariances sum_n a[n] * b[n + lag] for
@@ -1462,12 +1462,12 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
         return np.array([(a[:len(a) - lag] * b[lag:]).sum()
                         for lag in range(nlags + 1)])
 
-    for snap in snaps:
-        utils.echo(f'Fitting SNAP {snap}...', verbose=verbose)
+    for SNAP in SNAPs:
+        utils.echo(f'Fitting SNAP {SNAP}...', verbose=verbose)
         for tind in range(ntimes):
-            spectra = _snap_log_gain_spectra(snap_keys[snap], tind,
+            spectra = _SNAP_log_gain_spectra(SNAP_keys[SNAP], tind,
                                              gains, logamp_wgts)
-            nspectra_out[snap][tind] = len(spectra)
+            nspectra_out[SNAP][tind] = len(spectra)
             if len(spectra) == 0:
                 continue
 
@@ -1564,12 +1564,12 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
                         and np.array_equal(support, prev_support)):
                     break
                 prev_support = support
-            iters_out[snap][tind] = fgls_iter + 1
+            iters_out[SNAP][tind] = fgls_iter + 1
             for bi in range(nbands):
                 interior = [b for b in band_blocks[bi]
                             if ok_blocks[b] and b not in edge_blocks]
                 if interior:
-                    inflation_out[snap][tind, bi] = np.median(
+                    inflation_out[SNAP][tind, bi] = np.median(
                         np.sqrt(variances[interior]
                                 * normal_diag[interior]))
 
@@ -1614,18 +1614,18 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
                     np.maximum(np.diag(full_cov), 0))
 
             # blocks with no constraining data are unmeasured, not zero
-            log_suppression[snap][tind] = np.where(ok_blocks, fit, np.nan)
-            refit_out[snap][tind] = np.where(ok_blocks, refit, np.nan)
-            sigma_out[snap][tind] = sigma_fit
+            log_suppression[SNAP][tind] = np.where(ok_blocks, fit, np.nan)
+            refit_out[SNAP][tind] = np.where(ok_blocks, refit, np.nan)
+            sigma_out[SNAP][tind] = sigma_fit
 
     with np.errstate(invalid='ignore'):
-        decoherence = {snap: 1 - np.exp(-log_suppression[snap])
-                       for snap in snaps}
+        decoherence = {SNAP: 1 - np.exp(-log_suppression[SNAP])
+                       for SNAP in SNAPs}
     meta = {'log_suppression': log_suppression,
             'log_suppression_refit': refit_out,
             'log_suppression_sigma': sigma_out,
             'fgls_iterations': iters_out,
-            'n_spectra_per_snap': nspectra_out,
+            'n_spectra_per_SNAP': nspectra_out,
             'sigma_over_thermal': inflation_out,
             'covered_blocks': covered_blocks,
             'edge_blocks': sorted(edge_blocks),

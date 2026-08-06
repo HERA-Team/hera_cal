@@ -181,22 +181,22 @@ def correct_SNAP_decoherence_in_place(data, decoherence, ant_to_SNAP_dict,
     ntimes, nfreqs = data[next(iter(data.keys()))].shape
     chan_to_block = np.arange(nfreqs) // nchans_per_block
     nblocks = int(chan_to_block[-1]) + 1
-    snaps_in_data = sorted({ant_to_SNAP_dict[antnum]
+    SNAPs_in_data = sorted({ant_to_SNAP_dict[antnum]
                             for antnum in antnums_in_data})
-    missing_snaps = [snap for snap in snaps_in_data
-                     if snap not in decoherence]
-    if len(missing_snaps) > 0:
+    missing_SNAPs = [SNAP for SNAP in SNAPs_in_data
+                     if SNAP not in decoherence]
+    if len(missing_SNAPs) > 0:
         raise ValueError('decoherence is missing SNAPs that appear in the '
-                         f'data: {missing_snaps}.')
+                         f'data: {missing_SNAPs}.')
     coherence_factor, unmeasured = {}, {}
-    for snap in snaps_in_data:
-        p = np.asarray(decoherence[snap])
+    for SNAP in SNAPs_in_data:
+        p = np.asarray(decoherence[SNAP])
         if p.shape != (ntimes, nblocks):
-            raise ValueError(f'decoherence[{snap!r}] has shape {p.shape} '
+            raise ValueError(f'decoherence[{SNAP!r}] has shape {p.shape} '
                              f'but the data implies ({ntimes}, {nblocks}) '
                              f'with nchans_per_block={nchans_per_block}.')
-        coherence_factor[snap] = 1 - np.nan_to_num(p)[:, chan_to_block]
-        unmeasured[snap] = np.isnan(p)[:, chan_to_block]
+        coherence_factor[SNAP] = 1 - np.nan_to_num(p)[:, chan_to_block]
+        unmeasured[SNAP] = np.isnan(p)[:, chan_to_block]
 
     # NaN contract: unmeasured decoherence must not overlap unflagged
     # inter-SNAP data
