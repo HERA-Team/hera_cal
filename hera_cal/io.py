@@ -2951,3 +2951,384 @@ def uvdata_from_fastuvh5(
     uvd.history += uvd.pyuvdata_version_str
 
     return uvd
+
+
+class SNAPDecoherence:
+    """Container with HDF5 IO for per-SNAP, per-X-engine-block decoherence
+    (see skycal.estimate_SNAP_decoherence) and the antenna -> SNAP mapping
+    it was measured with.
+
+    This is deliberately NOT a calibration solution: the correction it
+    feeds (apply_cal.correct_SNAP_decoherence_in_place) is baseline-class
+    dependent — inter-SNAP cross-correlations are suppressed by
+    (1 - p_i)(1 - p_j) while intra-SNAP baselines and autos are exempt —
+    so it cannot be folded into per-antenna gains or stored as one.
+
+    Conventions (also recorded in the file as the /Header 'conventions'
+    attr; results arrays live in /Data, uvh5-style):
+    - decoherence is the loss fraction p, np.nan where unfit; within each
+      band it is relative to that band's least-suppressed covered block
+      (decoherence = 0 there by convention; absolute levels are not
+      measured).
+    - States are polarization-common: one per (SNAP, time, block).
+    - Blocks are anchored in frequency by block_freqs, which records
+      exactly which channels each block spanned — the identity that makes
+      cross-file comparison and application checks unambiguous.
+
+    Public attributes / properties:
+        decoherence: dict mapping SNAP ID to (Ntimes, Nblocks) float
+            arrays of p, np.nan where unfit
+        SNAPs: sorted list of SNAP IDs (row order of the file's arrays)
+        times: (Ntimes,) julian dates
+        block_freqs: (Nblocks, nchans_per_block) channel-center
+            frequencies in Hz (the band is assumed to be an integer
+            number of whole X-engine blocks)
+        ant_to_SNAP_dict: dict mapping antenna number to SNAP ID (the M&C
+            mapping frozen at measurement time; may include SNAPs with no
+            fit)
+        filepaths: list of the paths each constituent part was read from,
+            with None entries for parts built in memory — e.g. [None] for
+            a fresh from_estimate result, ['/path/1', '/path/2'] after a
+            two-file read, [None, '/path/1'] after adding those two
+        freqs: property, flat channel frequencies
+
+    Underscored attributes hold the advanced tier: _decoherence_refit
+    (unpenalized refit on the detected blocks, in p), _log_suppression /
+    _log_suppression_refit (properties, -ln(1 - p)),
+    _log_suppression_sigma (HAC 1-sigma in the log domain, where the
+    detection thresholds live; finite <=> detected), _covered_blocks,
+    _edge_blocks (blocks adjacent to band boundaries, where DPSS-basis
+    systematics of a few percent are documented), _n_spectra_per_SNAP,
+    and _band_edges ((Nbands, 2) Hz extents of the trimmed fit bands,
+    np.nan for a fully-flagged band).
+    """
+
+    def __init__(self, decoherence, decoherence_refit, log_suppression_sigma, n_spectra_per_SNAP,
+                 times, block_freqs, ant_to_SNAP_dict, covered_blocks, edge_blocks, band_edges,
+                 estimator_kwargs=None, history=''):
+        """Build from canonical in-memory pieces. Most users want
+        SNAPDecoherence.from_estimate (from estimator outputs) or
+        SNAPDecoherence.read (from disk) instead.
+
+        Arguments:
+            decoherence: dict mapping SNAP ID to (Ntimes, Nblocks) p
+            decoherence_refit: same structure, unpenalized refit in p
+            log_suppression_sigma: same structure, 1-sigma in -ln(1 - p)
+            n_spectra_per_SNAP: dict mapping SNAP ID to (Ntimes,) counts
+                of contributing antenna-pol spectra
+            times: (Ntimes,) julian dates
+            block_freqs: (Nblocks, nchans_per_block) channel-center
+                frequencies in Hz
+            ant_to_SNAP_dict: dict mapping antenna number to SNAP ID
+            covered_blocks: (Nblocks,) bool, blocks with enough unflagged
+                channels to fit
+            edge_blocks: iterable of block indices adjacent to band
+                boundaries
+            band_edges: (Nbands, 2) Hz extents (first and last channel
+                center) of each trimmed fit band, np.nan if fully flagged
+            estimator_kwargs: dict of estimate_SNAP_decoherence settings,
+                stored verbatim for provenance
+            history: string prepended to the file's history on write
+
+        Raises:
+            ValueError: on SNAP key mismatches between the per-SNAP dicts
+                or on any array shape inconsistency
+        """
+        self.SNAPs = sorted(decoherence)
+        self.times = np.asarray(times, dtype=float)
+        self.block_freqs = np.asarray(block_freqs, dtype=float)
+        self.ant_to_SNAP_dict = dict(ant_to_SNAP_dict)
+        self.history = history
+        self.filepaths = [None]   # replaced by read; [None] for objects built in memory
+        self._estimator_kwargs = dict(estimator_kwargs or {})
+        ntimes, (nblocks, _) = len(self.times), self.block_freqs.shape
+
+        self.decoherence = {}
+        self._decoherence_refit = {}
+        self._log_suppression_sigma = {}
+        self._n_spectra_per_SNAP = {}
+        for attr, name, dicts, shape in [
+                (self.decoherence, 'decoherence', decoherence, (ntimes, nblocks)),
+                (self._decoherence_refit, 'decoherence_refit', decoherence_refit, (ntimes, nblocks)),
+                (self._log_suppression_sigma, 'log_suppression_sigma', log_suppression_sigma, (ntimes, nblocks)),
+                (self._n_spectra_per_SNAP, 'n_spectra_per_SNAP', n_spectra_per_SNAP, (ntimes,))]:
+            if set(dicts) != set(self.SNAPs):
+                raise ValueError(f'{name} keys {sorted(dicts)} do not match decoherence SNAPs {self.SNAPs}.')
+            for SNAP in self.SNAPs:
+                arr = np.asarray(dicts[SNAP], dtype=float)
+                if arr.shape != shape:
+                    raise ValueError(f'{name}["{SNAP}"] has shape {arr.shape}, '
+                                     f'expected {shape} from times and block_freqs.')
+                attr[SNAP] = arr
+
+        self._covered_blocks = np.asarray(covered_blocks, dtype=bool)
+        if self._covered_blocks.shape != (nblocks,):
+            raise ValueError(f'covered_blocks has shape {self._covered_blocks.shape}, expected ({nblocks},).')
+        self._edge_blocks = sorted(int(b) for b in edge_blocks)
+        if any(b < 0 or b >= nblocks for b in self._edge_blocks):
+            raise ValueError(f'edge_blocks {self._edge_blocks} contains indices outside 0..{nblocks - 1}.')
+        self._band_edges = np.asarray(band_edges, dtype=float)
+        if self._band_edges.ndim != 2 or self._band_edges.shape[1] != 2:
+            raise ValueError(f'band_edges has shape {self._band_edges.shape}, expected (Nbands, 2).')
+
+    @classmethod
+    def from_estimate(cls, decoherence, meta, ant_to_SNAP_dict, freqs, times,
+                      nchans_per_block=96, estimator_kwargs=None, history=''):
+        """Build from skycal.estimate_SNAP_decoherence outputs.
+
+        Arguments:
+            decoherence, meta: the estimator's two return values
+            ant_to_SNAP_dict, freqs: the same objects passed to the
+                estimator
+            times: (Ntimes,) julian dates of the fitted integrations
+            nchans_per_block: channels per X-engine block, matching the
+                estimator's setting (a mismatch shows up as a shape
+                ValueError)
+            estimator_kwargs: dict of the estimator's keyword settings,
+                stored verbatim for provenance
+            history: string prepended to the file's history on write
+
+        Returns:
+            SNAPDecoherence
+
+        Raises:
+            ValueError: if len(freqs) is not a whole number of X-engine
+                blocks, or on any __init__ validation failure
+        """
+        freqs = np.asarray(freqs, dtype=float)
+        if len(freqs) % nchans_per_block != 0:
+            raise ValueError(f'len(freqs) = {len(freqs)} is not a multiple of nchans_per_block = '
+                             f'{nchans_per_block} — the band must be a whole number of X-engine blocks.')
+        with np.errstate(invalid='ignore'):
+            refit = {SNAP: 1 - np.exp(-np.asarray(ls, dtype=float))
+                     for SNAP, ls in meta['log_suppression_refit'].items()}
+        band_edges = [[np.nan, np.nan] if sl is None else [freqs[sl][0], freqs[sl][-1]]
+                      for sl in meta['band_slices']]
+        return cls(decoherence, refit, meta['log_suppression_sigma'], meta['n_spectra_per_SNAP'],
+                   times, freqs.reshape(-1, nchans_per_block), ant_to_SNAP_dict,
+                   meta['covered_blocks'], meta['edge_blocks'], band_edges,
+                   estimator_kwargs=estimator_kwargs, history=history)
+
+    @property
+    def freqs(self):
+        """Flat channel-center frequencies in Hz."""
+        return self.block_freqs.ravel()
+
+    @property
+    def _log_suppression(self):
+        """Dict mapping SNAP ID to -ln(1 - decoherence)."""
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return {SNAP: -np.log(1 - p) for SNAP, p in self.decoherence.items()}
+
+    @property
+    def _log_suppression_refit(self):
+        """Dict mapping SNAP ID to -ln(1 - _decoherence_refit)."""
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return {SNAP: -np.log(1 - p) for SNAP, p in self._decoherence_refit.items()}
+
+    def correct_in_place(self, data, data_flags=None):
+        """Correct data in place for this object's decoherence.
+
+        Thin wrapper around apply_cal.correct_SNAP_decoherence_in_place
+        (see its docstring for the three baseline classes and the nan
+        contract) that first verifies, when data carries freqs/times
+        metadata, that they match the stored measurement — the underlying
+        function maps channels to blocks by index and cannot detect a
+        shifted or trimmed spectral window on its own.
+
+        Arguments:
+            data: DataContainer of visibilities, modified in place
+            data_flags: optional DataContainer of flags (None means
+                nothing flagged, the strictest nan-decoherence check)
+
+        Raises:
+            ValueError: if data's freqs or times do not match this
+                object's, or from any correct_SNAP_decoherence_in_place
+                validation
+        """
+        if getattr(data, 'freqs', None) is not None:
+            if (len(data.freqs) != len(self.freqs) or not np.allclose(data.freqs, self.freqs, rtol=0, atol=1.0)):
+                raise ValueError('data.freqs do not match the channels this decoherence was measured at.')
+        if getattr(data, 'times', None) is not None:
+            if len(data.times) != len(self.times) or not np.allclose(data.times, self.times, rtol=0, atol=1e-8):
+                raise ValueError('data.times do not match the times this decoherence was measured at.')
+        from .apply_cal import correct_SNAP_decoherence_in_place
+        correct_SNAP_decoherence_in_place(data, self.decoherence, self.ant_to_SNAP_dict,
+                                          data_flags=data_flags, nchans_per_block=self.block_freqs.shape[1])
+
+    def write(self, filename, clobber=False):
+        """Write to an HDF5 file (suggested suffix: .snap_decoherence.h5).
+
+        Arguments:
+            filename: path to write
+            clobber: overwrite an existing file if True
+
+        Raises:
+            OSError: if filename exists and clobber is False
+        """
+        if os.path.exists(filename) and not clobber:
+            raise OSError(f'{filename} exists; use clobber=True to overwrite.')
+        nblocks = self.block_freqs.shape[0]
+        str_dt = h5py.string_dtype(encoding='utf-8')
+        with h5py.File(filename, 'w') as f:
+            # uvh5-style layout: axes, labels, and conventions in /Header,
+            # results arrays in /Data
+            header = f.create_group('Header')
+            header.attrs['conventions'] = (
+                'One decoherence state per (SNAP, time, block), common to both polarizations.\n'
+                'decoherence stores the loss fraction p, np.nan where unfit; log_suppression '
+                '= -ln(1 - p). log_suppression_sigma is the HAC 1-sigma error in the log domain, '
+                'where the detection thresholds live; finite sigma marks detected blocks.\n'
+                'Within each band, decoherence is relative to that band\'s least-suppressed '
+                'covered block (0 there by convention); absolute levels are not measured.')
+            header.attrs['history'] = self.history + utils.history_string()
+            header.create_dataset('SNAPs', data=self.SNAPs, dtype=str_dt)
+            header['times'] = self.times
+            header['block_freqs'] = self.block_freqs
+            header['band_edges'] = self._band_edges
+            header['covered_blocks'] = self._covered_blocks
+            edge = np.zeros(nblocks, dtype=bool)
+            edge[self._edge_blocks] = True
+            header['edge_blocks'] = edge
+            antnums = sorted(self.ant_to_SNAP_dict)
+            header['antnums'] = np.asarray(antnums, dtype=int)
+            header.create_dataset('ant_SNAPs', data=[self.ant_to_SNAP_dict[antnum] for antnum in antnums],
+                                  dtype=str_dt)
+            grp = header.create_group('estimator_kwargs')
+            for key, val in self._estimator_kwargs.items():
+                grp.attrs[key] = val
+            data = f.create_group('Data')
+            for name, dicts in [('decoherence', self.decoherence),
+                                ('decoherence_refit', self._decoherence_refit),
+                                ('log_suppression_sigma', self._log_suppression_sigma),
+                                ('n_spectra_per_SNAP', self._n_spectra_per_SNAP)]:
+                data[name] = np.array([dicts[SNAP] for SNAP in self.SNAPs])
+
+    @classmethod
+    def _read_single(cls, filename):
+        """Read one file written by write. Returns SNAPDecoherence with
+        filepaths = [filename]."""
+        with h5py.File(filename, 'r') as f:
+            header, data = f['Header'], f['Data']
+            SNAPs = list(header['SNAPs'].asstr()[()])
+            names = ['decoherence', 'decoherence_refit', 'log_suppression_sigma', 'n_spectra_per_SNAP']
+            per_SNAP = {name: dict(zip(SNAPs, data[name][()])) for name in names}
+            ant_to_SNAP_dict = dict(zip((int(antnum) for antnum in header['antnums'][()]),
+                                        header['ant_SNAPs'].asstr()[()]))
+            sd = cls(per_SNAP['decoherence'], per_SNAP['decoherence_refit'],
+                     per_SNAP['log_suppression_sigma'], per_SNAP['n_spectra_per_SNAP'],
+                     header['times'][()], header['block_freqs'][()], ant_to_SNAP_dict,
+                     header['covered_blocks'][()], np.flatnonzero(header['edge_blocks'][()]),
+                     header['band_edges'][()],
+                     estimator_kwargs=dict(header['estimator_kwargs'].attrs),
+                     history=str(header.attrs['history']))
+        sd.filepaths = [str(filename)]
+        return sd
+
+    @classmethod
+    def read(cls, filepaths):
+        """Read one file or concatenate several along the time axis.
+
+        Multi-file rules: every file must have identical block_freqs and
+        estimator settings; times are concatenated and sorted (duplicates
+        are an error); SNAPs are unioned, with np.nan (and 0 contributing
+        spectra) filled in for files where a SNAP has no fit;
+        ant_to_SNAP_dicts are merged, with any antenna mapped to
+        different SNAPs in different files a loud error (that is a real
+        M&C change the user must handle, not average over); band_edges
+        become the per-band envelope and covered/edge blocks the union.
+
+        Arguments:
+            filepaths: path or list of paths written by write
+
+        Returns:
+            SNAPDecoherence
+
+        Raises:
+            ValueError: on any multi-file inconsistency above
+        """
+        if isinstance(filepaths, (str, Path)):
+            filepaths = [filepaths]
+        parts = [cls._read_single(fn) for fn in filepaths]
+        if len(parts) == 1:
+            return parts[0]
+        return cls.concatenate(parts)
+
+    def __add__(self, other):
+        """Concatenate two SNAPDecoherence objects along the time axis,
+        following the same rules as read. To combine many objects, prefer
+        read (or one concatenate call) over chained addition — each +
+        copies every array again."""
+        if not isinstance(other, SNAPDecoherence):
+            return NotImplemented
+        return self.concatenate([self, other])
+
+    @classmethod
+    def concatenate(cls, parts):
+        """Concatenate SNAPDecoherence objects along the time axis in a
+        single N-way merge (the engine behind multi-file read and the
+        addition operator; see read for the rules).
+
+        Arguments:
+            parts: list of SNAPDecoherence objects
+
+        Returns:
+            SNAPDecoherence whose filepaths is the concatenation of the
+            parts' filepaths lists, in time order (None entries for parts
+            that were built in memory)
+
+        Raises:
+            ValueError: on any inconsistency between parts (see read)
+        """
+        parts = sorted(parts, key=lambda part: part.times[0])
+        # label parts by their file(s) in error messages, if they have any
+        names = [', '.join(fp for fp in part.filepaths if fp) or f'object {i}'
+                 for i, part in enumerate(parts)]
+        first, name0 = parts[0], names[0]
+        for part, name in zip(parts[1:], names[1:]):
+            if not np.array_equal(part.block_freqs, first.block_freqs):
+                raise ValueError(f'block_freqs in {name} do not match {name0}: '
+                                 'only objects sharing a channelization can be concatenated.')
+            if part._estimator_kwargs != first._estimator_kwargs:
+                raise ValueError(f'estimator_kwargs in {name} ({part._estimator_kwargs}) '
+                                 f'do not match {name0} ({first._estimator_kwargs}).')
+            if part._band_edges.shape != first._band_edges.shape:
+                raise ValueError(f'band_edges shape in {name} does not match {name0}.')
+
+        times = np.concatenate([part.times for part in parts])
+        if len(np.unique(times)) != len(times):
+            raise ValueError('Concatenated times contain duplicates — '
+                             'the same integration appears in more than one part.')
+        order = np.argsort(times)
+
+        ant_to_SNAP_dict = {}
+        for part, name in zip(parts, names):
+            for antnum, SNAP in part.ant_to_SNAP_dict.items():
+                if ant_to_SNAP_dict.setdefault(antnum, SNAP) != SNAP:
+                    raise ValueError(f'Antenna {antnum} maps to {ant_to_SNAP_dict[antnum]} and to {SNAP} '
+                                     f'in {name} — inconsistent ant_to_SNAP_dicts cannot be merged.')
+
+        SNAPs = sorted(set().union(*[part.SNAPs for part in parts]))
+        nblocks = first.block_freqs.shape[0]
+
+        def _stitch(attr, fill, width=nblocks):
+            def _one_part(part, SNAP):
+                if SNAP in getattr(part, attr):
+                    return getattr(part, attr)[SNAP]
+                return np.full((len(part.times), width) if width else (len(part.times),), fill)
+            return {SNAP: np.concatenate([_one_part(part, SNAP) for part in parts])[order] for SNAP in SNAPs}
+
+        with warnings.catch_warnings():
+            # a band fully flagged in every part is an all-nan slice
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            band_edges = np.stack([np.nanmin([part._band_edges[:, 0] for part in parts], axis=0),
+                                   np.nanmax([part._band_edges[:, 1] for part in parts], axis=0)], axis=1)
+        sd = cls(_stitch('decoherence', np.nan), _stitch('_decoherence_refit', np.nan),
+                 _stitch('_log_suppression_sigma', np.nan), _stitch('_n_spectra_per_SNAP', 0, width=None),
+                 times[order], first.block_freqs, ant_to_SNAP_dict,
+                 np.any([part._covered_blocks for part in parts], axis=0),
+                 sorted(set().union(*[part._edge_blocks for part in parts])), band_edges,
+                 estimator_kwargs=first._estimator_kwargs,
+                 history='\n'.join(part.history for part in parts))
+        sd.filepaths = [fp for part in parts for fp in part.filepaths]
+        return sd
