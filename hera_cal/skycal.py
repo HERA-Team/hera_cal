@@ -1124,10 +1124,10 @@ def _project_out_smooth(vals, wgts, band_slices, dpss_bases):
         # weighted least squares via the (Nmodes, Nmodes) normal equations
         # rather than an SVD of the full (Nchans, Nmodes) design — the same
         # strategy as hera_filters' 'dpss_solve'/'dpss_matrix' modes, ~5x
-        # faster at these shapes. The tiny lstsq on the Gram matrix keeps
-        # bands with fewer unflagged channels than modes graceful
-        # (minimum-norm coefficients; the residual on weighted channels is
-        # unaffected by the null space).
+        # faster at these shapes. lstsq (rather than solve) tolerates a
+        # numerically singular Gram matrix by returning minimum-norm
+        # coefficients, which leave the residual on weighted channels
+        # unaffected.
         wgt_band = wgts[band]
         gram = basis.T @ (basis * wgt_band[:, None])
         proj = basis.T @ (wgt_band[:, None] * vals2[band])

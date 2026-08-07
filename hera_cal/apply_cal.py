@@ -152,9 +152,9 @@ def correct_SNAP_decoherence_in_place(data, decoherence, ant_to_SNAP_dict,
             antenna appearing in data must be present, and every SNAP with
             an antenna in the data must appear in decoherence (ValueError
             otherwise).
-        data_flags: optional DataContainer of boolean flag waterfalls, used
-            ONLY to evaluate the NaN contract (never modified). Default
-            None treats all data as unflagged.
+        data_flags: optional DataContainer of boolean flag waterfalls with
+            the same keys as data, used ONLY to evaluate the NaN contract
+            (never modified). Default None treats all data as unflagged.
         nchans_per_block: channels per X-engine block; the block map is
             channel_index // nchans_per_block, matching
             estimate_SNAP_decoherence. Nfreqs / nchans_per_block (rounded
