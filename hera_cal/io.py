@@ -3047,15 +3047,15 @@ class SNAPDecoherence:
         self._decoherence_refit = {}
         self._log_suppression_sigma = {}
         self._n_spectra_per_SNAP = {}
-        for attr, name, dicts, shape in [
-                (self.decoherence, 'decoherence', decoherence, (ntimes, nblocks)),
-                (self._decoherence_refit, 'decoherence_refit', decoherence_refit, (ntimes, nblocks)),
-                (self._log_suppression_sigma, 'log_suppression_sigma', log_suppression_sigma, (ntimes, nblocks)),
-                (self._n_spectra_per_SNAP, 'n_spectra_per_SNAP', n_spectra_per_SNAP, (ntimes,))]:
-            if set(dicts) != set(self.SNAPs):
-                raise ValueError(f'{name} keys {sorted(dicts)} do not match decoherence SNAPs {self.SNAPs}.')
+        for attr, name, shape, dtype in [
+                (self.decoherence, 'decoherence', (ntimes, nblocks), float),
+                (self._decoherence_refit, 'decoherence_refit', (ntimes, nblocks), float),
+                (self._log_suppression_sigma, 'log_suppression_sigma', (ntimes, nblocks), float),
+                (self._n_spectra_per_SNAP, 'n_spectra_per_SNAP', (ntimes,), int)]:
+            if set(locals()[name]) != set(self.SNAPs):
+                raise ValueError(f'{name} keys {sorted(locals()[name])} do not match decoherence SNAPs {self.SNAPs}.')
             for SNAP in self.SNAPs:
-                arr = np.asarray(dicts[SNAP], dtype=float)
+                arr = np.asarray(locals()[name][SNAP], dtype=dtype)
                 if arr.shape != shape:
                     raise ValueError(f'{name}["{SNAP}"] has shape {arr.shape}, '
                                      f'expected {shape} from times and block_freqs.')

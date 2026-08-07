@@ -2049,6 +2049,8 @@ class TestSNAPDecoherence:
         assert 'test history' in sd2.history
         assert sd.filepaths == [None]
         assert sd2.filepaths == [fn]
+        # counts stay integers, in memory and on disk
+        assert sd2._n_spectra_per_SNAP['A'].dtype.kind == 'i'
 
     def test_write_clobber(self, tmp_path):
         sd = make_SNAP_decoherence()
