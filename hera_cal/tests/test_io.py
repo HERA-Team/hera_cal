@@ -21,8 +21,10 @@ from tempfile import TemporaryDirectory
 from pyuvdata.uvdata import FastUVH5Meta
 
 from .. import io
+from .. import skycal
 from ..io import HERACal, HERAData
 from ..datacontainer import DataContainer
+from .test_skycal import build_decoherence_sim, DECO_KWARGS
 from ..utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, split_bl
 from ..data import DATA_PATH
 from hera_qm.data import DATA_PATH as QM_DATA_PATH
@@ -1996,3 +1998,246 @@ def test_read_m_mode_spectra_file(tmp_path):
     antpair = (99, 100)
     with pytest.raises(ValueError, match="Requested antenna pair not found"):
         io.read_m_mode_spectra_file(str(test_file), antpair)
+
+
+# staircase for the SNAPDecoherence tests: strong detections on 2 of the
+# 8 test blocks (see build_decoherence_sim)
+PTIL_A = np.array([0., 0., 0.3, 0., 0., 0., 0.5, 0.])
+
+
+def make_SNAP_decoherence(ptil_by_SNAP=None, times=None, freqs_offset=0.0,
+                          seed=11):
+    '''Run the decoherence estimator on a build_decoherence_sim and wrap
+    the results in a SNAPDecoherence.'''
+    if ptil_by_SNAP is None:
+        ptil_by_SNAP = {'A': PTIL_A, 'B': np.zeros(8)}
+    sim = build_decoherence_sim(ptil_by_SNAP, seed=seed)
+    freqs = sim['freqs'] + freqs_offset
+    deco, meta = skycal.estimate_SNAP_decoherence(
+        sim['gains'], sim['logamp_wgts'], sim['ant_to_SNAP_dict'], freqs,
+        nchans_per_block=sim['nchans_per_block'], **DECO_KWARGS)
+    if times is None:
+        times = np.array([2459935.38])
+    est_kwargs = dict(nchans_per_block=sim['nchans_per_block'],
+                      **DECO_KWARGS)
+    return io.SNAPDecoherence.from_estimate(
+        deco, meta, sim['ant_to_SNAP_dict'], freqs, times,
+        nchans_per_block=sim['nchans_per_block'],
+        estimator_kwargs=est_kwargs, history='test history')
+
+
+class TestSNAPDecoherence:
+    def test_roundtrip(self, tmp_path):
+        sd = make_SNAP_decoherence()
+        fn = str(tmp_path / 'zen.2459935.38.sum.snap_decoherence.h5')
+        sd.write(fn)
+        sd2 = io.SNAPDecoherence.read(fn)
+        assert sd2.SNAPs == sd.SNAPs
+        np.testing.assert_array_equal(sd2.times, sd.times)
+        np.testing.assert_array_equal(sd2.block_freqs, sd.block_freqs)
+        assert sd2.ant_to_SNAP_dict == sd.ant_to_SNAP_dict
+        for attr in ['decoherence', '_decoherence_refit',
+                     '_log_suppression_sigma', '_n_spectra_per_SNAP']:
+            for SNAP in sd.SNAPs:
+                np.testing.assert_array_equal(getattr(sd2, attr)[SNAP],
+                                              getattr(sd, attr)[SNAP])
+        np.testing.assert_array_equal(sd2._covered_blocks,
+                                      sd._covered_blocks)
+        assert sd2._edge_blocks == sd._edge_blocks
+        np.testing.assert_array_equal(sd2._band_edges, sd._band_edges)
+        assert sd2._estimator_kwargs == sd._estimator_kwargs
+        assert 'test history' in sd2.history
+        assert sd.filepaths == [None]
+        assert sd2.filepaths == [fn]
+        # counts stay integers, in memory and on disk
+        assert sd2._n_spectra_per_SNAP['A'].dtype.kind == 'i'
+
+    def test_write_clobber(self, tmp_path):
+        sd = make_SNAP_decoherence()
+        fn = str(tmp_path / 'test.snap_decoherence.h5')
+        sd.write(fn)
+        with pytest.raises(OSError, match='clobber'):
+            sd.write(fn)
+        sd.write(fn, clobber=True)
+
+    def test_properties(self):
+        sd = make_SNAP_decoherence()
+        np.testing.assert_array_equal(sd.freqs,
+                                      60e6 + np.arange(256) * 0.5e6)
+        # detections recovered where injected (2 and 6), in p not -ln(1-p)
+        assert sd.decoherence['A'][0, 2] == pytest.approx(1 - np.exp(-0.3),
+                                                          abs=0.02)
+        assert sd.decoherence['A'][0, 6] == pytest.approx(1 - np.exp(-0.5),
+                                                          abs=0.02)
+        for SNAP in sd.SNAPs:
+            np.testing.assert_allclose(sd._log_suppression[SNAP],
+                                       -np.log(1 - sd.decoherence[SNAP]))
+            np.testing.assert_allclose(
+                sd._log_suppression_refit[SNAP],
+                -np.log(1 - sd._decoherence_refit[SNAP]))
+            # refit is nan exactly where decoherence is (unfit blocks)
+            np.testing.assert_array_equal(
+                np.isnan(sd._decoherence_refit[SNAP]),
+                np.isnan(sd.decoherence[SNAP]))
+        # finite sigma marks detections: exactly the injected blocks on A
+        assert np.flatnonzero(np.isfinite(
+            sd._log_suppression_sigma['A'][0])).tolist() == [2, 6]
+
+    def test_multifile_read(self, tmp_path):
+        sd1 = make_SNAP_decoherence(times=np.array([2459935.38]))
+        # second file: SNAP B absent entirely (e.g. all its antennas dead)
+        sd2 = make_SNAP_decoherence(ptil_by_SNAP={'A': PTIL_A},
+                                    times=np.array([2459935.39]), seed=12)
+        fn1 = str(tmp_path / 'f1.h5')
+        fn2 = str(tmp_path / 'f2.h5')
+        sd1.write(fn1)
+        sd2.write(fn2)
+        sd = io.SNAPDecoherence.read([fn2, fn1])   # order scrambled
+        np.testing.assert_array_equal(sd.times, [2459935.38, 2459935.39])
+        assert sd.SNAPs == ['A', 'B']
+        np.testing.assert_array_equal(sd.decoherence['A'][0],
+                                      sd1.decoherence['A'][0])
+        np.testing.assert_array_equal(sd.decoherence['A'][1],
+                                      sd2.decoherence['A'][0])
+        # SNAP B unfit in file 2 -> nan fill, 0 contributing spectra
+        np.testing.assert_array_equal(sd.decoherence['B'][0],
+                                      sd1.decoherence['B'][0])
+        assert np.all(np.isnan(sd.decoherence['B'][1]))
+        assert sd._n_spectra_per_SNAP['B'][1] == 0
+        assert sd.ant_to_SNAP_dict == sd1.ant_to_SNAP_dict
+        np.testing.assert_array_equal(sd.block_freqs, sd1.block_freqs)
+        np.testing.assert_array_equal(sd._band_edges, sd1._band_edges)
+        np.testing.assert_array_equal(sd._covered_blocks,
+                                      sd1._covered_blocks)
+        assert sd._edge_blocks == sorted(set(sd1._edge_blocks)
+                                         | set(sd2._edge_blocks))
+        assert sd._estimator_kwargs == sd1._estimator_kwargs
+        assert sd.filepaths == [fn1, fn2]   # per-part, in time order
+        # the addition operator runs the same merge
+        sd_add = sd2 + sd1
+        np.testing.assert_array_equal(sd_add.times, sd.times)
+        for SNAP in sd.SNAPs:
+            np.testing.assert_array_equal(sd_add.decoherence[SNAP], sd.decoherence[SNAP])
+        assert sd_add.filepaths == [None, None]   # in-memory parts
+        with pytest.raises(TypeError):
+            sd1 + 5
+
+    def test_multifile_errors(self, tmp_path):
+        sd1 = make_SNAP_decoherence(times=np.array([2459935.38]))
+        fn1 = str(tmp_path / 'f1.h5')
+        sd1.write(fn1)
+        with pytest.raises(ValueError, match='duplicates'):
+            io.SNAPDecoherence.read([fn1, fn1])
+
+        shifted = make_SNAP_decoherence(times=np.array([2459935.39]),
+                                        freqs_offset=0.25e6)
+        fn = str(tmp_path / 'shifted.h5')
+        shifted.write(fn)
+        with pytest.raises(ValueError, match='block_freqs'):
+            io.SNAPDecoherence.read([fn1, fn])
+
+        remapped = make_SNAP_decoherence(times=np.array([2459935.39]))
+        remapped.ant_to_SNAP_dict[0] = 'B'
+        fn = str(tmp_path / 'remapped.h5')
+        remapped.write(fn)
+        with pytest.raises(ValueError, match='maps to'):
+            io.SNAPDecoherence.read([fn1, fn])
+
+        retuned = make_SNAP_decoherence(times=np.array([2459935.39]))
+        retuned._estimator_kwargs['detection_sigma'] = 3.0
+        fn = str(tmp_path / 'retuned.h5')
+        retuned.write(fn)
+        with pytest.raises(ValueError, match='estimator_kwargs'):
+            io.SNAPDecoherence.read([fn1, fn])
+
+        rebanded = make_SNAP_decoherence(times=np.array([2459935.39]))
+        rebanded._band_edges = rebanded._band_edges[:1]
+        fn = str(tmp_path / 'rebanded.h5')
+        rebanded.write(fn)
+        with pytest.raises(ValueError, match='band_edges'):
+            io.SNAPDecoherence.read([fn1, fn])
+
+    def test_init_validation(self):
+        sd = make_SNAP_decoherence()
+
+        def rebuild(**over):
+            args = dict(decoherence=sd.decoherence,
+                        decoherence_refit=sd._decoherence_refit,
+                        log_suppression_sigma=sd._log_suppression_sigma,
+                        n_spectra_per_SNAP=sd._n_spectra_per_SNAP,
+                        times=sd.times, block_freqs=sd.block_freqs,
+                        ant_to_SNAP_dict=sd.ant_to_SNAP_dict,
+                        covered_blocks=sd._covered_blocks,
+                        edge_blocks=sd._edge_blocks,
+                        band_edges=sd._band_edges)
+            args.update(over)
+            return io.SNAPDecoherence(**args)
+
+        rebuild()   # the unmodified pieces are valid
+        with pytest.raises(ValueError, match='keys'):
+            rebuild(decoherence_refit={'A': sd._decoherence_refit['A']})
+        with pytest.raises(ValueError, match='decoherence'):
+            rebuild(decoherence={SNAP: p[:, :4]
+                                 for SNAP, p in sd.decoherence.items()})
+        with pytest.raises(ValueError, match='n_spectra_per_SNAP'):
+            rebuild(n_spectra_per_SNAP={SNAP: np.zeros(2)
+                                        for SNAP in sd.SNAPs})
+        with pytest.raises(ValueError, match='covered_blocks'):
+            rebuild(covered_blocks=np.ones(3, dtype=bool))
+        with pytest.raises(ValueError, match='edge_blocks'):
+            rebuild(edge_blocks=[99])
+        with pytest.raises(ValueError, match='band_edges'):
+            rebuild(band_edges=np.zeros(3))
+
+    def test_correct_in_place(self):
+        sd = make_SNAP_decoherence()
+        # per-channel coherence factors 1 - p for each SNAP
+        cf = {SNAP: np.repeat(1 - sd.decoherence[SNAP], 32, axis=1)
+              for SNAP in sd.SNAPs}
+        true_vis = np.full((1, 256), 2.0 + 1.0j)
+        # ants 0-2 are on SNAP A, 10-12 on SNAP B (build_decoherence_sim)
+        dc = DataContainer({
+            (0, 10, 'ee'): true_vis * cf['A'] * cf['B'],   # inter-SNAP
+            (0, 1, 'ee'): true_vis.copy(),                 # intra-SNAP
+            (0, 0, 'ee'): true_vis.copy()})                # auto
+        dc.freqs = sd.freqs
+        dc.times = sd.times
+        sd.correct_in_place(dc)
+        np.testing.assert_allclose(dc[(0, 10, 'ee')], true_vis)
+        np.testing.assert_array_equal(dc[(0, 1, 'ee')], true_vis)
+        np.testing.assert_array_equal(dc[(0, 0, 'ee')], true_vis)
+        # trimmed and shifted channelizations both raise
+        dc.freqs = sd.freqs[32:]
+        with pytest.raises(ValueError, match='channels'):
+            sd.correct_in_place(dc)
+        dc.freqs = sd.freqs + 0.25e6
+        with pytest.raises(ValueError, match='channels'):
+            sd.correct_in_place(dc)
+        dc.freqs = sd.freqs
+        dc.times = sd.times + 1e-3
+        with pytest.raises(ValueError, match='times'):
+            sd.correct_in_place(dc)
+
+    def test_from_estimate_edge_cases(self):
+        nfreqs, nchans_per_block = 256, 32
+        freqs = 100e6 + np.arange(nfreqs) * 0.5e6
+        nanarr = np.full((1, 8), np.nan)
+        meta = dict(log_suppression_refit={'A': nanarr},
+                    log_suppression_sigma={'A': nanarr},
+                    n_spectra_per_SNAP={'A': np.array([2])},
+                    covered_blocks=np.ones(8, dtype=bool),
+                    edge_blocks=[0, 7],
+                    band_slices=[None, slice(128, 256)])
+        sd = io.SNAPDecoherence.from_estimate(
+            {'A': np.zeros((1, 8))}, meta, {1: 'A', 2: 'A'}, freqs,
+            np.array([2459935.4]), nchans_per_block=nchans_per_block)
+        assert sd.block_freqs.shape == (8, 32)
+        np.testing.assert_array_equal(sd.freqs, freqs)
+        # fully-flagged band -> nan extents; trimmed band -> its channels
+        assert np.isnan(sd._band_edges[0]).all()
+        np.testing.assert_array_equal(sd._band_edges[1], [freqs[128], freqs[255]])
+        # the band must be a whole number of X-engine blocks
+        with pytest.raises(ValueError, match='whole number of X-engine blocks'):
+            io.SNAPDecoherence.from_estimate(
+                {'A': np.zeros((1, 8))}, meta, {1: 'A', 2: 'A'}, freqs[:250],
+                np.array([2459935.4]), nchans_per_block=nchans_per_block)
