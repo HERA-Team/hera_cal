@@ -2041,3 +2041,122 @@ class TestRunMethods(object):
         assert a.ex_ants == [5, 6]
         assert a.gain == 0.4
         assert a.verbose is True
+
+
+class TestOmnicalAnderson(object):
+
+    def _build_problem(self, rng_seed=123, nants=10, shape=(3, 16), gain_scatter=0.02):
+        antpos = linear_array(nants)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        rc = om.RedundantCalibrator(reds)
+        rng = np.random.default_rng(rng_seed)
+        gains, true_vis, data = sim_red_data(reds, shape=shape, gain_scatter=gain_scatter, rng=rng)
+        sol0 = {k: np.ones_like(v) for k, v in gains.items()}
+        sol0.update(rc.compute_ubls(data, sol0))
+        sol0 = om.RedSol(reds, sol_dict=sol0)
+        wgts = {k: np.ones_like(v, dtype=np.float32) for k, v in data.items()}
+        return rc, data, sol0, reds, gains, true_vis, wgts
+
+    def _mean_model_error(self, sol, reds, data):
+        errs = []
+        for bls in reds:
+            ubl = sol[bls[0]]
+            for bl in bls:
+                mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
+                errs.append(np.mean(np.abs(data[bl] - mdl) ** 2))
+        return float(np.mean(errs))
+
+    def test_omnical_anderson_converges(self):
+        rc, data, sol0, reds, gains, true_vis, wgts = self._build_problem(rng_seed=7)
+        sol0pack = {rc.pack_sol_key(ant): sol0.gains[ant] for ant in rc._ants_in_reds}
+        for ubl in rc._ubl_to_reds_index.keys():
+            sol0pack[rc.pack_sol_key(ubl)] = sol0[ubl]
+        ls = rc._solver(om.OmnicalSolver, data, sol0=sol0pack, wgts=wgts, gain=0.4)
+        MAXITER = 500
+        meta, prms = ls.solve_iteratively(
+            conv_crit=1e-10,
+            maxiter=MAXITER,
+            check_every=10,
+            check_after=30,
+            anderson_history=3,
+            anderson_start=2,
+            anderson_damping=0.5,
+        )
+        prms = {rc.unpack_sol_key(k): v for k, v in prms.items()}
+        sol = om.RedSol(reds, sol_dict=prms)
+
+        assert np.all(meta['iter'] <= MAXITER)
+        assert float(np.mean(meta['iter'])) < MAXITER - 30
+        assert np.sum(meta['iter'] == MAXITER) < 0.5 * meta['iter'].size
+        assert np.all(np.isfinite(meta['chisq']))
+        assert np.all(np.isfinite(meta['conv_crit']))
+        assert float(np.median(meta['conv_crit'])) < 1e-6
+        assert float(np.mean(meta['chisq'])) < 1e-6
+
+        for bls in reds:
+            ubl = sol[bls[0]]
+            for bl in bls:
+                mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
+                np.testing.assert_allclose(np.abs(data[bl]), np.abs(mdl), rtol=2e-2, atol=1e-4)
+
+    def test_omnical_anderson_reduces_iterations_vs_plain(self):
+        rc, data, sol0, reds, gains, true_vis, wgts = self._build_problem(rng_seed=11)
+        sol0pack = {rc.pack_sol_key(ant): sol0.gains[ant] for ant in rc._ants_in_reds}
+        for ubl in rc._ubl_to_reds_index.keys():
+            sol0pack[rc.pack_sol_key(ubl)] = sol0[ubl]
+
+        ls_plain = rc._solver(om.OmnicalSolver, data, sol0=deepcopy(sol0pack), wgts=wgts, gain=0.4)
+        MAXITER = 500
+        meta_plain, prms_plain = ls_plain.solve_iteratively(
+            conv_crit=1e-10,
+            maxiter=MAXITER,
+            check_every=5,
+            check_after=30,
+            anderson_history=0,
+        )
+        ls_aa = rc._solver(om.OmnicalSolver, data, sol0=deepcopy(sol0pack), wgts=wgts, gain=0.4)
+        meta_aa, prms_aa = ls_aa.solve_iteratively(
+            conv_crit=1e-10,
+            maxiter=MAXITER,
+            check_every=5,
+            check_after=30,
+            anderson_history=3,
+            anderson_start=2,
+            anderson_damping=0.5,
+        )
+
+        prms_plain = {rc.unpack_sol_key(k): v for k, v in prms_plain.items()}
+        prms_aa = {rc.unpack_sol_key(k): v for k, v in prms_aa.items()}
+        sol_plain = om.RedSol(reds, sol_dict=prms_plain)
+        sol_aa = om.RedSol(reds, sol_dict=prms_aa)
+
+        mean_iter_plain = float(np.mean(meta_plain['iter']))
+        mean_iter_aa = float(np.mean(meta_aa['iter']))
+        assert mean_iter_aa <= mean_iter_plain
+        assert np.any(meta_aa['iter'] < meta_plain['iter']) or mean_iter_aa < mean_iter_plain
+
+        assert float(np.mean(meta_aa['chisq'])) <= float(np.mean(meta_plain['chisq'])) * 1.1 + 1e-8
+
+        err_plain = self._mean_model_error(sol_plain, reds, data)
+        err_aa = self._mean_model_error(sol_aa, reds, data)
+        assert err_aa < 1e-5
+        assert err_aa <= max(err_plain * 1e5, 1e-5)
+
+    def test_omnical_anderson_handles_active_set_downselection(self):
+        rc, data, sol0, reds, gains, true_vis, wgts = self._build_problem(rng_seed=21, shape=(4, 8))
+        sol0pack = {rc.pack_sol_key(ant): sol0.gains[ant] for ant in rc._ants_in_reds}
+        for ubl in rc._ubl_to_reds_index.keys():
+            sol0pack[rc.pack_sol_key(ubl)] = sol0[ubl]
+        ls = rc._solver(om.OmnicalSolver, data, sol0=sol0pack, wgts=wgts, gain=0.4)
+        meta, prms = ls.solve_iteratively(
+            conv_crit=1e-6,
+            maxiter=100,
+            check_every=2,
+            check_after=1,
+            anderson_history=3,
+            anderson_start=1,
+            anderson_damping=0.5,
+        )
+        assert np.all(meta['iter'] < 100)
+        assert np.all(np.isfinite(meta['chisq']))
+        assert np.all(np.isfinite(meta['conv_crit']))
