@@ -244,6 +244,21 @@ class TestCalibrateAbsAmpFromAutos:
         np.testing.assert_allclose(
             ratios, np.broadcast_to(ratios[0:1], ratios.shape), rtol=1e-10)
 
+    def test_cross_pol_autos_ignored(self):
+        # a full-Stokes DataContainer has (ant, ant, 'en') keys whose antpol
+        # is also 'Jee': they must not contribute to the co-pol amplitudes
+        sim = build_sim(nants=6, nfreqs=32, ntimes=2, seed=4, amp_ripple=0.2)
+        gains = skycal.calibrate_abs_amp_from_autos(sim['data'])
+        rng = np.random.default_rng(0)
+        for antnum in sim['antnums']:
+            for xpol in ['en', 'ne']:
+                sim['data'][(antnum, antnum, xpol)] = (
+                    1e-3 * rng.normal(size=(sim['ntimes'], 32)).astype(complex))
+        gains_with_xpol = skycal.calibrate_abs_amp_from_autos(sim['data'])
+        assert set(gains_with_xpol) == set(gains)
+        for ant in gains:
+            np.testing.assert_array_equal(gains_with_xpol[ant], gains[ant])
+
     def test_flagged_cells_excluded_from_reference(self):
         sim = build_sim(nants=6, nfreqs=32, ntimes=2, seed=5)
         pol = sim['pol']

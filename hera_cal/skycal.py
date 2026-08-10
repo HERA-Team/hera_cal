@@ -342,7 +342,9 @@ def calibrate_abs_amp_from_autos(autos, auto_flags=None):
     in the refined gains instead.)
 
     Arguments:
-        autos: DataContainer containing autocorrelations, keys (ant, ant, pol)
+        autos: DataContainer containing autocorrelations, keys (ant, ant, pol);
+            cross-polarized autos (e.g. 'en') are ignored, so a full-Stokes
+            DataContainer can be passed directly
         auto_flags: optional DataContainer/dict of flag waterfalls with the
             same keys; flagged cells are excluded from the median reference
 
@@ -352,6 +354,11 @@ def calibrate_abs_amp_from_autos(autos, auto_flags=None):
     '''
     gains = {}
     for pol in sorted({bl[2] for bl in autos if bl[0] == bl[1]}):
+        # cross-polarized "autos" are not autocorrelation power; including
+        # them would clobber the co-pol amplitudes, since split_pol('en')[0]
+        # is also 'Jee'
+        if utils.split_pol(pol)[0] != utils.split_pol(pol)[1]:
+            continue
         auto_bls = sorted(bl for bl in autos if bl[0] == bl[1]
                           and bl[2] == pol)
         stack = np.asarray([np.abs(autos[bl]) for bl in auto_bls], dtype=float)
