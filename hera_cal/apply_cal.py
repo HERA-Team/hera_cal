@@ -114,7 +114,9 @@ def correct_SNAP_decoherence_in_place(data, decoherence, ant_to_SNAP_dict,
     which is why it cannot be folded into per-antenna gains:
 
         * cross-correlations between antennas on DIFFERENT SNAPs are divided
-          by (1 - p_i) * (1 - p_j) — under the stale-packet model only
+          by (1 - p_i) * (1 - p_j), where p_i is the loss fraction of the
+          SNAP that antenna i is on (looked up via ant_to_SNAP_dict, per
+          time and per block) — under the stale-packet model only
           current-times-current products correlate, so the observed
           visibility is suppressed by exactly that product of
           coherence factors;
