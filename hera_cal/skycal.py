@@ -1251,7 +1251,12 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
     where b indexes X-engine blocks (nchans_per_block channels each),
     log_suppression = -ln(1 - p) >= 0 for loss fraction p, n_ap is thermal
     noise with known variance 1 / logamp_wgts, and r is a stationary
-    residual bandpass-error field (see Noise model below). The smooth
+    residual bandpass-error field (see Noise model below). The fit is done
+    in ln|gain| because the effect is multiplicative — each block's gain
+    amplitude is the smooth bandpass times its coherence factor (1 - p_b) —
+    so the log turns that product into an exactly linear additive model,
+    fittable by penalized linear least squares, and makes the loss's
+    nonnegativity constraint exact: -ln(1 - p) >= 0 <=> 0 <= p < 1. The smooth
     per-antenna component (a DPSS basis per band) absorbs bandpass and
     calibration structure; the fitted staircase absorbs the
     block-discontinuous suppression that per-SNAP packet loss imprints on
