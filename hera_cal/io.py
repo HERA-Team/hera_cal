@@ -549,7 +549,8 @@ class HERAData(UVData):
     # times_by_bl: dictionary mapping antpairs to times (JD). Also includes all reverse pairs.
     # lsts_by_bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
 
-    def __init__(self, input_data, upsample=False, downsample=False, filetype='uvh5', **read_kwargs):
+    def __init__(self, input_data, upsample=False, downsample=False, filetype='uvh5',
+                 cache_uvh5_metadata=True, **read_kwargs):
         '''Instantiate a HERAData object. If the filetype is either uvh5 or uvfits, read in and store
         useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
@@ -561,6 +562,9 @@ class HERAData(UVData):
             downsample: bool. If True, will downsample to match the longest integration time in the file.
                 Downsampling will affect the time metadata stored on this object.
             filetype: supports 'uvh5' (default), 'miriad', 'uvfits'
+            cache_uvh5_metadata: bool. If True, cache pyuvdata's lazy UVH5 metadata
+                object for single-file reads. This avoids reopening and reparsing the
+                full header on repeated partial reads. Default True.
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
         '''
@@ -576,6 +580,8 @@ class HERAData(UVData):
         if self.upsample and self.downsample:
             raise ValueError('upsample and downsample cannot both be True.')
         self.filetype = filetype
+        self.cache_uvh5_metadata = cache_uvh5_metadata
+        self._uvh5_metas = {}
 
         # load metadata from file
         if self.filetype in ['uvh5', 'uvfits']:
@@ -583,9 +589,10 @@ class HERAData(UVData):
             temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
             self.read(read_data=False, **read_kwargs)
+            first_file_metadata = self.get_metadata_dict()
             self.filepaths = temp_paths
 
-            self._attach_metadata(**read_kwargs)
+            self._attach_metadata(first_file_metadata=first_file_metadata, **read_kwargs)
 
         elif self.filetype == 'miriad':
             for meta in self.HERAData_metas:
@@ -601,16 +608,26 @@ class HERAData(UVData):
             self.longest_integration = np.max(self.integration_time)
             self.shortest_integration = np.min(self.integration_time)
 
-    def _attach_metadata(self, **read_kwargs):
+    def _attach_metadata(self, first_file_metadata=None, **read_kwargs):
         """
         Attach metadata.
         """
         if hasattr(self, "filepaths") and self.filepaths is not None and len(self.filepaths) > 1:  # save HERAData_metas in dicts
             for meta in self.HERAData_metas:
                 setattr(self, meta, {})
-            for f in self.filepaths:
-                hd = HERAData(f, filetype='uvh5', **read_kwargs)
-                meta_dict = hd.get_metadata_dict()
+            for file_index, f in enumerate(self.filepaths):
+                if (file_index == 0 and first_file_metadata is not None
+                        and not self.upsample and not self.downsample):
+                    meta_dict = first_file_metadata
+                else:
+                    hd = HERAData(
+                        f,
+                        filetype='uvh5',
+                        cache_uvh5_metadata=self.cache_uvh5_metadata,
+                        **read_kwargs,
+                    )
+                    meta_dict = hd.get_metadata_dict()
+                    hd.close_metadata_cache()
                 for meta in self.HERAData_metas:
                     getattr(self, meta)[f] = meta_dict[meta]
         else:  # save HERAData_metas as attributes
@@ -621,6 +638,19 @@ class HERAData(UVData):
     def reset(self):
         '''Resets all standard UVData attributes, potentially freeing memory.'''
         super(HERAData, self).__init__()
+
+    def _get_uvh5_meta(self, filepath):
+        """Get a reusable lazy metadata reader for a UVH5 file."""
+        cache_key = str(Path(filepath).resolve())
+        if cache_key not in self._uvh5_metas:
+            self._uvh5_metas[cache_key] = FastUVH5Meta(filepath)
+        return self._uvh5_metas[cache_key]
+
+    def close_metadata_cache(self):
+        """Close and clear any cached UVH5 metadata readers."""
+        for meta in self._uvh5_metas.values():
+            meta.close()
+        self._uvh5_metas.clear()
 
     def get_metadata_dict(self):
         ''' Produces a dictionary of the most useful metadata. Used as object
@@ -662,15 +692,17 @@ class HERAData(UVData):
         self._blt_slices = get_blt_slices(self)
 
     def get_polstr_index(self, pol: str) -> int:
-        num = polstr2num(pol, x_orientation=self.telescope.get_x_orientation_from_feeds())
-
         try:
-            return self._polnum_indices[num]
+            x_orientation = self._pol_x_orientation
         except AttributeError:
             self._determine_pol_indexing()
-            return self._polnum_indices[num]
+            x_orientation = self._pol_x_orientation
+
+        num = polstr2num(pol, x_orientation=x_orientation)
+        return self._polnum_indices[num]
 
     def _determine_pol_indexing(self):
+        self._pol_x_orientation = self.telescope.get_x_orientation_from_feeds()
         self._polnum_indices = {
             polnum: i for i, polnum in enumerate(self.polarization_array)
         }
@@ -742,11 +774,16 @@ class HERAData(UVData):
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
-    def build_datacontainers(self):
+    def build_datacontainers(self, copy_data=True):
         '''Turns the data currently loaded into the HERAData object into DataContainers.
         Returned DataContainers include useful metadata specific to the data actually
         in the DataContainers (which may be a subset of the total data). This includes
         antenna positions, frequencies, all times, all lsts, and times and lsts by baseline.
+
+        Arguments:
+            copy_data: bool. If True, copy waterfalls into independent arrays, preserving
+                the historical behavior. If False, return views into this HERAData object's
+                data-like arrays when possible. Default True.
 
         Returns:
             data: DataContainer mapping baseline keys to complex visibility waterfalls
@@ -756,10 +793,22 @@ class HERAData(UVData):
         # build up DataContainers
         data, flags, nsamples = odict(), odict(), odict()
         meta = self.get_metadata_dict()
-        for bl in meta['bls']:
-            data[bl] = self._get_slice(self.data_array, bl)
-            flags[bl] = self._get_slice(self.flag_array, bl)
-            nsamples[bl] = self._get_slice(self.nsample_array, bl)
+        for antpair in meta['antpairs']:
+            blt_slice = self._blt_slices[antpair]
+            for pol_index, pol in enumerate(meta['pols']):
+                bl = antpair + (pol,)
+                if self.data_array.ndim == 4:  # old shapes
+                    index = (blt_slice, 0, slice(None), pol_index)
+                else:
+                    index = (blt_slice, slice(None), pol_index)
+
+                data[bl] = self.data_array[index]
+                flags[bl] = self.flag_array[index]
+                nsamples[bl] = self.nsample_array[index]
+                if copy_data:
+                    data[bl] = np.array(data[bl])
+                    flags[bl] = np.array(flags[bl])
+                    nsamples[bl] = np.array(nsamples[bl])
         data = DataContainer(data)
         flags = DataContainer(flags)
         nsamples = DataContainer(nsamples)
@@ -773,7 +822,8 @@ class HERAData(UVData):
 
     def read(self, bls=None, polarizations=None, times=None, time_range=None, lsts=None, lst_range=None,
              frequencies=None, freq_chans=None, axis=None, read_data=True, return_data=True,
-             run_check=True, check_extra=True, run_check_acceptability=True, **kwargs):
+             copy_data=True, multidim_index: bool | Literal['auto'] = 'auto', run_check=True,
+             check_extra=True, run_check_acceptability=True, **kwargs):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
         Arguments:
@@ -808,6 +858,12 @@ class HERAData(UVData):
                 basic metadata will be read in and nothing will be returned. Results in an
                 incompletely defined object (check will not pass). Default True.
             return_data: bool, if True, return the output of build_datacontainers().
+            copy_data: bool. If True, returned DataContainers own independent copies of
+                their waterfalls. If False, they use views into this object when possible.
+                Default True.
+            multidim_index: bool or 'auto'. If True, ask pyuvdata to index all sliceable
+                selected UVH5 axes together. If 'auto', enable this when more than one
+                physical data axis is selected. Default 'auto'.
             run_check: Option to check for the existence and proper shapes of
                 parameters after reading in the file. Default is True.
             check_extra: Option to check optional parameters as well as required
@@ -826,54 +882,88 @@ class HERAData(UVData):
         partials = ['bls', 'polarizations', 'times', 'time_range', 'lsts', 'lst_range', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
 
+        if multidim_index == 'auto':
+            selects_blt_axis = any(
+                selection is not None
+                for selection in [bls, times, time_range, lsts, lst_range]
+            )
+            selects_freq_axis = frequencies is not None or freq_chans is not None
+            selects_pol_axis = polarizations is not None
+            if bls is not None:
+                bl_list = [bls] if isinstance(bls, tuple) and len(bls) in [2, 3] else bls
+                selects_pol_axis |= any(
+                    isinstance(bl, tuple) and len(bl) == 3 for bl in bl_list
+                )
+            multidim_index = (
+                self.filetype == 'uvh5'
+                and sum([selects_blt_axis, selects_freq_axis, selects_pol_axis]) > 1
+            )
+        elif not isinstance(multidim_index, (bool, np.bool_)):
+            raise ValueError("multidim_index must be True, False, or 'auto'.")
+
         # if filepaths is None, this was converted to HERAData
         # from a different pre-loaded object with no history of filepath
         if self.filepaths is not None:
-            temp_read = self.read  # store self.read while it's being overwritten
-            self.read = super().read  # re-define self.read so UVData can call self.read recursively for lists of files
             # load data
-            try:
-                if self.filetype in ['uvh5', 'uvfits']:
+            if self.filetype == 'uvh5' and self.cache_uvh5_metadata:
+                single_filepath = None
+                if isinstance(self.filepaths, (str, Path)):
+                    single_filepath = self.filepaths
+                elif len(self.filepaths) == 1:
+                    single_filepath = self.filepaths[0]
+
+                if single_filepath is not None:
                     with warnings.catch_warnings():
                         warnings.filterwarnings('ignore', 'Fixing phases using antenna positions')
-                        super().read(self.filepaths, file_type=self.filetype, axis=axis, bls=bls, polarizations=polarizations,
-                                    times=times, time_range=time_range, lsts=lsts, lst_range=lst_range, frequencies=frequencies,
-                                    freq_chans=freq_chans, read_data=read_data, run_check=run_check, check_extra=check_extra,
-                                    run_check_acceptability=run_check_acceptability,
-                                    **kwargs)
-                    if self.filetype == 'uvfits':
-                        self.unproject_phase()
+                        super().read_uvh5(
+                            self._get_uvh5_meta(single_filepath),
+                            bls=bls,
+                            polarizations=polarizations,
+                            times=times,
+                            time_range=time_range,
+                            lsts=lsts,
+                            lst_range=lst_range,
+                            frequencies=frequencies,
+                            freq_chans=freq_chans,
+                            read_data=read_data,
+                            multidim_index=multidim_index,
+                            run_check=run_check,
+                            check_extra=check_extra,
+                            run_check_acceptability=run_check_acceptability,
+                            **kwargs,
+                        )
                 else:
-                    if not read_data:
-                        raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
-                    if self.filetype == 'miriad':
-                        super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
-                                     time_range=time_range, run_check=run_check, check_extra=check_extra,
-                                     run_check_acceptability=run_check_acceptability,
-                                     projected=False, **kwargs)
+                    self._read_with_generic_reader(
+                        bls=bls, polarizations=polarizations, times=times,
+                        time_range=time_range, lsts=lsts, lst_range=lst_range,
+                        frequencies=frequencies, freq_chans=freq_chans, axis=axis,
+                        read_data=read_data, multidim_index=multidim_index,
+                        run_check=run_check, check_extra=check_extra,
+                        run_check_acceptability=run_check_acceptability, **kwargs,
+                    )
+            else:
+                self._read_with_generic_reader(
+                    bls=bls, polarizations=polarizations, times=times,
+                    time_range=time_range, lsts=lsts, lst_range=lst_range,
+                    frequencies=frequencies, freq_chans=freq_chans, axis=axis,
+                    read_data=read_data, multidim_index=multidim_index,
+                    run_check=run_check, check_extra=check_extra,
+                    run_check_acceptability=run_check_acceptability, **kwargs,
+                )
 
-                        if any([times is not None, lsts is not None, lst_range is not None,
-                                frequencies is not None, freq_chans is not None]):
-                            warnings.warn('miriad does not support partial loading for times/lsts (except time_range) and frequencies. '
-                                          'Loading the file first and then performing select.')
-                            self.select(times=times, lsts=lsts, lst_range=lst_range, frequencies=frequencies, freq_chans=freq_chans)
-
-                # upsample or downsample data, as appropriate, including metadata. Will use self.longest/shortest_integration
-                # if not None (which came from whole file metadata) since partial i/o might change the current longest or
-                # shortest integration in a way that would create insonsistency between partial reads/writes.
-                if self.upsample:
-                    if hasattr(self, 'shortest_integration') and self.shortest_integration is not None:
-                        self.upsample_in_time(max_int_time=self.shortest_integration)
-                    else:
-                        self.upsample_in_time(max_int_time=np.min(self.integration_time))
-                if self.downsample:
-                    if hasattr(self, 'longest_integration') and self.longest_integration is not None:
-                        self.downsample_in_time(min_int_time=self.longest_integration)
-                    else:
-                        self.downsample_in_time(min_int_time=np.max(self.integration_time))
-
-            finally:
-                self.read = temp_read  # reset back to this function, regardless of whether the above try excecutes successfully
+            # upsample or downsample data, as appropriate, including metadata. Will use self.longest/shortest_integration
+            # if not None (which came from whole file metadata) since partial i/o might change the current longest or
+            # shortest integration in a way that would create insonsistency between partial reads/writes.
+            if self.upsample:
+                if hasattr(self, 'shortest_integration') and self.shortest_integration is not None:
+                    self.upsample_in_time(max_int_time=self.shortest_integration)
+                else:
+                    self.upsample_in_time(max_int_time=np.min(self.integration_time))
+            if self.downsample:
+                if hasattr(self, 'longest_integration') and self.longest_integration is not None:
+                    self.downsample_in_time(min_int_time=self.longest_integration)
+                else:
+                    self.downsample_in_time(min_int_time=np.max(self.integration_time))
 
         # It turns out that doing .read() can change the inherent rectangularity of the data
         # so, we reset it:
@@ -890,7 +980,77 @@ class HERAData(UVData):
         self._determine_pol_indexing()
 
         if read_data and return_data:
-            return self.build_datacontainers()
+            return self.build_datacontainers(copy_data=copy_data)
+
+    def _read_with_generic_reader(self, bls=None, polarizations=None, times=None,
+                                  time_range=None, lsts=None, lst_range=None,
+                                  frequencies=None, freq_chans=None, axis=None,
+                                  read_data=True, multidim_index=False, run_check=True,
+                                  check_extra=True, run_check_acceptability=True, **kwargs):
+        """Read through UVData's generic reader for non-cached and multi-file cases."""
+        temp_read = self.read
+        self.read = super().read
+        try:
+            if self.filetype in ['uvh5', 'uvfits']:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', 'Fixing phases using antenna positions')
+                    super().read(
+                        self.filepaths,
+                        file_type=self.filetype,
+                        axis=axis,
+                        bls=bls,
+                        polarizations=polarizations,
+                        times=times,
+                        time_range=time_range,
+                        lsts=lsts,
+                        lst_range=lst_range,
+                        frequencies=frequencies,
+                        freq_chans=freq_chans,
+                        read_data=read_data,
+                        multidim_index=multidim_index,
+                        run_check=run_check,
+                        check_extra=check_extra,
+                        run_check_acceptability=run_check_acceptability,
+                        **kwargs,
+                    )
+                if self.filetype == 'uvfits':
+                    self.unproject_phase()
+            else:
+                if not read_data:
+                    raise NotImplementedError(
+                        'reading only metadata is not implemented for ' + self.filetype
+                    )
+                if self.filetype == 'miriad':
+                    super().read(
+                        self.filepaths,
+                        file_type='miriad',
+                        axis=axis,
+                        bls=bls,
+                        polarizations=polarizations,
+                        time_range=time_range,
+                        run_check=run_check,
+                        check_extra=check_extra,
+                        run_check_acceptability=run_check_acceptability,
+                        projected=False,
+                        **kwargs,
+                    )
+
+                    if any([times is not None, lsts is not None, lst_range is not None,
+                            frequencies is not None, freq_chans is not None]):
+                        warnings.warn(
+                            'miriad does not support partial loading for times/lsts '
+                            '(except time_range) and frequencies. Loading the file first '
+                            'and then performing select.'
+                        )
+                        self.select(
+                            times=times,
+                            lsts=lsts,
+                            lst_range=lst_range,
+                            frequencies=frequencies,
+                            freq_chans=freq_chans,
+                        )
+        finally:
+            self.read = temp_read
 
     def select(self, inplace=True, **kwargs):
         """

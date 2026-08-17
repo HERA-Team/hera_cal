@@ -268,6 +268,24 @@ class Test_HERAData(object):
         with pytest.raises(ValueError):
             hd = HERAData(self.uvh5_bda, upsample=True, downsample=True)
 
+    def test_uvh5_metadata_cache(self):
+        hd = HERAData(self.uvh5_1)
+        assert len(hd._uvh5_metas) == 1
+        cached_meta = next(iter(hd._uvh5_metas.values()))
+
+        hd.read(bls=[(53, 54)], return_data=False)
+        assert next(iter(hd._uvh5_metas.values())) is cached_meta
+
+        hd.close_metadata_cache()
+        assert hd._uvh5_metas == {}
+        hd.read(bls=[(53, 54)], return_data=False)
+        assert next(iter(hd._uvh5_metas.values())) is not cached_meta
+
+        hd = HERAData(self.uvh5_1, cache_uvh5_metadata=False)
+        assert hd._uvh5_metas == {}
+        hd.read(bls=[(53, 54)], return_data=False)
+        assert hd._uvh5_metas == {}
+
     def test_add(self):
         hd = HERAData(self.uvh5_1)
         hd.read()
@@ -420,6 +438,16 @@ class Test_HERAData(object):
                 assert np.all(dc.lsts_by_bl[k] == hd.lsts_by_bl[k])
                 assert np.all(dc.lsts_by_bl[k] == dc.lsts_by_bl[(k[1], k[0])])
 
+        bl = hd.bls[0]
+        assert not np.shares_memory(d[bl], hd.data_array)
+        assert not np.shares_memory(f[bl], hd.flag_array)
+        assert not np.shares_memory(n[bl], hd.nsample_array)
+
+        d, f, n = hd.build_datacontainers(copy_data=False)
+        assert np.shares_memory(d[bl], hd.data_array)
+        assert np.shares_memory(f[bl], hd.flag_array)
+        assert np.shares_memory(n[bl], hd.nsample_array)
+
     def test_write_read_filter_cache_scratch(self):
         # most of write_filter_cache_scratch and all of read_filter_cache_scratch are covered in
         # test_delay_filter.test_load_dayenu_filter_and_write()
@@ -470,6 +498,11 @@ class Test_HERAData(object):
         k = list(d.keys())[0]
         assert len(d) == 2
         assert d[k].shape == (hd.Ntimes, 100)
+
+        d, f, n = hd.read(bls=hd.bls[:1], freq_chans=range(10), copy_data=False)
+        assert np.shares_memory(d[hd.bls[0]], hd.data_array)
+        with pytest.raises(ValueError, match='multidim_index'):
+            hd.read(multidim_index='invalid')
 
         # test read list
         hd = HERAData([self.uvh5_1, self.uvh5_2])
