@@ -3156,6 +3156,44 @@ class SNAPDecoherence:
         correct_SNAP_decoherence_in_place(data, self.decoherence, self.ant_to_SNAP_dict,
                                           data_flags=data_flags, nchans_per_block=self.block_freqs.shape[1])
 
+    def correct_gains(self, gains):
+        '''Remove the fitted per-SNAP suppression staircase from gain amplitudes by
+        multiplying each gain by e^{-ln(1 - p)} = 1 / (1 - p) per channel, using the
+        stored block map and antenna -> SNAP mapping. Because autocorrelations and
+        intra-SNAP baselines are exempt from decoherence, calibrating them requires
+        these corrected gains (inter-SNAP cross-correlations then get the exact
+        correction from apply_cal.correct_SNAP_decoherence_in_place). Every antenna
+        in gains must appear in the stored mapping (ValueError otherwise); unmeasured
+        (np.nan) blocks and SNAPs without stored results are left unchanged.
+
+        Arguments:
+            gains: dict mapping (ant, antpol) e.g. (0, 'Jee') to (Ntimes, Nfreqs)
+                complex gain waterfalls matching this object's times and freqs
+
+        Returns:
+            corrected_gains: new dict with the same keys, gains x 1 / (1 - p) where measured
+        '''
+        missing = sorted({ant[0] for ant in gains if ant[0] not in self.ant_to_SNAP_dict})
+        if len(missing) > 0:
+            raise ValueError('The stored ant_to_SNAP_dict is missing antennas that appear '
+                             f'in gains: {missing}. All antennas must be mapped to SNAPs.')
+        nchans_per_block = self.block_freqs.shape[1]
+        expected_shape = (len(self.times), len(self.freqs))
+        suppression = {SNAP: np.repeat(np.nan_to_num(ls), nchans_per_block, axis=1)
+                       for SNAP, ls in self._log_suppression.items()}
+        corrected_gains = {}
+        for ant, gain in gains.items():
+            gain = np.asarray(gain)
+            if gain.shape != expected_shape:
+                raise ValueError(f'gains[{ant}] has shape {gain.shape}, but this SNAPDecoherence '
+                                 f'object implies {expected_shape}.')
+            SNAP = self.ant_to_SNAP_dict[ant[0]]
+            if SNAP in suppression:
+                corrected_gains[ant] = gain * np.exp(suppression[SNAP])
+            else:
+                corrected_gains[ant] = gain.copy()
+        return corrected_gains
+
     def write(self, filename, clobber=False):
         """Write to an HDF5 file (suggested suffix: .snap_decoherence.h5).
 
