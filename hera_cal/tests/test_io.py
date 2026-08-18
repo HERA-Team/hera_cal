@@ -2083,6 +2083,37 @@ class TestSNAPDecoherence:
         assert np.flatnonzero(np.isfinite(
             sd._log_suppression_sigma['A'][0])).tolist() == [2, 6]
 
+    def test_correct_gains(self):
+        sd = make_SNAP_decoherence()
+        nchans_per_block = sd.block_freqs.shape[1]
+        rng = np.random.default_rng(0)
+        ant_on_A = next(a for a, SNAP in sd.ant_to_SNAP_dict.items() if SNAP == 'A')
+        ant_on_B = next(a for a, SNAP in sd.ant_to_SNAP_dict.items() if SNAP == 'B')
+        smooth = np.exp(0.01 * rng.standard_normal((1, len(sd.freqs)))
+                        + 0.1j * rng.standard_normal((1, len(sd.freqs))))
+        suppression = np.repeat(np.nan_to_num(sd._log_suppression['A']), nchans_per_block, axis=1)
+        sd.ant_to_SNAP_dict[999] = 'C'  # mapped, but SNAP C has no stored results
+        gains = {(ant_on_A, 'Jee'): smooth * np.exp(-suppression),
+                 (ant_on_B, 'Jee'): smooth.copy(),
+                 (999, 'Jee'): np.ones((1, len(sd.freqs)), dtype=complex)}
+        corrected = sd.correct_gains(gains)
+        # the staircase is removed from the SNAP-A antenna, recovering the smooth gain
+        np.testing.assert_allclose(corrected[(ant_on_A, 'Jee')], smooth)
+        assert np.any(np.abs(gains[(ant_on_A, 'Jee')]) != np.abs(corrected[(ant_on_A, 'Jee')]))
+        # SNAP B has no detections, so its gain is unchanged
+        np.testing.assert_array_equal(corrected[(ant_on_B, 'Jee')], smooth)
+        # a SNAP without stored results is returned unchanged, as a copy
+        np.testing.assert_array_equal(corrected[(999, 'Jee')], 1.0)
+        corrected[(999, 'Jee')][:] = 0
+        np.testing.assert_array_equal(gains[(999, 'Jee')], 1.0)
+
+    def test_correct_gains_errors(self):
+        sd = make_SNAP_decoherence()
+        with pytest.raises(ValueError, match='missing antennas'):
+            sd.correct_gains({(999, 'Jee'): np.ones((1, len(sd.freqs)), dtype=complex)})
+        with pytest.raises(ValueError, match='shape'):
+            sd.correct_gains({(1, 'Jee'): np.ones((1, 10), dtype=complex)})
+
     def test_multifile_read(self, tmp_path):
         sd1 = make_SNAP_decoherence(times=np.array([2459935.38]))
         # second file: SNAP B absent entirely (e.g. all its antennas dead)
