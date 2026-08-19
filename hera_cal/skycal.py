@@ -632,7 +632,8 @@ def _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
 def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
                                   nants, refine_tol=1e-8,
                                   refine_maxiter=100, sync_tol=1e-3,
-                                  sync_maxiter=200, verbose=False):
+                                  sync_maxiter=200,
+                                  max_divergent_chan_frac=0.0, verbose=False):
     '''Solve for per-antenna, per-channel complex gains g such that
     vis_ratio ~ g_i * conj(g_j) on each baseline, for a single
     (time, polarization).
@@ -702,6 +703,13 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         sync_tol: convergence threshold (radians) for the phase
             synchronization initialization (see _phase_sync_init)
         sync_maxiter: iteration cap for the phase synchronization
+        max_divergent_chan_frac: fraction of channels permitted to fail
+            (diverge or exhaust refine_maxiter) without raising. Failed
+            channels are dropped from the solve and returned as np.nan.
+            Default 0.0 requires every channel to converge. Intended for
+            coarse antenna-exclusion rounds, whose per-antenna chi^2 is a
+            median over channels and so tolerates a few gaps -- and whose
+            excluded antennas are usually what made those channels fail.
         verbose: print statements if True
 
     Returns:
@@ -710,17 +718,21 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             solve_iteratively convention: 'iter' (int rounds each channel
             used before its early exit; 0 where flagged) and 'conv_crit'
             (max relative chi^2 gradient over antennas in each channel;
-            np.nan where flagged)
+            np.nan where flagged), plus 'divergent_chans', an int array of
+            channel indices that failed and were returned as np.nan
 
     Raises:
         ValueError: if the flagging pattern is not uniform (see
             _shared_channel_flags), or if any unflagged cell has zero or
             non-finite data/model ratio (flags or zero weights must cover
             all bad data)
-        RuntimeError: if any channel has not converged after refine_maxiter
-            rounds. Do not proceed with unconverged gains: partially
-            converged channels retain memory of the initialization and can
-            imprint coherent per-antenna spectral structure.
+        RuntimeError: if more channels fail -- diverging to non-finite
+            gains or exhausting refine_maxiter -- than
+            max_divergent_chan_frac allows. Do not proceed with unconverged
+            gains: partially converged channels retain memory of the
+            initialization and can imprint coherent per-antenna spectral
+            structure, so failed channels are always returned as np.nan,
+            never as partial solutions.
     '''
     nfreqs = vis_ratio.shape[1]
 
@@ -758,6 +770,8 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
 
     gains = np.ones((nsel, nchans), dtype=complex)
     active_chans = np.ones(nchans, dtype=bool)   # channels still iterating
+    failed_chans = np.zeros(nchans, dtype=bool)  # channels that gave up (nan)
+    max_failed = int(np.floor(max_divergent_chan_frac * nchans))
     chan_iters = np.zeros(nfreqs, dtype=int)     # rounds each channel used
     niter = 0
     while niter <= refine_maxiter and active_chans.any():
@@ -780,9 +794,20 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         with np.errstate(invalid='ignore', divide='ignore'):
             resid_ratio = entry_ratio[in_active] / (gi * np.conj(gj))
         if not np.isfinite(resid_ratio).all():
-            # inputs were validated above, so this can only be divergence
-            raise RuntimeError('Per-channel gain refinement diverged: '
-                               f'non-finite gains in round {niter}.')
+            # inputs were validated above, so this can only be divergence.
+            # Drop the offending channels and carry on if allowed; they are
+            # returned as np.nan, so nothing partial escapes.
+            newly_failed = active_idx[np.unique(chan_pos[~np.isfinite(resid_ratio)])]
+            failed_chans[newly_failed] = True
+            active_chans[newly_failed] = False
+            if failed_chans.sum() > max_failed:
+                raise RuntimeError(
+                    'Per-channel gain refinement diverged: non-finite gains '
+                    f'in round {niter} at {int(failed_chans.sum())} channels '
+                    f'{good_chan_idx[failed_chans].tolist()}, more than '
+                    f'max_divergent_chan_frac={max_divergent_chan_frac} of '
+                    f'{nchans} unflagged channels allows.')
+            continue
 
         if niter == 0:
             # ---- initialization round ----
@@ -819,8 +844,12 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         # redcal.remove_degen_gains), then apply both updates
         # multiplicatively
         delta_phase -= delta_phase.mean(axis=1, keepdims=True)
-        gains[:, active_idx] = gains[:, active_idx] \
-            * np.exp(delta_logamp.T + 1j * delta_phase.T)
+        # a diverging channel overflows here before its non-finite residual
+        # is detected at the top of the next round, which is where it is
+        # reported; the overflow itself is expected and not worth warning about
+        with np.errstate(over='ignore', invalid='ignore'):
+            gains[:, active_idx] = gains[:, active_idx] \
+                * np.exp(delta_logamp.T + 1j * delta_phase.T)
 
         # channels whose largest update is below tolerance are converged
         # and drop out of subsequent rounds; record the rounds each used
@@ -831,27 +860,39 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             active_chans[dropped] = False
             chan_iters[good_chan_idx[dropped]] = niter + 1
         niter += 1
-    converged = not active_chans.any()
+    # channels still active after the last round exhausted refine_maxiter;
+    # they fail on the same terms as the divergent ones
+    unconverged = active_chans.copy()
+    failed_chans |= unconverged
 
-    # embed the solution back into the full (antenna, channel) grid
+    # embed the solution back into the full (antenna, channel) grid, blanking
+    # failed channels first so that no partial solution escapes and nothing
+    # downstream (including the convergence criterion) sees diverged values
+    gains[:, failed_chans] = np.nan
     full_gains = np.full((nants, nfreqs), np.nan, dtype=complex)
     full_gains[np.ix_(sel_ants, good_chan_idx)] = gains
 
     conv_crit = _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains,
                                         ant_i_idx, ant_j_idx)
-    if not converged:
+    conv_crit[good_chan_idx[failed_chans]] = np.nan
+    if failed_chans.sum() > max_failed:
+        worst = (np.nanmax(conv_crit) if np.any(np.isfinite(conv_crit))
+                 else np.nan)
         raise RuntimeError(
             f'Per-channel gain refinement did not converge: '
-            f'{int(active_chans.sum())} channels remain above '
+            f'{int(unconverged.sum())} channels remain above '
             f'refine_tol={refine_tol} after {refine_maxiter} rounds '
-            f'(max relative chi^2 gradient {np.nanmax(conv_crit):.2e}). '
+            f'{good_chan_idx[unconverged].tolist()} '
+            f'(max relative chi^2 gradient over solved channels {worst:.2e}). '
             'Do not proceed with unconverged gains.')
-    return full_gains, {'iter': chan_iters, 'conv_crit': conv_crit}
+    return full_gains, {'iter': chan_iters, 'conv_crit': conv_crit,
+                        'divergent_chans': good_chan_idx[failed_chans]}
 
 
 def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                  refine_tol=1e-8, refine_maxiter=100,
-                 sync_tol=1e-3, sync_maxiter=200, verbose=False):
+                 sync_tol=1e-3, sync_maxiter=200,
+                 max_divergent_chan_frac=0.0, verbose=False):
     '''Solve for per-antenna, per-channel refined gains on cross baselines,
     given starting gains g0. The data/model ratio divided by g0_i g0_j^* should
     be ~1 up to per-antenna corrections beyond g0 — including any per-SNAP
@@ -870,22 +911,23 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
             baseline of data_model_ratio must be present, whether or not it
             ends up in the solve (raises ValueError otherwise); if None, all
             cross baselines participate.
-        refine_tol, refine_maxiter, sync_tol, sync_maxiter:
-            see _refine_gains_single_pol_time
+        refine_tol, refine_maxiter, sync_tol, sync_maxiter,
+            max_divergent_chan_frac: see _refine_gains_single_pol_time
         verbose: print statements if True
 
     Returns:
         refined_gains: dict mapping (ant, antpol) to complex (Ntimes, Nfreqs)
             gain waterfalls; np.nan where unsolved
-        meta: dict with 'iter' and 'conv_crit', each a dict keyed by
-            (time index, pol) of per-channel (Nfreqs,) arrays (see
+        meta: dict with 'iter', 'conv_crit', and 'divergent_chans', each a
+            dict keyed by (time index, pol) (see
             _refine_gains_single_pol_time)
 
     Raises:
         ValueError: if ant_to_SNAP_dict is given but missing antennas, if
             the flagging pattern is not uniform (see _shared_channel_flags),
             or if any unflagged cell has zero or non-finite data/model ratio
-        RuntimeError: if the solve fails to converge for any (time, pol)
+        RuntimeError: if any (time, pol) has more failed channels than
+            max_divergent_chan_frac allows
     '''
     bls = [bl for bl in data_model_ratio if bl[0] != bl[1]]
     all_antnums = sorted({antnum for bl in bls for antnum in bl[:2]})
@@ -898,7 +940,7 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                              'must be mapped to SNAPs if any are.')
 
     refined_gains = {}
-    meta = {'iter': {}, 'conv_crit': {}}
+    meta = {'iter': {}, 'conv_crit': {}, 'divergent_chans': {}}
     for pol in sorted({bl[2] for bl in bls}):
         antpol = utils.split_pol(pol)[0]
         bls_here = [bl for bl in bls if bl[2] == pol
@@ -935,7 +977,9 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                 vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx, nants,
                 refine_tol=refine_tol,
                 refine_maxiter=refine_maxiter, sync_tol=sync_tol,
-                sync_maxiter=sync_maxiter, verbose=verbose)
+                sync_maxiter=sync_maxiter,
+                max_divergent_chan_frac=max_divergent_chan_frac,
+                verbose=verbose)
             utils.echo(f't{tind} {pol}: {int(meta_here["iter"].max())} '
                        'rounds, max relative chi^2 gradient '
                        f'{np.nanmax(meta_here["conv_crit"]):.2e}',
@@ -956,7 +1000,8 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
                   ant_flags=None, auto_flags=None, ant_to_SNAP_dict=None,
                   freqs=None, bls=None, dt=None, df=None,
                   refine_tol=1e-8, refine_maxiter=100, sync_tol=1e-3,
-                  sync_maxiter=200, verbose=False):
+                  sync_maxiter=200, max_divergent_chan_frac=0.0,
+                  verbose=False):
     '''Run the full staged sky-model-based calibration: data/model ratio →
     firstcal delays and offsets → autocorrelation-based amplitudes → per-channel
     refinement on (inter-SNAP) cross baselines. Returns gains g = g0 * refined,
@@ -991,7 +1036,8 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
             waterfalls, g0 * refined_gains; np.nan where unsolved
         meta: dict of stage products and diagnostics: 'data_model_ratio',
             'wgts', 'dlys', 'offsets', 'abs_amp_gains', 'g0', 'refined_gains',
-            and the refinement's 'iter' and 'conv_crit' dicts keyed by
+            and the refinement's 'iter', 'conv_crit', and
+            'divergent_chans' dicts keyed by
             (time index, pol) of per-channel (Nfreqs,) arrays
     '''
     if freqs is None:
@@ -1022,7 +1068,8 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
         data_model_ratio, wgts, g0, ant_to_SNAP_dict=ant_to_SNAP_dict,
         refine_tol=refine_tol,
         refine_maxiter=refine_maxiter, sync_tol=sync_tol,
-        sync_maxiter=sync_maxiter, verbose=verbose)
+        sync_maxiter=sync_maxiter,
+        max_divergent_chan_frac=max_divergent_chan_frac, verbose=verbose)
 
     # every antenna with starting gains must come through refinement — a gap
     # would otherwise be silently dropped by the key intersection in
