@@ -1098,3 +1098,155 @@ class TestCoverageGaps:
         # empty bands are a no-op
         skycal._fix_band_floors(vals, [[]])
         np.testing.assert_allclose(vals[3:6], [0.0, 0.15, 0.05])
+
+
+class TestDivergentChannelTolerance:
+    def test_solve_or_nan(self):
+        '''A singular member of a batched solve yields np.nan for that system only,
+        deterministically on every platform, rather than raising for the whole batch.'''
+        mats = np.array([np.eye(3), np.zeros((3, 3))])
+        rhs = np.ones((2, 3, 1))
+        solutions = skycal._solve_or_nan(mats, rhs)
+        np.testing.assert_array_equal(solutions[0], rhs[0])
+        assert np.all(np.isnan(solutions[1]))
+
+    '''Tests for max_divergent_chan_frac: failed channels may be dropped and
+    returned as nan instead of failing the whole solve, which lets coarse
+    antenna-exclusion rounds (whose per-antenna chi^2 is a median over
+    channels) proceed and remove whatever made those channels fail.'''
+
+    def setup_method(self):
+        self.rng = np.random.default_rng(5)
+
+    def _arrays(self, nants=6, nfreqs=16, noise=0.0):
+        true_h = ((1.0 + 0.2 * self.rng.uniform(-1, 1, (nants, nfreqs)))
+                  * np.exp(1j * 0.3 * self.rng.uniform(-1, 1, (nants, nfreqs))))
+        true_h *= np.exp(-1j * np.angle(true_h / np.abs(true_h)).mean(axis=0))[None, :]
+        bls = [(i, j) for i in range(nants) for j in range(i + 1, nants)]
+        ant_i = np.array([bl[0] for bl in bls])
+        ant_j = np.array([bl[1] for bl in bls])
+        vis_ratio = true_h[ant_i] * np.conj(true_h[ant_j])
+        if noise > 0:
+            vis_ratio = vis_ratio + noise * (self.rng.normal(size=vis_ratio.shape)
+                                             + 1j * self.rng.normal(size=vis_ratio.shape)) / np.sqrt(2)
+        wgts = np.ones_like(vis_ratio, dtype=float)
+        return true_h, vis_ratio, wgts, ant_i, ant_j, nants
+
+    def test_maxiter_failures_tolerated_and_reported(self):
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays()
+        # refine_maxiter=0 fails every channel: intolerable by default...
+        with pytest.raises(RuntimeError, match='did not converge'):
+            skycal._refine_gains_single_pol_time(vis_ratio, wgts, ant_i, ant_j, nants,
+                                                 refine_maxiter=0)
+        # ...but tolerated in full, and every failed channel comes back nan
+        gains, meta = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants, refine_maxiter=0,
+            max_divergent_chan_frac=1.0)
+        assert np.all(np.isnan(gains))
+        np.testing.assert_array_equal(meta['divergent_chans'], np.arange(vis_ratio.shape[1]))
+
+    def test_surviving_channels_are_unaffected(self):
+        '''A few bad channels neither corrupt nor perturb the good ones.'''
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays()
+        clean, _ = skycal._refine_gains_single_pol_time(vis_ratio, wgts, ant_i, ant_j, nants)
+
+        # wreck two channels by making one antenna's visibilities inconsistent
+        # with any per-antenna gain model (sign flips on a subset of its bls)
+        bad_chans = [3, 11]
+        wrecked = vis_ratio.copy()
+        touches_0 = np.where(ant_i == 0)[0]
+        for c in bad_chans:
+            wrecked[touches_0[::2], c] *= -1e6
+        with pytest.raises(RuntimeError):
+            skycal._refine_gains_single_pol_time(wrecked, wgts, ant_i, ant_j, nants)
+        gains, meta = skycal._refine_gains_single_pol_time(
+            wrecked, wgts, ant_i, ant_j, nants, max_divergent_chan_frac=0.25)
+
+        failed = set(meta['divergent_chans'].tolist())
+        assert failed and failed.issubset(set(bad_chans))
+        good = [c for c in range(vis_ratio.shape[1]) if c not in failed]
+        assert np.all(np.isnan(gains[:, sorted(failed)]))
+        assert np.all(np.isfinite(gains[:, good]))
+        # the surviving channels are bit-identical to the all-clean solve
+        np.testing.assert_allclose(gains[:, good], clean[:, good], atol=1e-10)
+
+    def test_frac_bounds_the_damage(self):
+        '''Tolerance is a budget: exceeding it still raises, naming channels.'''
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays()
+        wrecked = vis_ratio.copy()
+        touches_0 = np.where(ant_i == 0)[0]
+        for c in [2, 5, 9, 13]:
+            wrecked[touches_0[::2], c] *= -1e6
+        # 1/16 of channels allowed, 4 fail
+        with pytest.raises(RuntimeError, match='diverged'):
+            skycal._refine_gains_single_pol_time(wrecked, wgts, ant_i, ant_j, nants,
+                                                 max_divergent_chan_frac=1 / 16)
+        gains, meta = skycal._refine_gains_single_pol_time(
+            wrecked, wgts, ant_i, ant_j, nants, max_divergent_chan_frac=0.5)
+        assert len(meta['divergent_chans']) == 4
+
+    @pytest.mark.parametrize('frac', [-0.1, 1.5, np.nan, np.inf])
+    def test_invalid_frac_raises(self, frac):
+        '''Out-of-range values -- including a channel count mistaken for a
+        fraction -- fail legibly instead of deep inside the solver.'''
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays()
+        with pytest.raises(ValueError, match='fraction between'):
+            skycal._refine_gains_single_pol_time(vis_ratio, wgts, ant_i, ant_j, nants,
+                                                 max_divergent_chan_frac=frac)
+
+    def test_failed_channels_marked_in_iter(self):
+        '''meta['iter'] distinguishes failed channels (-1) from flagged (0).'''
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays()
+        wgts[:, 7] = 0   # channel 7 flagged for every baseline
+        wrecked = vis_ratio.copy()
+        touches_0 = np.where(ant_i == 0)[0]
+        wrecked[touches_0[::2], 3] *= -1e6
+        gains, meta = skycal._refine_gains_single_pol_time(
+            wrecked, wgts, ant_i, ant_j, nants, max_divergent_chan_frac=0.25)
+        assert meta['iter'][7] == 0            # flagged
+        assert meta['iter'][3] == -1           # failed
+        assert np.all(meta['iter'][[0, 1, 2]] > 0)   # solved
+        np.testing.assert_array_equal(meta['divergent_chans'], [3])
+
+    def test_normal_matrices_stay_finite(self, monkeypatch):
+        '''However badly a channel diverges, the linear solver is never handed a
+        non-finite normal matrix. LAPACK reports those platform-dependently (as a
+        LinAlgError on Linux but not macOS), so the solver detects the collapse
+        itself rather than letting that escape.'''
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays()
+        wrecked = vis_ratio.copy()
+        touches_0 = np.where(ant_i == 0)[0]
+        for c in [3, 11]:
+            wrecked[touches_0[::2], c] *= -1e6
+
+        original = skycal._build_normal_matrices
+        all_finite = []
+
+        def checked(*args, **kwargs):
+            amp_mats, phase_mats = original(*args, **kwargs)
+            all_finite.append(bool(np.isfinite(amp_mats).all() and np.isfinite(phase_mats).all()))
+            return amp_mats, phase_mats
+
+        monkeypatch.setattr(skycal, '_build_normal_matrices', checked)
+        skycal._refine_gains_single_pol_time(wrecked, wgts, ant_i, ant_j, nants,
+                                             max_divergent_chan_frac=0.25)
+        assert len(all_finite) > 1 and all(all_finite)
+
+    def test_default_is_unchanged_behavior(self):
+        '''With the default, a clean solve is bit-identical and reports nothing.'''
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays(noise=0.01)
+        g1, m1 = skycal._refine_gains_single_pol_time(vis_ratio, wgts, ant_i, ant_j, nants)
+        g2, m2 = skycal._refine_gains_single_pol_time(vis_ratio, wgts, ant_i, ant_j, nants,
+                                                      max_divergent_chan_frac=0.5)
+        np.testing.assert_array_equal(g1, g2)
+        assert len(m1['divergent_chans']) == 0 and len(m2['divergent_chans']) == 0
+
+    def test_passes_through_sky_calibrate(self):
+        '''The kwarg reaches the solver from the top-level driver.'''
+        sim = build_sim(nants=7, nfreqs=32, seed=4)
+        gains, meta = skycal.sky_calibrate(
+            sim['data'], sim['model'], freqs=sim['freqs'], dt=sim['dt'], df=sim['df'],
+            max_divergent_chan_frac=0.1)
+        assert 'divergent_chans' in meta
+        for key, chans in meta['divergent_chans'].items():
+            assert len(chans) == 0  # clean sim: nothing should fail
