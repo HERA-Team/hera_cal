@@ -794,16 +794,28 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         gi, gj = gains[ei, echan], gains[ej, echan]
         with np.errstate(invalid='ignore', divide='ignore'):
             resid_ratio = entry_ratio[in_active] / (gi * np.conj(gj))
-        if not np.isfinite(resid_ratio).all():
-            # inputs were validated above, so this can only be divergence;
-            # drop the offending channels and carry on if allowed
-            newly_failed = active_idx[np.unique(chan_pos[~np.isfinite(resid_ratio)])]
+        # weights for this round: the initialization uses the data weights, while
+        # Gauss-Newton rounds propagate them through the division by the current
+        # gains, which multiplies each weight by (|g_i| |g_j|)^2
+        with np.errstate(over='ignore', invalid='ignore'):
+            round_wgts = (wgts_here if niter == 0
+                          else wgts_here * (np.abs(gi) * np.abs(gj))**2)
+
+        # inputs were validated above, so this can only be divergence: either
+        # non-finite residuals, or weights that overflowed or underflowed as the
+        # gains ran away (which would leave the normal matrices unsolvable, and
+        # LAPACK reports that differently on different platforms). Drop the
+        # offending channels and carry on if allowed.
+        bad = (~np.isfinite(resid_ratio) | ~np.isfinite(round_wgts)
+               | (round_wgts <= 0))
+        if bad.any():
+            newly_failed = active_idx[np.unique(chan_pos[bad])]
             failed_chans[newly_failed] = True
             active_chans[newly_failed] = False
             if failed_chans.sum() > max_failed:
                 raise RuntimeError(
-                    'Per-channel gain refinement diverged: non-finite gains '
-                    f'in round {niter} at {int(failed_chans.sum())} channels '
+                    'Per-channel gain refinement diverged: non-finite gains or '
+                    f'weights in round {niter} at {int(failed_chans.sum())} channels '
                     f'{good_chan_idx[failed_chans].tolist()}, more than '
                     f'max_divergent_chan_frac={max_divergent_chan_frac} of '
                     f'{nchans} unflagged channels allows.')
@@ -811,7 +823,6 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
 
         if niter == 0:
             # ---- initialization round ----
-            round_wgts = wgts_here
             amp_mats, phase_mats = _build_normal_matrices(
                 nactive, nsel, chan_pos, ei, ej, round_wgts)
             # log-amplitudes: log|resid_ratio| = eta_i + eta_j is exactly
@@ -824,9 +835,6 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
                 sync_maxiter=sync_maxiter)
         else:
             # ---- Gauss-Newton round ----
-            # propagating the data weights through the division by the
-            # current gains multiplies each weight by (|g_i| |g_j|)^2
-            round_wgts = wgts_here * (np.abs(gi) * np.abs(gj))**2
             amp_mats, phase_mats = _build_normal_matrices(
                 nactive, nsel, chan_pos, ei, ej, round_wgts)
             # linearize: Im(resid_ratio) ~ phi_i - phi_j and

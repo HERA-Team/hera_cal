@@ -1199,6 +1199,30 @@ class TestDivergentChannelTolerance:
         assert np.all(meta['iter'][[0, 1, 2]] > 0)   # solved
         np.testing.assert_array_equal(meta['divergent_chans'], [3])
 
+    def test_normal_matrices_stay_finite(self, monkeypatch):
+        '''However badly a channel diverges, the linear solver is never handed a
+        non-finite normal matrix. LAPACK reports those platform-dependently (as a
+        LinAlgError on Linux but not macOS), so the solver detects the collapse
+        itself rather than letting that escape.'''
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays()
+        wrecked = vis_ratio.copy()
+        touches_0 = np.where(ant_i == 0)[0]
+        for c in [3, 11]:
+            wrecked[touches_0[::2], c] *= -1e6
+
+        original = skycal._build_normal_matrices
+        all_finite = []
+
+        def checked(*args, **kwargs):
+            amp_mats, phase_mats = original(*args, **kwargs)
+            all_finite.append(bool(np.isfinite(amp_mats).all() and np.isfinite(phase_mats).all()))
+            return amp_mats, phase_mats
+
+        monkeypatch.setattr(skycal, '_build_normal_matrices', checked)
+        skycal._refine_gains_single_pol_time(wrecked, wgts, ant_i, ant_j, nants,
+                                             max_divergent_chan_frac=0.25)
+        assert len(all_finite) > 1 and all(all_finite)
+
     def test_default_is_unchanged_behavior(self):
         '''With the default, a clean solve is bit-identical and reports nothing.'''
         true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays(noise=0.01)
