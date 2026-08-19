@@ -1176,6 +1176,29 @@ class TestDivergentChannelTolerance:
             wrecked, wgts, ant_i, ant_j, nants, max_divergent_chan_frac=0.5)
         assert len(meta['divergent_chans']) == 4
 
+    @pytest.mark.parametrize('frac', [-0.1, 1.5, np.nan, np.inf])
+    def test_invalid_frac_raises(self, frac):
+        '''Out-of-range values -- including a channel count mistaken for a
+        fraction -- fail legibly instead of deep inside the solver.'''
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays()
+        with pytest.raises(ValueError, match='fraction between'):
+            skycal._refine_gains_single_pol_time(vis_ratio, wgts, ant_i, ant_j, nants,
+                                                 max_divergent_chan_frac=frac)
+
+    def test_failed_channels_marked_in_iter(self):
+        '''meta['iter'] distinguishes failed channels (-1) from flagged (0).'''
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays()
+        wgts[:, 7] = 0   # channel 7 flagged for every baseline
+        wrecked = vis_ratio.copy()
+        touches_0 = np.where(ant_i == 0)[0]
+        wrecked[touches_0[::2], 3] *= -1e6
+        gains, meta = skycal._refine_gains_single_pol_time(
+            wrecked, wgts, ant_i, ant_j, nants, max_divergent_chan_frac=0.25)
+        assert meta['iter'][7] == 0            # flagged
+        assert meta['iter'][3] == -1           # failed
+        assert np.all(meta['iter'][[0, 1, 2]] > 0)   # solved
+        np.testing.assert_array_equal(meta['divergent_chans'], [3])
+
     def test_default_is_unchanged_behavior(self):
         '''With the default, a clean solve is bit-identical and reports nothing.'''
         true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._arrays(noise=0.01)

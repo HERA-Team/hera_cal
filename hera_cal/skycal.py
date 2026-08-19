@@ -703,37 +703,38 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         sync_tol: convergence threshold (radians) for the phase
             synchronization initialization (see _phase_sync_init)
         sync_maxiter: iteration cap for the phase synchronization
-        max_divergent_chan_frac: fraction of channels permitted to fail
-            (diverge or exhaust refine_maxiter) without raising. Failed
-            channels are dropped from the solve and returned as np.nan.
-            Default 0.0 requires every channel to converge. Intended for
-            coarse antenna-exclusion rounds, whose per-antenna chi^2 is a
-            median over channels and so tolerates a few gaps -- and whose
-            excluded antennas are usually what made those channels fail.
+        max_divergent_chan_frac: fraction of channels allowed to fail
+            (diverge or exhaust refine_maxiter) and come back as np.nan
+            instead of raising. Default 0.0 requires all to converge; a
+            small allowance lets coarse antenna-exclusion rounds, which
+            take a median over channels, proceed to remove whatever
+            antenna made those channels fail.
         verbose: print statements if True
 
     Returns:
         gains: complex ndarray (nants, Nfreqs); np.nan where unsolved
         meta: dict of per-channel (Nfreqs,) arrays, following redcal's
-            solve_iteratively convention: 'iter' (int rounds each channel
-            used before its early exit; 0 where flagged) and 'conv_crit'
-            (max relative chi^2 gradient over antennas in each channel;
-            np.nan where flagged), plus 'divergent_chans', an int array of
-            channel indices that failed and were returned as np.nan
+            solve_iteratively convention: 'iter' (rounds each channel
+            used before its early exit; 0 where flagged, -1 where it
+            failed) and 'conv_crit' (max relative chi^2 gradient over
+            antennas in each channel; np.nan where flagged or failed),
+            plus 'divergent_chans', the indices of the failed channels
 
     Raises:
-        ValueError: if the flagging pattern is not uniform (see
+        ValueError: if max_divergent_chan_frac is not between 0 and 1, if
+            the flagging pattern is not uniform (see
             _shared_channel_flags), or if any unflagged cell has zero or
             non-finite data/model ratio (flags or zero weights must cover
             all bad data)
-        RuntimeError: if more channels fail -- diverging to non-finite
-            gains or exhausting refine_maxiter -- than
-            max_divergent_chan_frac allows. Do not proceed with unconverged
-            gains: partially converged channels retain memory of the
-            initialization and can imprint coherent per-antenna spectral
-            structure, so failed channels are always returned as np.nan,
-            never as partial solutions.
+        RuntimeError: if more channels fail than
+            max_divergent_chan_frac allows. Failed channels always come
+            back as np.nan, never as partial solutions: partially
+            converged channels retain memory of the initialization and
+            can imprint coherent per-antenna spectral structure.
     '''
+    if not 0.0 <= max_divergent_chan_frac <= 1.0:
+        raise ValueError('max_divergent_chan_frac must be a fraction between '
+                         f'0 and 1, got {max_divergent_chan_frac}.')
     nfreqs = vis_ratio.shape[1]
 
     # validate the flags and reduce them to one shared waterfall: whole
@@ -794,9 +795,8 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         with np.errstate(invalid='ignore', divide='ignore'):
             resid_ratio = entry_ratio[in_active] / (gi * np.conj(gj))
         if not np.isfinite(resid_ratio).all():
-            # inputs were validated above, so this can only be divergence.
-            # Drop the offending channels and carry on if allowed; they are
-            # returned as np.nan, so nothing partial escapes.
+            # inputs were validated above, so this can only be divergence;
+            # drop the offending channels and carry on if allowed
             newly_failed = active_idx[np.unique(chan_pos[~np.isfinite(resid_ratio)])]
             failed_chans[newly_failed] = True
             active_chans[newly_failed] = False
@@ -844,9 +844,8 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         # redcal.remove_degen_gains), then apply both updates
         # multiplicatively
         delta_phase -= delta_phase.mean(axis=1, keepdims=True)
-        # a diverging channel overflows here before its non-finite residual
-        # is detected at the top of the next round, which is where it is
-        # reported; the overflow itself is expected and not worth warning about
+        # a diverging channel overflows here before the next round detects
+        # and reports its non-finite residual, so the overflow is expected
         with np.errstate(over='ignore', invalid='ignore'):
             gains[:, active_idx] = gains[:, active_idx] \
                 * np.exp(delta_logamp.T + 1j * delta_phase.T)
@@ -860,14 +859,12 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             active_chans[dropped] = False
             chan_iters[good_chan_idx[dropped]] = niter + 1
         niter += 1
-    # channels still active after the last round exhausted refine_maxiter;
-    # they fail on the same terms as the divergent ones
+    # channels still active exhausted refine_maxiter: they fail too
     unconverged = active_chans.copy()
     failed_chans |= unconverged
 
-    # embed the solution back into the full (antenna, channel) grid, blanking
-    # failed channels first so that no partial solution escapes and nothing
-    # downstream (including the convergence criterion) sees diverged values
+    # embed into the full (antenna, channel) grid, blanking failed channels
+    # first so nothing downstream ever sees a partial solution
     gains[:, failed_chans] = np.nan
     full_gains = np.full((nants, nfreqs), np.nan, dtype=complex)
     full_gains[np.ix_(sel_ants, good_chan_idx)] = gains
@@ -875,6 +872,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     conv_crit = _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains,
                                         ant_i_idx, ant_j_idx)
     conv_crit[good_chan_idx[failed_chans]] = np.nan
+    chan_iters[good_chan_idx[failed_chans]] = -1   # 0 is reserved for flagged
     if failed_chans.sum() > max_failed:
         worst = (np.nanmax(conv_crit) if np.any(np.isfinite(conv_crit))
                  else np.nan)
@@ -918,8 +916,8 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
     Returns:
         refined_gains: dict mapping (ant, antpol) to complex (Ntimes, Nfreqs)
             gain waterfalls; np.nan where unsolved
-        meta: dict with 'iter', 'conv_crit', and 'divergent_chans', each a
-            dict keyed by (time index, pol) (see
+        meta: dict with 'iter', 'conv_crit', and 'divergent_chans', each
+            keyed by (time index, pol) (see
             _refine_gains_single_pol_time)
 
     Raises:
