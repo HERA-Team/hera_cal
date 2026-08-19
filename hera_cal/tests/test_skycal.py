@@ -1101,6 +1101,15 @@ class TestCoverageGaps:
 
 
 class TestDivergentChannelTolerance:
+    def test_solve_or_nan(self):
+        '''A singular member of a batched solve yields np.nan for that system only,
+        deterministically on every platform, rather than raising for the whole batch.'''
+        mats = np.array([np.eye(3), np.zeros((3, 3))])
+        rhs = np.ones((2, 3, 1))
+        solutions = skycal._solve_or_nan(mats, rhs)
+        np.testing.assert_array_equal(solutions[0], rhs[0])
+        assert np.all(np.isnan(solutions[1]))
+
     '''Tests for max_divergent_chan_frac: failed channels may be dropped and
     returned as nan instead of failing the whole solve, which lets coarse
     antenna-exclusion rounds (whose per-antenna chi^2 is a median over

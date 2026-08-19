@@ -540,6 +540,24 @@ def _phase_sync_init(phasors, round_wgts, chan_pos, ei, ej, nchan_active,
     return phases
 
 
+def _solve_or_nan(mats, rhs):
+    '''np.linalg.solve over a stack of systems, with np.nan solutions for any singular
+    members instead of a raise. LAPACK judges near-singular matrices platform-dependently
+    (OpenBLAS raises where Accelerate returns garbage), so a diverging channel's collapsed
+    normal matrix must not take down the whole batch: its np.nan updates propagate into
+    non-finite gains that the refinement loop detects and drops next round.'''
+    try:
+        return np.linalg.solve(mats, rhs)
+    except np.linalg.LinAlgError:
+        solutions = np.full(rhs.shape, np.nan)
+        for k in range(mats.shape[0]):
+            try:
+                solutions[k] = np.linalg.solve(mats[k], rhs[k])
+            except np.linalg.LinAlgError:
+                pass
+        return solutions
+
+
 def _solve_logamp_updates(amp_mats, chan_pos, ei, ej, round_wgts, resids,
                           nchan_active, nsel):
     '''Solve the batched linear weighted least-squares systems for the
@@ -555,7 +573,7 @@ def _solve_logamp_updates(amp_mats, chan_pos, ei, ej, round_wgts, resids,
                + np.bincount(base + ej, weights=wgtd_resids,
                              minlength=nchan_active * nsel)
                ).reshape(nchan_active, nsel)
-    return np.linalg.solve(amp_mats, amp_rhs[:, :, None])[:, :, 0]
+    return _solve_or_nan(amp_mats, amp_rhs[:, :, None])[:, :, 0]
 
 
 def _solve_phase_updates(phase_mats, chan_pos, ei, ej, round_wgts, resids,
@@ -578,8 +596,8 @@ def _solve_phase_updates(phase_mats, chan_pos, ei, ej, round_wgts, resids,
                                minlength=nchan_active * nsel)
                  ).reshape(nchan_active, nsel)
     delta_phase = np.zeros((nchan_active, nsel))
-    delta_phase[:, 1:] = np.linalg.solve(phase_mats,
-                                         phase_rhs[:, 1:, None])[:, :, 0]
+    delta_phase[:, 1:] = _solve_or_nan(phase_mats,
+                                       phase_rhs[:, 1:, None])[:, :, 0]
     return delta_phase
 
 
