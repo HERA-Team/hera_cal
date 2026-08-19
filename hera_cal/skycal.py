@@ -705,10 +705,10 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         sync_maxiter: iteration cap for the phase synchronization
         max_divergent_chan_frac: fraction of channels allowed to fail
             (diverge or exhaust refine_maxiter) and come back as np.nan
-            instead of raising. Default 0.0 requires all to converge; a
-            small allowance lets coarse antenna-exclusion rounds, which
-            take a median over channels, proceed to remove whatever
-            antenna made those channels fail.
+            instead of raising an error. Default 0.0 requires all to
+            converge; a small allowance lets coarse antenna-exclusion
+            rounds, which take a median over channels, proceed to remove
+            whatever antenna made those channels fail.
         verbose: print statements if True
 
     Returns:
@@ -796,7 +796,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             resid_ratio = entry_ratio[in_active] / (gi * np.conj(gj))
         # weights for this round: the initialization uses the data weights, while
         # Gauss-Newton rounds propagate them through the division by the current
-        # gains, which multiplies each weight by (|g_i| |g_j|)^2
+        # gains, which multiplies each inverse variance weight by (|g_i| |g_j|)^2
         with np.errstate(over='ignore', invalid='ignore'):
             round_wgts = (wgts_here if niter == 0
                           else wgts_here * (np.abs(gi) * np.abs(gj))**2)
