@@ -11,6 +11,8 @@ import warnings
 from . import io
 from . import utils
 from . import redcal
+from . import noise
+from . import datacontainer
 import pyuvdata.utils as uvutils
 from pyuvdata import UVData
 
@@ -225,6 +227,285 @@ def correct_SNAP_decoherence_in_place(data, decoherence, ant_to_SNAP_dict,
             continue
         data[bl] /= (coherence_factor[ant_to_SNAP_dict[i]]
                      * coherence_factor[ant_to_SNAP_dict[j]])
+
+
+def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, snap_decoherence=None,
+                          dt=None, df=None, compute_chisq=True, effective_nsamples=True):
+    '''Calibrate visibilities and redundantly average them with inverse-variance noise
+    weights, one group at a time (a full-size calibrated copy of the data is never
+    materialized). data must include co-polarized autocorrelations: they set each
+    cross-correlation's noise variance, sigma^2 = A_i * A_j / (dt * df), and their
+    per-polarization averages over unflagged antennas (binary weights, since
+    inverse-variance weighting would bias this noise-prediction statistic low) are
+    always included in the results. Cross-polarized autocorrelations are averaged the
+    same way if their groups are listed, though they are never used for noise weights.
+    What is averaged is governed entirely by reds.
+
+    By default the returned nsamples are EFFECTIVE nsamples, defined so that the
+    standard predictor sigma^2 = Abar_i * Abar_j / (dt * df * nsamples), evaluated with
+    the averaged autocorrelations returned here, is exact for every averaged product:
+    Abar_i * Abar_j * sum(w) / (dt * df) for cross groups (above the count, since the
+    average leans on quieter-than-typical pairs) and n^2 * Abar_i * Abar_j / (the sum
+    over antennas of their co-polarized auto products) for the autocorrelations.
+    Effective nsamples is spectrally smooth (auto structure common to all antennas
+    cancels), so it can be sensibly inpainted across flagging gaps.
+
+    If snap_decoherence is given, gains are first cleaned of the fitted suppression
+    staircase (SNAPDecoherence.correct_gains; autocorrelations and intra-SNAP baselines
+    are exempt) and inter-SNAP cross-correlations instead get the exact correction
+    (correct_SNAP_decoherence_in_place), with unmeasured (np.nan) blocks flagged. The
+    stored antenna -> SNAP mapping is used throughout and must cover every antenna in
+    gains.
+
+    Chi^2 (co-polarized only): each group's mean is the only fit parameter, so a
+    participating baseline's weighted scatter about it has expectation 1 - w / sum(w)
+    per pixel. Antennas in ex_ants never enter the averages, but those with usable data
+    still get chi^2 against the good-antenna group means, attributed only to themselves,
+    with expectation 1 + w / sum(w_good).
+
+    Arguments:
+        data: DataContainer of visibilities, including co-polarized autocorrelations
+            (ValueError otherwise). Baselines lacking gains or autos are omitted.
+        gains: dict mapping (ant, antpol) e.g. (0, 'Jee') to (Ntimes, Nfreqs) complex
+            gain waterfalls. Nonfinite gains are treated as flagged.
+        reds: list of lists of redundant groups (antpairpol tuples) to average, e.g.
+            from redcal.get_reds(antpos, pols=pols, include_autos=True). Their
+            polarizations govern what is averaged: include 'en'/'ne' groups to average
+            cross-polarized cross-correlations (calibrated by e.g. g_Jee * conj(g_Jnn)).
+            MUST include a co-polarized autocorrelation group for every polarization
+            used (ValueError otherwise). reds is passed to the returned
+            RedDataContainers verbatim, so every listed baseline -- including flagged
+            or excluded antennas' -- resolves to its group's average.
+        ant_flags: optional dict mapping (ant, antpol) to boolean flag waterfalls.
+        ex_ants: optional iterable of (ant, antpol) tuples excluded from all averages.
+        snap_decoherence: optional io.SNAPDecoherence, e.g. from
+            SNAPDecoherence.from_estimate. Default None: no decoherence handling.
+        dt: integration time in seconds. Default None infers from data's times.
+        df: channel width in Hz. Default None infers from data's freqs.
+        compute_chisq: if True (default), accumulate DoF-normalized chi^2.
+        effective_nsamples: if True (default), return effective nsamples; else counts.
+
+    Returns:
+        red_avg_data: RedDataContainer of weighted group averages, keyed by each group's
+            first contributing baseline and including the averaged autocorrelations
+        red_avg_flags: RedDataContainer, True where a group has no unflagged members
+        red_avg_nsamples: RedDataContainer of effective nsamples (or counts)
+        meta: {'chisq_per_ant': (ant, antpol) -> chi^2 waterfalls (np.nan where nothing
+            was accumulated), 'total_chisq': antpol -> per-polarization totals} if
+            compute_chisq, else {}
+    '''
+    ant_flags = ({} if ant_flags is None else ant_flags)
+    ex_ants = set([] if ex_ants is None else ex_ants)
+    if dt is None:
+        dt = noise.infer_dt(data.times_by_bl, next(iter(data))) * 24.0 * 3600.0
+    if df is None:
+        df = np.median(np.ediff1d(data.freqs))
+    if not any(utils.join_bl(ant, ant) in data for ant in gains):
+        raise ValueError('data must include co-polarized autocorrelations: they set the noise '
+                         'weights and the averaged autocorrelations that anchor effective nsamples.')
+    listed_auto_antpols = {utils.split_pol(red[0][2])[0] for red in reds if red[0][0] == red[0][1]
+                           and utils.split_pol(red[0][2])[0] == utils.split_pol(red[0][2])[1]}
+    missing_antpols = ({antpol for red in reds for antpol in utils.split_pol(red[0][2])}
+                       - listed_auto_antpols)
+    if len(missing_antpols) > 0:
+        raise ValueError('reds must include a co-polarized autocorrelation group for every '
+                         f'polarization it uses (e.g. via redcal.get_reds with include_autos=True), '
+                         f'but is missing {sorted(missing_antpols)}.')
+
+    # per-antenna flags (excluded antennas are handled by membership, not flags). if decoherence
+    # is given, correct the staircase out of the gains and precompute per-SNAP suppression and
+    # unmeasured-block waterfalls
+    gain_flags = {ant: (~np.isfinite(g) | ant_flags.get(ant, False)) for ant, g in gains.items()}
+    finite_gains = {ant: np.where(np.isfinite(g), g, 1) for ant, g in gains.items()}
+    if snap_decoherence is not None:
+        finite_gains = snap_decoherence.correct_gains(finite_gains)
+        ant_to_SNAP = snap_decoherence.ant_to_SNAP_dict
+        nchans_per_block = snap_decoherence.block_freqs.shape[1]
+        log_supp = {SNAP: np.repeat(np.nan_to_num(ls), nchans_per_block, axis=1)
+                    for SNAP, ls in snap_decoherence._log_suppression.items()}
+        unmeasured = {SNAP: np.repeat(np.isnan(p), nchans_per_block, axis=1)
+                      for SNAP, p in snap_decoherence.decoherence.items()}
+
+        def _is_inter_SNAP(bl):
+            return ant_to_SNAP.get(bl[0]) != ant_to_SNAP.get(bl[1])
+
+    # calibrated autocorrelations (small: per-antenna) set every baseline's noise variance
+    cal_autos = {}
+    for ant in finite_gains:
+        auto_bl = utils.join_bl(ant, ant)
+        if auto_bl in data:
+            with np.errstate(divide='ignore', invalid='ignore'):
+                cal_autos[auto_bl] = np.abs(data[auto_bl]) / np.abs(finite_gains[ant])**2
+    cal_autos = datacontainer.DataContainer(cal_autos)
+
+    def _bl_flags(bl):
+        '''Both antennas' gain_flags, plus unmeasured decoherence blocks for inter-SNAP baselines.'''
+        ant_i, ant_j = utils.split_bl(bl)
+        flags = gain_flags[ant_i] | gain_flags[ant_j]
+        if snap_decoherence is not None and _is_inter_SNAP(bl):
+            # .get defaults: SNAPs without stored results (possible for excluded antennas) add no flags
+            flags = flags | unmeasured.get(ant_to_SNAP.get(bl[0]), False) | unmeasured.get(ant_to_SNAP.get(bl[1]), False)
+        return flags
+
+    def _noise_wgts(bl, flags):
+        '''Inverse noise variance from the calibrated autos, zeroed where flagged.'''
+        with np.errstate(all='ignore'):
+            sigma2 = noise.predict_noise_variance_from_autos(bl, cal_autos, dt=dt, df=df)
+            return np.where(flags | ~(sigma2 > 0), 0, 1 / np.where(sigma2 > 0, sigma2, 1))
+
+    def _usable_bl(bl, exclusion_chisq=False):
+        '''True if bl has the gains and co-polarized autos it needs and the right number of
+        excluded antennas: none for the averages, exactly one for the excluded-antenna chi^2.'''
+        ant_i, ant_j = utils.split_bl(bl)
+        if ant_i not in finite_gains or ant_j not in finite_gains:
+            return False
+        if (ant_i in ex_ants) + (ant_j in ex_ants) != (1 if exclusion_chisq else 0):
+            return False
+        return utils.join_bl(ant_i, ant_i) in cal_autos and utils.join_bl(ant_j, ant_j) in cal_autos
+
+    # average reds' autocorrelation groups (co-polarized first, then cross-polarized, whose
+    # effective nsamples need the co-polarized averages) with binary weights: every listed
+    # antenna's auto key resolves to the average via the returned RedDataContainers, but
+    # only usable antennas contribute
+    red_avg_data, red_avg_flags, red_avg_nsamples = {}, {}, {}
+    avg_autos = {}
+    auto_reds = sorted((red for red in reds if red[0][0] == red[0][1]),
+                       key=lambda red: (utils.split_pol(red[0][2])[0] != utils.split_pol(red[0][2])[1],
+                                        red[0][2]))
+    for red in auto_reds:
+        pol = red[0][2]
+        members = [bl for bl in red if bl in data and _usable_bl(bl)]
+        if len(members) == 0:
+            continue
+        cal_group = datacontainer.DataContainer({bl: data[bl].copy() for bl in members})
+        with np.errstate(divide='ignore', invalid='ignore'):
+            calibrate_in_place(cal_group, finite_gains)
+        binary = [(~_bl_flags(bl)).astype(float) for bl in members]
+        wgt_sum = np.sum(binary, axis=0)
+        with np.errstate(all='ignore'):
+            avg = np.sum([b * cal_group[bl] for b, bl in zip(binary, members)], axis=0) \
+                  / np.where(wgt_sum > 0, wgt_sum, 1)
+        avg = np.where(wgt_sum > 0, avg, 0)
+        key = members[0]
+        red_avg_data[key] = avg
+        red_avg_flags[key] = wgt_sum == 0
+        antpol_i, antpol_j = utils.split_pol(pol)
+        if antpol_i == antpol_j:
+            avg_autos[antpol_i] = np.abs(avg)
+        if effective_nsamples:
+            # uniform weighting of per-antenna auto noise: Var = sum(P_k) / (n^2 dt df) with P_k
+            # each antenna's co-polarized auto product, so n_eff = n^2 Abar_i Abar_j / sum(P_k)
+            product_sum = np.sum([b * np.abs(cal_autos[utils.join_bl((bl[0], antpol_i), (bl[0], antpol_i))]
+                                             * cal_autos[utils.join_bl((bl[0], antpol_j), (bl[0], antpol_j))])
+                                  for b, bl in zip(binary, members)], axis=0)
+            with np.errstate(all='ignore'):
+                red_avg_nsamples[key] = np.where(product_sum > 0,
+                                                 wgt_sum**2 * avg_autos[antpol_i] * avg_autos[antpol_j]
+                                                 / np.where(product_sum > 0, product_sum, 1), 0)
+        else:
+            red_avg_nsamples[key] = wgt_sum
+
+    chisq_num, chisq_dof, total_num, total_dof = {}, {}, {}, {}
+    for red in reds:
+        if red[0][0] == red[0][1]:
+            continue  # autocorrelations are always averaged separately, above
+        # members with usable gains and autocorrelations and at least one unflagged cell
+        group_wgts, group_flags = {}, {}
+        for bl in red:
+            if bl in data and _usable_bl(bl):
+                flags = _bl_flags(bl)
+                wgt = _noise_wgts(bl, flags)
+                if np.any(wgt > 0):
+                    group_wgts[bl], group_flags[bl] = wgt, flags
+        group_bls = list(group_wgts)
+        if len(group_bls) == 0:
+            continue
+
+        # calibrate this group's raw data (a full-size calibrated copy is never materialized)
+        group_data = datacontainer.DataContainer({bl: data[bl].copy() for bl in group_bls})
+        with np.errstate(divide='ignore', invalid='ignore'):
+            calibrate_in_place(group_data, finite_gains)
+        if snap_decoherence is not None:
+            # exact class-aware correction: inter-SNAP crosses divided by (1 - p_i)(1 - p_j)
+            correct_SNAP_decoherence_in_place(group_data, snap_decoherence.decoherence, ant_to_SNAP,
+                                              data_flags=datacontainer.DataContainer(group_flags),
+                                              nchans_per_block=nchans_per_block)
+
+        # inverse-variance weighted average of this group
+        wgt_sum = np.sum([group_wgts[bl] for bl in group_bls], axis=0)
+        with np.errstate(all='ignore'):
+            avg = np.sum([group_wgts[bl] * group_data[bl] for bl in group_bls], axis=0) \
+                  / np.where(wgt_sum > 0, wgt_sum, 1)
+        avg = np.where(wgt_sum > 0, avg, 0)
+        key = group_bls[0]
+        red_avg_data[key] = avg
+        red_avg_flags[key] = wgt_sum == 0
+        if effective_nsamples:
+            antpol_i, antpol_j = utils.split_pol(key[2])
+            with np.errstate(all='ignore'):
+                red_avg_nsamples[key] = avg_autos[antpol_i] * avg_autos[antpol_j] * wgt_sum / (dt * df)
+        else:
+            red_avg_nsamples[key] = np.sum([group_wgts[bl] > 0 for bl in group_bls], axis=0).astype(float)
+
+        # accumulate redundant-baseline chi^2 over co-polarized cross-correlations.
+        # NOTE: utils.chisq / redcal.normalized_chisq are deliberately not used here: their DoF
+        # normalization (redcal.predict_chisq_per_ant) assumes omnical, where gains are fit from
+        # redundancy. Here only each group's mean is fit, so the expected chi^2 is accumulated
+        # directly: 1 - w / sum(w) per participating baseline (and 1 + w / sum(w) for excluded
+        # antennas below, whose baselines did not participate in the mean).
+        if compute_chisq and utils.split_pol(red[0][2])[0] == utils.split_pol(red[0][2])[1]:
+            antpol = utils.split_bl(key)[0][1]
+            for bl in group_bls:
+                with np.errstate(all='ignore'):
+                    z2 = np.where(group_wgts[bl] > 0, group_wgts[bl] * np.abs(group_data[bl] - avg)**2, 0)
+                    dof = np.where(group_wgts[bl] > 0, 1 - group_wgts[bl] / np.where(wgt_sum > 0, wgt_sum, 1), 0)
+                for ant in utils.split_bl(bl):
+                    chisq_num[ant] = chisq_num.get(ant, 0) + z2
+                    chisq_dof[ant] = chisq_dof.get(ant, 0) + dof
+                total_num[antpol] = total_num.get(antpol, 0) + z2
+                total_dof[antpol] = total_dof.get(antpol, 0) + dof
+
+            # excluded antennas with usable data: chi^2 against the good-antenna group mean,
+            # attributed only to the excluded antenna (never to its partners or the totals)
+            if len(ex_ants) > 0 and np.any(wgt_sum > 0):
+                excl_wgts = {}
+                for bl in red:
+                    if bl in data and bl not in group_wgts and _usable_bl(bl, exclusion_chisq=True):
+                        wgt = _noise_wgts(bl, _bl_flags(bl))
+                        if np.any(wgt > 0):
+                            excl_wgts[bl] = wgt
+                if len(excl_wgts) > 0:
+                    excl_data = datacontainer.DataContainer({bl: data[bl].copy() for bl in excl_wgts})
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        calibrate_in_place(excl_data, finite_gains)
+                    for bl in excl_wgts:
+                        ant_i, ant_j = utils.split_bl(bl)
+                        if snap_decoherence is not None and _is_inter_SNAP(bl):
+                            # the exact correction, applied inline since an excluded antenna's
+                            # SNAP may lack stored results (.get defaults to no correction)
+                            excl_data[bl] *= np.exp(log_supp.get(ant_to_SNAP.get(bl[0]), 0)
+                                                    + log_supp.get(ant_to_SNAP.get(bl[1]), 0))
+                        usable = (excl_wgts[bl] > 0) & (wgt_sum > 0)
+                        with np.errstate(all='ignore'):
+                            z2 = np.where(usable, excl_wgts[bl] * np.abs(excl_data[bl] - avg)**2, 0)
+                            expectation = np.where(usable, 1 + excl_wgts[bl] / np.where(wgt_sum > 0, wgt_sum, 1), 0)
+                        excluded_ant = (ant_i if ant_i in ex_ants else ant_j)
+                        chisq_num[excluded_ant] = chisq_num.get(excluded_ant, 0) + z2
+                        chisq_dof[excluded_ant] = chisq_dof.get(excluded_ant, 0) + expectation
+
+    meta = {}
+    if compute_chisq:
+        with np.errstate(all='ignore'):
+            meta['chisq_per_ant'] = {ant: np.where(chisq_dof[ant] > 0,
+                                                   chisq_num[ant] / np.where(chisq_dof[ant] > 0, chisq_dof[ant], 1),
+                                                   np.nan) for ant in chisq_num}
+            meta['total_chisq'] = {antpol: np.where(total_dof[antpol] > 0,
+                                                    total_num[antpol] / np.where(total_dof[antpol] > 0, total_dof[antpol], 1),
+                                                    np.nan) for antpol in total_num}
+    return (datacontainer.RedDataContainer(red_avg_data, reds=reds),
+            datacontainer.RedDataContainer(red_avg_flags, reds=reds),
+            datacontainer.RedDataContainer(red_avg_nsamples, reds=reds),
+            meta)
 
 
 def build_gains_by_cadences(data, gains, cal_flags=None, flags_are_wgts=False):
