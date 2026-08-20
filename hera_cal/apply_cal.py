@@ -229,8 +229,9 @@ def correct_SNAP_decoherence_in_place(data, decoherence, ant_to_SNAP_dict,
                      * coherence_factor[ant_to_SNAP_dict[j]])
 
 
-def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, snap_decoherence=None,
-                          dt=None, df=None, compute_chisq=True, effective_nsamples=True):
+def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_flags=None,
+                          snap_decoherence=None, dt=None, df=None, compute_chisq=True,
+                          effective_nsamples=True):
     '''Calibrate visibilities and redundantly average them with inverse-variance noise
     weights, one group at a time (a full-size calibrated copy of the data is never
     materialized). data must include co-polarized autocorrelations: they set each
@@ -278,6 +279,13 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, snap_
             or excluded antennas' -- resolves to its group's average.
         ant_flags: optional dict mapping (ant, antpol) to boolean flag waterfalls.
         ex_ants: optional iterable of (ant, antpol) tuples excluded from all averages.
+        data_flags: optional DataContainer of boolean flag waterfalls with the same keys
+            as data. Flagged cells get zero weight in averages, chi^2, and effective
+            nsamples. Flags on an autocorrelation affect only its average, never the
+            noise weights of cross-correlations using that antenna -- flagging an
+            antenna everywhere is ant_flags' job. Unnecessary in most current HERA
+            analyses, where flags are carried per-antenna (or array-wide) and belong
+            in ant_flags.
         snap_decoherence: optional io.SNAPDecoherence, e.g. from
             SNAPDecoherence.from_estimate. Default None: no decoherence handling.
         dt: integration time in seconds. Default None infers from data's times.
@@ -339,9 +347,12 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, snap_
     cal_autos = datacontainer.DataContainer(cal_autos)
 
     def _bl_flags(bl):
-        '''Both antennas' gain_flags, plus unmeasured decoherence blocks for inter-SNAP baselines.'''
+        '''Both antennas' gain_flags, plus data_flags and unmeasured decoherence blocks
+        for inter-SNAP baselines.'''
         ant_i, ant_j = utils.split_bl(bl)
         flags = gain_flags[ant_i] | gain_flags[ant_j]
+        if data_flags is not None:
+            flags = flags | data_flags[bl]
         if snap_decoherence is not None and _is_inter_SNAP(bl):
             # .get defaults: SNAPs without stored results (possible for excluded antennas) add no flags
             flags = flags | unmeasured.get(ant_to_SNAP.get(bl[0]), False) | unmeasured.get(ant_to_SNAP.get(bl[1]), False)

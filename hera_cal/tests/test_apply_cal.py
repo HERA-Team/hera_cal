@@ -876,6 +876,35 @@ class TestCalibrateAndRedAvg:
         np.testing.assert_array_equal(nsamples[red[0]][0, :10], len(red) - 1)
         np.testing.assert_array_equal(nsamples[red[0]][0, 10:], len(red))
 
+    def test_data_flags(self):
+        sim = build_red_avg_sim()
+        # flag (and corrupt) some cells of one baseline, and flag some cells of one auto
+        data_flags = DataContainer({bl: np.zeros((sim['ntimes'], sim['nfreqs']), dtype=bool)
+                                    for bl in sim['data']})
+        data_flags[(0, 1, 'ee')][0, :10] = True
+        data_flags[(2, 2, 'ee')][1, -5:] = True
+        sim['data'][(0, 1, 'ee')][0, :10] = 100.0
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], data_flags=data_flags,
+            dt=sim['dt'], df=sim['df'], effective_nsamples=False)
+        # the corrupted flagged cells get zero weight: the group average stays exact, loses
+        # exactly one sample there, and the corruption never reaches chi^2
+        red = [r for r in sim['reds'] if (0, 1, 'ee') in r][0]
+        np.testing.assert_allclose(avg[red[0]], sim['true_vis'][red[0]], atol=1e-10)
+        np.testing.assert_array_equal(nsamples[red[0]][0, :10], len(red) - 1)
+        np.testing.assert_array_equal(nsamples[red[0]][0, 10:], len(red))
+        assert np.all(meta['chisq_per_ant'][(0, 'Jee')] < 1e-16)
+        # the flagged auto cells drop out of the auto average, but do NOT affect the noise
+        # weights of cross-correlations involving that antenna (that's ant_flags' job)
+        auto_key = next(bl for bl in avg if bl[0] == bl[1])
+        expected = np.mean([sim['true_autos'][(i, 'Jee')] for i in range(6) if i != 2], axis=0)
+        np.testing.assert_allclose(avg[auto_key][1, -5:], expected[1, -5:], atol=1e-10)
+        np.testing.assert_array_equal(nsamples[auto_key][1, -5:], 5)
+        np.testing.assert_array_equal(nsamples[auto_key][0, :], 6)
+        red2 = [r for r in sim['reds'] if (0, 2, 'ee') in r][0]
+        np.testing.assert_allclose(avg[red2[0]], sim['true_vis'][red2[0]], atol=1e-10)
+        np.testing.assert_array_equal(nsamples[red2[0]], len(red2))
+
     def test_decoherence_round_trip(self):
         sim = build_red_avg_sim()
         ant_to_SNAP = {i: ('S0' if i < 3 else 'S1') for i in range(6)}
