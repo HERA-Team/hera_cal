@@ -777,3 +777,312 @@ class TestCorrectSNAPDecoherence:
         with pytest.raises(ValueError, match='shape'):
             ac.correct_SNAP_decoherence_in_place(
                 data, bad_shape, self.SNAP_map, nchans_per_block=self.ncpb)
+
+
+def build_red_avg_sim(nfreqs=64, ntimes=2, nants=6, pols=['ee'], noise_amp=0.0, seed=0):
+    '''Linear redundant array with known gains, per-group true visibilities, and autos.
+    Returns a dict with the DataContainer (antpos attached), gains, truths, and dt/df.
+    With noise_amp=1, injected noise has exactly the variance predicted from the autos.'''
+    rng = np.random.default_rng(seed)
+    antpos = {i: np.array([14.6 * i, 0.0, 0.0]) for i in range(nants)}
+    freqs = 100e6 + np.arange(nfreqs) * 122070.3125
+    dt, df = 9.66, 122070.3125
+    reds = redcal.get_reds(antpos, pols=pols, include_autos=True)
+    gains, true_autos = {}, {}
+    for i in range(nants):
+        for antpol in {utils.split_pol(pol)[sub] for pol in pols for sub in (0, 1)}:
+            gains[(i, antpol)] = (1 + 0.1 * rng.standard_normal((ntimes, nfreqs))
+                                  + 0.1j * rng.standard_normal((ntimes, nfreqs)))
+            true_autos[(i, antpol)] = 10.0 + i + np.zeros((ntimes, nfreqs))
+    true_vis, data = {}, {}
+    for red in reds:
+        if red[0][0] != red[0][1]:
+            true_vis[red[0]] = (rng.standard_normal((ntimes, nfreqs))
+                                + 1j * rng.standard_normal((ntimes, nfreqs)))
+        for bl in red:
+            ant_i, ant_j = utils.split_bl(bl)
+            gi, gj = gains[ant_i], gains[ant_j]
+            if bl[0] == bl[1]:
+                if ant_i == ant_j:  # co-polarized autos only
+                    data[bl] = (np.abs(gi)**2 * true_autos[ant_i]).astype(complex)
+            else:
+                vis = true_vis[red[0]].copy()
+                if noise_amp > 0:
+                    sigma = np.sqrt(true_autos[ant_i] * true_autos[ant_j] / (dt * df)) * noise_amp
+                    vis += ((rng.standard_normal((ntimes, nfreqs))
+                             + 1j * rng.standard_normal((ntimes, nfreqs))) * sigma / np.sqrt(2))
+                data[bl] = gi * np.conj(gj) * vis
+    dc = DataContainer(data)
+    dc.antpos = antpos
+    return dict(data=dc, gains=gains, true_vis=true_vis, true_autos=true_autos,
+                reds=reds, antpos=antpos, freqs=freqs, dt=dt, df=df,
+                ntimes=ntimes, nfreqs=nfreqs)
+
+
+def build_test_SNAP_decoherence(sim, p_by_SNAP, ant_to_SNAP_dict, nchans_per_block=32):
+    '''Wrap hand-built per-SNAP loss fractions (Ntimes, Nblocks) in a SNAPDecoherence.'''
+    nblocks = sim['nfreqs'] // nchans_per_block
+    times = 2459935.5 + np.arange(sim['ntimes']) * 9.66 / (24 * 3600)
+    nan_like = {SNAP: np.full_like(p, np.nan) for SNAP, p in p_by_SNAP.items()}
+    counts = {SNAP: np.full(sim['ntimes'], 4, dtype=int) for SNAP in p_by_SNAP}
+    return io.SNAPDecoherence(
+        decoherence=p_by_SNAP, decoherence_refit={S: p.copy() for S, p in p_by_SNAP.items()},
+        log_suppression_sigma=nan_like, n_spectra_per_SNAP=counts,
+        times=times, block_freqs=sim['freqs'].reshape(nblocks, nchans_per_block),
+        ant_to_SNAP_dict=ant_to_SNAP_dict,
+        covered_blocks=np.ones(nblocks, dtype=bool), edge_blocks=[],
+        band_edges=np.array([[sim['freqs'][0], sim['freqs'][-1]]]))
+
+
+class TestCalibrateAndRedAvg:
+    def test_noiseless_recovery(self):
+        sim = build_red_avg_sim()
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], dt=sim['dt'], df=sim['df'])
+        for key, truth in sim['true_vis'].items():
+            np.testing.assert_allclose(avg[key], truth, atol=1e-10)
+            assert not np.any(flags[key])
+        # the zero-length group averages the calibrated autos uniformly over antennas
+        auto_key = next(bl for bl in avg if bl[0] == bl[1])
+        expected = np.mean([sim['true_autos'][(i, 'Jee')] for i in range(6)], axis=0)
+        np.testing.assert_allclose(avg[auto_key], expected, atol=1e-10)
+        # noiseless residuals mean zero chi^2
+        assert np.all(meta['chisq_per_ant'][(0, 'Jee')] < 1e-16)
+
+    def test_noise_weights_and_nsamples(self):
+        sim = build_red_avg_sim()
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], dt=sim['dt'], df=sim['df'], effective_nsamples=False)
+        # weights go as 1 / (A_i * A_j): check a group against the hand-computed average
+        red = [r for r in sim['reds'] if r[0][0] != r[0][1] and len(r) > 2][0]
+        wgts = [1.0 / (sim['true_autos'][utils.split_bl(bl)[0]]
+                       * sim['true_autos'][utils.split_bl(bl)[1]]) for bl in red]
+        cal_vis = [sim['data'][bl] / (sim['gains'][utils.split_bl(bl)[0]]
+                                      * np.conj(sim['gains'][utils.split_bl(bl)[1]])) for bl in red]
+        expected = np.sum([w * v for w, v in zip(wgts, cal_vis)], axis=0) / np.sum(wgts, axis=0)
+        np.testing.assert_allclose(avg[red[0]], expected, atol=1e-10)
+        np.testing.assert_array_equal(nsamples[red[0]], len(red))
+
+    def test_ant_flags(self):
+        sim = build_red_avg_sim()
+        wf = np.zeros((sim['ntimes'], sim['nfreqs']), dtype=bool)
+        wf[0, :10] = True
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], ant_flags={(0, 'Jee'): wf}, dt=sim['dt'], df=sim['df'],
+            effective_nsamples=False)
+        # groups containing antenna 0 lose one sample where it is flagged, but stay correct
+        red = [r for r in sim['reds'] if (0, 1, 'ee') in r][0]
+        np.testing.assert_allclose(avg[red[0]], sim['true_vis'][red[0]], atol=1e-10)
+        np.testing.assert_array_equal(nsamples[red[0]][0, :10], len(red) - 1)
+        np.testing.assert_array_equal(nsamples[red[0]][0, 10:], len(red))
+
+    def test_decoherence_round_trip(self):
+        sim = build_red_avg_sim()
+        ant_to_SNAP = {i: ('S0' if i < 3 else 'S1') for i in range(6)}
+        p_S1 = np.zeros((sim['ntimes'], 2))
+        p_S1[:, 1] = [0.04, 0.02]
+        sd = build_test_SNAP_decoherence(sim, {'S0': np.zeros((sim['ntimes'], 2)), 'S1': p_S1},
+                                         ant_to_SNAP)
+        # suppress inter-SNAP visibilities and put the staircase into the gains
+        suppression = {SNAP: np.repeat(-np.log(1 - sd.decoherence[SNAP]), 32, axis=1)
+                       for SNAP in sd.SNAPs}
+        data = DataContainer({bl: sim['data'][bl].copy() for bl in sim['data']})
+        data.antpos = sim['antpos']
+        for bl in data:
+            if bl[0] != bl[1] and ant_to_SNAP[bl[0]] != ant_to_SNAP[bl[1]]:
+                data[bl] *= np.exp(-suppression[ant_to_SNAP[bl[0]]] - suppression[ant_to_SNAP[bl[1]]])
+        # measured gains carry the staircase; autocorrelations are exempt and stay as built
+        gains = {ant: g * np.exp(-suppression[ant_to_SNAP[ant[0]]]) for ant, g in sim['gains'].items()}
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            data, gains, sim['reds'], snap_decoherence=sd, dt=sim['dt'], df=sim['df'])
+        for key, truth in sim['true_vis'].items():
+            np.testing.assert_allclose(avg[key], truth, atol=1e-8)
+        # without the decoherence handling, the staircase corrupts intra-SNAP members
+        avg_wrong, _, _, _ = ac.calibrate_and_red_avg(data, gains, sim['reds'], dt=sim['dt'], df=sim['df'])
+        assert any(not np.allclose(avg_wrong[key], truth, atol=1e-3)
+                   for key, truth in sim['true_vis'].items())
+
+    def test_unmeasured_blocks_flagged(self):
+        sim = build_red_avg_sim()
+        ant_to_SNAP = {i: ('S0' if i < 3 else 'S1') for i in range(6)}
+        p_S1 = np.zeros((sim['ntimes'], 2))
+        p_S1[0, 0] = np.nan  # unmeasured block for S1 at t = 0
+        sd = build_test_SNAP_decoherence(sim, {'S0': np.zeros((sim['ntimes'], 2)), 'S1': p_S1},
+                                         ant_to_SNAP)
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], snap_decoherence=sd, dt=sim['dt'], df=sim['df'],
+            effective_nsamples=False)
+        # the length-1 group has intra-SNAP members (0-1, 1-2, 3-4, 4-5) and one inter-SNAP
+        # member (2-3): the inter-SNAP baseline is excluded where p is unmeasured
+        red = [r for r in sim['reds'] if (0, 1, 'ee') in r][0]
+        np.testing.assert_array_equal(nsamples[red[0]][0, :32], len(red) - 1)
+        np.testing.assert_array_equal(nsamples[red[0]][0, 32:], len(red))
+        np.testing.assert_array_equal(nsamples[red[0]][1], len(red))
+        np.testing.assert_allclose(avg[red[0]], sim['true_vis'][red[0]], atol=1e-10)
+
+    def test_chisq_noise_expectation(self):
+        sim = build_red_avg_sim(nfreqs=128, noise_amp=1.0, seed=1)
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], dt=sim['dt'], df=sim['df'])
+        for ant, cspa in meta['chisq_per_ant'].items():
+            assert np.nanmean(cspa) == pytest.approx(1.0, abs=0.25)
+        assert np.nanmean(meta['total_chisq']['Jee']) == pytest.approx(1.0, abs=0.1)
+
+    def test_excluded_antennas(self):
+        sim = build_red_avg_sim(nfreqs=128, noise_amp=1.0, seed=2)
+        # corrupt antenna 5, as if miscalibrated
+        corrupted = DataContainer({bl: (sim['data'][bl] * (3.0 if 5 in bl[:2] and bl[0] != bl[1] else 1.0))
+                                   for bl in sim['data']})
+        corrupted.antpos = sim['antpos']
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            corrupted, sim['gains'], sim['reds'], ex_ants=[(5, 'Jee')], dt=sim['dt'], df=sim['df'])
+        # excluding antenna 5 makes the averages identical to simply not having it
+        no5 = DataContainer({bl: corrupted[bl] for bl in corrupted if 5 not in bl[:2]})
+        no5.antpos = sim['antpos']
+        avg2, flags2, nsamples2, meta2 = ac.calibrate_and_red_avg(
+            no5, sim['gains'], sim['reds'], dt=sim['dt'], df=sim['df'])
+        for key in avg2:
+            if 5 not in key[:2]:
+                np.testing.assert_array_equal(avg[key], avg2[key])
+        # excluded antennas' keys still resolve through the containers: their auto key
+        # maps to the array-averaged auto, and their cross keys to the group averages
+        np.testing.assert_array_equal(avg[(5, 5, 'ee')], avg[(0, 0, 'ee')])
+        np.testing.assert_array_equal(avg[(4, 5, 'ee')], avg[(0, 1, 'ee')])
+        # the corrupted antenna's chi^2 is large; its partners' chi^2 and the
+        # per-polarization totals are exactly what they would be without it
+        assert np.nanmean(meta['chisq_per_ant'][(5, 'Jee')]) > 10
+        for ant in meta2['chisq_per_ant']:
+            np.testing.assert_array_equal(meta['chisq_per_ant'][ant], meta2['chisq_per_ant'][ant])
+        np.testing.assert_array_equal(meta['total_chisq']['Jee'], meta2['total_chisq']['Jee'])
+
+    def test_cross_pols(self):
+        sim = build_red_avg_sim(pols=['ee', 'nn', 'en'])
+        # a cross-polarized "auto" is averaged too, though never used for noise weights
+        sim['data'][(0, 0, 'en')] = np.ones((sim['ntimes'], sim['nfreqs']), dtype=complex)
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], dt=sim['dt'], df=sim['df'])
+        en_keys = [key for key in sim['true_vis'] if key[2] == 'en']
+        assert len(en_keys) > 0
+        for key in en_keys:
+            np.testing.assert_allclose(avg[key], sim['true_vis'][key], atol=1e-10)
+        # the injected cross-polarized auto is calibrated and averaged (a group of one),
+        # with finite effective nsamples anchored by both polarizations' averaged autos
+        expected = 1.0 / (sim['gains'][(0, 'Jee')] * np.conj(sim['gains'][(0, 'Jnn')]))
+        np.testing.assert_allclose(avg[(0, 0, 'en')], expected, atol=1e-10)
+        assert np.all(nsamples[(0, 0, 'en')] > 0)
+        # chi^2 stays co-polarized: totals keyed by Jee/Jnn only
+        assert set(meta['total_chisq'].keys()) == {'Jee', 'Jnn'}
+        # reds govern everything: co-polarized-only reds drop 'en' crosses and autos alike
+        co_reds = [red for red in sim['reds']
+                   if utils.split_pol(red[0][2])[0] == utils.split_pol(red[0][2])[1]]
+        avg_co, _, _, _ = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], co_reds, dt=sim['dt'], df=sim['df'])
+        assert not any(key[2] == 'en' for key in avg_co)
+
+    def test_compute_chisq_false(self):
+        sim = build_red_avg_sim()
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], compute_chisq=False, dt=sim['dt'], df=sim['df'])
+        assert meta == {}
+
+    def test_missing_gains_and_autos_omitted(self):
+        sim = build_red_avg_sim()
+        gains = {ant: g for ant, g in sim['gains'].items() if ant[0] != 0}
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], gains, sim['reds'], dt=sim['dt'], df=sim['df'], effective_nsamples=False)
+        assert not any(0 in key[:2] for key in avg)
+        red = [r for r in sim['reds'] if (0, 1, 'ee') in r][0]
+        np.testing.assert_array_equal(nsamples[red[1]], len(red) - 1)
+
+    def test_excluded_antenna_with_decoherence(self):
+        sim = build_red_avg_sim()
+        ant_to_SNAP = {i: ('S0' if i < 3 else 'S1') for i in range(6)}
+        p_S1 = np.zeros((sim['ntimes'], 2))
+        p_S1[:, 1] = [0.04, 0.02]
+        sd = build_test_SNAP_decoherence(sim, {'S0': np.zeros((sim['ntimes'], 2)), 'S1': p_S1},
+                                         ant_to_SNAP)
+        suppression = {SNAP: np.repeat(-np.log(1 - sd.decoherence[SNAP]), 32, axis=1)
+                       for SNAP in sd.SNAPs}
+        data = DataContainer({bl: sim['data'][bl].copy() for bl in sim['data']})
+        data.antpos = sim['antpos']
+        for bl in data:
+            if bl[0] != bl[1] and ant_to_SNAP[bl[0]] != ant_to_SNAP[bl[1]]:
+                data[bl] *= np.exp(-suppression[ant_to_SNAP[bl[0]]] - suppression[ant_to_SNAP[bl[1]]])
+        gains = {ant: g * np.exp(-suppression[ant_to_SNAP[ant[0]]]) for ant, g in sim['gains'].items()}
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            data, gains, sim['reds'], ex_ants=[(5, 'Jee')], snap_decoherence=sd, dt=sim['dt'], df=sim['df'])
+        # the excluded antenna's data are noiseless and consistent with the good-antenna
+        # averages once the inline decoherence correction is applied, so its chi^2 ~ 0
+        assert np.all(meta['chisq_per_ant'][(5, 'Jee')] < 1e-16)
+
+    def test_excluded_and_omitted_edge_cases(self):
+        sim = build_red_avg_sim(nants=7)
+        # inject a cross-polarized "auto", which is never averaged
+        sim['data'][(0, 0, 'en')] = np.ones((sim['ntimes'], sim['nfreqs']), dtype=complex)
+        # antenna 1 loses its autocorrelation; antenna 0 loses its gains
+        del sim['data'][(1, 1, 'ee')]
+        gains = {ant: g for ant, g in sim['gains'].items() if ant[0] != 0}
+        # antenna 4 is entirely flagged; antenna 5 is excluded
+        all_flagged = np.ones((sim['ntimes'], sim['nfreqs']), dtype=bool)
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], gains, sim['reds'], ant_flags={(4, 'Jee'): all_flagged}, ex_ants=[(5, 'Jee')],
+            dt=sim['dt'], df=sim['df'])
+        # antennas 0 (no gains), 1 (no autos), and 4 (fully flagged) all drop out of the
+        # averages, and none of the excluded-antenna chi^2 machinery crashes on their
+        # baselines to antenna 5 (missing gains/autos, both-unexcluded, or fully flagged)
+        assert not any(0 in key[:2] or 1 in key[:2] for key in avg)
+        assert not any(key[2] == 'en' for key in avg)
+        assert (0, 'Jee') not in meta['chisq_per_ant']
+        assert (4, 'Jee') not in meta['chisq_per_ant']
+
+    def test_dt_df_inference(self):
+        sim = build_red_avg_sim()
+        times = 2459935.5 + np.arange(sim['ntimes']) * sim['dt'] / (24 * 3600)
+        sim['data'].times = times
+        sim['data'].times_by_bl = {bl[:2]: times for bl in sim['data']}
+        sim['data'].freqs = sim['freqs']
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(sim['data'], sim['gains'], sim['reds'])
+        for key, truth in sim['true_vis'].items():
+            np.testing.assert_allclose(avg[key], truth, atol=1e-10)
+
+    def test_effective_nsamples_exact(self):
+        sim = build_red_avg_sim(nfreqs=64, ntimes=400, noise_amp=1.0, seed=3)
+        avg, flags, n_eff, meta = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], dt=sim['dt'], df=sim['df'], compute_chisq=False)
+        _, _, n_count, _ = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], dt=sim['dt'], df=sim['df'], compute_chisq=False,
+            effective_nsamples=False)
+        auto_key = next(bl for bl in avg if bl[0] == bl[1])
+        avg_auto = np.abs(avg[auto_key])
+        key = sorted((bl for bl in avg if bl[0] != bl[1]), key=lambda bl: -np.max(n_count[bl]))[0]
+        # effective nsamples exceeds the count for cross groups and makes the standard
+        # predictor Abar^2 / (dt df nsamples) exact; the count over-predicts the noise
+        assert np.all(n_eff[key] > n_count[key])
+        # the sim's true visibilities vary with time, so subtract them to isolate the noise
+        empirical_var = np.var(avg[key] - sim['true_vis'][key], axis=0)
+        pred_eff = avg_auto[0]**2 / (sim['dt'] * sim['df'] * n_eff[key][0])
+        pred_count = avg_auto[0]**2 / (sim['dt'] * sim['df'] * n_count[key][0])
+        assert np.mean(empirical_var / pred_eff) == pytest.approx(1.0, abs=0.05)
+        assert np.mean(empirical_var / pred_count) < 0.98  # ~3.5% over-prediction for this sim's auto spread
+        # the averaged autos' own effective nsamples accounts for uniform weighting of
+        # heteroscedastic autos, and so is at or below the antenna count
+        assert np.all(n_eff[auto_key] <= n_count[auto_key] + 1e-10)
+
+    def test_autos_required(self):
+        sim = build_red_avg_sim()
+        no_autos = DataContainer({bl: sim['data'][bl] for bl in sim['data'] if bl[0] != bl[1]})
+        no_autos.antpos = sim['antpos']
+        with pytest.raises(ValueError, match='autocorrelations'):
+            ac.calibrate_and_red_avg(no_autos, sim['gains'], sim['reds'], dt=sim['dt'], df=sim['df'])
+
+    def test_reds_must_include_auto_groups(self):
+        sim = build_red_avg_sim()
+        cross_reds = [red for red in sim['reds'] if red[0][0] != red[0][1]]
+        with pytest.raises(ValueError, match='autocorrelation group'):
+            ac.calibrate_and_red_avg(sim['data'], sim['gains'], cross_reds,
+                                     dt=sim['dt'], df=sim['df'])
+        # with auto groups listed, every antenna's auto key resolves to the average
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], dt=sim['dt'], df=sim['df'])
+        expected = np.mean([sim['true_autos'][(i, 'Jee')] for i in range(6)], axis=0)
+        np.testing.assert_allclose(avg[(3, 3, 'ee')], expected, atol=1e-10)
