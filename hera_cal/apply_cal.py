@@ -248,8 +248,9 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
     Abar_i * Abar_j * sum(w) / (dt * df) for cross groups (above the count, since the
     average leans on quieter-than-typical pairs) and n^2 * Abar_i * Abar_j / (the sum
     over antennas of their co-polarized auto products) for the autocorrelations.
-    Effective nsamples is spectrally smooth (auto structure common to all antennas
-    cancels), so it can be sensibly inpainted across flagging gaps.
+    Flagging gaps will have nsamples = 0, but as long as antenna-to-antenna variation
+    in the autos is spectrally smooth, effective nsamples will be too, and can therefore
+    later be inpainted if needed.
 
     If snap_decoherence is given, gains are first cleaned of the fitted suppression
     staircase (SNAPDecoherence.correct_gains; autocorrelations and intra-SNAP baselines
