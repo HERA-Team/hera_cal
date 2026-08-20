@@ -1024,8 +1024,11 @@ class TestCalibrateAndRedAvg:
         gains = {ant: g for ant, g in sim['gains'].items() if ant[0] != 0}
         # antenna 4 is entirely flagged; antenna 5 is excluded
         all_flagged = np.ones((sim['ntimes'], sim['nfreqs']), dtype=bool)
+        # listed auto groups with no usable members (no 'nn' autos in data; no antenna has
+        # both antpols' gains for 'en') are skipped without producing averages
+        reds_plus = sim['reds'] + [[(i, i, 'nn') for i in range(7)], [(i, i, 'en') for i in range(7)]]
         avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
-            sim['data'], gains, sim['reds'], ant_flags={(4, 'Jee'): all_flagged}, ex_ants=[(5, 'Jee')],
+            sim['data'], gains, reds_plus, ant_flags={(4, 'Jee'): all_flagged}, ex_ants=[(5, 'Jee')],
             dt=sim['dt'], df=sim['df'])
         # antennas 0 (no gains), 1 (no autos), and 4 (fully flagged) all drop out of the
         # averages, and none of the excluded-antenna chi^2 machinery crashes on their
