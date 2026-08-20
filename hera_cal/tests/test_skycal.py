@@ -1250,3 +1250,82 @@ class TestDivergentChannelTolerance:
         assert 'divergent_chans' in meta
         for key, chans in meta['divergent_chans'].items():
             assert len(chans) == 0  # clean sim: nothing should fail
+
+
+class TestExpandSkyGains:
+    def test_recovery_and_containment(self):
+        sim = build_sim()
+        gains = dict(sim['true_gains'])
+        spectator = (3, 'Jee')
+        del gains[spectator]
+        solved_before = {ant: g.copy() for ant, g in gains.items()}
+        chisq_per_ant = {}
+        skycal.expand_sky_gains(sim['data'], sim['model'], gains, dt=sim['dt'], df=sim['df'],
+                                chisq_per_ant=chisq_per_ant)
+        # the spectator's true gain is recovered exactly and its chi^2 is ~0 (noiseless),
+        # while every solved antenna's gain is bit-identical to before
+        np.testing.assert_allclose(gains[spectator], sim['true_gains'][spectator], rtol=1e-8)
+        assert np.all(chisq_per_ant[spectator] < 1e-16)
+        assert set(chisq_per_ant) == {spectator}
+        for ant, g in solved_before.items():
+            np.testing.assert_array_equal(gains[ant], g)
+
+    def test_two_spectators_never_chain(self):
+        sim = build_sim()
+        gains = dict(sim['true_gains'])
+        # corrupt the baseline between the two spectators: it must never be used
+        sim['data'][(2, 5, sim['pol'])] *= 100
+        for spectator in [(2, 'Jee'), (5, 'Jee')]:
+            del gains[spectator]
+        skycal.expand_sky_gains(sim['data'], sim['model'], gains, dt=sim['dt'], df=sim['df'])
+        for spectator in [(2, 'Jee'), (5, 'Jee')]:
+            np.testing.assert_allclose(gains[spectator], sim['true_gains'][spectator], rtol=1e-8)
+
+    def test_inter_SNAP_restriction(self):
+        sim = build_sim()
+        ant_to_SNAP_dict = {antnum: ('S0' if antnum < 4 else 'S1') for antnum in sim['antnums']}
+        gains = dict(sim['true_gains'])
+        del gains[(2, 'Jee')]
+        # corrupt the spectator's intra-SNAP baselines: with the restriction they are
+        # never used, so recovery stays exact; without it, they bias the solution
+        for j in [0, 1, 3]:
+            sim['data'][(min(2, j), max(2, j), sim['pol'])] *= 3
+        skycal.expand_sky_gains(sim['data'], sim['model'], gains, dt=sim['dt'], df=sim['df'],
+                                ant_to_SNAP_dict=ant_to_SNAP_dict)
+        np.testing.assert_allclose(gains[(2, 'Jee')], sim['true_gains'][(2, 'Jee')], rtol=1e-8)
+        gains_unrestricted = {ant: g for ant, g in sim['true_gains'].items() if ant != (2, 'Jee')}
+        skycal.expand_sky_gains(sim['data'], sim['model'], gains_unrestricted,
+                                dt=sim['dt'], df=sim['df'])
+        assert not np.allclose(gains_unrestricted[(2, 'Jee')], sim['true_gains'][(2, 'Jee')],
+                               rtol=1e-3)
+
+    def test_corrupted_spectator_gets_large_chisq(self):
+        sim = build_sim(noise=1.0, seed=5)
+        gains = dict(sim['true_gains'])
+        del gains[(3, 'Jee')]
+        # a common rescaling would be absorbed by g_a, so corrupt the spectator's
+        # baselines with baseline-DEPENDENT factors no per-antenna gain can explain
+        for k, bl in enumerate(bl for bl in list(sim['data']) if 3 in bl[:2] and bl[0] != bl[1]):
+            sim['data'][bl] *= (1 + 0.5 * (-1)**k)
+        chisq_per_ant = {}
+        skycal.expand_sky_gains(sim['data'], sim['model'], gains, dt=sim['dt'], df=sim['df'],
+                                chisq_per_ant=chisq_per_ant)
+        assert np.mean(chisq_per_ant[(3, 'Jee')]) > 100
+
+    def test_nan_where_unusable(self):
+        sim = build_sim()
+        gains = dict(sim['true_gains'])
+        del gains[(3, 'Jee')]
+        all_flagged = np.ones((sim['ntimes'], len(sim['freqs'])), dtype=bool)
+        chisq_per_ant = {}
+        skycal.expand_sky_gains(sim['data'], sim['model'], gains, dt=sim['dt'], df=sim['df'],
+                                ant_flags={ant: all_flagged for ant in gains},
+                                chisq_per_ant=chisq_per_ant)
+        assert np.all(np.isnan(gains[(3, 'Jee')]))
+        assert np.all(np.isnan(chisq_per_ant[(3, 'Jee')]))
+
+    def test_no_spectators_is_a_no_op(self):
+        sim = build_sim()
+        gains = dict(sim['true_gains'])
+        skycal.expand_sky_gains(sim['data'], sim['model'], gains, dt=sim['dt'], df=sim['df'])
+        assert set(gains) == set(sim['true_gains'])
