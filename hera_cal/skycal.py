@@ -1112,6 +1112,99 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
     return gains, meta
 
 
+def expand_sky_gains(data, model, gains, autos=None, data_flags=None, model_flags=None,
+                     ant_flags=None, bls=None, ant_to_SNAP_dict=None, dt=None, df=None,
+                     chisq_per_ant=None):
+    '''Solve for the gains of antennas excluded from sky calibration ("spectators")
+    against the frozen solved gains and the sky model, updating gains in place.
+
+    With the solved gains g_j held fixed, each spectator's per-channel gain is a
+    closed-form weighted least-squares over its baselines to solved antennas:
+    the data/model ratio obeys Z_aj ~ g_a * conj(g_j), so
+    g_a = sum_j(w Z g_j) / sum_j(w |g_j|^2) -- no iteration, no divergence, and by
+    construction no effect on any solved antenna. This gives every antenna in every
+    file comparable statistics for downstream full-day flagging: broken antennas get
+    garbage gains with huge chi^2, which is the point -- they stay flagged upstream,
+    and the statistic records how badly they disagree with the sky. Cells where no
+    baseline is usable get np.nan gains.
+
+    NOTE: unlike its namesake redcal.expand_omni_gains, this deliberately does NOT
+    iterate to solve spectators against other spectators: only baselines to
+    originally-solved antennas are used, so spectator solutions never influence
+    anything else.
+
+    Arguments:
+        data: DataContainer of visibilities, including the autocorrelations for
+            noise weights unless autos is given
+        model: DataContainer or RedDataContainer of model visibilities,
+            time-aligned to data, as in build_data_model_ratio
+        gains: dict mapping (ant, antpol) e.g. (0, 'Jee') to (Ntimes, Nfreqs)
+            complex gain waterfalls of the SOLVED antennas, e.g. from
+            sky_calibrate (after any relative-phase calibration, so spectators
+            inherit that convention). UPDATED IN PLACE with spectator solutions.
+        autos, data_flags, model_flags, ant_flags, dt, df: as in
+            build_data_model_ratio
+        bls: optional list of candidate baselines. Default None considers every
+            modeled cross-correlation in data. Only baselines with exactly one
+            solved antenna are used either way.
+        ant_to_SNAP_dict: optional dict mapping antenna numbers to SNAP IDs. If
+            given, only inter-SNAP baselines are used (mirroring refine_gains, so
+            per-SNAP decoherence lands in spectator gain amplitudes the same way
+            as in solved ones) and baselines with unmapped antennas are skipped.
+        chisq_per_ant: optional dict of per-antenna chi^2 waterfalls, updated in
+            place: each spectator gets the mean over its baselines of
+            w |Z - g_a conj(g_j)|^2, whose expectation is ~1 for noise-like
+            residuals, attributed only to the spectator (solved antennas'
+            entries are never touched).
+    '''
+    # candidate baselines with exactly one solved antenna, oriented spectator-first
+    # (the containers handle the conjugation implied by reversal)
+    if bls is None:
+        bls = [bl for bl in data if bl[0] != bl[1] and bl in model]
+    spec_bls = []
+    for bl in bls:
+        if ant_to_SNAP_dict is not None:
+            if (bl[0] not in ant_to_SNAP_dict or bl[1] not in ant_to_SNAP_dict
+                    or ant_to_SNAP_dict[bl[0]] == ant_to_SNAP_dict[bl[1]]):
+                continue
+        ant_i, ant_j = utils.split_bl(bl)
+        if (ant_i in gains) and (ant_j not in gains):
+            spec_bls.append(utils.reverse_bl(bl))
+        elif (ant_j in gains) and (ant_i not in gains):
+            spec_bls.append(bl)
+    if len(spec_bls) == 0:
+        return
+
+    ratio, wgts = build_data_model_ratio(data, model, autos=autos, data_flags=data_flags,
+                                         model_flags=model_flags, ant_flags=ant_flags,
+                                         bls=spec_bls, dt=dt, df=df)
+
+    # closed-form per-channel solve, then chi^2 against the same frozen reference
+    num, den = {}, {}
+    for bl in spec_bls:
+        spec_ant, solved_ant = utils.split_bl(bl)
+        num[spec_ant] = num.get(spec_ant, 0) + wgts[bl] * np.nan_to_num(ratio[bl]) * gains[solved_ant]
+        den[spec_ant] = den.get(spec_ant, 0) + wgts[bl] * np.abs(gains[solved_ant])**2
+    with np.errstate(all='ignore'):
+        for ant in num:
+            gains[ant] = np.where(den[ant] > 0, num[ant] / np.where(den[ant] > 0, den[ant], 1), np.nan)
+
+    if chisq_per_ant is not None:
+        chisq_num, nobs = {}, {}
+        for bl in spec_bls:
+            spec_ant, solved_ant = utils.split_bl(bl)
+            with np.errstate(all='ignore'):
+                z2 = wgts[bl] * np.abs(ratio[bl] - gains[spec_ant] * np.conj(gains[solved_ant]))**2
+            usable = (wgts[bl] > 0) & np.isfinite(z2)
+            chisq_num[spec_ant] = chisq_num.get(spec_ant, 0) + np.where(usable, z2, 0)
+            nobs[spec_ant] = nobs.get(spec_ant, 0) + usable
+        with np.errstate(all='ignore'):
+            for ant in chisq_num:
+                chisq_per_ant[ant] = np.where(nobs[ant] > 0,
+                                              chisq_num[ant] / np.where(nobs[ant] > 0, nobs[ant], 1),
+                                              np.nan)
+
+
 ########################################################################
 # Per-SNAP, per-X-engine-block decoherence estimation
 ########################################################################
