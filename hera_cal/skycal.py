@@ -777,15 +777,20 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     entry_wgts = ratio_wgts[:, good_chan_idx][bl_inds, chan_inds]
     entry_ratio = vis_ratio[:, good_chan_idx][bl_inds, chan_inds]
 
-    # exact zeros are as fatal as NaNs here (log-amplitudes and unit phasors
-    # are both undefined) and typically mean bad data stored as 0 without
-    # accompanying flags, so fail loudly rather than diverge confusingly
-    bad_entries = ~np.isfinite(entry_ratio) | (entry_ratio == 0)
+    # non-finite entries mean bad data without accompanying flags, so fail loudly
+    bad_entries = ~np.isfinite(entry_ratio)
     if bad_entries.any():
         raise ValueError(
             f'{int(bad_entries.sum())} unflagged (baseline, channel) cells '
-            'have zero or non-finite data/model ratio. Flags or zero '
+            'have non-finite data/model ratio. Flags or zero '
             'weights must cover all bad data.')
+    # exactly-zero entries can be legitimate low-SNR data (due to quantization), but
+    # they carry no usable phase and would poison the log-amplitude, so those
+    # visibilities are dropped from the solve, exactly as if they had been flagged
+    keep = entry_ratio != 0
+    if not keep.all():
+        chan_inds, sel_i, sel_j = chan_inds[keep], sel_i[keep], sel_j[keep]
+        entry_wgts, entry_ratio = entry_wgts[keep], entry_ratio[keep]
 
     gains = np.ones((nsel, nchans), dtype=complex)
     active_chans = np.ones(nchans, dtype=bool)   # channels still iterating
@@ -949,7 +954,7 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
     Raises:
         ValueError: if ant_to_SNAP_dict is given but missing antennas, if
             the flagging pattern is not uniform (see _shared_channel_flags),
-            or if any unflagged cell has zero or non-finite data/model ratio
+            or if any unflagged cell has non-finite data/model ratio
         RuntimeError: if any (time, pol) has more failed channels than
             max_divergent_chan_frac allows
     '''

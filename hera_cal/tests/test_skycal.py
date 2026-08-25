@@ -299,12 +299,21 @@ class TestRefineGainsCore:
         wgts = self.rng.uniform(0.5, 2.0, size=vis_ratio.shape)
         return true_h, vis_ratio, wgts, ant_i, ant_j, nants
 
-    def test_zero_on_unflagged_cell_raises(self):
-        # bad data stored as 0 without flags must fail loudly: log-amplitude
-        # and unit-phasor initialization are both undefined at zero
+    def test_zero_cells_are_excluded_not_fatal(self):
+        # visibilities are stored as integers, so a weak cell can quantize to exactly
+        # 0 + 0j: legitimate data with no usable initialization info, dropped from
+        # the solve rather than refused
         true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays()
         vis_ratio[3, 2] = 0.0
-        with pytest.raises(ValueError, match='zero or non-finite'):
+        gains, meta = skycal._refine_gains_single_pol_time(vis_ratio, wgts, ant_i,
+                                                           ant_j, nants)
+        np.testing.assert_allclose(gains, true_h, atol=1e-7)
+
+    def test_nonfinite_on_unflagged_cell_raises(self):
+        # bad data stored as nan/inf without flags must still fail loudly
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays()
+        vis_ratio[3, 2] = np.nan
+        with pytest.raises(ValueError, match='non-finite'):
             skycal._refine_gains_single_pol_time(vis_ratio, wgts, ant_i,
                                                  ant_j, nants)
 
