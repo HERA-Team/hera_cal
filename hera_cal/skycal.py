@@ -1313,7 +1313,7 @@ def _project_out_smooth(vals, wgts, band_slices, dpss_bases):
 
 
 def _mcp_penalized_nnls(normal_mat, rhs, zero_below, unbiased_above,
-                        mask=None, start=None, tol=1e-10, maxiter=20000):
+                        mask=None, start=None, tol=1e-8, maxiter=20000):
     '''Penalized nonnegative least squares solved by coordinate descent.
 
     Nonnegative least squares ("NNLS") is least squares with every fitted
