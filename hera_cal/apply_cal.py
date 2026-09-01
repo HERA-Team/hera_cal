@@ -255,9 +255,12 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
     If snap_decoherence is given, gains are first cleaned of the fitted suppression
     staircase (SNAPDecoherence.correct_gains; autocorrelations and intra-SNAP baselines
     are exempt) and inter-SNAP cross-correlations instead get the exact correction
-    (correct_SNAP_decoherence_in_place), with unmeasured (np.nan) blocks flagged. The
-    stored antenna -> SNAP mapping is used throughout and must cover every antenna in
-    gains.
+    (correct_SNAP_decoherence_in_place), with unmeasured (np.nan) blocks flagged. Because
+    the correction inflates a baseline's noise by 1 / ((1 - p_i)(1 - p_j)) while the exempt
+    autos do not know it, the noise weights (and therefore the returned effective nsamples)
+    include the squared correction factor, keeping the standard noise prediction exact for
+    corrected data. The stored antenna -> SNAP mapping is used throughout and must cover
+    every antenna in gains.
 
     Chi^2 (co-polarized only): each group's mean is the only fit parameter, so a
     participating baseline's weighted scatter about it has expectation 1 - w / sum(w)
@@ -360,9 +363,17 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
         return flags
 
     def _noise_wgts(bl, flags):
-        '''Inverse noise variance from the calibrated autos, zeroed where flagged.'''
+        '''Inverse noise variance from the calibrated autos, zeroed where flagged. Inter-SNAP
+        baselines' post-correction noise is inflated by e^(ls_i + ls_j) = 1 / ((1 - p_i)(1 - p_j))
+        (decoherence suppresses the correlated signal but not the radiometer noise the autos
+        predict), so their variance carries the matching factor: corrected members are optimally
+        down-weighted, and the returned effective nsamples keep the standard noise prediction
+        (and therefore noise-normalized statistics like z-scores) exact for corrected data.'''
         with np.errstate(all='ignore'):
             sigma2 = noise.predict_noise_variance_from_autos(bl, cal_autos, dt=dt, df=df)
+            if snap_decoherence is not None and _is_inter_SNAP(bl):
+                sigma2 = sigma2 * np.exp(2 * (log_supp.get(ant_to_SNAP.get(bl[0]), 0)
+                                              + log_supp.get(ant_to_SNAP.get(bl[1]), 0)))
             return np.where(flags | ~(sigma2 > 0), 0, 1 / np.where(sigma2 > 0, sigma2, 1))
 
     def _usable_bl(bl, exclusion_chisq=False):
