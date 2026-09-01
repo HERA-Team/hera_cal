@@ -1100,6 +1100,46 @@ class TestCalibrateAndRedAvg:
         # heteroscedastic autos, and so is at or below the antenna count
         assert np.all(n_eff[auto_key] <= n_count[auto_key] + 1e-10)
 
+    def test_decoherence_noise_consistent(self):
+        # decoherence suppresses the correlated signal on inter-SNAP baselines but not the
+        # radiometer noise (the autos are exempt), so corrected data has noise inflated by the
+        # correction factor -- which the weights and effective nsamples must track
+        sim = build_red_avg_sim(nfreqs=64, ntimes=400, seed=4)
+        rng = np.random.default_rng(5)
+        ant_to_SNAP = {i: ('S0' if i < 3 else 'S1') for i in range(6)}
+        p_by_SNAP = {'S0': np.zeros((sim['ntimes'], 2)), 'S1': np.zeros((sim['ntimes'], 2))}
+        p_by_SNAP['S0'][:, 1] = 0.4
+        p_by_SNAP['S1'][:, 1] = 0.2
+        sd = build_test_SNAP_decoherence(sim, p_by_SNAP, ant_to_SNAP)
+        suppression = {SNAP: np.repeat(-np.log(1 - p), 32, axis=1) for SNAP, p in p_by_SNAP.items()}
+        data = DataContainer({bl: sim['data'][bl].copy() for bl in sim['data']})
+        data.antpos = sim['antpos']
+        for bl in data:
+            if bl[0] != bl[1]:
+                ant_i, ant_j = utils.split_bl(bl)
+                if ant_to_SNAP[bl[0]] != ant_to_SNAP[bl[1]]:
+                    data[bl] *= np.exp(-suppression[ant_to_SNAP[bl[0]]] - suppression[ant_to_SNAP[bl[1]]])
+                sigma = np.sqrt(sim['true_autos'][ant_i] * sim['true_autos'][ant_j] / (sim['dt'] * sim['df']))
+                data[bl] += (sim['gains'][ant_i] * np.conj(sim['gains'][ant_j]) * sigma / np.sqrt(2)
+                             * (rng.standard_normal(data[bl].shape) + 1j * rng.standard_normal(data[bl].shape)))
+        gains = {ant: g * np.exp(-suppression[ant_to_SNAP[ant[0]]]) for ant, g in sim['gains'].items()}
+        avg, flags, n_eff, _ = ac.calibrate_and_red_avg(data, gains, sim['reds'], snap_decoherence=sd,
+                                                        dt=sim['dt'], df=sim['df'], compute_chisq=False)
+        # in the corrected block, the standard prediction from the returned effective nsamples
+        # matches the empirical noise for every group, including groups mixing corrected
+        # inter-SNAP members with exempt intra-SNAP ones (without the correction-aware weights,
+        # the prediction would be low by the weighted mean squared correction, up to ~4.3x here)
+        auto_key = next(bl for bl in avg if bl[0] == bl[1])
+        avg_auto = np.abs(avg[auto_key])
+        for key, truth in sim['true_vis'].items():
+            empirical_var = np.var((avg[key] - truth)[:, 32:], axis=0)
+            pred = (avg_auto**2 / (sim['dt'] * sim['df'] * n_eff[key]))[0, 32:]
+            assert np.mean(empirical_var / pred) == pytest.approx(1.0, abs=0.1)
+        # a purely inter-SNAP group's effective nsamples drop by ((1 - p_i)(1 - p_j))^2 in the
+        # corrected block, honestly recording that its corrected data is noisier
+        ratio = n_eff[(0, 3, 'ee')][0, 32:] / n_eff[(0, 3, 'ee')][0, :32]
+        np.testing.assert_allclose(ratio, (0.6 * 0.8)**2, rtol=1e-6)
+
     def test_autos_required(self):
         sim = build_red_avg_sim()
         no_autos = DataContainer({bl: sim['data'][bl] for bl in sim['data'] if bl[0] != bl[1]})
