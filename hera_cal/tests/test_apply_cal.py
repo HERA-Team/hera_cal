@@ -956,6 +956,11 @@ class TestCalibrateAndRedAvg:
         for ant, cspa in meta['chisq_per_ant'].items():
             assert np.nanmean(cspa) == pytest.approx(1.0, abs=0.25)
         assert np.nanmean(meta['total_chisq']['Jee']) == pytest.approx(1.0, abs=0.1)
+        # per-baseline chi^2 covers exactly the cross-correlations that were averaged, ~1 for noise
+        participating = {bl for red in sim['reds'] if red[0][0] != red[0][1] for bl in red if bl in sim['data']}
+        assert set(meta['chisq_per_bl']) == participating
+        assert all(c.shape == (sim['ntimes'],) for c in meta['chisq_per_bl'].values())
+        assert np.nanmean(np.concatenate(list(meta['chisq_per_bl'].values()))) == pytest.approx(1.0, abs=0.1)
 
     def test_excluded_antennas(self):
         sim = build_red_avg_sim(nfreqs=128, noise_amp=1.0, seed=2)
