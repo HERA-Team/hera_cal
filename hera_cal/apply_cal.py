@@ -303,8 +303,10 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
         red_avg_flags: RedDataContainer, True where a group has no unflagged members
         red_avg_nsamples: RedDataContainer of effective nsamples (or counts)
         meta: {'chisq_per_ant': (ant, antpol) -> chi^2 waterfalls (np.nan where nothing
-            was accumulated), 'total_chisq': antpol -> per-polarization totals} if
-            compute_chisq, else {}
+            was accumulated), 'total_chisq': antpol -> per-polarization totals,
+            'chisq_per_bl': bl -> (Ntimes,) chi^2 / DoF summed over frequency for every
+            baseline that participated in an average (its non-redundancy with its group)}
+            if compute_chisq, else {}
     '''
     ant_flags = ({} if ant_flags is None else ant_flags)
     ex_ants = set([] if ex_ants is None else ex_ants)
@@ -428,7 +430,7 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
         else:
             red_avg_nsamples[key] = wgt_sum
 
-    chisq_num, chisq_dof, total_num, total_dof = {}, {}, {}, {}
+    chisq_num, chisq_dof, total_num, total_dof, bl_chisq_num, bl_chisq_dof = {}, {}, {}, {}, {}, {}
     for red in reds:
         if red[0][0] == red[0][1]:
             continue  # autocorrelations are always averaged separately, above
@@ -487,6 +489,7 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
                     chisq_dof[ant] = chisq_dof.get(ant, 0) + dof
                 total_num[antpol] = total_num.get(antpol, 0) + z2
                 total_dof[antpol] = total_dof.get(antpol, 0) + dof
+                bl_chisq_num[bl], bl_chisq_dof[bl] = np.sum(z2, axis=1), np.sum(dof, axis=1)
 
             # excluded antennas with usable data: chi^2 against the good-antenna group mean,
             # attributed only to the excluded antenna (never to its partners or the totals)
@@ -525,6 +528,8 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
             meta['total_chisq'] = {antpol: np.where(total_dof[antpol] > 0,
                                                     total_num[antpol] / np.where(total_dof[antpol] > 0, total_dof[antpol], 1),
                                                     np.nan) for antpol in total_num}
+            meta['chisq_per_bl'] = {bl: np.where(bl_chisq_dof[bl] > 0, bl_chisq_num[bl] / np.where(bl_chisq_dof[bl] > 0, bl_chisq_dof[bl], 1), np.nan)
+                                    for bl in bl_chisq_num}
     return (datacontainer.RedDataContainer(red_avg_data, reds=reds),
             datacontainer.RedDataContainer(red_avg_flags, reds=reds),
             datacontainer.RedDataContainer(red_avg_nsamples, reds=reds),
