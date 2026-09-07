@@ -2102,6 +2102,10 @@ class TestSNAPDecoherence:
         assert np.any(np.abs(gains[(ant_on_A, 'Jee')]) != np.abs(corrected[(ant_on_A, 'Jee')]))
         # SNAP B has no detections, so its gain is unchanged
         np.testing.assert_array_equal(corrected[(ant_on_B, 'Jee')], smooth)
+        # inverse=True re-imposes the staircase, round-tripping back to the input gains
+        restored = sd.correct_gains(corrected, inverse=True)
+        for ant in gains:
+            np.testing.assert_allclose(restored[ant], gains[ant])
         # a SNAP without stored results is returned unchanged, as a copy
         np.testing.assert_array_equal(corrected[(999, 'Jee')], 1.0)
         corrected[(999, 'Jee')][:] = 0
