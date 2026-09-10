@@ -931,6 +931,28 @@ class TestCalibrateAndRedAvg:
         assert any(not np.allclose(avg_wrong[key], truth, atol=1e-3)
                    for key, truth in sim['true_vis'].items())
 
+    def test_unmapped_antennas(self):
+        sim = build_red_avg_sim()
+        ant_to_SNAP = {i: ('S0' if i < 3 else 'S1') for i in range(6)}
+        sd = build_test_SNAP_decoherence(sim, {'S0': np.zeros((sim['ntimes'], 2)), 'S1': np.zeros((sim['ntimes'], 2))},
+                                         ant_to_SNAP)
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(
+            sim['data'], sim['gains'], sim['reds'], snap_decoherence=sd, dt=sim['dt'], df=sim['df'])
+        # an antenna the mapping does not cover is fine if it is entirely flagged (e.g. a placeholder
+        # unit gain for a never-connected outrigger) and changes nothing
+        gains = {**sim['gains'], (99, 'Jee'): np.ones((sim['ntimes'], sim['nfreqs']), dtype=complex)}
+        ant_flags = {(99, 'Jee'): np.ones((sim['ntimes'], sim['nfreqs']), dtype=bool)}
+        avg2, flags2, nsamples2, meta2 = ac.calibrate_and_red_avg(
+            sim['data'], gains, sim['reds'], ant_flags=ant_flags, snap_decoherence=sd, dt=sim['dt'], df=sim['df'])
+        for key in avg:
+            np.testing.assert_array_equal(avg[key], avg2[key])
+            np.testing.assert_array_equal(nsamples[key], nsamples2[key])
+        # but not if any of its gains are unflagged
+        ant_flags[(99, 'Jee')][0, 0] = False
+        with pytest.raises(ValueError, match='unflagged data'):
+            ac.calibrate_and_red_avg(sim['data'], gains, sim['reds'], ant_flags=ant_flags, snap_decoherence=sd,
+                                     dt=sim['dt'], df=sim['df'])
+
     def test_unmeasured_blocks_flagged(self):
         sim = build_red_avg_sim()
         ant_to_SNAP = {i: ('S0' if i < 3 else 'S1') for i in range(6)}

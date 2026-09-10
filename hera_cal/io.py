@@ -3156,7 +3156,7 @@ class SNAPDecoherence:
         correct_SNAP_decoherence_in_place(data, self.decoherence, self.ant_to_SNAP_dict,
                                           data_flags=data_flags, nchans_per_block=self.block_freqs.shape[1])
 
-    def correct_gains(self, gains, inverse=False):
+    def correct_gains(self, gains, inverse=False, flags=None):
         '''Remove the fitted per-SNAP suppression staircase from gain amplitudes by
         multiplying each gain by e^{-ln(1 - p)} = 1 / (1 - p) per channel, using the
         stored block map and antenna -> SNAP mapping. Because autocorrelations and
@@ -3164,22 +3164,26 @@ class SNAPDecoherence:
         these corrected gains (inter-SNAP cross-correlations then get the exact
         correction from apply_cal.correct_SNAP_decoherence_in_place). With inverse=True
         the staircase is instead re-imposed (gains x (1 - p)). Every antenna in
-        gains must appear in the stored mapping (ValueError otherwise); unmeasured
+        gains must appear in the stored mapping (ValueError otherwise), except antennas
+        that flags mark as entirely flagged, which are returned unchanged; unmeasured
         (np.nan) blocks and SNAPs without stored results are left unchanged.
 
         Arguments:
             gains: dict mapping (ant, antpol) e.g. (0, 'Jee') to (Ntimes, Nfreqs)
                 complex gain waterfalls matching this object's times and freqs
             inverse: if True, apply the staircase rather than removing it
+            flags: optional dict mapping (ant, antpol) to boolean flag waterfalls.
+                Default None requires every antenna in gains to be mapped.
 
         Returns:
             corrected_gains: new dict with the same keys, gains x 1 / (1 - p) (or x (1 - p)
                 if inverse) where measured
         '''
-        missing = sorted({ant[0] for ant in gains if ant[0] not in self.ant_to_SNAP_dict})
+        missing = sorted({ant[0] for ant in gains if ant[0] not in self.ant_to_SNAP_dict
+                          and (flags is None or not np.all(flags[ant]))})
         if len(missing) > 0:
-            raise ValueError('The stored ant_to_SNAP_dict is missing antennas that appear '
-                             f'in gains: {missing}. All antennas must be mapped to SNAPs.')
+            raise ValueError('The stored ant_to_SNAP_dict is missing antennas that appear in gains '
+                             f'with unflagged data: {missing}. All such antennas must be mapped to SNAPs.')
         nchans_per_block = self.block_freqs.shape[1]
         expected_shape = (len(self.times), len(self.freqs))
         suppression = {SNAP: np.repeat(np.nan_to_num(ls), nchans_per_block, axis=1)
@@ -3190,7 +3194,7 @@ class SNAPDecoherence:
             if gain.shape != expected_shape:
                 raise ValueError(f'gains[{ant}] has shape {gain.shape}, but this SNAPDecoherence '
                                  f'object implies {expected_shape}.')
-            SNAP = self.ant_to_SNAP_dict[ant[0]]
+            SNAP = self.ant_to_SNAP_dict.get(ant[0])
             if SNAP in suppression:
                 corrected_gains[ant] = gain * np.exp((-1 if inverse else 1) * suppression[SNAP])
             else:

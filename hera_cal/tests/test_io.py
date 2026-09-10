@@ -2115,6 +2115,13 @@ class TestSNAPDecoherence:
         sd = make_SNAP_decoherence()
         with pytest.raises(ValueError, match='missing antennas'):
             sd.correct_gains({(999, 'Jee'): np.ones((1, len(sd.freqs)), dtype=complex)})
+        # an unmapped antenna is tolerated (and returned unchanged) only if flags cover it entirely
+        gains = {(999, 'Jee'): np.ones((1, len(sd.freqs)), dtype=complex)}
+        flags = {(999, 'Jee'): np.ones((1, len(sd.freqs)), dtype=bool)}
+        np.testing.assert_array_equal(sd.correct_gains(gains, flags=flags)[(999, 'Jee')], 1.0)
+        flags[(999, 'Jee')][0, 0] = False
+        with pytest.raises(ValueError, match='unflagged data'):
+            sd.correct_gains(gains, flags=flags)
         with pytest.raises(ValueError, match='shape'):
             sd.correct_gains({(1, 'Jee'): np.ones((1, 10), dtype=complex)})
 

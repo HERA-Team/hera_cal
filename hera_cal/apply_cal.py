@@ -260,7 +260,7 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
     autos do not know it, the noise weights (and therefore the returned effective nsamples)
     include the squared correction factor, keeping the standard noise prediction exact for
     corrected data. The stored antenna -> SNAP mapping is used throughout and must cover
-    every antenna in gains.
+    every antenna in gains that is not entirely flagged.
 
     Chi^2 (co-polarized only): each group's mean is the only fit parameter, so a
     participating baseline's weighted scatter about it has expectation 1 - w / sum(w)
@@ -332,7 +332,7 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
     gain_flags = {ant: (~np.isfinite(g) | ant_flags.get(ant, False)) for ant, g in gains.items()}
     finite_gains = {ant: np.where(np.isfinite(g), g, 1) for ant, g in gains.items()}
     if snap_decoherence is not None:
-        finite_gains = snap_decoherence.correct_gains(finite_gains)
+        finite_gains = snap_decoherence.correct_gains(finite_gains, flags=gain_flags)
         ant_to_SNAP = snap_decoherence.ant_to_SNAP_dict
         nchans_per_block = snap_decoherence.block_freqs.shape[1]
         log_supp = {SNAP: np.repeat(np.nan_to_num(ls), nchans_per_block, axis=1)
