@@ -500,11 +500,11 @@ def radec_to_lmn(
     az = altaz.az.rad
     alt = altaz.alt.rad
 
-    l = np.cos(alt) * np.sin(az)   # East
-    m = np.cos(alt) * np.cos(az)   # North
-    n = np.sin(alt)                 # Up
+    east = np.cos(alt) * np.sin(az)
+    north = np.cos(alt) * np.cos(az)
+    up = np.sin(alt)
 
-    return np.array([l, m, n])
+    return np.array([east, north, up])
 
 
 def estimate_polarized_source_delay(
