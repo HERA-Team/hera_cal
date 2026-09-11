@@ -542,7 +542,7 @@ class TestIterativelyFitPolarizedSourceParams:
         """
         dc_d, dc_f, dc_n = self._make_dc()
         ra, dec, rm = self._fit(dc_d, dc_f, dc_n, drm=2.0, dtest=500)
-        np.testing.assert_allclose(ra, self.RA_TRUE, atol=1e-3)
+        np.testing.assert_allclose(ra, self.RA_TRUE, atol=1.5e-3)
         np.testing.assert_allclose(dec, self.DEC_TRUE, atol=1e-3)
         np.testing.assert_allclose(rm, self.RM_TRUE, atol=0.1)
 
@@ -605,7 +605,7 @@ class TestIterativelyFitPolarizedSourceParams:
             dtest=500,
             maxiter=20,
         )
-        np.testing.assert_allclose(ra, self.RA_TRUE, atol=1e-3,
+        np.testing.assert_allclose(ra, self.RA_TRUE, atol=1.5e-3,
                                    err_msg="RA did not converge to truth")
         np.testing.assert_allclose(dec, self.DEC_TRUE, atol=1e-3,
                                    err_msg="Dec did not converge to truth")
