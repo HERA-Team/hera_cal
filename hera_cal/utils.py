@@ -1285,7 +1285,10 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
         diffs = {ant: copy.deepcopy(relative_diff[ant]) for ant in new_gains if ant[1] == pol}
         for ant in diffs:
             diffs[ant][flags[ant]] = np.nan
-        avg_relative_diff[pol] = np.nanmean(list(diffs.values()), axis=0)
+        with warnings.catch_warnings():
+            # cells flagged for every antenna are all-nan slices, zeroed below by design
+            warnings.filterwarnings('ignore', message='Mean of empty slice', category=RuntimeWarning)
+            avg_relative_diff[pol] = np.nanmean(list(diffs.values()), axis=0)
         avg_relative_diff[pol][~np.isfinite(avg_relative_diff[pol])] = 0.0  # if completely flagged
 
     return relative_diff, avg_relative_diff

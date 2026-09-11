@@ -1066,7 +1066,9 @@ def fit_reflection_phase(dfft, dly_range, dlys, ref_dlys, fthin=1, Nphs=250, iff
     select = np.where((dlys > -dly_range[1]) & (dlys < -dly_range[0]))[0]
     filt[:, select] = dfft[:, select]
     filt, freqs = vis_clean.fft_data(filt, np.median(np.diff(dlys)) / 1e9, axis=-1, ifft=ifft, ifftshift=ifftshift, fftshift=False)
-    filt /= np.max(np.abs(filt), axis=-1, keepdims=True)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        # fully-flagged times divide 0 by 0, producing NaNs that are filled below
+        filt /= np.max(np.abs(filt), axis=-1, keepdims=True)
     freqs = np.linspace(0, freqs.max() - freqs.min(), Ndlys, endpoint=True)
     phases = np.linspace(0, 2 * np.pi, Nphs, endpoint=False)
     cosines = np.array([construct_reflection(freqs[::fthin], 1, ref_dlys / 1e9, p) for p in phases])

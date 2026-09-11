@@ -901,6 +901,7 @@ def test_pols_kwarg_loads_subset(multipol_files_and_grid, pol_subset_selector):
             np.testing.assert_array_equal(n_sub[..., sub_i], n_all[..., all_i])
 
 
+@pytest.mark.filterwarnings("ignore:Mean of empty slice:RuntimeWarning")
 def test_calc_with_lstcal(sbs_with_lstcal):
     uncal_crosses, cal_crosses = sbs_with_lstcal
     lst_avg_uncal, _, _ = uncal_crosses.average_over_nights()
