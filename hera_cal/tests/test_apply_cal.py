@@ -984,6 +984,26 @@ class TestCalibrateAndRedAvg:
         assert all(c.shape == (sim['ntimes'],) for c in meta['chisq_per_bl'].values())
         assert np.nanmean(np.concatenate(list(meta['chisq_per_bl'].values()))) == pytest.approx(1.0, abs=0.1)
 
+    def test_chisq_per_bl_nchans(self):
+        sim = build_red_avg_sim(nfreqs=128, noise_amp=1.0, seed=1)
+        # a corrupted chunk of one baseline stands out in that chunk only, and nothing else changes
+        bl = [red for red in sim['reds'] if len(red) >= 4 and red[0][0] != red[0][1]][0][1]
+        sim['data'][bl][1, 32:64] += 10
+        kwargs = dict(dt=sim['dt'], df=sim['df'])
+        _, _, _, meta = ac.calibrate_and_red_avg(sim['data'], sim['gains'], sim['reds'], **kwargs)
+        _, _, _, chunked = ac.calibrate_and_red_avg(sim['data'], sim['gains'], sim['reds'], chisq_per_bl_nchans=32, **kwargs)
+        _, _, _, whole_band = ac.calibrate_and_red_avg(sim['data'], sim['gains'], sim['reds'], chisq_per_bl_nchans=128, **kwargs)
+        assert set(chunked['chisq_per_bl']) == set(meta['chisq_per_bl'])
+        assert all(c.shape == (sim['ntimes'], 4) for c in chunked['chisq_per_bl'].values())
+        for key in meta['chisq_per_bl']:
+            np.testing.assert_allclose(whole_band['chisq_per_bl'][key][:, 0], meta['chisq_per_bl'][key])
+        for key in meta['chisq_per_ant']:
+            np.testing.assert_array_equal(chunked['chisq_per_ant'][key], meta['chisq_per_ant'][key])
+        assert np.argmax(chunked['chisq_per_bl'][bl]) == 1 * 4 + 1
+        assert chunked['chisq_per_bl'][bl][1, 1] > 10 * np.max(np.delete(chunked['chisq_per_bl'][bl].ravel(), 5))
+        with pytest.raises(ValueError, match='does not divide'):
+            ac.calibrate_and_red_avg(sim['data'], sim['gains'], sim['reds'], chisq_per_bl_nchans=48, **kwargs)
+
     def test_excluded_antennas(self):
         sim = build_red_avg_sim(nfreqs=128, noise_amp=1.0, seed=2)
         # corrupt antenna 5, as if miscalibrated
