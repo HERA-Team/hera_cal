@@ -231,7 +231,7 @@ def correct_SNAP_decoherence_in_place(data, decoherence, ant_to_SNAP_dict,
 
 def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_flags=None,
                           snap_decoherence=None, dt=None, df=None, compute_chisq=True,
-                          effective_nsamples=True):
+                          effective_nsamples=True, chisq_per_bl_nchans=None):
     '''Calibrate visibilities and redundantly average them with inverse-variance noise
     weights, one group at a time (a full-size calibrated copy of the data is never
     materialized). data must include co-polarized autocorrelations: they set each
@@ -296,6 +296,9 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
         df: channel width in Hz. Default None infers from data's freqs.
         compute_chisq: if True (default), accumulate DoF-normalized chi^2.
         effective_nsamples: if True (default), return effective nsamples; else counts.
+        chisq_per_bl_nchans: number of consecutive channels over which each baseline's chi^2 is
+            summed in meta['chisq_per_bl']. Default None sums over all of frequency. Must
+            divide the number of channels.
 
     Returns:
         red_avg_data: RedDataContainer of weighted group averages, keyed by each group's
@@ -304,12 +307,16 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
         red_avg_nsamples: RedDataContainer of effective nsamples (or counts)
         meta: {'chisq_per_ant': (ant, antpol) -> chi^2 waterfalls (np.nan where nothing
             was accumulated), 'total_chisq': antpol -> per-polarization totals,
-            'chisq_per_bl': bl -> (Ntimes,) chi^2 / DoF summed over frequency for every
+            'chisq_per_bl': bl -> (Ntimes,) chi^2 / DoF summed over frequency, or
+            (Ntimes, Nfreqs // chisq_per_bl_nchans) summed over chunks of channels, for every
             baseline that participated in an average (its non-redundancy with its group)}
             if compute_chisq, else {}
     '''
     ant_flags = ({} if ant_flags is None else ant_flags)
     ex_ants = set([] if ex_ants is None else ex_ants)
+    nfreqs = next(iter(data.values())).shape[1]
+    if chisq_per_bl_nchans is not None and nfreqs % chisq_per_bl_nchans != 0:
+        raise ValueError(f'chisq_per_bl_nchans = {chisq_per_bl_nchans} does not divide the {nfreqs} channels.')
     if dt is None:
         dt = noise.infer_dt(data.times_by_bl, next(iter(data))) * 24.0 * 3600.0
     if df is None:
@@ -489,7 +496,11 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
                     chisq_dof[ant] = chisq_dof.get(ant, 0) + dof
                 total_num[antpol] = total_num.get(antpol, 0) + z2
                 total_dof[antpol] = total_dof.get(antpol, 0) + dof
-                bl_chisq_num[bl], bl_chisq_dof[bl] = np.sum(z2, axis=1), np.sum(dof, axis=1)
+                if chisq_per_bl_nchans is None:
+                    bl_chisq_num[bl], bl_chisq_dof[bl] = np.sum(z2, axis=1), np.sum(dof, axis=1)
+                else:
+                    bl_chisq_num[bl], bl_chisq_dof[bl] = [np.sum(np.reshape(x, (x.shape[0], -1, chisq_per_bl_nchans)), axis=2)
+                                                          for x in (z2, dof)]
 
             # excluded antennas with usable data: chi^2 against the good-antenna group mean,
             # attributed only to the excluded antenna (never to its partners or the totals)
