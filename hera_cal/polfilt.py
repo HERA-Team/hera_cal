@@ -201,10 +201,12 @@ def _fit_polarized_source_position(
     XTX = np.zeros((3, 3), dtype=complex)
     XTy = np.zeros(3, dtype=complex)
 
+    # Direction cosines of the current sky position at all times, shape (3, n_times).
+    lmn0 = radec_to_lmn(ra, dec, times, location)
+
     for ti in range(vis.shape[1]):
         # Phase-shift visibilities to the current sky position.
-        lmn0 = radec_to_lmn(ra, dec, times[ti : ti + 1], location)  # shape (3, 1)
-        phase0 = np.einsum("bcf,ct->btf", uvw, lmn0)  # (n_bls, 1, n_freqs)
+        phase0 = np.einsum("bcf,ct->btf", uvw, lmn0[:, ti : ti + 1])  # (n_bls, 1, n_freqs)
 
         vis_t = (
             vis[:, ti, :]
