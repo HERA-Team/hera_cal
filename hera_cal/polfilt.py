@@ -4,6 +4,8 @@ Radio astronomy signal processing utilities.
 Provides coordinate transforms, polarized-source delay estimation, and
 visibility model computation for calibration pipelines.
 """
+from __future__ import annotations
+
 import numpy as np
 import astropy.units as u
 from astropy import constants
@@ -414,6 +416,7 @@ def iteratively_fit_polarized_source_params(
     if np.sum(weights) == 0.0:
         return right_ascension, declination, rotation_measure
 
+    fit_ra, fit_dec, fit_rm = right_ascension, declination, rotation_measure
     for fi in range(maxiter):
         fit_ra, fit_dec = _fit_polarized_source_position(
             vis,

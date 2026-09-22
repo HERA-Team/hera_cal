@@ -47,12 +47,18 @@ def _make_dcs(vis, freqs, times, antpos, all_flagged=False):
     return data, flags, nsamples
 
 
-def _point_source_vis(uvw, ra, dec, rm, times, freqs):
+def _point_source_vis(uvw, ra, dec, rm, times, freqs, real_sky=False):
     """Noiseless point source at (ra, dec) with rotation measure ``rm``:
-    V = exp(2πi · uvw·lmn(t)) · exp(−2i·λ²·rm), for uvw of shape (..., 3, n_freqs)."""
+    V = exp(2πi · uvw·lmn(t)) · exp(−2i·λ²·rm), for uvw of shape (..., 3, n_freqs).
+
+    With ``real_sky=True``, the source spectrum is instead a real Stokes Q, cos(2·λ²·rm),
+    which is what makes V(−b) = conj(V(b)) consistent with the same model, as
+    ``unpack_data_containers`` assumes when it adds each baseline's conjugate."""
     lmn = pf.radec_to_lmn(ra, dec, times, HERA_LOCATION)
     phase = np.einsum("...cf,ct->...tf", uvw, lmn)
-    return np.exp(2j * np.pi * phase) * np.exp(-2j * (C / freqs) ** 2 * rm)
+    lambda_sq = (C / freqs) ** 2
+    spectrum = np.cos(2 * lambda_sq * rm) if real_sky else np.exp(-2j * lambda_sq * rm)
+    return np.exp(2j * np.pi * phase) * spectrum
 
 
 # ---------------------------------------------------------------------------
@@ -258,9 +264,9 @@ class TestFitPolarizedSourcePosition:
 
 class TestIterativelyFitPolarizedSourceParams:
     """
-    End-to-end tests on noiseless visibilities that follow the fitter's own point-source
-    model (see ``_point_source_vis``), so the true parameters are the unique global maximum
-    of the likelihood. The array is 45 baselines from 10 randomly placed (but seeded)
+    End-to-end tests on noiseless visibilities of a point source with a real Stokes Q
+    spectrum (see ``_point_source_vis``), so the true position is an exact fixed point of
+    the fitter. The array is 45 baselines from 10 randomly placed (but seeded)
     antennas, and the source is at Dec ≈ HERA's latitude, so it transits nearly overhead
     and stays above the horizon throughout the 10-minute observation.
     """
@@ -270,12 +276,16 @@ class TestIterativelyFitPolarizedSourceParams:
     TIMES = np.linspace(2459000.0, 2459000.0 + 10 / 1440.0, 12)  # 12 integrations over 10 minutes
     ANTPOS = {i: np.append(pos, 0.0) for i, pos in enumerate(np.random.default_rng(1).uniform(0, 300, (10, 2)))}
     ANTPAIRS = [(i, j) for i in range(10) for j in range(i + 1, 10)]
+    # Fit tolerances. A real Q spectrum also has a mirror component at -RM, which pulls the
+    # fit RM by ~0.08 rad/m² for this band.
+    ATOL = {"ra": 1e-4, "dec": 1e-4, "rm": 0.1}  # degrees, degrees, rad/m²
 
     def _source_dcs(self, pol="pQ", all_flagged=False):
         vis = {}
         for ap in self.ANTPAIRS:
             uvw = (self.ANTPOS[ap[1]] - self.ANTPOS[ap[0]])[:, None] * self.FREQS[None, :] / C
-            vis[ap + (pol,)] = _point_source_vis(uvw, self.RA_TRUE, self.DEC_TRUE, self.RM_TRUE, self.TIMES, self.FREQS)
+            vis[ap + (pol,)] = _point_source_vis(uvw, self.RA_TRUE, self.DEC_TRUE, self.RM_TRUE, self.TIMES, self.FREQS,
+                                                 real_sky=True)
         return _make_dcs(vis, self.FREQS, self.TIMES, self.ANTPOS, all_flagged=all_flagged)
 
     def _fit(self, ra=RA_TRUE, dec=DEC_TRUE, rm=RM_TRUE, all_flagged=False, **kwargs):
@@ -287,23 +297,21 @@ class TestIterativelyFitPolarizedSourceParams:
     @pytest.mark.parametrize("dra, ddec, drm", [(0.0, 0.0, 0.0), (0.01, 0.01, 1.0)])
     def test_recovers_truth(self, dra, ddec, drm):
         """Starting at (or with small offsets from) the truth, the fitter converges to the truth."""
-        ra, dec, rm = self._fit(ra=self.RA_TRUE + dra, dec=self.DEC_TRUE + ddec, rm=self.RM_TRUE + drm,
-                                drm=3.0, dtest=500, maxiter=20, verbose=True)
-        np.testing.assert_allclose(ra, self.RA_TRUE, atol=1.5e-3, err_msg="RA did not converge to truth")
-        np.testing.assert_allclose(dec, self.DEC_TRUE, atol=1e-3, err_msg="Dec did not converge to truth")
-        np.testing.assert_allclose(rm, self.RM_TRUE, atol=0.1, err_msg="RM did not converge to truth")
+        fit = self._fit(ra=self.RA_TRUE + dra, dec=self.DEC_TRUE + ddec, rm=self.RM_TRUE + drm,
+                        drm=3.0, dtest=500, maxiter=20, verbose=True)
+        for param, value, truth in zip(("ra", "dec", "rm"), fit, (self.RA_TRUE, self.DEC_TRUE, self.RM_TRUE)):
+            np.testing.assert_allclose(value, truth, atol=self.ATOL[param], err_msg=f"{param} did not converge to truth")
 
     @pytest.mark.parametrize("param, offset", [("ra", 0.02), ("dec", 0.02), ("rm", 3.0)])
     def test_corrects_single_offset(self, param, offset):
-        """An incorrect initial RA, Dec, or RM is pulled toward the truth."""
+        """An incorrect initial RA, Dec, or RM is corrected."""
         truth = {"ra": self.RA_TRUE, "dec": self.DEC_TRUE, "rm": self.RM_TRUE}
         start = {**truth, param: truth[param] + offset}
         drm = offset + 1.0 if param == "rm" else 2.0  # the RM search window must contain the truth
         fit = dict(zip(("ra", "dec", "rm"), self._fit(**start, drm=drm, dtest=500)))
-        assert abs(fit[param] - truth[param]) < offset, (
-            f"{param} should improve: initial error {offset}, final error {abs(fit[param] - truth[param]):.4f}"
-        )
+        np.testing.assert_allclose(fit[param], truth[param], atol=self.ATOL[param])
 
-    def test_all_flagged_returns_original_params(self):
+    @pytest.mark.parametrize("kwargs", [dict(all_flagged=True), dict(maxiter=0)])
+    def test_returns_starting_params_without_fitting(self, kwargs):
         start = (10.0, -30.0, 5.0)
-        assert self._fit(*start, all_flagged=True) == start
+        assert self._fit(*start, **kwargs) == start
