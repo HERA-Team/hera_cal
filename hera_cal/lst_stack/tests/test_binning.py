@@ -948,7 +948,7 @@ def test_restricted_lst_range_matches_full_range(real_files_and_grid, lst_range)
             np.testing.assert_array_equal(getattr(sub, name)[i], getattr(full, name)[offset + i])
 
 
-@pytest.mark.parametrize("tind", [np.arange(5, 12), np.array([11, 5, 7])])
+@pytest.mark.parametrize("tind", [np.arange(5, 12), np.array([11, 5, 7]), np.array([11, 5, 7], dtype=np.uint64)])
 def test_read_one_file_time_subset(real_files_and_grid, tind, monkeypatch):
     """_read_one_file only returns the requested times (selected on read if tind is sorted)."""
     p = real_files_and_grid
@@ -973,7 +973,7 @@ def test_read_one_file_time_subset(real_files_and_grid, tind, monkeypatch):
 
     full, sub = read(np.arange(ntimes)), read(tind)
     assert times_read[0] is None  # all times needed, so no selection on read
-    if np.all(np.diff(tind) > 0):
+    if np.all(tind[1:] > tind[:-1]):
         assert len(times_read[1]) == len(tind)
     else:
         assert times_read[1] is None  # unsorted, so select after reading

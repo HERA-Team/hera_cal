@@ -467,7 +467,7 @@ def _read_one_file(
     # on read, which is true partial I/O for uvh5 files. This requires tind to be
     # sorted, since data are read in file order.
     file_times = meta.get_transactional("times")
-    select_times_on_read = (ntimes < len(file_times)) and np.all(np.diff(tind) > 0)
+    select_times_on_read = (ntimes < len(file_times)) and np.all(tind[1:] > tind[:-1])
 
     # TODO: use Fast readers here instead.
     _data, _flags, _nsamples = io.HERAData(meta_path).read(
