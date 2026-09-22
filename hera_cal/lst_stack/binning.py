@@ -463,17 +463,25 @@ def _read_one_file(
     # Read visibility data
     logger.info(f"Reading {meta_path}")
 
-    # TODO: use Fast readers here instead, and select times directly on read.
+    # If only some of the file's integrations fall within an LST bin, select them
+    # on read, which is true partial I/O for uvh5 files. This requires tind to be
+    # sorted, since data are read in file order.
+    file_times = meta.get_transactional("times")
+    select_times_on_read = (ntimes < len(file_times)) and np.all(np.diff(tind) > 0)
+
+    # TODO: use Fast readers here instead.
     _data, _flags, _nsamples = io.HERAData(meta_path).read(
         bls=bls_to_load,
         freq_chans=freq_chans,
         polarizations=pols,
+        times=(file_times[tind] if select_times_on_read else None),
     )
 
     # Trim to only the time indices that fall within an LST bin.
-    _data.select_or_expand_times(indices=tind, skip_bda_check=True)
-    _flags.select_or_expand_times(indices=tind, skip_bda_check=True)
-    _nsamples.select_or_expand_times(indices=tind, skip_bda_check=True)
+    if not select_times_on_read:
+        _data.select_or_expand_times(indices=tind, skip_bda_check=True)
+        _flags.select_or_expand_times(indices=tind, skip_bda_check=True)
+        _nsamples.select_or_expand_times(indices=tind, skip_bda_check=True)
 
     # Load inpainting flags (optional)
     inpainted = None
@@ -710,17 +718,13 @@ def lst_bin_files_for_baselines(
             cal_file_loader_kwargs['telescope_location_lat_lon_alt_degrees'] = metas[0].telescope_location_lat_lon_alt_degrees
 
     if time_idx is None:
+        # Find the times that fall in an LST bin, using the same logic as lst_align()
+        # (which also handles LST ranges that wrap through 2pi).
         adjust_lst_bin_edges(lst_bin_edges)
-        lst_bin_edges %= 2 * np.pi
-        op = np.logical_and if lst_bin_edges[0] < lst_bin_edges[-1] else np.logical_or
-        time_idx = []
-        for meta in metas:
-            _lsts = meta.get_transactional("lsts")
-            time_idx.append(
-                np.argwhere(
-                    op(_lsts >= lst_bin_edges[0], _lsts < lst_bin_edges[-1])
-                ).flatten()
-            )
+        time_idx = [
+            np.flatnonzero(get_lst_bins(meta.get_transactional("lsts"), lst_bin_edges)[2])
+            for meta in metas
+        ]
 
     if lsts is None:
         lsts = np.concatenate(

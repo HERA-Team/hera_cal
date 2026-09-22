@@ -922,6 +922,69 @@ def test_calc_with_lstcal(sbs_with_lstcal):
         calibrated_var[np.isfinite(uncalibrated_var) & np.isfinite(calibrated_var)]
     ), "Variance after calibration should be lower in bins where both have data"
 
+
+@pytest.mark.parametrize("lst_range", [(6.270, 6.280), (6.275, 2 * np.pi + 0.002)])  # 2nd wraps
+def test_restricted_lst_range_matches_full_range(real_files_and_grid, lst_range):
+    """Stacking a restricted range of LST bins gives the same bins as stacking all LSTs."""
+    p = real_files_and_grid
+    # Full grid starts at 3 rad so that both ranges (the test data straddle LST = 0)
+    # are contiguous slices of it.
+    dlst = 2 * np.pi / (len(p["lst_bin_edges"]) - 1)
+    full_edges = 3.0 + np.arange(len(p["lst_bin_edges"])) * dlst
+    sub_edges = full_edges[(full_edges >= lst_range[0]) & (full_edges <= lst_range[1])]
+
+    def stack(edges):
+        return binning.SingleBaselineStacker.from_configurator(
+            p["configurator"], p["baseline_string"], edges, to_keep_slice=slice(None),
+            where_inpainted_file_rules=p["where_rules"],
+        )
+
+    full, sub = stack(full_edges), stack(sub_edges)
+    offset = np.searchsorted(full_edges, sub_edges[0])
+    np.testing.assert_array_equal(sub.bin_lst, full.bin_lst[offset:offset + len(sub.bin_lst)])
+    assert sum(len(t) for t in sub.times_in_bins) > 0
+    for i in range(len(sub.bin_lst)):
+        for name in binning.SingleBaselineStacker._list_objects:
+            np.testing.assert_array_equal(getattr(sub, name)[i], getattr(full, name)[offset + i])
+
+
+@pytest.mark.parametrize("tind", [np.arange(5, 12), np.array([11, 5, 7])])
+def test_read_one_file_time_subset(real_files_and_grid, tind, monkeypatch):
+    """_read_one_file only returns the requested times (selected on read if tind is sorted)."""
+    p = real_files_and_grid
+    fl = p["configurator"].bl_to_file_map[p["baseline_string"]][0]
+    inpfile = fl.replace(*p["where_rules"][0])
+    ntimes = len(HERAData(fl).times)
+
+    # record the times passed to HERAData.read() when reading data
+    times_read = []
+    orig_read = HERAData.read
+
+    def spy_read(self, *args, **kwargs):
+        if kwargs.get("read_data", True):
+            times_read.append(kwargs.get("times"))
+        return orig_read(self, *args, **kwargs)
+
+    monkeypatch.setattr(HERAData, "read", spy_read)
+
+    def read(tind):
+        return binning._read_one_file(fl, None, tind, inpfile, p["hd"].antpairs, p["hd"].pols,
+                                      None, False, None, None, None)
+
+    full, sub = read(np.arange(ntimes)), read(tind)
+    assert times_read[0] is None  # all times needed, so no selection on read
+    if np.all(np.diff(tind) > 0):
+        assert len(times_read[1]) == len(tind)
+    else:
+        assert times_read[1] is None  # unsorted, so select after reading
+
+    assert sub["ntimes"] == len(tind)
+    for dc in ("data", "flags", "nsamples", "inpainted"):
+        np.testing.assert_array_equal(sub[dc].times, full[dc].times[tind])
+        for key in sub[dc]:
+            np.testing.assert_array_equal(sub[dc][key], full[dc][key][tind])
+
+
 # --- average_over_nights tests -------------------------------------------------------------
 
 
