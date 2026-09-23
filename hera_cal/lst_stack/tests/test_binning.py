@@ -410,6 +410,18 @@ class TestLSTBinFilesForBaselines:
         np.testing.assert_allclose(n0, n)
         # np.testing.assert_allclose(times0, times)
 
+    def test_boolean_time_idx(self, uvd, uvd_file):
+        """A boolean mask of the times to read gives the same result as the equivalent indices."""
+        mask = np.arange(uvd.Ntimes) % 2 == 0
+        kwargs = dict(data_files=[uvd_file], lst_bin_edges=[uvd.lst_array.min() - 0.01, uvd.lst_array.max() + 0.01],
+                      antpairs=uvd.get_antpairs(), rephase=False)
+        from_mask = binning.lst_bin_files_for_baselines(time_idx=[mask], **kwargs)
+        from_inds = binning.lst_bin_files_for_baselines(time_idx=[np.flatnonzero(mask)], **kwargs)
+        assert sum(len(t) for t in from_mask[5]) == mask.sum()
+        for out_mask, out_inds in zip(from_mask[1:4], from_inds[1:4]):  # data, flags, nsamples
+            for m, i in zip(out_mask, out_inds):
+                np.testing.assert_array_equal(m, i)
+
     def test_empty(self, uvd, uvd_file):
         f0 = binning.lst_bin_files_for_baselines(
             data_files=[uvd_file],
@@ -948,9 +960,9 @@ def test_restricted_lst_range_matches_full_range(real_files_and_grid, lst_range)
             np.testing.assert_array_equal(getattr(sub, name)[i], getattr(full, name)[offset + i])
 
 
-@pytest.mark.parametrize("tind", [np.arange(5, 12), np.array([11, 5, 7]), np.array([11, 5, 7], dtype=np.uint64)])
+@pytest.mark.parametrize("tind", [np.arange(5, 12), [2, 3, 9]])  # lists work too
 def test_read_one_file_time_subset(real_files_and_grid, tind, monkeypatch):
-    """_read_one_file only returns the requested times (selected on read if tind is sorted)."""
+    """_read_one_file only reads the requested times (selecting them on read) and matches a full read."""
     p = real_files_and_grid
     fl = p["configurator"].bl_to_file_map[p["baseline_string"]][0]
     inpfile = fl.replace(*p["where_rules"][0])
@@ -973,16 +985,21 @@ def test_read_one_file_time_subset(real_files_and_grid, tind, monkeypatch):
 
     full, sub = read(np.arange(ntimes)), read(tind)
     assert times_read[0] is None  # all times needed, so no selection on read
-    if np.all(tind[1:] > tind[:-1]):
-        assert len(times_read[1]) == len(tind)
-    else:
-        assert times_read[1] is None  # unsorted, so select after reading
+    assert len(times_read[1]) == len(tind)
 
     assert sub["ntimes"] == len(tind)
     for dc in ("data", "flags", "nsamples", "inpainted"):
         np.testing.assert_array_equal(sub[dc].times, full[dc].times[tind])
         for key in sub[dc]:
             np.testing.assert_array_equal(sub[dc][key], full[dc][key][tind])
+
+
+@pytest.mark.parametrize("tind", [[11, 5, 7], np.array([11, 5, 7], dtype=np.uint64), [5, 5, 6]])
+def test_read_one_file_unsorted_tind_raises(real_files_and_grid, tind):
+    p = real_files_and_grid
+    fl = p["configurator"].bl_to_file_map[p["baseline_string"]][0]
+    with pytest.raises(ValueError, match="must be strictly increasing"):
+        binning._read_one_file(fl, None, tind, None, p["hd"].antpairs, p["hd"].pols, None, False, None, None, None)
 
 
 # --- average_over_nights tests -------------------------------------------------------------
