@@ -365,7 +365,6 @@ def iteratively_fit_polarized_source_params(
     return fit_ra, fit_dec, fit_rm
 
 
-
 def estimate_polarized_source_delay(
     freqs: float | np.ndarray,
     rotation_measure: float | np.ndarray,
