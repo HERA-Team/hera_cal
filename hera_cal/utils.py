@@ -18,7 +18,7 @@ from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT
 from pyuvdata.utils.pol import x_orientation_pol_map
 from pyuvdata.uvdata import FastUVH5Meta
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 from pathlib import Path
 import operator
 import functools
@@ -29,6 +29,9 @@ import warnings
 import argparse
 import inspect
 from . import __version__
+
+if TYPE_CHECKING:
+    from .datacontainer import DataContainer
 
 try:
     AIPY = True
@@ -2006,3 +2009,166 @@ def get_phase_factor(baseline, lat, freqs, dt):
     # The accumulated phase is just the relative delay between the two zenith pointings,
     # multiplied by the observing frequency and converted to radians.
     return np.exp(2j * np.pi * dtau * freqs)
+
+
+def radec_to_lmn(
+    ra: float,
+    dec: float,
+    times,
+    location: crd.EarthLocation,
+) -> np.ndarray:
+    """
+    Convert a fixed ICRS position to direction cosines in the local
+    topocentric frame.
+
+    The direction cosines ``(l, m, n)`` are derived by first transforming
+    the sky coordinate to the local Az/Alt frame at the observer's location,
+    then projecting onto the East, North, and Up axes respectively.
+
+    Parameters
+    ----------
+    ra : float
+        Right ascension in degrees.
+    dec : float
+        Declination in degrees.
+    times : array-like of float or `~astropy.time.Time`
+        Observation times as Julian-date floats or an existing ``Time``
+        object.
+    location : `~astropy.coordinates.EarthLocation`
+        Observer location on Earth.
+
+    Returns
+    -------
+    lmn : np.ndarray, shape (3, n_times)
+        Direction cosines ``[l, m, n]`` at each time, where ``l`` is East,
+        ``m`` is North, and ``n`` is Up.
+    """
+    if not isinstance(times, Time):
+        times = Time(times, format="jd")
+
+    source = crd.SkyCoord(ra=ra * unt.deg, dec=dec * unt.deg, frame="icrs")
+    altaz = source.transform_to(crd.AltAz(obstime=times, location=location))
+
+    az = altaz.az.rad
+    alt = altaz.alt.rad
+
+    east = np.cos(alt) * np.sin(az)
+    north = np.cos(alt) * np.cos(az)
+    up = np.sin(alt)
+
+    return np.array([east, north, up])
+
+
+def unpack_data_containers(
+    data: DataContainer,
+    flags: DataContainer,
+    nsamples: DataContainer,
+    pol: str = "ee",
+    antpos: dict = None,
+    freqs: np.ndarray = None,
+    time_slice: slice = slice(0, None),
+    freq_slice: slice = slice(0, None),
+    antpairs: list = None,
+    weight_by_nsamples: bool = True,
+):
+    """
+    Unpack HERA data containers into arrays suitable for vectorized operations.
+
+    Extracts visibility data, flags, and metadata from HERA DataContainer
+    objects and formats them for use with the imaging and fitting algorithms.
+    Both each baseline and its conjugate are included to enforce Hermitian
+    symmetry in the visibility data.
+
+    Parameters
+    ----------
+    data : DataContainer
+        Visibility data to be unpacked.
+    flags : DataContainer
+        Boolean flags corresponding to the visibility data. Flagged samples
+        are zeroed out in the returned weights array.
+    nsamples : DataContainer
+        Number of samples contributing to each visibility measurement. Used
+        as weights when ``weight_by_nsamples`` is True.
+    pol : str, optional
+        Polarization string to extract (e.g. ``"ee"``, ``"nn"``).
+        Default is ``"ee"``.
+    antpos : dict, optional
+        Antenna positions in meters, keyed by antenna number. If None, falls
+        back to ``data.antpos``.
+    freqs : np.ndarray, optional
+        Frequency array in Hz. If None, falls back to ``data.freqs``.
+    time_slice : slice, optional
+        Slice applied along the time axis. Default selects all times.
+    freq_slice : slice, optional
+        Slice applied along the frequency axis. Default selects all channels.
+    antpairs : list of tuple, optional
+        Antenna pairs ``(ant1, ant2)`` to include. If None, all pairs in
+        ``data`` are used.
+    weight_by_nsamples : bool, optional
+        If True, weights are ``nsamples * ~flags``; otherwise weights are
+        ``~flags`` (i.e. binary unflagged mask). Default is True.
+
+    Returns
+    -------
+    vis : np.ndarray, shape (2 * n_antpairs, n_times, n_freqs)
+        Complex visibility data. The factor of two arises from including each
+        baseline and its conjugate.
+    weights : np.ndarray, shape (2 * n_antpairs, n_times, n_freqs)
+        Non-negative real weights for each visibility sample.
+    uvw : np.ndarray, shape (2 * n_antpairs, 3, n_freqs)
+        UVW coordinates in units of wavelengths, computed per frequency
+        channel.
+    times : np.ndarray, shape (n_times,)
+        Julian dates for each time sample after applying ``time_slice``.
+    freqs : np.ndarray, shape (n_freqs,)
+        Frequencies in Hz after applying ``freq_slice``.
+    """
+    if antpairs is None:
+        antpairs = data.antpairs()
+
+    if freqs is None:
+        freqs = data.freqs
+
+    if antpos is None:
+        antpos = data.antpos
+
+    vis_list = []
+    weights_list = []
+    uvw_list = []
+
+    for ap in antpairs:
+        blpol = ap + (pol,)
+        blvec = antpos[ap[1]] - antpos[ap[0]]
+
+        # Weights: optionally scale by nsamples, then zero flagged samples.
+        if weight_by_nsamples:
+            weight = nsamples[blpol][time_slice, freq_slice] * (
+                ~flags[blpol][time_slice, freq_slice]
+            ).astype(float)
+        else:
+            weight = (~flags[blpol][time_slice, freq_slice]).astype(float)
+
+        vis_list.extend(
+            [
+                data[blpol][time_slice, freq_slice],
+                data[reverse_bl(blpol)][time_slice, freq_slice],
+            ]
+        )
+        weights_list.extend([weight, weight])
+
+        # UVW in wavelengths: shape (3, n_freqs).
+        uvw_baseline = (
+            blvec[:, None] * freqs[freq_slice][None] / const.c.value
+        )
+        uvw_list.extend([uvw_baseline, -uvw_baseline])
+
+    # Final shapes:
+    #   vis, weights : (n_bls, n_times, n_freqs)
+    #   uvw          : (n_bls, 3, n_freqs)
+    vis = np.array(vis_list)
+    weights = np.array(weights_list)
+    uvw = np.array(uvw_list)
+    times = data.times[time_slice]
+    freqs_out = freqs[freq_slice]
+
+    return vis, weights, uvw, times, freqs_out
