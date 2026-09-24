@@ -18,6 +18,8 @@ from sklearn import gaussian_process as gp
 from ..redcal import filter_reds
 from ..redcal import get_pos_reds
 from astropy.coordinates import EarthLocation
+from astropy import units
+from astropy.time import Time
 from hera_sim.utils import gen_white_noise
 from .. import utils, abscal, datacontainer, io, redcal
 from ..data import DATA_PATH
@@ -1302,3 +1304,101 @@ def test_get_phase_factor():
     phasor_2d = utils.get_phase_factor(baseline, lat, freqs, dt_2d)
     assert phasor_2d.shape == (2, 2, 2)
     assert np.allclose(np.abs(phasor_2d), 1.0)
+
+
+# ---------------------------------------------------------------------------
+# radec_to_lmn (moved from polfilt)
+# ---------------------------------------------------------------------------
+
+class TestRadecToLmn:
+    HERA_LOCATION = EarthLocation(lat=-30.721527 * units.deg, lon=21.428305 * units.deg, height=1073.0 * units.m)
+
+    @pytest.mark.parametrize("times", [
+        np.array([2459000.0]),
+        np.linspace(2459000.0, 2459000.01, 7),
+        Time([2459000.0, 2459000.1], format="jd"),
+    ])
+    def test_output_shape(self, times):
+        assert utils.radec_to_lmn(45.0, -30.0, times, self.HERA_LOCATION).shape == (3, len(times))
+
+    def test_unit_vector(self):
+        """l² + m² + n² must equal 1 at every time step."""
+        times = np.linspace(2459000.0, 2459000.01, 10)
+        lmn = utils.radec_to_lmn(10.0, -20.0, times, self.HERA_LOCATION)
+        np.testing.assert_allclose(np.sum(lmn**2, axis=0), 1.0, atol=1e-12)
+
+    def test_below_horizon_n_negative(self):
+        """The North Pole is always below the horizon at HERA."""
+        times = np.linspace(2459000.0, 2459000.01, 5)
+        assert np.all(utils.radec_to_lmn(0.0, 90.0, times, self.HERA_LOCATION)[2] < 0)
+
+    def test_matches_pyuvdata_apparent_coords(self):
+        """radec_to_lmn agrees with pyuvdata's apparent coords rotated into ENU."""
+        from pyuvdata.utils.phasing import calc_app_coords
+        ra, dec = 45.0, -30.0
+        times = np.linspace(2459000.0, 2459000.0 + 4 / 24, 25)
+        loc = self.HERA_LOCATION
+        lat, lon, alt = loc.lat.deg, loc.lon.deg, loc.height.value
+        lst = utils.JD2LST(times, latitude=lat, longitude=lon, altitude=alt)
+        app_ra, app_dec = calc_app_coords(lon_coord=np.radians(ra), lat_coord=np.radians(dec),
+                                          time_array=times, telescope_loc=loc)
+        eq = np.array([np.cos(app_dec), np.zeros_like(app_dec), np.sin(app_dec)])
+        expected = np.einsum("tij,jt->it", utils.eq2top_m(app_ra - lst, np.radians(lat)), eq)
+        np.testing.assert_allclose(utils.radec_to_lmn(ra, dec, times, loc), expected, atol=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# unpack_data_containers (moved from polfilt)
+# ---------------------------------------------------------------------------
+
+class TestUnpackDataContainers:
+
+    ANTPOS = {0: np.array([0.0, 0.0, 0.0]), 1: np.array([14.6, 0.0, 0.0]), 2: np.array([0.0, 14.6, 0.0])}
+    FREQS = np.linspace(100e6, 200e6, 16)
+    TIMES = np.linspace(2459000.0, 2459000.1, 8)
+
+    def _unpack(self, antpairs=((0, 1), (0, 2), (1, 2)), all_flagged=False, **kwargs):
+        rng = np.random.default_rng(42)
+        shape = (len(self.TIMES), len(self.FREQS))
+        vis = {ap + ("ee",): rng.standard_normal(shape) + 1j * rng.standard_normal(shape) for ap in antpairs}
+        data = datacontainer.DataContainer(vis)
+        flags = datacontainer.DataContainer({k: np.full(v.shape, all_flagged) for k, v in vis.items()})
+        nsamples = datacontainer.DataContainer({k: np.ones(v.shape) for k, v in vis.items()})
+        data.times = self.TIMES
+        return utils.unpack_data_containers(data, flags, nsamples, antpos=self.ANTPOS, freqs=self.FREQS, **kwargs)
+
+    def test_output_shapes_full(self):
+        vis, weights, uvw, t_out, f_out = self._unpack()
+        assert vis.shape == weights.shape == (6, 8, 16)  # each baseline and its conjugate
+        assert uvw.shape == (6, 3, 16)
+        np.testing.assert_array_equal(t_out, self.TIMES)
+        np.testing.assert_array_equal(f_out, self.FREQS)
+
+    def test_slices_applied(self):
+        vis, _, _, t_out, f_out = self._unpack(time_slice=slice(2, 6), freq_slice=slice(4, 12))
+        assert vis.shape == (6, 4, 8)
+        np.testing.assert_array_equal(t_out, self.TIMES[2:6])
+        np.testing.assert_array_equal(f_out, self.FREQS[4:12])
+
+    def test_weights(self):
+        """Flagged samples get zero weight, and weights are binary if not weighting by nsamples."""
+        _, weights, *_ = self._unpack(antpairs=[(0, 1)], all_flagged=True)
+        assert np.all(weights == 0.0)
+        _, weights, *_ = self._unpack(antpairs=[(0, 1)], weight_by_nsamples=False)
+        assert set(np.unique(weights)) <= {0.0, 1.0}
+
+    def test_defaults_from_data(self):
+        """antpos and freqs default to the DataContainer's attributes."""
+        shape = (len(self.TIMES), len(self.FREQS))
+        data = datacontainer.DataContainer({(0, 1, "ee"): np.ones(shape, dtype=complex)})
+        flags = datacontainer.DataContainer({(0, 1, "ee"): np.zeros(shape, dtype=bool)})
+        nsamples = datacontainer.DataContainer({(0, 1, "ee"): np.ones(shape)})
+        data.times, data.freqs, data.antpos = self.TIMES, self.FREQS, self.ANTPOS
+        _, _, uvw, _, f_out = utils.unpack_data_containers(data, flags, nsamples)
+        np.testing.assert_array_equal(f_out, self.FREQS)
+        np.testing.assert_allclose(uvw[0], self.ANTPOS[1][:, None] * self.FREQS[None] / 299792458.0)
+
+    def test_uvw_conjugate_pair_negated(self):
+        vis, _, uvw, *_ = self._unpack(antpairs=[(0, 1)])
+        np.testing.assert_allclose(uvw[0], -uvw[1])
+        np.testing.assert_allclose(vis[0], vis[1].conj())
