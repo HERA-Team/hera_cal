@@ -315,3 +315,93 @@ class TestIterativelyFitPolarizedSourceParams:
     def test_returns_starting_params_without_fitting(self, kwargs):
         start = (10.0, -30.0, 5.0)
         assert self._fit(*start, **kwargs) == start
+
+
+# ---------------------------------------------------------------------------
+# subtract_polarized_source_model
+# ---------------------------------------------------------------------------
+
+class TestSubtractPolarizedSourceModel:
+    """A point source's visibilities on a real baseline, built with the module's own uvw
+    convention (``unpack_data_containers``, b = antpos[ant2] - antpos[ant1]), are removed
+    exactly by a model that is unity at the phase center: the subtraction is the inverse of
+    the phasing the source filtering uses to build its models."""
+
+    @pytest.fixture
+    def setup(self, tmp_path):
+        from hera_cal import io
+        from hera_cal.data import DATA_PATH
+        import os
+        hd = io.HERAData(os.path.join(DATA_PATH, "zen.2458098.43124.downsample.uvh5"))
+        antpair = next(ap for ap in hd.get_antpairs() if ap[0] != ap[1])
+        data, flags, nsamples = hd.read(bls=[antpair])
+        # a source 20 degrees east of the meridian and 15 degrees north of zenith at the file's LSTs
+        ra = (np.degrees(np.mean(hd.lsts)) + 20.0) % 360
+        dec = hd.telescope.location.lat.deg + 15.0
+        # the model file: unity at the phase center, unflagged, tagged with the source's position
+        hd.update(data={k: np.ones_like(v) for k, v in data.items()},
+                  flags={k: np.zeros_like(v) for k, v in flags.items()})
+        hd.extra_keywords["SOURCE_RA"], hd.extra_keywords["SOURCE_DEC"] = ra, dec
+        model_file = str(tmp_path / "model.uvh5")
+        hd.write_uvh5(model_file, clobber=True)
+        # the data: that source on this baseline, in the module's own convention
+        _, _, uvw, times, freqs = pf.unpack_data_containers(data, flags, nsamples, pol=antpair_pol(data, antpair),
+                                                           antpairs=[antpair], weight_by_nsamples=False)
+        source = _point_source_vis(uvw[0], ra, dec, 0.0, times, freqs)
+        for k in data:
+            data[k][:] = source
+            flags[k][:] = False
+        return data, flags, antpair, model_file, source
+
+    def test_exact_removal(self, setup):
+        data, flags, antpair, model_file, source = setup
+        assert np.any(np.abs(np.angle(source)) > 0.5)  # a non-trivial fringe to remove
+        # residuals are at the file's complex64 precision; a wrong sign would leave them of order 2
+        pf.subtract_polarized_source_model(data, flags, model_file)
+        for k in data:
+            np.testing.assert_allclose(data[k], 0, atol=1e-5)
+
+    def test_flags_and_extra_flags(self, setup):
+        data, flags, antpair, model_file, source = setup
+        k = next(iter(data))
+        flags[k][1, 5:10] = True
+        extra = np.zeros(source.shape, dtype=bool)
+        extra[0, :3] = True
+        pf.subtract_polarized_source_model(data, flags, model_file, extra_flags=extra)
+        np.testing.assert_allclose(data[k][1, 5:10], source[1, 5:10])  # untouched where flagged
+        np.testing.assert_allclose(data[k][0, :3], source[0, :3])
+        np.testing.assert_allclose(data[k][2:], 0, atol=1e-5)
+
+    def test_freq_range(self, setup):
+        data, flags, antpair, model_file, source = setup
+        k = next(iter(data))
+        f_min = np.median(data.freqs)
+        pf.subtract_polarized_source_model(data, flags, model_file, freq_range=(f_min, np.inf))
+        in_range = data.freqs >= f_min
+        np.testing.assert_allclose(data[k][:, in_range], 0, atol=1e-5)
+        np.testing.assert_allclose(data[k][:, ~in_range], source[:, ~in_range])
+
+    def test_baseline_selection(self, setup):
+        data, flags, antpair, model_file, source = setup
+        k = next(iter(data))
+        other = (antpair[0] + 1000, antpair[1] + 1000, k[2])
+        data[other], flags[other] = source.copy(), np.zeros(source.shape, dtype=bool)
+        data.antpos[antpair[0] + 1000], data.antpos[antpair[1] + 1000] = data.antpos[antpair[0]], data.antpos[antpair[1]]
+        with pytest.raises(ValueError, match="baseline must be given"):
+            pf.subtract_polarized_source_model(data, flags, model_file)
+        with pytest.raises(ValueError, match="not stored"):
+            pf.subtract_polarized_source_model(data, flags, model_file, baseline=antpair[::-1])
+        pf.subtract_polarized_source_model(data, flags, model_file, baseline=antpair)
+        np.testing.assert_allclose(data[k], 0, atol=1e-5)
+        np.testing.assert_allclose(data[other], source)
+
+    def test_grid_mismatch(self, setup):
+        data, flags, antpair, model_file, source = setup
+        data.freqs = data.freqs + 1e3  # a kilohertz off the model's grid
+        with pytest.raises(ValueError, match="grid"):
+            pf.subtract_polarized_source_model(data, flags, model_file)
+
+
+def antpair_pol(data, antpair):
+    """The polarization of the one key in data for this antpair."""
+    return next(k[2] for k in data if k[:2] == tuple(antpair))
