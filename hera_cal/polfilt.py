@@ -485,6 +485,8 @@ def subtract_polarized_source_model(
         or not np.allclose(model.freqs, data.freqs, rtol=0, atol=1.0)
     ):
         raise ValueError(f"{model_file} is not on the same time and frequency grid as the data.")
+    if "SOURCE_RA" not in hd_model.extra_keywords or "SOURCE_DEC" not in hd_model.extra_keywords:
+        raise KeyError(f"{model_file} lacks the SOURCE_RA and SOURCE_DEC extra keywords (the source's ICRS position in degrees).")
     ra, dec = hd_model.extra_keywords["SOURCE_RA"], hd_model.extra_keywords["SOURCE_DEC"]
     lmn = radec_to_lmn(ra, dec, data.times, hd_model.telescope.location)
     phasor = np.exp(2j * np.pi * np.outer(blvec @ lmn, data.freqs) / SPEED_OF_LIGHT)

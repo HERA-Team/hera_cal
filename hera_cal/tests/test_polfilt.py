@@ -341,6 +341,17 @@ class TestSubtractPolarizedSourceModel:
         with pytest.raises(ValueError, match="grid"):
             pf.subtract_polarized_source_model(data, flags, model_file)
 
+    def test_missing_position_keywords(self, setup, tmp_path):
+        from hera_cal import io
+        data, flags, antpair, model_file, source = setup
+        hd = io.HERAData(model_file)
+        hd.read()
+        del hd.extra_keywords["SOURCE_DEC"]
+        unlabeled = str(tmp_path / "unlabeled.uvh5")
+        hd.write_uvh5(unlabeled, clobber=True)
+        with pytest.raises(KeyError, match="SOURCE_RA and SOURCE_DEC"):
+            pf.subtract_polarized_source_model(data, flags, unlabeled)
+
 
 def antpair_pol(data, antpair):
     """The polarization of the one key in data for this antpair."""
