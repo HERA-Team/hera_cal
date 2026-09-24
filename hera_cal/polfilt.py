@@ -14,7 +14,7 @@ import numpy as np
 from astropy import constants
 from astropy.coordinates import EarthLocation
 from scipy.optimize import minimize_scalar
-from hera_cal import datacontainer
+from hera_cal import datacontainer, io
 from hera_cal.utils import radec_to_lmn, unpack_data_containers
 
 SPEED_OF_LIGHT = constants.c.value  # m/s
