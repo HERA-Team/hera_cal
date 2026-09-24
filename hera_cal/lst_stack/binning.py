@@ -386,8 +386,8 @@ def _read_one_file(
         Path to a calibration file to apply to the data, or ``None`` to skip
         calibration.
     tind
-        Indices into the time axis of the file that fall within at least one
-        LST bin.  Only these rows are read into memory.
+        Strictly increasing indices into the time axis of the file that fall within
+        at least one LST bin.  Only these rows are read into memory.
     inpfile
         Path to a UVFlag file recording where the data have
         been inpainted, or ``None`` if no inpainting information is available.
@@ -433,6 +433,9 @@ def _read_one_file(
     # Inspect file metadata (cheap; no I/O on the data arrays)
     meta = FastUVH5Meta(meta_path, blts_are_rectangular=blts_are_rectangular)
     data_antpairs = meta.get_transactional("antpairs")
+    tind = np.asarray(tind)
+    if np.any(tind[1:] <= tind[:-1]):
+        raise ValueError(f"Time indices for {meta_path} must be strictly increasing, got {tind}.")
     ntimes = len(tind)
 
     # Determine which baselines to actually read
@@ -463,17 +466,17 @@ def _read_one_file(
     # Read visibility data
     logger.info(f"Reading {meta_path}")
 
-    # TODO: use Fast readers here instead, and select times directly on read.
+    # If only some of the file's integrations fall within an LST bin, select them
+    # on read, which is true partial I/O for uvh5 files.
+    file_times = meta.get_transactional("times")
+
+    # TODO: use Fast readers here instead.
     _data, _flags, _nsamples = io.HERAData(meta_path).read(
         bls=bls_to_load,
         freq_chans=freq_chans,
         polarizations=pols,
+        times=(file_times[tind] if ntimes < len(file_times) else None),
     )
-
-    # Trim to only the time indices that fall within an LST bin.
-    _data.select_or_expand_times(indices=tind, skip_bda_check=True)
-    _flags.select_or_expand_times(indices=tind, skip_bda_check=True)
-    _nsamples.select_or_expand_times(indices=tind, skip_bda_check=True)
 
     # Load inpainting flags (optional)
     inpainted = None
@@ -593,10 +596,11 @@ def lst_bin_files_for_baselines(
         ``data_files``. If a particular element is None, no calibration will be
         applied to that file.
     time_idx
-        A list of arrays, one for each file, where the array is the same length as
-        the time array for that file, and is boolean, indicating whether each time
-        is required to be read (i.e. if it appears in any LST bin). If not provided,
-        will be calculated from the LST bin edges and the time arrays.
+        A list of arrays, one for each file, indicating which times are required to
+        be read (i.e. those that appear in any LST bin). Each is either a boolean
+        array the same length as the time array for that file, or strictly increasing
+        integer indices into it. If not provided, will be calculated from the LST bin
+        edges and the time arrays.
     ignore_flags
         If True, ignore flags in the data files and bin all data.
     rephase
@@ -710,17 +714,16 @@ def lst_bin_files_for_baselines(
             cal_file_loader_kwargs['telescope_location_lat_lon_alt_degrees'] = metas[0].telescope_location_lat_lon_alt_degrees
 
     if time_idx is None:
+        # Find the times that fall in an LST bin, using the same logic as lst_align()
+        # (which also handles LST ranges that wrap through 2pi).
         adjust_lst_bin_edges(lst_bin_edges)
-        lst_bin_edges %= 2 * np.pi
-        op = np.logical_and if lst_bin_edges[0] < lst_bin_edges[-1] else np.logical_or
-        time_idx = []
-        for meta in metas:
-            _lsts = meta.get_transactional("lsts")
-            time_idx.append(
-                np.argwhere(
-                    op(_lsts >= lst_bin_edges[0], _lsts < lst_bin_edges[-1])
-                ).flatten()
-            )
+        time_idx = [
+            np.flatnonzero(get_lst_bins(meta.get_transactional("lsts"), lst_bin_edges)[2])
+            for meta in metas
+        ]
+    else:
+        # convert any boolean masks to indices
+        time_idx = [np.flatnonzero(t) if np.asarray(t).dtype == bool else np.asarray(t) for t in time_idx]
 
     if lsts is None:
         lsts = np.concatenate(
