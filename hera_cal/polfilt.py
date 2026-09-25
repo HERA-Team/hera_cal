@@ -14,10 +14,7 @@ import numpy as np
 from astropy import constants
 from astropy.coordinates import EarthLocation
 from scipy.optimize import minimize_scalar
-
-from hera_cal import datacontainer
-# These live in utils; importing them here also keeps polfilt.radec_to_lmn and
-# polfilt.unpack_data_containers working for existing notebooks.
+from hera_cal import datacontainer, io
 from hera_cal.utils import radec_to_lmn, unpack_data_containers
 
 SPEED_OF_LIGHT = constants.c.value  # m/s
@@ -414,3 +411,94 @@ def estimate_freq_from_polarized_source_delay(
         Frequency in Hz at which the given delay occurs.
     """
     return (delay * np.pi / (2.0 * rotation_measure * SPEED_OF_LIGHT ** 2)) ** (-1.0 / 3.0)
+
+
+def subtract_polarized_source_model(
+    data: datacontainer.DataContainer,
+    flags: datacontainer.DataContainer,
+    model_file: str,
+    baseline: tuple = None,
+    extra_flags: np.ndarray = None,
+    freq_range: tuple = None,
+):
+    """
+    Subtract a phased polarized-source model from one baseline of data, in place.
+
+    The model file is the per-night polarized source filtering's product for one
+    source and one component (its Faraday-rotating, scintillation, or smooth
+    foreground part): the baseline-averaged visibilities phased to the source,
+    stored on a single placeholder baseline, with the source's ICRS position in
+    the ``SOURCE_RA`` and ``SOURCE_DEC`` extra keywords (degrees). Each of its
+    polarizations is moved back to the source's true position on the data
+    baseline by the geometric phasor ``exp(+2πi b·s(t) ν/c)``, with
+    ``b = antpos[ant2] - antpos[ant1]`` (the same baseline convention as
+    ``unpack_data_containers``) and ``s(t)`` the source's direction cosines from
+    ``radec_to_lmn``, which inverts the phasing used to build the model, and is
+    then subtracted from the data.
+
+    Parameters
+    ----------
+    data : datacontainer.DataContainer
+        Visibilities with ``antpos``, ``freqs``, and ``times`` attributes.
+        Modified in place.
+    flags : datacontainer.DataContainer
+        Boolean flags keyed like ``data``. Where the data or the model are
+        flagged nothing is subtracted.
+    model_file : str
+        Path to the model's uvh5 file, described above. Its times and
+        frequencies must match the data's.
+    baseline : tuple of int, optional
+        The ``(ant1, ant2)`` to subtract from, in the orientation stored in
+        ``data``. Required when ``data`` holds more than one antpair.
+    extra_flags : np.ndarray of bool, optional
+        Additional flags of shape ``(n_times, n_freqs)``, treated like ``flags``.
+    freq_range : tuple of float, optional
+        ``(f_min, f_max)`` in Hz: subtract only in channels with ``f_min <= freq <= f_max``.
+        Default: all channels.
+
+    Raises
+    ------
+    ValueError
+        If ``baseline`` is needed but not given or is not stored in ``data``,
+        or if the model's times or frequencies do not match the data's.
+    KeyError
+        If the model file lacks the ``SOURCE_RA`` / ``SOURCE_DEC`` keywords, or
+        holds a polarization the data do not.
+    """
+    if baseline is None:
+        antpairs = list(data.antpairs())
+        if len(antpairs) != 1:
+            raise ValueError("baseline must be given when data holds more than one antpair.")
+        baseline = antpairs[0]
+    baseline = tuple(baseline)
+    if baseline not in data.antpairs():
+        raise ValueError(f"{baseline} is not stored in data (in that orientation).")
+    ant1, ant2 = baseline
+    blvec = data.antpos[ant2] - data.antpos[ant1]
+
+    hd_model = io.HERAData(model_file)
+    model, model_flags, _ = hd_model.read()
+    if (
+        len(model.times) != len(data.times)
+        or len(model.freqs) != len(data.freqs)
+        or not np.allclose(model.times, data.times, rtol=0, atol=1e-8)
+        or not np.allclose(model.freqs, data.freqs, rtol=0, atol=1.0)
+    ):
+        raise ValueError(f"{model_file} is not on the same time and frequency grid as the data.")
+    if "SOURCE_RA" not in hd_model.extra_keywords or "SOURCE_DEC" not in hd_model.extra_keywords:
+        raise KeyError(f"{model_file} lacks the SOURCE_RA and SOURCE_DEC extra keywords (the source's ICRS position in degrees).")
+    ra, dec = hd_model.extra_keywords["SOURCE_RA"], hd_model.extra_keywords["SOURCE_DEC"]
+    lmn = radec_to_lmn(ra, dec, data.times, hd_model.telescope.location)
+    phasor = np.exp(2j * np.pi * np.outer(blvec @ lmn, data.freqs) / SPEED_OF_LIGHT)
+
+    model_antpair = list(model.antpairs())[0]
+    for pol in model.pols():
+        bl = baseline + (pol,)
+        flagged = model_flags[model_antpair + (pol,)] | flags[bl]
+        if extra_flags is not None:
+            flagged = flagged | extra_flags
+        model_here = np.where(flagged, 0, model[model_antpair + (pol,)] * phasor)
+        if freq_range is not None:
+            in_range = (data.freqs >= freq_range[0]) & (data.freqs <= freq_range[1])
+            model_here = np.where(in_range[np.newaxis, :], model_here, 0)
+        data[bl] -= model_here
