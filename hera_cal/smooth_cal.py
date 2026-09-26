@@ -7,7 +7,12 @@ import scipy
 from copy import deepcopy
 import warnings
 import argparse
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import pyuvdata
+from astropy.io import fits
+from pyuvdata.utils import jnum2str
+from pyuvdata.utils.io.fits import _indexhdus
 from collections.abc import Iterable
 import hera_filters
 from hera_qm.time_series_metrics import true_stretches
@@ -604,8 +609,13 @@ def flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5,
             for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that
             antenna for all times and channels. Setting this to 1.0 means no additional flagging.
     '''
-    # figure out which frequencies and times are flagged for all antennas
-    all_flagged = np.mean(1.0 - np.array(list(flags.values())), axis=0) == 0
+    # figure out which frequencies and times are flagged for all antennas (ANDed one antenna at a time: stacking
+    # every antenna's waterfall as floats would take 8x the memory of all the flags)
+    all_flagged = None
+    for f in flags.values():
+        all_flagged = (np.array(f, dtype=bool) if all_flagged is None else np.logical_and(all_flagged, f, out=all_flagged))
+    if all_flagged is None:  # no antennas: the original, stacked computation (and its behavior)
+        all_flagged = np.mean(1.0 - np.array(list(flags.values())), axis=0) == 0
     sum_flagged = 0
 
     # apply thresholding for times and frequencies and keep looping until no new flags are produced
@@ -862,13 +872,59 @@ def _check_finite_gains(gains, flags):
         gains[not_finite] = 1.0
 
 
+def _thread_map(fn, items, nthreads=1):
+    '''list(map(fn, items)), over a pool of nthreads threads if nthreads > 1.'''
+    if nthreads is None or nthreads <= 1:
+        return [fn(item) for item in items]
+    with ThreadPoolExecutor(max_workers=nthreads) as executor:
+        return list(executor.map(fn, items))
+
+
+def _read_calfits_metadata(calfile):
+    '''Metadata-only read of a calfits file, parsed by pyuvdata exactly as HERACal.read parses it, returning
+    what CalibrationSmoother needs to size its grids and to index into the file's data.'''
+    uvc = pyuvdata.UVCal()
+    uvc.read_calfits(calfile, read_data=False, run_check=False)
+    x_orientation = uvc.telescope.get_x_orientation_from_feeds()
+    pols = [jnum2str(j, x_orientation=x_orientation) for j in uvc.jones_array]
+    return {'freqs': np.unique(uvc.freq_array),
+            'times': np.unique(uvc.time_array),
+            'ants': [(ant, pol) for ant in uvc.ant_array for pol in pols],
+            'ant_indices': {ant: i for i, ant in enumerate(uvc.ant_array)},
+            'pol_indices': {pol: i for i, pol in enumerate(pols)},
+            'telescope_name': uvc.telescope.name,
+            # the layout _fill_grids_from_calfits reads directly (anything else goes through HERACal.read)
+            'direct_read': (uvc.cal_type == 'gain') and (uvc.Nspws == 1) and (uvc.time_array is not None),
+            'shape': (uvc.Nants_data, 1, uvc.Nfreqs, uvc.Ntimes, uvc.Njones)}
+
+
+def _write_smoothed_cal_file(calfile, out_gains, out_flags, refant, outfilename, history_to_add, clobber, attributes):
+    '''Write one smoothed calibration file (the body of CalibrationSmoother.write_smoothed_cal).'''
+    hc = io.HERACal(calfile)
+    gains, flags, _, _ = hc.read()
+    if refant is not None:
+        rephase_to_refant(gains, refant)
+    rel_diff, avg_rel_diff = utils.gain_relative_difference(gains, out_gains, out_flags)
+    hc.update(gains=out_gains, flags=out_flags, quals=rel_diff, total_qual=avg_rel_diff)
+    hc.history += history_to_add
+    for attribute, value in attributes.items():
+        if '.' in attribute:
+            top, bottom = attribute.split('.')
+            getattr(hc, top).__setattr__(bottom, value)
+        else:
+            hc.__setattr__(attribute, value)
+    hc.check()
+    hc.write_calfits(outfilename, clobber=clobber)
+    return outfilename
+
+
 class CalibrationSmoother():
 
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
                  waterfall_blacklist={}, blacklist_wgt=0.0, pick_refant=False, propagate_refant_flags=False, per_pol_refant=True,
                  acceptable_candidate_frac=0.0, antpos=None,
-                 freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, ignore_calflags=False, verbose=False):
+                 freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, ignore_calflags=False, verbose=False, nthreads=1):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -942,34 +998,23 @@ class CalibrationSmoother():
             ignore_calflags: bool, default False. If True, all times and frequencies with calibration files are assumed
                 to be unflagged unless overridden by external flags provided by flag_file_list.
             verbose: print status updates
+            nthreads: number of threads used to read the calibration and flag files. Reading mostly waits on the
+                file system, so on a network file system several threads can help. Results do not depend on it.
         '''
         self.verbose = verbose
 
-        # load calibration files---gains, flags, freqs, times, and if desired, cspa and chisq
+        # Load calibration files---gains, flags, freqs, times, and if desired, cspa and chisq---and flag files.
+        # Each file is read straight into the whole-day grids, so no per-file copy of the day's calibration is held
+        # alongside them (which roughly halves peak memory), and standard gain calfits are read without building a
+        # UVCal object for each. A metadata-only first pass sizes the grids.
         utils.echo('Now loading calibration files...', verbose=self.verbose)
         self.cals = calfits_list
-        gains, cal_flags, chisq, cspa, self.cal_freqs, self.cal_times = {}, {}, {}, {}, {}, {}
-        for cal in self.cals:
-            hc = io.HERACal(cal)
-            gains[cal], cal_flags[cal], quals, total_qual = hc.read()
-            if load_cspa:
-                cspa[cal] = quals
-            if load_chisq:
-                chisq[cal] = total_qual
-            self.cal_freqs[cal], self.cal_times[cal] = hc.freqs, hc.times
+        cal_metas = dict(zip(self.cals, _thread_map(_read_calfits_metadata, self.cals, nthreads)))
+        self.cal_freqs = {cal: cal_metas[cal]['freqs'] for cal in self.cals}
+        self.cal_times = {cal: cal_metas[cal]['times'] for cal in self.cals}
         self.freqs = self.cal_freqs[self.cals[0]]
-        self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
-
-        # load flag files
-        self.flag_files = flag_file_list
-        if len(self.flag_files) > 0:
-            utils.echo('Now loading external flag files...', verbose=self.verbose)
-            self.ext_flags, self.flag_freqs, self.flag_times = {}, {}, {}
-            for ff in self.flag_files:
-                flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
-                self.ext_flags[ff] = _to_antflags(flags, self.ants, antflag_thresh)
-                self.flag_freqs[ff] = meta['freqs']
-                self.flag_times[ff] = meta['times']
+        self.ants = sorted(list(set([k for meta in cal_metas.values() for k in meta['ants']])))
+        telescope_name = cal_metas[self.cals[-1]]['telescope_name']
 
         # set up time grid (note that it is offset by .5 dt so that times always map to the same
         # index, even if they are slightly different between the flag_files and the calfits files)
@@ -978,36 +1023,43 @@ class CalibrationSmoother():
         self.dt = np.median(np.diff(all_file_times))
         self.time_grid = np.arange(all_file_times[0] + self.dt / 2.0, all_file_times[-1] + self.dt, self.dt)
         self.time_indices = {cal: np.searchsorted(self.time_grid, times) for cal, times in self.cal_times.items()}
-        if len(self.flag_files) > 0:
-            self.flag_time_indices = {ff: np.searchsorted(self.time_grid, times) for ff, times in self.flag_times.items()}
 
-        # build empty multi-file grids for each antenna's gains and flags (and optionally for cspa)
+        # build empty multi-file grids for each antenna's gains and flags (and optionally for cspa and chisq)
         self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=complex) for ant in self.ants}
         self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
         if load_cspa:
             self.cspa_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=float) for ant in self.ants}
-        # Now fill those grid
-        for ant in self.ants:
-            for cal in self.cals:
-                if ant in gains[cal]:
-                    self.gain_grids[ant][self.time_indices[cal], :] = gains[cal][ant]
-                    self.flag_grids[ant][self.time_indices[cal], :] = (False if ignore_calflags else cal_flags[cal][ant])
-                    if load_cspa:
-                        self.cspa_grids[ant][self.time_indices[cal], :] = cspa[cal][ant]
-            if len(self.flag_files) > 0:
-                for ff in self.flag_files:
-                    if ant in self.ext_flags[ff]:
-                        self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
-            # make sure there are no unflagged infs or nans, replace flagged ones with 1.0s
-            _check_finite_gains(self.gain_grids[ant], self.flag_grids[ant])
-
-        # Now build grid and fill it for chisq_grid, if desired
         if load_chisq:
             jpols = set([ant[1] for ant in self.ants])
             self.chisq_grids = {jpol: np.ones((len(self.time_grid), len(self.freqs)), dtype=float) for jpol in jpols}
-            for jpol in jpols:
-                for cal in self.cals:
-                    self.chisq_grids[jpol][self.time_indices[cal], :] = chisq[cal][jpol]
+
+        # Now fill those grids, one calibration file at a time (files map to disjoint rows)
+        def fill_from_cal(cal):
+            self._fill_grids_from_calfits(cal, cal_metas[cal], ignore_calflags=ignore_calflags,
+                                          load_cspa=load_cspa, load_chisq=load_chisq)
+        _thread_map(fill_from_cal, self.cals, nthreads)
+
+        # load flag files, ORing each into the grids as it is read
+        self.flag_files = flag_file_list
+        if len(self.flag_files) > 0:
+            utils.echo('Now loading external flag files...', verbose=self.verbose)
+            self.flag_freqs, self.flag_times, self.flag_time_indices = {}, {}, {}
+            lock = threading.Lock()  # an antenna flag file and a flag waterfall can cover the same rows
+
+            def apply_flag_file(ff):
+                flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
+                ext_flags = _to_antflags(flags, self.ants, antflag_thresh)
+                tinds = np.searchsorted(self.time_grid, meta['times'])
+                with lock:
+                    self.flag_freqs[ff], self.flag_times[ff], self.flag_time_indices[ff] = meta['freqs'], meta['times'], tinds
+                    for ant in self.ants:
+                        if ant in ext_flags:
+                            self.flag_grids[ant][tinds, :] += ext_flags[ant]
+            _thread_map(apply_flag_file, self.flag_files, nthreads)
+
+        # make sure there are no unflagged infs or nans, replace flagged ones with 1.0s
+        for ant in self.ants:
+            _check_finite_gains(self.gain_grids[ant], self.flag_grids[ant])
 
         # perform data quality checks and flag thresholding
         self.check_consistency()
@@ -1017,7 +1069,7 @@ class CalibrationSmoother():
         # build blacklists
         self.blacklist_wgt = blacklist_wgt
         self.time_blacklist = build_time_blacklist(self.time_grid, time_blacklists=time_blacklists, lst_blacklists=lst_blacklists,
-                                                   lat_lon_alt_degrees=lat_lon_alt_degrees, telescope_name=hc.telescope.name)
+                                                   lat_lon_alt_degrees=lat_lon_alt_degrees, telescope_name=telescope_name)
         self.freq_blacklist = build_freq_blacklist(self.freqs, freq_blacklists=freq_blacklists, chan_blacklists=chan_blacklists)
         self.set_waterfall_blacklist(waterfall_blacklist)
 
@@ -1032,6 +1084,44 @@ class CalibrationSmoother():
             else:
                 utils.echo(f'Reference Antenna {self.refant} selected.', verbose=self.verbose)
             self.rephase_to_refant(propagate_refant_flags=propagate_refant_flags)
+
+    def _fill_grids_from_calfits(self, cal, meta, ignore_calflags=False, load_cspa=False, load_chisq=False):
+        '''Copy one calfits file's gains (and flags, cspa, and chisq, as requested) into this file's rows of the
+        grids. Standard single-spw gain calfits are read directly from the memory-mapped FITS data, computing
+        gains exactly as pyuvdata does (real + 1j * imag); anything else goes through HERACal.read.'''
+        tinds = self.time_indices[cal]
+        if meta['direct_read']:
+            with fits.open(cal) as fname:
+                hdr = fname[0].header
+                data = fname[0].data
+                hdunames = _indexhdus(fname)
+                has_quality = hdr.get('HASQLTY', True)
+                direct = ((data.shape[:5] == meta['shape']) and (data.shape[5] == (4 if has_quality else 3))
+                          and (has_quality or not load_cspa) and ('TOTQLTY' in hdunames or not load_chisq))
+                if direct:
+                    for ant in meta['ants']:
+                        plane = data[meta['ant_indices'][ant[0]], 0, :, :, meta['pol_indices'][ant[1]]]  # (Nfreqs, Ntimes, planes)
+                        self.gain_grids[ant][tinds, :] = (plane[:, :, 0] + 1j * plane[:, :, 1]).T
+                        self.flag_grids[ant][tinds, :] = (False if ignore_calflags else plane[:, :, 2].astype('bool').T)
+                        if load_cspa:
+                            self.cspa_grids[ant][tinds, :] = plane[:, :, -1].T
+                    if load_chisq:
+                        total_quality = fname[hdunames['TOTQLTY']].data[0]  # (Nfreqs, Ntimes, Njones)
+                        for jpol in self.chisq_grids:
+                            self.chisq_grids[jpol][tinds, :] = total_quality[:, :, meta['pol_indices'][jpol]].T
+                    return
+
+        # general case, through HERACal
+        hc = io.HERACal(cal)
+        gains, cal_flags, quals, total_qual = hc.read()
+        for ant in gains:
+            self.gain_grids[ant][tinds, :] = gains[ant]
+            self.flag_grids[ant][tinds, :] = (False if ignore_calflags else cal_flags[ant])
+            if load_cspa:
+                self.cspa_grids[ant][tinds, :] = quals[ant]
+        if load_chisq:
+            for jpol in self.chisq_grids:
+                self.chisq_grids[jpol][tinds, :] = total_qual[jpol]
 
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag files).
@@ -1279,7 +1369,8 @@ class CalibrationSmoother():
 
         return meta
 
-    def write_smoothed_cal(self, output_replace=('.flagged_abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
+    def write_smoothed_cal(self, output_replace=('.flagged_abs.', '.smooth_abs.'), add_to_history='', clobber=False,
+                           nthreads=1, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
         Also compares the input and output calibration and saves that result in the quals/total_quals fields.
 
@@ -1287,29 +1378,23 @@ class CalibrationSmoother():
             output_replace: tuple of input calfile substrings: ("to_replace", "to_replace_with")
             add_to_history: appends a string to the history of the output file (in addition to the )
             clobber: if True, overwrites existing file at outfilename
+            nthreads: number of threads writing files concurrently. Each file is read, compared, and written
+                independently, and much of that waits on the file system; the output does not depend on it.
             kwargs: dictionary mapping updated attributes to their new values.
                 See pyuvdata.UVCal documentation for more info.
         '''
         utils.echo('Now writing results to disk...', verbose=self.verbose)
-        for cal in self.cals:
-            hc = io.HERACal(cal)
-            gains, flags, _, _ = hc.read()
-            if hasattr(self, 'refant'):
-                rephase_to_refant(gains, self.refant)
-            out_gains = {ant: self.gain_grids[ant][self.time_indices[cal], :] for ant in self.ants}
-            out_flags = {ant: self.flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
-            rel_diff, avg_rel_diff = utils.gain_relative_difference(gains, out_gains, out_flags)
-            hc.update(gains=out_gains, flags=out_flags, quals=rel_diff, total_qual=avg_rel_diff)
-            hc.history += utils.history_string(add_to_history)
-            for attribute, value in kwargs.items():
-                if '.' in attribute:
-                    top, bottom = attribute.split('.')
-                    getattr(hc, top).__setattr__(bottom, value)
-                else:
-                    hc.__setattr__(attribute, value)
-            hc.check()
-            outfilename = cal.replace(output_replace[0], output_replace[1])
-            hc.write_calfits(outfilename, clobber=clobber)
+        history_to_add = utils.history_string(add_to_history)  # names this function as the writer, once for all files
+        refant = getattr(self, 'refant', None)
+
+        def write_one(cal):
+            tinds = self.time_indices[cal]
+            out_gains = {ant: self.gain_grids[ant][tinds, :] for ant in self.ants}
+            out_flags = {ant: self.flag_grids[ant][tinds, :] for ant in self.ants}
+            return _write_smoothed_cal_file(cal, out_gains, out_flags, refant, cal.replace(output_replace[0], output_replace[1]),
+                                            history_to_add, clobber, kwargs)
+
+        _thread_map(write_one, self.cals, nthreads)
 
 
 def _pair(dash_sep_arg_pair):
