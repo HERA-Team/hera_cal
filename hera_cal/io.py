@@ -105,15 +105,9 @@ class HERACal(UVCal):
     def _jones_index(self, pol):
         '''Index into the jones axis for a polarization string. Cached, because the
         x_orientation lookup behind jstr2num is slow and would otherwise run once per antenna.'''
-        try:
-            return self._pol_indices[pol]
-        except (AttributeError, KeyError):
-            if not hasattr(self, '_pol_indices'):
-                self._pol_indices = {}
-            x_orientation = getattr(self, '_x_orientation', None) or self.telescope.get_x_orientation_from_feeds()
-            ip = self._jnum_indices[jstr2num(pol, x_orientation=x_orientation)]
-            self._pol_indices[pol] = ip
-            return ip
+        if pol not in self._pol_indices:
+            self._pol_indices[pol] = self._jnum_indices[jstr2num(pol, x_orientation=self._x_orientation)]
+        return self._pol_indices[pol]
 
     def build_calcontainers(self):
         '''Turns the calibration information currently loaded into the HERACal object
