@@ -870,3 +870,97 @@ class Test_Calibration_Smoother(object):
             np.testing.assert_array_equal(qual[54, 'Jee'], relative_diff[54, 'Jee'])
             np.testing.assert_array_equal(total_qual['Jee'], avg_relative_diff['Jee'])
             os.remove(cal.replace('test_input/', 'test_output/smoothed_'))
+
+
+def _split_calfits(tmp_path, n_files=5):
+    '''Write an 8-antenna, 2-pol, 10-integration calfits out as n_files consecutive files, plus an antenna flag file
+    for each (flagging a few random samples), to get a small night.'''
+    uvc = UVCal.from_file(os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.omni.calfits_downselected'))
+    (tmp_path / 'in').mkdir()
+    rng = np.random.default_rng(0)
+    cals, flag_files = [], []
+    for i, times in enumerate(np.array_split(np.unique(uvc.time_array), n_files)):
+        part = uvc.select(times=times, inplace=False)
+        cals.append(str(tmp_path / 'in' / f'zen.{i}.calfits'))
+        part.write_calfits(cals[-1])
+        uvf = UVFlag(part, mode='flag')
+        uvf.flag_array = rng.random(uvf.flag_array.shape) < 0.1
+        flag_files.append(str(tmp_path / 'in' / f'zen.{i}.flags.h5'))
+        uvf.write(flag_files[-1])
+    return cals, flag_files
+
+
+def _night(name, tmp_path):
+    '''Calibration files and flag files for CalibrationSmoother, as (calfits_list, flag_file_list, flag_filetype).'''
+    if name == 'single_antenna_with_flag_files':
+        cals = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
+        flag_files = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
+        return cals, flag_files, 'npz'
+    return (*_split_calfits(tmp_path), 'h5')
+
+
+def _assert_same_loaded_state(cs1, cs2):
+    '''The two smoothers hold the same arrays and metadata, with dict keys in the same order.'''
+    for attr in ['ants', 'freqs', 'time_grid', 'cal_freqs', 'cal_times', 'time_indices', 'gain_grids', 'flag_grids',
+                 'cspa_grids', 'chisq_grids', 'flag_freqs', 'flag_times', 'flag_time_indices']:
+        a, b = getattr(cs1, attr, None), getattr(cs2, attr, None)
+        if isinstance(a, dict):
+            assert list(a.keys()) == list(b.keys()), attr
+            for key in a:
+                np.testing.assert_array_equal(a[key], b[key], err_msg=f'{attr}[{key}]')
+        else:
+            np.testing.assert_array_equal(a, b, err_msg=attr)
+
+
+@pytest.mark.filterwarnings("ignore:Mean of empty slice")
+class Test_Calibration_Smoother_IO(object):
+    '''CalibrationSmoother reads and writes the same thing whatever nthreads is, and its direct FITS reader
+    agrees with HERACal.read (which would catch pyuvdata changing the calfits layout).'''
+
+    @pytest.mark.parametrize('night', ['single_antenna_with_flag_files', 'eight_antennas_two_pols'])
+    @pytest.mark.parametrize('ignore_calflags', [False, True])
+    def test_load(self, night, ignore_calflags, tmp_path, monkeypatch):
+        cals, flag_files, flag_filetype = _night(night, tmp_path)
+
+        def load(**kwargs):
+            return smooth_cal.CalibrationSmoother(cals, flag_file_list=flag_files, flag_filetype=flag_filetype,
+                                                  load_cspa=True, load_chisq=True, ignore_calflags=ignore_calflags, **kwargs)
+
+        with monkeypatch.context() as m:  # these files all take the direct path, never HERACal.read
+            m.setattr(io.HERACal, 'read', lambda *args, **kwargs: pytest.fail('direct reader fell back to HERACal.read'))
+            direct = load()
+            threaded = load(nthreads=4)
+        with monkeypatch.context() as m:  # force every file through HERACal.read instead
+            read_metadata = smooth_cal._read_calfits_metadata
+            m.setattr(smooth_cal, '_read_calfits_metadata', lambda cal: {**read_metadata(cal), 'direct_read': False})
+            via_heracal = load()
+        _assert_same_loaded_state(direct, threaded)
+        _assert_same_loaded_state(direct, via_heracal)
+        if flag_files:
+            assert list(direct.flag_times.keys()) == flag_files  # in file order
+
+    @pytest.mark.parametrize('night', ['single_antenna_with_flag_files', 'eight_antennas_two_pols'])
+    def test_write(self, night, tmp_path):
+        cals, flag_files, flag_filetype = _night(night, tmp_path)
+        cs = smooth_cal.CalibrationSmoother(cals, flag_file_list=flag_files, flag_filetype=flag_filetype, pick_refant=True,
+                                            propagate_refant_flags=True)
+        for nthreads in [1, 4]:
+            (tmp_path / f'out{nthreads}').mkdir()
+            cs.write_smoothed_cal(output_replace=(os.path.dirname(cals[0]), str(tmp_path / f'out{nthreads}')),
+                                  add_to_history='hello world', clobber=True, nthreads=nthreads,
+                                  **{'observer': 'me', 'telescope.name': 'PAPER'})
+        for cal in cals:
+            out1, out4 = [io.HERACal(str(tmp_path / f'out{n}' / os.path.basename(cal))) for n in [1, 4]]
+            gains, flags, quals, total_qual = out1.read()
+            for x, y in zip((gains, flags, quals, total_qual), out4.read()):
+                assert list(x.keys()) == list(y.keys())
+                for key in x:
+                    np.testing.assert_array_equal(x[key], y[key])
+            assert out1.history == out4.history
+            assert (out1.observer, out1.telescope.name) == ('me', 'PAPER')
+            # the input gains were rephased to the refant before being compared with the smoothed ones
+            in_gains, _, _, _ = io.HERACal(cal).read()
+            smooth_cal.rephase_to_refant(in_gains, cs.refant)
+            rel_diff, _ = utils.gain_relative_difference(in_gains, gains, flags)
+            for ant in rel_diff:
+                np.testing.assert_allclose(quals[ant], rel_diff[ant], rtol=1e-6)
