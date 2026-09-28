@@ -8,9 +8,7 @@ from copy import deepcopy
 import warnings
 import argparse
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import nullcontext
 import pyuvdata
-from astropy.io import fits
 from pyuvdata.utils import jnum2str
 from collections.abc import Iterable
 import hera_filters
@@ -890,14 +888,6 @@ def _read_calfits_metadata(calfile):
             'telescope_name': uvc.telescope.name}
 
 
-def _fits_memmap(memmap):
-    '''Context for reading calfits files: memmap=False has astropy read each file's data into memory in one go
-    instead of memory-mapping it (much faster on network file systems like Lustre, and about the same on local disks,
-    since every file is read in full anyway), True memory-maps it, and None leaves astropy's setting alone. This sets
-    astropy's process-wide use_memmap until the context exits.'''
-    return nullcontext() if memmap is None else fits.conf.set_temp('use_memmap', memmap)
-
-
 def _write_smoothed_cal_file(calfile, out_gains, out_flags, rephase, refant, outfilename, history_to_add, clobber, attributes):
     '''Write one smoothed calibration file (the body of CalibrationSmoother.write_smoothed_cal).'''
     hc = io.HERACal(calfile)
@@ -924,8 +914,7 @@ class CalibrationSmoother():
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
                  waterfall_blacklist={}, blacklist_wgt=0.0, pick_refant=False, propagate_refant_flags=False, per_pol_refant=True,
                  acceptable_candidate_frac=0.0, antpos=None,
-                 freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, ignore_calflags=False, verbose=False, nthreads=1,
-                 memmap=False):
+                 freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, ignore_calflags=False, verbose=False, nthreads=1):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -1001,10 +990,6 @@ class CalibrationSmoother():
             verbose: print status updates
             nthreads: number of threads used to read the calibration files. Reading mostly waits on the file
                 system, so on a network file system several threads can help. Results do not depend on it.
-            memmap: False (default) reads each calibration file's data into memory in one go rather than
-                memory-mapping it, which is much faster on network file systems like Lustre and about the same on
-                local disks. True memory-maps it; None leaves astropy's setting (astropy.io.fits.conf.use_memmap)
-                alone. Results do not depend on it.
         '''
         self.verbose = verbose
 
@@ -1040,8 +1025,7 @@ class CalibrationSmoother():
         # Now fill those grids, one calibration file at a time (files map to disjoint rows)
         def fill_from_cal(cal):
             self._fill_grids_from_calfits(cal, ignore_calflags=ignore_calflags, load_cspa=load_cspa, load_chisq=load_chisq)
-        with _fits_memmap(memmap):
-            _thread_map(fill_from_cal, self.cals, nthreads)
+        _thread_map(fill_from_cal, self.cals, nthreads)
 
         # load flag files one at a time, ORing each into the grids as it is read (h5py runs one HDF5 call at a time
         # across threads, so reading these in parallel would gain little)
@@ -1348,7 +1332,7 @@ class CalibrationSmoother():
         return meta
 
     def write_smoothed_cal(self, output_replace=('.flagged_abs.', '.smooth_abs.'), add_to_history='', clobber=False,
-                           nthreads=1, memmap=False, **kwargs):
+                           nthreads=1, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
         Also compares the input and output calibration and saves that result in the quals/total_quals fields.
 
@@ -1358,9 +1342,6 @@ class CalibrationSmoother():
             clobber: if True, overwrites existing file at outfilename
             nthreads: number of threads writing files concurrently. Each file is read, compared, and written
                 independently, and much of that waits on the file system; the output does not depend on it.
-            memmap: as for CalibrationSmoother, for reading the input calibration files before writing. False
-                (default) reads each file's data into memory in one go rather than memory-mapping it; True memory-maps
-                it; None leaves astropy's setting alone.
             kwargs: dictionary mapping updated attributes to their new values.
                 See pyuvdata.UVCal documentation for more info.
         '''
@@ -1376,8 +1357,7 @@ class CalibrationSmoother():
             return _write_smoothed_cal_file(cal, out_gains, out_flags, rephase, refant, cal.replace(output_replace[0], output_replace[1]),
                                             history_to_add, clobber, kwargs)
 
-        with _fits_memmap(memmap):
-            _thread_map(write_one, self.cals, nthreads)
+        _thread_map(write_one, self.cals, nthreads)
 
 
 def _pair(dash_sep_arg_pair):
