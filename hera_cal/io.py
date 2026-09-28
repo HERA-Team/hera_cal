@@ -103,8 +103,7 @@ class HERACal(UVCal):
         self._antnum_indices = {ant: i for i, ant in enumerate(self.ant_array)}
 
     def _jones_index(self, pol):
-        '''Index into the jones axis for a polarization string. Cached, because the
-        x_orientation lookup behind jstr2num is slow and would otherwise run once per antenna.'''
+        '''Index into the jones axis for a polarization string, cached per object.'''
         if pol not in self._pol_indices:
             self._pol_indices[pol] = self._jnum_indices[jstr2num(pol, x_orientation=self._x_orientation)]
         return self._pol_indices[pol]

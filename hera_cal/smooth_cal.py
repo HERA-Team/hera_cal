@@ -9,7 +9,6 @@ import warnings
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import pyuvdata
-from pyuvdata.utils import jnum2str
 from collections.abc import Iterable
 import hera_filters
 from hera_qm.time_series_metrics import true_stretches
@@ -606,8 +605,7 @@ def flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5,
             for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that
             antenna for all times and channels. Setting this to 1.0 means no additional flagging.
     '''
-    # figure out which frequencies and times are flagged for all antennas (ANDed one antenna at a time: stacking
-    # every antenna's waterfall as floats would take 8x the memory of all the flags)
+    # figure out which frequencies and times are flagged for all antennas
     all_flagged = None
     for f in flags.values():
         all_flagged = (np.array(f, dtype=bool) if all_flagged is None else np.logical_and(all_flagged, f, out=all_flagged))
@@ -881,7 +879,7 @@ def _read_calfits_metadata(calfile):
     uvc = pyuvdata.UVCal()
     uvc.read_calfits(calfile, read_data=False, run_check=False)
     x_orientation = uvc.telescope.get_x_orientation_from_feeds()
-    pols = [jnum2str(j, x_orientation=x_orientation) for j in uvc.jones_array]
+    pols = [utils.jnum2str(j, x_orientation=x_orientation) for j in uvc.jones_array]
     return {'freqs': np.unique(uvc.freq_array),
             'times': np.unique(uvc.time_array),
             'ants': [(ant, pol) for ant in uvc.ant_array for pol in pols],
@@ -993,9 +991,8 @@ class CalibrationSmoother():
         '''
         self.verbose = verbose
 
-        # Load calibration files---gains, flags, freqs, times, and if desired, cspa and chisq---and flag files.
-        # A metadata-only first pass sizes the whole-day grids, then each file is read and copied straight into
-        # them, so no per-file copy of the day's calibration is held alongside them (which roughly halves peak memory).
+        # load calibration files---gains, flags, freqs, times, and if desired, cspa and chisq. A metadata-only
+        # first pass sizes the whole-day grids, then each file is read and copied into its rows of them.
         utils.echo('Now loading calibration files...', verbose=self.verbose)
         self.cals = calfits_list
         cal_metas = dict(zip(self.cals, _thread_map(_read_calfits_metadata, self.cals, nthreads)))
@@ -1012,6 +1009,7 @@ class CalibrationSmoother():
         self.dt = np.median(np.diff(all_file_times))
         self.time_grid = np.arange(all_file_times[0] + self.dt / 2.0, all_file_times[-1] + self.dt, self.dt)
         self.time_indices = {cal: np.searchsorted(self.time_grid, times) for cal, times in self.cal_times.items()}
+        self._check_calibration_consistency()
 
         # build empty multi-file grids for each antenna's gains and flags (and optionally for cspa and chisq)
         self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=complex) for ant in self.ants}
@@ -1027,8 +1025,7 @@ class CalibrationSmoother():
             self._fill_grids_from_calfits(cal, ignore_calflags=ignore_calflags, load_cspa=load_cspa, load_chisq=load_chisq)
         _thread_map(fill_from_cal, self.cals, nthreads)
 
-        # load flag files one at a time, ORing each into the grids as it is read (h5py runs one HDF5 call at a time
-        # across threads, so reading these in parallel would gain little)
+        # load flag files, ORing each into the grids as it is read
         self.flag_files = flag_file_list
         if len(self.flag_files) > 0:
             utils.echo('Now loading external flag files...', verbose=self.verbose)
@@ -1047,7 +1044,7 @@ class CalibrationSmoother():
             _check_finite_gains(self.gain_grids[ant], self.flag_grids[ant])
 
         # perform data quality checks and flag thresholding
-        self.check_consistency()
+        self._check_flag_consistency()
         flag_threshold_and_broadcast(self.flag_grids, freq_threshold=freq_threshold,
                                      time_threshold=time_threshold, ant_threshold=time_threshold)
 
@@ -1089,23 +1086,32 @@ class CalibrationSmoother():
         '''Checks the consistency of the input calibration files (and, if loaded, flag files).
         Ensures that all files have the same frequencies, that they are time-ordered, that
         times are internally contiguous in a file and that calibration and flagging times match.
+        Raises a ValueError if not.
         '''
+        self._check_calibration_consistency()
+        self._check_flag_consistency()
+
+    def _check_calibration_consistency(self):
+        '''The calibration-file part of check_consistency, which needs only the files' metadata.'''
         all_time_indices = np.array([i for indices in self.time_indices.values() for i in indices])
-        assert len(all_time_indices) == len(np.unique(all_time_indices)), \
-            'Multiple calibration integrations map to the same time index.'
+        if len(all_time_indices) != len(np.unique(all_time_indices)):
+            raise ValueError('Multiple calibration integrations map to the same time index.')
         for cal in self.cals:
-            assert np.all(
-                np.abs(self.cal_freqs[cal] - self.freqs) < 1e-4
-            ), f'{cal} and {self.cals[0]} have different frequencies.'
+            if not np.all(np.abs(self.cal_freqs[cal] - self.freqs) < 1e-4):
+                raise ValueError(f'{cal} and {self.cals[0]} have different frequencies.')
+
+    def _check_flag_consistency(self):
+        '''The flag-file part of check_consistency.'''
         if len(self.flag_files) > 0:
+            all_time_indices = np.array([i for indices in self.time_indices.values() for i in indices])
             all_flag_time_indices = np.array([i for indices in self.flag_time_indices.values() for i in indices])
             unq_flag = np.unique(all_flag_time_indices)
             unq_time = np.unique(all_time_indices)
-            assert len(unq_flag) == len(unq_time) and np.all(unq_flag == unq_time), \
-                'The number of unique indices for the flag files does not match the calibration files.'
+            if not (len(unq_flag) == len(unq_time) and np.all(unq_flag == unq_time)):
+                raise ValueError('The number of unique indices for the flag files does not match the calibration files.')
             for ff in self.flag_files:
-                assert np.all(np.abs(self.flag_freqs[ff] - self.freqs) < 1e-4), \
-                    '{} and {} have different frequencies.'.format(ff, self.cals[0])
+                if not np.all(np.abs(self.flag_freqs[ff] - self.freqs) < 1e-4):
+                    raise ValueError(f'{ff} and {self.cals[0]} have different frequencies.')
 
     def rephase_to_refant(self, warn=True, propagate_refant_flags=False):
         '''If the CalibrationSmoother object has a refant attribute, this function rephases the
@@ -1346,8 +1352,8 @@ class CalibrationSmoother():
                 See pyuvdata.UVCal documentation for more info.
         '''
         utils.echo('Now writing results to disk...', verbose=self.verbose)
-        history_to_add = utils.history_string(add_to_history)  # names this function as the writer, once for all files
-        rephase = hasattr(self, 'refant')  # as before: rephase whenever a refant has been set
+        history_to_add = utils.history_string(add_to_history)  # called here so the history names this function
+        rephase = hasattr(self, 'refant')
         refant = getattr(self, 'refant', None)
 
         def write_one(cal):

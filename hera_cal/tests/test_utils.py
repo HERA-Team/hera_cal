@@ -812,8 +812,10 @@ def test_gain_relative_difference():
     flags[(0, 'Jxx')][3, 4:6] = True
     flags[(1, 'Jxx')][3:5, 4] = True
 
-    # standard test with flags
-    relative_diff, avg_relative_diff = utils.gain_relative_difference(old_gains, new_gains, flags)
+    # standard test with flags; the cells flagged for both antennas raise no warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        relative_diff, avg_relative_diff = utils.gain_relative_difference(old_gains, new_gains, flags)
     assert relative_diff[0, 'Jxx'][0, 0] == 1.
     assert relative_diff[1, 'Jxx'][0, 0] == 3.
     assert avg_relative_diff['Jxx'][0, 0] == 2.
