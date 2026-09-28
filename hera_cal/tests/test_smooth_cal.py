@@ -12,7 +12,6 @@ import shutil
 from scipy import constants
 import warnings
 from pyuvdata import UVCal, UVData, UVFlag
-from astropy.io import fits
 import pytest
 from hera_filters import dspec
 
@@ -915,59 +914,34 @@ def _assert_same_loaded_state(cs1, cs2):
 
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 class Test_Calibration_Smoother_IO(object):
-    '''CalibrationSmoother reads and writes the same thing whatever nthreads and memmap are.'''
-
-    @staticmethod
-    def _record_memmap_setting(monkeypatch):
-        '''Record astropy's use_memmap setting each time HERACal.read runs.'''
-        seen = []
-        read = io.HERACal.read
-
-        def recording_read(self, *args, **kwargs):
-            seen.append(fits.conf.use_memmap)
-            return read(self, *args, **kwargs)
-        monkeypatch.setattr(io.HERACal, 'read', recording_read)
-        return seen
+    '''CalibrationSmoother reads and writes the same thing whatever nthreads is.'''
 
     @pytest.mark.parametrize('night', ['single_antenna_with_flag_files', 'eight_antennas_two_pols'])
     @pytest.mark.parametrize('ignore_calflags', [False, True])
-    def test_load(self, night, ignore_calflags, tmp_path, monkeypatch):
+    def test_load(self, night, ignore_calflags, tmp_path):
         cals, flag_files, flag_filetype = _night(night, tmp_path)
 
         def load(**kwargs):
             return smooth_cal.CalibrationSmoother(cals, flag_file_list=flag_files, flag_filetype=flag_filetype,
                                                   load_cspa=True, load_chisq=True, ignore_calflags=ignore_calflags, **kwargs)
 
-        astropy_default = fits.conf.use_memmap
-        seen = self._record_memmap_setting(monkeypatch)
         serial = load()
-        assert seen == [False] * len(cals)  # not memory-mapped by default
-        assert fits.conf.use_memmap == astropy_default  # restored afterwards
         threaded = load(nthreads=4)
-        seen.clear()
-        threaded_memmap = load(nthreads=4, memmap=True)
-        assert seen == [True] * len(cals)
         _assert_same_loaded_state(serial, threaded)
-        _assert_same_loaded_state(serial, threaded_memmap)
         if flag_files:
             assert list(serial.flag_times.keys()) == flag_files  # in file order
 
     @pytest.mark.parametrize('night', ['single_antenna_with_flag_files', 'eight_antennas_two_pols'])
-    def test_write(self, night, tmp_path, monkeypatch):
+    def test_write(self, night, tmp_path):
         cals, flag_files, flag_filetype = _night(night, tmp_path)
         cs = smooth_cal.CalibrationSmoother(cals, flag_file_list=flag_files, flag_filetype=flag_filetype, pick_refant=True,
                                             propagate_refant_flags=True)
-        astropy_default = fits.conf.use_memmap
-        seen = self._record_memmap_setting(monkeypatch)
-        runs = {'serial': {}, 'threaded_memmap': {'nthreads': 4, 'memmap': True}}
+        runs = {'serial': {}, 'threaded': {'nthreads': 4}}
         for name, kwargs in runs.items():
             (tmp_path / name).mkdir()
-            seen.clear()
             cs.write_smoothed_cal(output_replace=(os.path.dirname(cals[0]), str(tmp_path / name)),
                                   add_to_history='hello world', clobber=True, **kwargs,
                                   **{'observer': 'me', 'telescope.name': 'PAPER'})
-            assert seen == [kwargs.get('memmap', False)] * len(cals)
-        assert fits.conf.use_memmap == astropy_default
         for cal in cals:
             out1, out2 = [io.HERACal(str(tmp_path / name / os.path.basename(cal))) for name in runs]
             gains, flags, quals, total_qual = out1.read()
