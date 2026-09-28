@@ -704,25 +704,25 @@ class Test_Calibration_Smoother(object):
         temp_time = self.cs.cal_times[self.cs.cals[0]][0]
         self.cs.cal_times[self.cs.cals[0]][0] = self.cs.cal_times[self.cs.cals[0]][1]
         self.cs.time_indices = {cal: np.searchsorted(self.cs.time_grid, times) for cal, times in self.cs.cal_times.items()}
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             self.cs.check_consistency()
         self.cs.cal_times[self.cs.cals[0]][0] = temp_time
         self.cs.time_indices = {cal: np.searchsorted(self.cs.time_grid, times) for cal, times in self.cs.cal_times.items()}
 
         self.cs.cal_freqs[self.cs.cals[0]] += 1
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             self.cs.check_consistency()
         self.cs.cal_freqs[self.cs.cals[0]] -= 1
 
         self.cs.flag_freqs[self.cs.flag_files[0]] += 1
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             self.cs.check_consistency()
         self.cs.flag_freqs[self.cs.flag_files[0]] -= 1
 
         temp_time = self.cs.flag_times[self.cs.flag_files[0]][0]
         self.cs.flag_times[self.cs.flag_files[0]][0] = self.cs.flag_times[self.cs.flag_files[0]][1]
         self.cs.flag_time_indices = {ff: np.searchsorted(self.cs.time_grid, times) for ff, times in self.cs.flag_times.items()}
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             self.cs.check_consistency()
         self.cs.flag_times[self.cs.flag_files[0]][0] = temp_time
         self.cs.flag_time_indices = {ff: np.searchsorted(self.cs.time_grid, times) for ff, times in self.cs.flag_times.items()}
@@ -912,7 +912,6 @@ def _assert_same_loaded_state(cs1, cs2):
             np.testing.assert_array_equal(a, b, err_msg=attr)
 
 
-@pytest.mark.filterwarnings("ignore:Mean of empty slice")
 class Test_Calibration_Smoother_IO(object):
     '''CalibrationSmoother reads and writes the same thing whatever nthreads is.'''
 
@@ -936,12 +935,16 @@ class Test_Calibration_Smoother_IO(object):
         cals, flag_files, flag_filetype = _night(night, tmp_path)
         cs = smooth_cal.CalibrationSmoother(cals, flag_file_list=flag_files, flag_filetype=flag_filetype, pick_refant=True,
                                             propagate_refant_flags=True)
+        for ant in cs.flag_grids:
+            cs.flag_grids[ant][:, 5] = True  # a channel flagged for every antenna: all-nan in the relative difference
         runs = {'serial': {}, 'threaded': {'nthreads': 4}}
         for name, kwargs in runs.items():
             (tmp_path / name).mkdir()
-            cs.write_smoothed_cal(output_replace=(os.path.dirname(cals[0]), str(tmp_path / name)),
-                                  add_to_history='hello world', clobber=True, **kwargs,
-                                  **{'observer': 'me', 'telescope.name': 'PAPER'})
+            with warnings.catch_warnings():  # no RuntimeWarnings from any thread, e.g. "Mean of empty slice"
+                warnings.simplefilter('error', RuntimeWarning)
+                cs.write_smoothed_cal(output_replace=(os.path.dirname(cals[0]), str(tmp_path / name)),
+                                      add_to_history='hello world', clobber=True, **kwargs,
+                                      **{'observer': 'me', 'telescope.name': 'PAPER'})
         for cal in cals:
             out1, out2 = [io.HERACal(str(tmp_path / name / os.path.basename(cal))) for name in runs]
             gains, flags, quals, total_qual = out1.read()
@@ -957,3 +960,13 @@ class Test_Calibration_Smoother_IO(object):
             rel_diff, _ = utils.gain_relative_difference(in_gains, gains, flags)
             for ant in rel_diff:
                 np.testing.assert_allclose(quals[ant], rel_diff[ant], rtol=1e-6)
+
+    def test_inconsistent_files_fail_before_loading(self, tmp_path, monkeypatch):
+        cals, _, _ = _night('eight_antennas_two_pols', tmp_path)
+        uvc = UVCal.from_file(cals[1])
+        uvc.freq_array = uvc.freq_array + 1e6
+        uvc.write_calfits(cals[1], clobber=True)
+        monkeypatch.setattr(smooth_cal.CalibrationSmoother, '_fill_grids_from_calfits',
+                            lambda *args, **kwargs: pytest.fail('loaded calibration data'))
+        with pytest.raises(ValueError, match='different frequencies'):
+            smooth_cal.CalibrationSmoother(cals)
