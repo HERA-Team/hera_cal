@@ -8,6 +8,7 @@ from copy import deepcopy
 import warnings
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 import pyuvdata
 from astropy.io import fits
 from pyuvdata.utils import jnum2str
@@ -878,7 +879,7 @@ def _thread_map(fn, items, nthreads=1):
 
 def _read_calfits_metadata(calfile):
     '''Metadata-only read of a calfits file, parsed by pyuvdata exactly as HERACal.read parses it, returning
-    what CalibrationSmoother needs to size its grids and to index into the file's data.'''
+    what CalibrationSmoother needs to size its grids.'''
     uvc = pyuvdata.UVCal()
     uvc.read_calfits(calfile, read_data=False, run_check=False)
     x_orientation = uvc.telescope.get_x_orientation_from_feeds()
@@ -886,12 +887,15 @@ def _read_calfits_metadata(calfile):
     return {'freqs': np.unique(uvc.freq_array),
             'times': np.unique(uvc.time_array),
             'ants': [(ant, pol) for ant in uvc.ant_array for pol in pols],
-            'ant_indices': {ant: i for i, ant in enumerate(uvc.ant_array)},
-            'pol_indices': {pol: i for i, pol in enumerate(pols)},
-            'telescope_name': uvc.telescope.name,
-            # the layout _fill_grids_from_calfits reads directly (anything else goes through HERACal.read)
-            'direct_read': (uvc.cal_type == 'gain') and (uvc.time_array is not None),
-            'shape': (uvc.Nants_data, 1, uvc.Nfreqs, uvc.Ntimes, uvc.Njones)}
+            'telescope_name': uvc.telescope.name}
+
+
+def _fits_memmap(memmap):
+    '''Context for reading calfits files: memmap=False has astropy read each file's data into memory in one go
+    instead of memory-mapping it (much faster on network file systems like Lustre, and about the same on local disks,
+    since every file is read in full anyway), True memory-maps it, and None leaves astropy's setting alone. This sets
+    astropy's process-wide use_memmap until the context exits.'''
+    return nullcontext() if memmap is None else fits.conf.set_temp('use_memmap', memmap)
 
 
 def _write_smoothed_cal_file(calfile, out_gains, out_flags, rephase, refant, outfilename, history_to_add, clobber, attributes):
@@ -920,7 +924,8 @@ class CalibrationSmoother():
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
                  waterfall_blacklist={}, blacklist_wgt=0.0, pick_refant=False, propagate_refant_flags=False, per_pol_refant=True,
                  acceptable_candidate_frac=0.0, antpos=None,
-                 freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, ignore_calflags=False, verbose=False, nthreads=1):
+                 freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, ignore_calflags=False, verbose=False, nthreads=1,
+                 memmap=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -996,13 +1001,16 @@ class CalibrationSmoother():
             verbose: print status updates
             nthreads: number of threads used to read the calibration files. Reading mostly waits on the file
                 system, so on a network file system several threads can help. Results do not depend on it.
+            memmap: False (default) reads each calibration file's data into memory in one go rather than
+                memory-mapping it, which is much faster on network file systems like Lustre and about the same on
+                local disks. True memory-maps it; None leaves astropy's setting (astropy.io.fits.conf.use_memmap)
+                alone. Results do not depend on it.
         '''
         self.verbose = verbose
 
         # Load calibration files---gains, flags, freqs, times, and if desired, cspa and chisq---and flag files.
-        # Each file is read straight into the whole-day grids, so no per-file copy of the day's calibration is held
-        # alongside them (which roughly halves peak memory), and standard gain calfits are read without building a
-        # UVCal object for each. A metadata-only first pass sizes the grids.
+        # A metadata-only first pass sizes the whole-day grids, then each file is read and copied straight into
+        # them, so no per-file copy of the day's calibration is held alongside them (which roughly halves peak memory).
         utils.echo('Now loading calibration files...', verbose=self.verbose)
         self.cals = calfits_list
         cal_metas = dict(zip(self.cals, _thread_map(_read_calfits_metadata, self.cals, nthreads)))
@@ -1031,9 +1039,9 @@ class CalibrationSmoother():
 
         # Now fill those grids, one calibration file at a time (files map to disjoint rows)
         def fill_from_cal(cal):
-            self._fill_grids_from_calfits(cal, cal_metas[cal], ignore_calflags=ignore_calflags,
-                                          load_cspa=load_cspa, load_chisq=load_chisq)
-        _thread_map(fill_from_cal, self.cals, nthreads)
+            self._fill_grids_from_calfits(cal, ignore_calflags=ignore_calflags, load_cspa=load_cspa, load_chisq=load_chisq)
+        with _fits_memmap(memmap):
+            _thread_map(fill_from_cal, self.cals, nthreads)
 
         # load flag files one at a time, ORing each into the grids as it is read (h5py runs one HDF5 call at a time
         # across threads, so reading these in parallel would gain little)
@@ -1078,32 +1086,10 @@ class CalibrationSmoother():
                 utils.echo(f'Reference Antenna {self.refant} selected.', verbose=self.verbose)
             self.rephase_to_refant(propagate_refant_flags=propagate_refant_flags)
 
-    def _fill_grids_from_calfits(self, cal, meta, ignore_calflags=False, load_cspa=False, load_chisq=False):
-        '''Copy one calfits file's gains (and flags, cspa, and chisq, as requested) into this file's rows of the
-        grids. Standard gain calfits are read directly from the memory-mapped FITS data, computing
-        gains exactly as pyuvdata does (real + 1j * imag); anything else goes through HERACal.read.'''
+    def _fill_grids_from_calfits(self, cal, ignore_calflags=False, load_cspa=False, load_chisq=False):
+        '''Read one calfits file with HERACal and copy its gains (and flags, cspa, and chisq, as requested) into
+        this file's rows of the grids.'''
         tinds = self.time_indices[cal]
-        if meta['direct_read']:
-            with fits.open(cal) as fname:
-                hdr = fname[0].header
-                data = fname[0].data
-                has_quality = hdr.get('HASQLTY', True)
-                direct = ((data.shape[:5] == meta['shape']) and (data.shape[5] == (4 if has_quality else 3))
-                          and (has_quality or not load_cspa) and ('TOTQLTY' in fname or not load_chisq))
-                if direct:
-                    for ant in meta['ants']:
-                        plane = data[meta['ant_indices'][ant[0]], 0, :, :, meta['pol_indices'][ant[1]]]  # (Nfreqs, Ntimes, planes)
-                        self.gain_grids[ant][tinds, :] = (plane[:, :, 0] + 1j * plane[:, :, 1]).T
-                        self.flag_grids[ant][tinds, :] = (False if ignore_calflags else plane[:, :, 2].astype('bool').T)
-                        if load_cspa:
-                            self.cspa_grids[ant][tinds, :] = plane[:, :, -1].T
-                    if load_chisq:
-                        total_quality = fname['TOTQLTY'].data[0]  # (Nfreqs, Ntimes, Njones)
-                        for jpol in self.chisq_grids:
-                            self.chisq_grids[jpol][tinds, :] = total_quality[:, :, meta['pol_indices'][jpol]].T
-                    return
-
-        # general case, through HERACal
         hc = io.HERACal(cal)
         gains, cal_flags, quals, total_qual = hc.read()
         for ant in gains:
@@ -1362,7 +1348,7 @@ class CalibrationSmoother():
         return meta
 
     def write_smoothed_cal(self, output_replace=('.flagged_abs.', '.smooth_abs.'), add_to_history='', clobber=False,
-                           nthreads=1, **kwargs):
+                           nthreads=1, memmap=False, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
         Also compares the input and output calibration and saves that result in the quals/total_quals fields.
 
@@ -1372,6 +1358,9 @@ class CalibrationSmoother():
             clobber: if True, overwrites existing file at outfilename
             nthreads: number of threads writing files concurrently. Each file is read, compared, and written
                 independently, and much of that waits on the file system; the output does not depend on it.
+            memmap: as for CalibrationSmoother, for reading the input calibration files before writing. False
+                (default) reads each file's data into memory in one go rather than memory-mapping it; True memory-maps
+                it; None leaves astropy's setting alone.
             kwargs: dictionary mapping updated attributes to their new values.
                 See pyuvdata.UVCal documentation for more info.
         '''
@@ -1387,7 +1376,8 @@ class CalibrationSmoother():
             return _write_smoothed_cal_file(cal, out_gains, out_flags, rephase, refant, cal.replace(output_replace[0], output_replace[1]),
                                             history_to_add, clobber, kwargs)
 
-        _thread_map(write_one, self.cals, nthreads)
+        with _fits_memmap(memmap):
+            _thread_map(write_one, self.cals, nthreads)
 
 
 def _pair(dash_sep_arg_pair):
