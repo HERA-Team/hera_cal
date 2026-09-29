@@ -95,10 +95,18 @@ class HERACal(UVCal):
         '''Extract and store useful metadata and array indexing dictionaries.'''
         self.freqs = np.unique(self.freq_array)
         self.times = np.unique(self.time_array)
-        self.pols = [jnum2str(j, x_orientation=self.telescope.get_x_orientation_from_feeds()) for j in self.jones_array]
+        self._x_orientation = self.telescope.get_x_orientation_from_feeds()
+        self.pols = [jnum2str(j, x_orientation=self._x_orientation) for j in self.jones_array]
         self._jnum_indices = {jnum: i for i, jnum in enumerate(self.jones_array)}
+        self._pol_indices = {}  # cache for _jones_index
         self.ants = [(ant, pol) for ant in self.ant_array for pol in self.pols]
         self._antnum_indices = {ant: i for i, ant in enumerate(self.ant_array)}
+
+    def _jones_index(self, pol):
+        '''Index into the jones axis for a polarization string, cached per object.'''
+        if pol not in self._pol_indices:
+            self._pol_indices[pol] = self._jnum_indices[jstr2num(pol, x_orientation=self._x_orientation)]
+        return self._pol_indices[pol]
 
     def build_calcontainers(self):
         '''Turns the calibration information currently loaded into the HERACal object
@@ -126,7 +134,7 @@ class HERACal(UVCal):
 
         # build dict of gains, flags, and quals
         for (ant, pol) in self.ants:
-            i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.get_x_orientation_from_feeds())]
+            i, ip = self._antnum_indices[ant], self._jones_index(pol)
             gains[(ant, pol)] = np.array(self.gain_array[i, :, :, ip].T)
             flags[(ant, pol)] = np.array(self.flag_array[i, :, :, ip].T)
             if quals is not None:
@@ -135,7 +143,7 @@ class HERACal(UVCal):
         # build dict of total_qual if available
         if total_qual is not None:
             for pol in self.pols:
-                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.get_x_orientation_from_feeds())]
+                ip = self._jones_index(pol)
                 total_qual[pol] = np.array(self.total_quality_array[:, :, ip].T)
 
         return gains, flags, quals, total_qual
@@ -228,7 +236,7 @@ class HERACal(UVCal):
         for to_update, array in zip([gains, flags, quals], data_arrays):
             if to_update is not None:
                 for (ant, pol) in to_update.keys():
-                    i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.get_x_orientation_from_feeds())]
+                    i, ip = self._antnum_indices[ant], self._jones_index(pol)
                     array[i, fSlice, tSlice, ip] = to_update[(ant, pol)].T
 
         # update total_qual
@@ -236,7 +244,7 @@ class HERACal(UVCal):
             if self.total_quality_array is None:
                 self.total_quality_array = np.zeros(self.gain_array.shape[1:], dtype=float)
             for pol in total_qual.keys():
-                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.telescope.get_x_orientation_from_feeds())]
+                ip = self._jones_index(pol)
                 self.total_quality_array[fSlice, tSlice, ip] = total_qual[pol].T
 
     def write(self, filename, spoof_missing_channels=False, **write_kwargs):

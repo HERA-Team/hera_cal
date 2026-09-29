@@ -704,25 +704,25 @@ class Test_Calibration_Smoother(object):
         temp_time = self.cs.cal_times[self.cs.cals[0]][0]
         self.cs.cal_times[self.cs.cals[0]][0] = self.cs.cal_times[self.cs.cals[0]][1]
         self.cs.time_indices = {cal: np.searchsorted(self.cs.time_grid, times) for cal, times in self.cs.cal_times.items()}
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             self.cs.check_consistency()
         self.cs.cal_times[self.cs.cals[0]][0] = temp_time
         self.cs.time_indices = {cal: np.searchsorted(self.cs.time_grid, times) for cal, times in self.cs.cal_times.items()}
 
         self.cs.cal_freqs[self.cs.cals[0]] += 1
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             self.cs.check_consistency()
         self.cs.cal_freqs[self.cs.cals[0]] -= 1
 
         self.cs.flag_freqs[self.cs.flag_files[0]] += 1
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             self.cs.check_consistency()
         self.cs.flag_freqs[self.cs.flag_files[0]] -= 1
 
         temp_time = self.cs.flag_times[self.cs.flag_files[0]][0]
         self.cs.flag_times[self.cs.flag_files[0]][0] = self.cs.flag_times[self.cs.flag_files[0]][1]
         self.cs.flag_time_indices = {ff: np.searchsorted(self.cs.time_grid, times) for ff, times in self.cs.flag_times.items()}
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             self.cs.check_consistency()
         self.cs.flag_times[self.cs.flag_files[0]][0] = temp_time
         self.cs.flag_time_indices = {ff: np.searchsorted(self.cs.time_grid, times) for ff, times in self.cs.flag_times.items()}
@@ -870,3 +870,103 @@ class Test_Calibration_Smoother(object):
             np.testing.assert_array_equal(qual[54, 'Jee'], relative_diff[54, 'Jee'])
             np.testing.assert_array_equal(total_qual['Jee'], avg_relative_diff['Jee'])
             os.remove(cal.replace('test_input/', 'test_output/smoothed_'))
+
+
+def _split_calfits(tmp_path, n_files=5):
+    '''Write an 8-antenna, 2-pol, 10-integration calfits out as n_files consecutive files, plus an antenna flag file
+    for each (flagging a few random samples), to get a small night.'''
+    uvc = UVCal.from_file(os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.omni.calfits_downselected'))
+    (tmp_path / 'in').mkdir()
+    rng = np.random.default_rng(0)
+    cals, flag_files = [], []
+    for i, times in enumerate(np.array_split(np.unique(uvc.time_array), n_files)):
+        part = uvc.select(times=times, inplace=False)
+        cals.append(str(tmp_path / 'in' / f'zen.{i}.calfits'))
+        part.write_calfits(cals[-1])
+        uvf = UVFlag(part, mode='flag')
+        uvf.flag_array = rng.random(uvf.flag_array.shape) < 0.1
+        flag_files.append(str(tmp_path / 'in' / f'zen.{i}.flags.h5'))
+        uvf.write(flag_files[-1])
+    return cals, flag_files
+
+
+def _night(name, tmp_path):
+    '''Calibration files and flag files for CalibrationSmoother, as (calfits_list, flag_file_list, flag_filetype).'''
+    if name == 'single_antenna_with_flag_files':
+        cals = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
+        flag_files = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
+        return cals, flag_files, 'npz'
+    return (*_split_calfits(tmp_path), 'h5')
+
+
+def _assert_same_loaded_state(cs1, cs2):
+    '''The two smoothers hold the same arrays and metadata, with dict keys in the same order.'''
+    for attr in ['ants', 'freqs', 'time_grid', 'cal_freqs', 'cal_times', 'time_indices', 'gain_grids', 'flag_grids',
+                 'cspa_grids', 'chisq_grids', 'flag_freqs', 'flag_times', 'flag_time_indices']:
+        a, b = getattr(cs1, attr, None), getattr(cs2, attr, None)
+        if isinstance(a, dict):
+            assert list(a.keys()) == list(b.keys()), attr
+            for key in a:
+                np.testing.assert_array_equal(a[key], b[key], err_msg=f'{attr}[{key}]')
+        else:
+            np.testing.assert_array_equal(a, b, err_msg=attr)
+
+
+class Test_Calibration_Smoother_IO(object):
+    '''CalibrationSmoother reads and writes the same thing whatever nthreads is.'''
+
+    @pytest.mark.parametrize('night', ['single_antenna_with_flag_files', 'eight_antennas_two_pols'])
+    @pytest.mark.parametrize('ignore_calflags', [False, True])
+    def test_load(self, night, ignore_calflags, tmp_path):
+        cals, flag_files, flag_filetype = _night(night, tmp_path)
+
+        def load(**kwargs):
+            return smooth_cal.CalibrationSmoother(cals, flag_file_list=flag_files, flag_filetype=flag_filetype,
+                                                  load_cspa=True, load_chisq=True, ignore_calflags=ignore_calflags, **kwargs)
+
+        serial = load()
+        threaded = load(nthreads=4)
+        _assert_same_loaded_state(serial, threaded)
+        if flag_files:
+            assert list(serial.flag_times.keys()) == flag_files  # in file order
+
+    @pytest.mark.parametrize('night', ['single_antenna_with_flag_files', 'eight_antennas_two_pols'])
+    def test_write(self, night, tmp_path):
+        cals, flag_files, flag_filetype = _night(night, tmp_path)
+        cs = smooth_cal.CalibrationSmoother(cals, flag_file_list=flag_files, flag_filetype=flag_filetype, pick_refant=True,
+                                            propagate_refant_flags=True)
+        for ant in cs.flag_grids:
+            cs.flag_grids[ant][:, 5] = True  # a channel flagged for every antenna: all-nan in the relative difference
+        runs = {'serial': {}, 'threaded': {'nthreads': 4}}
+        for name, kwargs in runs.items():
+            (tmp_path / name).mkdir()
+            with warnings.catch_warnings():  # no RuntimeWarnings from any thread, e.g. "Mean of empty slice"
+                warnings.simplefilter('error', RuntimeWarning)
+                cs.write_smoothed_cal(output_replace=(os.path.dirname(cals[0]), str(tmp_path / name)),
+                                      add_to_history='hello world', clobber=True, **kwargs,
+                                      **{'observer': 'me', 'telescope.name': 'PAPER'})
+        for cal in cals:
+            out1, out2 = [io.HERACal(str(tmp_path / name / os.path.basename(cal))) for name in runs]
+            gains, flags, quals, total_qual = out1.read()
+            for x, y in zip((gains, flags, quals, total_qual), out2.read()):
+                assert list(x.keys()) == list(y.keys())
+                for key in x:
+                    np.testing.assert_array_equal(x[key], y[key])
+            assert out1.history == out2.history
+            assert (out1.observer, out1.telescope.name) == ('me', 'PAPER')
+            # the input gains were rephased to the refant before being compared with the smoothed ones
+            in_gains, _, _, _ = io.HERACal(cal).read()
+            smooth_cal.rephase_to_refant(in_gains, cs.refant)
+            rel_diff, _ = utils.gain_relative_difference(in_gains, gains, flags)
+            for ant in rel_diff:
+                np.testing.assert_allclose(quals[ant], rel_diff[ant], rtol=1e-6)
+
+    def test_inconsistent_files_fail_before_loading(self, tmp_path, monkeypatch):
+        cals, _, _ = _night('eight_antennas_two_pols', tmp_path)
+        uvc = UVCal.from_file(cals[1])
+        uvc.freq_array = uvc.freq_array + 1e6
+        uvc.write_calfits(cals[1], clobber=True)
+        monkeypatch.setattr(smooth_cal.CalibrationSmoother, '_fill_grids_from_calfits',
+                            lambda *args, **kwargs: pytest.fail('loaded calibration data'))
+        with pytest.raises(ValueError, match='different frequencies'):
+            smooth_cal.CalibrationSmoother(cals)
