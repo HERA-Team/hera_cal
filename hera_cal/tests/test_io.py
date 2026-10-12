@@ -1301,7 +1301,8 @@ class Test_Visibility_IO_Legacy:
     @pytest.mark.filterwarnings("ignore:antenna_diameters is not set")
     @pytest.mark.filterwarnings("ignore:Unicode equal comparison failed")
     @pytest.mark.filterwarnings("ignore:writing default values for restfreq")
-    def test_write_vis(self):
+    def test_write_vis(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
         # get data
         uvd = UVData()
         uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458044.41632.xx.HH.XRAA.uvh5"))
@@ -1435,7 +1436,8 @@ class Test_Calibration_IO_Legacy:
         assert times.shape == (3,)
         assert sorted(pols) == [parse_jpolstr('jxx', x_orientation=cal_xx.telescope.get_x_orientation_from_feeds()), parse_jpolstr('jyy', x_orientation=cal_yy.telescope.get_x_orientation_from_feeds())]
 
-    def test_write_cal(self):
+    def test_write_cal(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
         # create fake data
         ants = np.arange(10)
         pols = np.array(['Jnn'])
