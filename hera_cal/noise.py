@@ -69,9 +69,9 @@ def infer_dt(times_by_bl, bl, default_dt=None):
 
 
 def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None,
-                                      auto_ant=None):
+                                      auto_ant=None, noise_excess=1.0):
     '''Predict the noise variance on a baseline using autocorrelation data
-    using the formla sigma^2 = Vii * Vjj / Delta t / Delta nu.
+    using the formula sigma^2 = Vii * Vjj / Delta t / Delta nu * noise_excess.
 
     Arguments:
         bl: baseline tuple of the form (0, 1, 'nn')
@@ -87,6 +87,12 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None,
             to the individual antennas is not available. In this case, the
             user should use this keyword to specify a single auto antenna from
             which to derive this statistic.
+        noise_excess: factor by which the noise variance exceeds the radiometer
+            equation, Vii * Vjj / Delta t / Delta nu. The default, 1.0, is the
+            radiometer equation alone. Typically this is the first value returned
+            by correlator_noise_covariance(), which accounts for how the correlator
+            forms and accumulates spectra, e.g.
+            noise_excess=correlator_noise_covariance(kind='sum')[0] for HERA's sums.
 
     Returns:
         Noise variance predicted on baseline bl in units of data squared.
@@ -103,10 +109,83 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None,
     else:
         auto_bl1, auto_bl2 = (auto_ant, auto_ant, join_pol(ap1, ap1)), (auto_ant, auto_ant, join_pol(ap2, ap2))
 
-    var = np.abs(data[auto_bl1] * data[auto_bl2] / dt / df)
+    var = noise_excess * np.abs(data[auto_bl1] * data[auto_bl2] / dt / df)
     if nsamples is not None:
         return var / nsamples[bl]
     return var
+
+
+def correlator_noise_covariance(kind='sum', n_taps=4, window='hamming', fwidth=1.0, n_fft=16384,
+                                spectra_per_interleave=2, fine_channels_summed=4, max_lag=1):
+    '''Predict how a polyphase filterbank (PFB) correlator makes visibility noise depart from the radiometer equation.
+
+    A PFB forms each spectrum from n_taps * n_fft input samples, so consecutive spectra share samples, and each channel's
+    response overlaps its neighbors'. For Gaussian noise that is independent between the two antennas, the noise on the
+    per-spectrum visibility X_k Y_k^* is then correlated between nearby spectra and channels by |rho|^2, where rho is the
+    PFB's own correlation of white noise. Accumulating spectra (all of them for sums, or alternating blocks of them for
+    even and odd) and summing fine channels into output channels turns that into a variance excess over the radiometer
+    equation and a covariance between nearby output channels. Separate integrations are treated as independent: each
+    holds many spectra, and only the few at its edges overlap the next one's. Quantization is not modeled.
+
+    The defaults describe HERA's SNAP-based correlator:
+        * hera_corr_f's pfb_fir_8192ch_core is a CASPER pfb_fir_real with TotalTaps = 4, WindowType = hamming, fwidth = 1,
+          and PFBSize = 14 (a 16384-point FFT of real samples, so 8192 channels). The coefficients built into it match
+          the prototype filter used here to within rounding.
+        * paper_gpu's X-engines alternate between even and odd every 2 spectra (N_TIME_PER_PACKET = TIME_DEMUX = 2).
+        * The catcher sums 4 fine channels into each output channel (CATCHER_CHAN_SUM_BDA = 4).
+    With these, sums have 1.0926 times the radiometer equation's variance, with a correlation of 0.0063 between adjacent
+    channels. Diffs have 1.0190 and 0.0035, and even or odd alone 1.0558 and 0.0049. Channels two or more apart are
+    uncorrelated to better than 1e-7.
+
+    Arguments:
+        kind: which accumulation of spectra the visibilities are: 'sum', 'diff', 'even', or 'odd'
+        n_taps: number of PFB taps (CASPER's TotalTaps)
+        window: window applied to the PFB's sinc prototype filter. Any name scipy.signal.get_window accepts.
+        fwidth: scales the prototype's sinc, whose zeros are n_fft / fwidth samples apart (CASPER's fwidth)
+        n_fft: length of the PFB's FFT in input samples, i.e. 2**PFBSize in CASPER. For real input, this is twice the
+            number of PFB channels.
+        spectra_per_interleave: number of consecutive spectra that go into even before switching to odd. This only
+            matters for diffs, even, and odd.
+        fine_channels_summed: number of adjacent PFB channels summed into each output channel
+        max_lag: largest separation between output channels, in channels, for which to compute the covariance
+
+    Returns:
+        covariance: numpy array of length max_lag + 1 in units of the radiometer equation's variance, Vii * Vjj / dt / df.
+            covariance[0] is the variance excess, typically passed to predict_noise_variance_from_autos() as noise_excess.
+            covariance[l] is the covariance with the output channel l channels away, so covariance[l] / covariance[0] is
+            the correlation. In delay, the noise power is proportional to
+            covariance[0] + 2 * sum_l covariance[l] * cos(2 pi tau l df).
+    '''
+    # weights of one period of the even/odd interleave, standing in for an integration of many spectra
+    position = np.arange(2 * spectra_per_interleave)
+    even = (position // spectra_per_interleave) % 2 == 0
+    weights = {'sum': np.ones(len(position)), 'diff': np.where(even, 1.0, -1.0), 'even': 1.0 * even, 'odd': 1.0 * ~even}
+    if kind not in weights:
+        raise ValueError(f"kind must be 'sum', 'diff', 'even', or 'odd', not {kind!r}.")
+    a = weights[kind]
+
+    # CASPER's pfb_fir prototype filter: the window times a sinc with zeros n_fft / fwidth samples apart
+    n = np.arange(n_taps * n_fft)
+    h = scipy.signal.get_window(window, n_taps * n_fft, fftbins=False) * np.sinc(fwidth * (n / n_fft - n_taps / 2))
+
+    # Covariance of the per-spectrum visibility noise between fine channels dk apart and spectra dm apart, |rho(dk, dm)|^2.
+    # The sum over samples that gives rho only depends on the sample index modulo n_fft, so it folds into one FFT per dm.
+    dms = np.arange(1 - n_taps, n_taps)
+    dks = np.arange(1 - fine_channels_summed, fine_channels_summed * (max_lag + 1))
+    per_spectrum_cov = np.zeros((len(dks), len(dms)))
+    for j, dm in enumerate(dms):
+        lo, hi = max(0, -dm * n_fft), len(h) - max(0, dm * n_fft)
+        overlap = np.zeros(len(h))
+        overlap[lo:hi] = h[lo:hi] * h[lo + dm * n_fft:hi + dm * n_fft]
+        rho = np.fft.fft(overlap.reshape(n_taps, n_fft).sum(axis=0))[dks % n_fft] / np.sum(h**2)
+        per_spectrum_cov[:, j] = np.abs(rho)**2
+
+    # accumulate over spectra (the mean of a_m a_{m + dm}), then over the pairs of fine channels in two output channels
+    accumulated = per_spectrum_cov @ np.array([np.mean(a * np.roll(a, -dm)) for dm in dms])
+    offsets = np.arange(1 - fine_channels_summed, fine_channels_summed)  # fine-channel offsets, each made by this many pairs:
+    pairs = fine_channels_summed - np.abs(offsets)
+    covariance = [np.sum(pairs * accumulated[fine_channels_summed * lag + offsets - dks[0]]) for lag in range(max_lag + 1)]
+    return np.array(covariance) / (fine_channels_summed * np.mean(a**2))
 
 
 def per_antenna_noise_std(autos, dt=None, df=None):

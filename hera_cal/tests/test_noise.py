@@ -81,6 +81,34 @@ class Test_Noise(object):
                 sigmasq3 = noise.predict_noise_variance_from_autos(k, data, nsamples=nsamples)
                 np.testing.assert_array_equal(sigmasq / 2.0, sigmasq3)
 
+                sigmasq4 = noise.predict_noise_variance_from_autos(k, data, noise_excess=1.1)
+                np.testing.assert_allclose(sigmasq4, 1.1 * sigmasq)
+
+    def test_correlator_noise_covariance(self):
+        # HERA's SNAP correlator, the defaults
+        cov = {kind: noise.correlator_noise_covariance(kind, max_lag=2) for kind in ['sum', 'diff', 'even', 'odd']}
+        for kind, excess, rho1 in [('sum', 1.092629, 0.006265), ('diff', 1.019034, 0.003465), ('even', 1.055832, 0.004914)]:
+            assert len(cov[kind]) == 3
+            np.testing.assert_allclose(cov[kind][0], excess, atol=1e-6)
+            np.testing.assert_allclose(cov[kind][1] / cov[kind][0], rho1, atol=1e-6)
+            assert np.abs(cov[kind][2]) < 1e-7
+        np.testing.assert_allclose(cov['even'], cov['odd'])
+
+        # the interleave changes diffs, but not sums
+        for spectra_per_interleave in [1, 4]:
+            np.testing.assert_allclose(noise.correlator_noise_covariance('sum', spectra_per_interleave=spectra_per_interleave),
+                                       cov['sum'][:2])
+        diff_excess = [noise.correlator_noise_covariance('diff', spectra_per_interleave=b)[0] for b in [1, 2, 4, 8]]
+        np.testing.assert_allclose(diff_excess, [0.9568, 1.0190, 1.0558, 1.0742], atol=1e-4)
+
+        # a plain FFT with a rectangular window and no channel sum is exactly the radiometer equation
+        for kind in ['sum', 'diff', 'even', 'odd']:
+            plain_fft = noise.correlator_noise_covariance(kind, n_taps=1, window='boxcar', fwidth=0, n_fft=64, fine_channels_summed=1)
+            np.testing.assert_allclose(plain_fft, [1, 0], atol=1e-12)
+
+        with pytest.raises(ValueError):
+            noise.correlator_noise_covariance('even-odd')
+
     def test_per_antenna_noise_std(self):
         infile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
         hd = io.HERAData(infile)
