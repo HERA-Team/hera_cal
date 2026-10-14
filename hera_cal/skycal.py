@@ -97,11 +97,11 @@ def _pack_baseline_arrays(container, bls):
 
 def build_data_model_ratio(data, model, autos=None, data_flags=None,
                            model_flags=None, ant_flags=None, bls=None,
-                           dt=None, df=None):
+                           dt=None, df=None, noise_excess=1.0):
     '''Build the matched-filter data/model ratio and its inverse-variance
     weights: ratio = V * M^* / |M|^2 (equal to V / M in the low-noise limit)
-    and wgts = |M|^2 / sigma^2 with sigma^2 = auto_i * auto_j / (dt * df) from
-    noise.predict_noise_variance_from_autos. In these conventions the weighted
+    and wgts = |M|^2 / sigma^2 with sigma^2 = noise_excess * auto_i * auto_j / (dt * df)
+    from noise.predict_noise_variance_from_autos. In these conventions the weighted
     average of ratio over any set of cells is the inverse-variance estimate of
     the (assumed common) gain factor relating data to model.
 
@@ -123,6 +123,11 @@ def build_data_model_ratio(data, model, autos=None, data_flags=None,
             cross baselines in data that have corresponding models.
         dt: integration time in seconds. Default None infers from autos.
         df: channel width in Hz. Default None infers from autos.
+        noise_excess: factor by which the noise variance exceeds the radiometer
+            equation, as in noise.predict_noise_variance_from_autos. Typically the
+            first value returned by noise.correlator_noise_covariance(). It scales
+            every weight alike, so it matters only where the weights are used in
+            absolute terms, such as in chi^2.
 
     Returns:
         data_model_ratio: DataContainer of V * M^* / |M|^2 waterfalls, np.nan
@@ -158,7 +163,7 @@ def build_data_model_ratio(data, model, autos=None, data_flags=None,
                 flgs = flgs | ant_flags[ant2]
         mvis = np.nan_to_num(mvis)
         m2 = np.abs(mvis)**2
-        sigma2 = predict_noise_variance_from_autos(bl, autos, dt=dt, df=df)
+        sigma2 = predict_noise_variance_from_autos(bl, autos, dt=dt, df=df, noise_excess=noise_excess)
         good = (~flgs) & (m2 > 0) & np.isfinite(sigma2) & (sigma2 > 0)
         with np.errstate(invalid='ignore', divide='ignore'):
             ratio_here[bl] = np.where(good, data[bl] * np.conj(mvis)
@@ -1027,7 +1032,7 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
 
 def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
                   ant_flags=None, auto_flags=None, ant_to_SNAP_dict=None,
-                  freqs=None, bls=None, dt=None, df=None,
+                  freqs=None, bls=None, dt=None, df=None, noise_excess=1.0,
                   refine_tol=1e-8, refine_maxiter=100, sync_tol=1e-3,
                   sync_maxiter=200, max_divergent_chan_frac=0.0,
                   verbose=False):
@@ -1056,6 +1061,8 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
         bls: optional list of baselines to calibrate with
         dt: integration time in seconds (default: inferred from autos)
         df: channel width in Hz (default: inferred from autos)
+        noise_excess: as in build_data_model_ratio. It scales meta['wgts'] (and so
+            any chi^2 built from them) but not the gains.
         refine_tol, refine_maxiter, sync_tol, sync_maxiter:
             see _refine_gains_single_pol_time
         verbose: print statements if True
@@ -1078,7 +1085,8 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
     utils.echo('Building data/model ratio and weights...', verbose=verbose)
     data_model_ratio, wgts = build_data_model_ratio(
         data, model, autos=autos, data_flags=data_flags,
-        model_flags=model_flags, ant_flags=ant_flags, bls=bls, dt=dt, df=df)
+        model_flags=model_flags, ant_flags=ant_flags, bls=bls, dt=dt, df=df,
+        noise_excess=noise_excess)
 
     utils.echo('Solving model-based firstcal delays and offsets...',
                verbose=verbose)
@@ -1119,7 +1127,7 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
 
 def expand_sky_gains(data, model, gains, autos=None, data_flags=None, model_flags=None,
                      ant_flags=None, bls=None, ant_to_SNAP_dict=None, dt=None, df=None,
-                     chisq_per_ant=None):
+                     noise_excess=1.0, chisq_per_ant=None):
     '''Solve for the gains of antennas excluded from sky calibration ("spectators")
     against the frozen solved gains and the sky model, updating gains in place.
 
@@ -1147,7 +1155,7 @@ def expand_sky_gains(data, model, gains, autos=None, data_flags=None, model_flag
             complex gain waterfalls of the SOLVED antennas, e.g. from
             sky_calibrate (after any relative-phase calibration, so spectators
             inherit that convention). UPDATED IN PLACE with spectator solutions.
-        autos, data_flags, model_flags, ant_flags, dt, df: as in
+        autos, data_flags, model_flags, ant_flags, dt, df, noise_excess: as in
             build_data_model_ratio
         bls: optional list of candidate baselines. Default None considers every
             modeled cross-correlation in data. Only baselines with exactly one
@@ -1159,7 +1167,7 @@ def expand_sky_gains(data, model, gains, autos=None, data_flags=None, model_flag
         chisq_per_ant: optional dict of per-antenna chi^2 waterfalls, updated in
             place: each spectator gets the mean over its baselines of
             w |Z - g_a conj(g_j)|^2, whose expectation is ~1 for noise-like
-            residuals, attributed only to the spectator (solved antennas'
+            residuals (given the correlator's noise_excess), attributed only to the spectator (solved antennas'
             entries are never touched).
     '''
     # candidate baselines with exactly one solved antenna, oriented spectator-first
@@ -1182,7 +1190,7 @@ def expand_sky_gains(data, model, gains, autos=None, data_flags=None, model_flag
 
     ratio, wgts = build_data_model_ratio(data, model, autos=autos, data_flags=data_flags,
                                          model_flags=model_flags, ant_flags=ant_flags,
-                                         bls=spec_bls, dt=dt, df=df)
+                                         bls=spec_bls, dt=dt, df=df, noise_excess=noise_excess)
 
     # closed-form per-channel solve, then chi^2 against the same frozen reference
     num, den = {}, {}
