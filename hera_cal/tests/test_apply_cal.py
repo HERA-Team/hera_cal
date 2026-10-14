@@ -1031,21 +1031,28 @@ class TestCalibrateAndRedAvg:
             np.testing.assert_array_equal(meta['chisq_per_ant'][ant], meta2['chisq_per_ant'][ant])
         np.testing.assert_array_equal(meta['total_chisq']['Jee'], meta2['total_chisq']['Jee'])
 
-    def test_noise_excess_divides_chisq(self):
-        sim = build_red_avg_sim(nfreqs=128, noise_amp=1.0, seed=2)
+    def test_noise_excess(self):
+        # noise with 1.5 times the variance the radiometer equation predicts, as from a correlator's channelization
+        sim = build_red_avg_sim(nfreqs=64, ntimes=400, noise_amp=np.sqrt(1.5), seed=3)
         kwargs = dict(ex_ants=[(5, 'Jee')], dt=sim['dt'], df=sim['df'])
-        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(sim['data'], sim['gains'], sim['reds'], **kwargs)
-        avg2, flags2, nsamples2, meta2 = ac.calibrate_and_red_avg(sim['data'], sim['gains'], sim['reds'],
-                                                                  noise_excess=2.0, **kwargs)
-        # the correlator's noise excess divides every chi^2, the excluded antenna's included, and changes nothing else
+        avg, flags, n_eff, meta = ac.calibrate_and_red_avg(sim['data'], sim['gains'], sim['reds'], noise_excess=1.5, **kwargs)
+        avg1, flags1, n_eff1, meta1 = ac.calibrate_and_red_avg(sim['data'], sim['gains'], sim['reds'], **kwargs)
+        # noise_excess scales every weight alike, so only chi^2 depends on it, the excluded antenna's included
         for key in avg:
-            np.testing.assert_array_equal(avg2[key], avg[key])
-            np.testing.assert_array_equal(flags2[key], flags[key])
-            np.testing.assert_array_equal(nsamples2[key], nsamples[key])
+            np.testing.assert_allclose(avg[key], avg1[key], rtol=1e-12)
+            np.testing.assert_array_equal(flags[key], flags1[key])
+            np.testing.assert_allclose(n_eff[key], n_eff1[key], rtol=1e-12)
         assert np.nanmean(meta['chisq_per_ant'][(5, 'Jee')]) > 0
         for name in ['chisq_per_ant', 'total_chisq', 'chisq_per_bl']:
             for key in meta[name]:
-                np.testing.assert_allclose(meta2[name][key], meta[name][key] / 2, rtol=1e-12)
+                np.testing.assert_allclose(meta1[name][key], 1.5 * meta[name][key], rtol=1e-12)
+        # with it, chi^2 is ~1 for noise, and the standard predictor with the same noise_excess is exact
+        assert np.nanmean(meta['total_chisq']['Jee']) == pytest.approx(1.0, abs=0.05)
+        auto_key = next(bl for bl in avg if bl[0] == bl[1])
+        key = max((bl for bl in avg if bl[0] != bl[1]), key=lambda bl: np.max(n_eff[bl]))
+        empirical_var = np.var(avg[key] - sim['true_vis'][key], axis=0)
+        predicted_var = 1.5 * np.abs(avg[auto_key][0])**2 / (sim['dt'] * sim['df'] * n_eff[key][0])
+        assert np.mean(empirical_var / predicted_var) == pytest.approx(1.0, abs=0.05)
 
     def test_cross_pols(self):
         sim = build_red_avg_sim(pols=['ee', 'nn', 'en'])

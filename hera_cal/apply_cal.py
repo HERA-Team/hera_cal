@@ -235,7 +235,7 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
     '''Calibrate visibilities and redundantly average them with inverse-variance noise
     weights, one group at a time (a full-size calibrated copy of the data is never
     materialized). data must include co-polarized autocorrelations: they set each
-    cross-correlation's noise variance, sigma^2 = A_i * A_j / (dt * df), and their
+    cross-correlation's noise variance, sigma^2 = noise_excess * A_i * A_j / (dt * df), and their
     per-polarization averages over unflagged antennas (binary weights, since
     inverse-variance weighting would bias this noise-prediction statistic low) are
     always included in the results. Cross-polarized autocorrelations are averaged the
@@ -243,14 +243,14 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
     What is averaged is governed entirely by reds.
 
     By default the returned nsamples are EFFECTIVE nsamples, defined so that the
-    standard predictor sigma^2 = Abar_i * Abar_j / (dt * df * nsamples), evaluated with
-    the averaged autocorrelations returned here, is exact for every averaged product:
-    Abar_i * Abar_j * sum(w) / (dt * df) for cross groups (above the count, since the
-    average leans on quieter-than-typical pairs) and n^2 * Abar_i * Abar_j / (the sum
-    over antennas of their co-polarized auto products) for the autocorrelations.
-    Flagging gaps will have nsamples = 0, but as long as antenna-to-antenna variation
-    in the autos is spectrally smooth, effective nsamples will be too, and can therefore
-    later be inpainted if needed.
+    standard predictor sigma^2 = noise_excess * Abar_i * Abar_j / (dt * df * nsamples),
+    evaluated with the averaged autocorrelations returned here, is exact for every averaged
+    product: noise_excess * Abar_i * Abar_j * sum(w) / (dt * df) for cross groups (above the
+    count, since the average leans on quieter-than-typical pairs) and n^2 * Abar_i * Abar_j /
+    (the sum over antennas of their co-polarized auto products) for the autocorrelations.
+    Neither depends on noise_excess, which the weights w carry too. Flagging gaps will have
+    nsamples = 0, but as long as antenna-to-antenna variation in the autos is spectrally
+    smooth, effective nsamples will be too, and can therefore later be inpainted if needed.
 
     If snap_decoherence is given, gains are first cleaned of the fitted suppression
     staircase (SNAPDecoherence.correct_gains; autocorrelations and intra-SNAP baselines
@@ -266,8 +266,7 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
     participating baseline's weighted scatter about it has expectation 1 - w / sum(w)
     per pixel. Antennas in ex_ants never enter the averages, but those with usable data
     still get chi^2 against the good-antenna group means, attributed only to themselves,
-    with expectation 1 + w / sum(w_good). Chi^2 measures scatter in units of the noise
-    variance noise_excess * sigma^2; noise_excess affects nothing else.
+    with expectation 1 + w / sum(w_good).
 
     Arguments:
         data: DataContainer of visibilities, including co-polarized autocorrelations
@@ -295,11 +294,10 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
             SNAPDecoherence.from_estimate. Default None: no decoherence handling.
         dt: integration time in seconds. Default None infers from data's times.
         df: channel width in Hz. Default None infers from data's freqs.
-        noise_excess: factor by which the noise variance exceeds the radiometer equation, as in
-            noise.predict_noise_variance_from_autos. Typically the first value returned by
-            noise.correlator_noise_covariance(). It divides every chi^2 but changes neither the
-            averages nor the effective nsamples, which stay defined against the radiometer
-            equation: predict the averages' noise with this same noise_excess.
+        noise_excess: factor by which the noise variance exceeds the radiometer equation, passed
+            to noise.predict_noise_variance_from_autos. Typically the first value returned by
+            noise.correlator_noise_covariance(). It scales every weight alike, so of the results
+            only chi^2 depends on it.
         compute_chisq: if True (default), accumulate DoF-normalized chi^2.
         effective_nsamples: if True (default), return effective nsamples; else counts.
         chisq_per_bl_nchans: number of consecutive channels over which each baseline's chi^2 is
@@ -385,7 +383,7 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
         down-weighted, and the returned effective nsamples keep the standard noise prediction
         (and therefore noise-normalized statistics like z-scores) exact for corrected data.'''
         with np.errstate(all='ignore'):
-            sigma2 = noise.predict_noise_variance_from_autos(bl, cal_autos, dt=dt, df=df)
+            sigma2 = noise.predict_noise_variance_from_autos(bl, cal_autos, dt=dt, df=df, noise_excess=noise_excess)
             if snap_decoherence is not None and _is_inter_SNAP(bl):
                 sigma2 = sigma2 * np.exp(2 * (log_supp.get(ant_to_SNAP.get(bl[0]), 0)
                                               + log_supp.get(ant_to_SNAP.get(bl[1]), 0)))
@@ -481,7 +479,8 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
         if effective_nsamples:
             antpol_i, antpol_j = utils.split_pol(key[2])
             with np.errstate(all='ignore'):
-                red_avg_nsamples[key] = avg_autos[antpol_i] * avg_autos[antpol_j] * wgt_sum / (dt * df)
+                # one baseline's noise variance at the averaged autocorrelations, over the average's (1 / sum(w))
+                red_avg_nsamples[key] = noise_excess * avg_autos[antpol_i] * avg_autos[antpol_j] / (dt * df) * wgt_sum
         else:
             red_avg_nsamples[key] = np.sum([group_wgts[bl] > 0 for bl in group_bls], axis=0).astype(float)
 
@@ -495,7 +494,7 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
             antpol = utils.split_bl(key)[0][1]
             for bl in group_bls:
                 with np.errstate(all='ignore'):
-                    z2 = np.where(group_wgts[bl] > 0, group_wgts[bl] / noise_excess * np.abs(group_data[bl] - avg)**2, 0)
+                    z2 = np.where(group_wgts[bl] > 0, group_wgts[bl] * np.abs(group_data[bl] - avg)**2, 0)
                     dof = np.where(group_wgts[bl] > 0, 1 - group_wgts[bl] / np.where(wgt_sum > 0, wgt_sum, 1), 0)
                 for ant in utils.split_bl(bl):
                     chisq_num[ant] = chisq_num.get(ant, 0) + z2
@@ -530,7 +529,7 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
                                                     + log_supp.get(ant_to_SNAP.get(bl[1]), 0))
                         usable = (excl_wgts[bl] > 0) & (wgt_sum > 0)
                         with np.errstate(all='ignore'):
-                            z2 = np.where(usable, excl_wgts[bl] / noise_excess * np.abs(excl_data[bl] - avg)**2, 0)
+                            z2 = np.where(usable, excl_wgts[bl] * np.abs(excl_data[bl] - avg)**2, 0)
                             expectation = np.where(usable, 1 + excl_wgts[bl] / np.where(wgt_sum > 0, wgt_sum, 1), 0)
                         excluded_ant = (ant_i if ant_i in ex_ants else ant_j)
                         chisq_num[excluded_ant] = chisq_num.get(excluded_ant, 0) + z2
