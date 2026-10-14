@@ -179,6 +179,15 @@ class TestBuildDataModelRatio:
                 assert np.isnan(ratio[other][1, 7])
                 assert wgts[other][1, 7] == 0
 
+    def test_noise_excess_scales_wgts(self):
+        sim = self.sim
+        ratio, wgts = skycal.build_data_model_ratio(sim['data'], sim['model'], dt=sim['dt'], df=sim['df'])
+        ratio2, wgts2 = skycal.build_data_model_ratio(sim['data'], sim['model'], dt=sim['dt'], df=sim['df'],
+                                                      noise_excess=1.1)
+        for bl in wgts:
+            np.testing.assert_array_equal(ratio2[bl], ratio[bl])
+            np.testing.assert_allclose(wgts2[bl], wgts[bl] / 1.1, rtol=1e-12)
+
 
 class TestModelBasedFirstcal:
     def test_signed_delay_and_offset_recovery(self):
@@ -589,6 +598,16 @@ class TestSkyCalibrate:
             np.testing.assert_allclose(
                 np.abs(gains[(antnum, antpol)]),
                 np.abs(sim['true_gains'][(antnum, antpol)]), rtol=2e-2)
+
+    def test_noise_excess_scales_wgts_not_gains(self):
+        sim = build_sim(nants=5, nfreqs=32, ntimes=1, seed=10, noise=0.1)
+        gains, meta = skycal.sky_calibrate(sim['data'], sim['model'], freqs=sim['freqs'], dt=sim['dt'], df=sim['df'])
+        gains2, meta2 = skycal.sky_calibrate(sim['data'], sim['model'], freqs=sim['freqs'], dt=sim['dt'], df=sim['df'],
+                                             noise_excess=1.1)
+        for ant in gains:   # the same to within the refinement's tolerance (refine_tol = 1e-8)
+            np.testing.assert_allclose(gains2[ant], gains[ant], rtol=1e-7)
+        for bl in meta['wgts']:
+            np.testing.assert_allclose(meta2['wgts'][bl], meta['wgts'][bl] / 1.1, rtol=1e-12)
 
     def test_meta_completeness(self):
         sim = build_sim(nants=5, nfreqs=32, ntimes=1, seed=10)
@@ -1262,6 +1281,21 @@ class TestDivergentChannelTolerance:
 
 
 class TestExpandSkyGains:
+    def test_noise_excess_scales_chisq(self):
+        sim = build_sim(noise=0.1)
+        spectator = (3, 'Jee')
+        results = {}
+        for noise_excess in [1.0, 2.0]:
+            gains = {ant: g for ant, g in sim['true_gains'].items() if ant != spectator}
+            chisq_per_ant = {}
+            skycal.expand_sky_gains(sim['data'], sim['model'], gains, dt=sim['dt'], df=sim['df'],
+                                    noise_excess=noise_excess, chisq_per_ant=chisq_per_ant)
+            results[noise_excess] = (gains[spectator], chisq_per_ant[spectator])
+        # the spectator's gain does not depend on the excess; its chi^2 is divided by it
+        np.testing.assert_allclose(results[2.0][0], results[1.0][0], rtol=1e-10)
+        np.testing.assert_allclose(results[2.0][1], results[1.0][1] / 2, rtol=1e-10)
+        assert np.mean(results[1.0][1]) > 0
+
     def test_recovery_and_containment(self):
         sim = build_sim()
         gains = dict(sim['true_gains'])

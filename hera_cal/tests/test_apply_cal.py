@@ -1031,6 +1031,22 @@ class TestCalibrateAndRedAvg:
             np.testing.assert_array_equal(meta['chisq_per_ant'][ant], meta2['chisq_per_ant'][ant])
         np.testing.assert_array_equal(meta['total_chisq']['Jee'], meta2['total_chisq']['Jee'])
 
+    def test_noise_excess_divides_chisq(self):
+        sim = build_red_avg_sim(nfreqs=128, noise_amp=1.0, seed=2)
+        kwargs = dict(ex_ants=[(5, 'Jee')], dt=sim['dt'], df=sim['df'])
+        avg, flags, nsamples, meta = ac.calibrate_and_red_avg(sim['data'], sim['gains'], sim['reds'], **kwargs)
+        avg2, flags2, nsamples2, meta2 = ac.calibrate_and_red_avg(sim['data'], sim['gains'], sim['reds'],
+                                                                  noise_excess=2.0, **kwargs)
+        # the correlator's noise excess divides every chi^2, the excluded antenna's included, and changes nothing else
+        for key in avg:
+            np.testing.assert_array_equal(avg2[key], avg[key])
+            np.testing.assert_array_equal(flags2[key], flags[key])
+            np.testing.assert_array_equal(nsamples2[key], nsamples[key])
+        assert np.nanmean(meta['chisq_per_ant'][(5, 'Jee')]) > 0
+        for name in ['chisq_per_ant', 'total_chisq', 'chisq_per_bl']:
+            for key in meta[name]:
+                np.testing.assert_allclose(meta2[name][key], meta[name][key] / 2, rtol=1e-12)
+
     def test_cross_pols(self):
         sim = build_red_avg_sim(pols=['ee', 'nn', 'en'])
         # a cross-polarized "auto" is averaged too, though never used for noise weights
