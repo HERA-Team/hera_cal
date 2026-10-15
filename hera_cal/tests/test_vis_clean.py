@@ -340,7 +340,8 @@ class Test_VisClean:
         assert not hasattr(V2, 'hc')
 
     @pytest.mark.filterwarnings("ignore:Selected polarization values are not evenly spaced")
-    def test_read_write(self):
+    def test_read_write(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
         # test read data can be turned off for uvh5
         fname = os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5')
         V = VisClean(fname, filetype='uvh5')
