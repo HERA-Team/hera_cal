@@ -267,8 +267,8 @@ def model_based_firstcal(data_model_ratio, wgts, freqs, mode='pinv',
         bl_dlys = np.full(nbls * ntimes, np.nan)
         has_wgt = flat_wgts > 0
         if has_wgt.any():
-            bl_dlys[has_wgt] = utils.fft_dly(flat_ratio[has_wgt],
-                                             df)[0].ravel()
+            bl_dlys[has_wgt] = utils.fft_dly(flat_ratio[has_wgt], df,
+                                             compute_offset=False)[0].ravel()
         bl_dlys = bl_dlys.reshape(nbls, ntimes)
 
         # per-antenna delays (degeneracy fixed: mean delay = 0), then
