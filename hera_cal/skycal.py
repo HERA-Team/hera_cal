@@ -441,7 +441,7 @@ def _shared_channel_flags(ratio_wgts, ant_i_idx, ant_j_idx, nants):
     return flagged_ants, chan_flags
 
 
-def _build_normal_matrices(nchan_active, nsel, chan_pos, ei, ej, round_wgts):
+def _build_normal_matrices(round_wgts, sel_i, sel_j, nsel):
     '''Build the batched per-channel normal matrices (the matrices of the two
     weighted least-squares systems solved each round). Amplitude equations
     have the form resid ~ eta_i + eta_j — log-amplitudes ADD, because
@@ -455,39 +455,39 @@ def _build_normal_matrices(nchan_active, nsel, chan_pos, ei, ej, round_wgts):
     its mean phase to 0.
 
     Arguments:
-        nchan_active: number of channels in the batch
+        round_wgts: (Nbls, Nchans) ndarray of this round's weights, one row
+            per baseline in the solve and one column per channel in the batch
+        sel_i / sel_j: int ndarrays of each baseline's two antennas'
+            positions among the participating antennas; each antenna pair
+            may appear in only one baseline
         nsel: number of participating antennas
-        chan_pos / ei / ej: int ndarrays over unflagged (baseline, channel)
-            entries giving each entry's position in the channel batch and
-            its two antenna indices
-        round_wgts: ndarray of per-entry weights for this round
 
     Returns:
-        amp_mats: (nchan_active, nsel, nsel) log-amplitude system matrices
-        phase_mats: (nchan_active, nsel - 1, nsel - 1) phase system matrices
+        amp_mats: (Nchans, nsel, nsel) log-amplitude system matrices
+        phase_mats: (Nchans, nsel - 1, nsel - 1) phase system matrices
             with the first participating antenna pinned
     '''
-    # accumulate with np.bincount on flattened indices (several times faster
-    # than np.add.at); the amplitude and phase matrices share their diagonal
-    # blocks and differ only in the sign of the off-diagonal couplings
-    n2 = nsel * nsel
-    base = chan_pos.astype(np.int64) * n2
-    minlength = nchan_active * n2
-    diag = (np.bincount(base + ei * (nsel + 1), weights=round_wgts,
-                        minlength=minlength)
-            + np.bincount(base + ej * (nsel + 1), weights=round_wgts,
-                          minlength=minlength))
-    off = (np.bincount(base + ei * nsel + ej, weights=round_wgts,
-                       minlength=minlength)
-           + np.bincount(base + ej * nsel + ei, weights=round_wgts,
-                         minlength=minlength))
-    amp_mats = (diag + off).reshape(nchan_active, nsel, nsel)
-    phase_mats = (diag - off).reshape(nchan_active, nsel, nsel)
+    # each off-diagonal cell (i, j) of a channel's matrices holds the weight of
+    # the one baseline between antennas i and j (positive for amplitudes,
+    # negative for phases), so the cells are simply assigned; only the
+    # diagonals, each antenna's summed weights, need accumulating
+    nchans = round_wgts.shape[1]
+    chans = np.arange(nchans)
+    diag = (np.bincount((sel_i[:, None] * nchans + chans).ravel(),
+                        weights=round_wgts.ravel(), minlength=nsel * nchans)
+            + np.bincount((sel_j[:, None] * nchans + chans).ravel(),
+                          weights=round_wgts.ravel(), minlength=nsel * nchans)
+            ).reshape(nsel, nchans).T
+    amp_mats = np.zeros((nchans, nsel, nsel))
+    amp_mats[:, sel_i, sel_j] = amp_mats[:, sel_j, sel_i] = round_wgts.T
+    phase_mats = -amp_mats
+    on_diag = (slice(None), np.arange(nsel), np.arange(nsel))
+    amp_mats[on_diag] = phase_mats[on_diag] = diag
     return amp_mats, phase_mats[:, 1:, 1:]
 
 
-def _phase_sync_init(phasors, round_wgts, chan_pos, ei, ej, nchan_active,
-                     nsel, sync_tol=1e-3, sync_maxiter=200):
+def _phase_sync_init(phasors, round_wgts, sel_i, sel_j, nsel, sync_tol=1e-3,
+                     sync_maxiter=200):
     '''Wrap-immune initialization of per-antenna phases by eigenvector phase
     synchronization, batched over channels.
 
@@ -511,26 +511,27 @@ def _phase_sync_init(phasors, round_wgts, chan_pos, ei, ej, nchan_active,
     is unobservable in baseline differences.
 
     Arguments:
-        phasors: complex ndarray of unit-modulus per-entry measurements u_ij
-        round_wgts: ndarray of per-entry weights
-        chan_pos / ei / ej: int ndarrays giving each entry's position in the
-            channel batch and its two antenna indices
-        nchan_active: number of channels in the batch
+        phasors: (Nbls, Nchans) complex ndarray of unit-modulus measurements
+            u_ij, one row per baseline and one column per channel in the batch
+        round_wgts: (Nbls, Nchans) ndarray of weights
+        sel_i / sel_j: int ndarrays of each baseline's two antennas'
+            positions among the participating antennas; each antenna pair
+            may appear in only one baseline
         nsel: number of participating antennas
         sync_tol: convergence threshold in radians
         sync_maxiter: iteration cap
 
     Returns:
-        phases: (nchan_active, nsel) ndarray of initial per-antenna phases,
+        phases: (Nchans, nsel) ndarray of initial per-antenna phases,
             mean 0 over antennas in each channel
     '''
-    sync_mats = np.zeros((nchan_active, nsel, nsel), dtype=np.complex64)
-    np.add.at(sync_mats, (chan_pos, ei, ej),
-              (round_wgts * phasors).astype(np.complex64))
-    np.add.at(sync_mats, (chan_pos, ej, ei),
-              (round_wgts * np.conj(phasors)).astype(np.complex64))
-    eigvec = np.ones((nchan_active, nsel, 1), dtype=np.complex64)
-    phases = np.zeros((nchan_active, nsel))
+    # each baseline has its own two cells in each channel's matrix
+    nchans = phasors.shape[1]
+    sync_mats = np.zeros((nchans, nsel, nsel), dtype=np.complex64)
+    sync_mats[:, sel_i, sel_j] += (round_wgts * phasors).astype(np.complex64).T
+    sync_mats[:, sel_j, sel_i] += (round_wgts * np.conj(phasors)).astype(np.complex64).T
+    eigvec = np.ones((nchans, nsel, 1), dtype=np.complex64)
+    phases = np.zeros((nchans, nsel))
     for _ in range(sync_maxiter):
         # one power-iteration step toward the leading eigenvector
         eigvec = sync_mats @ eigvec
@@ -724,7 +725,8 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             from the input, not flagged.
         ratio_wgts: float ndarray (Nbls, Nfreqs) of inverse-variance weights
             for vis_ratio; 0 excludes a cell
-        ant_i_idx / ant_j_idx: int ndarrays of length Nbls indexing antennas
+        ant_i_idx / ant_j_idx: int ndarrays of length Nbls indexing antennas;
+            each pair of distinct antennas may appear in only one baseline
         nants: total number of antennas indexed
         refine_tol: convergence threshold on the largest per-(antenna,
             channel) update
@@ -751,10 +753,11 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
 
     Raises:
         ValueError: if max_divergent_chan_frac is not between 0 and 1, if
-            the flagging pattern is not uniform (see
-            _shared_channel_flags), or if any unflagged cell has a
-            non-finite data/model ratio (flags or zero weights must cover
-            all bad data)
+            an antenna pair appears in more than one baseline (repeated or
+            reversed) or a baseline pairs an antenna with itself, if the
+            flagging pattern is not uniform (see _shared_channel_flags), or
+            if any unflagged cell has a non-finite data/model ratio (flags or
+            zero weights must cover all bad data)
         RuntimeError: if more channels fail than
             max_divergent_chan_frac allows. Failed channels always come
             back as np.nan, never as partial solutions: partially
@@ -764,6 +767,15 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     if not 0.0 <= max_divergent_chan_frac <= 1.0:
         raise ValueError('max_divergent_chan_frac must be a fraction between '
                          f'0 and 1, got {max_divergent_chan_frac}.')
+    # each baseline needs its own two cells, (i, j) and (j, i), in the normal
+    # matrices (see _build_normal_matrices)
+    pairs = np.concatenate([ant_i_idx * nants + ant_j_idx,
+                            ant_j_idx * nants + ant_i_idx])
+    if len(np.unique(pairs)) < len(pairs):
+        raise ValueError(
+            'Each antenna pair may appear in only one baseline: repeated or '
+            'reversed baselines, and baselines pairing an antenna with itself, '
+            'are not supported.')
     nfreqs = vis_ratio.shape[1]
 
     # validate the flags and reduce them to one shared waterfall: whole
@@ -853,29 +865,28 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
                     f'{nchans} unflagged channels allows.')
             continue
 
-        # flatten the (baseline, channel) cells for the per-channel linear
-        # systems, tagging each with its channel's position in this round's
-        # batch and its two antenna positions
+        # flatten the (baseline, channel) cells for the right-hand sides of the
+        # per-channel linear systems, tagging each with its channel's
+        # position in this round's batch and its two antenna positions
         chan_pos = np.tile(np.arange(nactive), len(sel_i))
         flat_sel_i = np.repeat(sel_i, nactive)
         flat_sel_j = np.repeat(sel_j, nactive)
         flat_wgts = round_wgts.ravel()
         if niter == 0:
             # ---- initialization round ----
-            amp_mats, phase_mats = _build_normal_matrices(
-                nactive, nsel, chan_pos, flat_sel_i, flat_sel_j, flat_wgts)
+            amp_mats, phase_mats = _build_normal_matrices(round_wgts, sel_i,
+                                                          sel_j, nsel)
             # log-amplitudes: log|resid_ratio| = eta_i + eta_j is exactly
             # linear in the log-amplitudes — no approximation needed
             amp_resids = np.log(np.abs(resid_ratio)).ravel()
             # phases: wrap-immune eigenvector synchronization (see helper)
             delta_phase = _phase_sync_init(
-                (resid_ratio / np.abs(resid_ratio)).ravel(), flat_wgts,
-                chan_pos, flat_sel_i, flat_sel_j, nactive, nsel, sync_tol=sync_tol,
-                sync_maxiter=sync_maxiter)
+                resid_ratio / np.abs(resid_ratio), round_wgts, sel_i, sel_j,
+                nsel, sync_tol=sync_tol, sync_maxiter=sync_maxiter)
         else:
             # ---- Gauss-Newton round ----
-            amp_mats, phase_mats = _build_normal_matrices(
-                nactive, nsel, chan_pos, flat_sel_i, flat_sel_j, flat_wgts)
+            amp_mats, phase_mats = _build_normal_matrices(round_wgts, sel_i,
+                                                          sel_j, nsel)
             # linearize: Im(resid_ratio) ~ phi_i - phi_j and
             # Re(resid_ratio) - 1 ~ eta_i + eta_j
             delta_phase = _solve_phase_updates(
@@ -969,8 +980,10 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
 
     Raises:
         ValueError: if ant_to_SNAP_dict is given but missing antennas, if
-            the flagging pattern is not uniform (see _shared_channel_flags),
-            or if any unflagged cell has non-finite data/model ratio
+            an antenna pair appears in more than one baseline (e.g. both
+            (i, j) and (j, i)), if the flagging pattern is not uniform (see
+            _shared_channel_flags), or if any unflagged cell has non-finite
+            data/model ratio
         RuntimeError: if any (time, pol) has more failed channels than
             max_divergent_chan_frac allows
     '''
