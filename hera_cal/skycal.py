@@ -707,13 +707,19 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     with no regularization. The overall phase degeneracy is fixed by pinning
     one antenna inside the solves and then removing the degeneracy from each
     update by setting its mean phase to 0 over participating antennas — the
-    same convention as redcal.remove_degen_gains. Convergence is verified
-    via the maximum relative chi^2 gradient over ALL solved cells
-    (_relative_chi2_gradient) and enforced with a RuntimeError.
+    same convention as redcal.remove_degen_gains. Each channel converges
+    when its largest update falls below refine_tol; channels that diverge
+    or exhaust refine_maxiter fail, raising a RuntimeError if more fail
+    than max_divergent_chan_frac allows. The maximum relative chi^2
+    gradient over ALL solved cells (_relative_chi2_gradient) is then
+    computed as an independent check on the solution and reported in
+    meta['conv_crit'].
 
     Arguments:
         vis_ratio: complex ndarray (Nbls, Nfreqs) of data/model ratios
-            divided by g0_i * conj(g0_j); np.nan excludes a cell. Baselines
+            divided by g0_i * conj(g0_j). Cells are excluded by zero
+            weights (non-finite ratios must carry zero weight); exactly-zero
+            ratios are dropped from the solve as if flagged. Baselines
             that should not participate (e.g. intra-SNAP) must be omitted
             from the input, not flagged.
         ratio_wgts: float ndarray (Nbls, Nfreqs) of inverse-variance weights
@@ -746,7 +752,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     Raises:
         ValueError: if max_divergent_chan_frac is not between 0 and 1, if
             the flagging pattern is not uniform (see
-            _shared_channel_flags), or if any unflagged cell has zero or
+            _shared_channel_flags), or if any unflagged cell has a
             non-finite data/model ratio (flags or zero weights must cover
             all bad data)
         RuntimeError: if more channels fail than
