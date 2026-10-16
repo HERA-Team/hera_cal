@@ -189,6 +189,17 @@ class TestFftDly(object):
         assert np.median(np.abs(dlys - true_dlys)) < 1e-2  # median accuracy of 10 ps
         np.testing.assert_almost_equal(offs, 0.123, decimal=1)
 
+    def test_skip_offset(self):
+        # skipping the phase offset leaves the delays untouched
+        true_dlys = self.rng.uniform(-200, 200, size=(60, 1))
+        data = (np.exp(2j * np.pi * self.freqs * true_dlys + 1j * 0.123)
+                + 0.1 * gen_white_noise((60, 1024), rng=self.rng))
+        df = np.median(np.diff(self.freqs))
+        dlys, _ = utils.fft_dly(data, df, f0=self.freqs[0])
+        dlys_only, offs = utils.fft_dly(data, df, f0=self.freqs[0], compute_offset=False)
+        np.testing.assert_array_equal(dlys_only, dlys)
+        assert offs is None
+
     def test_noisy(self):
         true_dlys = self.rng.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
