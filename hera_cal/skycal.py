@@ -53,6 +53,7 @@ all the caller's responsibility (hera_mc is deliberately not imported).
 """
 import numpy as np
 import linsolve
+from scipy import sparse
 from hera_filters import dspec
 
 from . import utils
@@ -441,7 +442,18 @@ def _shared_channel_flags(ratio_wgts, ant_i_idx, ant_j_idx, nants):
     return flagged_ants, chan_flags
 
 
-def _build_normal_matrices(round_wgts, sel_i, sel_j, nsel):
+def _antenna_incidence(ant_idx, nants):
+    '''Sparse (nants, Nbls) matrix with a 1 at (ant_idx[b], b), so that
+    left-multiplying a (Nbls, ...) array by it sums each antenna's rows.
+    scipy accumulates those sums in baseline order, exactly as np.bincount
+    would (so the two give bit-identical results), but over every column of
+    the array at once.'''
+    nbls = len(ant_idx)
+    return sparse.csr_array((np.ones(nbls), (ant_idx, np.arange(nbls))),
+                            shape=(nants, nbls))
+
+
+def _build_normal_matrices(round_wgts, sel_i, sel_j, inc_i, inc_j):
     '''Build the batched per-channel normal matrices (the matrices of the two
     weighted least-squares systems solved each round). Amplitude equations
     have the form resid ~ eta_i + eta_j — log-amplitudes ADD, because
@@ -460,7 +472,7 @@ def _build_normal_matrices(round_wgts, sel_i, sel_j, nsel):
         sel_i / sel_j: int ndarrays of each baseline's two antennas'
             positions among the participating antennas; each antenna pair
             may appear in only one baseline
-        nsel: number of participating antennas
+        inc_i / inc_j: _antenna_incidence matrices of sel_i and sel_j
 
     Returns:
         amp_mats: (Nchans, nsel, nsel) log-amplitude system matrices
@@ -471,13 +483,8 @@ def _build_normal_matrices(round_wgts, sel_i, sel_j, nsel):
     # the one baseline between antennas i and j (positive for amplitudes,
     # negative for phases), so the cells are simply assigned; only the
     # diagonals, each antenna's summed weights, need accumulating
-    nchans = round_wgts.shape[1]
-    chans = np.arange(nchans)
-    diag = (np.bincount((sel_i[:, None] * nchans + chans).ravel(),
-                        weights=round_wgts.ravel(), minlength=nsel * nchans)
-            + np.bincount((sel_j[:, None] * nchans + chans).ravel(),
-                          weights=round_wgts.ravel(), minlength=nsel * nchans)
-            ).reshape(nsel, nchans).T
+    nchans, nsel = round_wgts.shape[1], inc_i.shape[0]
+    diag = (inc_i @ round_wgts + inc_j @ round_wgts).T
     amp_mats = np.zeros((nchans, nsel, nsel))
     amp_mats[:, sel_i, sel_j] = amp_mats[:, sel_j, sel_i] = round_wgts.T
     phase_mats = -amp_mats
@@ -564,44 +571,36 @@ def _solve_or_nan(mats, rhs):
         return solutions
 
 
-def _solve_logamp_updates(amp_mats, chan_pos, ei, ej, round_wgts, resids,
-                          nchan_active, nsel):
+def _solve_logamp_updates(amp_mats, inc_i, inc_j, round_wgts, resids):
     '''Solve the batched linear weighted least-squares systems for the
-    per-antenna log-amplitude updates. Each entry contributes the equation
-    resid ~ eta_i + eta_j, so both antennas' right-hand sides accumulate the
-    residual with POSITIVE sign (see _build_normal_matrices).
+    per-antenna log-amplitude updates. Each (baseline, channel) cell
+    contributes the equation resid ~ eta_i + eta_j, so both antennas'
+    right-hand sides accumulate the residual with POSITIVE sign (see
+    _build_normal_matrices). round_wgts and resids are (Nbls, Nchans)
+    arrays; inc_i / inc_j are the _antenna_incidence matrices of the
+    baselines' two antennas.
 
-    Returns: (nchan_active, nsel) ndarray of log-amplitude updates eta.'''
-    base = chan_pos.astype(np.int64) * nsel
+    Returns: (Nchans, nsel) ndarray of log-amplitude updates eta.'''
     wgtd_resids = round_wgts * resids
-    amp_rhs = (np.bincount(base + ei, weights=wgtd_resids,
-                           minlength=nchan_active * nsel)
-               + np.bincount(base + ej, weights=wgtd_resids,
-                             minlength=nchan_active * nsel)
-               ).reshape(nchan_active, nsel)
+    amp_rhs = (inc_i @ wgtd_resids + inc_j @ wgtd_resids).T
     return _solve_or_nan(amp_mats, amp_rhs[:, :, None])[:, :, 0]
 
 
-def _solve_phase_updates(phase_mats, chan_pos, ei, ej, round_wgts, resids,
-                         nchan_active, nsel):
+def _solve_phase_updates(phase_mats, inc_i, inc_j, round_wgts, resids):
     '''Solve the batched linear weighted least-squares systems for the
-    per-antenna phase updates. Each entry contributes the equation
-    resid ~ phi_i - phi_j (the sign flip comes from the conjugation of
-    antenna j's gain). The systems are the reduced ones with the first
-    participating antenna pinned to 0 (see _build_normal_matrices); the
-    caller removes the degeneracy of the full update by setting its mean
-    phase to 0.
+    per-antenna phase updates. Each (baseline, channel) cell contributes the
+    equation resid ~ phi_i - phi_j (the sign flip comes from the
+    conjugation of antenna j's gain). The systems are the reduced ones with
+    the first participating antenna pinned to 0 (see
+    _build_normal_matrices); the caller removes the degeneracy of the full
+    update by setting its mean phase to 0. Arguments as in
+    _solve_logamp_updates.
 
-    Returns: (nchan_active, nsel) ndarray of phase updates phi, with the
-        pinned antenna's entry equal to 0.'''
-    base = chan_pos.astype(np.int64) * nsel
+    Returns: (Nchans, nsel) ndarray of phase updates phi, with the pinned
+        antenna's entry equal to 0.'''
     wgtd_resids = round_wgts * resids
-    phase_rhs = (np.bincount(base + ei, weights=wgtd_resids,
-                             minlength=nchan_active * nsel)
-                 - np.bincount(base + ej, weights=wgtd_resids,
-                               minlength=nchan_active * nsel)
-                 ).reshape(nchan_active, nsel)
-    delta_phase = np.zeros((nchan_active, nsel))
+    phase_rhs = (inc_i @ wgtd_resids - inc_j @ wgtd_resids).T
+    delta_phase = np.zeros(phase_rhs.shape)
     delta_phase[:, 1:] = _solve_or_nan(phase_mats,
                                        phase_rhs[:, 1:, None])[:, :, 0]
     return delta_phase
@@ -632,16 +631,19 @@ def _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
     Returns: (Nfreqs,) ndarray of the max residual over solved antennas in
         each channel; np.nan for channels with no solved cells.'''
     wgtd_ratio = np.nan_to_num(vis_ratio) * ratio_wgts
-    numerator = np.zeros(full_gains.shape, dtype=complex)
-    denominator = np.zeros(full_gains.shape)
     gains_zeroed = np.nan_to_num(full_gains)
-    np.add.at(numerator, ant_i_idx, wgtd_ratio * gains_zeroed[ant_j_idx])
-    np.add.at(denominator, ant_i_idx,
-              ratio_wgts * np.abs(gains_zeroed[ant_j_idx])**2)
-    np.add.at(numerator, ant_j_idx,
-              np.conj(wgtd_ratio) * gains_zeroed[ant_i_idx])
-    np.add.at(denominator, ant_j_idx,
-              ratio_wgts * np.abs(gains_zeroed[ant_i_idx])**2)
+    abs2_gains = np.abs(gains_zeroed)**2
+    # each antenna's sums over the baselines it is first in and then over
+    # those it is second in are one product with the stacked incidence
+    # matrix; the numerator's real and imaginary parts are summed as reals
+    both_ants = _antenna_incidence(np.concatenate([ant_i_idx, ant_j_idx]),
+                                   full_gains.shape[0])
+    numerator_terms = np.concatenate(
+        [wgtd_ratio * gains_zeroed[ant_j_idx],
+         np.conj(wgtd_ratio) * gains_zeroed[ant_i_idx]])
+    numerator = (both_ants @ numerator_terms.view(float)).view(complex)
+    denominator = both_ants @ np.concatenate(
+        [ratio_wgts * abs2_gains[ant_j_idx], ratio_wgts * abs2_gains[ant_i_idx]])
     with np.errstate(invalid='ignore', divide='ignore'):
         resid = np.abs(numerator / np.maximum(denominator, 1e-30)
                        - full_gains) / np.abs(full_gains)
@@ -797,6 +799,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     ant_map = np.full(nants, -1)
     ant_map[sel_ants] = np.arange(nsel)
     sel_i, sel_j = ant_map[ant_i_idx[live_bls]], ant_map[ant_j_idx[live_bls]]
+    inc_i, inc_j = _antenna_incidence(sel_i, nsel), _antenna_incidence(sel_j, nsel)
     cell_wgts = ratio_wgts[np.ix_(live_bls, good_chan_idx)]
     cell_ratio = vis_ratio[np.ix_(live_bls, good_chan_idx)]
 
@@ -828,7 +831,6 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         batch = slice(None) if len(active_idx) == nchans else active_idx
         wgts_here = cell_wgts[:, batch]
         gains_here = gains[:, batch]
-        nactive = len(active_idx)
 
         # residual ratio: the data with the current gain model divided out;
         # exactly exp(eta_i + eta_j + 1j * (phi_i - phi_j)) for the updates
@@ -865,37 +867,28 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
                     f'{nchans} unflagged channels allows.')
             continue
 
-        # flatten the (baseline, channel) cells for the right-hand sides of the
-        # per-channel linear systems, tagging each with its channel's
-        # position in this round's batch and its two antenna positions
-        chan_pos = np.tile(np.arange(nactive), len(sel_i))
-        flat_sel_i = np.repeat(sel_i, nactive)
-        flat_sel_j = np.repeat(sel_j, nactive)
-        flat_wgts = round_wgts.ravel()
         if niter == 0:
             # ---- initialization round ----
-            amp_mats, phase_mats = _build_normal_matrices(round_wgts, sel_i,
-                                                          sel_j, nsel)
+            amp_mats, phase_mats = _build_normal_matrices(
+                round_wgts, sel_i, sel_j, inc_i, inc_j)
             # log-amplitudes: log|resid_ratio| = eta_i + eta_j is exactly
             # linear in the log-amplitudes — no approximation needed
-            amp_resids = np.log(np.abs(resid_ratio)).ravel()
+            amp_resids = np.log(np.abs(resid_ratio))
             # phases: wrap-immune eigenvector synchronization (see helper)
             delta_phase = _phase_sync_init(
                 resid_ratio / np.abs(resid_ratio), round_wgts, sel_i, sel_j,
                 nsel, sync_tol=sync_tol, sync_maxiter=sync_maxiter)
         else:
             # ---- Gauss-Newton round ----
-            amp_mats, phase_mats = _build_normal_matrices(round_wgts, sel_i,
-                                                          sel_j, nsel)
+            amp_mats, phase_mats = _build_normal_matrices(
+                round_wgts, sel_i, sel_j, inc_i, inc_j)
             # linearize: Im(resid_ratio) ~ phi_i - phi_j and
             # Re(resid_ratio) - 1 ~ eta_i + eta_j
             delta_phase = _solve_phase_updates(
-                phase_mats, chan_pos, flat_sel_i, flat_sel_j, flat_wgts,
-                np.imag(resid_ratio).ravel(), nactive, nsel)
-            amp_resids = (np.real(resid_ratio) - 1.0).ravel()
-        delta_logamp = _solve_logamp_updates(
-            amp_mats, chan_pos, flat_sel_i, flat_sel_j, flat_wgts, amp_resids,
-            nactive, nsel)
+                phase_mats, inc_i, inc_j, round_wgts, np.imag(resid_ratio))
+            amp_resids = np.real(resid_ratio) - 1.0
+        delta_logamp = _solve_logamp_updates(amp_mats, inc_i, inc_j,
+                                             round_wgts, amp_resids)
 
         # remove the phase degeneracy by setting the update's mean over
         # participating antennas to 0 (same convention as
