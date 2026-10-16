@@ -453,7 +453,8 @@ def _antenna_incidence(ant_idx, nants):
                             shape=(nants, nbls))
 
 
-def _build_normal_matrices(round_wgts, sel_i, sel_j, inc_i, inc_j):
+def _build_normal_matrices(round_wgts, sel_i, sel_j, inc_i, inc_j, amp_mats,
+                           phase_mats):
     '''Build the batched per-channel normal matrices (the matrices of the two
     weighted least-squares systems solved each round). Amplitude equations
     have the form resid ~ eta_i + eta_j — log-amplitudes ADD, because
@@ -473,24 +474,33 @@ def _build_normal_matrices(round_wgts, sel_i, sel_j, inc_i, inc_j):
             positions among the participating antennas; each antenna pair
             may appear in only one baseline
         inc_i / inc_j: _antenna_incidence matrices of sel_i and sel_j
+        amp_mats / phase_mats: (Nchans, nsel, nsel) arrays filled in place.
+            Only the diagonal and the baselines' cells of amp_mats are
+            written (phase_mats is filled from it), so its other cells must
+            be 0 on input; buffers from np.zeros can therefore be reused from
+            round to round, since that pattern of cells never changes.
 
     Returns:
         amp_mats: (Nchans, nsel, nsel) log-amplitude system matrices
         phase_mats: (Nchans, nsel - 1, nsel - 1) phase system matrices
             with the first participating antenna pinned
+        Both are views of the transposed buffers: the matrices are exactly
+        symmetric, so these are the same matrices, but in the column-major
+        memory order that LAPACK uses (sparing np.linalg.solve a strided
+        copy).
     '''
     # each off-diagonal cell (i, j) of a channel's matrices holds the weight of
     # the one baseline between antennas i and j (positive for amplitudes,
     # negative for phases), so the cells are simply assigned; only the
     # diagonals, each antenna's summed weights, need accumulating
-    nchans, nsel = round_wgts.shape[1], inc_i.shape[0]
+    nsel = inc_i.shape[0]
     diag = (inc_i @ round_wgts + inc_j @ round_wgts).T
-    amp_mats = np.zeros((nchans, nsel, nsel))
     amp_mats[:, sel_i, sel_j] = amp_mats[:, sel_j, sel_i] = round_wgts.T
-    phase_mats = -amp_mats
+    np.negative(amp_mats, out=phase_mats)
     on_diag = (slice(None), np.arange(nsel), np.arange(nsel))
     amp_mats[on_diag] = phase_mats[on_diag] = diag
-    return amp_mats, phase_mats[:, 1:, 1:]
+    return (amp_mats.transpose(0, 2, 1),
+            phase_mats.transpose(0, 2, 1)[:, 1:, 1:])
 
 
 def _phase_sync_init(phasors, round_wgts, sel_i, sel_j, nsel, sync_tol=1e-3,
@@ -819,6 +829,10 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     cell_wgts = np.where(zero_cells, 0.0, cell_wgts)
     cell_ratio = np.where(zero_cells, 1.0, cell_ratio)
 
+    # every round's normal matrices share one pattern of nonzero cells, so they
+    # are filled into the same zero-initialized buffers (see
+    # _build_normal_matrices)
+    amp_buf, phase_buf = np.zeros((2, nchans, nsel, nsel))
     gains = np.ones((nsel, nchans), dtype=complex)
     active_chans = np.ones(nchans, dtype=bool)   # channels still iterating
     failed_chans = np.zeros(nchans, dtype=bool)  # channels that gave up (nan)
@@ -870,7 +884,8 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         if niter == 0:
             # ---- initialization round ----
             amp_mats, phase_mats = _build_normal_matrices(
-                round_wgts, sel_i, sel_j, inc_i, inc_j)
+                round_wgts, sel_i, sel_j, inc_i, inc_j,
+                amp_buf[:len(active_idx)], phase_buf[:len(active_idx)])
             # log-amplitudes: log|resid_ratio| = eta_i + eta_j is exactly
             # linear in the log-amplitudes — no approximation needed
             amp_resids = np.log(np.abs(resid_ratio))
@@ -881,7 +896,8 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         else:
             # ---- Gauss-Newton round ----
             amp_mats, phase_mats = _build_normal_matrices(
-                round_wgts, sel_i, sel_j, inc_i, inc_j)
+                round_wgts, sel_i, sel_j, inc_i, inc_j,
+                amp_buf[:len(active_idx)], phase_buf[:len(active_idx)])
             # linearize: Im(resid_ratio) ~ phi_i - phi_j and
             # Re(resid_ratio) - 1 ~ eta_i + eta_j
             delta_phase = _solve_phase_updates(
